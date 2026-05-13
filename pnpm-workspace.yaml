@@ -1,7 +1,12 @@
-# Project-local pnpm settings. Disables the global blockExoticSubdeps guard
-# only for this repo so the @electron/node-gyp transitive dep
-# (git+https://github.com/electron/node-gyp.git, pinned SHA, used by
-# @electron/rebuild during native-module builds) can install.
-# Other guards still apply: minimumReleaseAge: 10080 (7 days),
+# Project-local pnpm settings.
+#
+# nodeLinker: hoisted — required by electron-forge so it can crawl a
+# flat node_modules tree when packaging.
+#
+# blockExoticSubdeps: false — project-scoped allowance for the
+# @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
+# pinned SHA, used by @electron/rebuild during native-module builds).
+# Your other guards still apply: minimumReleaseAge: 10080 (7 days),
 # ignoreScripts: true, strictDepBuilds: true.
+nodeLinker: hoisted
 blockExoticSubdeps: false
