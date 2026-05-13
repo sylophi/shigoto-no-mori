@@ -27,9 +27,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         />
       )}
       <span className="flex-1 truncate font-medium">
-        {worktree.isPrimary
-          ? worktree.branch
-          : worktree.branch.replace(/^.*\//, "")}
+        {worktree.branch.replace(/^.*\//, "")}
       </span>
       <StatusIndicator worktree={worktree} />
     </button>

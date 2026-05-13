@@ -26,7 +26,6 @@ export const WorktreeSchema = z.object({
   behind: z.number().int().nonnegative(),
   dirtyCount: z.number().int().nonnegative(),
   lastCommit: CommitSummarySchema.nullable(),
-  isPrimary: z.boolean().optional(),
   port: z.number().int().positive().optional(),
 });
 

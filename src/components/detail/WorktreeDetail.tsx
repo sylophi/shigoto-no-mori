@@ -30,12 +30,7 @@ function deleteButtonLabel(
   return isDirty ? "Force delete?" : "Confirm delete?";
 }
 
-function deleteButtonTitle(
-  isPrimary: boolean | undefined,
-  armed: boolean,
-  isDirty: boolean,
-): string {
-  if (isPrimary) return "Primary worktree can't be deleted from here";
+function deleteButtonTitle(armed: boolean, isDirty: boolean): string {
   if (!armed) return "Delete worktree";
   return isDirty
     ? "Click again to force-delete (dirty)"
@@ -146,9 +141,9 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
             "text-destructive hover:bg-destructive/10 hover:text-destructive",
             confirmDelete && "bg-destructive/10",
           )}
-          disabled={worktree.isPrimary || busy}
+          disabled={busy}
           onClick={handleDelete}
-          title={deleteButtonTitle(worktree.isPrimary, confirmDelete, isDirty)}
+          title={deleteButtonTitle(confirmDelete, isDirty)}
         >
           <Trash2 />
           {deleteButtonLabel(busy, confirmDelete, isDirty)}
