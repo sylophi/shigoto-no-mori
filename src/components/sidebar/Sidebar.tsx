@@ -46,16 +46,28 @@ function SidebarFooter() {
   const addProject = useAddProjectFlow();
 
   return (
-    <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
-      <button
-        type="button"
-        onClick={() => void addProject.start()}
-        className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <Plus className="size-3.5" />
-        <span>Add project</span>
-      </button>
-      <ThemeToggle />
+    <div className="flex flex-col border-t border-border">
+      {addProject.error && (
+        <button
+          type="button"
+          onClick={() => addProject.reset()}
+          className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/15"
+          title="Click to dismiss"
+        >
+          {addProject.error.message}
+        </button>
+      )}
+      <div className="flex items-center gap-1 px-2 py-1.5">
+        <button
+          type="button"
+          onClick={() => void addProject.start()}
+          className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <Plus className="size-3.5" />
+          <span>Add project</span>
+        </button>
+        <ThemeToggle />
+      </div>
     </div>
   );
 }

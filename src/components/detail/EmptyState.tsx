@@ -25,6 +25,16 @@ export function EmptyState() {
       <Button size="sm" onClick={() => void addProject.start()}>
         {hasProjects ? "Add another project" : "Add your first project"}
       </Button>
+      {addProject.error && (
+        <button
+          type="button"
+          onClick={() => addProject.reset()}
+          className="max-w-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive hover:bg-destructive/15"
+          title="Click to dismiss"
+        >
+          {addProject.error.message}
+        </button>
+      )}
     </div>
   );
 }

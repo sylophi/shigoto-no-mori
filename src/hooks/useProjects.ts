@@ -33,19 +33,21 @@ export function useRemoveProject() {
 
 // Combined "open the native picker, then add the project" flow used by the
 // sidebar footer and the empty-state CTA. Shared so they don't each do their
-// own try/catch/invalidate dance.
+// own try/catch/invalidate dance. The mutation's error is exposed so callers
+// can render it inline.
 export function useAddProjectFlow() {
   const addProject = useAddProject();
   return {
     isPending: addProject.isPending,
     error: addProject.error,
+    reset: addProject.reset,
     start: async (): Promise<Project | null> => {
       const folder = await window.api.dialog.pickFolder();
       if (!folder) return null;
       try {
         return await addProject.mutateAsync(folder);
-      } catch (error) {
-        console.error("Failed to add project", error);
+      } catch {
+        // Error is captured in addProject.error; callers render it.
         return null;
       }
     },
