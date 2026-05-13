@@ -16,8 +16,12 @@ export const CHANNELS = {
   LaunchersSetPreferred: "launchers:setPreferred",
   DialogPickFolder: "dialog:pickFolder",
   RuntimeInfo: "runtime:info",
+  RuntimeSetTheme: "runtime:setTheme",
   FsListDirectory: "fs:listDirectory",
   FsScanForGitRepos: "fs:scanForGitRepos",
+  ShigotoWrite: "shigoto:write",
+  ShellOpenPath: "shell:openPath",
+  ShellShowItemInFolder: "shell:showItemInFolder",
 } as const;
 
 export interface RuntimeInfo {

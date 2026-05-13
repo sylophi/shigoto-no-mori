@@ -1,6 +1,6 @@
 import { createContext, use, useState, type ReactNode } from "react";
 
-type SelectionMode = "worktree" | "new-worktree" | "empty";
+type SelectionMode = "worktree" | "new-worktree" | "configure" | "empty";
 
 interface SelectionState {
   mode: SelectionMode;
@@ -8,6 +8,7 @@ interface SelectionState {
   selectedProjectId: string | null;
   selectWorktree: (worktreeId: string) => void;
   beginNewWorktree: (projectId: string) => void;
+  beginConfigureProject: (projectId: string) => void;
   clear: () => void;
 }
 
@@ -33,6 +34,10 @@ export function SelectionProvider({ children }: { children: ReactNode }) {
     beginNewWorktree: (projectId: string) => {
       setSelectedProjectId(projectId);
       setMode("new-worktree");
+    },
+    beginConfigureProject: (projectId: string) => {
+      setSelectedProjectId(projectId);
+      setMode("configure");
     },
     clear: () => {
       setSelectedWorktreeId(null);

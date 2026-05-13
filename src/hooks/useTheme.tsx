@@ -56,6 +56,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = (next: Theme) => {
     window.localStorage.setItem(STORAGE_KEY, next);
     setThemeState(next);
+    // Keep the main process in sync so the BrowserWindow paints the right
+    // background on next launch and the native chrome tracks the new theme.
+    void window.api.runtime.setTheme(next);
   };
 
   return (

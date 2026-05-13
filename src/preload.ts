@@ -10,6 +10,7 @@ import type {
   ScriptEvent,
   ScriptName,
   ShigotoConfig,
+  Theme,
   Worktree,
 } from "@shared/schemas";
 
@@ -46,6 +47,8 @@ const api = {
   },
   runtime: {
     info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
+    setTheme: (theme: Theme): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.RuntimeSetTheme, { theme }),
   },
   fs: {
     listDirectory: (path: string): Promise<DirectoryListing> =>
@@ -56,6 +59,14 @@ const api = {
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>
       ipcRenderer.invoke(CHANNELS.ShigotoRead, { projectId }),
+    write: (projectId: string, config: ShigotoConfig): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShigotoWrite, { projectId, config }),
+  },
+  shell: {
+    openPath: (path: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
+    showItemInFolder: (path: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
   },
   scripts: {
     run: (input: {

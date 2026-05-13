@@ -4,6 +4,26 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shigoto no Mori</title>
+    <script>
+      // Apply persisted theme synchronously before any CSS or React runs, so
+      // the first paint matches the user's choice. Mirrors the BrowserWindow
+      // backgroundColor set in src/main.ts.
+      (function () {
+        try {
+          var stored = localStorage.getItem("shigoto.theme") || "system";
+          var dark =
+            stored === "dark" ||
+            (stored === "system" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var html = document.documentElement;
+          if (dark) html.classList.add("dark");
+          html.style.colorScheme = dark ? "dark" : "light";
+          html.style.background = dark ? "#1c1c1c" : "#ffffff";
+        } catch (_) {
+          // localStorage may be unavailable in some contexts; render light.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

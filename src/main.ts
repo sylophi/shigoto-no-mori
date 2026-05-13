@@ -1,7 +1,10 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
 import path from "node:path";
 import started from "electron-squirrel-startup";
+import { CHANNELS } from "@shared/channels";
+import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { registerIpcHandlers } from "./main/ipc";
+import { readKey, writeKey } from "./main/store";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -10,14 +13,28 @@ if (started) {
 
 registerIpcHandlers();
 
+const THEME_KEY = "theme";
+const BG_LIGHT = "#ffffff";
+const BG_DARK = "#1c1c1c";
+
+function resolvedBgColor(): string {
+  const stored = readKey<Theme>(THEME_KEY, "system");
+  const dark =
+    stored === "dark" ||
+    (stored === "system" && nativeTheme.shouldUseDarkColors);
+  return dark ? BG_DARK : BG_LIGHT;
+}
+
+let mainWindow: BrowserWindow | null = null;
+
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 720,
     minHeight: 480,
     titleBarStyle: "hiddenInset",
-    backgroundColor: "#fafafa",
+    backgroundColor: resolvedBgColor(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -34,6 +51,22 @@ const createWindow = () => {
     );
   }
 };
+
+// Persist user-chosen theme so the next window can paint the right color
+// before the renderer mounts. Also nudges the current window so OS-level
+// chrome (titlebar, scrollbars) stays in sync after a theme change.
+ipcMain.handle(CHANNELS.RuntimeSetTheme, (_event, rawPayload: unknown) => {
+  const { theme } = SetThemePayloadSchema.parse(rawPayload);
+  writeKey<Theme>(THEME_KEY, theme);
+  if (mainWindow) mainWindow.setBackgroundColor(resolvedBgColor());
+});
+
+// React to OS theme changes when the user has chosen "system".
+nativeTheme.on("updated", () => {
+  if (!mainWindow) return;
+  const stored = readKey<Theme>(THEME_KEY, "system");
+  if (stored === "system") mainWindow.setBackgroundColor(resolvedBgColor());
+});
 
 app.on("ready", createWindow);
 

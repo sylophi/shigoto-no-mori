@@ -2,6 +2,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useSelection } from "@/hooks/useSelection";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import type { Worktree } from "@shared/types";
+import { ConfigureProject } from "./ConfigureProject";
 import { EmptyState } from "./EmptyState";
 import { NewWorktree } from "./NewWorktree";
 import { WorktreeDetail } from "./WorktreeDetail";
@@ -13,6 +14,10 @@ export function DetailPane() {
 
   if (mode === "new-worktree" && selectedProjectId) {
     return <NewWorktree projectId={selectedProjectId} />;
+  }
+
+  if (mode === "configure" && selectedProjectId) {
+    return <ConfigureProject projectId={selectedProjectId} />;
   }
 
   if (mode === "worktree" && selectedWorktreeId) {

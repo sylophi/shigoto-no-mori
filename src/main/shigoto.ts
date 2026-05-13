@@ -1,7 +1,7 @@
-// Read shigomori.config.json from a project's root, with a short TTL cache so
-// repeated IPC handlers (launchers, scripts, palette) don't re-read and
-// re-parse on every action.
-import { readFile } from "node:fs/promises";
+// Read / write shigomori.config.json from a project's root. Reads are cached
+// with a short TTL so repeated IPC handlers (launchers, scripts, palette)
+// don't re-read and re-parse on every action; the cache is busted on write.
+import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ShigotoConfig, ShigotoConfigSchema } from "@shared/schemas";
 
@@ -41,4 +41,26 @@ export async function readShigotoConfig(
 
   cache.set(projectPath, { value, expires: now + CACHE_TTL_MS });
   return value;
+}
+
+export function configPathFor(projectPath: string): string {
+  return join(projectPath, "shigomori.config.json");
+}
+
+export async function writeShigotoConfig(
+  projectPath: string,
+  config: ShigotoConfig,
+): Promise<void> {
+  const validated = ShigotoConfigSchema.parse(config);
+  const target = configPathFor(projectPath);
+  const temp = `${target}.tmp.${process.pid}.${Date.now()}`;
+  const json = `${JSON.stringify(validated, null, 2)}\n`;
+  await writeFile(temp, json, "utf8");
+  try {
+    await rename(temp, target);
+  } catch (error) {
+    await unlink(temp).catch(() => undefined);
+    throw error;
+  }
+  cache.delete(projectPath);
 }

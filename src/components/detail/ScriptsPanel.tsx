@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useSelection } from "@/hooks/useSelection";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { type LogLine, useScriptRun } from "@/hooks/useScriptRun";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ const SCRIPT_ORDER: ScriptName[] = ["setup", "run", "teardown"];
 export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
   const { data: config, isLoading } = useShigotoConfig(worktree.projectId);
   const run = useScriptRun();
+  const { beginConfigureProject } = useSelection();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll the console to the bottom on new log lines.
@@ -31,7 +34,13 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
   }, [run.logs]);
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground">Reading config…</div>;
+    return (
+      <div className="flex items-center gap-2" aria-label="Reading config">
+        <Skeleton className="h-7 w-20" />
+        <Skeleton className="h-7 w-20" />
+        <Skeleton className="h-7 w-24" />
+      </div>
+    );
   }
 
   const scripts = config?.scripts ?? {};
@@ -39,11 +48,17 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
 
   if (defined.length === 0) {
     return (
-      <div className="text-sm text-muted-foreground">
-        No scripts defined. Add{" "}
-        <span className="font-mono">scripts.setup / .run / .teardown</span> to{" "}
-        <span className="font-mono">shigomori.config.json</span> at the project
-        root.
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          No setup, run, or teardown scripts configured.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => beginConfigureProject(worktree.projectId)}
+        >
+          Configure scripts
+        </Button>
       </div>
     );
   }

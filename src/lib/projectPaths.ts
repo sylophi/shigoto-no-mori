@@ -53,3 +53,10 @@ export function normalizeForSubmit(value: string): string {
   if (trimmed.length <= 1) return trimmed;
   return trimmed.replace(/\/+$/, "");
 }
+
+export function tildify(path: string, home: string | null | undefined): string {
+  if (!home || !path) return path;
+  if (path === home) return "~";
+  if (path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`;
+  return path;
+}

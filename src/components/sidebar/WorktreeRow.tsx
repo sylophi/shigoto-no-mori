@@ -15,18 +15,12 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       type="button"
       onClick={() => selectWorktree(worktree.id)}
       className={cn(
-        "group relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+        "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
         "hover:bg-accent/60",
-        isSelected && "bg-accent text-accent-foreground",
+        isSelected && "bg-accent font-medium text-accent-foreground",
       )}
     >
-      {isSelected && (
-        <span
-          aria-hidden
-          className="absolute top-1.5 bottom-1.5 left-0 w-0.5 rounded-r-full bg-foreground"
-        />
-      )}
-      <span className="flex-1 truncate font-medium">
+      <span className="flex-1 truncate font-mono">
         {worktree.branch.replace(/^.*\//, "")}
       </span>
       <StatusIndicator worktree={worktree} />

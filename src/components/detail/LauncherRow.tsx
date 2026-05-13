@@ -6,11 +6,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   useLaunch,
   useLauncherForProject,
   useSetPreferredLauncher,
 } from "@/hooks/useLaunchers";
+import { useSelection } from "@/hooks/useSelection";
 import { cn } from "@/lib/utils";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 
@@ -41,19 +43,32 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   const { data, isLoading } = useLauncherForProject(worktree.projectId);
   const launch = useLaunch();
   const setPreferred = useSetPreferredLauncher();
+  const { beginConfigureProject } = useSelection();
 
   if (isLoading) {
-    return <div className="text-sm text-muted-foreground">Detecting apps…</div>;
+    return (
+      <div className="flex items-center" aria-label="Detecting launchers">
+        <Skeleton className="h-8 w-40 rounded-r-none" />
+        <Skeleton className="h-8 w-8 rounded-l-none" />
+      </div>
+    );
   }
 
   const entries = data?.entries ?? [];
   const preferredId = data?.preferred ?? entries[0]?.id ?? null;
   if (entries.length === 0 || !preferredId) {
     return (
-      <div className="text-sm text-muted-foreground">
-        No launchers detected. Install a supported editor (Cursor, VS Code,
-        Zed…) or add commands under <span className="font-mono">launchers</span>{" "}
-        in <span className="font-mono">shigomori.config.json</span>.
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          No editors detected and no custom launchers configured.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => beginConfigureProject(worktree.projectId)}
+        >
+          Configure launchers
+        </Button>
       </div>
     );
   }

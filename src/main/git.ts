@@ -4,6 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
+import { sanitizeBranchForPath } from "@shared/branches";
 import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
 import { shigomoriRoot } from "./paths";
 
@@ -183,9 +184,7 @@ export async function listWorktrees(
   const identities = await listWorktreeIdentities(projectId, projectPath);
   // Hide the primary worktree from the UI — shigomori is about managing the
   // additional worktrees layered on top of the original checkout.
-  return Promise.all(
-    identities.filter((i) => !i.isPrimary).map(buildWorktree),
-  );
+  return Promise.all(identities.filter((i) => !i.isPrimary).map(buildWorktree));
 }
 
 export async function describeWorktree(
@@ -205,10 +204,6 @@ export async function findWorktreeIdentity(
 
 export function deriveProjectName(path: string): string {
   return basename(path);
-}
-
-function sanitizeBranchForPath(branch: string): string {
-  return branch.replace(/[\\/]/g, "-").replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 export function defaultWorktreePath(

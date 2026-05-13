@@ -138,6 +138,21 @@ export const ReadShigotoPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const WriteShigotoPayloadSchema = z.object({
+  projectId: z.string(),
+  config: ShigotoConfigSchema,
+});
+
+export const ShellPathPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
+export const ThemeSchema = z.enum(["light", "dark", "system"]);
+export const SetThemePayloadSchema = z.object({
+  theme: ThemeSchema,
+});
+export type Theme = z.infer<typeof ThemeSchema>;
+
 export const ScriptNameSchema = z.enum(["setup", "run", "teardown"]);
 
 export const RunScriptPayloadSchema = z.object({
