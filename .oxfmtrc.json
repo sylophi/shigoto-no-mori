@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": true,
+  "singleQuote": false,
+  "tabWidth": 2,
+  "trailingComma": "all",
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "sortTailwindcss": {
+    "stylesheet": "./src/index.css"
+  },
+  "ignorePatterns": [
+    "**/node_modules/",
+    "**/out/",
+    "**/dist/",
+    "**/.vite/",
+    "pnpm-lock.yaml",
+    "**/tsconfig.tsbuildinfo",
+    "*.md",
+    "**/*.md"
+  ]
+}

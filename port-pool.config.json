@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "portNames": ["renderer"],
+  "envFiles": {
+    ".env": {
+      "PORT": "${renderer}"
+    }
+  }
+}
