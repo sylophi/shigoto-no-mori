@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSelection } from "@/hooks/useSelection";
-import { mockProjects } from "@/lib/mockData";
+import { useProjects } from "@/hooks/useProjects";
 
 interface NewWorktreeProps {
   projectId: string;
@@ -10,7 +10,8 @@ interface NewWorktreeProps {
 
 export function NewWorktree({ projectId }: NewWorktreeProps) {
   const { clear } = useSelection();
-  const project = mockProjects.find((p) => p.id === projectId);
+  const { data: projects = [] } = useProjects();
+  const project = projects.find((p) => p.id === projectId);
   const [branchName, setBranchName] = useState("");
 
   if (!project) {
@@ -55,8 +56,8 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
             className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
           />
           <p className="text-xs text-muted-foreground">
-            Branched from <span className="font-mono">main</span>. Source picker
-            and setup-script preview land with the IPC commit.
+            Source picker, setup-script preview, and actual creation land in the
+            next IPC commit.
           </p>
         </div>
 

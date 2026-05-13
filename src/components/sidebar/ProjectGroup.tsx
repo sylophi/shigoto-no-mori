@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ChevronRight, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/hooks/useSelection";
+import { useWorktrees } from "@/hooks/useWorktrees";
 import type { Project } from "@shared/types";
 import { WorktreeRow } from "./WorktreeRow";
 
@@ -12,6 +13,7 @@ interface ProjectGroupProps {
 export function ProjectGroup({ project }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
   const { beginNewWorktree } = useSelection();
+  const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
 
   return (
     <div className="flex flex-col">
@@ -28,9 +30,11 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             )}
           />
           <span className="truncate">{project.name}</span>
-          <span className="tabular text-[10px] font-medium text-muted-foreground/70">
-            {project.worktrees.length}
-          </span>
+          {worktrees.length > 0 && (
+            <span className="tabular text-[10px] font-medium text-muted-foreground/70">
+              {worktrees.length}
+            </span>
+          )}
         </button>
         <button
           type="button"
@@ -43,9 +47,21 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
       </div>
       {expanded && (
         <div className="flex flex-col gap-0.5 pl-3">
-          {project.worktrees.map((worktree) => (
-            <WorktreeRow key={worktree.id} worktree={worktree} />
-          ))}
+          {isLoading && (
+            <div className="px-2 py-1 text-xs text-muted-foreground/70">
+              Loading worktrees…
+            </div>
+          )}
+          {error && (
+            <div className="px-2 py-1 text-xs text-destructive">
+              Failed to list worktrees
+            </div>
+          )}
+          {!isLoading &&
+            !error &&
+            worktrees.map((worktree) => (
+              <WorktreeRow key={worktree.id} worktree={worktree} />
+            ))}
         </div>
       )}
     </div>

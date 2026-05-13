@@ -45,18 +45,24 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
 
         <section className="space-y-3">
           <SectionHeading>Last commit</SectionHeading>
-          <div className="space-y-1">
-            <div className="font-mono text-sm">
-              {worktree.lastCommit.subject}
+          {worktree.lastCommit ? (
+            <div className="space-y-1">
+              <div className="font-mono text-sm">
+                {worktree.lastCommit.subject}
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-mono">{worktree.lastCommit.hash}</span>
+                <span aria-hidden>·</span>
+                <span>{worktree.lastCommit.author}</span>
+                <span aria-hidden>·</span>
+                <RelativeDate date={worktree.lastCommit.date} />
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="font-mono">{worktree.lastCommit.hash}</span>
-              <span aria-hidden>·</span>
-              <span>{worktree.lastCommit.author}</span>
-              <span aria-hidden>·</span>
-              <RelativeDate date={worktree.lastCommit.date} />
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Last-commit detail lands when git log IPC is wired.
             </div>
-          </div>
+          )}
         </section>
 
         <Separator />

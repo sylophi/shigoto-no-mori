@@ -1,19 +1,27 @@
 import { Moon, Plus, Sun, SunMoon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
+import { addProjectViaDialog, useProjects } from "@/hooks/useProjects";
+import { useQueryClient } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { mockProjects } from "@/lib/mockData";
 import { ProjectGroup } from "./ProjectGroup";
 
 export function Sidebar() {
+  const { data: projects = [], isLoading } = useProjects();
+
   return (
     <aside className="flex h-full flex-col border-r border-border bg-card">
       <SidebarHeader />
       <ScrollArea className="flex-1">
         <div className="flex flex-col gap-1 px-2 py-2">
-          {mockProjects.map((project) => (
+          {projects.map((project) => (
             <ProjectGroup key={project.id} project={project} />
           ))}
+          {!isLoading && projects.length === 0 && (
+            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+              No projects yet.
+            </div>
+          )}
         </div>
       </ScrollArea>
       <SidebarFooter />
@@ -36,10 +44,24 @@ function SidebarHeader() {
 }
 
 function SidebarFooter() {
+  const queryClient = useQueryClient();
+
+  const handleAdd = async () => {
+    try {
+      const project = await addProjectViaDialog();
+      if (project) {
+        void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      }
+    } catch (error) {
+      console.error("Failed to add project", error);
+    }
+  };
+
   return (
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
       <button
         type="button"
+        onClick={handleAdd}
         className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Plus className="size-3.5" />

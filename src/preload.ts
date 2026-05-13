@@ -1,9 +1,27 @@
-// Preload script — runs in an isolated context with access to Node APIs.
-// IPC surface added in subsequent commits as the worktree backend lands.
+// Preload script — runs in an isolated context with access to Node + Electron APIs.
+// Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
+import { CHANNELS } from "@shared/channels";
+import type { Project, Worktree } from "@shared/schemas";
 
-const api = {} as const;
+const api = {
+  projects: {
+    list: (): Promise<Project[]> => ipcRenderer.invoke(CHANNELS.ProjectsList),
+    add: (path: string): Promise<Project> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsAdd, { path }),
+    remove: (id: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsRemove, { id }),
+  },
+  worktrees: {
+    list: (projectId: string): Promise<Worktree[]> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesList, { projectId }),
+  },
+  dialog: {
+    pickFolder: (): Promise<string | null> =>
+      ipcRenderer.invoke(CHANNELS.DialogPickFolder),
+  },
+} as const;
 
 export type RendererApi = typeof api;
 
