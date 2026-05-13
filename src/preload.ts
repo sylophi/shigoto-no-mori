@@ -16,6 +16,21 @@ const api = {
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>
       ipcRenderer.invoke(CHANNELS.WorktreesList, { projectId }),
+    create: (input: {
+      projectId: string;
+      branchName: string;
+      base?: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesCreate, input),
+    delete: (input: {
+      projectId: string;
+      worktreeId: string;
+      force?: boolean;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesDelete, {
+        ...input,
+        force: input.force ?? false,
+      }),
   },
   dialog: {
     pickFolder: (): Promise<string | null> =>

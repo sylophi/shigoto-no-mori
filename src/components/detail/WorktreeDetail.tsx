@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -8,6 +9,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useDeleteWorktree } from "@/hooks/useWorktrees";
+import { useSelection } from "@/hooks/useSelection";
 import type { Worktree } from "@shared/types";
 
 interface WorktreeDetailProps {
@@ -16,6 +19,30 @@ interface WorktreeDetailProps {
 }
 
 export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
+  const { clear } = useSelection();
+  const deleteMutation = useDeleteWorktree();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isDirty = worktree.dirtyCount > 0;
+  const busy = deleteMutation.isPending;
+
+  const handleDelete = () => {
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      window.setTimeout(() => setConfirmDelete(false), 3_000);
+      return;
+    }
+    deleteMutation.mutate(
+      {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        force: isDirty,
+      },
+      {
+        onSuccess: () => clear(),
+      },
+    );
+  };
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-8 py-6">
@@ -37,7 +64,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
           <SectionHeading>Launch</SectionHeading>
           <div className="text-sm text-muted-foreground">
             T3-style preferred-app button + chevron menu lands in the next
-            commit. For now: stub.
+            commit.
           </div>
         </section>
 
@@ -59,9 +86,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
               </div>
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground">
-              Last-commit detail lands when git log IPC is wired.
-            </div>
+            <div className="text-sm text-muted-foreground">No commits yet.</div>
           )}
         </section>
 
@@ -74,6 +99,12 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
             is wired.
           </div>
         </section>
+
+        {deleteMutation.error && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {deleteMutation.error.message}
+          </div>
+        )}
       </div>
 
       <footer className="flex items-center gap-2 border-t border-border bg-card px-8 py-3">
@@ -97,11 +128,30 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
         <Button
           variant="ghost"
           size="sm"
-          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-          disabled={worktree.isPrimary}
+          className={cn(
+            "text-destructive hover:bg-destructive/10 hover:text-destructive",
+            confirmDelete && "bg-destructive/10",
+          )}
+          disabled={worktree.isPrimary || busy}
+          onClick={handleDelete}
+          title={
+            worktree.isPrimary
+              ? "Primary worktree can't be deleted from here"
+              : confirmDelete
+                ? isDirty
+                  ? "Click again to force-delete (dirty)"
+                  : "Click again to confirm delete"
+                : "Delete worktree"
+          }
         >
           <Trash2 />
-          Delete worktree
+          {busy
+            ? "Deleting…"
+            : confirmDelete
+              ? isDirty
+                ? "Force delete?"
+                : "Confirm delete?"
+              : "Delete worktree"}
         </Button>
       </footer>
     </div>

@@ -1,8 +1,10 @@
 // Thin wrappers around git CLI via child_process. Each call returns the parsed
 // result; throws on non-zero exit.
 import { execFile } from "node:child_process";
+import { mkdir } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { basename } from "node:path";
 import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
 
 const exec = promisify(execFile);
@@ -162,4 +164,45 @@ export async function listWorktrees(
 
 export function deriveProjectName(path: string): string {
   return basename(path);
+}
+
+function sanitizeBranchForPath(branch: string): string {
+  return branch.replace(/[\\/]/g, "-").replace(/[^A-Za-z0-9._-]/g, "_");
+}
+
+export function defaultWorktreePath(
+  projectPath: string,
+  branchName: string,
+): string {
+  const projectName = basename(projectPath);
+  return join(
+    homedir(),
+    ".shigoto",
+    "worktrees",
+    projectName,
+    sanitizeBranchForPath(branchName),
+  );
+}
+
+export async function createWorktree(
+  projectPath: string,
+  branchName: string,
+  base: string | undefined,
+): Promise<string> {
+  const worktreePath = defaultWorktreePath(projectPath, branchName);
+  await mkdir(dirname(worktreePath), { recursive: true });
+  const args = ["worktree", "add", "-b", branchName, worktreePath];
+  if (base) args.push(base);
+  await run(projectPath, args);
+  return worktreePath;
+}
+
+export async function removeWorktree(
+  projectPath: string,
+  worktreePath: string,
+  force: boolean,
+): Promise<void> {
+  const args = ["worktree", "remove", worktreePath];
+  if (force) args.push("--force");
+  await run(projectPath, args);
 }

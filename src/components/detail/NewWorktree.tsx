@@ -3,16 +3,19 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSelection } from "@/hooks/useSelection";
 import { useProjects } from "@/hooks/useProjects";
+import { useCreateWorktree } from "@/hooks/useWorktrees";
 
 interface NewWorktreeProps {
   projectId: string;
 }
 
 export function NewWorktree({ projectId }: NewWorktreeProps) {
-  const { clear } = useSelection();
+  const { clear, selectWorktree } = useSelection();
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const [branchName, setBranchName] = useState("");
+  const [base, setBase] = useState("");
+  const create = useCreateWorktree();
 
   if (!project) {
     return (
@@ -21,6 +24,20 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
       </div>
     );
   }
+
+  const handleCreate = () => {
+    create.mutate(
+      { projectId: project.id, branchName, base: base || undefined },
+      {
+        onSuccess: (worktree) => {
+          selectWorktree(worktree.id);
+        },
+      },
+    );
+  };
+
+  const busy = create.isPending;
+  const errorMessage = create.error ? create.error.message : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -45,7 +62,7 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
             htmlFor="branch-name"
             className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
           >
-            Branch name
+            New branch
           </label>
           <input
             id="branch-name"
@@ -53,19 +70,51 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
             value={branchName}
             onChange={(e) => setBranchName(e.target.value)}
             placeholder="feat/new-thing"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+            disabled={busy}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label
+            htmlFor="branch-base"
+            className="text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+          >
+            Branched from (optional)
+          </label>
+          <input
+            id="branch-base"
+            type="text"
+            value={base}
+            onChange={(e) => setBase(e.target.value)}
+            placeholder="main"
+            disabled={busy}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
           />
           <p className="text-xs text-muted-foreground">
-            Source picker, setup-script preview, and actual creation land in the
-            next IPC commit.
+            Defaults to the current HEAD. The worktree lives at{" "}
+            <span className="font-mono">
+              ~/.shigoto/worktrees/{project.name}/&lt;branch&gt;
+            </span>
+            .
           </p>
         </div>
 
+        {errorMessage && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {errorMessage}
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
-          <Button disabled={!branchName} size="sm">
-            Create worktree
+          <Button
+            disabled={!branchName || busy}
+            size="sm"
+            onClick={handleCreate}
+          >
+            {busy ? "Creating…" : "Create worktree"}
           </Button>
-          <Button variant="ghost" size="sm" onClick={clear}>
+          <Button variant="ghost" size="sm" onClick={clear} disabled={busy}>
             Cancel
           </Button>
         </div>

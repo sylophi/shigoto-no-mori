@@ -4,6 +4,8 @@ export const CHANNELS = {
   ProjectsAdd: "projects:add",
   ProjectsRemove: "projects:remove",
   WorktreesList: "worktrees:list",
+  WorktreesCreate: "worktrees:create",
+  WorktreesDelete: "worktrees:delete",
   DialogPickFolder: "dialog:pickFolder",
 } as const;
 

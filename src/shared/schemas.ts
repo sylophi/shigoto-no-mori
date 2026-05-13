@@ -51,6 +51,18 @@ export const ListWorktreesPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const CreateWorktreePayloadSchema = z.object({
+  projectId: z.string(),
+  branchName: z.string().min(1),
+  base: z.string().optional(),
+});
+
+export const DeleteWorktreePayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  force: z.boolean().default(false),
+});
+
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
 export type WorktreeStatus = z.infer<typeof WorktreeStatusSchema>;
