@@ -16,10 +16,12 @@ export const CHANNELS = {
   LaunchersSetPreferred: "launchers:setPreferred",
   DialogPickFolder: "dialog:pickFolder",
   RuntimeInfo: "runtime:info",
+  FsListDirectory: "fs:listDirectory",
 } as const;
 
 export interface RuntimeInfo {
   shigomoriRoot: string;
+  homedir: string;
   isDev: boolean;
 }
 

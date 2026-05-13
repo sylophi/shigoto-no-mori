@@ -15,6 +15,7 @@ export function registerRuntimeHandlers(): void {
     CHANNELS.RuntimeInfo,
     (): RuntimeInfo => ({
       shigomoriRoot: tildify(shigomoriRoot()),
+      homedir: homedir(),
       isDev: !app.isPackaged,
     }),
   );

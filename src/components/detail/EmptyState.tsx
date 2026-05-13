@@ -1,10 +1,11 @@
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useAddProjectFlow, useProjects } from "@/hooks/useProjects";
+import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { useProjects } from "@/hooks/useProjects";
 
 export function EmptyState() {
   const { data: projects = [] } = useProjects();
-  const addProject = useAddProjectFlow();
+  const { openIn } = useCommandPalette();
   const hasProjects = projects.length > 0;
 
   return (
@@ -22,19 +23,9 @@ export function EmptyState() {
             : "Add a project to start managing its worktrees."}
         </p>
       </div>
-      <Button size="sm" onClick={() => void addProject.start()}>
+      <Button size="sm" onClick={() => openIn("add-project")}>
         {hasProjects ? "Add another project" : "Add your first project"}
       </Button>
-      {addProject.error && (
-        <button
-          type="button"
-          onClick={() => addProject.reset()}
-          className="max-w-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive hover:bg-destructive/15"
-          title="Click to dismiss"
-        >
-          {addProject.error.message}
-        </button>
-      )}
     </div>
   );
 }

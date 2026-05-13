@@ -63,6 +63,25 @@ export const DeleteWorktreePayloadSchema = z.object({
   force: z.boolean().default(false),
 });
 
+// Filesystem browser used by the Add Project palette.
+
+export const ListDirectoryPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
+export const DirectoryEntrySchema = z.object({
+  name: z.string(),
+  isGitRepo: z.boolean(),
+});
+
+export const DirectoryListingSchema = z.object({
+  path: z.string(),
+  entries: z.array(DirectoryEntrySchema),
+});
+
+export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
+export type DirectoryListing = z.infer<typeof DirectoryListingSchema>;
+
 // shigomori.config.json — per-project config committed to the repo.
 
 export const LauncherCommandSchema = z.object({

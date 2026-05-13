@@ -4,6 +4,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
+  DirectoryListing,
   LauncherEntry,
   Project,
   ScriptEvent,
@@ -45,6 +46,10 @@ const api = {
   },
   runtime: {
     info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
+  },
+  fs: {
+    listDirectory: (path: string): Promise<DirectoryListing> =>
+      ipcRenderer.invoke(CHANNELS.FsListDirectory, { path }),
   },
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>

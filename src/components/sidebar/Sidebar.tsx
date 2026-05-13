@@ -1,7 +1,8 @@
-import { Moon, Plus, Sun, SunMoon } from "lucide-react";
+import { FolderPlus, Moon, Sun, SunMoon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useTheme } from "@/hooks/useTheme";
-import { useAddProjectFlow, useProjects } from "@/hooks/useProjects";
+import { useProjects } from "@/hooks/useProjects";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProjectGroup } from "./ProjectGroup";
 
@@ -29,45 +30,36 @@ export function Sidebar() {
 }
 
 function SidebarHeader() {
+  const { openIn } = useCommandPalette();
+
   return (
     <div
-      className="flex h-11 items-center px-3"
+      className="flex h-11 items-center gap-2 px-3"
       // macOS title-bar drag region
       style={{ ["-webkit-app-region" as never]: "drag" }}
     >
-      <div className="flex w-full items-center pl-16 text-[13px] font-semibold tracking-tight">
+      <div className="flex flex-1 items-center pl-16 text-[13px] font-semibold tracking-tight">
         Shigoto no Mori
       </div>
+      <button
+        type="button"
+        onClick={() => openIn("add-project")}
+        // Opt out of the title-bar drag region so the click is captured.
+        style={{ ["-webkit-app-region" as never]: "no-drag" }}
+        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        aria-label="Add project"
+        title="Add project (⌘K)"
+      >
+        <FolderPlus className="size-3.5" />
+      </button>
     </div>
   );
 }
 
 function SidebarFooter() {
-  const addProject = useAddProjectFlow();
-
   return (
-    <div className="flex flex-col border-t border-border">
-      {addProject.error && (
-        <button
-          type="button"
-          onClick={() => addProject.reset()}
-          className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-left text-xs text-destructive hover:bg-destructive/15"
-          title="Click to dismiss"
-        >
-          {addProject.error.message}
-        </button>
-      )}
-      <div className="flex items-center gap-1 px-2 py-1.5">
-        <button
-          type="button"
-          onClick={() => void addProject.start()}
-          className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="size-3.5" />
-          <span>Add project</span>
-        </button>
-        <ThemeToggle />
-      </div>
+    <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-1.5">
+      <ThemeToggle />
     </div>
   );
 }
