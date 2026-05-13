@@ -61,7 +61,7 @@ export function CommandPalette() {
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/40 p-4 pt-[10vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-background/60 p-4 pt-[10vh] backdrop-blur-sm"
     >
       <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
         {mode === "browse" ? (
