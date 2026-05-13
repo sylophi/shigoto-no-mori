@@ -6,6 +6,11 @@ export const CHANNELS = {
   WorktreesList: "worktrees:list",
   WorktreesCreate: "worktrees:create",
   WorktreesDelete: "worktrees:delete",
+  ShigotoRead: "shigoto:read",
+  LaunchersDetect: "launchers:detect",
+  LaunchersForProject: "launchers:forProject",
+  LaunchersLaunch: "launchers:launch",
+  LaunchersSetPreferred: "launchers:setPreferred",
   DialogPickFolder: "dialog:pickFolder",
 } as const;
 

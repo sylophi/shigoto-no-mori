@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useDeleteWorktree } from "@/hooks/useWorktrees";
 import { useSelection } from "@/hooks/useSelection";
+import { LauncherRow } from "./LauncherRow";
 import type { Worktree } from "@shared/types";
 
 interface WorktreeDetailProps {
@@ -62,10 +63,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
       <div className="flex flex-col gap-8 overflow-y-auto px-8 py-6">
         <section>
           <SectionHeading>Launch</SectionHeading>
-          <div className="text-sm text-muted-foreground">
-            T3-style preferred-app button + chevron menu lands in the next
-            commit.
-          </div>
+          <LauncherRow worktree={worktree} />
         </section>
 
         <Separator />

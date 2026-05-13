@@ -63,7 +63,70 @@ export const DeleteWorktreePayloadSchema = z.object({
   force: z.boolean().default(false),
 });
 
+// shigoto.json — per-project config committed to the repo.
+
+export const LauncherCommandSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  command: z.string().min(1),
+});
+
+export const ShigotoConfigSchema = z.object({
+  scripts: z
+    .object({
+      setup: z.string().optional(),
+      run: z.string().optional(),
+      teardown: z.string().optional(),
+    })
+    .partial()
+    .optional(),
+  launchers: z.array(LauncherCommandSchema).optional(),
+  portBase: z.number().int().positive().optional(),
+});
+
+// Detected apps + custom commands from shigoto.json, ready for the renderer
+// to display in a single launcher row.
+
+export const DetectedLauncherSchema = z.object({
+  kind: z.literal("detected"),
+  id: z.string(),
+  label: z.string(),
+  icon: z.string(),
+  available: z.boolean(),
+});
+
+export const CustomLauncherSchema = z.object({
+  kind: z.literal("custom"),
+  id: z.string(),
+  label: z.string(),
+});
+
+export const LauncherEntrySchema = z.discriminatedUnion("kind", [
+  DetectedLauncherSchema,
+  CustomLauncherSchema,
+]);
+
+export const LaunchPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  launcherId: z.string(),
+});
+
+export const ReadShigotoPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+export const SetPreferredLauncherPayloadSchema = z.object({
+  projectId: z.string(),
+  launcherId: z.string(),
+});
+
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
 export type WorktreeStatus = z.infer<typeof WorktreeStatusSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
+export type ShigotoConfig = z.infer<typeof ShigotoConfigSchema>;
+export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
+export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
+export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
+export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;

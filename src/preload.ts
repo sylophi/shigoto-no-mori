@@ -3,7 +3,12 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
-import type { Project, Worktree } from "@shared/schemas";
+import type {
+  LauncherEntry,
+  Project,
+  ShigotoConfig,
+  Worktree,
+} from "@shared/schemas";
 
 const api = {
   projects: {
@@ -35,6 +40,26 @@ const api = {
   dialog: {
     pickFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(CHANNELS.DialogPickFolder),
+  },
+  shigoto: {
+    read: (projectId: string): Promise<ShigotoConfig | null> =>
+      ipcRenderer.invoke(CHANNELS.ShigotoRead, { projectId }),
+  },
+  launchers: {
+    forProject: (
+      projectId: string,
+    ): Promise<{ entries: LauncherEntry[]; preferred: string | null }> =>
+      ipcRenderer.invoke(CHANNELS.LaunchersForProject, { projectId }),
+    launch: (input: {
+      projectId: string;
+      worktreeId: string;
+      launcherId: string;
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.LaunchersLaunch, input),
+    setPreferred: (input: {
+      projectId: string;
+      launcherId: string;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.LaunchersSetPreferred, input),
   },
 } as const;
 
