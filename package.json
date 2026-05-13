@@ -8,6 +8,7 @@
   "packageManager": "pnpm@11.1.1",
   "scripts": {
     "start": "port-pool ensure . && electron-forge start",
+    "dev": "pnpm run start",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
