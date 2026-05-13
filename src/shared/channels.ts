@@ -15,6 +15,12 @@ export const CHANNELS = {
   LaunchersLaunch: "launchers:launch",
   LaunchersSetPreferred: "launchers:setPreferred",
   DialogPickFolder: "dialog:pickFolder",
+  RuntimeInfo: "runtime:info",
 } as const;
+
+export interface RuntimeInfo {
+  shigomoriRoot: string;
+  isDev: boolean;
+}
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];

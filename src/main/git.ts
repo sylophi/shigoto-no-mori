@@ -2,10 +2,10 @@
 // result; throws on non-zero exit.
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
+import { shigomoriRoot } from "./paths";
 
 const exec = promisify(execFile);
 
@@ -214,8 +214,7 @@ export function defaultWorktreePath(
 ): string {
   const projectName = basename(projectPath);
   return join(
-    homedir(),
-    "shigomori",
+    shigomoriRoot(),
     "worktrees",
     projectName,
     sanitizeBranchForPath(branchName),

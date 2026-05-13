@@ -1,12 +1,12 @@
-// Tiny JSON-file persistence in ~/shigomori. Atomic via tmp+rename.
+// Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { shigomoriRoot } from "./paths";
 
 const FILE = "state.json";
 
 function filePath(): string {
-  return join(homedir(), "shigomori", FILE);
+  return join(shigomoriRoot(), FILE);
 }
 
 function readAll(): Record<string, unknown> {

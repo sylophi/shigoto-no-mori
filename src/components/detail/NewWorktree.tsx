@@ -3,6 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSelection } from "@/hooks/useSelection";
 import { useProjects } from "@/hooks/useProjects";
+import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 
 interface NewWorktreeProps {
@@ -12,6 +13,7 @@ interface NewWorktreeProps {
 export function NewWorktree({ projectId }: NewWorktreeProps) {
   const { clear, selectWorktree } = useSelection();
   const { data: projects = [] } = useProjects();
+  const { data: runtime } = useRuntimeInfo();
   const project = projects.find((p) => p.id === projectId);
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
@@ -94,7 +96,8 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
           <p className="text-xs text-muted-foreground">
             Defaults to the current HEAD. The worktree lives at{" "}
             <span className="font-mono">
-              ~/shigomori/worktrees/{project.name}/&lt;branch&gt;
+              {runtime?.shigomoriRoot ?? "~/shigomori"}/worktrees/{project.name}
+              /&lt;branch&gt;
             </span>
             .
           </p>

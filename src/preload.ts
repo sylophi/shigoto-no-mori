@@ -2,7 +2,7 @@
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
-import { CHANNELS } from "@shared/channels";
+import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
   LauncherEntry,
   Project,
@@ -42,6 +42,9 @@ const api = {
   dialog: {
     pickFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(CHANNELS.DialogPickFolder),
+  },
+  runtime: {
+    info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
   },
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>
