@@ -9,10 +9,10 @@ import {
   SunMoon,
   TreeDeciduous,
 } from "lucide-react";
-import { useQueries } from "@tanstack/react-query";
-import { addProjectViaDialog, useProjects } from "@/hooks/useProjects";
+import { useAddProjectFlow, useProjects } from "@/hooks/useProjects";
 import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
+import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 
 export function CommandPalette() {
@@ -20,6 +20,7 @@ export function CommandPalette() {
   const { data: projects = [] } = useProjects();
   const { selectWorktree, beginNewWorktree } = useSelection();
   const { setTheme } = useTheme();
+  const addProject = useAddProjectFlow();
 
   // Toggle on ⌘K / Ctrl+K.
   useEffect(() => {
@@ -33,14 +34,9 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Pull all worktrees across all projects so the palette can search them.
-  const worktreeQueries = useQueries({
-    queries: projects.map((project) => ({
-      queryKey: ["worktrees", project.id],
-      queryFn: () => window.api.worktrees.list(project.id),
-      staleTime: 10_000,
-    })),
-  });
+  // Worktree queries are gated on `open` so we don't refresh them in the
+  // background while the palette isn't visible.
+  const worktreeQueries = useAllProjectWorktrees(projects, open);
 
   const allWorktrees = projects.flatMap((project, i) => {
     const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
@@ -120,8 +116,8 @@ export function CommandPalette() {
             ))}
             <Command.Item
               value="add project"
-              onSelect={handle(async () => {
-                await addProjectViaDialog();
+              onSelect={handle(() => {
+                void addProject.start();
               })}
               className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
             >

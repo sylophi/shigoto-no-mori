@@ -4,26 +4,23 @@ import {
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
-  type Project,
   type Worktree,
 } from "@shared/schemas";
-import { createWorktree, listWorktrees, removeWorktree } from "../git";
-import { readKey } from "../store";
-
-const PROJECTS_KEY = "projects";
-
-function findProject(projectId: string): Project | undefined {
-  const projects = readKey<Project[]>(PROJECTS_KEY, []);
-  return projects.find((p) => p.id === projectId);
-}
+import {
+  createWorktree,
+  describeWorktree,
+  findWorktreeIdentity,
+  listWorktrees,
+  removeWorktree,
+} from "../git";
+import { findProjectOrThrow } from "../projects";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     CHANNELS.WorktreesList,
     async (_event, rawPayload: unknown): Promise<Worktree[]> => {
       const { projectId } = ListWorktreesPayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
+      const project = findProjectOrThrow(projectId);
       return listWorktrees(project.id, project.path);
     },
   );
@@ -33,17 +30,8 @@ export function registerWorktreeHandlers(): void {
     async (_event, rawPayload: unknown): Promise<Worktree> => {
       const { projectId, branchName, base } =
         CreateWorktreePayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
-      await createWorktree(project.path, branchName, base);
-      const trees = await listWorktrees(project.id, project.path);
-      const created = trees.find((w) => w.branch === branchName);
-      if (!created) {
-        throw new Error(
-          `Worktree was created but did not appear in the list for branch ${branchName}`,
-        );
-      }
-      return created;
+      const project = findProjectOrThrow(projectId);
+      return createWorktree(project.id, project.path, branchName, base);
     },
   );
 
@@ -52,18 +40,23 @@ export function registerWorktreeHandlers(): void {
     async (_event, rawPayload: unknown): Promise<void> => {
       const { projectId, worktreeId, force } =
         DeleteWorktreePayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
-      const trees = await listWorktrees(project.id, project.path);
-      const target = trees.find((w) => w.id === worktreeId);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
       if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
       if (target.isPrimary) {
         throw new Error("Cannot delete the project's primary worktree");
       }
-      if (target.dirtyCount > 0 && !force) {
-        throw new Error(
-          `Worktree has ${target.dirtyCount} uncommitted change(s). Pass force=true to remove anyway.`,
-        );
+      if (!force) {
+        const full = await describeWorktree(target);
+        if (full.dirtyCount > 0) {
+          throw new Error(
+            `Worktree has ${full.dirtyCount} uncommitted change(s). Pass force=true to remove anyway.`,
+          );
+        }
       }
       await removeWorktree(project.path, target.path, force);
     },

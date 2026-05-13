@@ -2,20 +2,12 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CancelScriptPayloadSchema,
-  type Project,
   RunScriptPayloadSchema,
-  type Worktree,
 } from "@shared/schemas";
-import { listWorktrees } from "../git";
+import { findWorktreeIdentity } from "../git";
+import { findProjectOrThrow } from "../projects";
 import { cancelScript, startScript } from "../scripts";
 import { readShigotoConfig } from "../shigoto";
-import { readKey } from "../store";
-
-const PROJECTS_KEY = "projects";
-
-function findProject(projectId: string): Project | undefined {
-  return readKey<Project[]>(PROJECTS_KEY, []).find((p) => p.id === projectId);
-}
 
 export function registerScriptHandlers(): void {
   ipcMain.handle(
@@ -24,8 +16,7 @@ export function registerScriptHandlers(): void {
       const { projectId, worktreeId, script } =
         RunScriptPayloadSchema.parse(rawPayload);
 
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
+      const project = findProjectOrThrow(projectId);
 
       const config = await readShigotoConfig(project.path);
       const command = config?.scripts?.[script];
@@ -35,8 +26,11 @@ export function registerScriptHandlers(): void {
         );
       }
 
-      const worktrees = await listWorktrees(project.id, project.path);
-      const worktree = worktrees.find((w: Worktree) => w.id === worktreeId);
+      const worktree = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
       if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 
       const runId = startScript({
@@ -44,7 +38,7 @@ export function registerScriptHandlers(): void {
         cwd: worktree.path,
         scriptName: script,
         worktreeId: worktree.id,
-        port: worktree.port,
+        port: undefined,
         webContents: event.sender,
       });
       return { runId };

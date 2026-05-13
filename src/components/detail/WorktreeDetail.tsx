@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -9,6 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDeleteWorktree } from "@/hooks/useWorktrees";
 import { useSelection } from "@/hooks/useSelection";
 import { LauncherRow } from "./LauncherRow";
@@ -20,29 +20,47 @@ interface WorktreeDetailProps {
   projectName: string;
 }
 
+function deleteButtonLabel(
+  busy: boolean,
+  armed: boolean,
+  isDirty: boolean,
+): string {
+  if (busy) return "Deleting…";
+  if (!armed) return "Delete worktree";
+  return isDirty ? "Force delete?" : "Confirm delete?";
+}
+
+function deleteButtonTitle(
+  isPrimary: boolean | undefined,
+  armed: boolean,
+  isDirty: boolean,
+): string {
+  if (isPrimary) return "Primary worktree can't be deleted from here";
+  if (!armed) return "Delete worktree";
+  return isDirty
+    ? "Click again to force-delete (dirty)"
+    : "Click again to confirm delete";
+}
+
 export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
   const { clear } = useSelection();
   const deleteMutation = useDeleteWorktree();
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
+    useConfirmTwice(3_000);
   const isDirty = worktree.dirtyCount > 0;
   const busy = deleteMutation.isPending;
 
   const handleDelete = () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      window.setTimeout(() => setConfirmDelete(false), 3_000);
-      return;
-    }
-    deleteMutation.mutate(
-      {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        force: isDirty,
-      },
-      {
-        onSuccess: () => clear(),
-      },
-    );
+    confirmDeleteTrigger(() => {
+      deleteMutation.mutate(
+        {
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          force: isDirty,
+        },
+        { onSuccess: () => clear() },
+      );
+    });
   };
 
   return (
@@ -130,24 +148,10 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
           )}
           disabled={worktree.isPrimary || busy}
           onClick={handleDelete}
-          title={
-            worktree.isPrimary
-              ? "Primary worktree can't be deleted from here"
-              : confirmDelete
-                ? isDirty
-                  ? "Click again to force-delete (dirty)"
-                  : "Click again to confirm delete"
-                : "Delete worktree"
-          }
+          title={deleteButtonTitle(worktree.isPrimary, confirmDelete, isDirty)}
         >
           <Trash2 />
-          {busy
-            ? "Deleting…"
-            : confirmDelete
-              ? isDirty
-                ? "Force delete?"
-                : "Confirm delete?"
-              : "Delete worktree"}
+          {deleteButtonLabel(busy, confirmDelete, isDirty)}
         </Button>
       </footer>
     </div>

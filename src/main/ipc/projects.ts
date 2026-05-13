@@ -4,21 +4,13 @@ import { CHANNELS } from "@shared/channels";
 import {
   AddProjectPayloadSchema,
   type Project,
-  ProjectSchema,
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
 import { deriveProjectName, isGitRepo } from "../git";
-import { readKey, writeKey } from "../store";
+import { loadProjects } from "../projects";
+import { writeKey } from "../store";
 
 const STORE_KEY = "projects";
-
-function loadProjects(): Project[] {
-  const raw = readKey<Project[]>(STORE_KEY, []);
-  return raw
-    .map((p) => ProjectSchema.safeParse(p))
-    .filter((r): r is Extract<typeof r, { success: true }> => r.success)
-    .map((r) => r.data);
-}
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(STORE_KEY, projects);

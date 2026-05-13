@@ -1,5 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Worktree } from "@shared/schemas";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { Project, Worktree } from "@shared/schemas";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
@@ -10,6 +15,19 @@ export function useWorktrees(projectId: string | null) {
     },
     enabled: projectId !== null,
     staleTime: 10_000,
+  });
+}
+
+// One query per project, sharing the per-project cache key with useWorktrees.
+// `enabled` toggles them all off when the consumer isn't visible (palette).
+export function useAllProjectWorktrees(projects: Project[], enabled = true) {
+  return useQueries({
+    queries: projects.map((project) => ({
+      queryKey: ["worktrees", project.id],
+      queryFn: () => window.api.worktrees.list(project.id),
+      staleTime: 10_000,
+      enabled,
+    })),
   });
 }
 

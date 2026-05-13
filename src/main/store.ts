@@ -1,11 +1,5 @@
 // Tiny JSON-file persistence keyed in userData. Atomic via tmp+rename.
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { app } from "electron";
 
@@ -16,10 +10,11 @@ function filePath(): string {
 }
 
 function readAll(): Record<string, unknown> {
-  const path = filePath();
-  if (!existsSync(path)) return {};
   try {
-    return JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+    return JSON.parse(readFileSync(filePath(), "utf8")) as Record<
+      string,
+      unknown
+    >;
   } catch {
     return {};
   }

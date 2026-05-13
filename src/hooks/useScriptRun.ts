@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ScriptEvent, ScriptName } from "@shared/schemas";
 
+const MAX_LOGS = 5_000;
+
 export interface LogLine {
   id: number;
   stream: "stdout" | "stderr" | "error" | "exit";
@@ -10,7 +12,6 @@ export interface LogLine {
 export interface ScriptRunState {
   logs: LogLine[];
   running: boolean;
-  runId: string | null;
   exitCode: number | null;
   start: (input: {
     projectId: string;
@@ -21,10 +22,14 @@ export interface ScriptRunState {
   clear: () => void;
 }
 
+function appendBounded(prev: LogLine[], entry: LogLine): LogLine[] {
+  if (prev.length < MAX_LOGS) return [...prev, entry];
+  return [...prev.slice(prev.length - MAX_LOGS + 1), entry];
+}
+
 export function useScriptRun(): ScriptRunState {
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [running, setRunning] = useState(false);
-  const [runId, setRunId] = useState<string | null>(null);
   const [exitCode, setExitCode] = useState<number | null>(null);
   const activeRunId = useRef<string | null>(null);
   const nextLogId = useRef(0);
@@ -32,29 +37,28 @@ export function useScriptRun(): ScriptRunState {
   useEffect(() => {
     const unsubscribe = window.api.scripts.onEvent((event: ScriptEvent) => {
       if (event.runId !== activeRunId.current) return;
+
+      const id = nextLogId.current++;
       if (event.kind === "stdout" || event.kind === "stderr") {
-        setLogs((prev) => [
-          ...prev,
-          { id: nextLogId.current++, stream: event.kind, text: event.data },
-        ]);
+        setLogs((prev) =>
+          appendBounded(prev, { id, stream: event.kind, text: event.data }),
+        );
         return;
       }
       if (event.kind === "error") {
-        setLogs((prev) => [
-          ...prev,
-          { id: nextLogId.current++, stream: "error", text: event.data },
-        ]);
+        setLogs((prev) =>
+          appendBounded(prev, { id, stream: "error", text: event.data }),
+        );
         return;
       }
       if (event.kind === "exit") {
-        setLogs((prev) => [
-          ...prev,
-          {
-            id: nextLogId.current++,
+        setLogs((prev) =>
+          appendBounded(prev, {
+            id,
             stream: "exit",
             text: `Exited with code ${event.code ?? "(signal)"}`,
-          },
-        ]);
+          }),
+        );
         setExitCode(event.code);
         setRunning(false);
       }
@@ -65,19 +69,17 @@ export function useScriptRun(): ScriptRunState {
   return {
     logs,
     running,
-    runId,
     exitCode,
     start: async ({ projectId, worktreeId, script }) => {
       setLogs([]);
       setExitCode(null);
       setRunning(true);
-      const { runId: newRunId } = await window.api.scripts.run({
+      const { runId } = await window.api.scripts.run({
         projectId,
         worktreeId,
         script,
       });
-      activeRunId.current = newRunId;
-      setRunId(newRunId);
+      activeRunId.current = runId;
     },
     cancel: async () => {
       if (!activeRunId.current) return;
@@ -87,7 +89,6 @@ export function useScriptRun(): ScriptRunState {
       setLogs([]);
       setExitCode(null);
       activeRunId.current = null;
-      setRunId(null);
     },
   };
 }

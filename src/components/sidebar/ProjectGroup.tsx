@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ChevronRight, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useSelection } from "@/hooks/useSelection";
 import { useWorktrees } from "@/hooks/useWorktrees";
 import { useRemoveProject } from "@/hooks/useProjects";
@@ -13,19 +14,15 @@ interface ProjectGroupProps {
 
 export function ProjectGroup({ project }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const { beginNewWorktree } = useSelection();
   const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
   const removeProject = useRemoveProject();
+  const { armed: confirmRemove, trigger: confirmRemoveTrigger } =
+    useConfirmTwice();
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirmRemove) {
-      setConfirmRemove(true);
-      window.setTimeout(() => setConfirmRemove(false), 2_500);
-      return;
-    }
-    removeProject.mutate(project.id);
+    confirmRemoveTrigger(() => removeProject.mutate(project.id));
   };
 
   return (

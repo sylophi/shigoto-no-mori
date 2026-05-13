@@ -5,13 +5,11 @@ import {
   type DetectedLauncher,
   LaunchPayloadSchema,
   type LauncherEntry,
-  type Project,
   ReadShigotoPayloadSchema,
   SetPreferredLauncherPayloadSchema,
   type ShigotoConfig,
-  type Worktree,
 } from "@shared/schemas";
-import { listWorktrees } from "../git";
+import { findWorktreeIdentity } from "../git";
 import {
   type DetectedApp,
   detectApps,
@@ -19,17 +17,13 @@ import {
   launchCustom,
   launchDetected,
 } from "../launchers";
+import { findProjectOrThrow } from "../projects";
 import { readShigotoConfig } from "../shigoto";
 import { readKey, writeKey } from "../store";
 
-const PROJECTS_KEY = "projects";
 const PREFERRED_KEY = "launcherPreferences";
 
 type PreferredMap = Record<string, string>;
-
-function findProject(projectId: string): Project | undefined {
-  return readKey<Project[]>(PROJECTS_KEY, []).find((p) => p.id === projectId);
-}
 
 function customEntries(config: ShigotoConfig | null): CustomLauncher[] {
   if (!config?.launchers) return [];
@@ -61,8 +55,7 @@ export function registerLauncherHandlers(): void {
     CHANNELS.ShigotoRead,
     async (_event, rawPayload: unknown): Promise<ShigotoConfig | null> => {
       const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
+      const project = findProjectOrThrow(projectId);
       return readShigotoConfig(project.path);
     },
   );
@@ -82,8 +75,7 @@ export function registerLauncherHandlers(): void {
       preferred: string | null;
     }> => {
       const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
+      const project = findProjectOrThrow(projectId);
 
       const [detected, config] = await Promise.all([
         detectApps(),
@@ -111,11 +103,13 @@ export function registerLauncherHandlers(): void {
     async (_event, rawPayload: unknown): Promise<void> => {
       const { projectId, worktreeId, launcherId } =
         LaunchPayloadSchema.parse(rawPayload);
-      const project = findProject(projectId);
-      if (!project) throw new Error(`Unknown project: ${projectId}`);
+      const project = findProjectOrThrow(projectId);
 
-      const worktrees = await listWorktrees(project.id, project.path);
-      const worktree = worktrees.find((w: Worktree) => w.id === worktreeId);
+      const worktree = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
       if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 
       if (launcherId.startsWith("app:")) {
@@ -133,7 +127,7 @@ export function registerLauncherHandlers(): void {
         const custom = config?.launchers?.find((l) => l.id === customId);
         if (!custom)
           throw new Error(`Custom launcher not in shigoto.json: ${customId}`);
-        launchCustom(custom.command, worktree.path, worktree.port);
+        launchCustom(custom.command, worktree.path, undefined);
         return;
       }
 

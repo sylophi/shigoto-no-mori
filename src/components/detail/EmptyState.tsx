@@ -1,23 +1,11 @@
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { addProjectViaDialog, useProjects } from "@/hooks/useProjects";
-import { useQueryClient } from "@tanstack/react-query";
+import { useAddProjectFlow, useProjects } from "@/hooks/useProjects";
 
 export function EmptyState() {
-  const queryClient = useQueryClient();
   const { data: projects = [] } = useProjects();
+  const addProject = useAddProjectFlow();
   const hasProjects = projects.length > 0;
-
-  const handleAdd = async () => {
-    try {
-      const project = await addProjectViaDialog();
-      if (project) {
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      }
-    } catch (error) {
-      console.error("Failed to add project", error);
-    }
-  };
 
   return (
     <div className="flex h-full flex-col items-center justify-center gap-6 p-8">
@@ -34,7 +22,7 @@ export function EmptyState() {
             : "Add a project to start managing its worktrees."}
         </p>
       </div>
-      <Button size="sm" onClick={handleAdd}>
+      <Button size="sm" onClick={() => void addProject.start()}>
         {hasProjects ? "Add another project" : "Add your first project"}
       </Button>
     </div>

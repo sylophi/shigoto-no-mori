@@ -31,8 +31,23 @@ export function useRemoveProject() {
   });
 }
 
-export async function addProjectViaDialog(): Promise<Project | null> {
-  const folder = await window.api.dialog.pickFolder();
-  if (!folder) return null;
-  return window.api.projects.add(folder);
+// Combined "open the native picker, then add the project" flow used by the
+// sidebar footer and the empty-state CTA. Shared so they don't each do their
+// own try/catch/invalidate dance.
+export function useAddProjectFlow() {
+  const addProject = useAddProject();
+  return {
+    isPending: addProject.isPending,
+    error: addProject.error,
+    start: async (): Promise<Project | null> => {
+      const folder = await window.api.dialog.pickFolder();
+      if (!folder) return null;
+      try {
+        return await addProject.mutateAsync(folder);
+      } catch (error) {
+        console.error("Failed to add project", error);
+        return null;
+      }
+    },
+  };
 }

@@ -130,36 +130,74 @@ function deriveStatus(
   return "clean";
 }
 
-export async function listWorktrees(
+interface WorktreeIdentity {
+  id: string;
+  projectId: string;
+  branch: string;
+  path: string;
+  isPrimary: boolean;
+}
+
+export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
-): Promise<Worktree[]> {
+): Promise<WorktreeIdentity[]> {
   const stdout = await run(projectPath, ["worktree", "list", "--porcelain"]);
-  const raw = parsePorcelain(stdout).filter((e) => !e.bare);
-
-  return Promise.all(
-    raw.map(async (entry, index): Promise<Worktree> => {
+  return parsePorcelain(stdout)
+    .filter((e) => !e.bare)
+    .map((entry, index) => {
       const branch = deriveBranch(entry);
-      const primary = entry.path === projectPath || index === 0;
-      const [{ ahead, behind }, dirtyCount, lastCommit] = await Promise.all([
-        getAheadBehind(entry.path, branch),
-        getDirtyCount(entry.path),
-        getLastCommit(entry.path),
-      ]);
       return {
         id: `${projectId}:${branch}`,
         projectId,
         branch,
         path: entry.path,
-        status: deriveStatus(ahead, behind, dirtyCount),
-        ahead,
-        behind,
-        dirtyCount,
-        lastCommit,
-        isPrimary: primary || undefined,
+        isPrimary: entry.path === projectPath || index === 0,
       };
-    }),
-  );
+    });
+}
+
+async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
+  const [{ ahead, behind }, dirtyCount, lastCommit] = await Promise.all([
+    getAheadBehind(identity.path, identity.branch),
+    getDirtyCount(identity.path),
+    getLastCommit(identity.path),
+  ]);
+  return {
+    id: identity.id,
+    projectId: identity.projectId,
+    branch: identity.branch,
+    path: identity.path,
+    status: deriveStatus(ahead, behind, dirtyCount),
+    ahead,
+    behind,
+    dirtyCount,
+    lastCommit,
+    isPrimary: identity.isPrimary || undefined,
+  };
+}
+
+export async function listWorktrees(
+  projectId: string,
+  projectPath: string,
+): Promise<Worktree[]> {
+  const identities = await listWorktreeIdentities(projectId, projectPath);
+  return Promise.all(identities.map(buildWorktree));
+}
+
+export async function describeWorktree(
+  identity: WorktreeIdentity,
+): Promise<Worktree> {
+  return buildWorktree(identity);
+}
+
+export async function findWorktreeIdentity(
+  projectId: string,
+  projectPath: string,
+  worktreeId: string,
+): Promise<WorktreeIdentity | undefined> {
+  const identities = await listWorktreeIdentities(projectId, projectPath);
+  return identities.find((w) => w.id === worktreeId);
 }
 
 export function deriveProjectName(path: string): string {
@@ -185,16 +223,23 @@ export function defaultWorktreePath(
 }
 
 export async function createWorktree(
+  projectId: string,
   projectPath: string,
   branchName: string,
   base: string | undefined,
-): Promise<string> {
+): Promise<Worktree> {
   const worktreePath = defaultWorktreePath(projectPath, branchName);
   await mkdir(dirname(worktreePath), { recursive: true });
   const args = ["worktree", "add", "-b", branchName, worktreePath];
   if (base) args.push(base);
   await run(projectPath, args);
-  return worktreePath;
+  return buildWorktree({
+    id: `${projectId}:${branchName}`,
+    projectId,
+    branch: branchName,
+    path: worktreePath,
+    isPrimary: false,
+  });
 }
 
 export async function removeWorktree(

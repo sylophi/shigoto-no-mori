@@ -1,8 +1,7 @@
 import { Moon, Plus, Sun, SunMoon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/useTheme";
-import { addProjectViaDialog, useProjects } from "@/hooks/useProjects";
-import { useQueryClient } from "@tanstack/react-query";
+import { useAddProjectFlow, useProjects } from "@/hooks/useProjects";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ProjectGroup } from "./ProjectGroup";
 
@@ -44,24 +43,13 @@ function SidebarHeader() {
 }
 
 function SidebarFooter() {
-  const queryClient = useQueryClient();
-
-  const handleAdd = async () => {
-    try {
-      const project = await addProjectViaDialog();
-      if (project) {
-        void queryClient.invalidateQueries({ queryKey: ["projects"] });
-      }
-    } catch (error) {
-      console.error("Failed to add project", error);
-    }
-  };
+  const addProject = useAddProjectFlow();
 
   return (
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
       <button
         type="button"
-        onClick={handleAdd}
+        onClick={() => void addProject.start()}
         className="flex flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Plus className="size-3.5" />

@@ -118,8 +118,19 @@ async function cliExists(name: string): Promise<boolean> {
   }
 }
 
+// Detection is expensive (10 `which` shell-outs + filesystem checks). Cache
+// briefly so a single user action that needs the list a few times doesn't
+// re-shell each time. Refreshes when the user opens the launcher row again
+// after the TTL.
+const DETECT_TTL_MS = 5_000;
+let detectionCache: { value: DetectedApp[]; expires: number } | null = null;
+
 export async function detectApps(): Promise<DetectedApp[]> {
-  return Promise.all(
+  const now = Date.now();
+  if (detectionCache && detectionCache.expires > now) {
+    return detectionCache.value;
+  }
+  const value = await Promise.all(
     CATALOG.map(async (entry) => {
       const bundleHit = entry.bundleNames.some(appExists);
       const cliHit = entry.cli ? await cliExists(entry.cli) : false;
@@ -133,6 +144,8 @@ export async function detectApps(): Promise<DetectedApp[]> {
       };
     }),
   );
+  detectionCache = { value, expires: now + DETECT_TTL_MS };
+  return value;
 }
 
 export function findDetected(
@@ -167,16 +180,13 @@ export async function launchDetected(
   worktreePath: string,
 ): Promise<void> {
   // Prefer the bundle (more reliable, no PATH issues) when present.
-  const bundleHit = app.bundleNames.some(appExists);
-  if (bundleHit) {
+  try {
     await openWithBundle(app.bundleNames, worktreePath);
     return;
+  } catch (bundleError) {
+    if (!app.cli) throw bundleError;
   }
-  if (app.cli && (await cliExists(app.cli))) {
-    await openWithCli(app.cli, worktreePath);
-    return;
-  }
-  throw new Error(`${app.label} is no longer available on this machine`);
+  await openWithCli(app.cli, worktreePath);
 }
 
 export function launchCustom(
