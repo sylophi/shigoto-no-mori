@@ -6,6 +6,8 @@ import { CHANNELS } from "@shared/channels";
 import type {
   LauncherEntry,
   Project,
+  ScriptEvent,
+  ScriptName,
   ShigotoConfig,
   Worktree,
 } from "@shared/schemas";
@@ -44,6 +46,24 @@ const api = {
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>
       ipcRenderer.invoke(CHANNELS.ShigotoRead, { projectId }),
+  },
+  scripts: {
+    run: (input: {
+      projectId: string;
+      worktreeId: string;
+      script: ScriptName;
+    }): Promise<{ runId: string }> =>
+      ipcRenderer.invoke(CHANNELS.ScriptsRun, input),
+    cancel: (runId: string): Promise<{ cancelled: boolean }> =>
+      ipcRenderer.invoke(CHANNELS.ScriptsCancel, { runId }),
+    onEvent: (handler: (event: ScriptEvent) => void): (() => void) => {
+      const listener = (_event: unknown, payload: ScriptEvent) =>
+        handler(payload);
+      ipcRenderer.on(CHANNELS.ScriptsEvent, listener);
+      return () => {
+        ipcRenderer.off(CHANNELS.ScriptsEvent, listener);
+      };
+    },
   },
   launchers: {
     forProject: (

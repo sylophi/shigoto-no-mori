@@ -116,6 +116,29 @@ export const ReadShigotoPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const ScriptNameSchema = z.enum(["setup", "run", "teardown"]);
+
+export const RunScriptPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  script: ScriptNameSchema,
+});
+
+export const CancelScriptPayloadSchema = z.object({
+  runId: z.string(),
+});
+
+export const ScriptEventSchema = z.discriminatedUnion("kind", [
+  z.object({ runId: z.string(), kind: z.literal("stdout"), data: z.string() }),
+  z.object({ runId: z.string(), kind: z.literal("stderr"), data: z.string() }),
+  z.object({
+    runId: z.string(),
+    kind: z.literal("exit"),
+    code: z.number().nullable(),
+  }),
+  z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
+]);
+
 export const SetPreferredLauncherPayloadSchema = z.object({
   projectId: z.string(),
   launcherId: z.string(),
@@ -130,3 +153,5 @@ export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
 export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;
+export type ScriptName = z.infer<typeof ScriptNameSchema>;
+export type ScriptEvent = z.infer<typeof ScriptEventSchema>;

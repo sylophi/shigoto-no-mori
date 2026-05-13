@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useDeleteWorktree } from "@/hooks/useWorktrees";
 import { useSelection } from "@/hooks/useSelection";
 import { LauncherRow } from "./LauncherRow";
+import { ScriptsPanel } from "./ScriptsPanel";
 import type { Worktree } from "@shared/types";
 
 interface WorktreeDetailProps {
@@ -92,10 +93,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
 
         <section className="space-y-3">
           <SectionHeading>Scripts</SectionHeading>
-          <div className="text-sm text-muted-foreground">
-            setup / run / teardown scripts panel lands when `shigoto.json` IPC
-            is wired.
-          </div>
+          <ScriptsPanel worktree={worktree} />
         </section>
 
         {deleteMutation.error && (
