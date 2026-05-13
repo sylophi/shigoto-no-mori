@@ -1,4 +1,5 @@
 import { registerFsHandlers } from "./fs";
+import { registerGlobalConfigHandlers } from "./globalConfig";
 import { registerLauncherHandlers } from "./launchers";
 import { registerProjectHandlers } from "./projects";
 import { registerRuntimeHandlers } from "./runtime";
@@ -16,4 +17,5 @@ export function registerIpcHandlers(): void {
   registerFsHandlers();
   registerShellHandlers();
   registerShigotoHandlers();
+  registerGlobalConfigHandlers();
 }

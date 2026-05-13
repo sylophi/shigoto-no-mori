@@ -1,6 +1,13 @@
-import { FolderPlus, Moon, Sun, SunMoon } from "lucide-react";
+import {
+  FolderPlus,
+  Moon,
+  Settings as SettingsIcon,
+  Sun,
+  SunMoon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -57,8 +64,25 @@ function SidebarHeader() {
 }
 
 function SidebarFooter() {
+  const { mode, openSettings } = useSelection();
+  const settingsActive = mode === "settings";
   return (
     <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-1.5">
+      <button
+        type="button"
+        onClick={openSettings}
+        aria-label="Settings"
+        aria-current={settingsActive ? "page" : undefined}
+        title="Settings"
+        className={cn(
+          "rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
+          settingsActive
+            ? "bg-accent text-foreground"
+            : "text-muted-foreground",
+        )}
+      >
+        <SettingsIcon className="size-3.5" />
+      </button>
       <ThemeToggle />
     </div>
   );

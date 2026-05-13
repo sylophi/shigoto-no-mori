@@ -106,6 +106,17 @@ export const ShigotoConfigSchema = z.object({
   portBase: z.number().int().positive().optional(),
 });
 
+// Global, per-user config kept in ~/shigomori/config.json. Holds preferences
+// that span every project: custom launchers the user wants everywhere
+// (claude, tmux, an editor command, etc.), and room for future settings.
+export const GlobalConfigSchema = z.object({
+  launchers: z.array(LauncherCommandSchema).optional(),
+});
+
+export const WriteGlobalConfigPayloadSchema = z.object({
+  config: GlobalConfigSchema,
+});
+
 // Detected apps + custom commands from shigomori.config.json, ready for the
 // renderer to display in a single launcher row.
 
@@ -186,6 +197,7 @@ export type Worktree = z.infer<typeof WorktreeSchema>;
 export type WorktreeStatus = z.infer<typeof WorktreeStatusSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigotoConfig = z.infer<typeof ShigotoConfigSchema>;
+export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;

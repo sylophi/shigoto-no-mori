@@ -1,16 +1,8 @@
 import { useState } from "react";
-import {
-  ArrowLeft,
-  ExternalLink,
-  FolderOpen,
-  Plus,
-  Save,
-  X,
-} from "lucide-react";
+import { ArrowLeft, ExternalLink, FolderOpen, Plus, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLauncherForProject } from "@/hooks/useLaunchers";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useSelection } from "@/hooks/useSelection";
@@ -18,6 +10,7 @@ import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import { tildify } from "@/lib/projectPaths";
 import type { LauncherCommand, ShigotoConfig } from "@shared/schemas";
+import { CustomLauncherInput } from "./CustomLauncherInput";
 
 interface ConfigureProjectProps {
   projectId: string;
@@ -135,7 +128,7 @@ function ConfigureForm({
 }: ConfigureFormProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const { data: launcherData } = useLauncherForProject(projectId);
+  const { openSettings } = useSelection();
   const write = useShigotoWrite();
 
   const initial = fromConfig(initialConfig);
@@ -143,9 +136,6 @@ function ConfigureForm({
   const [savedSnapshot, setSavedSnapshot] = useState<FormState>(initial);
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
-  const detected = (launcherData?.entries ?? []).filter(
-    (e) => e.kind === "detected",
-  );
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
@@ -255,57 +245,44 @@ function ConfigureForm({
 
           <Separator />
 
-          <section className="space-y-5">
+          <section className="space-y-3">
             <div>
-              <SectionHeading>Launchers</SectionHeading>
+              <SectionHeading>Project launchers</SectionHeading>
               <p className="text-xs text-muted-foreground">
-                One-click commands to open this worktree in an editor or run an
-                ad-hoc tool.
+                Buttons specific to this project. For launchers that should
+                appear in every project (editors, agents), use{" "}
+                <button
+                  type="button"
+                  onClick={() => openSettings()}
+                  className="underline underline-offset-2 hover:text-foreground"
+                >
+                  Settings
+                </button>
+                .
               </p>
             </div>
-
-            {detected.length > 0 && (
+            {form.launchers.length === 0 ? (
+              <p className="text-xs text-muted-foreground/70">
+                None yet. Add one to run a project-specific command in the
+                worktree (e.g. <span className="font-mono">bun storybook</span>,
+                a custom devbox shell).
+              </p>
+            ) : (
               <div className="space-y-2">
-                <SubHeading>Detected on this machine</SubHeading>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {detected.map((d) => (
-                    <span
-                      key={d.id}
-                      className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground"
-                    >
-                      {d.label}
-                    </span>
-                  ))}
-                </div>
+                {form.launchers.map((launcher) => (
+                  <CustomLauncherInput
+                    key={launcher.id}
+                    launcher={launcher}
+                    onChange={(patch) => updateLauncher(launcher.id, patch)}
+                    onRemove={() => removeLauncher(launcher.id)}
+                  />
+                ))}
               </div>
             )}
-
-            <div className="space-y-2">
-              <SubHeading>Custom</SubHeading>
-              {form.launchers.length === 0 ? (
-                <p className="text-xs text-muted-foreground/70">
-                  Add a custom launcher to run anything in the worktree (e.g.{" "}
-                  <span className="font-mono">claude</span>,{" "}
-                  <span className="font-mono">tmux new-session</span>,{" "}
-                  <span className="font-mono">open .</span>).
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {form.launchers.map((launcher) => (
-                    <CustomLauncherInput
-                      key={launcher.id}
-                      launcher={launcher}
-                      onChange={(patch) => updateLauncher(launcher.id, patch)}
-                      onRemove={() => removeLauncher(launcher.id)}
-                    />
-                  ))}
-                </div>
-              )}
-              <Button variant="ghost" size="sm" onClick={addLauncher}>
-                <Plus />
-                Add custom launcher
-              </Button>
-            </div>
+            <Button variant="ghost" size="sm" onClick={addLauncher}>
+              <Plus />
+              Add project launcher
+            </Button>
           </section>
 
           {write.error && (
@@ -348,12 +325,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SubHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs font-medium text-muted-foreground">{children}</div>
-  );
-}
-
 interface ScriptFieldProps {
   id: string;
   label: string;
@@ -387,47 +358,6 @@ function ScriptField({
         rows={value.includes("\n") ? 4 : 2}
         className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
       />
-    </div>
-  );
-}
-
-interface CustomLauncherInputProps {
-  launcher: LauncherCommand;
-  onChange: (patch: Partial<LauncherCommand>) => void;
-  onRemove: () => void;
-}
-
-function CustomLauncherInput({
-  launcher,
-  onChange,
-  onRemove,
-}: CustomLauncherInputProps) {
-  return (
-    <div className="grid grid-cols-[minmax(6rem,10rem)_minmax(0,1fr)_auto] items-center gap-2">
-      <input
-        type="text"
-        value={launcher.label}
-        onChange={(e) => onChange({ label: e.target.value })}
-        placeholder="Label"
-        aria-label="Launcher label"
-        className="min-w-0 rounded-md border border-input bg-background px-2.5 py-1.5 text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-      />
-      <input
-        type="text"
-        value={launcher.command}
-        onChange={(e) => onChange({ command: e.target.value })}
-        placeholder="Command"
-        aria-label="Launcher command"
-        className="min-w-0 rounded-md border border-input bg-background px-2.5 py-1.5 font-mono text-xs transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
-      />
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label="Remove launcher"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-      >
-        <X className="size-4" />
-      </button>
     </div>
   );
 }

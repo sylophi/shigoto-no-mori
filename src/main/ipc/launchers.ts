@@ -3,13 +3,16 @@ import { CHANNELS } from "@shared/channels";
 import {
   type CustomLauncher,
   type DetectedLauncher,
+  type GlobalConfig,
   LaunchPayloadSchema,
+  type LauncherCommand,
   type LauncherEntry,
   ReadShigotoPayloadSchema,
   SetPreferredLauncherPayloadSchema,
   type ShigotoConfig,
 } from "@shared/schemas";
 import { findWorktreeIdentity } from "../git";
+import { readGlobalConfig } from "../globalConfig";
 import {
   type DetectedApp,
   detectApps,
@@ -25,14 +28,28 @@ const PREFERRED_KEY = "launcherPreferences";
 
 type PreferredMap = Record<string, string>;
 
-function customEntries(config: ShigotoConfig | null): CustomLauncher[] {
-  if (!config?.launchers) return [];
-  return config.launchers.map(
+function customEntriesFrom(
+  launchers: LauncherCommand[] | undefined,
+): CustomLauncher[] {
+  if (!launchers) return [];
+  return launchers.map(
     (launcher): CustomLauncher => ({
       kind: "custom",
       id: `custom:${launcher.id}`,
       label: launcher.label,
     }),
+  );
+}
+
+function findCustomCommand(
+  customId: string,
+  global: GlobalConfig,
+  project: ShigotoConfig | null,
+): LauncherCommand | undefined {
+  // Project-scoped wins on the (very unlikely) id collision.
+  return (
+    project?.launchers?.find((l) => l.id === customId) ??
+    global.launchers?.find((l) => l.id === customId)
   );
 }
 
@@ -62,7 +79,8 @@ export function registerLauncherHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.LaunchersDetect,
-    async (): Promise<DetectedApp[]> => detectApps(),
+    async (): Promise<DetectedLauncher[]> =>
+      detectedEntries(await detectApps()),
   );
 
   ipcMain.handle(
@@ -77,14 +95,16 @@ export function registerLauncherHandlers(): void {
       const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
 
-      const [detected, config] = await Promise.all([
+      const [detected, projectConfig, globalConfig] = await Promise.all([
         detectApps(),
         readShigotoConfig(project.path),
+        readGlobalConfig(),
       ]);
 
       const entries: LauncherEntry[] = [
         ...detectedEntries(detected),
-        ...customEntries(config),
+        ...customEntriesFrom(globalConfig.launchers),
+        ...customEntriesFrom(projectConfig?.launchers),
       ];
 
       const preferences = readKey<PreferredMap>(PREFERRED_KEY, {});
@@ -122,13 +142,15 @@ export function registerLauncherHandlers(): void {
       }
 
       if (launcherId.startsWith("custom:")) {
-        const config = await readShigotoConfig(project.path);
         const customId = launcherId.slice("custom:".length);
-        const custom = config?.launchers?.find((l) => l.id === customId);
-        if (!custom)
-          throw new Error(
-            `Custom launcher not in shigomori.config.json: ${customId}`,
-          );
+        const [projectConfig, globalConfig] = await Promise.all([
+          readShigotoConfig(project.path),
+          readGlobalConfig(),
+        ]);
+        const custom = findCustomCommand(customId, globalConfig, projectConfig);
+        if (!custom) {
+          throw new Error(`Custom launcher not found: ${customId}`);
+        }
         launchCustom(custom.command, worktree.path, undefined);
         return;
       }

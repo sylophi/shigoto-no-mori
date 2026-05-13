@@ -5,12 +5,17 @@ import type { Worktree } from "@shared/types";
 import { ConfigureProject } from "./ConfigureProject";
 import { EmptyState } from "./EmptyState";
 import { NewWorktree } from "./NewWorktree";
+import { Settings } from "./Settings";
 import { WorktreeDetail } from "./WorktreeDetail";
 
 export function DetailPane() {
   const { mode, selectedWorktreeId, selectedProjectId } = useSelection();
   const { data: projects = [] } = useProjects();
   const worktreeQueries = useAllProjectWorktrees(projects);
+
+  if (mode === "settings") {
+    return <Settings />;
+  }
 
   if (mode === "new-worktree" && selectedProjectId) {
     return <NewWorktree projectId={selectedProjectId} />;

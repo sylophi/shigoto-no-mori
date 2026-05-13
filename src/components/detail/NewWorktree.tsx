@@ -5,6 +5,7 @@ import { useSelection } from "@/hooks/useSelection";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
+import { tildify } from "@/lib/projectPaths";
 import { sanitizeBranchForPath } from "@shared/branches";
 
 interface NewWorktreeProps {
@@ -48,7 +49,10 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
 
   const busy = create.isPending;
   const errorMessage = create.error ? create.error.message : null;
-  const root = runtime?.shigomoriRoot ?? "~/shigomori";
+  const home = runtime?.homedir ?? null;
+  const root = runtime?.shigomoriRoot
+    ? tildify(runtime.shigomoriRoot, home)
+    : "~/shigomori";
   const sanitized = branchName ? sanitizeBranchForPath(branchName) : "";
   const destination = sanitized
     ? `${root}/worktrees/${project.name}/${sanitized}`

@@ -20,6 +20,8 @@ export const CHANNELS = {
   FsListDirectory: "fs:listDirectory",
   FsScanForGitRepos: "fs:scanForGitRepos",
   ShigotoWrite: "shigoto:write",
+  GlobalConfigRead: "globalConfig:read",
+  GlobalConfigWrite: "globalConfig:write",
   ShellOpenPath: "shell:openPath",
   ShellShowItemInFolder: "shell:showItemInFolder",
 } as const;

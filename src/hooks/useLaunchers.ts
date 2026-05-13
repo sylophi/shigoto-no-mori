@@ -1,5 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { LauncherEntry } from "@shared/schemas";
+import type { DetectedLauncher, LauncherEntry } from "@shared/schemas";
+
+export function useDetectedLaunchers() {
+  return useQuery<DetectedLauncher[]>({
+    queryKey: ["launchers", "detected"],
+    queryFn: () => window.api.launchers.detected(),
+    staleTime: 60_000,
+  });
+}
 
 interface LauncherForProjectResult {
   entries: LauncherEntry[];

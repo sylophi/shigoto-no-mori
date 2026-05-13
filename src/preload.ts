@@ -4,7 +4,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
+  DetectedLauncher,
   DirectoryListing,
+  GlobalConfig,
   LauncherEntry,
   Project,
   ScriptEvent,
@@ -62,6 +64,12 @@ const api = {
     write: (projectId: string, config: ShigotoConfig): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShigotoWrite, { projectId, config }),
   },
+  globalConfig: {
+    read: (): Promise<GlobalConfig> =>
+      ipcRenderer.invoke(CHANNELS.GlobalConfigRead),
+    write: (config: GlobalConfig): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.GlobalConfigWrite, { config }),
+  },
   shell: {
     openPath: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
@@ -87,6 +95,8 @@ const api = {
     },
   },
   launchers: {
+    detected: (): Promise<DetectedLauncher[]> =>
+      ipcRenderer.invoke(CHANNELS.LaunchersDetect),
     forProject: (
       projectId: string,
     ): Promise<{ entries: LauncherEntry[]; preferred: string | null }> =>
