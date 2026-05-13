@@ -1,6 +1,6 @@
-// Read shigoto.json from a project's root, with a short TTL cache so repeated
-// IPC handlers (launchers, scripts, palette) don't re-read and re-parse on
-// every action.
+// Read shigomori.config.json from a project's root, with a short TTL cache so
+// repeated IPC handlers (launchers, scripts, palette) don't re-read and
+// re-parse on every action.
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ShigotoConfig, ShigotoConfigSchema } from "@shared/schemas";
@@ -18,7 +18,7 @@ export async function readShigotoConfig(
   const cached = cache.get(projectPath);
   if (cached && cached.expires > now) return cached.value;
 
-  const path = join(projectPath, "shigoto.json");
+  const path = join(projectPath, "shigomori.config.json");
   let value: ShigotoConfig | null;
   try {
     const raw = await readFile(path, "utf8");
@@ -33,7 +33,7 @@ export async function readShigotoConfig(
     } else {
       // Don't cache failures — bad config should error every time so the user
       // notices and fixes it.
-      throw new Error(`Failed to read shigoto.json at ${path}`, {
+      throw new Error(`Failed to read shigomori.config.json at ${path}`, {
         cause: error,
       });
     }

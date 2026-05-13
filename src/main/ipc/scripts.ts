@@ -22,7 +22,7 @@ export function registerScriptHandlers(): void {
       const command = config?.scripts?.[script];
       if (!command || command.trim() === "") {
         throw new Error(
-          `No "${script}" script defined in shigoto.json for ${project.name}`,
+          `No "${script}" script defined in shigomori.config.json for ${project.name}`,
         );
       }
 

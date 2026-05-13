@@ -215,7 +215,7 @@ export function defaultWorktreePath(
   const projectName = basename(projectPath);
   return join(
     homedir(),
-    ".shigoto",
+    "shigomori",
     "worktrees",
     projectName,
     sanitizeBranchForPath(branchName),

@@ -126,7 +126,7 @@ export function registerLauncherHandlers(): void {
         const customId = launcherId.slice("custom:".length);
         const custom = config?.launchers?.find((l) => l.id === customId);
         if (!custom)
-          throw new Error(`Custom launcher not in shigoto.json: ${customId}`);
+          throw new Error(`Custom launcher not in shigomori.config.json: ${customId}`);
         launchCustom(custom.command, worktree.path, undefined);
         return;
       }

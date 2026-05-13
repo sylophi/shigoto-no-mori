@@ -196,8 +196,8 @@ export function launchCustom(
 ): void {
   const env = {
     ...process.env,
-    SHIGOTO_WORKSPACE_PATH: worktreePath,
-    SHIGOTO_PORT: port ? String(port) : "",
+    SHIGOMORI_WORKSPACE_PATH: worktreePath,
+    SHIGOMORI_PORT: port ? String(port) : "",
   };
   // Detached + unref so the spawned process outlives this main process,
   // which matches "fire and forget launcher" semantics.

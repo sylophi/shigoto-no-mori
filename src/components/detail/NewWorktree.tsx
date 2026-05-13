@@ -94,7 +94,7 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
           <p className="text-xs text-muted-foreground">
             Defaults to the current HEAD. The worktree lives at{" "}
             <span className="font-mono">
-              ~/.shigoto/worktrees/{project.name}/&lt;branch&gt;
+              ~/shigomori/worktrees/{project.name}/&lt;branch&gt;
             </span>
             .
           </p>

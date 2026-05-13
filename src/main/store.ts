@@ -1,12 +1,12 @@
-// Tiny JSON-file persistence keyed in userData. Atomic via tmp+rename.
+// Tiny JSON-file persistence in ~/shigomori. Atomic via tmp+rename.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { app } from "electron";
 
-const FILE = "shigoto-state.json";
+const FILE = "state.json";
 
 function filePath(): string {
-  return join(app.getPath("userData"), FILE);
+  return join(homedir(), "shigomori", FILE);
 }
 
 function readAll(): Record<string, unknown> {

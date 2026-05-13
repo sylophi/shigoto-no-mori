@@ -42,7 +42,7 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
       <div className="text-sm text-muted-foreground">
         No scripts defined. Add{" "}
         <span className="font-mono">scripts.setup / .run / .teardown</span> to{" "}
-        <span className="font-mono">shigoto.json</span> at the project root.
+        <span className="font-mono">shigomori.config.json</span> at the project root.
       </div>
     );
   }

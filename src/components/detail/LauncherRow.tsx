@@ -53,7 +53,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
       <div className="text-sm text-muted-foreground">
         No launchers detected. Install a supported editor (Cursor, VS Code,
         Zed…) or add commands under <span className="font-mono">launchers</span>{" "}
-        in <span className="font-mono">shigoto.json</span>.
+        in <span className="font-mono">shigomori.config.json</span>.
       </div>
     );
   }

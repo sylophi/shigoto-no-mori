@@ -1,4 +1,4 @@
-// Spawn shigoto.json scripts (setup/run/teardown) with streamed
+// Spawn shigomori.config.json scripts (setup/run/teardown) with streamed
 // stdout/stderr events sent back to the originating renderer.
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -26,10 +26,10 @@ export function startScript(args: RunArgs): string {
   const runId = randomUUID();
   const env = {
     ...process.env,
-    SHIGOTO_WORKSPACE_PATH: args.cwd,
-    SHIGOTO_PORT: args.port ? String(args.port) : "",
-    SHIGOTO_WORKTREE_ID: args.worktreeId,
-    SHIGOTO_SCRIPT_NAME: args.scriptName,
+    SHIGOMORI_WORKSPACE_PATH: args.cwd,
+    SHIGOMORI_PORT: args.port ? String(args.port) : "",
+    SHIGOMORI_WORKTREE_ID: args.worktreeId,
+    SHIGOMORI_SCRIPT_NAME: args.scriptName,
   };
 
   const child = spawn(args.command, [], {

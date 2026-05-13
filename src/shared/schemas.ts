@@ -63,7 +63,7 @@ export const DeleteWorktreePayloadSchema = z.object({
   force: z.boolean().default(false),
 });
 
-// shigoto.json — per-project config committed to the repo.
+// shigomori.config.json — per-project config committed to the repo.
 
 export const LauncherCommandSchema = z.object({
   id: z.string().min(1),
@@ -84,8 +84,8 @@ export const ShigotoConfigSchema = z.object({
   portBase: z.number().int().positive().optional(),
 });
 
-// Detected apps + custom commands from shigoto.json, ready for the renderer
-// to display in a single launcher row.
+// Detected apps + custom commands from shigomori.config.json, ready for the
+// renderer to display in a single launcher row.
 
 export const DetectedLauncherSchema = z.object({
   kind: z.literal("detected"),
