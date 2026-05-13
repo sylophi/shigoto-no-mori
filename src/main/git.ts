@@ -3,7 +3,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { basename } from "node:path";
-import type { Worktree, WorktreeStatus } from "@shared/schemas";
+import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
 
 const exec = promisify(execFile);
 
@@ -60,6 +60,74 @@ function deriveBranch(entry: RawWorktreeEntry): string {
   return "(unknown)";
 }
 
+async function getDirtyCount(worktreePath: string): Promise<number> {
+  try {
+    const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
+    return stdout.split("\n").filter((line) => line.length > 0).length;
+  } catch {
+    return 0;
+  }
+}
+
+async function getAheadBehind(
+  worktreePath: string,
+  branch: string,
+): Promise<{ ahead: number; behind: number }> {
+  if (!branch || branch === "(unknown)") return { ahead: 0, behind: 0 };
+  try {
+    // Compare against the configured upstream (@{u}). No upstream → no counts.
+    const stdout = await run(worktreePath, [
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${branch}...@{u}`,
+    ]);
+    const [aheadStr, behindStr] = stdout.trim().split(/\s+/);
+    return {
+      ahead: Number.parseInt(aheadStr, 10) || 0,
+      behind: Number.parseInt(behindStr, 10) || 0,
+    };
+  } catch {
+    return { ahead: 0, behind: 0 };
+  }
+}
+
+async function getLastCommit(
+  worktreePath: string,
+): Promise<CommitSummary | null> {
+  try {
+    // Tab-delimited; safer than newlines for parsing.
+    const fmt = "%h%x09%an%x09%aI%x09%s";
+    const stdout = await run(worktreePath, [
+      "log",
+      "-1",
+      `--pretty=format:${fmt}`,
+    ]);
+    const [hash, author, date, ...subjectParts] = stdout.split("\t");
+    if (!hash) return null;
+    return {
+      hash,
+      author: author ?? "",
+      date: date ?? "",
+      subject: subjectParts.join("\t"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function deriveStatus(
+  ahead: number,
+  behind: number,
+  dirty: number,
+): WorktreeStatus {
+  if (dirty > 0) return "dirty";
+  if (ahead > 0 && behind > 0) return "diverged";
+  if (ahead > 0) return "ahead";
+  if (behind > 0) return "behind";
+  return "clean";
+}
+
 export async function listWorktrees(
   projectId: string,
   projectPath: string,
@@ -67,22 +135,29 @@ export async function listWorktrees(
   const stdout = await run(projectPath, ["worktree", "list", "--porcelain"]);
   const raw = parsePorcelain(stdout).filter((e) => !e.bare);
 
-  return raw.map((entry, index): Worktree => {
-    const branch = deriveBranch(entry);
-    const primary = entry.path === projectPath || index === 0;
-    return {
-      id: `${projectId}:${branch}`,
-      projectId,
-      branch,
-      path: entry.path,
-      status: "clean" satisfies WorktreeStatus,
-      ahead: 0,
-      behind: 0,
-      dirtyCount: 0,
-      lastCommit: null,
-      isPrimary: primary || undefined,
-    };
-  });
+  return Promise.all(
+    raw.map(async (entry, index): Promise<Worktree> => {
+      const branch = deriveBranch(entry);
+      const primary = entry.path === projectPath || index === 0;
+      const [{ ahead, behind }, dirtyCount, lastCommit] = await Promise.all([
+        getAheadBehind(entry.path, branch),
+        getDirtyCount(entry.path),
+        getLastCommit(entry.path),
+      ]);
+      return {
+        id: `${projectId}:${branch}`,
+        projectId,
+        branch,
+        path: entry.path,
+        status: deriveStatus(ahead, behind, dirtyCount),
+        ahead,
+        behind,
+        dirtyCount,
+        lastCommit,
+        isPrimary: primary || undefined,
+      };
+    }),
+  );
 }
 
 export function deriveProjectName(path: string): string {

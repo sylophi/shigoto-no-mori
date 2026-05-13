@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ChevronRight, Plus } from "lucide-react";
+import { ChevronRight, Plus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/hooks/useSelection";
 import { useWorktrees } from "@/hooks/useWorktrees";
+import { useRemoveProject } from "@/hooks/useProjects";
 import type { Project } from "@shared/types";
 import { WorktreeRow } from "./WorktreeRow";
 
@@ -12,8 +13,20 @@ interface ProjectGroupProps {
 
 export function ProjectGroup({ project }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const { beginNewWorktree } = useSelection();
   const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
+  const removeProject = useRemoveProject();
+
+  const handleRemove = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirmRemove) {
+      setConfirmRemove(true);
+      window.setTimeout(() => setConfirmRemove(false), 2_500);
+      return;
+    }
+    removeProject.mutate(project.id);
+  };
 
   return (
     <div className="flex flex-col">
@@ -43,6 +56,28 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
           aria-label={`New worktree in ${project.name}`}
         >
           <Plus className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleRemove}
+          className={cn(
+            "rounded-md p-1 transition-opacity",
+            confirmRemove
+              ? "text-destructive opacity-100"
+              : "text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-accent hover:text-foreground",
+          )}
+          aria-label={
+            confirmRemove
+              ? `Click again to remove ${project.name}`
+              : `Remove ${project.name}`
+          }
+          title={
+            confirmRemove
+              ? "Click again to confirm removal"
+              : "Remove from Shigoto (does not delete files)"
+          }
+        >
+          <X className="size-3.5" />
         </button>
       </div>
       {expanded && (
