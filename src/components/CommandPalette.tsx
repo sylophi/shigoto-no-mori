@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Command } from "cmdk";
 import {
+  ArrowDown,
   ArrowLeft,
-  ChevronRight,
+  ArrowUp,
+  CornerLeftUp,
   Folder,
-  FolderOpen,
   FolderPlus,
   GitBranch,
   Moon,
@@ -14,13 +15,22 @@ import {
   TreeDeciduous,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  appendBrowsePathSegment,
+  canNavigateUp,
+  getBrowseDirectoryPath,
+  getBrowseLeafSegment,
+  getBrowseParentPath,
+  hasTrailingSlash,
+  normalizeForSubmit,
+} from "@/lib/projectPaths";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import type { Worktree } from "@shared/schemas";
 
 export function CommandPalette() {
@@ -28,7 +38,7 @@ export function CommandPalette() {
 
   // Toggle on ⌘K / Ctrl+K.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         toggle();
@@ -46,15 +56,9 @@ export function CommandPalette() {
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/10 p-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-start justify-center bg-foreground/40 p-4 pt-[10vh] backdrop-blur-sm"
     >
-      <Command
-        label="Command palette"
-        className="w-full max-w-lg overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl ring-1 ring-foreground/10"
-        loop
-        // Disable cmdk's auto-filtering in browse-fs mode; we supply the list.
-        shouldFilter={mode === "browse"}
-      >
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
         {mode === "browse" ? (
           <BrowseView onAddProject={() => openIn("add-project")} />
         ) : (
@@ -63,10 +67,12 @@ export function CommandPalette() {
             onBack={() => openIn("browse")}
           />
         )}
-      </Command>
+      </div>
     </div>
   );
 }
+
+// ---------- Browse (existing palette) ----------
 
 function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   const { setOpen } = useCommandPalette();
@@ -86,14 +92,14 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   };
 
   return (
-    <>
+    <Command label="Command palette" loop>
       <Command.Input
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
         autoFocus
         placeholder="Search worktrees, switch project, run a command…"
         className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
       />
-      <Command.List className="max-h-80 overflow-y-auto px-1 py-2">
+      <Command.List className="max-h-96 overflow-y-auto p-2">
         <Command.Empty className="px-4 py-6 text-center text-sm text-muted-foreground">
           Nothing here.
         </Command.Empty>
@@ -101,7 +107,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
         {allWorktrees.length > 0 && (
           <Command.Group
             heading="Worktrees"
-            className="px-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
           >
             {allWorktrees.map(({ project, tree }) => (
               <Command.Item
@@ -110,7 +116,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
                 onSelect={handle(() => selectWorktree(tree.id))}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
-                <GitBranch className="size-3.5 text-muted-foreground" />
+                <GitBranch className="size-4 text-muted-foreground/80" />
                 <span className="truncate font-mono">{tree.branch}</span>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {project.name}
@@ -122,7 +128,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
 
         <Command.Group
           heading="Projects"
-          className="px-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
         >
           {projects.map((project) => (
             <Command.Item
@@ -131,7 +137,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               onSelect={handle(() => beginNewWorktree(project.id))}
               className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
             >
-              <Plus className="size-3.5 text-muted-foreground" />
+              <Plus className="size-4 text-muted-foreground/80" />
               <span>
                 New worktree in{" "}
                 <span className="text-foreground">{project.name}</span>
@@ -139,25 +145,30 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             </Command.Item>
           ))}
           <Command.Item
-            value="add project"
+            value="add project local folder browse"
             onSelect={() => onAddProject()}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <FolderPlus className="size-3.5 text-muted-foreground" />
-            <span>Add project…</span>
+            <FolderPlus className="size-4 text-muted-foreground/80" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-sm text-foreground">Add project…</span>
+              <span className="truncate text-xs text-muted-foreground/70">
+                Browse a folder on disk
+              </span>
+            </span>
           </Command.Item>
         </Command.Group>
 
         <Command.Group
           heading="Theme"
-          className="px-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+          className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
         >
           <Command.Item
             value="theme light"
             onSelect={handle(() => setTheme("light"))}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <Sun className="size-3.5 text-muted-foreground" />
+            <Sun className="size-4 text-muted-foreground/80" />
             Light
           </Command.Item>
           <Command.Item
@@ -165,7 +176,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             onSelect={handle(() => setTheme("dark"))}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <Moon className="size-3.5 text-muted-foreground" />
+            <Moon className="size-4 text-muted-foreground/80" />
             Dark
           </Command.Item>
           <Command.Item
@@ -173,7 +184,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             onSelect={handle(() => setTheme("system"))}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <SunMoon className="size-3.5 text-muted-foreground" />
+            <SunMoon className="size-4 text-muted-foreground/80" />
             System
           </Command.Item>
         </Command.Group>
@@ -181,22 +192,24 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
         {projects.length === 0 && allWorktrees.length === 0 && (
           <Command.Group
             heading="Get started"
-            className="px-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5"
+            className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
           >
             <Command.Item
               value="welcome"
               disabled
               className="flex items-center gap-2 px-2 py-3 text-sm text-muted-foreground"
             >
-              <TreeDeciduous className="size-3.5" />
+              <TreeDeciduous className="size-4" />
               Add your first project to begin.
             </Command.Item>
           </Command.Group>
         )}
       </Command.List>
-    </>
+    </Command>
   );
 }
+
+// ---------- Add Project (T3-style path-as-input browser) ----------
 
 interface AddProjectViewProps {
   onDone: () => void;
@@ -204,47 +217,48 @@ interface AddProjectViewProps {
 }
 
 function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
-  const { data: runtime } = useRuntimeInfo();
-  const home = runtime?.homedir ?? null;
-  const [cwd, setCwd] = useState<string>(() => home ?? "~");
-  const [filter, setFilter] = useState("");
+  // The input value IS the path. Tildified paths are expanded server-side.
+  const [query, setQuery] = useState<string>("~/");
+  const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
-  // Defer the listing fetch until we know the real home dir.
+
+  // The directory we're browsing (everything up to and including the last "/").
+  // When the user types after a "/", the leaf is the filter.
+  const browseDir = getBrowseDirectoryPath(query);
+  const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
+
+  const listingEnabled = browseDir.length > 0 && hasTrailingSlash(browseDir);
   const {
     data: listing,
     isLoading,
     error,
-  } = useFsListDirectory(cwd, cwd !== "~");
+  } = useFsListDirectory(browseDir, listingEnabled);
 
-  // Once we know the real home dir from runtime info, hop into it.
-  useEffect(() => {
-    if (home && cwd === "~") setCwd(home);
-  }, [home, cwd]);
-
-  const matching = (listing?.entries ?? []).filter((entry) =>
-    entry.name.toLowerCase().includes(filter.toLowerCase()),
+  const filtered = (listing?.entries ?? []).filter((e) =>
+    e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
   );
 
-  const descend = (name: string) => {
-    setCwd((prev) => joinPath(prev, name));
-    setFilter("");
+  const browseTo = (name: string) => {
+    setQuery(appendBrowsePathSegment(query, name));
+    setHighlighted("");
   };
 
-  const goUp = () => {
-    const parent = parentOf(listing?.path ?? cwd);
+  const browseUp = () => {
+    const parent = getBrowseParentPath(query);
     if (parent) {
-      setCwd(parent);
-      setFilter("");
+      setQuery(parent);
+      setHighlighted("");
     }
   };
 
-  const submit = async () => {
-    const target = listing?.path ?? cwd;
+  const submit = async (raw?: string) => {
+    const target = normalizeForSubmit(raw ?? query);
+    if (target.length === 0) return;
     try {
       await addProject.mutateAsync(target);
       onDone();
     } catch {
-      // Error is on addProject.error; banner renders below.
+      // Error rendered inline below.
     }
   };
 
@@ -259,170 +273,183 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     }
   };
 
-  // ⌘↩ adds the current folder regardless of selection.
-  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+  const hasHighlighted = highlighted.startsWith("browse:");
+
+  const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // ⌘↩ always submits the typed path, regardless of selection.
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
+      e.stopPropagation();
       void submit();
-    } else if (e.key === "Backspace" && filter === "") {
+      return;
+    }
+    // Plain Enter with no entry highlighted submits the path.
+    if (e.key === "Enter" && !hasHighlighted) {
       e.preventDefault();
-      goUp();
-    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      void submit();
+      return;
+    }
+    // Plain Enter with an entry highlighted: let cmdk activate it (descend).
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onBack();
+      return;
+    }
+    if (e.key === "Backspace" && query === "") {
       e.preventDefault();
       onBack();
     }
   };
 
-  const displayPath = listing?.path
-    ? tildifyForDisplay(listing.path, home)
-    : cwd;
+  const submitLabel = "Add";
+  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
+  const canBrowseUp = canNavigateUp(query);
 
   return (
-    <div role="group" aria-label="Add project" onKeyDown={onKeyDown}>
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+    <Command
+      label="Add project"
+      loop
+      shouldFilter={false}
+      value={highlighted}
+      onValueChange={setHighlighted}
+    >
+      <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
         <button
           type="button"
           onClick={onBack}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           aria-label="Back"
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
-          <ArrowLeft className="size-3.5" />
+          <ArrowLeft className="size-4" />
         </button>
-        <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Add project
-        </span>
-        <span className="ml-auto truncate font-mono text-xs text-muted-foreground">
-          {displayPath}
-        </span>
-      </div>
-      <Command.Input
-        // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
-        autoFocus
-        value={filter}
-        onValueChange={setFilter}
-        placeholder="Type to filter, ↩ to descend, ⌘↩ to add this folder"
-        className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
-      />
-      <Command.List className="max-h-80 overflow-y-auto px-1 py-2">
-        <Command.Item
-          value="__add_here__"
-          onSelect={() => void submit()}
-          className="mb-1 flex cursor-default items-center gap-2 rounded-md border border-dashed border-border px-2 py-1.5 text-sm aria-selected:border-solid aria-selected:bg-accent aria-selected:text-accent-foreground"
+        <FolderPlus className="size-4 shrink-0 text-muted-foreground/80" />
+        <Command.Input
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
+          autoFocus
+          value={query}
+          onValueChange={setQuery}
+          onKeyDown={onInputKeyDown}
+          placeholder="Enter project path (e.g. ~/projects/my-app)"
+          className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+        />
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => void submit()}
+          disabled={query.trim().length === 0 || addProject.isPending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={`${submitLabel} (${submitKbd})`}
+          title={`${submitLabel} (${submitKbd})`}
         >
-          <FolderOpen className="size-3.5 text-muted-foreground" />
-          <span>
-            Add <span className="font-mono">{displayPath}</span> as project
-          </span>
-          <span className="ml-auto text-[10px] tracking-wide text-muted-foreground">
-            ⌘↩
-          </span>
-        </Command.Item>
+          <span>{addProject.isPending ? "Adding…" : submitLabel}</span>
+          <KbdGroup className="pointer-events-none">
+            <Kbd>{submitKbd}</Kbd>
+          </KbdGroup>
+        </button>
+      </div>
 
-        {parentOf(listing?.path ?? cwd) && (
+      <Command.List className="max-h-96 overflow-y-auto p-2">
+        {canBrowseUp && (
           <Command.Item
-            value="__parent__"
-            onSelect={goUp}
+            value="browse:up"
+            keywords={[".."]}
+            onSelect={browseUp}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <ArrowLeft className="size-3.5 text-muted-foreground" />
-            <span className="font-mono">..</span>
+            <CornerLeftUp className="size-4 text-muted-foreground/80" />
+            <span className="font-mono text-muted-foreground">..</span>
           </Command.Item>
         )}
 
-        {isLoading && (
-          <div className="px-3 py-2 text-xs text-muted-foreground">
-            Loading…
-          </div>
-        )}
-        {error && (
-          <div className="px-3 py-2 text-xs text-destructive">
-            {error.message}
-          </div>
-        )}
-
-        {matching.map((entry) => (
+        {filtered.map((entry) => (
           <Command.Item
             key={entry.name}
-            value={entry.name}
-            onSelect={() => descend(entry.name)}
+            value={`browse:${browseDir}${entry.name}`}
+            keywords={[entry.name]}
+            onSelect={() => browseTo(entry.name)}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
             <Folder
               className={cn(
-                "size-3.5",
-                entry.isGitRepo ? "text-foreground" : "text-muted-foreground",
+                "size-4",
+                entry.isGitRepo
+                  ? "text-foreground"
+                  : "text-muted-foreground/80",
               )}
             />
             <span className="truncate font-mono">{entry.name}</span>
             {entry.isGitRepo && (
-              <span className="ml-1 rounded border border-border bg-card px-1 py-0 text-[9px] tracking-wide text-muted-foreground">
+              <span className="rounded-sm border border-border bg-muted px-1 font-mono text-[10px] tracking-wide text-muted-foreground">
                 git
               </span>
             )}
-            <ChevronRight className="ml-auto size-3 text-muted-foreground" />
           </Command.Item>
         ))}
 
-        {!isLoading && !error && matching.length === 0 && (
-          <Command.Empty className="px-4 py-6 text-center text-sm text-muted-foreground">
-            No matching folders.
-          </Command.Empty>
+        {isLoading && !listing && (
+          <div className="px-3 py-3 text-xs text-muted-foreground">
+            Loading…
+          </div>
+        )}
+        {error && (
+          <div className="px-3 py-3 text-xs text-destructive">
+            {error.message}
+          </div>
+        )}
+        {!isLoading && !error && filtered.length === 0 && !canBrowseUp && (
+          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+            {leafFilter.length > 0
+              ? `No folders matching "${leafFilter}".`
+              : "Type a path to start browsing."}
+          </div>
+        )}
+        {!isLoading && !error && filtered.length === 0 && canBrowseUp && (
+          <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+            {leafFilter.length > 0
+              ? `No folders matching "${leafFilter}". Press ⌘↩ to add anyway.`
+              : "Empty directory."}
+          </div>
         )}
       </Command.List>
 
       {addProject.error && (
-        <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
           {addProject.error.message}
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-3">
-          <Hint k="↩" label="descend" />
-          <Hint k="⌘↩" label="add" />
-          <Hint k="⌫" label="up" />
-          <Hint k="esc" label="back" />
+          <KbdGroup>
+            <Kbd>
+              <ArrowUp />
+            </Kbd>
+            <Kbd>
+              <ArrowDown />
+            </Kbd>
+            <span className="text-muted-foreground/80">Navigate</span>
+          </KbdGroup>
+          {hasHighlighted && (
+            <KbdGroup>
+              <Kbd>↩</Kbd>
+              <span className="text-muted-foreground/80">Select</span>
+            </KbdGroup>
+          )}
+          <KbdGroup>
+            <Kbd>Esc</Kbd>
+            <span className="text-muted-foreground/80">Back</span>
+          </KbdGroup>
         </div>
         <button
           type="button"
           onClick={() => void pickViaDialog()}
-          className="flex items-center gap-1.5 rounded-md px-2 py-1 transition-colors hover:bg-accent hover:text-foreground"
+          className="rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
         >
-          <FolderOpen className="size-3" />
           Open in Finder
         </button>
       </div>
-    </div>
+    </Command>
   );
-}
-
-function Hint({ k, label }: { k: string; label: string }) {
-  return (
-    <span className="flex items-center gap-1">
-      <kbd className="rounded border border-border bg-card px-1 py-0 font-mono text-[10px]">
-        {k}
-      </kbd>
-      <span>{label}</span>
-    </span>
-  );
-}
-
-function joinPath(base: string, child: string): string {
-  if (base.endsWith("/")) return `${base}${child}`;
-  return `${base}/${child}`;
-}
-
-function parentOf(path: string): string | null {
-  if (!path || path === "/") return null;
-  const trimmed = path.replace(/\/$/, "");
-  const idx = trimmed.lastIndexOf("/");
-  if (idx <= 0) return "/";
-  return trimmed.slice(0, idx);
-}
-
-function tildifyForDisplay(absolute: string, home: string | null): string {
-  if (!home) return absolute;
-  if (absolute === home) return "~";
-  if (absolute.startsWith(`${home}/`)) return `~${absolute.slice(home.length)}`;
-  return absolute;
 }

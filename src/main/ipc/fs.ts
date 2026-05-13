@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
@@ -8,12 +7,7 @@ import {
   type DirectoryListing,
   ListDirectoryPayloadSchema,
 } from "@shared/schemas";
-
-function expandHome(path: string): string {
-  if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
-  return path;
-}
+import { expandHome } from "../paths";
 
 export function registerFsHandlers(): void {
   ipcMain.handle(

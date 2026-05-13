@@ -46,9 +46,9 @@ function SidebarHeader() {
         onClick={() => openIn("add-project")}
         // Opt out of the title-bar drag region so the click is captured.
         style={{ ["-webkit-app-region" as never]: "no-drag" }}
-        className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         aria-label="Add project"
-        title="Add project (⌘K)"
+        title="Add project"
       >
         <FolderPlus className="size-3.5" />
       </button>

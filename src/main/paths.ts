@@ -8,3 +8,9 @@ export function shigomoriRoot(): string {
   const name = app.isPackaged ? "shigomori" : "shigomori-dev";
   return join(homedir(), name);
 }
+
+export function expandHome(path: string): string {
+  if (path === "~") return homedir();
+  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  return path;
+}

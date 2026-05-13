@@ -7,6 +7,7 @@ import {
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
 import { deriveProjectName, isGitRepo } from "../git";
+import { expandHome } from "../paths";
 import { loadProjects } from "../projects";
 import { writeKey } from "../store";
 
@@ -20,7 +21,8 @@ export function registerProjectHandlers(): void {
   ipcMain.handle(CHANNELS.ProjectsList, () => loadProjects());
 
   ipcMain.handle(CHANNELS.ProjectsAdd, async (_event, rawPayload: unknown) => {
-    const { path } = AddProjectPayloadSchema.parse(rawPayload);
+    const { path: rawPath } = AddProjectPayloadSchema.parse(rawPayload);
+    const path = expandHome(rawPath);
 
     if (!(await isGitRepo(path))) {
       throw new Error(`${path} is not a git repository`);
