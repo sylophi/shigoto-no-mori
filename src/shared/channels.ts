@@ -17,6 +17,7 @@ export const CHANNELS = {
   DialogPickFolder: "dialog:pickFolder",
   RuntimeInfo: "runtime:info",
   FsListDirectory: "fs:listDirectory",
+  FsScanForGitRepos: "fs:scanForGitRepos",
 } as const;
 
 export interface RuntimeInfo {

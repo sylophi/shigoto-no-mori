@@ -69,6 +69,10 @@ export const ListDirectoryPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
+export const ScanForGitReposPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
 export const DirectoryEntrySchema = z.object({
   name: z.string(),
   isGitRepo: z.boolean(),

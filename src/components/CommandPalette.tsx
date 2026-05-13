@@ -4,12 +4,16 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Check,
   CornerLeftUp,
   Folder,
   FolderPlus,
+  FolderSearch,
   GitBranch,
+  Loader2,
   Moon,
   Plus,
+  Square,
   Sun,
   SunMoon,
   TreeDeciduous,
@@ -27,6 +31,7 @@ import {
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
+import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
@@ -216,18 +221,32 @@ interface AddProjectViewProps {
   onBack: () => void;
 }
 
+type AddProjectStage = "browse" | "scanning" | "results";
+
 function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
   // The input value IS the path. Tildified paths are expanded server-side.
   const [query, setQuery] = useState<string>("~/");
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
+  const { data: existingProjects = [] } = useProjects();
+  const { data: runtime } = useRuntimeInfo();
+  const home = runtime?.homedir ?? null;
 
-  // The directory we're browsing (everything up to and including the last "/").
-  // When the user types after a "/", the leaf is the filter.
+  // Scan flow state.
+  const [stage, setStage] = useState<AddProjectStage>("browse");
+  const [scanRoot, setScanRoot] = useState<string>("");
+  const [scanResults, setScanResults] = useState<string[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [scanError, setScanError] = useState<Error | null>(null);
+  const [bulkAdding, setBulkAdding] = useState(false);
+
+  // ---------- Browse mode ----------
+
   const browseDir = getBrowseDirectoryPath(query);
   const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
 
-  const listingEnabled = browseDir.length > 0 && hasTrailingSlash(browseDir);
+  const listingEnabled =
+    stage === "browse" && browseDir.length > 0 && hasTrailingSlash(browseDir);
   const {
     data: listing,
     isLoading,
@@ -273,24 +292,78 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     }
   };
 
+  // ---------- Scan mode ----------
+
+  const scanCurrentDir = async () => {
+    // Use the directory we're currently browsing (with trailing /).
+    if (!hasTrailingSlash(browseDir)) return;
+    setScanRoot(browseDir);
+    setStage("scanning");
+    setScanError(null);
+    try {
+      const results = await window.api.fs.scanForGitRepos(browseDir);
+      const existingPaths = new Set(existingProjects.map((p) => p.path));
+      const newOnly = results.filter((p) => !existingPaths.has(p));
+      setScanResults(newOnly);
+      setSelected(new Set(newOnly));
+      setHighlighted("");
+      setStage("results");
+    } catch (e) {
+      setScanError(e instanceof Error ? e : new Error(String(e)));
+      setStage("browse");
+    }
+  };
+
+  const exitScan = () => {
+    setStage("browse");
+    setScanResults([]);
+    setSelected(new Set());
+    setScanError(null);
+    setHighlighted("");
+  };
+
+  const toggleSelected = (path: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
+
+  const bulkAdd = async () => {
+    const toAdd = [...selected];
+    if (toAdd.length === 0 || bulkAdding) return;
+    setBulkAdding(true);
+    for (const path of toAdd) {
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential to avoid races on the state.json write
+        await addProject.mutateAsync(path);
+      } catch {
+        // Skip individual failures; user can retry by re-scanning.
+      }
+    }
+    setBulkAdding(false);
+    onDone();
+  };
+
+  // ---------- Keyboard handling ----------
+
   const hasHighlighted = highlighted.startsWith("browse:");
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    // ⌘↩ always submits the typed path, regardless of selection.
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
       void submit();
       return;
     }
-    // Plain Enter with no entry highlighted submits the path.
     if (e.key === "Enter" && !hasHighlighted) {
       e.preventDefault();
       e.stopPropagation();
       void submit();
       return;
     }
-    // Plain Enter with an entry highlighted: let cmdk activate it (descend).
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -303,9 +376,58 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     }
   };
 
+  const onResultsKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      void bulkAdd();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      exitScan();
+    }
+  };
+
+  // ---------- Render ----------
+
+  if (stage === "scanning") {
+    return (
+      <ScanningPanel
+        scanRoot={scanRoot}
+        home={home}
+        onCancel={exitScan}
+        onBack={onBack}
+      />
+    );
+  }
+
+  if (stage === "results") {
+    return (
+      <ResultsPanel
+        scanRoot={scanRoot}
+        home={home}
+        results={scanResults}
+        selected={selected}
+        highlighted={highlighted}
+        onHighlightChange={setHighlighted}
+        onToggle={toggleSelected}
+        onSelectAll={() => setSelected(new Set(scanResults))}
+        onSelectNone={() => setSelected(new Set())}
+        onBack={exitScan}
+        onAdd={bulkAdd}
+        bulkAdding={bulkAdding}
+        onKeyDown={onResultsKeyDown}
+      />
+    );
+  }
+
+  // Browse stage.
   const submitLabel = "Add";
   const submitKbd = hasHighlighted ? "⌘↩" : "↩";
   const canBrowseUp = canNavigateUp(query);
+  const canScan = hasTrailingSlash(browseDir) && !!listing && !error;
 
   return (
     <Command
@@ -351,6 +473,25 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       </div>
 
       <Command.List className="max-h-96 overflow-y-auto p-2">
+        {canScan && (
+          <Command.Item
+            value="action:scan"
+            keywords={["scan", "discover", "find"]}
+            onSelect={() => void scanCurrentDir()}
+            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+          >
+            <FolderSearch className="size-4 text-muted-foreground/80" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="text-foreground">
+                Scan this folder for git repos
+              </span>
+              <span className="truncate text-xs text-muted-foreground/70">
+                Recursively, stopping at the outermost .git
+              </span>
+            </span>
+          </Command.Item>
+        )}
+
         {canBrowseUp && (
           <Command.Item
             value="browse:up"
@@ -398,25 +539,18 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
             {error.message}
           </div>
         )}
-        {!isLoading && !error && filtered.length === 0 && !canBrowseUp && (
-          <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            {leafFilter.length > 0
-              ? `No folders matching "${leafFilter}".`
-              : "Type a path to start browsing."}
-          </div>
-        )}
-        {!isLoading && !error && filtered.length === 0 && canBrowseUp && (
+        {!isLoading && !error && filtered.length === 0 && (
           <div className="px-3 py-3 text-center text-xs text-muted-foreground">
             {leafFilter.length > 0
-              ? `No folders matching "${leafFilter}". Press ⌘↩ to add anyway.`
+              ? `No folders matching "${leafFilter}".`
               : "Empty directory."}
           </div>
         )}
       </Command.List>
 
-      {addProject.error && (
+      {(addProject.error || scanError) && (
         <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          {addProject.error.message}
+          {addProject.error?.message ?? scanError?.message}
         </div>
       )}
 
@@ -452,4 +586,195 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       </div>
     </Command>
   );
+}
+
+// ---------- Scanning panel ----------
+
+function ScanningPanel({
+  scanRoot,
+  home,
+  onCancel,
+  onBack: _onBack,
+}: {
+  scanRoot: string;
+  home: string | null;
+  onCancel: () => void;
+  onBack: () => void;
+}) {
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          aria-label="Cancel"
+          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" />
+        </button>
+        <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
+        <span className="min-w-0 flex-1 truncate font-mono text-sm">
+          {tildify(scanRoot, home)}
+        </span>
+      </div>
+      <div className="flex flex-col items-center gap-3 px-4 py-16 text-sm text-muted-foreground">
+        <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
+        <span>Looking for git repos…</span>
+      </div>
+      <div className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+        <KbdGroup>
+          <Kbd>Esc</Kbd>
+          <span className="text-muted-foreground/80">Cancel</span>
+        </KbdGroup>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Scan results panel ----------
+
+interface ResultsPanelProps {
+  scanRoot: string;
+  home: string | null;
+  results: string[];
+  selected: Set<string>;
+  highlighted: string;
+  onHighlightChange: (v: string) => void;
+  onToggle: (path: string) => void;
+  onSelectAll: () => void;
+  onSelectNone: () => void;
+  onBack: () => void;
+  onAdd: () => Promise<void>;
+  bulkAdding: boolean;
+  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
+}
+
+function ResultsPanel(props: ResultsPanelProps) {
+  const allSelected =
+    props.results.length > 0 && props.selected.size === props.results.length;
+  const tildifiedRoot = tildify(props.scanRoot, props.home);
+
+  return (
+    <div onKeyDown={props.onKeyDown} role="group" aria-label="Scan results">
+      <Command
+        label="Scan results"
+        loop
+        shouldFilter={false}
+        value={props.highlighted}
+        onValueChange={props.onHighlightChange}
+      >
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+          <button
+            type="button"
+            onClick={props.onBack}
+            aria-label="Back"
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+          <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <span className="text-sm text-foreground">
+              {props.results.length === 0
+                ? "No new git repos found"
+                : `${props.results.length} new git repo${props.results.length === 1 ? "" : "s"}`}
+            </span>
+            <span className="truncate font-mono text-xs text-muted-foreground/70">
+              in {tildifiedRoot}
+            </span>
+          </div>
+          {props.results.length > 0 && (
+            <button
+              type="button"
+              onClick={allSelected ? props.onSelectNone : props.onSelectAll}
+              className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              {allSelected ? "Deselect all" : "Select all"}
+            </button>
+          )}
+        </div>
+
+        <Command.List className="max-h-96 overflow-y-auto p-2">
+          {props.results.length === 0 ? (
+            <div className="px-3 py-10 text-center text-sm text-muted-foreground">
+              All git repos in this folder are already added.
+            </div>
+          ) : (
+            props.results.map((path) => {
+              const isSelected = props.selected.has(path);
+              const relative = relativeFromRoot(path, props.scanRoot);
+              return (
+                <Command.Item
+                  key={path}
+                  value={`result:${path}`}
+                  keywords={[relative]}
+                  onSelect={() => props.onToggle(path)}
+                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+                >
+                  {isSelected ? (
+                    <Check className="size-4 text-foreground" />
+                  ) : (
+                    <Square className="size-4 text-muted-foreground/60" />
+                  )}
+                  <Folder className="size-4 text-muted-foreground/80" />
+                  <span className="truncate font-mono">{relative}</span>
+                </Command.Item>
+              );
+            })
+          )}
+        </Command.List>
+
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <KbdGroup>
+              <Kbd>
+                <ArrowUp />
+              </Kbd>
+              <Kbd>
+                <ArrowDown />
+              </Kbd>
+              <span className="text-muted-foreground/80">Navigate</span>
+            </KbdGroup>
+            <KbdGroup>
+              <Kbd>↩</Kbd>
+              <span className="text-muted-foreground/80">Toggle</span>
+            </KbdGroup>
+            <KbdGroup>
+              <Kbd>Esc</Kbd>
+              <span className="text-muted-foreground/80">Back</span>
+            </KbdGroup>
+          </div>
+          <button
+            type="button"
+            onClick={() => void props.onAdd()}
+            disabled={props.selected.size === 0 || props.bulkAdding}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span>
+              {props.bulkAdding
+                ? "Adding…"
+                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`}
+            </span>
+            <KbdGroup className="pointer-events-none">
+              <Kbd>⌘↩</Kbd>
+            </KbdGroup>
+          </button>
+        </div>
+      </Command>
+    </div>
+  );
+}
+
+function relativeFromRoot(absolute: string, root: string): string {
+  const trimmedRoot = root.endsWith("/") ? root : `${root}/`;
+  return absolute.startsWith(trimmedRoot)
+    ? absolute.slice(trimmedRoot.length)
+    : absolute;
+}
+
+function tildify(path: string, home: string | null): string {
+  if (!home || !path) return path;
+  if (path === home) return "~";
+  if (path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`;
+  return path;
 }

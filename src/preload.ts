@@ -50,6 +50,8 @@ const api = {
   fs: {
     listDirectory: (path: string): Promise<DirectoryListing> =>
       ipcRenderer.invoke(CHANNELS.FsListDirectory, { path }),
+    scanForGitRepos: (path: string): Promise<string[]> =>
+      ipcRenderer.invoke(CHANNELS.FsScanForGitRepos, { path }),
   },
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>
