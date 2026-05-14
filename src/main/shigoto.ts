@@ -1,9 +1,10 @@
-// Read / write shigomori.config.json from a project's root. Reads are cached
-// with a short TTL so repeated IPC handlers (launchers, scripts, palette)
-// don't re-read and re-parse on every action; the cache is busted on write.
+// Per-project config lives under ~/shigomori[-dev]/projects/<projectId>.json.
+// Shigomori manages these itself; we don't touch the user's repo.
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { type ShigotoConfig, ShigotoConfigSchema } from "@shared/schemas";
+import { shigomoriRoot } from "./paths";
 
 const CACHE_TTL_MS = 5_000;
 const cache = new Map<
@@ -11,14 +12,18 @@ const cache = new Map<
   { value: ShigotoConfig | null; expires: number }
 >();
 
+function configPathFor(projectId: string): string {
+  return join(shigomoriRoot(), "projects", `${projectId}.json`);
+}
+
 export async function readShigotoConfig(
-  projectPath: string,
+  projectId: string,
 ): Promise<ShigotoConfig | null> {
   const now = Date.now();
-  const cached = cache.get(projectPath);
+  const cached = cache.get(projectId);
   if (cached && cached.expires > now) return cached.value;
 
-  const path = join(projectPath, "shigomori.config.json");
+  const path = configPathFor(projectId);
   let value: ShigotoConfig | null;
   try {
     const raw = await readFile(path, "utf8");
@@ -33,26 +38,23 @@ export async function readShigotoConfig(
     } else {
       // Don't cache failures — bad config should error every time so the user
       // notices and fixes it.
-      throw new Error(`Failed to read shigomori.config.json at ${path}`, {
+      throw new Error(`Failed to read project config at ${path}`, {
         cause: error,
       });
     }
   }
 
-  cache.set(projectPath, { value, expires: now + CACHE_TTL_MS });
+  cache.set(projectId, { value, expires: now + CACHE_TTL_MS });
   return value;
 }
 
-export function configPathFor(projectPath: string): string {
-  return join(projectPath, "shigomori.config.json");
-}
-
 export async function writeShigotoConfig(
-  projectPath: string,
+  projectId: string,
   config: ShigotoConfig,
 ): Promise<void> {
   const validated = ShigotoConfigSchema.parse(config);
-  const target = configPathFor(projectPath);
+  const target = configPathFor(projectId);
+  await mkdir(dirname(target), { recursive: true });
   const temp = `${target}.tmp.${process.pid}.${Date.now()}`;
   const json = `${JSON.stringify(validated, null, 2)}\n`;
   await writeFile(temp, json, "utf8");
@@ -62,5 +64,5 @@ export async function writeShigotoConfig(
     await unlink(temp).catch(() => undefined);
     throw error;
   }
-  cache.delete(projectPath);
+  cache.delete(projectId);
 }

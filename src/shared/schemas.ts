@@ -53,6 +53,10 @@ export const ListWorktreesPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const ProjectsDefaultBranchPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
 export const CreateWorktreePayloadSchema = z.object({
   projectId: z.string(),
   branchName: z.string().min(1),
@@ -107,6 +111,7 @@ export const ShigotoConfigSchema = z.object({
     .optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
   portBase: z.number().int().positive().optional(),
+  defaultBranch: z.string().min(1),
 });
 
 // Global, per-user config kept in ~/shigomori/config.json. Holds preferences

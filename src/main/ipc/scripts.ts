@@ -18,12 +18,10 @@ export function registerScriptHandlers(): void {
 
       const project = findProjectOrThrow(projectId);
 
-      const config = await readShigotoConfig(project.path);
+      const config = await readShigotoConfig(project.id);
       const command = config?.scripts?.[script];
       if (!command || command.trim() === "") {
-        throw new Error(
-          `No "${script}" script defined in shigomori.config.json for ${project.name}`,
-        );
+        throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 
       const worktree = await findWorktreeIdentity(

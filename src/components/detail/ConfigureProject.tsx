@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowLeft, ExternalLink, FolderOpen, Plus, Save } from "lucide-react";
+import { ArrowLeft, FolderOpen, Plus, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useSelection } from "@/hooks/useSelection";
@@ -19,7 +20,10 @@ interface ConfigureProjectProps {
 export function ConfigureProject({ projectId }: ConfigureProjectProps) {
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
-  const { data: config, isLoading } = useShigotoConfig(projectId);
+  const { data: config, isLoading: configLoading } =
+    useShigotoConfig(projectId);
+  const { data: resolvedDefaultBranch, isLoading: branchLoading } =
+    useDefaultBranch(projectId);
   const { clear } = useSelection();
 
   if (!project) {
@@ -48,7 +52,7 @@ export function ConfigureProject({ projectId }: ConfigureProjectProps) {
           <h1 className="text-lg font-medium tracking-tight">Configure</h1>
         </div>
       </header>
-      {isLoading ? (
+      {configLoading || branchLoading || !resolvedDefaultBranch ? (
         <ConfigureSkeleton />
       ) : (
         <ConfigureForm
@@ -56,6 +60,7 @@ export function ConfigureProject({ projectId }: ConfigureProjectProps) {
           projectId={projectId}
           projectPath={project.path}
           initialConfig={config ?? null}
+          resolvedDefaultBranch={resolvedDefaultBranch}
         />
       )}
     </div>
@@ -80,14 +85,19 @@ function ConfigureSkeleton() {
 }
 
 interface FormState {
+  defaultBranch: string;
   setup: string;
   run: string;
   teardown: string;
   launchers: LauncherCommand[];
 }
 
-function fromConfig(config: ShigotoConfig | null): FormState {
+function fromConfig(
+  config: ShigotoConfig | null,
+  resolvedDefaultBranch: string,
+): FormState {
   return {
+    defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
     setup: config?.scripts?.setup ?? "",
     run: config?.scripts?.run ?? "",
     teardown: config?.scripts?.teardown ?? "",
@@ -110,6 +120,7 @@ function toConfig(
 
   return {
     ...original,
+    defaultBranch: state.defaultBranch.trim(),
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
   };
@@ -119,23 +130,26 @@ interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
   initialConfig: ShigotoConfig | null;
+  resolvedDefaultBranch: string;
 }
 
 function ConfigureForm({
   projectId,
   projectPath,
   initialConfig,
+  resolvedDefaultBranch,
 }: ConfigureFormProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
   const { openSettings } = useSelection();
   const write = useShigotoWrite();
 
-  const initial = fromConfig(initialConfig);
+  const initial = fromConfig(initialConfig, resolvedDefaultBranch);
   const [form, setForm] = useState<FormState>(initial);
   const [savedSnapshot, setSavedSnapshot] = useState<FormState>(initial);
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
+  const canSave = isDirty && form.defaultBranch.trim().length > 0;
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
@@ -173,8 +187,6 @@ function ConfigureForm({
     }));
   };
 
-  const configFilePath = `${projectPath}/shigomori.config.json`;
-
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
@@ -184,26 +196,51 @@ function ConfigureForm({
             <div className="font-mono text-sm select-text" title={projectPath}>
               {tildify(projectPath, home)}
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  void window.api.shell.showItemInFolder(projectPath)
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void window.api.shell.showItemInFolder(projectPath)
+              }
+            >
+              <FolderOpen />
+              Reveal in Finder
+            </Button>
+          </section>
+
+          <Separator />
+
+          <section className="space-y-3">
+            <div>
+              <SectionHeading>Worktrees</SectionHeading>
+              <p className="text-xs text-muted-foreground">
+                Settings for branches created inside this project.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="default-branch"
+                className="block text-sm font-medium"
+              >
+                Default branch
+              </label>
+              <input
+                id="default-branch"
+                type="text"
+                value={form.defaultBranch}
+                onChange={(e) =>
+                  setForm({ ...form, defaultBranch: e.target.value })
                 }
-              >
-                <FolderOpen />
-                Reveal in Finder
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void window.api.shell.openPath(configFilePath)}
-                title={configFilePath}
-              >
-                <ExternalLink />
-                Open config file
-              </Button>
+                placeholder={resolvedDefaultBranch}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+              />
+              <p className="text-xs text-muted-foreground">
+                Pre-fills "Branched from" when starting a new worktree. Falls
+                back to <span className="font-mono">main</span> /{" "}
+                <span className="font-mono">master</span> /{" "}
+                <span className="font-mono">dev</span> (in that order, then the
+                first local branch) when the branch you set here doesn't exist.
+              </p>
             </div>
           </section>
 
@@ -307,7 +344,7 @@ function ConfigureForm({
         <Button
           size="sm"
           onClick={() => void handleSave()}
-          disabled={!isDirty || write.isPending}
+          disabled={!canSave || write.isPending}
         >
           <Save />
           {write.isPending ? "Saving…" : "Save"}

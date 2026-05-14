@@ -23,6 +23,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsAdd, { path }),
     remove: (id: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ProjectsRemove, { id }),
+    defaultBranch: (projectId: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsDefaultBranch, { projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>

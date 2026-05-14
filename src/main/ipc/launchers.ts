@@ -66,7 +66,7 @@ export function registerLauncherHandlers(): void {
     async (_event, rawPayload: unknown): Promise<ShigotoConfig | null> => {
       const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      return readShigotoConfig(project.path);
+      return readShigotoConfig(project.id);
     },
   );
 
@@ -87,7 +87,7 @@ export function registerLauncherHandlers(): void {
 
       const [detected, projectConfig, globalConfig] = await Promise.all([
         detectApps(),
-        readShigotoConfig(project.path),
+        readShigotoConfig(project.id),
         readGlobalConfig(),
       ]);
 
@@ -127,7 +127,7 @@ export function registerLauncherHandlers(): void {
       if (launcherId.startsWith("custom:")) {
         const customId = launcherId.slice("custom:".length);
         const [projectConfig, globalConfig] = await Promise.all([
-          readShigotoConfig(project.path),
+          readShigotoConfig(project.id),
           readGlobalConfig(),
         ]);
         const custom = findCustomCommand(customId, globalConfig, projectConfig);

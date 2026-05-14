@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useSelection } from "@/hooks/useSelection";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
@@ -16,10 +17,19 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
   const { clear, selectWorktree } = useSelection();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
+  const { data: defaultBranch } = useDefaultBranch(projectId);
   const project = projects.find((p) => p.id === projectId);
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
+  const baseSeeded = useRef(false);
   const create = useCreateWorktree();
+
+  useEffect(() => {
+    if (defaultBranch && !baseSeeded.current) {
+      setBase(defaultBranch);
+      baseSeeded.current = true;
+    }
+  }, [defaultBranch]);
 
   if (!project) {
     return (
@@ -115,23 +125,20 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
 
         <div className="space-y-2">
           <label htmlFor="branch-base" className="block text-sm font-medium">
-            Branched from{" "}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
+            Branched from
           </label>
           <input
             id="branch-base"
             type="text"
             value={base}
             onChange={(e) => setBase(e.target.value)}
-            placeholder="HEAD"
-            disabled={busy}
+            placeholder={defaultBranch ?? "main"}
+            disabled={busy || !defaultBranch}
             className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
           />
           <p className="text-xs text-muted-foreground">
-            Defaults to the current HEAD of the primary checkout. Accepts any
-            ref: a branch, tag, or commit.
+            Defaults to this project's default branch. Accepts any ref: a
+            branch, tag, or commit.
           </p>
         </div>
 

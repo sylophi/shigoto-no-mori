@@ -7,7 +7,7 @@ import { writeShigotoConfig } from "../shigoto";
 export function registerShigotoHandlers(): void {
   ipcMain.handle(CHANNELS.ShigotoWrite, async (_event, rawPayload: unknown) => {
     const { projectId, config } = WriteShigotoPayloadSchema.parse(rawPayload);
-    const project = findProjectOrThrow(projectId);
-    await writeShigotoConfig(project.path, config);
+    findProjectOrThrow(projectId);
+    await writeShigotoConfig(projectId, config);
   });
 }

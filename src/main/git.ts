@@ -209,6 +209,57 @@ export function deriveProjectName(path: string): string {
   return basename(path);
 }
 
+const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
+
+async function localBranchExists(
+  projectPath: string,
+  branch: string,
+): Promise<boolean> {
+  try {
+    await exec(
+      "git",
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+      { cwd: projectPath },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function firstLocalBranch(projectPath: string): Promise<string | null> {
+  try {
+    const stdout = await run(projectPath, [
+      "for-each-ref",
+      "--format=%(refname:short)",
+      "--count=1",
+      "refs/heads/",
+    ]);
+    const name = stdout.trim();
+    return name.length > 0 ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function resolveDefaultBranch(
+  projectPath: string,
+  override?: string,
+): Promise<string> {
+  const trimmed = override?.trim();
+  if (trimmed && (await localBranchExists(projectPath, trimmed))) {
+    return trimmed;
+  }
+  // Override missing or pointing at a branch that no longer exists.
+  for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
+    // oxlint-disable-next-line no-await-in-loop -- priority order matters; short-circuit on first hit
+    if (await localBranchExists(projectPath, candidate)) return candidate;
+  }
+  const first = await firstLocalBranch(projectPath);
+  if (first) return first;
+  throw new Error(`No local branches found in ${projectPath}`);
+}
+
 export function defaultWorktreePath(
   projectPath: string,
   branchName: string,

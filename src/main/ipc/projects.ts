@@ -4,11 +4,13 @@ import { CHANNELS } from "@shared/channels";
 import {
   AddProjectPayloadSchema,
   type Project,
+  ProjectsDefaultBranchPayloadSchema,
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
-import { deriveProjectName, isGitRepo } from "../git";
+import { deriveProjectName, isGitRepo, resolveDefaultBranch } from "../git";
 import { expandHome } from "../paths";
-import { loadProjects } from "../projects";
+import { findProjectOrThrow, loadProjects } from "../projects";
+import { readShigotoConfig } from "../shigoto";
 import { writeKey } from "../store";
 
 const STORE_KEY = "projects";
@@ -47,6 +49,17 @@ export function registerProjectHandlers(): void {
     const { id } = RemoveProjectPayloadSchema.parse(rawPayload);
     saveProjects(loadProjects().filter((p) => p.id !== id));
   });
+
+  ipcMain.handle(
+    CHANNELS.ProjectsDefaultBranch,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId } =
+        ProjectsDefaultBranchPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const config = await readShigotoConfig(project.id);
+      return resolveDefaultBranch(project.path, config?.defaultBranch);
+    },
+  );
 
   ipcMain.handle(CHANNELS.DialogPickFolder, async () => {
     const result = await dialog.showOpenDialog({
