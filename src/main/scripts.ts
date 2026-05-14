@@ -5,19 +5,25 @@ import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import type { WebContents } from "electron";
 import { CHANNELS } from "@shared/channels";
-import type { ScriptEvent, ScriptName } from "@shared/schemas";
+import type { Project, ScriptEvent, ScriptName } from "@shared/schemas";
+import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 
 const runningScripts = new Map<string, ChildProcess>();
 
+// Slim view of a worktree identity for script env injection — keeps the
+// signature pinned to the few fields scripts actually consume.
+interface ScriptWorktree {
+  id: string;
+  name: string;
+  branch: string;
+  path: string;
+}
+
 interface RunArgs {
   command: string;
-  cwd: string;
   scriptName: ScriptName;
-  worktreeId: string;
-  worktreeName: string;
-  worktreeBranch: string;
-  projectPath: string;
-  projectName: string;
+  worktree: ScriptWorktree;
+  project: Pick<Project, "path" | "name">;
   projectBranch: string;
   defaultBranch: string;
   webContents: WebContents;
@@ -28,15 +34,11 @@ function emit(webContents: WebContents, payload: ScriptEvent): void {
   webContents.send(CHANNELS.ScriptsEvent, payload);
 }
 
-// Run the user's preferred shell as login+interactive so .zprofile *and*
-// .zshrc (or bash equivalents) are sourced. Without this, tools that
-// users add to PATH via nvm / pyenv / asdf / brew-shellenv inside .zshrc
-// aren't available to scripts.
-//
-// Shell discovery: $SHELL is reliable when launched from a terminal, but
-// can be empty in GUI launches (Finder/Dock/Spotlight) depending on
-// launchd state. os.userInfo().shell reads the user's passwd entry
-// directly, which works regardless of how the app was started.
+// $SHELL is reliable when launched from a terminal, but can be empty in
+// GUI launches depending on launchd state. os.userInfo().shell reads the
+// passwd entry directly. Flags `-l -i -c` source both .zprofile and
+// .zshrc (or bash equivalents) so tools users added to PATH via nvm /
+// pyenv / brew-shellenv inside their rc are available to the script.
 function resolveShell(): { command: string; args: string[] } {
   const fromEnv = process.env["SHELL"];
   if (fromEnv) return { command: fromEnv, args: ["-l", "-i", "-c"] };
@@ -49,20 +51,20 @@ export function startScript(args: RunArgs): string {
   const runId = randomUUID();
   const env = {
     ...process.env,
-    SHIGOMORI_SCRIPT_NAME: args.scriptName,
-    SHIGOMORI_WORKTREE_PATH: args.cwd,
-    SHIGOMORI_WORKTREE_NAME: args.worktreeName,
-    SHIGOMORI_WORKTREE_BRANCH: args.worktreeBranch,
-    SHIGOMORI_WORKTREE_ID: args.worktreeId,
-    SHIGOMORI_PROJECT_PATH: args.projectPath,
-    SHIGOMORI_PROJECT_NAME: args.projectName,
-    SHIGOMORI_PROJECT_BRANCH: args.projectBranch,
-    SHIGOMORI_DEFAULT_BRANCH: args.defaultBranch,
+    [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
+    [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
+    [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
+    [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
+    [SCRIPT_ENV_KEYS.WORKTREE_ID]: args.worktree.id,
+    [SCRIPT_ENV_KEYS.PROJECT_PATH]: args.project.path,
+    [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
+    [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.projectBranch,
+    [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
   const { command: shellCmd, args: shellArgs } = resolveShell();
   const child = spawn(shellCmd, [...shellArgs, args.command], {
-    cwd: args.cwd,
+    cwd: args.worktree.path,
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });

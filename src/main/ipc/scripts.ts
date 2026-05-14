@@ -24,8 +24,6 @@ export function registerScriptHandlers(): void {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 
-      // Single listWorktreeIdentities call gives us both the worktree the
-      // script runs in *and* the primary's branch for $SHIGOMORI_PROJECT_BRANCH.
       const [identities, defaultBranch] = await Promise.all([
         listWorktreeIdentities(project.id, project.path),
         resolveDefaultBranch(project.path, config?.defaultBranch).catch(
@@ -34,18 +32,13 @@ export function registerScriptHandlers(): void {
       ]);
       const worktree = identities.find((i) => i.id === worktreeId);
       if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
-      const primary = identities.find((i) => i.isPrimary);
 
       const runId = startScript({
         command,
-        cwd: worktree.path,
         scriptName: script,
-        worktreeId: worktree.id,
-        worktreeName: worktree.name,
-        worktreeBranch: worktree.branch,
-        projectPath: project.path,
-        projectName: project.name,
-        projectBranch: primary?.branch ?? "",
+        worktree,
+        project,
+        projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
         defaultBranch,
         webContents: event.sender,
       });

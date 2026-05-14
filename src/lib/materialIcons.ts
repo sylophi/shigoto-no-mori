@@ -1,20 +1,17 @@
-// File/folder icon lookups powered by the Material Icon Theme manifest.
-// The manifest ships pre-computed maps from filename / extension / folder
-// name to an icon identifier; each identifier resolves to an SVG file in
-// the package's `icons/` directory. We glob those SVGs at build time so
-// Vite emits hashed asset URLs we can hand to <img src>.
 import manifest from "material-icon-theme/dist/material-icons.json";
 
-const iconUrlByPath = import.meta.glob(
-  "../../node_modules/material-icon-theme/icons/*.svg",
-  { query: "?url", import: "default", eager: true },
-) as Record<string, string>;
-
-const iconUrlByName: Record<string, string> = {};
-for (const [path, url] of Object.entries(iconUrlByPath)) {
-  const match = path.match(/\/([^/]+)\.svg$/);
-  if (match) iconUrlByName[match[1]] = url;
-}
+const iconUrlByName: Record<string, string> = (() => {
+  const byPath = import.meta.glob(
+    "../../node_modules/material-icon-theme/icons/*.svg",
+    { query: "?url", import: "default", eager: true },
+  ) as Record<string, string>;
+  const byName: Record<string, string> = {};
+  for (const [path, url] of Object.entries(byPath)) {
+    const match = path.match(/\/([^/]+)\.svg$/);
+    if (match) byName[match[1]] = url;
+  }
+  return byName;
+})();
 
 type LightVariants = {
   fileExtensions?: Record<string, string>;

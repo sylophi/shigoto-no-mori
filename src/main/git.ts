@@ -314,12 +314,10 @@ export async function pickAvailableWorktreeName(
   return pickWorktreeName(used);
 }
 
-// Raw gitignored paths from `git ls-files --others --ignored
-// --exclude-standard --directory`. `--directory` collapses fully-ignored
-// directories into a single trailing-slash entry; loose files inside
-// partially-ignored dirs are listed individually. The renderer checks
-// membership (direct path or any ancestor folder) to decide whether a
-// filesystem entry can be carried over.
+// `--directory` collapses fully-ignored directories into a single
+// trailing-slash entry; loose files inside partially-ignored dirs are
+// listed individually. The renderer derives membership from this list to
+// decide whether a filesystem entry can be carried over.
 export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
   const stdout = await run(projectPath, [
     "ls-files",

@@ -1,7 +1,5 @@
-// Carry files/folders over from the main checkout into a newly-created
-// worktree (copy or symlink, per entry). Best-effort: failed entries are
-// collected and returned so the caller can surface them, but they never
-// abort worktree creation.
+// Best-effort: failed entries are collected and returned so the caller
+// can surface them, but they never abort worktree creation.
 
 import { cp, lstat, mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -44,7 +42,10 @@ async function applyOne(
       // Absolute target so the link survives moving the worktree dir around.
       await symlink(src, dst);
     } else {
-      await cp(src, dst, { recursive: true, errorOnExist: false });
+      // force:false matters even though we pre-check pathExists — otherwise
+      // a race between the check and cp would silently clobber files git
+      // just laid down.
+      await cp(src, dst, { recursive: true, force: false });
     }
     return null;
   } catch (err) {

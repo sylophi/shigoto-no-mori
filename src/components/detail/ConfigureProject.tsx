@@ -29,6 +29,7 @@ import type {
   LauncherCommand,
   ShigomoriConfig,
 } from "@shared/schemas";
+import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
@@ -294,61 +295,14 @@ function ConfigureForm({
                 Run inside the worktree directory. These env vars are available:
               </p>
               <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_SCRIPT_NAME
-                  </span>
-                  : <span className="font-mono">setup</span> or{" "}
-                  <span className="font-mono">teardown</span>.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_WORKTREE_PATH
-                  </span>
-                  : absolute path of the worktree.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_WORKTREE_NAME
-                  </span>
-                  : dirname of the worktree.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_WORKTREE_BRANCH
-                  </span>
-                  : branch currently checked out here.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_WORKTREE_ID
-                  </span>
-                  : stable internal identifier.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_PROJECT_PATH
-                  </span>
-                  : absolute path of the main checkout.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_PROJECT_NAME
-                  </span>
-                  : project name.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_PROJECT_BRANCH
-                  </span>
-                  : branch checked out at the main checkout.
-                </li>
-                <li>
-                  <span className="font-mono text-foreground/80">
-                    SHIGOMORI_DEFAULT_BRANCH
-                  </span>
-                  : configured default branch.
-                </li>
+                {SCRIPT_ENV_DOCS.map((row) => (
+                  <li key={row.name}>
+                    <span className="font-mono text-foreground/80">
+                      {row.name}
+                    </span>
+                    : {row.desc}
+                  </li>
+                ))}
               </ul>
             </div>
             <ScriptField
