@@ -77,7 +77,6 @@ function ConfigureSkeleton() {
 interface FormState {
   defaultBranch: string;
   setup: string;
-  run: string;
   teardown: string;
   launchers: LauncherCommand[];
 }
@@ -89,7 +88,6 @@ function fromConfig(
   return {
     defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
     setup: config?.scripts?.setup ?? "",
-    run: config?.scripts?.run ?? "",
     teardown: config?.scripts?.teardown ?? "",
     launchers: config?.launchers ?? [],
   };
@@ -99,9 +97,8 @@ function toConfig(
   original: ShigotoConfig | null,
   state: FormState,
 ): ShigotoConfig {
-  const scripts: { setup?: string; run?: string; teardown?: string } = {};
+  const scripts: { setup?: string; teardown?: string } = {};
   if (state.setup.trim()) scripts.setup = state.setup;
-  if (state.run.trim()) scripts.run = state.run;
   if (state.teardown.trim()) scripts.teardown = state.teardown;
 
   const validLaunchers = state.launchers.filter(
@@ -250,14 +247,6 @@ function ConfigureForm({
               onChange={(setup) => setForm({ ...form, setup })}
             />
             <ScriptField
-              id="script-run"
-              label="Run"
-              placeholder="bun dev"
-              description="Long-running, output streams to the console."
-              value={form.run}
-              onChange={(run) => setForm({ ...form, run })}
-            />
-            <ScriptField
               id="script-teardown"
               label="Teardown"
               placeholder="rm -rf node_modules"
@@ -271,7 +260,7 @@ function ConfigureForm({
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Project tools</SectionHeading>
+              <SectionHeading>Custom tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Tools specific to this project. For tools you want available in
                 every project (editors, agents), use{" "}

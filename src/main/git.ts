@@ -4,12 +4,7 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
-import type {
-  BranchList,
-  CommitSummary,
-  Worktree,
-  WorktreeStatus,
-} from "@shared/schemas";
+import type { BranchList, CommitSummary, Worktree } from "@shared/schemas";
 import { pickWorktreeName } from "./animals";
 import { shigomoriRoot } from "./paths";
 
@@ -68,7 +63,7 @@ function deriveBranch(entry: RawWorktreeEntry): string {
   return "(unknown)";
 }
 
-async function getDirtyCount(worktreePath: string): Promise<number> {
+async function getChangedCount(worktreePath: string): Promise<number> {
   try {
     const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
     return stdout.split("\n").filter((line) => line.length > 0).length;
@@ -100,6 +95,37 @@ async function getAheadBehind(
   }
 }
 
+// Walks `git log` for the worktree's current branch. Tab-delimited to
+// survive subjects containing arbitrary punctuation; the subject is
+// captured as the trailing portion of each line.
+export async function listCommits(
+  worktreePath: string,
+  limit: number,
+): Promise<CommitSummary[]> {
+  try {
+    const fmt = "%h%x09%an%x09%aI%x09%s";
+    const stdout = await run(worktreePath, [
+      "log",
+      `-${limit}`,
+      `--pretty=format:${fmt}`,
+    ]);
+    return stdout
+      .split("\n")
+      .filter((l) => l.length > 0)
+      .map((line) => {
+        const [hash, author, date, ...subject] = line.split("\t");
+        return {
+          hash: hash ?? "",
+          author: author ?? "",
+          date: date ?? "",
+          subject: subject.join("\t"),
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
 async function getLastCommit(
   worktreePath: string,
 ): Promise<CommitSummary | null> {
@@ -122,18 +148,6 @@ async function getLastCommit(
   } catch {
     return null;
   }
-}
-
-function deriveStatus(
-  ahead: number,
-  behind: number,
-  dirty: number,
-): WorktreeStatus {
-  if (dirty > 0) return "dirty";
-  if (ahead > 0 && behind > 0) return "diverged";
-  if (ahead > 0) return "ahead";
-  if (behind > 0) return "behind";
-  return "clean";
 }
 
 interface WorktreeIdentity {
@@ -175,9 +189,9 @@ export async function listWorktreeIdentities(
 }
 
 async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
-  const [{ ahead, behind }, dirtyCount, lastCommit] = await Promise.all([
+  const [{ ahead, behind }, changedCount, lastCommit] = await Promise.all([
     getAheadBehind(identity.path, identity.branch),
-    getDirtyCount(identity.path),
+    getChangedCount(identity.path),
     getLastCommit(identity.path),
   ]);
   return {
@@ -186,10 +200,9 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     name: identity.name,
     branch: identity.branch,
     path: identity.path,
-    status: deriveStatus(ahead, behind, dirtyCount),
     ahead,
     behind,
-    dirtyCount,
+    changedCount,
     lastCommit,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,

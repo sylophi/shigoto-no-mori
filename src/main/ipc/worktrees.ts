@@ -2,6 +2,8 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
+  type CommitSummary,
+  CommitHistoryPayloadSchema,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
@@ -13,6 +15,7 @@ import {
   createWorktree,
   describeWorktree,
   findWorktreeIdentity,
+  listCommits,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -56,9 +59,9 @@ export function registerWorktreeHandlers(): void {
       }
       if (!force) {
         const full = await describeWorktree(target);
-        if (full.dirtyCount > 0) {
+        if (full.changedCount > 0) {
           throw new Error(
-            `Worktree has ${full.dirtyCount} uncommitted change(s). Pass force=true to remove anyway.`,
+            `Worktree has ${full.changedCount} uncommitted change(s). Pass force=true to remove anyway.`,
           );
         }
       }
@@ -88,6 +91,22 @@ export function registerWorktreeHandlers(): void {
         throw new Error("Worktree disappeared after rename");
       }
       return describeWorktree(refreshed);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesCommitHistory,
+    async (_event, rawPayload: unknown): Promise<CommitSummary[]> => {
+      const { projectId, worktreeId, limit } =
+        CommitHistoryPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
+      return listCommits(target.path, limit);
     },
   );
 

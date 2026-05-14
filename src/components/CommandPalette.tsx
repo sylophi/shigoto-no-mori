@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { Command } from "cmdk";
+import finderIconUrl from "@/assets/app-icons/finder.png";
 import {
   ArrowDown,
   ArrowLeft,
@@ -7,6 +8,7 @@ import {
   Check,
   CornerLeftUp,
   Folder,
+  FolderGit2,
   FolderPlus,
   FolderSearch,
   GitBranch,
@@ -16,7 +18,6 @@ import {
   Square,
   TreeDeciduous,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -29,6 +30,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { useFsIsGitRepo } from "@/hooks/useFsIsGitRepo";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
@@ -131,7 +133,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               >
                 <GitBranch className="size-4 text-muted-foreground/80" />
                 <span className="truncate font-mono">{tree.branch}</span>
-                <span className="truncate text-xs text-muted-foreground capitalize">
+                <span className="truncate text-xs text-muted-foreground">
                   {tree.name}
                 </span>
                 <span className="ml-auto text-xs text-muted-foreground">
@@ -257,6 +259,15 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
   );
 
+  // What the user is about to submit. When the query points at an
+  // existing git repo we offer "Add"; otherwise we offer "Scan for git
+  // repos" so the same primary slot doubles as the discovery path.
+  const submitTarget = normalizeForSubmit(query);
+  const { data: targetIsGitRepo = false } = useFsIsGitRepo(
+    submitTarget,
+    stage === "browse",
+  );
+
   const browseTo = (name: string) => {
     setQuery(appendBrowsePathSegment(query, name));
     setHighlighted("");
@@ -351,17 +362,25 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
 
   const hasHighlighted = highlighted.startsWith("browse:");
 
+  const primaryAction = () => {
+    if (targetIsGitRepo) {
+      void submit();
+    } else {
+      void scanCurrentDir();
+    }
+  };
+
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
-      void submit();
+      primaryAction();
       return;
     }
     if (e.key === "Enter" && !hasHighlighted) {
       e.preventDefault();
       e.stopPropagation();
-      void submit();
+      primaryAction();
       return;
     }
     if (e.key === "Escape") {
@@ -424,10 +443,12 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
   }
 
   // Browse stage.
-  const submitLabel = "Add";
+  const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
   const submitKbd = hasHighlighted ? "⌘↩" : "↩";
   const canBrowseUp = canNavigateUp(query);
-  const canScan = hasTrailingSlash(browseDir) && !!listing && !error;
+  const canPrimary = targetIsGitRepo
+    ? submitTarget.length > 0
+    : hasTrailingSlash(browseDir) && !!listing && !error;
 
   return (
     <Command
@@ -459,13 +480,15 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
         <button
           type="button"
           onMouseDown={(e) => e.preventDefault()}
-          onClick={() => void submit()}
-          disabled={query.trim().length === 0 || addProject.isPending}
+          onClick={primaryAction}
+          disabled={!canPrimary || addProject.isPending}
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={`${submitLabel} (${submitKbd})`}
           title={`${submitLabel} (${submitKbd})`}
         >
-          <span>{addProject.isPending ? "Adding…" : submitLabel}</span>
+          <span>
+            {addProject.isPending && targetIsGitRepo ? "Adding…" : submitLabel}
+          </span>
           <KbdGroup className="pointer-events-none">
             <Kbd>{submitKbd}</Kbd>
           </KbdGroup>
@@ -493,20 +516,12 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
             onSelect={() => browseTo(entry.name)}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <Folder
-              className={cn(
-                "size-4",
-                entry.isGitRepo
-                  ? "text-foreground"
-                  : "text-muted-foreground/80",
-              )}
-            />
-            <span className="truncate font-mono">{entry.name}</span>
-            {entry.isGitRepo && (
-              <span className="rounded-sm border border-border bg-muted px-1 font-mono text-[10px] tracking-wide text-muted-foreground">
-                git
-              </span>
+            {entry.isGitRepo ? (
+              <FolderGit2 className="size-4 text-foreground" />
+            ) : (
+              <Folder className="size-4 text-muted-foreground/80" />
             )}
+            <span className="truncate font-mono">{entry.name}</span>
           </Command.Item>
         ))}
 
@@ -557,25 +572,14 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
             <span className="text-muted-foreground/80">Back</span>
           </KbdGroup>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => void scanCurrentDir()}
-            disabled={!canScan}
-            title="Scan this folder recursively for git repos, stopping at the outermost .git"
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
-          >
-            <FolderSearch className="size-3.5" />
-            Scan for git repos
-          </button>
-          <button
-            type="button"
-            onClick={() => void pickViaDialog()}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-          >
-            Open in Finder
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => void pickViaDialog()}
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <img src={finderIconUrl} alt="" className="size-4" />
+          Open in Finder
+        </button>
       </div>
     </Command>
   );
@@ -717,26 +721,7 @@ function ResultsPanel(props: ResultsPanelProps) {
           )}
         </Command.List>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-          <div className="flex items-center gap-3">
-            <KbdGroup>
-              <Kbd>
-                <ArrowUp />
-              </Kbd>
-              <Kbd>
-                <ArrowDown />
-              </Kbd>
-              <span className="text-muted-foreground/80">Navigate</span>
-            </KbdGroup>
-            <KbdGroup>
-              <Kbd>↩</Kbd>
-              <span className="text-muted-foreground/80">Toggle</span>
-            </KbdGroup>
-            <KbdGroup>
-              <Kbd>Esc</Kbd>
-              <span className="text-muted-foreground/80">Back</span>
-            </KbdGroup>
-          </div>
+        <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
           <button
             type="button"
             onClick={() => void props.onAdd()}

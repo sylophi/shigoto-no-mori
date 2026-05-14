@@ -8,10 +8,14 @@ import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
 import { useBranches } from "@/hooks/useBranches";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
+import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useShigotoConfig } from "@/hooks/useShigotoConfig";
+import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import {
   useCheckoutBranch,
+  useCommitHistory,
   useDeleteWorktree,
   useRenameBranch,
   useWorktrees,
@@ -19,7 +23,7 @@ import {
 import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsPanel } from "./ScriptsPanel";
-import type { Worktree } from "@shared/types";
+import type { CommitSummary, Worktree } from "@shared/schemas";
 
 function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";
@@ -110,7 +114,7 @@ export function WorktreeDetail() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
-            <div className="mt-1 truncate text-xs text-muted-foreground capitalize">
+            <div className="mt-1 truncate text-xs text-muted-foreground">
               {worktree.name}
             </div>
           </div>
@@ -127,29 +131,7 @@ export function WorktreeDetail() {
 
           <Separator />
 
-          <section className="space-y-3">
-            <SectionHeading>Last commit</SectionHeading>
-            {worktree.lastCommit ? (
-              <div className="space-y-1">
-                <div className="text-sm">{worktree.lastCommit.subject}</div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                  <span className="font-mono">{worktree.lastCommit.hash}</span>
-                  <span aria-hidden className="text-muted-foreground/40">
-                    ·
-                  </span>
-                  <span>{worktree.lastCommit.author}</span>
-                  <span aria-hidden className="text-muted-foreground/40">
-                    ·
-                  </span>
-                  <RelativeDate date={worktree.lastCommit.date} />
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">
-                No commits yet.
-              </div>
-            )}
-          </section>
+          <CommitsSection worktree={worktree} />
 
           <Separator />
 
@@ -157,6 +139,10 @@ export function WorktreeDetail() {
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsPanel worktree={worktree} />
           </section>
+
+          <Separator />
+
+          <NotesSection worktree={worktree} />
 
         </div>
       </div>
@@ -196,7 +182,7 @@ export function WorktreeDetail() {
             </span>
             {worktree.isPrimary ? (
               <span className="shrink-0 text-xs text-muted-foreground/70">
-                Primary checkout
+                Repo root
               </span>
             ) : (
               <Button
@@ -225,9 +211,146 @@ export function WorktreeDetail() {
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+    <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
       {children}
     </h2>
+  );
+}
+
+function NotesSection({ worktree }: { worktree: Worktree }) {
+  const { data: config } = useShigotoConfig(worktree.projectId);
+  const { data: resolvedDefaultBranch } = useDefaultBranch(worktree.projectId);
+  const write = useShigotoWrite();
+
+  const saved = config?.notes?.[worktree.name] ?? "";
+  const [draft, setDraft] = useState(saved);
+  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
+
+  // Re-sync the draft when switching between worktrees or when the
+  // config first loads. Tracking the worktree id lets us detect both.
+  if (hydratedFor !== worktree.id) {
+    setHydratedFor(worktree.id);
+    setDraft(saved);
+  }
+
+  const commit = () => {
+    const next = draft;
+    if (next === saved) return;
+    if (!resolvedDefaultBranch && !config?.defaultBranch) return;
+    const base = config ?? {
+      defaultBranch: resolvedDefaultBranch ?? "main",
+    };
+    const nextNotes = { ...config?.notes };
+    if (next.trim().length === 0) {
+      delete nextNotes[worktree.name];
+    } else {
+      nextNotes[worktree.name] = next;
+    }
+    write.mutate({
+      projectId: worktree.projectId,
+      config: {
+        ...base,
+        notes: Object.keys(nextNotes).length > 0 ? nextNotes : undefined,
+      },
+    });
+  };
+
+  const status =
+    write.isPending && draft !== saved
+      ? "Saving…"
+      : write.isSuccess && draft === saved
+        ? "Saved"
+        : "";
+
+  return (
+    <section className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>Notes</SectionHeading>
+        <span className="text-xs text-muted-foreground/60">{status}</span>
+      </div>
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        placeholder="Anything worth remembering about this worktree…"
+        rows={3}
+        className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30"
+      />
+      {write.error && (
+        <div className="text-xs text-destructive">{write.error.message}</div>
+      )}
+    </section>
+  );
+}
+
+function CommitsSection({ worktree }: { worktree: Worktree }) {
+  const [expanded, setExpanded] = useState(false);
+  const history = useCommitHistory(worktree.projectId, worktree.id, {
+    enabled: expanded,
+    limit: 30,
+  });
+  const last = worktree.lastCommit;
+
+  if (!last) {
+    return (
+      <section className="space-y-3">
+        <SectionHeading>Last commit</SectionHeading>
+        <div className="text-sm text-muted-foreground">No commits yet.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>
+          {expanded ? "Recent commits" : "Last commit"}
+        </SectionHeading>
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
+        >
+          {expanded ? "Hide" : "Show more"}
+        </button>
+      </div>
+      {expanded ? (
+        history.isLoading ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : history.error ? (
+          <div className="text-sm text-destructive">
+            {history.error.message}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {(history.data ?? []).map((c) => (
+              <CommitRow key={c.hash} commit={c} />
+            ))}
+          </div>
+        )
+      ) : (
+        <CommitRow commit={last} />
+      )}
+    </section>
+  );
+}
+
+function CommitRow({ commit }: { commit: CommitSummary }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-sm">{commit.subject}</div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+        <span className="font-mono">{commit.hash}</span>
+        <span aria-hidden className="text-muted-foreground/40">
+          ·
+        </span>
+        <span>{commit.author}</span>
+        <span aria-hidden className="text-muted-foreground/40">
+          ·
+        </span>
+        <RelativeDate date={commit.date} />
+      </div>
+    </div>
   );
 }
 
@@ -318,7 +441,6 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
       >
         {worktree.branch}
       </h1>
-      <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
       <button
         type="button"
         onClick={begin}
@@ -328,6 +450,7 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
       >
         <Pencil className="size-3.5" />
       </button>
+      <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
     </div>
   );
 }
@@ -480,18 +603,14 @@ function StatusPills({ worktree }: { worktree: Worktree }) {
   if (worktree.behind > 0) {
     pills.push({ label: `↓ ${worktree.behind}`, tone: "neutral" });
   }
-  if (worktree.dirtyCount > 0) {
+  if (worktree.changedCount > 0) {
     pills.push({
-      label: `${worktree.dirtyCount} dirty`,
+      label: `${worktree.changedCount} changed`,
       tone: "warn",
     });
   }
   if (pills.length === 0) {
-    return (
-      <span className="shrink-0 pt-1.5 text-xs text-muted-foreground/70">
-        in sync
-      </span>
-    );
+    return null;
   }
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 pt-1">

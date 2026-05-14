@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import type { CommitSummary, Project, Worktree } from "@shared/schemas";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
@@ -103,5 +103,20 @@ export function useCheckoutBranch() {
         queryKey: ["worktrees", vars.projectId],
       });
     },
+  });
+}
+
+export function useCommitHistory(
+  projectId: string,
+  worktreeId: string,
+  options: { enabled?: boolean; limit?: number } = {},
+) {
+  const limit = options.limit ?? 30;
+  return useQuery<CommitSummary[]>({
+    queryKey: ["commits", projectId, worktreeId, limit],
+    queryFn: () =>
+      window.api.worktrees.commitHistory({ projectId, worktreeId, limit }),
+    enabled: options.enabled ?? true,
+    staleTime: 30_000,
   });
 }

@@ -27,7 +27,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       }
       title={
         worktree.isPrimary
-          ? "Primary checkout"
+          ? "Repo root"
           : worktree.isExternal
             ? `External worktree at ${worktree.path}`
             : undefined
@@ -47,14 +47,14 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         >
           {worktree.branch}
         </span>
-        <span className="truncate text-[10px] text-muted-foreground capitalize">
+        <span className="truncate text-[10px] text-muted-foreground">
           {worktree.name}
         </span>
       </div>
       {worktree.isPrimary && (
         <House
           className="size-3 text-muted-foreground/60"
-          aria-label="Primary checkout"
+          aria-label="Repo root"
         />
       )}
       {!worktree.isPrimary && worktree.isExternal && (
@@ -72,7 +72,7 @@ function StatusIndicator({ worktree }: { worktree: Worktree }) {
   const parts: string[] = [];
   if (worktree.ahead > 0) parts.push(`↑${worktree.ahead}`);
   if (worktree.behind > 0) parts.push(`↓${worktree.behind}`);
-  if (worktree.dirtyCount > 0) parts.push(`●${worktree.dirtyCount}`);
+  if (worktree.changedCount > 0) parts.push(`●${worktree.changedCount}`);
 
   if (parts.length === 0) {
     return null;

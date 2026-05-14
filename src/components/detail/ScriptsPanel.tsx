@@ -14,11 +14,10 @@ interface ScriptsPanelProps {
 
 const SCRIPT_LABELS: Record<ScriptName, string> = {
   setup: "Setup",
-  run: "Run",
   teardown: "Teardown",
 };
 
-const SCRIPT_ORDER: ScriptName[] = ["setup", "run", "teardown"];
+const SCRIPT_ORDER: ScriptName[] = ["setup", "teardown"];
 
 export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
   const { data: config, isLoading } = useShigotoConfig(worktree.projectId);

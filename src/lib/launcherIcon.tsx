@@ -1,12 +1,9 @@
-// Maps a launcher entry to the right brand SVG (light/dark aware) or a
-// lucide fallback for tools without a recognizable logo on svgl.
-import { Folder, Sparkles, Terminal } from "lucide-react";
+// Maps a launcher entry to the right brand asset. Apple- and vendor-provided
+// app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
+// each app's bundle; the rest fall back to svgl SVGs.
+import { Sparkles } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { Antigravity } from "@/components/ui/svgs/antigravity";
-import { CursorLight } from "@/components/ui/svgs/cursorLight";
-import { Ghostty } from "@/components/ui/svgs/ghostty";
-import { GithubDark } from "@/components/ui/svgs/githubDark";
-import { GithubLight } from "@/components/ui/svgs/githubLight";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrainsSolid";
 import { Phpstorm } from "@/components/ui/svgs/phpstorm";
@@ -14,14 +11,18 @@ import { Pycharm } from "@/components/ui/svgs/pycharm";
 import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Sublimetext } from "@/components/ui/svgs/sublimetext";
-import { Vscode } from "@/components/ui/svgs/vscode";
 import { Vscodium } from "@/components/ui/svgs/vscodium";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import { WindsurfDark } from "@/components/ui/svgs/windsurfDark";
 import { WindsurfLight } from "@/components/ui/svgs/windsurfLight";
-import { Xcode } from "@/components/ui/svgs/xcode";
-import { ZedLogo } from "@/components/ui/svgs/zedLogo";
-import { ZedLogoDark } from "@/components/ui/svgs/zedLogoDark";
+import cursorIconUrl from "@/assets/app-icons/cursor.png";
+import finderIconUrl from "@/assets/app-icons/finder.png";
+import ghosttyIconUrl from "@/assets/app-icons/ghostty.png";
+import githubDesktopIconUrl from "@/assets/app-icons/github-desktop.png";
+import terminalIconUrl from "@/assets/app-icons/terminal.png";
+import vscodeIconUrl from "@/assets/app-icons/vscode.png";
+import xcodeIconUrl from "@/assets/app-icons/xcode.png";
+import zedIconUrl from "@/assets/app-icons/zed.png";
 import type { LauncherEntry } from "@shared/schemas";
 
 interface LauncherIconProps {
@@ -42,9 +43,23 @@ export function LauncherIcon({
   const appId = entry.id.replace(/^app:/, "");
   switch (appId) {
     case "cursor":
-      // svgl's two cursor variants are byte-identical with no explicit fill;
-      // route both to one and let fill-current take the surrounding text color.
-      return <CursorLight className={`${className} fill-current`} />;
+      return <img src={cursorIconUrl} alt="" className={className} />;
+    case "vscode":
+    case "vscode-insiders":
+      return <img src={vscodeIconUrl} alt="" className={className} />;
+    case "zed":
+      return <img src={zedIconUrl} alt="" className={className} />;
+    case "ghostty":
+      return <img src={ghosttyIconUrl} alt="" className={className} />;
+    case "terminal":
+    case "iterm":
+      return <img src={terminalIconUrl} alt="" className={className} />;
+    case "github-desktop":
+      return <img src={githubDesktopIconUrl} alt="" className={className} />;
+    case "xcode":
+      return <img src={xcodeIconUrl} alt="" className={className} />;
+    case "finder":
+      return <img src={finderIconUrl} alt="" className={className} />;
     case "windsurf":
       return resolved === "dark" ? (
         <WindsurfDark className={className} />
@@ -53,17 +68,8 @@ export function LauncherIcon({
       );
     case "antigravity":
       return <Antigravity className={className} />;
-    case "vscode":
-    case "vscode-insiders":
-      return <Vscode className={className} />;
     case "vscodium":
       return <Vscodium className={className} />;
-    case "zed":
-      return resolved === "dark" ? (
-        <ZedLogoDark className={className} />
-      ) : (
-        <ZedLogo className={className} />
-      );
     case "sublime":
       return <Sublimetext className={className} />;
     case "intellij":
@@ -87,22 +93,6 @@ export function LauncherIcon({
     case "goland":
     case "rustrover":
       return <JetbrainsSolid className={className} />;
-    case "xcode":
-      return <Xcode className={`${className} fill-current`} />;
-    case "ghostty":
-      return <Ghostty className={className} />;
-    case "github-desktop":
-      return resolved === "dark" ? (
-        <GithubDark className={className} />
-      ) : (
-        <GithubLight className={className} />
-      );
-    case "iterm":
-    case "terminal":
-      return <Terminal className={className} />;
-    case "finder":
-      return <Folder className={className} />;
-    // Trae, Kiro, Antigravity, and anything else unknown: generic.
     default:
       return <Sparkles className={className} />;
   }

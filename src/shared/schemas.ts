@@ -1,14 +1,6 @@
 // Zod schemas for IPC validation. Types in shared/types.ts derive from these.
 import { z } from "zod";
 
-export const WorktreeStatusSchema = z.enum([
-  "clean",
-  "dirty",
-  "ahead",
-  "behind",
-  "diverged",
-]);
-
 export const CommitSummarySchema = z.object({
   hash: z.string(),
   subject: z.string(),
@@ -27,10 +19,9 @@ export const WorktreeSchema = z.object({
   // its identity. May change via `git checkout` / `git branch -m`.
   branch: z.string(),
   path: z.string(),
-  status: WorktreeStatusSchema,
   ahead: z.number().int().nonnegative(),
   behind: z.number().int().nonnegative(),
-  dirtyCount: z.number().int().nonnegative(),
+  changedCount: z.number().int().nonnegative(),
   lastCommit: CommitSummarySchema.nullable(),
   port: z.number().int().positive().optional(),
   // The repo's primary checkout. Shown in the UI for context but never
@@ -101,6 +92,12 @@ export const CheckoutBranchPayloadSchema = z.object({
   branch: z.string().min(1),
 });
 
+export const CommitHistoryPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  limit: z.number().int().positive().max(500).default(30),
+});
+
 // Filesystem browser used by the Add Project palette.
 
 export const ListDirectoryPayloadSchema = z.object({
@@ -108,6 +105,10 @@ export const ListDirectoryPayloadSchema = z.object({
 });
 
 export const ScanForGitReposPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
+export const IsGitRepoPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
@@ -136,7 +137,6 @@ export const ShigotoConfigSchema = z.object({
   scripts: z
     .object({
       setup: z.string().optional(),
-      run: z.string().optional(),
       teardown: z.string().optional(),
     })
     .partial()
@@ -144,6 +144,8 @@ export const ShigotoConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   portBase: z.number().int().positive().optional(),
   defaultBranch: z.string().min(1),
+  // Free-form per-worktree notes, keyed by Worktree.name (directory basename).
+  notes: z.record(z.string(), z.string()).optional(),
 });
 
 // Global, per-user config kept in ~/shigomori/config.json. Holds preferences
@@ -203,7 +205,7 @@ export const SetThemePayloadSchema = z.object({
 });
 export type Theme = z.infer<typeof ThemeSchema>;
 
-export const ScriptNameSchema = z.enum(["setup", "run", "teardown"]);
+export const ScriptNameSchema = z.enum(["setup", "teardown"]);
 
 export const RunScriptPayloadSchema = z.object({
   projectId: z.string(),
@@ -228,7 +230,6 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
 
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
-export type WorktreeStatus = z.infer<typeof WorktreeStatusSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigotoConfig = z.infer<typeof ShigotoConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;

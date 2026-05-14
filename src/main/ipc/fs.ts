@@ -5,6 +5,7 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   type DirectoryListing,
+  IsGitRepoPayloadSchema,
   ListDirectoryPayloadSchema,
   ScanForGitReposPayloadSchema,
 } from "@shared/schemas";
@@ -85,6 +86,18 @@ export function registerFsHandlers(): void {
         .toSorted((a, b) => a.name.localeCompare(b.name));
 
       return { path: absolute, entries: dirs };
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.FsIsGitRepo,
+    (_event, rawPayload: unknown): boolean => {
+      const { path } = IsGitRepoPayloadSchema.parse(rawPayload);
+      const expanded = expandHome(path);
+      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
+      // existsSync covers both a regular repo (.git directory) and a
+      // linked worktree (.git file with `gitdir: …`).
+      return existsSync(join(absolute, ".git"));
     },
   );
 

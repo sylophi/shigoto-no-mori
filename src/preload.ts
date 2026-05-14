@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
   BranchList,
+  CommitSummary,
   DetectedLauncher,
   DirectoryListing,
   GlobalConfig,
@@ -59,6 +60,15 @@ const api = {
       branch: string;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
+    commitHistory: (input: {
+      projectId: string;
+      worktreeId: string;
+      limit?: number;
+    }): Promise<CommitSummary[]> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesCommitHistory, {
+        ...input,
+        limit: input.limit ?? 30,
+      }),
   },
   dialog: {
     pickFolder: (): Promise<string | null> =>
@@ -75,6 +85,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.FsListDirectory, { path }),
     scanForGitRepos: (path: string): Promise<string[]> =>
       ipcRenderer.invoke(CHANNELS.FsScanForGitRepos, { path }),
+    isGitRepo: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.FsIsGitRepo, { path }),
   },
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>
