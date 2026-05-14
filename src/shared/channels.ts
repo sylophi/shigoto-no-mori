@@ -26,6 +26,8 @@ export const CHANNELS = {
   GlobalConfigWrite: "globalConfig:write",
   ShellOpenPath: "shell:openPath",
   ShellShowItemInFolder: "shell:showItemInFolder",
+  PaletteToggle: "palette:toggle",
+  PaletteAddProject: "palette:addProject",
 } as const;
 
 export interface RuntimeInfo {

@@ -4,6 +4,7 @@ import started from "electron-squirrel-startup";
 import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { registerIpcHandlers } from "./main/ipc";
+import { buildAppMenu } from "./main/menu";
 import { readKey, writeKey } from "./main/store";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -29,10 +30,10 @@ let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 720,
-    minHeight: 480,
+    width: 920,
+    height: 600,
+    minWidth: 640,
+    minHeight: 420,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
     backgroundColor: resolvedBgColor(),
@@ -69,7 +70,10 @@ nativeTheme.on("updated", () => {
   if (stored === "system") mainWindow.setBackgroundColor(resolvedBgColor());
 });
 
-app.on("ready", createWindow);
+app.on("ready", () => {
+  buildAppMenu();
+  createWindow();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

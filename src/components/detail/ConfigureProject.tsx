@@ -34,7 +34,7 @@ export function ConfigureProject() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
+      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
@@ -59,7 +59,7 @@ export function ConfigureProject() {
 
 function ConfigureSkeleton() {
   return (
-    <div className="flex flex-col gap-8 px-8 py-6">
+    <div className="flex flex-col gap-8 px-6 py-6">
       <div className="space-y-2">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-4 w-72" />
@@ -179,7 +179,7 @@ function ConfigureForm({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-7">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
@@ -316,7 +316,7 @@ function ConfigureForm({
           )}
         </div>
       </div>
-      <footer className="flex items-center gap-3 border-t border-border bg-card px-8 py-2.5">
+      <footer className="flex items-center gap-3 border-t border-border bg-card px-6 py-2.5">
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
         </span>

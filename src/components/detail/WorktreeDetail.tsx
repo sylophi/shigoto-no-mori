@@ -70,7 +70,7 @@ export function WorktreeDetail() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-col gap-2 border-b border-border px-8 pt-7 pb-5">
+      <header className="flex flex-col gap-2 border-b border-border px-6 pt-7 pb-5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button
             type="button"
@@ -100,7 +100,7 @@ export function WorktreeDetail() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-4xl flex-col gap-8">
           <section>
             <SectionHeading>Launch</SectionHeading>
@@ -148,7 +148,7 @@ export function WorktreeDetail() {
         </div>
       </div>
 
-      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-8">
+      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
         <span
           className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
           title={worktree.path}

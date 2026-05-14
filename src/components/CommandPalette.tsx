@@ -11,11 +11,9 @@ import {
   FolderSearch,
   GitBranch,
   Loader2,
-  Moon,
   Plus,
+  Settings as SettingsIcon,
   Square,
-  Sun,
-  SunMoon,
   TreeDeciduous,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,7 +31,6 @@ import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useTheme } from "@/hooks/useTheme";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import type { Worktree } from "@shared/schemas";
@@ -41,17 +38,13 @@ import type { Worktree } from "@shared/schemas";
 export function CommandPalette() {
   const { open, mode, setOpen, toggle, openIn } = useCommandPalette();
 
-  // Toggle on ⌘K / Ctrl+K.
-  useEffect(() => {
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        toggle();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [toggle]);
+  // Both shortcuts are wired via native menu accelerators in src/main/menu.ts
+  // — View → Command palette (⌘T) and File → Add project… (⌘N).
+  useEffect(() => window.api.palette.onToggle(toggle), [toggle]);
+  useEffect(
+    () => window.api.palette.onAddProject(() => openIn("add-project")),
+    [openIn],
+  );
 
   if (!open) return null;
 
@@ -61,7 +54,15 @@ export function CommandPalette() {
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) setOpen(false);
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/60 p-4 pt-[10vh] backdrop-blur-sm"
+      onKeyDown={(e) => {
+        // AddProjectView owns its own Escape handling (back/scan stages);
+        // only close the palette on Escape from browse mode here.
+        if (e.key === "Escape" && mode === "browse") {
+          e.preventDefault();
+          setOpen(false);
+        }
+      }}
+      className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
     >
       <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
         {mode === "browse" ? (
@@ -83,7 +84,6 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   const { setOpen } = useCommandPalette();
   const { data: projects = [] } = useProjects();
   const navigate = useNavigate();
-  const { setTheme } = useTheme();
 
   const worktreeQueries = useAllProjectWorktrees(projects, true);
   const allWorktrees = projects.flatMap((project, i) => {
@@ -178,32 +178,16 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
         </Command.Group>
 
         <Command.Group
-          heading="Theme"
+          heading="Navigate"
           className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
         >
           <Command.Item
-            value="theme light"
-            onSelect={handle(() => setTheme("light"))}
+            value="settings preferences appearance theme"
+            onSelect={handle(() => void navigate({ to: "/settings" }))}
             className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
           >
-            <Sun className="size-4 text-muted-foreground/80" />
-            Light
-          </Command.Item>
-          <Command.Item
-            value="theme dark"
-            onSelect={handle(() => setTheme("dark"))}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-          >
-            <Moon className="size-4 text-muted-foreground/80" />
-            Dark
-          </Command.Item>
-          <Command.Item
-            value="theme system"
-            onSelect={handle(() => setTheme("system"))}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-          >
-            <SunMoon className="size-4 text-muted-foreground/80" />
-            System
+            <SettingsIcon className="size-4 text-muted-foreground/80" />
+            Settings
           </Command.Item>
         </Command.Group>
 

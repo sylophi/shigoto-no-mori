@@ -82,6 +82,22 @@ const api = {
     showItemInFolder: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
   },
+  palette: {
+    onToggle: (handler: () => void): (() => void) => {
+      const listener = () => handler();
+      ipcRenderer.on(CHANNELS.PaletteToggle, listener);
+      return () => {
+        ipcRenderer.off(CHANNELS.PaletteToggle, listener);
+      };
+    },
+    onAddProject: (handler: () => void): (() => void) => {
+      const listener = () => handler();
+      ipcRenderer.on(CHANNELS.PaletteAddProject, listener);
+      return () => {
+        ipcRenderer.off(CHANNELS.PaletteAddProject, listener);
+      };
+    },
+  },
   scripts: {
     run: (input: {
       projectId: string;

@@ -71,7 +71,7 @@ export function NewWorktree() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
+      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
@@ -81,7 +81,7 @@ export function NewWorktree() {
       </header>
 
       <form
-        className="flex max-w-xl flex-col gap-7 px-8 py-6"
+        className="flex max-w-xl flex-col gap-7 px-6 py-6"
         onSubmit={handleSubmit}
       >
         <div className="space-y-2">

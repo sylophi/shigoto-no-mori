@@ -1,5 +1,5 @@
 import { ExternalLink, House } from "lucide-react";
-import { useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import type { Worktree } from "@shared/types";
 
@@ -9,11 +9,9 @@ interface WorktreeRowProps {
 
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
-  const matchRoute = useMatchRoute();
-  const isSelected = !!matchRoute({
-    to: "/projects/$projectId/worktrees/$branch",
-    params: { projectId: worktree.projectId, branch: worktree.branch },
-  });
+  const location = useLocation();
+  const expectedPath = `/projects/${encodeURIComponent(worktree.projectId)}/worktrees/${encodeURIComponent(worktree.branch)}`;
+  const isSelected = location.pathname === expectedPath;
 
   return (
     <button
@@ -32,7 +30,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
             : undefined
       }
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+        "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
         "hover:bg-accent/60",
         isSelected && "bg-accent font-medium text-accent-foreground",
       )}
@@ -68,7 +66,7 @@ function StatusIndicator({ worktree }: { worktree: Worktree }) {
   }
 
   return (
-    <span className="tabular text-xs text-muted-foreground">
+    <span className="tabular text-[10px] text-muted-foreground">
       {parts.join(" ")}
     </span>
   );

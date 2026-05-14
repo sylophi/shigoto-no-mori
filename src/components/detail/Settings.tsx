@@ -4,8 +4,11 @@ import {
   ExternalLink,
   FolderOpen,
   Flame,
+  Moon,
   Plus,
   Save,
+  Sun,
+  SunMoon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -14,6 +17,7 @@ import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
 import { tildify } from "@/lib/projectPaths";
 import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
@@ -27,7 +31,7 @@ export function Settings() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
+      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
         <div className="flex min-w-0 flex-col">
           <span className="text-xs text-muted-foreground">Shigoto no Mori</span>
           <h1 className="text-lg font-medium tracking-tight">Settings</h1>
@@ -44,7 +48,7 @@ export function Settings() {
 
 function SettingsSkeleton() {
   return (
-    <div className="flex flex-col gap-8 px-8 py-6">
+    <div className="flex flex-col gap-8 px-6 py-6">
       <div className="space-y-2">
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-4 w-72" />
@@ -132,7 +136,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-7">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
@@ -171,6 +175,10 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               </Button>
             </div>
           </section>
+
+          <Separator />
+
+          <AppearanceSection />
 
           <Separator />
 
@@ -275,7 +283,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           )}
         </div>
       </div>
-      <footer className="flex items-center gap-3 border-t border-border bg-card px-8 py-2.5">
+      <footer className="flex items-center gap-3 border-t border-border bg-card px-6 py-2.5">
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
         </span>
@@ -297,6 +305,33 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
         </Button>
       </footer>
     </>
+  );
+}
+
+function AppearanceSection() {
+  const { theme, setTheme } = useTheme();
+  const options: { value: typeof theme; label: string; Icon: typeof Sun }[] = [
+    { value: "light", label: "Light", Icon: Sun },
+    { value: "dark", label: "Dark", Icon: Moon },
+    { value: "system", label: "System", Icon: SunMoon },
+  ];
+  return (
+    <section className="space-y-3">
+      <SectionHeading>Appearance</SectionHeading>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {options.map(({ value, label, Icon }) => (
+          <Button
+            key={value}
+            variant={theme === value ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setTheme(value)}
+          >
+            <Icon />
+            {label}
+          </Button>
+        ))}
+      </div>
+    </section>
   );
 }
 

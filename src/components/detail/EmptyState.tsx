@@ -52,7 +52,7 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
             or{" "}
             <KbdGroup className="mx-0.5 inline-flex">
               <Kbd>⌘</Kbd>
-              <Kbd>K</Kbd>
+              <Kbd>T</Kbd>
             </KbdGroup>{" "}
             for the palette
           </span>
@@ -73,7 +73,7 @@ function BetweenWorktrees() {
           or press{" "}
           <KbdGroup className="mx-0.5 inline-flex">
             <Kbd>⌘</Kbd>
-            <Kbd>K</Kbd>
+            <Kbd>T</Kbd>
           </KbdGroup>{" "}
           to jump
         </p>
