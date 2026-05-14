@@ -316,7 +316,7 @@ export async function listBranches(projectPath: string): Promise<BranchList> {
 export async function createWorktree(
   projectId: string,
   projectPath: string,
-  branchName: string,
+  branchName: string | undefined,
   base: string | undefined,
 ): Promise<Worktree> {
   // The worktree's directory name is decoupled from the branch: pick a
@@ -325,6 +325,9 @@ export async function createWorktree(
   const existing = await listWorktreeIdentities(projectId, projectPath);
   const used = new Set(existing.map((w) => w.name));
   const worktreeName = pickWorktreeName(used);
+  // Quick-create: when the caller doesn't specify a branch, reuse the
+  // animal dirname so the branch and worktree start aligned.
+  const branch = branchName?.trim() || worktreeName;
   const projectName = basename(projectPath);
   const worktreePath = join(
     shigomoriRoot(),
@@ -334,14 +337,14 @@ export async function createWorktree(
   );
 
   await mkdir(dirname(worktreePath), { recursive: true });
-  const args = ["worktree", "add", "-b", branchName, worktreePath];
+  const args = ["worktree", "add", "-b", branch, worktreePath];
   if (base) args.push(base);
   await run(projectPath, args);
   return buildWorktree({
     id: `${projectId}:${worktreeName}`,
     projectId,
     name: worktreeName,
-    branch: branchName,
+    branch,
     path: worktreePath,
     isPrimary: false,
     isExternal: false,

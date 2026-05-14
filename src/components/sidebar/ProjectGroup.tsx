@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronRight, Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useWorktrees } from "@/hooks/useWorktrees";
+import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { useRemoveProject } from "@/hooks/useProjects";
 import type { Project } from "@shared/types";
 import { WorktreeRow } from "./WorktreeRow";
@@ -24,6 +24,25 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
   const navigate = useNavigate();
   const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
   const removeProject = useRemoveProject();
+  const create = useCreateWorktree();
+
+  const quickCreate = async () => {
+    if (create.isPending) return;
+    try {
+      const defaultBranch = await window.api.projects.defaultBranch(project.id);
+      const worktree = await create.mutateAsync({
+        projectId: project.id,
+        base: defaultBranch,
+      });
+      void navigate({
+        to: "/projects/$projectId/worktrees/$worktreeName",
+        params: { projectId: project.id, worktreeName: worktree.name },
+      });
+    } catch {
+      // Error surfaces on the WorktreeDetail / palette next time; sidebar
+      // row stays minimal.
+    }
+  };
 
   return (
     <div className="flex flex-col">
@@ -48,17 +67,18 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
         </button>
         <button
           type="button"
-          onClick={() =>
-            void navigate({
-              to: "/projects/$projectId/new",
-              params: { projectId: project.id },
-            })
-          }
-          aria-label={`New worktree in ${project.name}`}
-          title={`New worktree in ${project.name}`}
-          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground"
+          onClick={() => void quickCreate()}
+          disabled={create.isPending}
+          aria-label={`Quick-create worktree in ${project.name}`}
+          title={`Quick-create worktree in ${project.name}`}
+          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-busy:opacity-100 disabled:cursor-not-allowed disabled:opacity-100"
+          aria-busy={create.isPending}
         >
-          <Plus className="size-3.5" />
+          {create.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Plus className="size-3.5" />
+          )}
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger
@@ -73,6 +93,16 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             }
           />
           <DropdownMenuContent align="end" sideOffset={2}>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/new",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              New worktree…
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
                 void navigate({

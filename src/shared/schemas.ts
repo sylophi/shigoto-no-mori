@@ -70,7 +70,9 @@ export type BranchList = z.infer<typeof BranchListSchema>;
 
 export const CreateWorktreePayloadSchema = z.object({
   projectId: z.string(),
-  branchName: z.string().min(1),
+  // Optional: when omitted, the worktree's auto-picked animal name is
+  // used as the branch name too (the quick-create shortcut).
+  branchName: z.string().min(1).optional(),
   base: z.string().optional(),
 });
 

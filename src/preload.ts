@@ -35,7 +35,7 @@ const api = {
       ipcRenderer.invoke(CHANNELS.WorktreesList, { projectId }),
     create: (input: {
       projectId: string;
-      branchName: string;
+      branchName?: string;
       base?: string;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCreate, input),
