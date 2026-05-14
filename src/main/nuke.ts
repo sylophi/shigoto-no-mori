@@ -18,8 +18,8 @@ import { loadProjects } from "./projects";
 export async function nukeEverything(): Promise<void> {
   const projects = loadProjects();
   const deleteBranches = await readGlobalConfig()
-    .then((c) => c.deleteBranchOnRemove ?? false)
-    .catch(() => false);
+    .then((c) => c.deleteBranchOnRemove ?? true)
+    .catch(() => true);
 
   await Promise.all(
     projects.map(async (project) => {

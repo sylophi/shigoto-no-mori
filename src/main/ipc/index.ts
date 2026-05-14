@@ -1,3 +1,4 @@
+import { registerBranchHandlers } from "./branches";
 import { registerFsHandlers } from "./fs";
 import { registerGlobalConfigHandlers } from "./globalConfig";
 import { registerLauncherHandlers } from "./launchers";
@@ -11,6 +12,7 @@ import { registerWorktreeHandlers } from "./worktrees";
 export function registerIpcHandlers(): void {
   registerProjectHandlers();
   registerWorktreeHandlers();
+  registerBranchHandlers();
   registerLauncherHandlers();
   registerScriptHandlers();
   registerRuntimeHandlers();

@@ -73,7 +73,7 @@ interface FormState {
 function fromConfig(config: GlobalConfig): FormState {
   return {
     launchers: config.launchers ?? [],
-    deleteBranchOnRemove: config.deleteBranchOnRemove ?? false,
+    deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
   };
 }
 
@@ -84,7 +84,9 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
   return {
     ...original,
     launchers: valid.length > 0 ? valid : undefined,
-    deleteBranchOnRemove: state.deleteBranchOnRemove || undefined,
+    // Default is true; omit when on, store explicit `false` when off so
+    // the user's opt-out survives reads.
+    deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
   };
 }
 
@@ -206,7 +208,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
                 setForm({ ...form, deleteBranchOnRemove: v })
               }
               label="Delete branch when removing worktree"
-              description="Force-deletes the branch the worktree had checked out. Skipped if the branch is the repo's primary HEAD or is in use by another worktree."
+              description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
             />
           </section>
 

@@ -64,6 +64,27 @@ const api = {
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
   },
+  branches: {
+    create: (input: {
+      projectId: string;
+      name: string;
+      base?: string;
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesCreate, input),
+    rename: (input: {
+      projectId: string;
+      oldName: string;
+      newName: string;
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesRename, input),
+    delete: (input: {
+      projectId: string;
+      name: string;
+      force?: boolean;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.BranchesDelete, {
+        ...input,
+        force: input.force ?? false,
+      }),
+  },
   dialog: {
     pickFolder: (): Promise<string | null> =>
       ipcRenderer.invoke(CHANNELS.DialogPickFolder),

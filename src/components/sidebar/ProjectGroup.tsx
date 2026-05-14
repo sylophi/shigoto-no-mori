@@ -163,6 +163,16 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
+                  to: "/projects/$projectId/branches",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Manage branches
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
                   to: "/projects/$projectId/configure",
                   params: { projectId: project.id },
                 })

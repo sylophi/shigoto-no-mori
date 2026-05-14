@@ -381,6 +381,42 @@ export async function deleteLocalBranch(
   await run(projectPath, ["branch", "-D", branch]);
 }
 
+// Create a local branch pointing at `base` (or HEAD if omitted). When
+// base is a remote-tracking ref, `--track` sets upstream automatically.
+export async function createLocalBranch(
+  projectPath: string,
+  name: string,
+  base: string | undefined,
+): Promise<void> {
+  const args = ["branch"];
+  if (base?.includes("/")) args.push("--track");
+  args.push(name);
+  if (base) args.push(base);
+  await run(projectPath, args);
+}
+
+// Rename any local branch (not necessarily the current one). `git branch
+// -m <old> <new>` works even if `old` is checked out in a worktree —
+// git updates that worktree's HEAD to the new name.
+export async function renameAnyLocalBranch(
+  projectPath: string,
+  oldName: string,
+  newName: string,
+): Promise<void> {
+  await run(projectPath, ["branch", "-m", oldName, newName]);
+}
+
+// Delete a local branch. `-d` is the safe variant (rejects unmerged);
+// `-D` force-deletes. Either way git refuses if the branch is checked
+// out in any worktree.
+export async function deleteAnyLocalBranch(
+  projectPath: string,
+  name: string,
+  force: boolean,
+): Promise<void> {
+  await run(projectPath, ["branch", force ? "-D" : "-d", name]);
+}
+
 export async function removeWorktree(
   projectPath: string,
   worktreePath: string,

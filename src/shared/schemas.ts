@@ -116,6 +116,26 @@ export const CheckoutBranchPayloadSchema = z.object({
   branch: z.string().min(1),
 });
 
+// Branch operations against the project's primary repo (not tied to any
+// specific worktree). Used by the Manage Branches page.
+export const CreateBranchPayloadSchema = z.object({
+  projectId: z.string(),
+  name: z.string().min(1),
+  base: z.string().min(1).optional(),
+});
+
+export const RenameAnyBranchPayloadSchema = z.object({
+  projectId: z.string(),
+  oldName: z.string().min(1),
+  newName: z.string().min(1),
+});
+
+export const DeleteBranchPayloadSchema = z.object({
+  projectId: z.string(),
+  name: z.string().min(1),
+  force: z.boolean().default(false),
+});
+
 // Filesystem browser used by the Add Project palette.
 
 export const ListDirectoryPayloadSchema = z.object({

@@ -73,9 +73,12 @@ export function registerWorktreeHandlers(): void {
       await removeWorktree(project.path, target.path, force);
 
       // `git branch -D` refuses if the branch is still in use elsewhere,
-      // so we don't need to guard against that case ourselves.
+      // so we don't need to guard against that case ourselves. Defaults
+      // to true: if you're done with the worktree, you're done with the
+      // local branch. (Remote branches are never touched.)
       const config = await readGlobalConfig();
-      if (config.deleteBranchOnRemove && isRealBranch(target.branch)) {
+      const shouldDeleteBranch = config.deleteBranchOnRemove ?? true;
+      if (shouldDeleteBranch && isRealBranch(target.branch)) {
         try {
           await deleteLocalBranch(project.path, target.branch);
         } catch {

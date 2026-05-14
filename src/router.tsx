@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
+import { ManageBranches } from "@/components/detail/ManageBranches";
 import { NewWorktree } from "@/components/detail/NewWorktree";
 import { Settings } from "@/components/detail/Settings";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
@@ -164,6 +165,12 @@ const configureProjectRoute = createRoute({
   component: KeyedConfigureProject,
 });
 
+const manageBranchesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/branches",
+  component: KeyedManageBranches,
+});
+
 // Force remount on params change so refetchOnMount: "always" fires
 // (TanStack Router keeps the same instance and just re-renders otherwise).
 function KeyedWorktreeDetail() {
@@ -181,6 +188,11 @@ function KeyedConfigureProject() {
   return <ConfigureProject key={projectId} />;
 }
 
+function KeyedManageBranches() {
+  const { projectId } = manageBranchesRoute.useParams();
+  return <ManageBranches key={projectId} />;
+}
+
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeName",
@@ -192,6 +204,7 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   newWorktreeRoute,
   configureProjectRoute,
+  manageBranchesRoute,
   worktreeRoute,
 ]);
 
@@ -209,6 +222,7 @@ declare module "@tanstack/react-router" {
 
 export {
   configureProjectRoute,
+  manageBranchesRoute,
   newWorktreeRoute,
   settingsRoute,
   worktreeRoute,
