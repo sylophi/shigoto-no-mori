@@ -2,6 +2,7 @@
 // stdout/stderr events sent back to the originating renderer.
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { userInfo } from "node:os";
 import type { WebContents } from "electron";
 import { CHANNELS } from "@shared/channels";
 import type { ScriptEvent, ScriptName } from "@shared/schemas";
@@ -13,7 +14,12 @@ interface RunArgs {
   cwd: string;
   scriptName: ScriptName;
   worktreeId: string;
-  port: number | undefined;
+  worktreeName: string;
+  worktreeBranch: string;
+  projectPath: string;
+  projectName: string;
+  projectBranch: string;
+  defaultBranch: string;
   webContents: WebContents;
 }
 
@@ -22,20 +28,42 @@ function emit(webContents: WebContents, payload: ScriptEvent): void {
   webContents.send(CHANNELS.ScriptsEvent, payload);
 }
 
+// Run the user's preferred shell as login+interactive so .zprofile *and*
+// .zshrc (or bash equivalents) are sourced. Without this, tools that
+// users add to PATH via nvm / pyenv / asdf / brew-shellenv inside .zshrc
+// aren't available to scripts.
+//
+// Shell discovery: $SHELL is reliable when launched from a terminal, but
+// can be empty in GUI launches (Finder/Dock/Spotlight) depending on
+// launchd state. os.userInfo().shell reads the user's passwd entry
+// directly, which works regardless of how the app was started.
+function resolveShell(): { command: string; args: string[] } {
+  const fromEnv = process.env["SHELL"];
+  if (fromEnv) return { command: fromEnv, args: ["-l", "-i", "-c"] };
+  const fromPasswd = userInfo().shell;
+  if (fromPasswd) return { command: fromPasswd, args: ["-l", "-i", "-c"] };
+  return { command: "/bin/sh", args: ["-c"] };
+}
+
 export function startScript(args: RunArgs): string {
   const runId = randomUUID();
   const env = {
     ...process.env,
-    SHIGOMORI_WORKSPACE_PATH: args.cwd,
-    SHIGOMORI_PORT: args.port ? String(args.port) : "",
-    SHIGOMORI_WORKTREE_ID: args.worktreeId,
     SHIGOMORI_SCRIPT_NAME: args.scriptName,
+    SHIGOMORI_WORKTREE_PATH: args.cwd,
+    SHIGOMORI_WORKTREE_NAME: args.worktreeName,
+    SHIGOMORI_WORKTREE_BRANCH: args.worktreeBranch,
+    SHIGOMORI_WORKTREE_ID: args.worktreeId,
+    SHIGOMORI_PROJECT_PATH: args.projectPath,
+    SHIGOMORI_PROJECT_NAME: args.projectName,
+    SHIGOMORI_PROJECT_BRANCH: args.projectBranch,
+    SHIGOMORI_DEFAULT_BRANCH: args.defaultBranch,
   };
 
-  const child = spawn(args.command, [], {
+  const { command: shellCmd, args: shellArgs } = resolveShell();
+  const child = spawn(shellCmd, [...shellArgs, args.command], {
     cwd: args.cwd,
     env,
-    shell: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
 

@@ -4,7 +4,7 @@ import {
   CancelScriptPayloadSchema,
   RunScriptPayloadSchema,
 } from "@shared/schemas";
-import { findWorktreeIdentity } from "../git";
+import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
 import { findProjectOrThrow } from "../projects";
 import { cancelScript, startScript } from "../scripts";
 import { readShigotoConfig } from "../shigoto";
@@ -24,19 +24,29 @@ export function registerScriptHandlers(): void {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 
-      const worktree = await findWorktreeIdentity(
-        project.id,
-        project.path,
-        worktreeId,
-      );
+      // Single listWorktreeIdentities call gives us both the worktree the
+      // script runs in *and* the primary's branch for $SHIGOMORI_PROJECT_BRANCH.
+      const [identities, defaultBranch] = await Promise.all([
+        listWorktreeIdentities(project.id, project.path),
+        resolveDefaultBranch(project.path, config?.defaultBranch).catch(
+          () => "",
+        ),
+      ]);
+      const worktree = identities.find((i) => i.id === worktreeId);
       if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
+      const primary = identities.find((i) => i.isPrimary);
 
       const runId = startScript({
         command,
         cwd: worktree.path,
         scriptName: script,
         worktreeId: worktree.id,
-        port: undefined,
+        worktreeName: worktree.name,
+        worktreeBranch: worktree.branch,
+        projectPath: project.path,
+        projectName: project.name,
+        projectBranch: primary?.branch ?? "",
+        defaultBranch,
         webContents: event.sender,
       });
       return { runId };

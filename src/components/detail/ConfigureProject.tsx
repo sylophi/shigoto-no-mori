@@ -291,15 +291,70 @@ function ConfigureForm({
             <div>
               <SectionHeading>Scripts</SectionHeading>
               <p className="text-xs text-muted-foreground">
-                Run inside each worktree directory with{" "}
-                <span className="font-mono">$SHIGOMORI_*</span> env vars set.
+                Run inside the worktree directory. These env vars are available:
               </p>
+              <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_SCRIPT_NAME
+                  </span>
+                  : <span className="font-mono">setup</span> or{" "}
+                  <span className="font-mono">teardown</span>.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_WORKTREE_PATH
+                  </span>
+                  : absolute path of the worktree.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_WORKTREE_NAME
+                  </span>
+                  : dirname of the worktree.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_WORKTREE_BRANCH
+                  </span>
+                  : branch currently checked out here.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_WORKTREE_ID
+                  </span>
+                  : stable internal identifier.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_PROJECT_PATH
+                  </span>
+                  : absolute path of the main checkout.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_PROJECT_NAME
+                  </span>
+                  : project name.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_PROJECT_BRANCH
+                  </span>
+                  : branch checked out at the main checkout.
+                </li>
+                <li>
+                  <span className="font-mono text-foreground/80">
+                    SHIGOMORI_DEFAULT_BRANCH
+                  </span>
+                  : configured default branch.
+                </li>
+              </ul>
             </div>
             <ScriptField
               id="script-setup"
               label="Setup"
               placeholder="bun install"
-              description="One-time per worktree."
               value={form.setup}
               onChange={(setup) => setForm({ ...form, setup })}
             />
@@ -307,7 +362,6 @@ function ConfigureForm({
               id="script-teardown"
               label="Teardown"
               placeholder="rm -rf node_modules"
-              description="Cleanup hook, runs on demand."
               value={form.teardown}
               onChange={(teardown) => setForm({ ...form, teardown })}
             />
@@ -399,7 +453,6 @@ interface ScriptFieldProps {
   id: string;
   label: string;
   placeholder: string;
-  description: string;
   value: string;
   onChange: (value: string) => void;
 }
@@ -408,18 +461,14 @@ function ScriptField({
   id,
   label,
   placeholder,
-  description,
   value,
   onChange,
 }: ScriptFieldProps) {
   return (
     <div className="space-y-1.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-sm font-medium">
-          {label}
-        </label>
-        <span className="text-xs text-muted-foreground">{description}</span>
-      </div>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
       <textarea
         id={id}
         value={value}
