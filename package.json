@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "extract-icon": "scripts/extract-app-icon.sh"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -30,6 +30,10 @@ interface LauncherIconProps {
   className?: string;
 }
 
+function AppIcon({ src, className }: { src: string; className: string }) {
+  return <img src={src} alt="" className={className} />;
+}
+
 export function LauncherIcon({
   entry,
   className = "size-4",
@@ -41,33 +45,33 @@ export function LauncherIcon({
   const appId = entry.id.replace(/^app:/, "");
   switch (appId) {
     case "cursor":
-      return <img src={cursorIconUrl} alt="" className={className} />;
+      return <AppIcon src={cursorIconUrl} className={className} />;
     case "vscode":
-      return <img src={vscodeIconUrl} alt="" className={className} />;
+      return <AppIcon src={vscodeIconUrl} className={className} />;
     case "vscode-insiders":
-      return <img src={vscodeInsidersIconUrl} alt="" className={className} />;
+      return <AppIcon src={vscodeInsidersIconUrl} className={className} />;
     case "zed":
-      return <img src={zedIconUrl} alt="" className={className} />;
+      return <AppIcon src={zedIconUrl} className={className} />;
     case "ghostty":
-      return <img src={ghosttyIconUrl} alt="" className={className} />;
+      return <AppIcon src={ghosttyIconUrl} className={className} />;
     case "terminal":
-      return <img src={terminalIconUrl} alt="" className={className} />;
+      return <AppIcon src={terminalIconUrl} className={className} />;
     case "iterm":
-      return <img src={itermIconUrl} alt="" className={className} />;
+      return <AppIcon src={itermIconUrl} className={className} />;
     case "github-desktop":
-      return <img src={githubDesktopIconUrl} alt="" className={className} />;
+      return <AppIcon src={githubDesktopIconUrl} className={className} />;
     case "xcode":
-      return <img src={xcodeIconUrl} alt="" className={className} />;
+      return <AppIcon src={xcodeIconUrl} className={className} />;
     case "finder":
-      return <img src={finderIconUrl} alt="" className={className} />;
+      return <AppIcon src={finderIconUrl} className={className} />;
     case "antigravity":
-      return <img src={antigravityIconUrl} alt="" className={className} />;
+      return <AppIcon src={antigravityIconUrl} className={className} />;
     case "windsurf":
-      return <img src={windsurfIconUrl} alt="" className={className} />;
+      return <AppIcon src={windsurfIconUrl} className={className} />;
     case "vscodium":
-      return <img src={vscodiumIconUrl} alt="" className={className} />;
+      return <AppIcon src={vscodiumIconUrl} className={className} />;
     case "sublime":
-      return <img src={sublimeIconUrl} alt="" className={className} />;
+      return <AppIcon src={sublimeIconUrl} className={className} />;
     case "intellij":
       return <Intellijidea className={className} />;
     case "webstorm":

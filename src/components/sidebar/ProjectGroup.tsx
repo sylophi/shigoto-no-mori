@@ -101,7 +101,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
                 })
               }
             >
-              New worktree…
+              New worktree from…
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
@@ -111,7 +111,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
                 })
               }
             >
-              Configure…
+              Configure
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem

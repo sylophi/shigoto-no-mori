@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
@@ -65,10 +66,14 @@ function SettingsSkeleton() {
 
 interface FormState {
   launchers: LauncherCommand[];
+  deleteBranchOnRemove: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
-  return { launchers: config.launchers ?? [] };
+  return {
+    launchers: config.launchers ?? [],
+    deleteBranchOnRemove: config.deleteBranchOnRemove ?? false,
+  };
 }
 
 function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
@@ -78,6 +83,7 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
   return {
     ...original,
     launchers: valid.length > 0 ? valid : undefined,
+    deleteBranchOnRemove: state.deleteBranchOnRemove || undefined,
   };
 }
 
@@ -137,7 +143,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-3xl flex-col gap-7">
+        <div className="flex max-w-3xl flex-col gap-5">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
             {root && (
@@ -179,6 +185,20 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           <Separator />
 
           <AppearanceSection />
+
+          <Separator />
+
+          <section className="space-y-3">
+            <SectionHeading>Worktrees</SectionHeading>
+            <ToggleRow
+              checked={form.deleteBranchOnRemove}
+              onCheckedChange={(v) =>
+                setForm({ ...form, deleteBranchOnRemove: v })
+              }
+              label="Delete branch when removing worktree"
+              description="Force-deletes the branch the worktree had checked out. Skipped if the branch is the repo's primary HEAD or is in use by another worktree."
+            />
+          </section>
 
           <Separator />
 
@@ -283,20 +303,20 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           )}
         </div>
       </div>
-      <footer className="flex items-center gap-3 border-t border-border bg-card px-6 py-2.5">
+      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
         </span>
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={handleDiscard}
           disabled={!isDirty || write.isPending}
         >
           Discard
         </Button>
         <Button
-          size="sm"
+          size="xs"
           onClick={() => void handleSave()}
           disabled={!isDirty || write.isPending}
         >
@@ -340,6 +360,32 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
       {children}
     </h2>
+  );
+}
+
+function ToggleRow({
+  checked,
+  onCheckedChange,
+  label,
+  description,
+}: {
+  checked: boolean;
+  onCheckedChange: (next: boolean) => void;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-3">
+      <span className="mt-0.5">
+        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="text-sm">{label}</span>
+        {description && (
+          <span className="text-xs text-muted-foreground">{description}</span>
+        )}
+      </div>
+    </label>
   );
 }
 

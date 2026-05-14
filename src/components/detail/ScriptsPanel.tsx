@@ -49,7 +49,7 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          No setup, run, or teardown scripts configured.
+          No setup or teardown scripts configured.
         </p>
         <Button
           variant="outline"

@@ -5,12 +5,21 @@
 // The original project repos on disk are untouched — we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
-import { listWorktreeIdentities, removeWorktree } from "./git";
+import {
+  deleteLocalBranch,
+  listWorktreeIdentities,
+  removeWorktree,
+} from "./git";
+import { readGlobalConfig } from "./globalConfig";
 import { shigomoriRoot } from "./paths";
 import { loadProjects } from "./projects";
 
 export async function nukeEverything(): Promise<void> {
   const projects = loadProjects();
+  const deleteBranches = await readGlobalConfig()
+    .then((c) => c.deleteBranchOnRemove ?? false)
+    .catch(() => false);
+
   await Promise.all(
     projects.map(async (project) => {
       let identities;
@@ -21,13 +30,21 @@ export async function nukeEverything(): Promise<void> {
         // via git for this one. The shigomori root wipe below still happens.
         return;
       }
+      const targets = identities.filter((i) => !i.isPrimary);
       await Promise.all(
-        identities
-          .filter((i) => !i.isPrimary)
-          .map((i) =>
-            removeWorktree(project.path, i.path, true).catch(() => undefined),
-          ),
+        targets.map((i) =>
+          removeWorktree(project.path, i.path, true).catch(() => undefined),
+        ),
       );
+      if (deleteBranches) {
+        await Promise.all(
+          targets
+            .filter((i) => i.branch && i.branch !== "(unknown)")
+            .map((i) =>
+              deleteLocalBranch(project.path, i.branch).catch(() => undefined),
+            ),
+        );
+      }
     }),
   );
   await rm(shigomoriRoot(), { recursive: true, force: true });

@@ -177,7 +177,7 @@ function ConfigureForm({
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-3xl flex-col gap-7">
+        <div className="flex max-w-3xl flex-col gap-5">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
             <div className="font-mono text-sm select-text" title={projectPath}>
@@ -305,20 +305,20 @@ function ConfigureForm({
           )}
         </div>
       </div>
-      <footer className="flex items-center gap-3 border-t border-border bg-card px-6 py-2.5">
+      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
         </span>
         <Button
           variant="ghost"
-          size="sm"
+          size="xs"
           onClick={handleDiscard}
           disabled={!isDirty || write.isPending}
         >
           Discard
         </Button>
         <Button
-          size="sm"
+          size="xs"
           onClick={() => void handleSave()}
           disabled={!canSave || write.isPending}
         >

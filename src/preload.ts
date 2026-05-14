@@ -37,6 +37,7 @@ const api = {
       projectId: string;
       branchName?: string;
       base?: string;
+      checkout?: boolean;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCreate, input),
     delete: (input: {

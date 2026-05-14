@@ -1,6 +1,15 @@
 import { useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { Check, ChevronsUpDown, Pencil, Search, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  ExternalLink,
+  House,
+  Pencil,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -114,8 +123,19 @@ export function WorktreeDetail() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
-            <div className="mt-1 truncate text-xs text-muted-foreground">
-              {worktree.name}
+            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              {worktree.isPrimary ? (
+                <House
+                  className="size-3 shrink-0 text-muted-foreground/70"
+                  aria-label="Repo root"
+                />
+              ) : worktree.isExternal ? (
+                <ExternalLink
+                  className="size-3 shrink-0 text-muted-foreground/70"
+                  aria-label="External worktree"
+                />
+              ) : null}
+              <span className="truncate">{worktree.name}</span>
             </div>
           </div>
           <StatusPills worktree={worktree} />
@@ -123,8 +143,8 @@ export function WorktreeDetail() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-4xl flex-col gap-8">
-          <section>
+        <div className="flex max-w-4xl flex-col gap-5">
+          <section className="space-y-3">
             <SectionHeading>Launch</SectionHeading>
             <LauncherRow worktree={worktree} />
           </section>
@@ -263,7 +283,7 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
         : "";
 
   return (
-    <section className="space-y-2">
+    <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
         <SectionHeading>Notes</SectionHeading>
         <span className="text-xs text-muted-foreground/60">{status}</span>
@@ -272,7 +292,6 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        placeholder="Anything worth remembering about this worktree…"
         rows={3}
         className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30"
       />

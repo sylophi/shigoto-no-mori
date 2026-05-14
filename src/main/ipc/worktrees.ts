@@ -13,6 +13,7 @@ import {
 import {
   checkoutBranch,
   createWorktree,
+  deleteLocalBranch,
   describeWorktree,
   findWorktreeIdentity,
   listCommits,
@@ -20,6 +21,7 @@ import {
   removeWorktree,
   renameBranch,
 } from "../git";
+import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
 
 export function registerWorktreeHandlers(): void {
@@ -35,10 +37,16 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     CHANNELS.WorktreesCreate,
     async (_event, rawPayload: unknown): Promise<Worktree> => {
-      const { projectId, branchName, base } =
+      const { projectId, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      return createWorktree(project.id, project.path, branchName, base);
+      return createWorktree(
+        project.id,
+        project.path,
+        branchName,
+        base,
+        checkout ?? false,
+      );
     },
   );
 
@@ -66,6 +74,24 @@ export function registerWorktreeHandlers(): void {
         }
       }
       await removeWorktree(project.path, target.path, force);
+
+      // Optionally clean up the local branch the worktree had checked out.
+      // `git branch -D` refuses if the branch is still in use elsewhere,
+      // and we skip detached HEADs (no real branch to delete).
+      const config = await readGlobalConfig();
+      if (
+        config.deleteBranchOnRemove &&
+        target.branch &&
+        target.branch !== "(unknown)"
+      ) {
+        try {
+          await deleteLocalBranch(project.path, target.branch);
+        } catch {
+          // Likely the branch is shared with another worktree, or is the
+          // primary's HEAD. Either way, leaving the branch behind is the
+          // safe fallback.
+        }
+      }
     },
   );
 

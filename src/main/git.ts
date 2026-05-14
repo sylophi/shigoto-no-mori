@@ -318,6 +318,7 @@ export async function createWorktree(
   projectPath: string,
   branchName: string | undefined,
   base: string | undefined,
+  checkout: boolean,
 ): Promise<Worktree> {
   // The worktree's directory name is decoupled from the branch: pick a
   // random animal that isn't already used by another worktree in this
@@ -325,9 +326,6 @@ export async function createWorktree(
   const existing = await listWorktreeIdentities(projectId, projectPath);
   const used = new Set(existing.map((w) => w.name));
   const worktreeName = pickWorktreeName(used);
-  // Quick-create: when the caller doesn't specify a branch, reuse the
-  // animal dirname so the branch and worktree start aligned.
-  const branch = branchName?.trim() || worktreeName;
   const projectName = basename(projectPath);
   const worktreePath = join(
     shigomoriRoot(),
@@ -337,18 +335,28 @@ export async function createWorktree(
   );
 
   await mkdir(dirname(worktreePath), { recursive: true });
-  const args = ["worktree", "add", "-b", branch, worktreePath];
-  if (base) args.push(base);
-  await run(projectPath, args);
-  return buildWorktree({
-    id: `${projectId}:${worktreeName}`,
-    projectId,
-    name: worktreeName,
-    branch,
-    path: worktreePath,
-    isPrimary: false,
-    isExternal: false,
-  });
+  if (checkout) {
+    if (!base) throw new Error("Checkout mode requires a base ref");
+    // No `-b`: reuse the existing branch in this new worktree. git
+    // refuses if the branch is already checked out in another worktree.
+    await run(projectPath, ["worktree", "add", worktreePath, base]);
+  } else {
+    // Quick-create: when the caller doesn't specify a branch, reuse the
+    // animal dirname so the branch and worktree start aligned.
+    const branch = branchName?.trim() || worktreeName;
+    const args = ["worktree", "add", "-b", branch, worktreePath];
+    if (base) args.push(base);
+    await run(projectPath, args);
+  }
+  // Re-read identity from `git worktree list` so the returned worktree's
+  // branch reflects what git actually settled on (e.g. checking out
+  // `origin/main` creates a local `main` tracking branch).
+  const fresh = await listWorktreeIdentities(projectId, projectPath);
+  const identity = fresh.find((w) => w.path === worktreePath);
+  if (!identity) {
+    throw new Error("Worktree disappeared after creation");
+  }
+  return buildWorktree(identity);
 }
 
 // Rename the branch currently checked out in a worktree.
@@ -367,6 +375,17 @@ export async function checkoutBranch(
   branch: string,
 ): Promise<void> {
   await run(worktreePath, ["checkout", branch]);
+}
+
+// Force-delete a local branch. Used after worktree removal when the
+// global "deleteBranchOnRemove" setting is on. `git branch -D` refuses if
+// the branch is checked out elsewhere, so safety against in-use branches
+// is enforced by git itself.
+export async function deleteLocalBranch(
+  projectPath: string,
+  branch: string,
+): Promise<void> {
+  await run(projectPath, ["branch", "-D", branch]);
 }
 
 export async function removeWorktree(

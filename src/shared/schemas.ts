@@ -74,6 +74,10 @@ export const CreateWorktreePayloadSchema = z.object({
   // used as the branch name too (the quick-create shortcut).
   branchName: z.string().min(1).optional(),
   base: z.string().optional(),
+  // When true: check out `base` as the worktree's branch (no -b, no new
+  // branch). Requires `base` to be set and not already checked out
+  // elsewhere. Ignores `branchName`.
+  checkout: z.boolean().optional(),
 });
 
 export const DeleteWorktreePayloadSchema = z.object({
@@ -155,6 +159,11 @@ export const ShigotoConfigSchema = z.object({
 // (claude, tmux, an editor command, etc.), and room for future settings.
 export const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
+  // When true, deleting a worktree also force-deletes its checked-out
+  // local branch (skipped if the branch is the primary's or is in use
+  // by another worktree). Off by default; matches git's native
+  // `git worktree remove` behavior.
+  deleteBranchOnRemove: z.boolean().optional(),
 });
 
 export const WriteGlobalConfigPayloadSchema = z.object({

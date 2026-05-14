@@ -35,6 +35,7 @@ interface CreateWorktreeInput {
   projectId: string;
   branchName?: string;
   base?: string;
+  checkout?: boolean;
 }
 
 export function useCreateWorktree() {
