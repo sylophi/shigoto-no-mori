@@ -33,6 +33,7 @@ export function useAllProjectWorktrees(projects: Project[], enabled = true) {
 
 interface CreateWorktreeInput {
   projectId: string;
+  worktreeName?: string;
   branchName?: string;
   base?: string;
   checkout?: boolean;

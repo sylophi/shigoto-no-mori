@@ -37,12 +37,13 @@ export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     CHANNELS.WorktreesCreate,
     async (_event, rawPayload: unknown): Promise<Worktree> => {
-      const { projectId, branchName, base, checkout } =
+      const { projectId, worktreeName, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return createWorktree(
         project.id,
         project.path,
+        worktreeName,
         branchName,
         base,
         checkout ?? false,

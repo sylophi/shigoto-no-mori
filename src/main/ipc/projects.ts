@@ -4,6 +4,7 @@ import { CHANNELS } from "@shared/channels";
 import {
   AddProjectPayloadSchema,
   type BranchList,
+  PickWorktreeNamePayloadSchema,
   type Project,
   ProjectsDefaultBranchPayloadSchema,
   ProjectsListBranchesPayloadSchema,
@@ -13,6 +14,7 @@ import {
   deriveProjectName,
   isGitRepo,
   listBranches,
+  pickAvailableWorktreeName,
   resolveDefaultBranch,
 } from "../git";
 import { expandHome } from "../paths";
@@ -75,6 +77,15 @@ export function registerProjectHandlers(): void {
         ProjectsListBranchesPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return listBranches(project.path);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.ProjectsPickWorktreeName,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId } = PickWorktreeNamePayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return pickAvailableWorktreeName(project.id, project.path);
     },
   );
 

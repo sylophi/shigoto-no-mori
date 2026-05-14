@@ -507,18 +507,26 @@ function BranchSwitcher({
   anchorRef: React.RefObject<HTMLElement | null>;
 }) {
   const { data: branches } = useBranches(worktree.projectId);
+  const { data: peerWorktrees = [] } = useWorktrees(worktree.projectId);
   const checkout = useCheckoutBranch();
   const [query, setQuery] = useState("");
 
+  // Hide branches that are checked out in any other worktree in this
+  // project; keep this worktree's own branch so the user can see what's
+  // currently selected (it gets a check mark below).
+  const occupied = new Set(
+    peerWorktrees
+      .filter((w) => w.id !== worktree.id)
+      .map((w) => w.branch)
+      .filter((b): b is string => Boolean(b) && b !== "(unknown)"),
+  );
   const all: BranchEntry[] = [
-    ...(branches?.local ?? []).map((name) => ({
-      name,
-      kind: "local" as const,
-    })),
-    ...(branches?.remote ?? []).map((name) => ({
-      name,
-      kind: "remote" as const,
-    })),
+    ...(branches?.local ?? [])
+      .filter((name) => !occupied.has(name))
+      .map((name) => ({ name, kind: "local" as const })),
+    ...(branches?.remote ?? [])
+      .filter((name) => !occupied.has(name))
+      .map((name) => ({ name, kind: "remote" as const })),
   ];
   const sorted: BranchEntry[] = query
     ? all

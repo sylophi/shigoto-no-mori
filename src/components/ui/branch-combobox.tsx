@@ -12,6 +12,10 @@ interface BranchComboboxProps {
   id?: string;
   disabled?: boolean;
   className?: string;
+  // Names to hide from the list (e.g. branches already checked out in
+  // another worktree). Free-text input is still allowed via the "Use as
+  // ref" fallback.
+  excludeBranches?: readonly string[];
 }
 
 interface BranchEntry {
@@ -48,19 +52,19 @@ export function BranchCombobox({
   id,
   disabled,
   className,
+  excludeBranches,
 }: BranchComboboxProps) {
   const { data: branches } = useBranches(projectId);
   const [query, setQuery] = useState("");
 
+  const excluded = new Set(excludeBranches ?? []);
   const all: BranchEntry[] = [
-    ...(branches?.local ?? []).map((name) => ({
-      name,
-      kind: "local" as const,
-    })),
-    ...(branches?.remote ?? []).map((name) => ({
-      name,
-      kind: "remote" as const,
-    })),
+    ...(branches?.local ?? [])
+      .filter((name) => !excluded.has(name))
+      .map((name) => ({ name, kind: "local" as const })),
+    ...(branches?.remote ?? [])
+      .filter((name) => !excluded.has(name))
+      .map((name) => ({ name, kind: "remote" as const })),
   ];
   const sorted: BranchEntry[] = query
     ? all

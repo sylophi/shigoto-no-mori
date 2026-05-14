@@ -62,6 +62,10 @@ export const ProjectsListBranchesPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const PickWorktreeNamePayloadSchema = z.object({
+  projectId: z.string(),
+});
+
 export const BranchListSchema = z.object({
   local: z.array(z.string()),
   remote: z.array(z.string()),
@@ -70,6 +74,9 @@ export type BranchList = z.infer<typeof BranchListSchema>;
 
 export const CreateWorktreePayloadSchema = z.object({
   projectId: z.string(),
+  // Optional: caller-picked animal dirname. Falls back to the backend's
+  // own pick when omitted or when the requested name is already in use.
+  worktreeName: z.string().min(1).optional(),
   // Optional: when omitted, the worktree's auto-picked animal name is
   // used as the branch name too (the quick-create shortcut).
   branchName: z.string().min(1).optional(),

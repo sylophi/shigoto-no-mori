@@ -291,6 +291,18 @@ export async function resolveDefaultBranch(
   throw new Error(`No local branches found in ${projectPath}`);
 }
 
+// Picks the next animal name not currently in use by any worktree in this
+// project. Lets the renderer preview the dirname before committing to a
+// create call.
+export async function pickAvailableWorktreeName(
+  projectId: string,
+  projectPath: string,
+): Promise<string> {
+  const existing = await listWorktreeIdentities(projectId, projectPath);
+  const used = new Set(existing.map((w) => w.name));
+  return pickWorktreeName(used);
+}
+
 // Lists branches usable as a base ref: local heads and remote-tracking refs.
 // Symbolic refs like `origin/HEAD` are dropped — they alias another remote
 // branch and would show up twice.
@@ -316,6 +328,7 @@ export async function listBranches(projectPath: string): Promise<BranchList> {
 export async function createWorktree(
   projectId: string,
   projectPath: string,
+  requestedWorktreeName: string | undefined,
   branchName: string | undefined,
   base: string | undefined,
   checkout: boolean,
@@ -323,9 +336,15 @@ export async function createWorktree(
   // The worktree's directory name is decoupled from the branch: pick a
   // random animal that isn't already used by another worktree in this
   // project. Branch can rename/switch later without breaking the path.
+  // Callers may pre-pick the name (see ProjectsPickWorktreeName) so the
+  // UI can show it before submitting; we honor it unless it's taken in
+  // the brief window between pick and create.
   const existing = await listWorktreeIdentities(projectId, projectPath);
   const used = new Set(existing.map((w) => w.name));
-  const worktreeName = pickWorktreeName(used);
+  const worktreeName =
+    requestedWorktreeName && !used.has(requestedWorktreeName)
+      ? requestedWorktreeName
+      : pickWorktreeName(used);
   const projectName = basename(projectPath);
   const worktreePath = join(
     shigomoriRoot(),

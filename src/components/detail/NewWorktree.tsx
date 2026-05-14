@@ -4,9 +4,10 @@ import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
+import { usePickedWorktreeName } from "@/hooks/usePickedWorktreeName";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useCreateWorktree } from "@/hooks/useWorktrees";
+import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
 
@@ -18,11 +19,20 @@ export function NewWorktree() {
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const { data: defaultBranch } = useDefaultBranch(projectId);
+  const { data: pickedName } = usePickedWorktreeName(projectId);
+  const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
+  // Branches that are already a worktree's HEAD elsewhere can't be
+  // checked out into a new one — git enforces this. Hide them from the
+  // Source picker when we'd otherwise let the user pick one and fail.
+  const occupiedBranches = worktrees
+    .map((w) => w.branch)
+    .filter((b): b is string => Boolean(b) && b !== "(unknown)");
   const [mode, setMode] = useState<Mode>("branch-from");
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
   const baseSeeded = useRef(false);
+  const branchSeeded = useRef(false);
   const create = useCreateWorktree();
 
   useEffect(() => {
@@ -32,6 +42,13 @@ export function NewWorktree() {
     }
   }, [defaultBranch]);
 
+  useEffect(() => {
+    if (pickedName && !branchSeeded.current) {
+      setBranchName(pickedName);
+      branchSeeded.current = true;
+    }
+  }, [pickedName]);
+
   if (!project) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -40,14 +57,32 @@ export function NewWorktree() {
     );
   }
 
+  // Belt-and-suspenders: occupied branches are filtered from the picker
+  // dropdown, but the user can still type one in via "Use as ref".
+  // Block the submit + surface why.
+  const baseOccupied =
+    mode === "checkout" && occupiedBranches.includes(base);
+
   const canSubmit =
-    base.length > 0 && (mode === "checkout" || branchName.length > 0);
+    base.length > 0 &&
+    (mode === "checkout" || branchName.length > 0) &&
+    !baseOccupied;
 
   const handleCreate = () => {
     create.mutate(
       mode === "checkout"
-        ? { projectId: project.id, base, checkout: true }
-        : { projectId: project.id, branchName, base: base || undefined },
+        ? {
+            projectId: project.id,
+            worktreeName: pickedName || undefined,
+            base,
+            checkout: true,
+          }
+        : {
+            projectId: project.id,
+            worktreeName: pickedName || undefined,
+            branchName,
+            base: base || undefined,
+          },
       {
         onSuccess: (worktree) => {
           void navigate({
@@ -102,7 +137,14 @@ export function NewWorktree() {
             onChange={setBase}
             placeholder={defaultBranch ?? "main"}
             disabled={busy || !defaultBranch}
+            excludeBranches={mode === "checkout" ? occupiedBranches : undefined}
           />
+          {baseOccupied && (
+            <p className="text-xs text-destructive">
+              <span className="font-mono">{base}</span> is already checked out
+              in another worktree.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -126,17 +168,19 @@ export function NewWorktree() {
           />
           {mode === "branch-from" ? (
             <p className="text-xs text-muted-foreground">
-              A new branch created off the source. Checked out into a folder
-              under{" "}
-              <span className="font-mono">
-                {root}/worktrees/{project.name}/
+              A new branch created off the source. Checked out into{" "}
+              <span className="font-mono text-foreground/80">
+                {root}/worktrees/{project.name}/{pickedName ?? "…"}
               </span>
               .
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
-              Check out the source branch directly in a new folder. Fails if
-              the branch is already checked out in another worktree.
+              Check out the source branch into{" "}
+              <span className="font-mono text-foreground/80">
+                {root}/worktrees/{project.name}/{pickedName ?? "…"}
+              </span>
+              . Branches already checked out in another worktree are hidden.
             </p>
           )}
         </div>

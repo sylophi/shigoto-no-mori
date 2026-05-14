@@ -5,6 +5,7 @@ export const CHANNELS = {
   ProjectsRemove: "projects:remove",
   ProjectsDefaultBranch: "projects:defaultBranch",
   ProjectsListBranches: "projects:listBranches",
+  ProjectsPickWorktreeName: "projects:pickWorktreeName",
   WorktreesList: "worktrees:list",
   WorktreesCreate: "worktrees:create",
   WorktreesDelete: "worktrees:delete",

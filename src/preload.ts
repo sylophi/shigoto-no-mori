@@ -29,12 +29,15 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsDefaultBranch, { projectId }),
     listBranches: (projectId: string): Promise<BranchList> =>
       ipcRenderer.invoke(CHANNELS.ProjectsListBranches, { projectId }),
+    pickWorktreeName: (projectId: string): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsPickWorktreeName, { projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>
       ipcRenderer.invoke(CHANNELS.WorktreesList, { projectId }),
     create: (input: {
       projectId: string;
+      worktreeName?: string;
       branchName?: string;
       base?: string;
       checkout?: boolean;
