@@ -21,6 +21,10 @@ import {
 } from "../launchers";
 import { findProjectOrThrow } from "../projects";
 import { readShigotoConfig } from "../shigoto";
+import { readKey, writeKey } from "../store";
+
+const USE_COUNT_KEY = "launcherUseCount";
+type UseCountMap = Record<string, number>;
 
 function customEntriesFrom(
   launchers: LauncherCommand[] | undefined,
@@ -95,7 +99,17 @@ export function registerLauncherHandlers(): void {
         ...customEntriesFrom(projectConfig?.launchers),
       ];
 
-      return { entries };
+      // Sort by all-time use count (descending). toSorted is stable, so ties
+      // preserve the original detected → global → project order. The renderer
+      // query has a staleTime and useLaunch doesn't invalidate it, so the
+      // visible order doesn't shift while the user is interacting — only
+      // re-sorts when they navigate away and back (or the cache goes stale).
+      const counts = readKey<UseCountMap>(USE_COUNT_KEY, {});
+      return {
+        entries: entries.toSorted(
+          (a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0),
+        ),
+      };
     },
   );
 
@@ -119,6 +133,7 @@ export function registerLauncherHandlers(): void {
         const app = findDetected(appId, apps);
         if (!app) throw new Error(`Launcher not detected: ${appId}`);
         await launchDetected(app, worktree.path);
+        bumpUseCount(launcherId);
         return;
       }
 
@@ -133,10 +148,17 @@ export function registerLauncherHandlers(): void {
           throw new Error(`Custom launcher not found: ${customId}`);
         }
         launchCustom(custom.command, worktree.path, undefined);
+        bumpUseCount(launcherId);
         return;
       }
 
       throw new Error(`Unknown launcher id format: ${launcherId}`);
     },
   );
+}
+
+function bumpUseCount(launcherId: string): void {
+  const counts = readKey<UseCountMap>(USE_COUNT_KEY, {});
+  counts[launcherId] = (counts[launcherId] ?? 0) + 1;
+  writeKey<UseCountMap>(USE_COUNT_KEY, counts);
 }
