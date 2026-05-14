@@ -2,7 +2,7 @@ import type { SVGProps } from "react";
 
 const ZedLogo = (props: SVGProps<SVGSVGElement>) => (
   <svg {...props} fill="none" viewBox="0 0 96 96">
-    <g clipPath="url(#a)">
+    <g clipPath="url(#zedLogo__a)">
       <path
         fill="currentColor"
         fillRule="evenodd"
@@ -11,7 +11,7 @@ const ZedLogo = (props: SVGProps<SVGSVGElement>) => (
       />
     </g>
     <defs>
-      <clipPath id="a">
+      <clipPath id="zedLogo__a">
         <path fill="#fff" d="M0 0h96v96H0z" />
       </clipPath>
     </defs>
