@@ -5,6 +5,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { CursorDark } from "@/components/ui/svgs/cursorDark";
 import { CursorLight } from "@/components/ui/svgs/cursorLight";
 import { Ghostty } from "@/components/ui/svgs/ghostty";
+import { GithubDark } from "@/components/ui/svgs/githubDark";
+import { GithubLight } from "@/components/ui/svgs/githubLight";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrainsSolid";
 import { Phpstorm } from "@/components/ui/svgs/phpstorm";
@@ -78,6 +80,12 @@ export function LauncherIcon({
       return <JetbrainsSolid className={className} />;
     case "ghostty":
       return <Ghostty className={className} />;
+    case "github-desktop":
+      return resolved === "dark" ? (
+        <GithubLight className={className} />
+      ) : (
+        <GithubDark className={className} />
+      );
     case "iterm":
     case "terminal":
       return <Terminal className={className} />;

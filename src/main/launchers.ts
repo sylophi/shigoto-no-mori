@@ -172,6 +172,13 @@ const CATALOG: CatalogEntry[] = [
     label: "Terminal",
     bundleNames: ["Utilities/Terminal.app"],
   },
+  // Git clients
+  {
+    id: "github-desktop",
+    label: "GitHub Desktop",
+    bundleNames: ["GitHub Desktop.app"],
+    cli: "github",
+  },
   // Other
   {
     id: "finder",
