@@ -232,6 +232,34 @@ async function localBranchExists(
   }
 }
 
+async function remoteRefExists(
+  projectPath: string,
+  ref: string,
+): Promise<boolean> {
+  try {
+    await exec(
+      "git",
+      ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`],
+      { cwd: projectPath },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function listRemotes(projectPath: string): Promise<string[]> {
+  try {
+    const stdout = await run(projectPath, ["remote"]);
+    return stdout
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+  } catch {
+    return [];
+  }
+}
+
 async function firstLocalBranch(projectPath: string): Promise<string | null> {
   try {
     const stdout = await run(projectPath, [
@@ -252,12 +280,24 @@ export async function resolveDefaultBranch(
   override?: string,
 ): Promise<string> {
   const trimmed = override?.trim();
-  if (trimmed && (await localBranchExists(projectPath, trimmed))) {
-    return trimmed;
+  if (trimmed) {
+    // User explicitly picked it — accept whether it's local or remote.
+    if (await localBranchExists(projectPath, trimmed)) return trimmed;
+    if (await remoteRefExists(projectPath, trimmed)) return trimmed;
   }
-  // Override missing or pointing at a branch that no longer exists.
+  // No (valid) override. Prefer a remote-tracking ref (the source of
+  // truth) over the local copy, which tends to drift. Try each remote
+  // in the order `git remote` lists them — usually that's the project's
+  // canonical "origin"-equivalent first.
+  const remotes = await listRemotes(projectPath);
   for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
-    // oxlint-disable-next-line no-await-in-loop -- priority order matters; short-circuit on first hit
+    for (const remote of remotes) {
+      // oxlint-disable-next-line no-await-in-loop -- priority order matters
+      if (await remoteRefExists(projectPath, `${remote}/${candidate}`)) {
+        return `${remote}/${candidate}`;
+      }
+    }
+    // oxlint-disable-next-line no-await-in-loop -- priority order matters
     if (await localBranchExists(projectPath, candidate)) return candidate;
   }
   const first = await firstLocalBranch(projectPath);

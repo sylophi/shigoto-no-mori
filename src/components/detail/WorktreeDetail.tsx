@@ -33,11 +33,7 @@ import {
 import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsPanel } from "./ScriptsPanel";
-import {
-  type BranchEntry,
-  scoreMatch,
-  toBranchEntries,
-} from "@/components/ui/branch-combobox";
+import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
   type CommitSummary,
   isRealBranch,
@@ -467,7 +463,17 @@ function BranchSwitcher({
       .filter((w) => w.id !== worktree.id && isRealBranch(w.branch))
       .map((w) => w.branch),
   );
-  const all = toBranchEntries(branches, occupied);
+  // Local branches always shown; remotes only when no matching local
+  // exists. Picking a remote orphan creates a local tracking branch
+  // (handled in onValueChange below).
+  const localSet = new Set(branches?.local ?? []);
+  const localEntries: BranchEntry[] = (branches?.local ?? [])
+    .filter((name) => !occupied.has(name))
+    .map((name) => ({ name, kind: "local" as const }));
+  const remoteEntries: BranchEntry[] = (branches?.remote ?? [])
+    .filter((name) => !localSet.has(name.replace(/^[^/]+\//, "")))
+    .map((name) => ({ name, kind: "remote" as const }));
+  const all = [...localEntries, ...remoteEntries];
   const sorted: BranchEntry[] = query
     ? all
         .map((b) => ({ b, score: scoreMatch(query, b.name) }))
@@ -482,10 +488,18 @@ function BranchSwitcher({
       onValueChange={(v) => {
         const next = v as string | null;
         if (!next || next === worktree.branch) return;
+        // Remote orphans: strip the remote prefix so `git checkout` DWIMs
+        // into a freshly-created local tracking branch instead of
+        // detached HEAD on the remote ref.
+        const remoteSet = new Set(branches?.remote ?? []);
+        const target = remoteSet.has(next)
+          ? next.replace(/^[^/]+\//, "")
+          : next;
+        if (target === worktree.branch) return;
         checkout.mutate({
           projectId: worktree.projectId,
           worktreeId: worktree.id,
-          branch: next,
+          branch: target,
         });
       }}
       inputValue={query}
