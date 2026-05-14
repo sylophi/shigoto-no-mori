@@ -27,6 +27,7 @@ import {
   hasTrailingSlash,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
+import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
 import { useNavigate } from "@tanstack/react-router";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
@@ -505,22 +506,45 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
           </Command.Item>
         )}
 
-        {filtered.map((entry) => (
-          <Command.Item
-            key={entry.name}
-            value={`browse:${browseDir}${entry.name}`}
-            keywords={[entry.name]}
-            onSelect={() => browseTo(entry.name)}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-          >
-            {entry.isGitRepo ? (
-              <FolderGit2 className="size-4 text-foreground" />
-            ) : (
-              <Folder className="size-4 text-muted-foreground/80" />
-            )}
-            <span className="truncate font-mono">{entry.name}</span>
-          </Command.Item>
-        ))}
+        {filtered.map((entry) => {
+          const entryPath = `${browseDir}${entry.name}`;
+          return (
+            <Command.Item
+              key={entry.name}
+              value={`browse:${entryPath}`}
+              keywords={[entry.name]}
+              onSelect={() => browseTo(entry.name)}
+              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+            >
+              {entry.isGitRepo ? (
+                <FolderGit2 className="size-4 text-foreground" />
+              ) : (
+                <Folder className="size-4 text-muted-foreground/80" />
+              )}
+              <span className="min-w-0 flex-1 truncate font-mono">
+                {entry.name}
+              </span>
+              {entry.isGitRepo && (
+                <div
+                  className="inline-flex items-center"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  role="presentation"
+                >
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => void submit(entryPath)}
+                    title={`Add ${entry.name} as a project`}
+                  >
+                    Add
+                  </Button>
+                </div>
+              )}
+            </Command.Item>
+          );
+        })}
 
         {isLoading && !listing && (
           <div className="px-3 py-3 text-xs text-muted-foreground">

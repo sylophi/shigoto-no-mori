@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  focusManager,
   MutationCache,
   QueryCache,
   QueryClient,
@@ -10,6 +11,30 @@ import { Toaster } from "sonner";
 import { App } from "./App";
 import { notifyError } from "./lib/toast";
 import "./index.css";
+
+// React Query's default focus listener subscribes to `window.focus` and
+// `visibilitychange`, but those don't fire on every Electron focus
+// transition (notably ⌘Tab back into the app, where focus arrives at
+// the BrowserWindow level rather than the document). Add an Electron
+// IPC channel on top of the web events so refetch-on-focus is reliable.
+focusManager.setEventListener((handleFocus) => {
+  const onFocus = () => handleFocus(true);
+  const onBlur = () => handleFocus(false);
+  const onVisibility = () =>
+    handleFocus(document.visibilityState === "visible");
+  window.addEventListener("focus", onFocus);
+  window.addEventListener("blur", onBlur);
+  document.addEventListener("visibilitychange", onVisibility);
+  const unsubFocus = window.api.window.onFocused(onFocus);
+  const unsubBlur = window.api.window.onBlurred(onBlur);
+  return () => {
+    window.removeEventListener("focus", onFocus);
+    window.removeEventListener("blur", onBlur);
+    document.removeEventListener("visibilitychange", onVisibility);
+    unsubFocus();
+    unsubBlur();
+  };
+});
 
 // Per-query opt-out: pass `meta: { silentError: true }` to suppress the
 // global toast (use when the call site renders a richer inline error).

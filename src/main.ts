@@ -52,6 +52,15 @@ const createWindow = () => {
       path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
     );
   }
+
+  // Relay BrowserWindow focus/blur to the renderer. The web-level `focus`
+  // and `visibilitychange` events don't fire on every Electron focus
+  // transition (notably ⌘Tab between apps), so React Query's
+  // refetch-on-focus needs this signal to be reliable.
+  const sendFocus = () => mainWindow?.webContents.send(CHANNELS.WindowFocused);
+  const sendBlur = () => mainWindow?.webContents.send(CHANNELS.WindowBlurred);
+  mainWindow.on("focus", sendFocus);
+  mainWindow.on("blur", sendBlur);
 };
 
 // Persist user-chosen theme so the next window can paint the right color

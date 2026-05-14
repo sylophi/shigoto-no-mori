@@ -146,6 +146,22 @@ const api = {
       };
     },
   },
+  window: {
+    onFocused: (handler: () => void): (() => void) => {
+      const listener = () => handler();
+      ipcRenderer.on(CHANNELS.WindowFocused, listener);
+      return () => {
+        ipcRenderer.off(CHANNELS.WindowFocused, listener);
+      };
+    },
+    onBlurred: (handler: () => void): (() => void) => {
+      const listener = () => handler();
+      ipcRenderer.on(CHANNELS.WindowBlurred, listener);
+      return () => {
+        ipcRenderer.off(CHANNELS.WindowBlurred, listener);
+      };
+    },
+  },
   scripts: {
     run: (input: {
       projectId: string;

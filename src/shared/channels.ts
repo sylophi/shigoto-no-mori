@@ -38,6 +38,8 @@ export const CHANNELS = {
   ShellShowItemInFolder: "shell:showItemInFolder",
   PaletteToggle: "palette:toggle",
   PaletteAddProject: "palette:addProject",
+  WindowFocused: "window:focused",
+  WindowBlurred: "window:blurred",
 } as const;
 
 export interface RuntimeInfo {
