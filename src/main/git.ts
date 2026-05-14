@@ -5,7 +5,12 @@ import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
 import { sanitizeBranchForPath } from "@shared/branches";
-import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
+import type {
+  BranchList,
+  CommitSummary,
+  Worktree,
+  WorktreeStatus,
+} from "@shared/schemas";
 import { shigomoriRoot } from "./paths";
 
 const exec = promisify(execFile);
@@ -262,6 +267,28 @@ export async function resolveDefaultBranch(
   const first = await firstLocalBranch(projectPath);
   if (first) return first;
   throw new Error(`No local branches found in ${projectPath}`);
+}
+
+// Lists branches usable as a base ref: local heads and remote-tracking refs.
+// Symbolic refs like `origin/HEAD` are dropped — they alias another remote
+// branch and would show up twice.
+export async function listBranches(projectPath: string): Promise<BranchList> {
+  const stdout = await run(projectPath, [
+    "for-each-ref",
+    "--format=%(refname)\t%(refname:short)\t%(symref)",
+    "refs/heads/",
+    "refs/remotes/",
+  ]);
+  const local: string[] = [];
+  const remote: string[] = [];
+  for (const line of stdout.split("\n")) {
+    if (!line) continue;
+    const [full, short, symref] = line.split("\t");
+    if (!full || !short || symref) continue;
+    if (full.startsWith("refs/heads/")) local.push(short);
+    else if (full.startsWith("refs/remotes/")) remote.push(short);
+  }
+  return { local, remote };
 }
 
 export function defaultWorktreePath(

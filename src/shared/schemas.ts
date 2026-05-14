@@ -61,6 +61,16 @@ export const ProjectsDefaultBranchPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const ProjectsListBranchesPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+export const BranchListSchema = z.object({
+  local: z.array(z.string()),
+  remote: z.array(z.string()),
+});
+export type BranchList = z.infer<typeof BranchListSchema>;
+
 export const CreateWorktreePayloadSchema = z.object({
   projectId: z.string(),
   branchName: z.string().min(1),

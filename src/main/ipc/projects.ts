@@ -3,11 +3,18 @@ import { randomUUID } from "node:crypto";
 import { CHANNELS } from "@shared/channels";
 import {
   AddProjectPayloadSchema,
+  type BranchList,
   type Project,
   ProjectsDefaultBranchPayloadSchema,
+  ProjectsListBranchesPayloadSchema,
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
-import { deriveProjectName, isGitRepo, resolveDefaultBranch } from "../git";
+import {
+  deriveProjectName,
+  isGitRepo,
+  listBranches,
+  resolveDefaultBranch,
+} from "../git";
 import { expandHome } from "../paths";
 import { findProjectOrThrow, loadProjects } from "../projects";
 import { readShigotoConfig } from "../shigoto";
@@ -58,6 +65,16 @@ export function registerProjectHandlers(): void {
       const project = findProjectOrThrow(projectId);
       const config = await readShigotoConfig(project.id);
       return resolveDefaultBranch(project.path, config?.defaultBranch);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.ProjectsListBranches,
+    async (_event, rawPayload: unknown): Promise<BranchList> => {
+      const { projectId } =
+        ProjectsListBranchesPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return listBranches(project.path);
     },
   );
 

@@ -4,6 +4,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
+  BranchList,
   DetectedLauncher,
   DirectoryListing,
   GlobalConfig,
@@ -25,6 +26,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsRemove, { id }),
     defaultBranch: (projectId: string): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.ProjectsDefaultBranch, { projectId }),
+    listBranches: (projectId: string): Promise<BranchList> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsListBranches, { projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>

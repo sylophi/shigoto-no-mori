@@ -148,7 +148,7 @@ export function WorktreeDetail() {
         </div>
       </div>
 
-      <footer className="flex min-h-12 items-center gap-3 border-t border-border bg-card px-8 py-2.5">
+      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-8">
         <span
           className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
           title={worktree.path}
@@ -162,7 +162,7 @@ export function WorktreeDetail() {
         ) : (
           <Button
             variant="ghost"
-            size="sm"
+            size="xs"
             className={cn(
               "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
               confirmDelete && "bg-destructive/10",

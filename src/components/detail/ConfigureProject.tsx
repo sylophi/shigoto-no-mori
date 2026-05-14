@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { FolderOpen, Plus, Save } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -213,15 +214,12 @@ function ConfigureForm({
               >
                 Default branch
               </label>
-              <input
+              <BranchCombobox
                 id="default-branch"
-                type="text"
+                projectId={projectId}
                 value={form.defaultBranch}
-                onChange={(e) =>
-                  setForm({ ...form, defaultBranch: e.target.value })
-                }
+                onChange={(v) => setForm({ ...form, defaultBranch: v })}
                 placeholder={resolvedDefaultBranch}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
               />
               <p className="text-xs text-muted-foreground">
                 Pre-fills "Branched from" when starting a new worktree. Falls
