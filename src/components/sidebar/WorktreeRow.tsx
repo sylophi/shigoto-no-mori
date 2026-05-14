@@ -1,3 +1,4 @@
+import { House } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelection } from "@/hooks/useSelection";
 import type { Worktree } from "@shared/types";
@@ -14,6 +15,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
     <button
       type="button"
       onClick={() => selectWorktree(worktree.id)}
+      title={worktree.isPrimary ? "Primary checkout" : undefined}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
         "hover:bg-accent/60",
@@ -23,6 +25,12 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       <span className="flex-1 truncate font-mono">
         {worktree.branch.replace(/^.*\//, "")}
       </span>
+      {worktree.isPrimary && (
+        <House
+          className="size-3 text-muted-foreground/60"
+          aria-label="Primary checkout"
+        />
+      )}
       <StatusIndicator worktree={worktree} />
     </button>
   );

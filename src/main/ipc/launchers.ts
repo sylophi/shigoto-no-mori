@@ -8,7 +8,6 @@ import {
   type LauncherCommand,
   type LauncherEntry,
   ReadShigotoPayloadSchema,
-  SetPreferredLauncherPayloadSchema,
   type ShigotoConfig,
 } from "@shared/schemas";
 import { findWorktreeIdentity } from "../git";
@@ -22,11 +21,6 @@ import {
 } from "../launchers";
 import { findProjectOrThrow } from "../projects";
 import { readShigotoConfig } from "../shigoto";
-import { readKey, writeKey } from "../store";
-
-const PREFERRED_KEY = "launcherPreferences";
-
-type PreferredMap = Record<string, string>;
 
 function customEntriesFrom(
   launchers: LauncherCommand[] | undefined,
@@ -61,7 +55,6 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
         kind: "detected",
         id: `app:${a.id}`,
         label: a.label,
-        icon: a.icon,
         available: true,
       }),
     );
@@ -88,10 +81,7 @@ export function registerLauncherHandlers(): void {
     async (
       _event,
       rawPayload: unknown,
-    ): Promise<{
-      entries: LauncherEntry[];
-      preferred: string | null;
-    }> => {
+    ): Promise<{ entries: LauncherEntry[] }> => {
       const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
 
@@ -107,14 +97,7 @@ export function registerLauncherHandlers(): void {
         ...customEntriesFrom(projectConfig?.launchers),
       ];
 
-      const preferences = readKey<PreferredMap>(PREFERRED_KEY, {});
-      const preferred =
-        preferences[projectId] &&
-        entries.some((e) => e.id === preferences[projectId])
-          ? preferences[projectId]
-          : (entries[0]?.id ?? null);
-
-      return { entries, preferred };
+      return { entries };
     },
   );
 
@@ -156,17 +139,6 @@ export function registerLauncherHandlers(): void {
       }
 
       throw new Error(`Unknown launcher id format: ${launcherId}`);
-    },
-  );
-
-  ipcMain.handle(
-    CHANNELS.LaunchersSetPreferred,
-    async (_event, rawPayload: unknown): Promise<void> => {
-      const { projectId, launcherId } =
-        SetPreferredLauncherPayloadSchema.parse(rawPayload);
-      const preferences = readKey<PreferredMap>(PREFERRED_KEY, {});
-      preferences[projectId] = launcherId;
-      writeKey<PreferredMap>(PREFERRED_KEY, preferences);
     },
   );
 }

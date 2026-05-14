@@ -12,7 +12,6 @@ const exec = promisify(execFile);
 export interface DetectedApp {
   id: string;
   label: string;
-  icon: string;
   bundleNames: string[];
   cli?: string | undefined;
   available: boolean;
@@ -21,77 +20,66 @@ export interface DetectedApp {
 interface CatalogEntry {
   id: string;
   label: string;
-  icon: string;
   bundleNames: string[];
   cli?: string;
 }
 
-// Lucide icon names for each entry. Renderer maps them to actual components.
+// The renderer maps each id to a brand SVG (or a lucide fallback).
 const CATALOG: CatalogEntry[] = [
   {
     id: "vscode",
     label: "VS Code",
-    icon: "code",
     bundleNames: ["Visual Studio Code.app", "VSCodium.app"],
     cli: "code",
   },
   {
     id: "cursor",
     label: "Cursor",
-    icon: "cursor-text",
     bundleNames: ["Cursor.app"],
     cli: "cursor",
   },
   {
     id: "zed",
     label: "Zed",
-    icon: "zap",
     bundleNames: ["Zed.app", "Zed Preview.app"],
     cli: "zed",
   },
   {
     id: "sublime",
     label: "Sublime Text",
-    icon: "file-code",
     bundleNames: ["Sublime Text.app"],
     cli: "subl",
   },
   {
     id: "intellij",
     label: "IntelliJ IDEA",
-    icon: "square-code",
     bundleNames: ["IntelliJ IDEA.app", "IntelliJ IDEA CE.app"],
     cli: "idea",
   },
   {
     id: "webstorm",
     label: "WebStorm",
-    icon: "square-code",
     bundleNames: ["WebStorm.app"],
     cli: "webstorm",
   },
   {
     id: "ghostty",
     label: "Ghostty",
-    icon: "terminal",
     bundleNames: ["Ghostty.app"],
   },
   {
     id: "iterm",
     label: "iTerm",
-    icon: "terminal-square",
     bundleNames: ["iTerm.app"],
   },
   {
     id: "terminal",
     label: "Terminal",
-    icon: "square-terminal",
     bundleNames: ["Utilities/Terminal.app"],
   },
   {
     id: "finder",
     label: "Finder",
-    icon: "folder",
     bundleNames: ["__finder__"],
   },
 ];
@@ -137,7 +125,6 @@ export async function detectApps(): Promise<DetectedApp[]> {
       return {
         id: entry.id,
         label: entry.label,
-        icon: entry.icon,
         bundleNames: entry.bundleNames,
         cli: entry.cli,
         available: bundleHit || cliHit,

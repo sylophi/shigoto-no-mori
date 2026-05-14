@@ -27,6 +27,9 @@ export const WorktreeSchema = z.object({
   dirtyCount: z.number().int().nonnegative(),
   lastCommit: CommitSummarySchema.nullable(),
   port: z.number().int().positive().optional(),
+  // The repo's primary checkout. Shown in the UI for context but never
+  // removable — deleting it would mean detaching the project itself.
+  isPrimary: z.boolean(),
 });
 
 export const ProjectSchema = z.object({
@@ -124,7 +127,6 @@ export const DetectedLauncherSchema = z.object({
   kind: z.literal("detected"),
   id: z.string(),
   label: z.string(),
-  icon: z.string(),
   available: z.boolean(),
 });
 
@@ -186,11 +188,6 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
 ]);
-
-export const SetPreferredLauncherPayloadSchema = z.object({
-  projectId: z.string(),
-  launcherId: z.string(),
-});
 
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;

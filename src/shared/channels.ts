@@ -13,7 +13,6 @@ export const CHANNELS = {
   LaunchersDetect: "launchers:detect",
   LaunchersForProject: "launchers:forProject",
   LaunchersLaunch: "launchers:launch",
-  LaunchersSetPreferred: "launchers:setPreferred",
   DialogPickFolder: "dialog:pickFolder",
   RuntimeInfo: "runtime:info",
   RuntimeSetTheme: "runtime:setTheme",

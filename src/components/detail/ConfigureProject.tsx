@@ -177,7 +177,7 @@ function ConfigureForm({
 
   return (
     <>
-      <div className="overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
         <div className="flex max-w-3xl flex-col gap-7">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>

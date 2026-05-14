@@ -97,20 +97,13 @@ const api = {
   launchers: {
     detected: (): Promise<DetectedLauncher[]> =>
       ipcRenderer.invoke(CHANNELS.LaunchersDetect),
-    forProject: (
-      projectId: string,
-    ): Promise<{ entries: LauncherEntry[]; preferred: string | null }> =>
+    forProject: (projectId: string): Promise<{ entries: LauncherEntry[] }> =>
       ipcRenderer.invoke(CHANNELS.LaunchersForProject, { projectId }),
     launch: (input: {
       projectId: string;
       worktreeId: string;
       launcherId: string;
     }): Promise<void> => ipcRenderer.invoke(CHANNELS.LaunchersLaunch, input),
-    setPreferred: (input: {
-      projectId: string;
-      launcherId: string;
-    }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.LaunchersSetPreferred, input),
   },
 } as const;
 

@@ -83,7 +83,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
         </div>
       </header>
 
-      <div className="overflow-y-auto px-8 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-8 py-6">
         <div className="flex max-w-4xl flex-col gap-8">
           <section>
             <SectionHeading>Launch</SectionHeading>
@@ -138,20 +138,26 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
         >
           {tildify(worktree.path, home)}
         </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={cn(
-            "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
-            confirmDelete && "bg-destructive/10",
-          )}
-          disabled={busy}
-          onClick={handleDelete}
-          title={deleteButtonTitle(confirmDelete, isDirty)}
-        >
-          <Trash2 />
-          {deleteButtonLabel(busy, confirmDelete, isDirty)}
-        </Button>
+        {worktree.isPrimary ? (
+          <span className="shrink-0 text-xs text-muted-foreground/70">
+            Primary checkout
+          </span>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+              confirmDelete && "bg-destructive/10",
+            )}
+            disabled={busy}
+            onClick={handleDelete}
+            title={deleteButtonTitle(confirmDelete, isDirty)}
+          >
+            <Trash2 />
+            {deleteButtonLabel(busy, confirmDelete, isDirty)}
+          </Button>
+        )}
       </footer>
     </div>
   );

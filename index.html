@@ -24,6 +24,14 @@
         }
       })();
     </script>
+    <script type="module">
+      // react-grab: ⌘C / Ctrl+C on a hovered element copies its source
+      // location (file + component) for pasting into an AI coding agent.
+      // Dev-only — Vite tree-shakes this out of packaged builds.
+      if (import.meta.env.DEV) {
+        import("react-grab");
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

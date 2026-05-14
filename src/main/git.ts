@@ -174,6 +174,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     behind,
     dirtyCount,
     lastCommit,
+    isPrimary: identity.isPrimary,
   };
 }
 
@@ -182,9 +183,11 @@ export async function listWorktrees(
   projectPath: string,
 ): Promise<Worktree[]> {
   const identities = await listWorktreeIdentities(projectId, projectPath);
-  // Hide the primary worktree from the UI — shigomori is about managing the
-  // additional worktrees layered on top of the original checkout.
-  return Promise.all(identities.filter((i) => !i.isPrimary).map(buildWorktree));
+  // Primary first so it anchors the sidebar list as the canonical checkout.
+  const ordered = identities.toSorted((a, b) =>
+    a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
+  );
+  return Promise.all(ordered.map(buildWorktree));
 }
 
 export async function describeWorktree(
