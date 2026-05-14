@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { useFsListEntries } from "@/hooks/useFsListEntries";
 import { useIgnoredPaths } from "@/hooks/useIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { tildify } from "@/lib/projectPaths";
+import { PathSpan } from "@/components/ui/path-span";
 import type { CarryOverEntry, FsEntry } from "@shared/schemas";
 
 interface CarryOverPickerModalProps {
@@ -152,12 +152,6 @@ export function CarryOverPickerModal({
     }
   };
 
-  // Tildify only when above home; otherwise show project-relative path so
-  // the user sees where they are inside the repo.
-  const breadcrumb = atRoot
-    ? tildify(cwd, home)
-    : `${tildify(projectPath, home)}${cwd.slice(projectPath.length)}`;
-
   return (
     <div
       role="presentation"
@@ -180,12 +174,11 @@ export function CarryOverPickerModal({
             </button>
           )}
           <Folder className="size-4 shrink-0 text-muted-foreground/80" />
-          <span
+          <PathSpan
+            path={cwd}
+            home={home}
             className="min-w-0 flex-1 truncate font-mono text-sm select-text"
-            title={cwd}
-          >
-            {breadcrumb}
-          </span>
+          />
           <button
             type="button"
             onClick={onClose}

@@ -15,8 +15,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { PathSpan } from "@/components/ui/path-span";
 import { cn } from "@/lib/utils";
-import { tildify } from "@/lib/projectPaths";
 import { useBranches } from "@/hooks/useBranches";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
@@ -122,9 +122,11 @@ export function WorktreeDetail() {
           <span aria-hidden className="text-muted-foreground/40">
             /
           </span>
-          <span className="min-w-0 truncate font-mono">
-            {tildify(worktree.path, home)}
-          </span>
+          <PathSpan
+            path={worktree.path}
+            home={home}
+            className="min-w-0 flex-1 truncate font-mono"
+          />
         </div>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -199,12 +201,11 @@ export function WorktreeDetail() {
           </>
         ) : (
           <>
-            <span
+            <PathSpan
+              path={worktree.path}
+              home={home}
               className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
-              title={worktree.path}
-            >
-              {tildify(worktree.path, home)}
-            </span>
+            />
             {worktree.isPrimary ? (
               <span className="shrink-0 text-xs text-muted-foreground/70">
                 Repo root

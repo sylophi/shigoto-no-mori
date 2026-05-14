@@ -27,6 +27,7 @@ import {
   hasTrailingSlash,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
+import { PathSpan } from "@/components/ui/path-span";
 import { useNavigate } from "@tanstack/react-router";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
@@ -459,7 +460,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
       onValueChange={setHighlighted}
     >
       <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
-        <FolderPlus className="size-4 shrink-0 text-muted-foreground/80" />
         <Command.Input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
           autoFocus
@@ -576,7 +576,7 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
         <button
           type="button"
           onClick={() => void pickViaDialog()}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
         >
           <img src={finderIconUrl} alt="" className="size-4" />
           Open in Finder
@@ -609,9 +609,11 @@ function ScanningPanel({
           <ArrowLeft className="size-4" />
         </button>
         <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
-        <span className="min-w-0 flex-1 truncate font-mono text-sm">
-          {tildify(scanRoot, home)}
-        </span>
+        <PathSpan
+          path={scanRoot}
+          home={home}
+          className="min-w-0 flex-1 truncate font-mono text-sm"
+        />
       </div>
       <div className="flex flex-col items-center gap-3 px-4 py-16 text-sm text-muted-foreground">
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
@@ -648,7 +650,6 @@ interface ResultsPanelProps {
 function ResultsPanel(props: ResultsPanelProps) {
   const allSelected =
     props.results.length > 0 && props.selected.size === props.results.length;
-  const tildifiedRoot = tildify(props.scanRoot, props.home);
 
   return (
     <div onKeyDown={props.onKeyDown} role="group" aria-label="Scan results">
@@ -675,8 +676,13 @@ function ResultsPanel(props: ResultsPanelProps) {
                 ? "No new git repos found"
                 : `${props.results.length} new git repo${props.results.length === 1 ? "" : "s"}`}
             </span>
-            <span className="truncate font-mono text-xs text-muted-foreground/70">
-              in {tildifiedRoot}
+            <span className="flex font-mono text-xs text-muted-foreground/70">
+              <span className="shrink-0">in&nbsp;</span>
+              <PathSpan
+                path={props.scanRoot}
+                home={props.home}
+                className="min-w-0 flex-1 truncate"
+              />
             </span>
           </div>
           {props.results.length > 0 && (
@@ -696,27 +702,16 @@ function ResultsPanel(props: ResultsPanelProps) {
               All git repos in this folder are already added.
             </div>
           ) : (
-            props.results.map((path) => {
-              const isSelected = props.selected.has(path);
-              const relative = relativeFromRoot(path, props.scanRoot);
-              return (
-                <Command.Item
-                  key={path}
-                  value={`result:${path}`}
-                  keywords={[relative]}
-                  onSelect={() => props.onToggle(path)}
-                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-                >
-                  {isSelected ? (
-                    <Check className="size-4 text-foreground" />
-                  ) : (
-                    <Square className="size-4 text-muted-foreground/60" />
-                  )}
-                  <Folder className="size-4 text-muted-foreground/80" />
-                  <span className="truncate font-mono">{relative}</span>
-                </Command.Item>
-              );
-            })
+            props.results.map((path) => (
+              <ResultRow
+                key={path}
+                path={path}
+                scanRoot={props.scanRoot}
+                home={props.home}
+                isSelected={props.selected.has(path)}
+                onToggle={() => props.onToggle(path)}
+              />
+            ))
           )}
         </Command.List>
 
@@ -749,9 +744,47 @@ function relativeFromRoot(absolute: string, root: string): string {
     : absolute;
 }
 
-function tildify(path: string, home: string | null): string {
-  if (!home || !path) return path;
-  if (path === home) return "~";
-  if (path.startsWith(`${home}/`)) return `~${path.slice(home.length)}`;
-  return path;
+function ResultRow({
+  path,
+  scanRoot,
+  home,
+  isSelected,
+  onToggle,
+}: {
+  path: string;
+  scanRoot: string;
+  home: string | null;
+  isSelected: boolean;
+  onToggle: () => void;
+}) {
+  const relative = relativeFromRoot(path, scanRoot);
+  // Result == scanRoot leaves `relative` equal to the absolute path; let
+  // PathSpan tildify+shorten it. Nested results are already short.
+  const showAbsolute = relative === path;
+  return (
+    <Command.Item
+      value={`result:${path}`}
+      keywords={[relative]}
+      onSelect={onToggle}
+      className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+    >
+      {isSelected ? (
+        <Check className="size-4 text-foreground" />
+      ) : (
+        <Square className="size-4 text-muted-foreground/60" />
+      )}
+      <Folder className="size-4 text-muted-foreground/80" />
+      {showAbsolute ? (
+        <PathSpan
+          path={path}
+          home={home}
+          className="min-w-0 flex-1 truncate font-mono"
+        />
+      ) : (
+        <span className="min-w-0 flex-1 truncate font-mono" title={path}>
+          {relative}
+        </span>
+      )}
+    </Command.Item>
+  );
 }

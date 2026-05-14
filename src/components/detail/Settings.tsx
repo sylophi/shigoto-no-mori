@@ -20,6 +20,7 @@ import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
+import { PathSpan } from "@/components/ui/path-span";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
 import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
@@ -150,11 +151,12 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
             {root && (
-              <div
-                className="font-mono text-sm select-text"
-                title={configFilePath ?? root}
-              >
-                {tildify(configFilePath ?? root, home)}
+              <div className="flex font-mono text-sm select-text">
+                <PathSpan
+                  path={configFilePath ?? root}
+                  home={home}
+                  className="min-w-0 flex-1 truncate"
+                />
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">

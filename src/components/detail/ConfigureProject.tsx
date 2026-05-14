@@ -21,7 +21,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { useShigomoriWrite } from "@/hooks/useShigomoriWrite";
-import { tildify } from "@/lib/projectPaths";
+import { PathSpan } from "@/components/ui/path-span";
 import { notifyError } from "@/lib/toast";
 import { configureProjectRoute } from "@/router";
 import type {
@@ -225,8 +225,12 @@ function ConfigureForm({
         <div className="flex max-w-3xl flex-col gap-5">
           <section className="space-y-3">
             <SectionHeading>Location</SectionHeading>
-            <div className="font-mono text-sm select-text" title={projectPath}>
-              {tildify(projectPath, home)}
+            <div className="flex font-mono text-sm select-text">
+              <PathSpan
+                path={projectPath}
+                home={home}
+                className="min-w-0 flex-1 truncate"
+              />
             </div>
             <Button
               variant="outline"
