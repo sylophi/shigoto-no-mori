@@ -6,6 +6,7 @@ import {
   CommitHistoryPayloadSchema,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
+  isRealBranch,
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
   type Worktree,
@@ -40,14 +41,12 @@ export function registerWorktreeHandlers(): void {
       const { projectId, worktreeName, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      return createWorktree(
-        project.id,
-        project.path,
-        worktreeName,
+      return createWorktree(project.id, project.path, {
+        requestedWorktreeName: worktreeName,
         branchName,
         base,
-        checkout ?? false,
-      );
+        checkout: checkout ?? false,
+      });
     },
   );
 
@@ -76,21 +75,15 @@ export function registerWorktreeHandlers(): void {
       }
       await removeWorktree(project.path, target.path, force);
 
-      // Optionally clean up the local branch the worktree had checked out.
       // `git branch -D` refuses if the branch is still in use elsewhere,
-      // and we skip detached HEADs (no real branch to delete).
+      // so we don't need to guard against that case ourselves.
       const config = await readGlobalConfig();
-      if (
-        config.deleteBranchOnRemove &&
-        target.branch &&
-        target.branch !== "(unknown)"
-      ) {
+      if (config.deleteBranchOnRemove && isRealBranch(target.branch)) {
         try {
           await deleteLocalBranch(project.path, target.branch);
         } catch {
-          // Likely the branch is shared with another worktree, or is the
-          // primary's HEAD. Either way, leaving the branch behind is the
-          // safe fallback.
+          // Branch may be shared with another worktree or be the primary's
+          // HEAD — leaving it behind is the safe fallback.
         }
       }
     },

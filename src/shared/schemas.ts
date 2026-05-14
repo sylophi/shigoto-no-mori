@@ -8,6 +8,14 @@ export const CommitSummarySchema = z.object({
   date: z.string(),
 });
 
+// Sentinel returned by `deriveBranch` when a worktree has no branch and
+// no detached HEAD we can read. Treated as "not a real branch" by every
+// consumer that filters branches for operations (delete, switch, etc.).
+export const UNKNOWN_BRANCH = "(unknown)";
+
+export const isRealBranch = (branch: string): boolean =>
+  branch !== UNKNOWN_BRANCH;
+
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string(),

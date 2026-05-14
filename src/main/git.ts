@@ -4,7 +4,12 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
-import type { BranchList, CommitSummary, Worktree } from "@shared/schemas";
+import {
+  type BranchList,
+  type CommitSummary,
+  UNKNOWN_BRANCH,
+  type Worktree,
+} from "@shared/schemas";
 import { pickWorktreeName } from "./animals";
 import { shigomoriRoot } from "./paths";
 
@@ -60,7 +65,7 @@ function parsePorcelain(stdout: string): RawWorktreeEntry[] {
 function deriveBranch(entry: RawWorktreeEntry): string {
   if (entry.branch) return entry.branch.replace(/^refs\/heads\//, "");
   if (entry.detached) return entry.head?.slice(0, 7) ?? "detached";
-  return "(unknown)";
+  return UNKNOWN_BRANCH;
 }
 
 async function getChangedCount(worktreePath: string): Promise<number> {
@@ -76,7 +81,7 @@ async function getAheadBehind(
   worktreePath: string,
   branch: string,
 ): Promise<{ ahead: number; behind: number }> {
-  if (!branch || branch === "(unknown)") return { ahead: 0, behind: 0 };
+  if (!branch || branch === UNKNOWN_BRANCH) return { ahead: 0, behind: 0 };
   try {
     // Compare against the configured upstream (@{u}). No upstream → no counts.
     const stdout = await run(worktreePath, [
@@ -291,9 +296,6 @@ export async function resolveDefaultBranch(
   throw new Error(`No local branches found in ${projectPath}`);
 }
 
-// Picks the next animal name not currently in use by any worktree in this
-// project. Lets the renderer preview the dirname before committing to a
-// create call.
 export async function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
@@ -325,20 +327,23 @@ export async function listBranches(projectPath: string): Promise<BranchList> {
   return { local, remote };
 }
 
+interface CreateWorktreeOptions {
+  requestedWorktreeName?: string;
+  branchName?: string;
+  base?: string;
+  checkout: boolean;
+}
+
 export async function createWorktree(
   projectId: string,
   projectPath: string,
-  requestedWorktreeName: string | undefined,
-  branchName: string | undefined,
-  base: string | undefined,
-  checkout: boolean,
+  opts: CreateWorktreeOptions,
 ): Promise<Worktree> {
-  // The worktree's directory name is decoupled from the branch: pick a
-  // random animal that isn't already used by another worktree in this
-  // project. Branch can rename/switch later without breaking the path.
-  // Callers may pre-pick the name (see ProjectsPickWorktreeName) so the
-  // UI can show it before submitting; we honor it unless it's taken in
-  // the brief window between pick and create.
+  const { requestedWorktreeName, branchName, base, checkout } = opts;
+  // Dirname is decoupled from the branch — a random animal that isn't
+  // already used by another worktree in this project. The renderer may
+  // pre-pick (see ProjectsPickWorktreeName) so it can preview the path;
+  // we honor that pick unless it got taken in the meantime.
   const existing = await listWorktreeIdentities(projectId, projectPath);
   const used = new Set(existing.map((w) => w.name));
   const worktreeName =

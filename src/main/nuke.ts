@@ -5,6 +5,7 @@
 // The original project repos on disk are untouched — we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
+import { isRealBranch } from "@shared/schemas";
 import {
   deleteLocalBranch,
   listWorktreeIdentities,
@@ -39,7 +40,7 @@ export async function nukeEverything(): Promise<void> {
       if (deleteBranches) {
         await Promise.all(
           targets
-            .filter((i) => i.branch && i.branch !== "(unknown)")
+            .filter((i) => isRealBranch(i.branch))
             .map((i) =>
               deleteLocalBranch(project.path, i.branch).catch(() => undefined),
             ),

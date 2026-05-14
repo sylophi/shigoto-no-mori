@@ -73,8 +73,7 @@ export function registerProjectHandlers(): void {
   ipcMain.handle(
     CHANNELS.ProjectsListBranches,
     async (_event, rawPayload: unknown): Promise<BranchList> => {
-      const { projectId } =
-        ProjectsListBranchesPayloadSchema.parse(rawPayload);
+      const { projectId } = ProjectsListBranchesPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return listBranches(project.path);
     },

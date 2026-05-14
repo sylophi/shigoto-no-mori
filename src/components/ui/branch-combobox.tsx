@@ -3,6 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { ChevronsUpDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBranches } from "@/hooks/useBranches";
+import type { BranchList } from "@shared/schemas";
 
 interface BranchComboboxProps {
   projectId: string | null;
@@ -12,19 +13,31 @@ interface BranchComboboxProps {
   id?: string;
   disabled?: boolean;
   className?: string;
-  // Names to hide from the list (e.g. branches already checked out in
-  // another worktree). Free-text input is still allowed via the "Use as
-  // ref" fallback.
+  // Free-text "Use as ref" entries are NOT filtered.
   excludeBranches?: readonly string[];
 }
 
-interface BranchEntry {
+export interface BranchEntry {
   name: string;
   kind: "local" | "remote";
 }
 
+export function toBranchEntries(
+  branches: BranchList | undefined,
+  exclude: ReadonlySet<string>,
+): BranchEntry[] {
+  return [
+    ...(branches?.local ?? [])
+      .filter((name) => !exclude.has(name))
+      .map((name) => ({ name, kind: "local" as const })),
+    ...(branches?.remote ?? [])
+      .filter((name) => !exclude.has(name))
+      .map((name) => ({ name, kind: "remote" as const })),
+  ];
+}
+
 // Higher score = better match. 0 = no match.
-function scoreMatch(query: string, target: string): number {
+export function scoreMatch(query: string, target: string): number {
   if (!query) return 1;
   const q = query.toLowerCase();
   const t = target.toLowerCase();
@@ -57,15 +70,7 @@ export function BranchCombobox({
   const { data: branches } = useBranches(projectId);
   const [query, setQuery] = useState("");
 
-  const excluded = new Set(excludeBranches ?? []);
-  const all: BranchEntry[] = [
-    ...(branches?.local ?? [])
-      .filter((name) => !excluded.has(name))
-      .map((name) => ({ name, kind: "local" as const })),
-    ...(branches?.remote ?? [])
-      .filter((name) => !excluded.has(name))
-      .map((name) => ({ name, kind: "remote" as const })),
-  ];
+  const all = toBranchEntries(branches, new Set(excludeBranches ?? []));
   const sorted: BranchEntry[] = query
     ? all
         .map((b) => ({ b, score: scoreMatch(query, b.name) }))

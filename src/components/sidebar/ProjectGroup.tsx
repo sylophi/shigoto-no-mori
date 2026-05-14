@@ -71,7 +71,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
           disabled={create.isPending}
           aria-label={`Quick-create worktree in ${project.name}`}
           title={`Quick-create worktree in ${project.name}`}
-          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-busy:opacity-100 disabled:cursor-not-allowed disabled:opacity-100"
+          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
           aria-busy={create.isPending}
         >
           {create.isPending ? (

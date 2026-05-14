@@ -32,7 +32,16 @@ import {
 import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsPanel } from "./ScriptsPanel";
-import type { CommitSummary, Worktree } from "@shared/schemas";
+import {
+  type BranchEntry,
+  scoreMatch,
+  toBranchEntries,
+} from "@/components/ui/branch-combobox";
+import {
+  type CommitSummary,
+  isRealBranch,
+  type Worktree,
+} from "@shared/schemas";
 
 function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";
@@ -163,7 +172,6 @@ export function WorktreeDetail() {
           <Separator />
 
           <NotesSection worktree={worktree} />
-
         </div>
       </div>
 
@@ -293,7 +301,7 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/30"
+        className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
       />
       {write.error && (
         <div className="text-xs text-destructive">{write.error.message}</div>
@@ -465,38 +473,13 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
         onClick={begin}
         aria-label="Rename branch"
         title="Rename branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/branch:opacity-100 focus-visible:opacity-100"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
       >
         <Pencil className="size-3.5" />
       </button>
       <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
     </div>
   );
-}
-
-interface BranchEntry {
-  name: string;
-  kind: "local" | "remote";
-}
-
-function scoreMatch(query: string, target: string): number {
-  if (!query) return 1;
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  if (t === q) return 1000;
-  const idx = t.indexOf(q);
-  if (idx >= 0) {
-    return 200 - idx * 2 + Math.round((q.length / t.length) * 50);
-  }
-  let pos = 0;
-  let gaps = 0;
-  for (const c of q) {
-    const next = t.indexOf(c, pos);
-    if (next < 0) return 0;
-    gaps += next - pos;
-    pos = next + 1;
-  }
-  return Math.max(1, 80 - gaps);
 }
 
 function BranchSwitcher({
@@ -511,23 +494,14 @@ function BranchSwitcher({
   const checkout = useCheckoutBranch();
   const [query, setQuery] = useState("");
 
-  // Hide branches that are checked out in any other worktree in this
-  // project; keep this worktree's own branch so the user can see what's
-  // currently selected (it gets a check mark below).
+  // Exclude branches in use by *other* worktrees only; keeping this
+  // worktree's own branch lets the popup show it with a check mark.
   const occupied = new Set(
     peerWorktrees
-      .filter((w) => w.id !== worktree.id)
-      .map((w) => w.branch)
-      .filter((b): b is string => Boolean(b) && b !== "(unknown)"),
+      .filter((w) => w.id !== worktree.id && isRealBranch(w.branch))
+      .map((w) => w.branch),
   );
-  const all: BranchEntry[] = [
-    ...(branches?.local ?? [])
-      .filter((name) => !occupied.has(name))
-      .map((name) => ({ name, kind: "local" as const })),
-    ...(branches?.remote ?? [])
-      .filter((name) => !occupied.has(name))
-      .map((name) => ({ name, kind: "remote" as const })),
-  ];
+  const all = toBranchEntries(branches, occupied);
   const sorted: BranchEntry[] = query
     ? all
         .map((b) => ({ b, score: scoreMatch(query, b.name) }))
@@ -561,7 +535,7 @@ function BranchSwitcher({
       <Combobox.Trigger
         aria-label="Switch branch"
         title="Switch branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/branch:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
       >
         <ChevronsUpDown aria-hidden className="size-3.5" />
       </Combobox.Trigger>

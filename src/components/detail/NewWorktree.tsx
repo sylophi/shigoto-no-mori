@@ -10,6 +10,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
+import { isRealBranch } from "@shared/schemas";
 
 type Mode = "branch-from" | "checkout";
 
@@ -22,12 +23,10 @@ export function NewWorktree() {
   const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
-  // Branches that are already a worktree's HEAD elsewhere can't be
-  // checked out into a new one — git enforces this. Hide them from the
-  // Source picker when we'd otherwise let the user pick one and fail.
+  // git refuses to check out a branch that's already a HEAD elsewhere.
   const occupiedBranches = worktrees
-    .map((w) => w.branch)
-    .filter((b): b is string => Boolean(b) && b !== "(unknown)");
+    .filter((w) => isRealBranch(w.branch))
+    .map((w) => w.branch);
   const [mode, setMode] = useState<Mode>("branch-from");
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
@@ -57,11 +56,9 @@ export function NewWorktree() {
     );
   }
 
-  // Belt-and-suspenders: occupied branches are filtered from the picker
-  // dropdown, but the user can still type one in via "Use as ref".
-  // Block the submit + surface why.
-  const baseOccupied =
-    mode === "checkout" && occupiedBranches.includes(base);
+  // The picker hides occupied branches, but free-text "Use as ref" can
+  // still smuggle one in — block submit and surface why.
+  const baseOccupied = mode === "checkout" && occupiedBranches.includes(base);
 
   const canSubmit =
     base.length > 0 &&
@@ -110,6 +107,15 @@ export function NewWorktree() {
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
+  const destPath = `${root}/worktrees/${project.name}/${pickedName ?? "…"}`;
+  const destLead =
+    mode === "branch-from"
+      ? "A new branch created off the source. Checked out into"
+      : "Check out the source branch into";
+  const destTrail =
+    mode === "checkout"
+      ? ". Branches already checked out in another worktree are hidden."
+      : ".";
 
   return (
     <div className="flex h-full flex-col">
@@ -166,23 +172,11 @@ export function NewWorktree() {
             autoFocus
             className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
           />
-          {mode === "branch-from" ? (
-            <p className="text-xs text-muted-foreground">
-              A new branch created off the source. Checked out into{" "}
-              <span className="font-mono text-foreground/80">
-                {root}/worktrees/{project.name}/{pickedName ?? "…"}
-              </span>
-              .
-            </p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Check out the source branch into{" "}
-              <span className="font-mono text-foreground/80">
-                {root}/worktrees/{project.name}/{pickedName ?? "…"}
-              </span>
-              . Branches already checked out in another worktree are hidden.
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {destLead}{" "}
+            <span className="font-mono text-foreground/80">{destPath}</span>
+            {destTrail}
+          </p>
         </div>
 
         {errorMessage && (

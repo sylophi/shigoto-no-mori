@@ -87,4 +87,3 @@ function SidebarFooter() {
     </div>
   );
 }
-

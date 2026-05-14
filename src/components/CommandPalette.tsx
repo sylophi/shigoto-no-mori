@@ -120,14 +120,15 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               <Command.Item
                 key={tree.id}
                 value={`${tree.name} ${tree.branch} ${project.name} ${tree.path}`}
-                onSelect={handle(() =>
-                  void navigate({
-                    to: "/projects/$projectId/worktrees/$worktreeName",
-                    params: {
-                      projectId: project.id,
-                      worktreeName: tree.name,
-                    },
-                  }),
+                onSelect={handle(
+                  () =>
+                    void navigate({
+                      to: "/projects/$projectId/worktrees/$worktreeName",
+                      params: {
+                        projectId: project.id,
+                        worktreeName: tree.name,
+                      },
+                    }),
                 )}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
@@ -152,11 +153,12 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             <Command.Item
               key={`new-${project.id}`}
               value={`new worktree ${project.name}`}
-              onSelect={handle(() =>
-                void navigate({
-                  to: "/projects/$projectId/new",
-                  params: { projectId: project.id },
-                }),
+              onSelect={handle(
+                () =>
+                  void navigate({
+                    to: "/projects/$projectId/new",
+                    params: { projectId: project.id },
+                  }),
               )}
               className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
             >
