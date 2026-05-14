@@ -2,7 +2,7 @@
 // result; throws on non-zero exit.
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { CommitSummary, Worktree, WorktreeStatus } from "@shared/schemas";
@@ -137,6 +137,7 @@ interface WorktreeIdentity {
   branch: string;
   path: string;
   isPrimary: boolean;
+  isExternal: boolean;
 }
 
 export async function listWorktreeIdentities(
@@ -144,6 +145,7 @@ export async function listWorktreeIdentities(
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
   const stdout = await run(projectPath, ["worktree", "list", "--porcelain"]);
+  const managedPrefix = join(shigomoriRoot(), "worktrees") + sep;
   return parsePorcelain(stdout)
     .filter((e) => !e.bare)
     .map((entry, index) => {
@@ -154,6 +156,7 @@ export async function listWorktreeIdentities(
         branch,
         path: entry.path,
         isPrimary: entry.path === projectPath || index === 0,
+        isExternal: !entry.path.startsWith(managedPrefix),
       };
     });
 }
@@ -175,6 +178,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     dirtyCount,
     lastCommit,
     isPrimary: identity.isPrimary,
+    isExternal: identity.isExternal,
   };
 }
 
@@ -290,6 +294,7 @@ export async function createWorktree(
     branch: branchName,
     path: worktreePath,
     isPrimary: false,
+    isExternal: false,
   });
 }
 

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   ExternalLink,
   FolderOpen,
   Flame,
@@ -15,7 +14,7 @@ import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useSelection } from "@/hooks/useSelection";
+import { useNavigate } from "@tanstack/react-router";
 import { tildify } from "@/lib/projectPaths";
 import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
@@ -24,20 +23,11 @@ import { CustomLauncherInput } from "./CustomLauncherInput";
 const THEME_STORAGE_KEY = "shigoto.theme";
 
 export function Settings() {
-  const { clear } = useSelection();
   const { data: config, isLoading } = useGlobalConfig();
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
-        <button
-          type="button"
-          onClick={clear}
-          aria-label="Back"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
         <div className="flex min-w-0 flex-col">
           <span className="text-xs text-muted-foreground">Shigoto no Mori</span>
           <h1 className="text-lg font-medium tracking-tight">Settings</h1>
@@ -319,7 +309,7 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 function DangerZone() {
-  const { clear } = useSelection();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const { armed, trigger } = useConfirmTwice(5_000);
@@ -343,7 +333,7 @@ function DangerZone() {
           // localStorage may be unavailable; not fatal.
         }
         await queryClient.invalidateQueries();
-        clear();
+        void navigate({ to: "/" });
       } catch (e) {
         setError(e instanceof Error ? e : new Error(String(e)));
       } finally {

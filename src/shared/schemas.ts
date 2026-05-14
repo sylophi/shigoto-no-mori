@@ -30,6 +30,10 @@ export const WorktreeSchema = z.object({
   // The repo's primary checkout. Shown in the UI for context but never
   // removable — deleting it would mean detaching the project itself.
   isPrimary: z.boolean(),
+  // True when the worktree lives outside shigomori's managed worktrees dir
+  // (i.e. created manually or by another tool). Primary checkouts are also
+  // technically external; the UI tags only non-primary externals.
+  isExternal: z.boolean(),
 });
 
 export const ProjectSchema = z.object({

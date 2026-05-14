@@ -28,11 +28,11 @@ import {
   hasTrailingSlash,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
+import { useNavigate } from "@tanstack/react-router";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -82,7 +82,7 @@ export function CommandPalette() {
 function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   const { setOpen } = useCommandPalette();
   const { data: projects = [] } = useProjects();
-  const { selectWorktree, beginNewWorktree } = useSelection();
+  const navigate = useNavigate();
   const { setTheme } = useTheme();
 
   const worktreeQueries = useAllProjectWorktrees(projects, true);
@@ -118,7 +118,15 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               <Command.Item
                 key={tree.id}
                 value={`${tree.branch} ${project.name} ${tree.path}`}
-                onSelect={handle(() => selectWorktree(tree.id))}
+                onSelect={handle(() =>
+                  void navigate({
+                    to: "/projects/$projectId/worktrees/$branch",
+                    params: {
+                      projectId: project.id,
+                      branch: tree.branch,
+                    },
+                  }),
+                )}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
                 <GitBranch className="size-4 text-muted-foreground/80" />
@@ -139,7 +147,12 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             <Command.Item
               key={`new-${project.id}`}
               value={`new worktree ${project.name}`}
-              onSelect={handle(() => beginNewWorktree(project.id))}
+              onSelect={handle(() =>
+                void navigate({
+                  to: "/projects/$projectId/new",
+                  params: { projectId: project.id },
+                }),
+              )}
               className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
             >
               <Plus className="size-4 text-muted-foreground/80" />

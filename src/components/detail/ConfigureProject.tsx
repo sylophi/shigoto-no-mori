@@ -1,30 +1,27 @@
 import { useState } from "react";
-import { ArrowLeft, FolderOpen, Plus, Save } from "lucide-react";
+import { FolderOpen, Plus, Save } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useSelection } from "@/hooks/useSelection";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import { tildify } from "@/lib/projectPaths";
+import { configureProjectRoute } from "@/router";
 import type { LauncherCommand, ShigotoConfig } from "@shared/schemas";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
-interface ConfigureProjectProps {
-  projectId: string;
-}
-
-export function ConfigureProject({ projectId }: ConfigureProjectProps) {
+export function ConfigureProject() {
+  const { projectId } = configureProjectRoute.useParams();
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const { data: config, isLoading: configLoading } =
     useShigotoConfig(projectId);
   const { data: resolvedDefaultBranch, isLoading: branchLoading } =
     useDefaultBranch(projectId);
-  const { clear } = useSelection();
 
   if (!project) {
     return (
@@ -37,14 +34,6 @@ export function ConfigureProject({ projectId }: ConfigureProjectProps) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
-        <button
-          type="button"
-          onClick={clear}
-          aria-label="Back"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
@@ -141,7 +130,7 @@ function ConfigureForm({
 }: ConfigureFormProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const { openSettings } = useSelection();
+  const navigate = useNavigate();
   const write = useShigotoWrite();
 
   const initial = fromConfig(initialConfig, resolvedDefaultBranch);
@@ -290,7 +279,7 @@ function ConfigureForm({
                 every project (editors, agents), use{" "}
                 <button
                   type="button"
-                  onClick={() => openSettings()}
+                  onClick={() => navigate({ to: "/settings" })}
                   className="underline underline-offset-2 hover:text-foreground"
                 >
                   Settings

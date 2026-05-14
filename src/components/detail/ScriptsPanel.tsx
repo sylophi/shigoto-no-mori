@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Play, Square, Trash2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSelection } from "@/hooks/useSelection";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { type LogLine, useScriptRun } from "@/hooks/useScriptRun";
 import { cn } from "@/lib/utils";
@@ -23,7 +23,7 @@ const SCRIPT_ORDER: ScriptName[] = ["setup", "run", "teardown"];
 export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
   const { data: config, isLoading } = useShigotoConfig(worktree.projectId);
   const run = useScriptRun();
-  const { beginConfigureProject } = useSelection();
+  const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll the console to the bottom on new log lines.
@@ -55,7 +55,12 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => beginConfigureProject(worktree.projectId)}
+          onClick={() =>
+            void navigate({
+              to: "/projects/$projectId/configure",
+              params: { projectId: worktree.projectId },
+            })
+          }
         >
           Configure scripts
         </Button>

@@ -1,20 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { useSelection } from "@/hooks/useSelection";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
+import { newWorktreeRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 
-interface NewWorktreeProps {
-  projectId: string;
-}
-
-export function NewWorktree({ projectId }: NewWorktreeProps) {
-  const { clear, selectWorktree } = useSelection();
+export function NewWorktree() {
+  const { projectId } = newWorktreeRoute.useParams();
+  const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const { data: defaultBranch } = useDefaultBranch(projectId);
@@ -44,7 +41,10 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
       { projectId: project.id, branchName, base: base || undefined },
       {
         onSuccess: (worktree) => {
-          selectWorktree(worktree.id);
+          void navigate({
+            to: "/projects/$projectId/worktrees/$branch",
+            params: { projectId: worktree.projectId, branch: worktree.branch },
+          });
         },
       },
     );
@@ -71,14 +71,6 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
-        <button
-          type="button"
-          onClick={clear}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Back"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
@@ -156,7 +148,7 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
             type="button"
             variant="ghost"
             size="sm"
-            onClick={clear}
+            onClick={() => navigate({ to: "/" })}
             disabled={busy}
           >
             Cancel

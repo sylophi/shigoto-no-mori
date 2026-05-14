@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -9,7 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSelection } from "@/hooks/useSelection";
 import { useWorktrees } from "@/hooks/useWorktrees";
 import { useRemoveProject } from "@/hooks/useProjects";
 import type { Project } from "@shared/types";
@@ -21,7 +21,7 @@ interface ProjectGroupProps {
 
 export function ProjectGroup({ project }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
-  const { beginNewWorktree, beginConfigureProject } = useSelection();
+  const navigate = useNavigate();
   const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
   const removeProject = useRemoveProject();
 
@@ -48,7 +48,12 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
         </button>
         <button
           type="button"
-          onClick={() => beginNewWorktree(project.id)}
+          onClick={() =>
+            void navigate({
+              to: "/projects/$projectId/new",
+              params: { projectId: project.id },
+            })
+          }
           aria-label={`New worktree in ${project.name}`}
           title={`New worktree in ${project.name}`}
           className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground"
@@ -68,7 +73,14 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             }
           />
           <DropdownMenuContent align="end" sideOffset={2}>
-            <DropdownMenuItem onClick={() => beginConfigureProject(project.id)}>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/configure",
+                  params: { projectId: project.id },
+                })
+              }
+            >
               Configure…
             </DropdownMenuItem>
             <DropdownMenuSeparator />

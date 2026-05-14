@@ -1,6 +1,6 @@
-import { House } from "lucide-react";
+import { ExternalLink, House } from "lucide-react";
+import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { useSelection } from "@/hooks/useSelection";
 import type { Worktree } from "@shared/types";
 
 interface WorktreeRowProps {
@@ -8,14 +8,29 @@ interface WorktreeRowProps {
 }
 
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
-  const { selectedWorktreeId, selectWorktree } = useSelection();
-  const isSelected = selectedWorktreeId === worktree.id;
+  const navigate = useNavigate();
+  const matchRoute = useMatchRoute();
+  const isSelected = !!matchRoute({
+    to: "/projects/$projectId/worktrees/$branch",
+    params: { projectId: worktree.projectId, branch: worktree.branch },
+  });
 
   return (
     <button
       type="button"
-      onClick={() => selectWorktree(worktree.id)}
-      title={worktree.isPrimary ? "Primary checkout" : undefined}
+      onClick={() =>
+        void navigate({
+          to: "/projects/$projectId/worktrees/$branch",
+          params: { projectId: worktree.projectId, branch: worktree.branch },
+        })
+      }
+      title={
+        worktree.isPrimary
+          ? "Primary checkout"
+          : worktree.isExternal
+            ? `External worktree at ${worktree.path}`
+            : undefined
+      }
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
         "hover:bg-accent/60",
@@ -29,6 +44,12 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         <House
           className="size-3 text-muted-foreground/60"
           aria-label="Primary checkout"
+        />
+      )}
+      {!worktree.isPrimary && worktree.isExternal && (
+        <ExternalLink
+          className="size-3 text-muted-foreground/60"
+          aria-label="External worktree"
         />
       )}
       <StatusIndicator worktree={worktree} />

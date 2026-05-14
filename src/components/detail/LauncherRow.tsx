@@ -1,8 +1,8 @@
 import { Loader2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLaunch, useLauncherForProject } from "@/hooks/useLaunchers";
-import { useSelection } from "@/hooks/useSelection";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 
@@ -13,7 +13,7 @@ interface LauncherRowProps {
 export function LauncherRow({ worktree }: LauncherRowProps) {
   const { data, isLoading } = useLauncherForProject(worktree.projectId);
   const launch = useLaunch();
-  const { beginConfigureProject } = useSelection();
+  const navigate = useNavigate();
 
   if (isLoading) {
     return (
@@ -38,7 +38,12 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => beginConfigureProject(worktree.projectId)}
+          onClick={() =>
+            void navigate({
+              to: "/projects/$projectId/configure",
+              params: { projectId: worktree.projectId },
+            })
+          }
         >
           Configure tools
         </Button>

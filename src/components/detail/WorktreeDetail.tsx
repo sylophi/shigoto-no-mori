@@ -1,20 +1,17 @@
 import { Trash2 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
+import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useDeleteWorktree } from "@/hooks/useWorktrees";
-import { useSelection } from "@/hooks/useSelection";
+import { useDeleteWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsPanel } from "./ScriptsPanel";
 import type { Worktree } from "@shared/types";
-
-interface WorktreeDetailProps {
-  worktree: Worktree;
-  projectName: string;
-}
 
 function deleteButtonLabel(
   busy: boolean,
@@ -33,15 +30,30 @@ function deleteButtonTitle(armed: boolean, isDirty: boolean): string {
     : "Click again to confirm delete";
 }
 
-export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
-  const { clear, beginConfigureProject } = useSelection();
+export function WorktreeDetail() {
+  const { projectId, branch } = worktreeRoute.useParams();
+  const navigate = useNavigate();
+  const { data: projects = [] } = useProjects();
+  const { data: worktrees = [] } = useWorktrees(projectId);
+  const project = projects.find((p) => p.id === projectId);
+  const worktree = worktrees.find((w) => w.branch === branch);
+
   const { data: runtime } = useRuntimeInfo();
   const deleteMutation = useDeleteWorktree();
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(3_000);
+  const home = runtime?.homedir ?? null;
+
+  if (!worktree || !project) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+        Worktree not found.
+      </div>
+    );
+  }
+
   const isDirty = worktree.dirtyCount > 0;
   const busy = deleteMutation.isPending;
-  const home = runtime?.homedir ?? null;
 
   const handleDelete = () => {
     confirmDeleteTrigger(() => {
@@ -51,7 +63,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
           worktreeId: worktree.id,
           force: isDirty,
         },
-        { onSuccess: () => clear() },
+        { onSuccess: () => void navigate({ to: "/" }) },
       );
     });
   };
@@ -62,11 +74,16 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button
             type="button"
-            onClick={() => beginConfigureProject(worktree.projectId)}
+            onClick={() =>
+              void navigate({
+                to: "/projects/$projectId/configure",
+                params: { projectId: worktree.projectId },
+              })
+            }
             className="shrink-0 rounded transition-colors hover:text-foreground"
-            title={`Configure ${projectName}`}
+            title={`Configure ${project.name}`}
           >
-            {projectName}
+            {project.name}
           </button>
           <span aria-hidden className="text-muted-foreground/40">
             /
@@ -131,7 +148,7 @@ export function WorktreeDetail({ worktree, projectName }: WorktreeDetailProps) {
         </div>
       </div>
 
-      <footer className="flex items-center gap-3 border-t border-border bg-card px-8 py-2.5">
+      <footer className="flex min-h-12 items-center gap-3 border-t border-border bg-card px-8 py-2.5">
         <span
           className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
           title={worktree.path}

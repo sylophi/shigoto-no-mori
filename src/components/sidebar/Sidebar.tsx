@@ -5,9 +5,9 @@ import {
   Sun,
   SunMoon,
 } from "lucide-react";
+import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
-import { useSelection } from "@/hooks/useSelection";
 import { useTheme } from "@/hooks/useTheme";
 import { useProjects } from "@/hooks/useProjects";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -64,14 +64,15 @@ function SidebarHeader() {
 }
 
 function SidebarFooter() {
-  const { mode, openSettings } = useSelection();
-  const settingsActive = mode === "settings";
+  const navigate = useNavigate();
+  const matchRoute = useMatchRoute();
+  const settingsActive = !!matchRoute({ to: "/settings" });
   return (
     <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-1.5">
       <ThemeToggle />
       <button
         type="button"
-        onClick={openSettings}
+        onClick={() => void navigate({ to: "/settings" })}
         aria-label="Settings"
         aria-current={settingsActive ? "page" : undefined}
         title="Settings"
