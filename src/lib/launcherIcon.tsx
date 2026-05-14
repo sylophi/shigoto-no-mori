@@ -93,9 +93,9 @@ export function LauncherIcon({
       return <Ghostty className={className} />;
     case "github-desktop":
       return resolved === "dark" ? (
-        <GithubLight className={className} />
-      ) : (
         <GithubDark className={className} />
+      ) : (
+        <GithubLight className={className} />
       );
     case "iterm":
     case "terminal":

@@ -42,18 +42,6 @@ const CATALOG: CatalogEntry[] = [
     cli: "windsurf",
   },
   {
-    id: "trae",
-    label: "Trae",
-    bundleNames: ["Trae.app"],
-    cli: "trae",
-  },
-  {
-    id: "kiro",
-    label: "Kiro",
-    bundleNames: ["Kiro.app"],
-    cli: "kiro",
-  },
-  {
     id: "vscode",
     label: "VS Code",
     bundleNames: ["Visual Studio Code.app"],
