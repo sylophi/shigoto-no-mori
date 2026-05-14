@@ -150,6 +150,13 @@ const CATALOG: CatalogEntry[] = [
     bundleNames: ["WebStorm.app"],
     cli: "webstorm",
   },
+  // Apple
+  {
+    id: "xcode",
+    label: "Xcode",
+    bundleNames: ["Xcode.app"],
+    cli: "xed",
+  },
   // Terminals (we go further than T3 here)
   {
     id: "ghostty",

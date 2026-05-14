@@ -3,7 +3,6 @@
 import { Folder, Sparkles, Terminal } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
 import { Antigravity } from "@/components/ui/svgs/antigravity";
-import { CursorDark } from "@/components/ui/svgs/cursorDark";
 import { CursorLight } from "@/components/ui/svgs/cursorLight";
 import { Ghostty } from "@/components/ui/svgs/ghostty";
 import { GithubDark } from "@/components/ui/svgs/githubDark";
@@ -20,6 +19,7 @@ import { Vscodium } from "@/components/ui/svgs/vscodium";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import { WindsurfDark } from "@/components/ui/svgs/windsurfDark";
 import { WindsurfLight } from "@/components/ui/svgs/windsurfLight";
+import { Xcode } from "@/components/ui/svgs/xcode";
 import { ZedLogo } from "@/components/ui/svgs/zedLogo";
 import { ZedLogoDark } from "@/components/ui/svgs/zedLogoDark";
 import type { LauncherEntry } from "@shared/schemas";
@@ -42,11 +42,9 @@ export function LauncherIcon({
   const appId = entry.id.replace(/^app:/, "");
   switch (appId) {
     case "cursor":
-      return resolved === "dark" ? (
-        <CursorDark className={className} />
-      ) : (
-        <CursorLight className={className} />
-      );
+      // svgl's two cursor variants are byte-identical with no explicit fill;
+      // route both to one and let fill-current take the surrounding text color.
+      return <CursorLight className={`${className} fill-current`} />;
     case "windsurf":
       return resolved === "dark" ? (
         <WindsurfDark className={className} />
@@ -89,6 +87,8 @@ export function LauncherIcon({
     case "goland":
     case "rustrover":
       return <JetbrainsSolid className={className} />;
+    case "xcode":
+      return <Xcode className={`${className} fill-current`} />;
     case "ghostty":
       return <Ghostty className={className} />;
     case "github-desktop":
