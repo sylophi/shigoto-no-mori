@@ -22,8 +22,8 @@ import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useShigotoConfig } from "@/hooks/useShigotoConfig";
-import { useShigotoWrite } from "@/hooks/useShigotoWrite";
+import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
+import { useShigomoriWrite } from "@/hooks/useShigomoriWrite";
 import {
   useCheckoutBranch,
   useDeleteWorktree,
@@ -243,9 +243,9 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 function NotesSection({ worktree }: { worktree: Worktree }) {
-  const { data: config } = useShigotoConfig(worktree.projectId);
+  const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: resolvedDefaultBranch } = useDefaultBranch(worktree.projectId);
-  const write = useShigotoWrite();
+  const write = useShigomoriWrite();
 
   const saved = config?.notes?.[worktree.name] ?? "";
   const [draft, setDraft] = useState(saved);

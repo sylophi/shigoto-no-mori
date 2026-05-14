@@ -26,7 +26,7 @@ import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
-const THEME_STORAGE_KEY = "shigoto.theme";
+const THEME_STORAGE_KEY = "shigomori.theme";
 
 export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();

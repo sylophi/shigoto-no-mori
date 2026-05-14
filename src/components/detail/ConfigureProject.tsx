@@ -19,15 +19,15 @@ import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useFsStat } from "@/hooks/useFsStat";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useShigotoConfig } from "@/hooks/useShigotoConfig";
-import { useShigotoWrite } from "@/hooks/useShigotoWrite";
+import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
+import { useShigomoriWrite } from "@/hooks/useShigomoriWrite";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
 import { configureProjectRoute } from "@/router";
 import type {
   CarryOverEntry,
   LauncherCommand,
-  ShigotoConfig,
+  ShigomoriConfig,
 } from "@shared/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CustomLauncherInput } from "./CustomLauncherInput";
@@ -37,7 +37,7 @@ export function ConfigureProject() {
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const { data: config, isLoading: configLoading } =
-    useShigotoConfig(projectId);
+    useShigomoriConfig(projectId);
   const { data: resolvedDefaultBranch, isLoading: branchLoading } =
     useDefaultBranch(projectId);
 
@@ -100,7 +100,7 @@ interface FormState {
 }
 
 function fromConfig(
-  config: ShigotoConfig | null,
+  config: ShigomoriConfig | null,
   resolvedDefaultBranch: string,
 ): FormState {
   return {
@@ -113,9 +113,9 @@ function fromConfig(
 }
 
 function toConfig(
-  original: ShigotoConfig | null,
+  original: ShigomoriConfig | null,
   state: FormState,
-): ShigotoConfig {
+): ShigomoriConfig {
   const scripts: { setup?: string; teardown?: string } = {};
   if (state.setup.trim()) scripts.setup = state.setup;
   if (state.teardown.trim()) scripts.teardown = state.teardown;
@@ -136,7 +136,7 @@ function toConfig(
 interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
-  initialConfig: ShigotoConfig | null;
+  initialConfig: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
 }
 
@@ -149,7 +149,7 @@ function ConfigureForm({
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
   const navigate = useNavigate();
-  const write = useShigotoWrite();
+  const write = useShigomoriWrite();
 
   const initial = fromConfig(initialConfig, resolvedDefaultBranch);
   const [form, setForm] = useState<FormState>(initial);

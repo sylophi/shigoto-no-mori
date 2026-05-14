@@ -3,7 +3,7 @@ import { Play, Square, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useShigotoConfig } from "@/hooks/useShigotoConfig";
+import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { type LogLine, useScriptRun } from "@/hooks/useScriptRun";
 import { cn } from "@/lib/utils";
 import type { ScriptName, Worktree } from "@shared/schemas";
@@ -20,7 +20,7 @@ const SCRIPT_LABELS: Record<ScriptName, string> = {
 const SCRIPT_ORDER: ScriptName[] = ["setup", "teardown"];
 
 export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
-  const { data: config, isLoading } = useShigotoConfig(worktree.projectId);
+  const { data: config, isLoading } = useShigomoriConfig(worktree.projectId);
   const run = useScriptRun();
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);

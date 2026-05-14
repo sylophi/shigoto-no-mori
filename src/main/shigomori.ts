@@ -3,31 +3,31 @@
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { type ShigotoConfig, ShigotoConfigSchema } from "@shared/schemas";
+import { type ShigomoriConfig, ShigomoriConfigSchema } from "@shared/schemas";
 import { shigomoriRoot } from "./paths";
 
 const CACHE_TTL_MS = 5_000;
 const cache = new Map<
   string,
-  { value: ShigotoConfig | null; expires: number }
+  { value: ShigomoriConfig | null; expires: number }
 >();
 
 function configPathFor(projectId: string): string {
   return join(shigomoriRoot(), "projects", `${projectId}.json`);
 }
 
-export async function readShigotoConfig(
+export async function readShigomoriConfig(
   projectId: string,
-): Promise<ShigotoConfig | null> {
+): Promise<ShigomoriConfig | null> {
   const now = Date.now();
   const cached = cache.get(projectId);
   if (cached && cached.expires > now) return cached.value;
 
   const path = configPathFor(projectId);
-  let value: ShigotoConfig | null;
+  let value: ShigomoriConfig | null;
   try {
     const raw = await readFile(path, "utf8");
-    value = ShigotoConfigSchema.parse(JSON.parse(raw));
+    value = ShigomoriConfigSchema.parse(JSON.parse(raw));
   } catch (error) {
     if (
       error instanceof Error &&
@@ -48,11 +48,11 @@ export async function readShigotoConfig(
   return value;
 }
 
-export async function writeShigotoConfig(
+export async function writeShigomoriConfig(
   projectId: string,
-  config: ShigotoConfig,
+  config: ShigomoriConfig,
 ): Promise<void> {
-  const validated = ShigotoConfigSchema.parse(config);
+  const validated = ShigomoriConfigSchema.parse(config);
   const target = configPathFor(projectId);
   await mkdir(dirname(target), { recursive: true });
   const temp = `${target}.tmp.${process.pid}.${Date.now()}`;

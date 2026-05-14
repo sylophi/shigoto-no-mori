@@ -7,7 +7,7 @@ import {
 import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
 import { findProjectOrThrow } from "../projects";
 import { cancelScript, startScript } from "../scripts";
-import { readShigotoConfig } from "../shigoto";
+import { readShigomoriConfig } from "../shigomori";
 
 export function registerScriptHandlers(): void {
   ipcMain.handle(
@@ -18,7 +18,7 @@ export function registerScriptHandlers(): void {
 
       const project = findProjectOrThrow(projectId);
 
-      const config = await readShigotoConfig(project.id);
+      const config = await readShigomoriConfig(project.id);
       const command = config?.scripts?.[script];
       if (!command || command.trim() === "") {
         throw new Error(`No "${script}" script configured for ${project.name}`);

@@ -15,7 +15,7 @@ import type {
   Project,
   ScriptEvent,
   ScriptName,
-  ShigotoConfig,
+  ShigomoriConfig,
   Theme,
   Worktree,
 } from "@shared/schemas";
@@ -112,11 +112,11 @@ const api = {
     listEntries: (path: string): Promise<FsListing> =>
       ipcRenderer.invoke(CHANNELS.FsListEntries, { path }),
   },
-  shigoto: {
-    read: (projectId: string): Promise<ShigotoConfig | null> =>
-      ipcRenderer.invoke(CHANNELS.ShigotoRead, { projectId }),
-    write: (projectId: string, config: ShigotoConfig): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShigotoWrite, { projectId, config }),
+  shigomori: {
+    read: (projectId: string): Promise<ShigomoriConfig | null> =>
+      ipcRenderer.invoke(CHANNELS.ShigomoriRead, { projectId }),
+    write: (projectId: string, config: ShigomoriConfig): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShigomoriWrite, { projectId, config }),
   },
   globalConfig: {
     read: (): Promise<GlobalConfig> =>

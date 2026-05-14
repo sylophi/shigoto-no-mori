@@ -25,7 +25,7 @@ import {
   listProjectsWithStatus,
   loadProjects,
 } from "../projects";
-import { readShigotoConfig } from "../shigoto";
+import { readShigomoriConfig } from "../shigomori";
 import { writeKey } from "../store";
 
 const STORE_KEY = "projects";
@@ -71,7 +71,7 @@ export function registerProjectHandlers(): void {
       const { projectId } =
         ProjectsDefaultBranchPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      const config = await readShigotoConfig(project.id);
+      const config = await readShigomoriConfig(project.id);
       return resolveDefaultBranch(project.path, config?.defaultBranch);
     },
   );

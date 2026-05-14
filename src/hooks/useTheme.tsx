@@ -9,7 +9,7 @@ interface ThemeState {
 }
 
 const ThemeContext = createContext<ThemeState | null>(null);
-const STORAGE_KEY = "shigoto.theme";
+const STORAGE_KEY = "shigomori.theme";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";

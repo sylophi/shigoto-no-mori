@@ -40,8 +40,8 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
             <Mono>~/shigomori/worktrees/</Mono>.
           </Step>
           <Step n={3} title="Launch your tools.">
-            Open each worktree in Cursor, VS Code, Zed, or anything in{" "}
-            <Mono>shigomori.config.json</Mono>.
+            Open each worktree in Cursor, VS Code, Zed, or any custom tool you
+            wire up in the project's Configure page.
           </Step>
         </ol>
         <div className="flex items-center gap-4">

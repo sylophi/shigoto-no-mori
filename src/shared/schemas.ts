@@ -219,7 +219,8 @@ export const DirectoryListingSchema = z.object({
 export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
 export type DirectoryListing = z.infer<typeof DirectoryListingSchema>;
 
-// shigomori.config.json — per-project config committed to the repo.
+// Per-project config. Stored at ~/shigomori[-dev]/projects/<projectId>.json
+// and managed by the app, not committed to the user's repo.
 
 export const LauncherCommandSchema = z.object({
   id: z.string().min(1),
@@ -244,7 +245,7 @@ export const CarryOverEntrySchema = z.object({
   mode: z.enum(["copy", "symlink"]),
 });
 
-export const ShigotoConfigSchema = z.object({
+export const ShigomoriConfigSchema = z.object({
   scripts: z
     .object({
       setup: z.string().optional(),
@@ -260,9 +261,10 @@ export const ShigotoConfigSchema = z.object({
   carryOver: z.array(CarryOverEntrySchema).optional(),
 });
 
-// Global, per-user config kept in ~/shigomori/config.json. Holds preferences
-// that span every project: custom launchers the user wants everywhere
-// (claude, tmux, an editor command, etc.), and room for future settings.
+// Global, per-user config kept in ~/shigomori[-dev]/config.json. Holds
+// preferences that span every project: custom launchers the user wants
+// everywhere (claude, tmux, an editor command, etc.), and room for future
+// settings.
 export const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   // When true, deleting a worktree also force-deletes its checked-out
@@ -276,8 +278,8 @@ export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,
 });
 
-// Detected apps + custom commands from shigomori.config.json, ready for the
-// renderer to display in a single launcher row.
+// Detected apps + custom commands from the per-project config, ready for
+// the renderer to display in a single launcher row.
 
 export const DetectedLauncherSchema = z.object({
   kind: z.literal("detected"),
@@ -303,13 +305,13 @@ export const LaunchPayloadSchema = z.object({
   launcherId: z.string(),
 });
 
-export const ReadShigotoPayloadSchema = z.object({
+export const ReadShigomoriPayloadSchema = z.object({
   projectId: z.string(),
 });
 
-export const WriteShigotoPayloadSchema = z.object({
+export const WriteShigomoriPayloadSchema = z.object({
   projectId: z.string(),
-  config: ShigotoConfigSchema,
+  config: ShigomoriConfigSchema,
 });
 
 export const ShellPathPayloadSchema = z.object({
@@ -348,7 +350,7 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
-export type ShigotoConfig = z.infer<typeof ShigotoConfigSchema>;
+export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;

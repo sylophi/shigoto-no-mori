@@ -7,8 +7,8 @@ import {
   LaunchPayloadSchema,
   type LauncherCommand,
   type LauncherEntry,
-  ReadShigotoPayloadSchema,
-  type ShigotoConfig,
+  ReadShigomoriPayloadSchema,
+  type ShigomoriConfig,
 } from "@shared/schemas";
 import { findWorktreeIdentity } from "../git";
 import { readGlobalConfig } from "../globalConfig";
@@ -20,7 +20,7 @@ import {
   launchDetected,
 } from "../launchers";
 import { findProjectOrThrow } from "../projects";
-import { readShigotoConfig } from "../shigoto";
+import { readShigomoriConfig } from "../shigomori";
 import { readKey, writeKey } from "../store";
 
 // Rolling-window usage so the launcher row adapts when the user switches
@@ -54,7 +54,7 @@ function customEntriesFrom(
 function findCustomCommand(
   customId: string,
   global: GlobalConfig,
-  project: ShigotoConfig | null,
+  project: ShigomoriConfig | null,
 ): LauncherCommand | undefined {
   // Project-scoped wins on the (very unlikely) id collision.
   return (
@@ -76,11 +76,11 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
 
 export function registerLauncherHandlers(): void {
   ipcMain.handle(
-    CHANNELS.ShigotoRead,
-    async (_event, rawPayload: unknown): Promise<ShigotoConfig | null> => {
-      const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
+    CHANNELS.ShigomoriRead,
+    async (_event, rawPayload: unknown): Promise<ShigomoriConfig | null> => {
+      const { projectId } = ReadShigomoriPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      return readShigotoConfig(project.id);
+      return readShigomoriConfig(project.id);
     },
   );
 
@@ -96,12 +96,12 @@ export function registerLauncherHandlers(): void {
       _event,
       rawPayload: unknown,
     ): Promise<{ entries: LauncherEntry[] }> => {
-      const { projectId } = ReadShigotoPayloadSchema.parse(rawPayload);
+      const { projectId } = ReadShigomoriPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
 
       const [detected, projectConfig, globalConfig] = await Promise.all([
         detectApps(),
-        readShigotoConfig(project.id),
+        readShigomoriConfig(project.id),
         readGlobalConfig(),
       ]);
 
@@ -153,7 +153,7 @@ export function registerLauncherHandlers(): void {
       if (launcherId.startsWith("custom:")) {
         const customId = launcherId.slice("custom:".length);
         const [projectConfig, globalConfig] = await Promise.all([
-          readShigotoConfig(project.id),
+          readShigomoriConfig(project.id),
           readGlobalConfig(),
         ]);
         const custom = findCustomCommand(customId, globalConfig, projectConfig);

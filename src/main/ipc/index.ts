@@ -6,7 +6,7 @@ import { registerProjectHandlers } from "./projects";
 import { registerRuntimeHandlers } from "./runtime";
 import { registerScriptHandlers } from "./scripts";
 import { registerShellHandlers } from "./shell";
-import { registerShigotoHandlers } from "./shigoto";
+import { registerShigomoriHandlers } from "./shigomori";
 import { registerWorktreeHandlers } from "./worktrees";
 
 export function registerIpcHandlers(): void {
@@ -18,6 +18,6 @@ export function registerIpcHandlers(): void {
   registerRuntimeHandlers();
   registerFsHandlers();
   registerShellHandlers();
-  registerShigotoHandlers();
+  registerShigomoriHandlers();
   registerGlobalConfigHandlers();
 }

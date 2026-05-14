@@ -1,5 +1,5 @@
-// Spawn shigomori.config.json scripts (setup/run/teardown) with streamed
-// stdout/stderr events sent back to the originating renderer.
+// Spawn per-project setup/teardown scripts with streamed stdout/stderr
+// events sent back to the originating renderer.
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";

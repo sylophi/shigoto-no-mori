@@ -1,7 +1,7 @@
 // Per-user global config at ~/shigomori[-dev]/config.json. Holds preferences
-// that span every project — currently just custom launchers — and is kept
-// separate from state.json (runtime data) and shigomori.config.json (committed
-// per-project config).
+// that span every project (currently just custom launchers) and is kept
+// separate from state.json (runtime data) and from the per-project configs
+// at ~/shigomori[-dev]/projects/<projectId>.json.
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";

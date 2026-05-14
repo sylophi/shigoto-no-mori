@@ -23,7 +23,7 @@ import {
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
 import { applyCarryOver } from "../carryOver";
-import { readShigotoConfig } from "../shigoto";
+import { readShigomoriConfig } from "../shigomori";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -47,7 +47,7 @@ export function registerWorktreeHandlers(): void {
         base,
         checkout: checkout ?? false,
       });
-      const config = await readShigotoConfig(project.id).catch(() => null);
+      const config = await readShigomoriConfig(project.id).catch(() => null);
       const carryOver = await applyCarryOver(
         project.path,
         worktree.path,
