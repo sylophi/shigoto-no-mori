@@ -70,7 +70,7 @@ export function NewWorktree({ projectId }: NewWorktreeProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-8 py-4">
+      <header className="flex items-center gap-3 border-b border-border px-8 pt-7 pb-4">
         <button
           type="button"
           onClick={clear}

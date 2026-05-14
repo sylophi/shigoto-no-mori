@@ -41,11 +41,11 @@ function SidebarHeader() {
 
   return (
     <div
-      className="flex h-11 items-center gap-2 px-3"
+      className="flex h-[52px] items-center gap-2 px-3 pl-[92px]"
       // macOS title-bar drag region
       style={{ ["-webkit-app-region" as never]: "drag" }}
     >
-      <div className="flex flex-1 items-center pl-16 text-[13px] font-semibold tracking-tight">
+      <div className="flex flex-1 items-center text-[13px] font-semibold tracking-tight">
         Shigoto no Mori
       </div>
       <button
