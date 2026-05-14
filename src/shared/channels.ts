@@ -29,7 +29,7 @@ export const CHANNELS = {
   FsListDirectory: "fs:listDirectory",
   FsScanForGitRepos: "fs:scanForGitRepos",
   FsIsGitRepo: "fs:isGitRepo",
-  FsExists: "fs:exists",
+  FsStat: "fs:stat",
   FsListEntries: "fs:listEntries",
   ShigotoWrite: "shigoto:write",
   GlobalConfigRead: "globalConfig:read",

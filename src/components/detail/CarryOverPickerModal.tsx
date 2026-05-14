@@ -5,7 +5,6 @@ import {
   ArrowUp,
   Copy as CopyIcon,
   CornerLeftUp,
-  File as FileIcon,
   Folder,
   Link as LinkIcon,
   Loader2,
@@ -14,6 +13,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { MaterialIcon } from "@/components/ui/material-icon";
 import { cn } from "@/lib/utils";
 import { useFsListEntries } from "@/hooks/useFsListEntries";
 import { useIgnoredPaths } from "@/hooks/useIgnoredPaths";
@@ -326,11 +326,12 @@ function PickerRow({
       onClick={isFolder ? onNavigate : undefined}
       onMouseEnter={onHover}
     >
-      {isFolder ? (
-        <Folder className="size-3.5 shrink-0 text-muted-foreground/80" />
-      ) : (
-        <FileIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )}
+      <MaterialIcon
+        kind={isFolder ? "folder" : "file"}
+        name={entry.name}
+        expanded={isFolder && highlighted}
+        className="size-4"
+      />
       <span
         className="min-w-0 flex-1 truncate font-mono text-xs"
         title={entry.name}

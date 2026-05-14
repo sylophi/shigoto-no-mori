@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   AlertTriangle,
   Copy as CopyIcon,
-  Folder,
   FolderOpen,
   Link as LinkIcon,
   Plus,
@@ -12,11 +11,12 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { MaterialIcon } from "@/components/ui/material-icon";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { useFsExists } from "@/hooks/useFsExists";
+import { useFsStat } from "@/hooks/useFsStat";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
@@ -509,14 +509,17 @@ function CarryOverRow({
   onChangeMode,
   onRemove,
 }: CarryOverRowProps) {
-  const { data: exists, isLoading } = useFsExists(
-    `${projectPath}/${entry.path}`,
-  );
-  const missing = !isLoading && exists === false;
+  const { data: stat, isLoading } = useFsStat(`${projectPath}/${entry.path}`);
+  const missing = !isLoading && stat?.exists === false;
+  const basename = entry.path.split("/").pop() ?? entry.path;
   return (
     <div className="group flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
       <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <Folder className="size-3.5 shrink-0 text-muted-foreground/40" />
+        <MaterialIcon
+          kind={stat?.isDirectory ? "folder" : "file"}
+          name={basename}
+          className="size-4"
+        />
         <span
           className={cn(
             "min-w-0 truncate font-mono text-xs",

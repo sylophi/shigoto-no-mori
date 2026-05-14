@@ -23,5 +23,14 @@ export default defineConfig(({ mode }) => {
         },
       }),
     ],
+    build: {
+      // Keep material-icon-theme SVGs as separate hashed files so each one
+      // loads on-demand when its icon is actually displayed. Inlined as
+      // base64 they'd bloat the JS bundle for icons that may never render.
+      assetsInlineLimit: (filePath) => {
+        if (filePath.includes("material-icon-theme/icons/")) return false;
+        return undefined;
+      },
+    },
   };
 });

@@ -9,6 +9,7 @@ import type {
   DetectedLauncher,
   DirectoryListing,
   FsListing,
+  FsStat,
   GlobalConfig,
   LauncherEntry,
   Project,
@@ -106,8 +107,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.FsScanForGitRepos, { path }),
     isGitRepo: (path: string): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.FsIsGitRepo, { path }),
-    exists: (path: string): Promise<boolean> =>
-      ipcRenderer.invoke(CHANNELS.FsExists, { path }),
+    stat: (path: string): Promise<FsStat> =>
+      ipcRenderer.invoke(CHANNELS.FsStat, { path }),
     listEntries: (path: string): Promise<FsListing> =>
       ipcRenderer.invoke(CHANNELS.FsListEntries, { path }),
   },

@@ -175,9 +175,18 @@ export const IsGitRepoPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
-export const FsExistsPayloadSchema = z.object({
+export const FsStatPayloadSchema = z.object({
   path: z.string().min(1),
 });
+
+// Slim subset of fs.Stats; "exists: false" means the path is missing or
+// unreadable. Used by the carry-over row to render a missing warning and
+// pick the right icon (file vs folder).
+export const FsStatSchema = z.object({
+  exists: z.boolean(),
+  isDirectory: z.boolean(),
+});
+export type FsStat = z.infer<typeof FsStatSchema>;
 
 export const FsListEntriesPayloadSchema = z.object({
   path: z.string().min(1),

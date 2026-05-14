@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
-import { access, readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   type DirectoryListing,
-  FsExistsPayloadSchema,
   FsListEntriesPayloadSchema,
   type FsListing,
+  type FsStat,
+  FsStatPayloadSchema,
   IsGitRepoPayloadSchema,
   ListDirectoryPayloadSchema,
   ScanForGitReposPayloadSchema,
@@ -117,16 +118,16 @@ export function registerFsHandlers(): void {
   );
 
   ipcMain.handle(
-    CHANNELS.FsExists,
-    async (_event, rawPayload: unknown): Promise<boolean> => {
-      const { path } = FsExistsPayloadSchema.parse(rawPayload);
+    CHANNELS.FsStat,
+    async (_event, rawPayload: unknown): Promise<FsStat> => {
+      const { path } = FsStatPayloadSchema.parse(rawPayload);
       const expanded = expandHome(path);
       const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
       try {
-        await access(absolute);
-        return true;
+        const s = await stat(absolute);
+        return { exists: true, isDirectory: s.isDirectory() };
       } catch {
-        return false;
+        return { exists: false, isDirectory: false };
       }
     },
   );
