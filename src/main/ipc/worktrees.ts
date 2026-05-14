@@ -1,17 +1,21 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
+  CheckoutBranchPayloadSchema,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
+  RenameBranchPayloadSchema,
   type Worktree,
 } from "@shared/schemas";
 import {
+  checkoutBranch,
   createWorktree,
   describeWorktree,
   findWorktreeIdentity,
   listWorktrees,
   removeWorktree,
+  renameBranch,
 } from "../git";
 import { findProjectOrThrow } from "../projects";
 
@@ -59,6 +63,56 @@ export function registerWorktreeHandlers(): void {
         }
       }
       await removeWorktree(project.path, target.path, force);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesRenameBranch,
+    async (_event, rawPayload: unknown): Promise<Worktree> => {
+      const { projectId, worktreeId, newBranch } =
+        RenameBranchPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
+      await renameBranch(target.path, newBranch);
+      const refreshed = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (!refreshed) {
+        throw new Error("Worktree disappeared after rename");
+      }
+      return describeWorktree(refreshed);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesCheckoutBranch,
+    async (_event, rawPayload: unknown): Promise<Worktree> => {
+      const { projectId, worktreeId, branch } =
+        CheckoutBranchPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
+      await checkoutBranch(target.path, branch);
+      const refreshed = await findWorktreeIdentity(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (!refreshed) {
+        throw new Error("Worktree disappeared after checkout");
+      }
+      return describeWorktree(refreshed);
     },
   );
 }

@@ -117,13 +117,13 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             {allWorktrees.map(({ project, tree }) => (
               <Command.Item
                 key={tree.id}
-                value={`${tree.branch} ${project.name} ${tree.path}`}
+                value={`${tree.name} ${tree.branch} ${project.name} ${tree.path}`}
                 onSelect={handle(() =>
                   void navigate({
-                    to: "/projects/$projectId/worktrees/$branch",
+                    to: "/projects/$projectId/worktrees/$worktreeName",
                     params: {
                       projectId: project.id,
-                      branch: tree.branch,
+                      worktreeName: tree.name,
                     },
                   }),
                 )}
@@ -131,6 +131,9 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               >
                 <GitBranch className="size-4 text-muted-foreground/80" />
                 <span className="truncate font-mono">{tree.branch}</span>
+                <span className="truncate text-xs text-muted-foreground capitalize">
+                  {tree.name}
+                </span>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {project.name}
                 </span>

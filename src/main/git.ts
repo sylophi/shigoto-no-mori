@@ -4,13 +4,13 @@ import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
-import { sanitizeBranchForPath } from "@shared/branches";
 import type {
   BranchList,
   CommitSummary,
   Worktree,
   WorktreeStatus,
 } from "@shared/schemas";
+import { pickWorktreeName } from "./animals";
 import { shigomoriRoot } from "./paths";
 
 const exec = promisify(execFile);
@@ -139,6 +139,8 @@ function deriveStatus(
 interface WorktreeIdentity {
   id: string;
   projectId: string;
+  // Directory basename — stable identity, separate from the branch.
+  name: string;
   branch: string;
   path: string;
   isPrimary: boolean;
@@ -155,12 +157,18 @@ export async function listWorktreeIdentities(
     .filter((e) => !e.bare)
     .map((entry, index) => {
       const branch = deriveBranch(entry);
+      const isPrimary = entry.path === projectPath || index === 0;
+      // Primary checkout sits at the project root, so its "name" is just
+      // the project's directory basename. Managed worktrees use the picked
+      // animal dirname; external ones use whatever the user named them.
+      const name = basename(entry.path);
       return {
-        id: `${projectId}:${branch}`,
+        id: `${projectId}:${name}`,
         projectId,
+        name,
         branch,
         path: entry.path,
-        isPrimary: entry.path === projectPath || index === 0,
+        isPrimary,
         isExternal: !entry.path.startsWith(managedPrefix),
       };
     });
@@ -175,6 +183,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
   return {
     id: identity.id,
     projectId: identity.projectId,
+    name: identity.name,
     branch: identity.branch,
     path: identity.path,
     status: deriveStatus(ahead, behind, dirtyCount),
@@ -291,38 +300,57 @@ export async function listBranches(projectPath: string): Promise<BranchList> {
   return { local, remote };
 }
 
-export function defaultWorktreePath(
-  projectPath: string,
-  branchName: string,
-): string {
-  const projectName = basename(projectPath);
-  return join(
-    shigomoriRoot(),
-    "worktrees",
-    projectName,
-    sanitizeBranchForPath(branchName),
-  );
-}
-
 export async function createWorktree(
   projectId: string,
   projectPath: string,
   branchName: string,
   base: string | undefined,
 ): Promise<Worktree> {
-  const worktreePath = defaultWorktreePath(projectPath, branchName);
+  // The worktree's directory name is decoupled from the branch: pick a
+  // random animal that isn't already used by another worktree in this
+  // project. Branch can rename/switch later without breaking the path.
+  const existing = await listWorktreeIdentities(projectId, projectPath);
+  const used = new Set(existing.map((w) => w.name));
+  const worktreeName = pickWorktreeName(used);
+  const projectName = basename(projectPath);
+  const worktreePath = join(
+    shigomoriRoot(),
+    "worktrees",
+    projectName,
+    worktreeName,
+  );
+
   await mkdir(dirname(worktreePath), { recursive: true });
   const args = ["worktree", "add", "-b", branchName, worktreePath];
   if (base) args.push(base);
   await run(projectPath, args);
   return buildWorktree({
-    id: `${projectId}:${branchName}`,
+    id: `${projectId}:${worktreeName}`,
     projectId,
+    name: worktreeName,
     branch: branchName,
     path: worktreePath,
     isPrimary: false,
     isExternal: false,
   });
+}
+
+// Rename the branch currently checked out in a worktree.
+// `git branch -m <new>` renames the current HEAD branch.
+export async function renameBranch(
+  worktreePath: string,
+  newBranch: string,
+): Promise<void> {
+  await run(worktreePath, ["branch", "-m", newBranch]);
+}
+
+// Switch a worktree to a different branch. For remote-tracking refs
+// like `origin/foo`, git creates the local tracking branch automatically.
+export async function checkoutBranch(
+  worktreePath: string,
+  branch: string,
+): Promise<void> {
+  await run(worktreePath, ["checkout", branch]);
 }
 
 export async function removeWorktree(

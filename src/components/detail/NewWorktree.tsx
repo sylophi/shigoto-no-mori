@@ -8,7 +8,6 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
-import { sanitizeBranchForPath } from "@shared/branches";
 
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
@@ -43,8 +42,11 @@ export function NewWorktree() {
       {
         onSuccess: (worktree) => {
           void navigate({
-            to: "/projects/$projectId/worktrees/$branch",
-            params: { projectId: worktree.projectId, branch: worktree.branch },
+            to: "/projects/$projectId/worktrees/$worktreeName",
+            params: {
+              projectId: worktree.projectId,
+              worktreeName: worktree.name,
+            },
           });
         },
       },
@@ -64,10 +66,6 @@ export function NewWorktree() {
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
-  const sanitized = branchName ? sanitizeBranchForPath(branchName) : "";
-  const destination = sanitized
-    ? `${root}/worktrees/${project.name}/${sanitized}`
-    : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -100,19 +98,12 @@ export function NewWorktree() {
             className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
           />
           <div className="text-xs text-muted-foreground">
-            {destination ? (
-              <>
-                Worktree will live at{" "}
-                <span className="font-mono text-foreground/80">
-                  {destination}
-                </span>
-              </>
-            ) : (
-              <>
-                A new branch on this repo, checked out into its own folder under{" "}
-                <span className="font-mono">{root}/worktrees/</span>.
-              </>
-            )}
+            A new branch on this repo, checked out into a folder named after
+            a random animal under{" "}
+            <span className="font-mono">
+              {root}/worktrees/{project.name}/
+            </span>
+            .
           </div>
         </div>
 

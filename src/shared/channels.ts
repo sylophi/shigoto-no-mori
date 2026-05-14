@@ -8,6 +8,8 @@ export const CHANNELS = {
   WorktreesList: "worktrees:list",
   WorktreesCreate: "worktrees:create",
   WorktreesDelete: "worktrees:delete",
+  WorktreesRenameBranch: "worktrees:renameBranch",
+  WorktreesCheckoutBranch: "worktrees:checkoutBranch",
   ShigotoRead: "shigoto:read",
   ScriptsRun: "scripts:run",
   ScriptsCancel: "scripts:cancel",

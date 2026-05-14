@@ -10,7 +10,7 @@ interface WorktreeRowProps {
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const expectedPath = `/projects/${encodeURIComponent(worktree.projectId)}/worktrees/${encodeURIComponent(worktree.branch)}`;
+  const expectedPath = `/projects/${encodeURIComponent(worktree.projectId)}/worktrees/${encodeURIComponent(worktree.name)}`;
   const isSelected = location.pathname === expectedPath;
 
   return (
@@ -18,8 +18,11 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       type="button"
       onClick={() =>
         void navigate({
-          to: "/projects/$projectId/worktrees/$branch",
-          params: { projectId: worktree.projectId, branch: worktree.branch },
+          to: "/projects/$projectId/worktrees/$worktreeName",
+          params: {
+            projectId: worktree.projectId,
+            worktreeName: worktree.name,
+          },
         })
       }
       title={
@@ -30,14 +33,24 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
             : undefined
       }
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+        "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
-        isSelected && "bg-accent font-medium text-accent-foreground",
+        isSelected && "bg-accent text-accent-foreground",
       )}
     >
-      <span className="flex-1 truncate font-mono">
-        {worktree.branch.replace(/^.*\//, "")}
-      </span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span
+          className={cn(
+            "truncate font-mono",
+            isSelected && "font-medium",
+          )}
+        >
+          {worktree.branch}
+        </span>
+        <span className="truncate text-[10px] text-muted-foreground capitalize">
+          {worktree.name}
+        </span>
+      </div>
       {worktree.isPrimary && (
         <House
           className="size-3 text-muted-foreground/60"

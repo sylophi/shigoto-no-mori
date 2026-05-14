@@ -1,47 +1,44 @@
-import { Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Combobox } from "@base-ui/react/combobox";
+import { Check, ChevronsUpDown, Pencil, Search, Trash2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
+import { useBranches } from "@/hooks/useBranches";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useDeleteWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import {
+  useCheckoutBranch,
+  useDeleteWorktree,
+  useRenameBranch,
+  useWorktrees,
+} from "@/hooks/useWorktrees";
 import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsPanel } from "./ScriptsPanel";
 import type { Worktree } from "@shared/types";
 
-function deleteButtonLabel(
-  busy: boolean,
-  armed: boolean,
-  isDirty: boolean,
-): string {
+function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";
-  if (!armed) return "Delete worktree";
-  return isDirty ? "Force delete?" : "Confirm delete?";
-}
-
-function deleteButtonTitle(armed: boolean, isDirty: boolean): string {
-  if (!armed) return "Delete worktree";
-  return isDirty
-    ? "Click again to force-delete (dirty)"
-    : "Click again to confirm delete";
+  return armed ? "Confirm delete?" : "Delete worktree";
 }
 
 export function WorktreeDetail() {
-  const { projectId, branch } = worktreeRoute.useParams();
+  const { projectId, worktreeName } = worktreeRoute.useParams();
   const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
-  const worktree = worktrees.find((w) => w.branch === branch);
+  const worktree = worktrees.find((w) => w.name === worktreeName);
 
   const { data: runtime } = useRuntimeInfo();
   const deleteMutation = useDeleteWorktree();
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(3_000);
+  const [needsForce, setNeedsForce] = useState(false);
   const home = runtime?.homedir ?? null;
 
   if (!worktree || !project) {
@@ -52,7 +49,6 @@ export function WorktreeDetail() {
     );
   }
 
-  const isDirty = worktree.dirtyCount > 0;
   const busy = deleteMutation.isPending;
 
   const handleDelete = () => {
@@ -61,11 +57,30 @@ export function WorktreeDetail() {
         {
           projectId: worktree.projectId,
           worktreeId: worktree.id,
-          force: isDirty,
+          force: false,
         },
-        { onSuccess: () => void navigate({ to: "/" }) },
+        {
+          onSuccess: () => void navigate({ to: "/" }),
+          onError: () => setNeedsForce(true),
+        },
       );
     });
+  };
+
+  const handleForceDelete = () => {
+    deleteMutation.mutate(
+      {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        force: true,
+      },
+      { onSuccess: () => void navigate({ to: "/" }) },
+    );
+  };
+
+  const cancelForce = () => {
+    setNeedsForce(false);
+    deleteMutation.reset();
   };
 
   return (
@@ -93,9 +108,12 @@ export function WorktreeDetail() {
           </span>
         </div>
         <div className="flex items-start justify-between gap-4">
-          <h1 className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight">
-            {worktree.branch}
-          </h1>
+          <div className="min-w-0 flex-1">
+            <BranchTitle worktree={worktree} />
+            <div className="mt-1 truncate text-xs text-muted-foreground capitalize">
+              {worktree.name}
+            </div>
+          </div>
           <StatusPills worktree={worktree} />
         </div>
       </header>
@@ -140,40 +158,65 @@ export function WorktreeDetail() {
             <ScriptsPanel worktree={worktree} />
           </section>
 
-          {deleteMutation.error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {deleteMutation.error.message}
-            </div>
-          )}
         </div>
       </div>
 
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
-        <span
-          className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
-          title={worktree.path}
-        >
-          {tildify(worktree.path, home)}
-        </span>
-        {worktree.isPrimary ? (
-          <span className="shrink-0 text-xs text-muted-foreground/70">
-            Primary checkout
-          </span>
+        {needsForce ? (
+          <>
+            <span className="min-w-0 flex-1 truncate text-xs text-destructive">
+              {deleteMutation.error?.message ?? "Has uncommitted changes."}
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={cancelForce}
+              disabled={busy}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={busy}
+              onClick={handleForceDelete}
+            >
+              <Trash2 />
+              {busy ? "Deleting…" : "Force delete"}
+            </Button>
+          </>
         ) : (
-          <Button
-            variant="ghost"
-            size="xs"
-            className={cn(
-              "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
-              confirmDelete && "bg-destructive/10",
+          <>
+            <span
+              className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
+              title={worktree.path}
+            >
+              {tildify(worktree.path, home)}
+            </span>
+            {worktree.isPrimary ? (
+              <span className="shrink-0 text-xs text-muted-foreground/70">
+                Primary checkout
+              </span>
+            ) : (
+              <Button
+                variant="ghost"
+                size="xs"
+                className={cn(
+                  "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                  confirmDelete && "bg-destructive/10",
+                )}
+                disabled={busy}
+                onClick={handleDelete}
+                title={
+                  confirmDelete ? "Click again to confirm" : "Delete worktree"
+                }
+              >
+                <Trash2 />
+                {deleteButtonLabel(busy, confirmDelete)}
+              </Button>
             )}
-            disabled={busy}
-            onClick={handleDelete}
-            title={deleteButtonTitle(confirmDelete, isDirty)}
-          >
-            <Trash2 />
-            {deleteButtonLabel(busy, confirmDelete, isDirty)}
-          </Button>
+          </>
         )}
       </footer>
     </div>
@@ -185,6 +228,247 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
       {children}
     </h2>
+  );
+}
+
+function BranchTitle({ worktree }: { worktree: Worktree }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(worktree.branch);
+  const rename = useRenameBranch();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+
+  const begin = () => {
+    setDraft(worktree.branch);
+    rename.reset();
+    setEditing(true);
+  };
+  const cancel = () => {
+    setEditing(false);
+    setDraft(worktree.branch);
+    rename.reset();
+  };
+  const commit = () => {
+    const next = draft.trim();
+    if (!next || next === worktree.branch) {
+      cancel();
+      return;
+    }
+    rename.mutate(
+      {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        newBranch: next,
+      },
+      { onSuccess: () => setEditing(false) },
+    );
+  };
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <input
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
+          autoFocus
+          value={draft}
+          disabled={rename.isPending}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              cancel();
+            }
+          }}
+          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-2xl font-medium tracking-tight outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={commit}
+          disabled={rename.isPending}
+          aria-label="Confirm rename"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <Check className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={rename.isPending}
+          aria-label="Cancel rename"
+          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <X className="size-4" />
+        </button>
+        {rename.error && (
+          <span className="truncate text-xs text-destructive">
+            {rename.error.message}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="group/branch flex min-w-0 items-center gap-1.5">
+      <h1
+        ref={titleRef}
+        className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
+      >
+        {worktree.branch}
+      </h1>
+      <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
+      <button
+        type="button"
+        onClick={begin}
+        aria-label="Rename branch"
+        title="Rename branch"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/branch:opacity-100 focus-visible:opacity-100"
+      >
+        <Pencil className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+interface BranchEntry {
+  name: string;
+  kind: "local" | "remote";
+}
+
+function scoreMatch(query: string, target: string): number {
+  if (!query) return 1;
+  const q = query.toLowerCase();
+  const t = target.toLowerCase();
+  if (t === q) return 1000;
+  const idx = t.indexOf(q);
+  if (idx >= 0) {
+    return 200 - idx * 2 + Math.round((q.length / t.length) * 50);
+  }
+  let pos = 0;
+  let gaps = 0;
+  for (const c of q) {
+    const next = t.indexOf(c, pos);
+    if (next < 0) return 0;
+    gaps += next - pos;
+    pos = next + 1;
+  }
+  return Math.max(1, 80 - gaps);
+}
+
+function BranchSwitcher({
+  worktree,
+  anchorRef,
+}: {
+  worktree: Worktree;
+  anchorRef: React.RefObject<HTMLElement | null>;
+}) {
+  const { data: branches } = useBranches(worktree.projectId);
+  const checkout = useCheckoutBranch();
+  const [query, setQuery] = useState("");
+
+  const all: BranchEntry[] = [
+    ...(branches?.local ?? []).map((name) => ({
+      name,
+      kind: "local" as const,
+    })),
+    ...(branches?.remote ?? []).map((name) => ({
+      name,
+      kind: "remote" as const,
+    })),
+  ];
+  const sorted: BranchEntry[] = query
+    ? all
+        .map((b) => ({ b, score: scoreMatch(query, b.name) }))
+        .filter((x) => x.score > 0)
+        .toSorted((a, b) => b.score - a.score)
+        .map((x) => x.b)
+    : all;
+
+  return (
+    <Combobox.Root
+      value={worktree.branch}
+      onValueChange={(v) => {
+        const next = v as string | null;
+        if (!next || next === worktree.branch) return;
+        checkout.mutate({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          branch: next,
+        });
+      }}
+      inputValue={query}
+      onInputValueChange={setQuery}
+      onOpenChange={(open) => {
+        if (open) {
+          setQuery("");
+          checkout.reset();
+        }
+      }}
+      autoHighlight
+    >
+      <Combobox.Trigger
+        aria-label="Switch branch"
+        title="Switch branch"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/branch:opacity-100 focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+      >
+        <ChevronsUpDown aria-hidden className="size-3.5" />
+      </Combobox.Trigger>
+      <Combobox.Portal>
+        <Combobox.Positioner
+          anchor={anchorRef}
+          sideOffset={6}
+          side="bottom"
+          align="start"
+          className="z-50"
+        >
+          <Combobox.Popup className="flex max-h-72 w-72 flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md">
+            <div className="flex items-center gap-2 border-b border-border px-3">
+              <Search
+                aria-hidden
+                className="size-3.5 shrink-0 text-muted-foreground/60"
+              />
+              <Combobox.Input
+                placeholder="Switch to branch…"
+                className="flex-1 bg-transparent py-2 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+              />
+            </div>
+            <Combobox.List className="flex-1 overflow-y-auto p-1">
+              {sorted.length === 0 && (
+                <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                  No matching branches.
+                </div>
+              )}
+              {sorted.map((entry) => (
+                <Combobox.Item
+                  key={`${entry.kind}:${entry.name}`}
+                  value={entry.name}
+                  className="flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+                >
+                  <span className="flex-1 truncate font-mono">
+                    {entry.name}
+                  </span>
+                  {entry.name === worktree.branch && (
+                    <Check className="size-3.5 text-muted-foreground" />
+                  )}
+                  {entry.kind === "remote" && (
+                    <span className="text-[10px] text-muted-foreground">
+                      remote
+                    </span>
+                  )}
+                </Combobox.Item>
+              ))}
+            </Combobox.List>
+            {checkout.error && (
+              <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {checkout.error.message}
+              </div>
+            )}
+          </Combobox.Popup>
+        </Combobox.Positioner>
+      </Combobox.Portal>
+    </Combobox.Root>
   );
 }
 

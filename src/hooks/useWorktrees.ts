@@ -66,3 +66,42 @@ export function useDeleteWorktree() {
     },
   });
 }
+
+interface RenameBranchInput {
+  projectId: string;
+  worktreeId: string;
+  newBranch: string;
+}
+
+export function useRenameBranch() {
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, RenameBranchInput>({
+    mutationFn: (input) => window.api.worktrees.renameBranch(input),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["worktrees", vars.projectId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["branches", vars.projectId],
+      });
+    },
+  });
+}
+
+interface CheckoutBranchInput {
+  projectId: string;
+  worktreeId: string;
+  branch: string;
+}
+
+export function useCheckoutBranch() {
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, CheckoutBranchInput>({
+    mutationFn: (input) => window.api.worktrees.checkoutBranch(input),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["worktrees", vars.projectId],
+      });
+    },
+  });
+}

@@ -19,6 +19,12 @@ export const CommitSummarySchema = z.object({
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  // The worktree's identity — directory basename. Stable across branch
+  // checkouts/renames; for shigomori-created worktrees it's a randomly
+  // picked animal name.
+  name: z.string(),
+  // The currently checked-out branch. A *property* of the worktree, not
+  // its identity. May change via `git checkout` / `git branch -m`.
   branch: z.string(),
   path: z.string(),
   status: WorktreeStatusSchema,
@@ -81,6 +87,18 @@ export const DeleteWorktreePayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   force: z.boolean().default(false),
+});
+
+export const RenameBranchPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  newBranch: z.string().min(1),
+});
+
+export const CheckoutBranchPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  branch: z.string().min(1),
 });
 
 // Filesystem browser used by the Add Project palette.

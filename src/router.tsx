@@ -111,7 +111,7 @@ const configureProjectRoute = createRoute({
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$branch",
+  path: "/projects/$projectId/worktrees/$worktreeName",
   component: WorktreeDetail,
 });
 

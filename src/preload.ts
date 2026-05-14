@@ -47,6 +47,18 @@ const api = {
         ...input,
         force: input.force ?? false,
       }),
+    renameBranch: (input: {
+      projectId: string;
+      worktreeId: string;
+      newBranch: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesRenameBranch, input),
+    checkoutBranch: (input: {
+      projectId: string;
+      worktreeId: string;
+      branch: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
   },
   dialog: {
     pickFolder: (): Promise<string | null> =>
