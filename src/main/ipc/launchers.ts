@@ -23,8 +23,20 @@ import { findProjectOrThrow } from "../projects";
 import { readShigotoConfig } from "../shigoto";
 import { readKey, writeKey } from "../store";
 
-const USE_COUNT_KEY = "launcherUseCount";
-type UseCountMap = Record<string, number>;
+// Rolling-window usage so the launcher row adapts when the user switches
+// tools. Each entry in the log is a launch timestamp; the score is the
+// count of timestamps within the window.
+const USE_LOG_KEY = "launcherUseLog";
+const WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+
+type UseLogMap = Record<string, number[]>;
+
+function recentScore(log: UseLogMap, id: string, now: number): number {
+  const cutoff = now - WINDOW_MS;
+  let n = 0;
+  for (const t of log[id] ?? []) if (t >= cutoff) n++;
+  return n;
+}
 
 function customEntriesFrom(
   launchers: LauncherCommand[] | undefined,
@@ -99,15 +111,16 @@ export function registerLauncherHandlers(): void {
         ...customEntriesFrom(projectConfig?.launchers),
       ];
 
-      // Sort by all-time use count (descending). toSorted is stable, so ties
-      // preserve the original detected → global → project order. The renderer
-      // query has a staleTime and useLaunch doesn't invalidate it, so the
-      // visible order doesn't shift while the user is interacting — only
+      // Sort by rolling-window use count (descending). toSorted is stable, so
+      // ties preserve the original detected → global → project order. The
+      // renderer query has a staleTime and useLaunch doesn't invalidate it,
+      // so the visible order stays put while the user interacts — only
       // re-sorts when they navigate away and back (or the cache goes stale).
-      const counts = readKey<UseCountMap>(USE_COUNT_KEY, {});
+      const log = readKey<UseLogMap>(USE_LOG_KEY, {});
+      const now = Date.now();
       return {
         entries: entries.toSorted(
-          (a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0),
+          (a, b) => recentScore(log, b.id, now) - recentScore(log, a.id, now),
         ),
       };
     },
@@ -158,7 +171,11 @@ export function registerLauncherHandlers(): void {
 }
 
 function bumpUseCount(launcherId: string): void {
-  const counts = readKey<UseCountMap>(USE_COUNT_KEY, {});
-  counts[launcherId] = (counts[launcherId] ?? 0) + 1;
-  writeKey<UseCountMap>(USE_COUNT_KEY, counts);
+  const log = readKey<UseLogMap>(USE_LOG_KEY, {});
+  const now = Date.now();
+  const cutoff = now - WINDOW_MS;
+  const fresh = (log[launcherId] ?? []).filter((t) => t >= cutoff);
+  fresh.push(now);
+  log[launcherId] = fresh;
+  writeKey<UseLogMap>(USE_LOG_KEY, log);
 }
