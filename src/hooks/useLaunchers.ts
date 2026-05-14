@@ -5,7 +5,10 @@ export function useDetectedLaunchers() {
   return useQuery<DetectedLauncher[]>({
     queryKey: ["launchers", "detected"],
     queryFn: () => window.api.launchers.detected(),
-    staleTime: 60_000,
+    // Detection spawns ~15 `which` calls; cache for the session. The
+    // answer only changes when the user installs/removes an app.
+    staleTime: Number.POSITIVE_INFINITY,
+    meta: { errorTitle: "Couldn't detect installed tools" },
   });
 }
 
@@ -21,7 +24,7 @@ export function useLauncherForProject(projectId: string | null) {
       return window.api.launchers.forProject(projectId);
     },
     enabled: projectId !== null,
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't load launchers" },
   });
 }
 
@@ -34,5 +37,6 @@ interface LaunchInput {
 export function useLaunch() {
   return useMutation<void, Error, LaunchInput>({
     mutationFn: (input) => window.api.launchers.launch(input),
+    meta: { errorTitle: "Couldn't launch" },
   });
 }

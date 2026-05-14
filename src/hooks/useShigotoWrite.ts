@@ -17,5 +17,6 @@ export function useShigotoWrite() {
       qc.invalidateQueries({ queryKey: ["shigoto", projectId] });
       qc.invalidateQueries({ queryKey: ["launchers", projectId] });
     },
+    meta: { errorTitle: "Couldn't save project config" },
   });
 }

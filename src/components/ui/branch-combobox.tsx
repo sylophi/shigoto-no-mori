@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
-import { ChevronsUpDown, Search } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBranches } from "@/hooks/useBranches";
 import type { BranchList } from "@shared/schemas";
@@ -67,7 +68,8 @@ export function BranchCombobox({
   className,
   excludeBranches,
 }: BranchComboboxProps) {
-  const { data: branches } = useBranches(projectId);
+  const { data: branches, isFetching } = useBranches(projectId);
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
 
   const all = toBranchEntries(branches, new Set(excludeBranches ?? []));
@@ -90,7 +92,14 @@ export function BranchCombobox({
       inputValue={query}
       onInputValueChange={setQuery}
       onOpenChange={(open) => {
-        if (open) setQuery("");
+        if (open) {
+          setQuery("");
+          if (projectId) {
+            void queryClient.invalidateQueries({
+              queryKey: ["branches", projectId],
+            });
+          }
+        }
       }}
       disabled={disabled}
       autoHighlight
@@ -136,6 +145,12 @@ export function BranchCombobox({
                 placeholder="Search branches…"
                 className="flex-1 bg-transparent py-2 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
               />
+              {isFetching && (
+                <Loader2
+                  aria-label="Syncing branches"
+                  className="size-3.5 shrink-0 animate-spin text-muted-foreground/60"
+                />
+              )}
             </div>
             <Combobox.List className="flex-1 overflow-y-auto p-1">
               {sorted.length === 0 && !showCustom && (

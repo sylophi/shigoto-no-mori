@@ -8,6 +8,6 @@ export function useDefaultBranch(projectId: string | null) {
       return window.api.projects.defaultBranch(projectId);
     },
     enabled: projectId !== null,
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't resolve default branch" },
   });
 }

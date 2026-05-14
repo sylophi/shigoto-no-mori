@@ -4,7 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { CommitSummary, Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
@@ -14,7 +14,9 @@ export function useWorktrees(projectId: string | null) {
       return window.api.worktrees.list(projectId);
     },
     enabled: projectId !== null,
-    staleTime: 10_000,
+    // Sidebar renders inline "Failed to list worktrees" + the project-
+    // missing affordance handles the dominant ENOENT case.
+    meta: { silentError: true },
   });
 }
 
@@ -25,8 +27,8 @@ export function useAllProjectWorktrees(projects: Project[], enabled = true) {
     queries: projects.map((project) => ({
       queryKey: ["worktrees", project.id],
       queryFn: () => window.api.worktrees.list(project.id),
-      staleTime: 10_000,
       enabled,
+      meta: { silentError: true },
     })),
   });
 }
@@ -48,6 +50,7 @@ export function useCreateWorktree() {
         queryKey: ["worktrees", vars.projectId],
       });
     },
+    meta: { errorTitle: "Couldn't create worktree" },
   });
 }
 
@@ -66,6 +69,9 @@ export function useDeleteWorktree() {
         queryKey: ["worktrees", vars.projectId],
       });
     },
+    // The detail page swaps into a force-delete prompt on failure — a
+    // toast on top would be noise.
+    meta: { silentError: true },
   });
 }
 
@@ -87,6 +93,7 @@ export function useRenameBranch() {
         queryKey: ["branches", vars.projectId],
       });
     },
+    meta: { errorTitle: "Couldn't rename branch" },
   });
 }
 
@@ -104,21 +111,10 @@ export function useCheckoutBranch() {
       void queryClient.invalidateQueries({
         queryKey: ["worktrees", vars.projectId],
       });
+      void queryClient.invalidateQueries({
+        queryKey: ["branches", vars.projectId],
+      });
     },
-  });
-}
-
-export function useCommitHistory(
-  projectId: string,
-  worktreeId: string,
-  options: { enabled?: boolean; limit?: number } = {},
-) {
-  const limit = options.limit ?? 30;
-  return useQuery<CommitSummary[]>({
-    queryKey: ["commits", projectId, worktreeId, limit],
-    queryFn: () =>
-      window.api.worktrees.commitHistory({ projectId, worktreeId, limit }),
-    enabled: options.enabled ?? true,
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't switch branch" },
   });
 }

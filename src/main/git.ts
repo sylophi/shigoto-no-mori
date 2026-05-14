@@ -100,37 +100,6 @@ async function getAheadBehind(
   }
 }
 
-// Walks `git log` for the worktree's current branch. Tab-delimited to
-// survive subjects containing arbitrary punctuation; the subject is
-// captured as the trailing portion of each line.
-export async function listCommits(
-  worktreePath: string,
-  limit: number,
-): Promise<CommitSummary[]> {
-  try {
-    const fmt = "%h%x09%an%x09%aI%x09%s";
-    const stdout = await run(worktreePath, [
-      "log",
-      `-${limit}`,
-      `--pretty=format:${fmt}`,
-    ]);
-    return stdout
-      .split("\n")
-      .filter((l) => l.length > 0)
-      .map((line) => {
-        const [hash, author, date, ...subject] = line.split("\t");
-        return {
-          hash: hash ?? "",
-          author: author ?? "",
-          date: date ?? "",
-          subject: subject.join("\t"),
-        };
-      });
-  } catch {
-    return [];
-  }
-}
-
 async function getLastCommit(
   worktreePath: string,
 ): Promise<CommitSummary | null> {

@@ -6,5 +6,6 @@ export function useRuntimeInfo() {
     queryKey: ["runtime", "info"],
     queryFn: () => window.api.runtime.info(),
     staleTime: Number.POSITIVE_INFINITY,
+    meta: { errorTitle: "Couldn't read runtime info" },
   });
 }

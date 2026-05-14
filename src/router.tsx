@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -6,6 +6,9 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
+import { useIsFetching } from "@tanstack/react-query";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
@@ -77,8 +80,60 @@ function RootLayout() {
           className="absolute inset-x-0 top-0 z-30 h-7"
           style={{ ["-webkit-app-region" as never]: "drag" }}
         />
+        <ActivityIndicator />
         <Outlet />
       </main>
+    </div>
+  );
+}
+
+// Show the spinner immediately on fetching, then linger briefly after the
+// last fetch settles. Local git calls finish in tens of ms, so without the
+// linger you'd never perceive the flash.
+const SPINNER_LINGER_MS = 100;
+
+function ActivityIndicator() {
+  // Queries with `meta: { silentSpinner: true }` (e.g. branches, which
+  // shows its own popup spinner) don't count toward the global indicator.
+  const fetching = useIsFetching({
+    predicate: (q) => !q.meta?.silentSpinner,
+  });
+  const [visible, setVisible] = useState(false);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (fetching > 0) {
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
+      }
+      setVisible(true);
+      return;
+    }
+    hideTimer.current = setTimeout(() => {
+      setVisible(false);
+      hideTimer.current = null;
+    }, SPINNER_LINGER_MS);
+    return () => {
+      if (hideTimer.current) {
+        clearTimeout(hideTimer.current);
+        hideTimer.current = null;
+      }
+    };
+  }, [fetching]);
+
+  return (
+    <div
+      aria-hidden={!visible}
+      aria-label={visible ? "Syncing with git" : undefined}
+      className={cn(
+        // Mirror the page header's pt-7 px-6 so the spinner top/right
+        // aligns with the breadcrumb's top/left.
+        "pointer-events-none absolute top-7 right-6 z-40 text-muted-foreground",
+        visible ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <Loader2 className="size-3.5 animate-spin" />
     </div>
   );
 }
@@ -100,19 +155,36 @@ const settingsRoute = createRoute({
 const newWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/new",
-  component: NewWorktree,
+  component: KeyedNewWorktree,
 });
 
 const configureProjectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/configure",
-  component: ConfigureProject,
+  component: KeyedConfigureProject,
 });
+
+// Force remount on params change so refetchOnMount: "always" fires
+// (TanStack Router keeps the same instance and just re-renders otherwise).
+function KeyedWorktreeDetail() {
+  const { projectId, worktreeName } = worktreeRoute.useParams();
+  return <WorktreeDetail key={`${projectId}:${worktreeName}`} />;
+}
+
+function KeyedNewWorktree() {
+  const { projectId } = newWorktreeRoute.useParams();
+  return <NewWorktree key={projectId} />;
+}
+
+function KeyedConfigureProject() {
+  const { projectId } = configureProjectRoute.useParams();
+  return <ConfigureProject key={projectId} />;
+}
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeName",
-  component: WorktreeDetail,
+  component: KeyedWorktreeDetail,
 });
 
 const routeTree = rootRoute.addChildren([

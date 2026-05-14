@@ -6,6 +6,6 @@ export function useFsListDirectory(path: string, enabled = true) {
     queryKey: ["fs", "listDirectory", path],
     queryFn: () => window.api.fs.listDirectory(path),
     enabled,
-    staleTime: 5_000,
+    meta: { errorTitle: "Couldn't read folder" },
   });
 }

@@ -2,8 +2,6 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
-  type CommitSummary,
-  CommitHistoryPayloadSchema,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
   isRealBranch,
@@ -17,7 +15,6 @@ import {
   deleteLocalBranch,
   describeWorktree,
   findWorktreeIdentity,
-  listCommits,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -111,22 +108,6 @@ export function registerWorktreeHandlers(): void {
         throw new Error("Worktree disappeared after rename");
       }
       return describeWorktree(refreshed);
-    },
-  );
-
-  ipcMain.handle(
-    CHANNELS.WorktreesCommitHistory,
-    async (_event, rawPayload: unknown): Promise<CommitSummary[]> => {
-      const { projectId, worktreeId, limit } =
-        CommitHistoryPayloadSchema.parse(rawPayload);
-      const project = findProjectOrThrow(projectId);
-      const target = await findWorktreeIdentity(
-        project.id,
-        project.path,
-        worktreeId,
-      );
-      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
-      return listCommits(target.path, limit);
     },
   );
 

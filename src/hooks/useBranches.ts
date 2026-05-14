@@ -9,6 +9,8 @@ export function useBranches(projectId: string | null) {
       return window.api.projects.listBranches(projectId);
     },
     enabled: projectId !== null,
-    staleTime: 30_000,
+    // Local spinner inside the branch dropdown; the global indicator
+    // would be misleading since branches are invisible until opened.
+    meta: { errorTitle: "Couldn't list branches", silentSpinner: true },
   });
 }

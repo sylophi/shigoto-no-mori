@@ -11,5 +11,6 @@ export function usePickedWorktreeName(projectId: string | null) {
     // Re-roll on every mount.
     staleTime: 0,
     gcTime: 0,
+    meta: { errorTitle: "Couldn't pick worktree name" },
   });
 }

@@ -18,7 +18,11 @@ import {
   resolveDefaultBranch,
 } from "../git";
 import { expandHome } from "../paths";
-import { findProjectOrThrow, loadProjects } from "../projects";
+import {
+  findProjectOrThrow,
+  listProjectsWithStatus,
+  loadProjects,
+} from "../projects";
 import { readShigotoConfig } from "../shigoto";
 import { writeKey } from "../store";
 
@@ -29,7 +33,7 @@ function saveProjects(projects: Project[]): void {
 }
 
 export function registerProjectHandlers(): void {
-  ipcMain.handle(CHANNELS.ProjectsList, () => loadProjects());
+  ipcMain.handle(CHANNELS.ProjectsList, () => listProjectsWithStatus());
 
   ipcMain.handle(CHANNELS.ProjectsAdd, async (_event, rawPayload: unknown) => {
     const { path: rawPath } = AddProjectPayloadSchema.parse(rawPayload);

@@ -5,12 +5,14 @@ import {
   ChevronsUpDown,
   ExternalLink,
   House,
+  Loader2,
   Pencil,
   Search,
   Trash2,
   X,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -24,7 +26,6 @@ import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import {
   useCheckoutBranch,
-  useCommitHistory,
   useDeleteWorktree,
   useRenameBranch,
   useWorktrees,
@@ -311,52 +312,14 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
 }
 
 function CommitsSection({ worktree }: { worktree: Worktree }) {
-  const [expanded, setExpanded] = useState(false);
-  const history = useCommitHistory(worktree.projectId, worktree.id, {
-    enabled: expanded,
-    limit: 30,
-  });
   const last = worktree.lastCommit;
-
-  if (!last) {
-    return (
-      <section className="space-y-3">
-        <SectionHeading>Last commit</SectionHeading>
-        <div className="text-sm text-muted-foreground">No commits yet.</div>
-      </section>
-    );
-  }
-
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <SectionHeading>
-          {expanded ? "Recent commits" : "Last commit"}
-        </SectionHeading>
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="text-xs text-muted-foreground/70 transition-colors hover:text-foreground"
-        >
-          {expanded ? "Hide" : "Show more"}
-        </button>
-      </div>
-      {expanded ? (
-        history.isLoading ? (
-          <div className="text-sm text-muted-foreground">Loading…</div>
-        ) : history.error ? (
-          <div className="text-sm text-destructive">
-            {history.error.message}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {(history.data ?? []).map((c) => (
-              <CommitRow key={c.hash} commit={c} />
-            ))}
-          </div>
-        )
-      ) : (
+      <SectionHeading>Last commit</SectionHeading>
+      {last ? (
         <CommitRow commit={last} />
+      ) : (
+        <div className="text-sm text-muted-foreground">No commits yet.</div>
       )}
     </section>
   );
@@ -489,9 +452,12 @@ function BranchSwitcher({
   worktree: Worktree;
   anchorRef: React.RefObject<HTMLElement | null>;
 }) {
-  const { data: branches } = useBranches(worktree.projectId);
+  const { data: branches, isFetching: branchesFetching } = useBranches(
+    worktree.projectId,
+  );
   const { data: peerWorktrees = [] } = useWorktrees(worktree.projectId);
   const checkout = useCheckoutBranch();
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
 
   // Exclude branches in use by *other* worktrees only; keeping this
@@ -528,6 +494,12 @@ function BranchSwitcher({
         if (open) {
           setQuery("");
           checkout.reset();
+          void queryClient.invalidateQueries({
+            queryKey: ["branches", worktree.projectId],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["worktrees", worktree.projectId],
+          });
         }
       }}
       autoHighlight
@@ -557,6 +529,12 @@ function BranchSwitcher({
                 placeholder="Switch to branch…"
                 className="flex-1 bg-transparent py-2 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
               />
+              {branchesFetching && (
+                <Loader2
+                  aria-label="Syncing branches"
+                  className="size-3.5 shrink-0 animate-spin text-muted-foreground/60"
+                />
+              )}
             </div>
             <Combobox.List className="flex-1 overflow-y-auto p-1">
               {sorted.length === 0 && (

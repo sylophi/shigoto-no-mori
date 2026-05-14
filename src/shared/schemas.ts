@@ -45,6 +45,9 @@ export const ProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
   path: z.string(),
+  // Populated by ProjectsList only — `false` means the project's path is
+  // missing on disk (deleted/moved/unmounted). Other handlers don't set it.
+  pathExists: z.boolean().optional(),
 });
 
 export const ProjectsListResultSchema = z.array(ProjectSchema);
@@ -111,12 +114,6 @@ export const CheckoutBranchPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   branch: z.string().min(1),
-});
-
-export const CommitHistoryPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
-  limit: z.number().int().positive().max(500).default(30),
 });
 
 // Filesystem browser used by the Add Project palette.

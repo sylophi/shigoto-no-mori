@@ -9,6 +9,7 @@ import {
   ListDirectoryPayloadSchema,
   ScanForGitReposPayloadSchema,
 } from "@shared/schemas";
+import { isGitRepo } from "../git";
 import { expandHome } from "../paths";
 
 // Directories that virtually never contain git repos but are huge and slow to
@@ -91,13 +92,13 @@ export function registerFsHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.FsIsGitRepo,
-    (_event, rawPayload: unknown): boolean => {
+    async (_event, rawPayload: unknown): Promise<boolean> => {
       const { path } = IsGitRepoPayloadSchema.parse(rawPayload);
       const expanded = expandHome(path);
       const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
-      // existsSync covers both a regular repo (.git directory) and a
-      // linked worktree (.git file with `gitdir: …`).
-      return existsSync(join(absolute, ".git"));
+      // `git rev-parse --git-dir` validates a real working repo: catches
+      // missing/corrupted .git, bare repos, and linked worktrees alike.
+      return isGitRepo(absolute);
     },
   );
 

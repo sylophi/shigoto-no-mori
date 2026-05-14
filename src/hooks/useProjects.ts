@@ -7,7 +7,7 @@ export function useProjects() {
   return useQuery<Project[]>({
     queryKey: PROJECTS_KEY,
     queryFn: () => window.api.projects.list(),
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't load projects" },
   });
 }
 
@@ -18,6 +18,7 @@ export function useAddProject() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
     },
+    meta: { errorTitle: "Couldn't add project" },
   });
 }
 
@@ -28,5 +29,6 @@ export function useRemoveProject() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: PROJECTS_KEY });
     },
+    meta: { errorTitle: "Couldn't remove project" },
   });
 }

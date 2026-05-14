@@ -11,6 +11,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
 import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import { tildify } from "@/lib/projectPaths";
+import { notifyError } from "@/lib/toast";
 import { configureProjectRoute } from "@/router";
 import type { LauncherCommand, ShigotoConfig } from "@shared/schemas";
 import { CustomLauncherInput } from "./CustomLauncherInput";
@@ -186,9 +187,11 @@ function ConfigureForm({
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                void window.api.shell.showItemInFolder(projectPath)
-              }
+              onClick={() => {
+                window.api.shell
+                  .showItemInFolder(projectPath)
+                  .catch((err) => notifyError("Couldn't reveal folder", err));
+              }}
             >
               <FolderOpen />
               Reveal in Finder

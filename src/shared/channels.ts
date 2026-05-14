@@ -11,7 +11,6 @@ export const CHANNELS = {
   WorktreesDelete: "worktrees:delete",
   WorktreesRenameBranch: "worktrees:renameBranch",
   WorktreesCheckoutBranch: "worktrees:checkoutBranch",
-  WorktreesCommitHistory: "worktrees:commitHistory",
   ShigotoRead: "shigoto:read",
   ScriptsRun: "scripts:run",
   ScriptsCancel: "scripts:cancel",

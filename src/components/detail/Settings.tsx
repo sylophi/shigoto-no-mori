@@ -21,6 +21,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
 import { tildify } from "@/lib/projectPaths";
+import { notifyError } from "@/lib/toast";
 import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
@@ -160,7 +161,13 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
                 size="sm"
                 disabled={!root}
                 onClick={() => {
-                  if (root) void window.api.shell.showItemInFolder(root);
+                  if (root) {
+                    window.api.shell
+                      .showItemInFolder(root)
+                      .catch((err) =>
+                        notifyError("Couldn't reveal folder", err),
+                      );
+                  }
                 }}
               >
                 <FolderOpen />
@@ -171,8 +178,11 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
                 size="sm"
                 disabled={!configFilePath}
                 onClick={() => {
-                  if (configFilePath)
-                    void window.api.shell.openPath(configFilePath);
+                  if (configFilePath) {
+                    window.api.shell
+                      .openPath(configFilePath)
+                      .catch((err) => notifyError("Couldn't open file", err));
+                  }
                 }}
                 title={configFilePath ?? undefined}
               >

@@ -1,7 +1,14 @@
 import { useState } from "react";
-import { ChevronRight, Loader2, MoreHorizontal, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +29,14 @@ interface ProjectGroupProps {
 export function ProjectGroup({ project }: ProjectGroupProps) {
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
-  const { data: worktrees = [], isLoading, error } = useWorktrees(project.id);
+  const missing = project.pathExists === false;
+  // Skip the listing query entirely when the project's path is gone —
+  // every git invocation would just ENOENT.
+  const {
+    data: worktrees = [],
+    isLoading,
+    error,
+  } = useWorktrees(missing ? null : project.id);
   const removeProject = useRemoveProject();
   const create = useCreateWorktree();
 
@@ -38,11 +52,54 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
         to: "/projects/$projectId/worktrees/$worktreeName",
         params: { projectId: project.id, worktreeName: worktree.name },
       });
-    } catch {
-      // Error surfaces on the WorktreeDetail / palette next time; sidebar
-      // row stays minimal.
+    } catch (err) {
+      // useCreateWorktree already toasts its own failures; only surface
+      // the defaultBranch lookup failure here.
+      if (!create.isError) {
+        notifyError("Couldn't resolve default branch", err);
+      }
     }
   };
+
+  if (missing) {
+    return (
+      <div className="group flex items-center gap-0.5 py-0.5">
+        <div
+          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-semibold tracking-wide text-muted-foreground/60 uppercase"
+          title={`${project.path} is missing on disk`}
+        >
+          <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+          <span className="truncate line-through decoration-1">
+            {project.name}
+          </span>
+          <span className="text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
+            missing
+          </span>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`More actions for ${project.name}`}
+                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" sideOffset={2}>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => removeProject.mutate(project.id)}
+            >
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col">

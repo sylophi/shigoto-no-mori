@@ -5,7 +5,6 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
   BranchList,
-  CommitSummary,
   DetectedLauncher,
   DirectoryListing,
   GlobalConfig,
@@ -64,15 +63,6 @@ const api = {
       branch: string;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
-    commitHistory: (input: {
-      projectId: string;
-      worktreeId: string;
-      limit?: number;
-    }): Promise<CommitSummary[]> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesCommitHistory, {
-        ...input,
-        limit: input.limit ?? 30,
-      }),
   },
   dialog: {
     pickFolder: (): Promise<string | null> =>

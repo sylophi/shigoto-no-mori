@@ -7,7 +7,7 @@ export function useGlobalConfig() {
   return useQuery<GlobalConfig>({
     queryKey: QUERY_KEY,
     queryFn: () => window.api.globalConfig.read(),
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't load settings" },
   });
 }
 
@@ -22,5 +22,6 @@ export function useGlobalConfigWrite() {
       // Launcher catalogs for every project depend on global custom launchers.
       qc.invalidateQueries({ queryKey: ["launchers"] });
     },
+    meta: { errorTitle: "Couldn't save settings" },
   });
 }

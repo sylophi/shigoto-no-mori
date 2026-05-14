@@ -9,6 +9,6 @@ export function useShigotoConfig(projectId: string | null) {
       return window.api.shigoto.read(projectId);
     },
     enabled: projectId !== null,
-    staleTime: 30_000,
+    meta: { errorTitle: "Couldn't load project config" },
   });
 }

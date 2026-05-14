@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { notifyError } from "@/lib/toast";
 import type { ScriptEvent, ScriptName } from "@shared/schemas";
 
 const MAX_LOGS = 5_000;
@@ -74,16 +75,25 @@ export function useScriptRun(): ScriptRunState {
       setLogs([]);
       setExitCode(null);
       setRunning(true);
-      const { runId } = await window.api.scripts.run({
-        projectId,
-        worktreeId,
-        script,
-      });
-      activeRunId.current = runId;
+      try {
+        const { runId } = await window.api.scripts.run({
+          projectId,
+          worktreeId,
+          script,
+        });
+        activeRunId.current = runId;
+      } catch (err) {
+        setRunning(false);
+        notifyError(`Couldn't start ${script}`, err);
+      }
     },
     cancel: async () => {
       if (!activeRunId.current) return;
-      await window.api.scripts.cancel(activeRunId.current);
+      try {
+        await window.api.scripts.cancel(activeRunId.current);
+      } catch (err) {
+        notifyError("Couldn't cancel script", err);
+      }
     },
     clear: () => {
       setLogs([]);
