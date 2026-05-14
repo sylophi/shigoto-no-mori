@@ -57,8 +57,9 @@ export function CommandPalette() {
         if (e.target === e.currentTarget) setOpen(false);
       }}
       onKeyDown={(e) => {
-        // AddProjectView owns its own Escape handling (back/scan stages);
-        // only close the palette on Escape from browse mode here.
+        // AddProjectView owns its own Escape handling (cancels scan stage,
+        // or closes from the browse stage); only close the palette on
+        // Escape from browse mode here.
         if (e.key === "Escape" && mode === "browse") {
           e.preventDefault();
           setOpen(false);
@@ -70,10 +71,7 @@ export function CommandPalette() {
         {mode === "browse" ? (
           <BrowseView onAddProject={() => openIn("add-project")} />
         ) : (
-          <AddProjectView
-            onDone={() => setOpen(false)}
-            onBack={() => openIn("browse")}
-          />
+          <AddProjectView onClose={() => setOpen(false)} />
         )}
       </div>
     </div>
@@ -221,13 +219,12 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
 // ---------- Add Project (T3-style path-as-input browser) ----------
 
 interface AddProjectViewProps {
-  onDone: () => void;
-  onBack: () => void;
+  onClose: () => void;
 }
 
 type AddProjectStage = "browse" | "scanning" | "results";
 
-function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
+function AddProjectView({ onClose }: AddProjectViewProps) {
   // The input value IS the path. Tildified paths are expanded server-side.
   const [query, setQuery] = useState<string>("~/");
   const [highlighted, setHighlighted] = useState<string>("");
@@ -288,7 +285,7 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     if (target.length === 0) return;
     try {
       await addProject.mutateAsync(target);
-      onDone();
+      onClose();
     } catch {
       // Error rendered inline below.
     }
@@ -299,7 +296,7 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     if (!picked) return;
     try {
       await addProject.mutateAsync(picked);
-      onDone();
+      onClose();
     } catch {
       // Error rendered inline.
     }
@@ -357,7 +354,7 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       }
     }
     setBulkAdding(false);
-    onDone();
+    onClose();
   };
 
   // ---------- Keyboard handling ----------
@@ -394,12 +391,12 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      onBack();
+      onClose();
       return;
     }
     if (e.key === "Backspace" && query === "") {
       e.preventDefault();
-      onBack();
+      onClose();
     }
   };
 
@@ -421,12 +418,7 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
 
   if (stage === "scanning") {
     return (
-      <ScanningPanel
-        scanRoot={scanRoot}
-        home={home}
-        onCancel={exitScan}
-        onBack={onBack}
-      />
+      <ScanningPanel scanRoot={scanRoot} home={home} onCancel={exitScan} />
     );
   }
 
@@ -467,14 +459,6 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       onValueChange={setHighlighted}
     >
       <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label="Back"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
         <FolderPlus className="size-4 shrink-0 text-muted-foreground/80" />
         <Command.Input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
@@ -494,6 +478,11 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
           aria-label={`${submitLabel} (${submitKbd})`}
           title={`${submitLabel} (${submitKbd})`}
         >
+          {targetIsGitRepo ? (
+            <FolderGit2 className="size-3.5" />
+          ) : (
+            <FolderSearch className="size-3.5" />
+          )}
           <span>
             {addProject.isPending && targetIsGitRepo ? "Adding…" : submitLabel}
           </span>
@@ -603,12 +592,10 @@ function ScanningPanel({
   scanRoot,
   home,
   onCancel,
-  onBack: _onBack,
 }: {
   scanRoot: string;
   home: string | null;
   onCancel: () => void;
-  onBack: () => void;
 }) {
   return (
     <div className="flex flex-col">

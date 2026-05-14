@@ -350,7 +350,7 @@ function PickerRow({
         >
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="xs"
             onClick={() => onPick("symlink")}
             title="Edits stay in sync with the main checkout"
@@ -360,7 +360,7 @@ function PickerRow({
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             size="xs"
             onClick={() => onPick("copy")}
             title="Independent snapshot at worktree creation"
