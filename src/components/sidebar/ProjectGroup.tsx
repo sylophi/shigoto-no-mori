@@ -76,7 +76,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
               variant="destructive"
               onClick={() => removeProject.mutate(project.id)}
             >
-              Remove from Shigoto
+              Remove from Shigomori
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

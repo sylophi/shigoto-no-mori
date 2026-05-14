@@ -68,6 +68,7 @@ function SidebarFooter() {
   const settingsActive = mode === "settings";
   return (
     <div className="flex items-center justify-end gap-1 border-t border-border px-2 py-1.5">
+      <ThemeToggle />
       <button
         type="button"
         onClick={openSettings}
@@ -83,7 +84,6 @@ function SidebarFooter() {
       >
         <SettingsIcon className="size-3.5" />
       </button>
-      <ThemeToggle />
     </div>
   );
 }

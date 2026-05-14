@@ -473,25 +473,6 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       </div>
 
       <Command.List className="max-h-96 overflow-y-auto p-2">
-        {canScan && (
-          <Command.Item
-            value="action:scan"
-            keywords={["scan", "discover", "find"]}
-            onSelect={() => void scanCurrentDir()}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-          >
-            <FolderSearch className="size-4 text-muted-foreground/80" />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="text-foreground">
-                Scan this folder for git repos
-              </span>
-              <span className="truncate text-xs text-muted-foreground/70">
-                Recursively, stopping at the outermost .git
-              </span>
-            </span>
-          </Command.Item>
-        )}
-
         {canBrowseUp && (
           <Command.Item
             value="browse:up"
@@ -576,13 +557,25 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
             <span className="text-muted-foreground/80">Back</span>
           </KbdGroup>
         </div>
-        <button
-          type="button"
-          onClick={() => void pickViaDialog()}
-          className="rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
-        >
-          Open in Finder
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => void scanCurrentDir()}
+            disabled={!canScan}
+            title="Scan this folder recursively for git repos, stopping at the outermost .git"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+          >
+            <FolderSearch className="size-3.5" />
+            Scan for git repos
+          </button>
+          <button
+            type="button"
+            onClick={() => void pickViaDialog()}
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Open in Finder
+          </button>
+        </div>
       </div>
     </Command>
   );

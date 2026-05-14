@@ -51,6 +51,7 @@ const api = {
     info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
     setTheme: (theme: Theme): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.RuntimeSetTheme, { theme }),
+    nuke: (): Promise<void> => ipcRenderer.invoke(CHANNELS.RuntimeNuke),
   },
   fs: {
     listDirectory: (path: string): Promise<DirectoryListing> =>

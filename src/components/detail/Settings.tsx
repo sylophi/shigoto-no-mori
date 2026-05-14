@@ -1,15 +1,27 @@
 import { useState } from "react";
-import { ArrowLeft, ExternalLink, FolderOpen, Plus, Save } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  ExternalLink,
+  FolderOpen,
+  Flame,
+  Plus,
+  Save,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useSelection } from "@/hooks/useSelection";
 import { tildify } from "@/lib/projectPaths";
 import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
+import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
+
+const THEME_STORAGE_KEY = "shigoto.theme";
 
 export function Settings() {
   const { clear } = useSelection();
@@ -180,15 +192,16 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
             {detected.length === 0 ? (
               <p className="text-xs text-muted-foreground/70">
                 Nothing detected yet. Install a supported editor (Cursor, VS
-                Code, Zed, etc.) and Shigoto will pick it up on next launch.
+                Code, Zed, etc.) and Shigomori will pick it up on next launch.
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-1.5">
                 {detected.map((d) => (
                   <span
                     key={d.id}
-                    className="inline-flex items-center rounded-md border border-border bg-card px-2 py-0.5 text-xs text-muted-foreground"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground"
                   >
+                    <LauncherIcon entry={d} className="size-3.5" />
                     {d.label}
                   </span>
                 ))}
@@ -231,6 +244,10 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
             </Button>
           </section>
 
+          <Separator />
+
+          <DangerZone />
+
           {write.error && (
             <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
               {write.error.message}
@@ -268,5 +285,80 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
     <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
       {children}
     </h2>
+  );
+}
+
+function DangerZone() {
+  const { clear } = useSelection();
+  const queryClient = useQueryClient();
+  const { data: runtime } = useRuntimeInfo();
+  const { armed, trigger } = useConfirmTwice(5_000);
+  const [nuking, setNuking] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const home = runtime?.homedir ?? null;
+  const root = runtime?.shigomoriRoot
+    ? tildify(runtime.shigomoriRoot, home)
+    : "~/shigomori";
+
+  const handleNuke = () => {
+    trigger(async () => {
+      setNuking(true);
+      setError(null);
+      try {
+        await window.api.runtime.nuke();
+        try {
+          window.localStorage.removeItem(THEME_STORAGE_KEY);
+        } catch {
+          // localStorage may be unavailable; not fatal.
+        }
+        await queryClient.invalidateQueries();
+        clear();
+      } catch (e) {
+        setError(e instanceof Error ? e : new Error(String(e)));
+      } finally {
+        setNuking(false);
+      }
+    });
+  };
+
+  return (
+    <section className="space-y-3">
+      <SectionHeading>Danger zone</SectionHeading>
+      <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-destructive">
+            Nuke everything
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Force-removes every worktree shigomori created, drops the project
+            registry, and deletes all configs and state under{" "}
+            <span className="font-mono">{root}</span>. The original project
+            repos on disk are not touched.
+          </p>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={nuking}
+          onClick={handleNuke}
+          title={
+            armed
+              ? "Click again to confirm — this cannot be undone"
+              : "Wipe all shigomori data"
+          }
+        >
+          <Flame />
+          {nuking
+            ? "Nuking…"
+            : armed
+              ? "Click again to confirm"
+              : "Nuke everything"}
+        </Button>
+        {error && (
+          <div className="text-xs text-destructive">{error.message}</div>
+        )}
+      </div>
+    </section>
   );
 }

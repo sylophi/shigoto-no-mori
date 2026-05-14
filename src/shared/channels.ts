@@ -16,6 +16,7 @@ export const CHANNELS = {
   DialogPickFolder: "dialog:pickFolder",
   RuntimeInfo: "runtime:info",
   RuntimeSetTheme: "runtime:setTheme",
+  RuntimeNuke: "runtime:nuke",
   FsListDirectory: "fs:listDirectory",
   FsScanForGitRepos: "fs:scanForGitRepos",
   ShigotoWrite: "shigoto:write",
