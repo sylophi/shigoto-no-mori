@@ -4,6 +4,7 @@ import { CHANNELS } from "@shared/channels";
 import {
   AddProjectPayloadSchema,
   type BranchList,
+  ListIgnoredPathsPayloadSchema,
   PickWorktreeNamePayloadSchema,
   type Project,
   ProjectsDefaultBranchPayloadSchema,
@@ -14,6 +15,7 @@ import {
   deriveProjectName,
   isGitRepo,
   listBranches,
+  listIgnoredPaths,
   pickAvailableWorktreeName,
   resolveDefaultBranch,
 } from "../git";
@@ -89,6 +91,15 @@ export function registerProjectHandlers(): void {
       const { projectId } = PickWorktreeNamePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return pickAvailableWorktreeName(project.id, project.path);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.ProjectsListIgnoredPaths,
+    async (_event, rawPayload: unknown): Promise<string[]> => {
+      const { projectId } = ListIgnoredPathsPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return listIgnoredPaths(project.path);
     },
   );
 

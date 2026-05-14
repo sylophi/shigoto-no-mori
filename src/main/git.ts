@@ -314,6 +314,23 @@ export async function pickAvailableWorktreeName(
   return pickWorktreeName(used);
 }
 
+// Raw gitignored paths from `git ls-files --others --ignored
+// --exclude-standard --directory`. `--directory` collapses fully-ignored
+// directories into a single trailing-slash entry; loose files inside
+// partially-ignored dirs are listed individually. The renderer checks
+// membership (direct path or any ancestor folder) to decide whether a
+// filesystem entry can be carried over.
+export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
+  const stdout = await run(projectPath, [
+    "ls-files",
+    "--others",
+    "--ignored",
+    "--exclude-standard",
+    "--directory",
+  ]);
+  return stdout.split("\n").filter((line) => line.length > 0);
+}
+
 // Lists branches usable as a base ref: local heads and remote-tracking refs.
 // Symbolic refs like `origin/HEAD` are dropped — they alias another remote
 // branch and would show up twice.

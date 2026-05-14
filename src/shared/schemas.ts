@@ -77,6 +77,16 @@ export const PickWorktreeNamePayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const ListIgnoredPathsPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+// Raw output from `git ls-files --others --ignored --exclude-standard
+// --directory`: relative paths, with trailing "/" on fully-ignored folders.
+// The renderer derives membership by checking exact match or any ancestor
+// folder match.
+export const IgnoredPathsSchema = z.array(z.string());
+
 export const BranchListSchema = z.object({
   local: z.array(z.string()),
   remote: z.array(z.string()),
@@ -96,6 +106,21 @@ export const CreateWorktreePayloadSchema = z.object({
   // branch). Requires `base` to be set and not already checked out
   // elsewhere. Ignores `branchName`.
   checkout: z.boolean().optional(),
+});
+
+export const CarryOverFailureSchema = z.object({
+  path: z.string(),
+  reason: z.string(),
+});
+
+export const CarryOverReportSchema = z.object({
+  applied: z.number().int().nonnegative(),
+  failures: z.array(CarryOverFailureSchema),
+});
+
+export const CreateWorktreeResultSchema = z.object({
+  worktree: WorktreeSchema,
+  carryOver: CarryOverReportSchema,
 });
 
 export const DeleteWorktreePayloadSchema = z.object({
@@ -150,6 +175,28 @@ export const IsGitRepoPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
+export const FsExistsPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
+export const FsListEntriesPayloadSchema = z.object({
+  path: z.string().min(1),
+});
+
+// Filesystem entry as returned by FsListEntries. Includes dotfiles so the
+// carry-over picker can surface .env, .vscode, etc., but skips the special
+// .git directory since carrying it over makes no sense.
+export const FsEntrySchema = z.object({
+  name: z.string(),
+  isDirectory: z.boolean(),
+});
+export const FsListingSchema = z.object({
+  path: z.string(),
+  entries: z.array(FsEntrySchema),
+});
+export type FsEntry = z.infer<typeof FsEntrySchema>;
+export type FsListing = z.infer<typeof FsListingSchema>;
+
 export const DirectoryEntrySchema = z.object({
   name: z.string(),
   isGitRepo: z.boolean(),
@@ -171,6 +218,23 @@ export const LauncherCommandSchema = z.object({
   command: z.string().min(1),
 });
 
+// Files/folders to carry over from the primary checkout into newly-created
+// worktrees. `path` is relative to the project root; gitignored entries are
+// the expected source. `symlink` keeps state shared; `copy` snapshots.
+export const CarryOverEntrySchema = z.object({
+  path: z
+    .string()
+    .min(1)
+    .refine(
+      (p) =>
+        !p.startsWith("/") &&
+        !p.split(/[\\/]/).includes("..") &&
+        !p.includes("\0"),
+      { message: "Path must stay within the project root" },
+    ),
+  mode: z.enum(["copy", "symlink"]),
+});
+
 export const ShigotoConfigSchema = z.object({
   scripts: z
     .object({
@@ -184,6 +248,7 @@ export const ShigotoConfigSchema = z.object({
   defaultBranch: z.string().min(1),
   // Free-form per-worktree notes, keyed by Worktree.name (directory basename).
   notes: z.record(z.string(), z.string()).optional(),
+  carryOver: z.array(CarryOverEntrySchema).optional(),
 });
 
 // Global, per-user config kept in ~/shigomori/config.json. Holds preferences
@@ -277,6 +342,10 @@ export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigotoConfig = z.infer<typeof ShigotoConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
+export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
+export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;
+export type CarryOverReport = z.infer<typeof CarryOverReportSchema>;
+export type CreateWorktreeResult = z.infer<typeof CreateWorktreeResultSchema>;
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
 export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;

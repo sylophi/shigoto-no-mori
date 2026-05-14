@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
+  type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
   isRealBranch,
@@ -21,6 +22,8 @@ import {
 } from "../git";
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
+import { applyCarryOver } from "../carryOver";
+import { readShigotoConfig } from "../shigoto";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -34,16 +37,23 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.WorktreesCreate,
-    async (_event, rawPayload: unknown): Promise<Worktree> => {
+    async (_event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
       const { projectId, worktreeName, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      return createWorktree(project.id, project.path, {
+      const worktree = await createWorktree(project.id, project.path, {
         requestedWorktreeName: worktreeName,
         branchName,
         base,
         checkout: checkout ?? false,
       });
+      const config = await readShigotoConfig(project.id).catch(() => null);
+      const carryOver = await applyCarryOver(
+        project.path,
+        worktree.path,
+        config?.carryOver ?? [],
+      );
+      return { worktree, carryOver };
     },
   );
 

@@ -385,6 +385,12 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
       primaryAction();
       return;
     }
+    if (e.key === "ArrowLeft" && canNavigateUp(query) && !leafFilter) {
+      e.preventDefault();
+      e.stopPropagation();
+      browseUp();
+      return;
+    }
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
@@ -566,13 +572,17 @@ function AddProjectView({ onDone, onBack }: AddProjectViewProps) {
           {hasHighlighted && (
             <KbdGroup>
               <Kbd>↩</Kbd>
-              <span className="text-muted-foreground/80">Select</span>
+              <span className="text-muted-foreground/80">Enter folder</span>
             </KbdGroup>
           )}
-          <KbdGroup>
-            <Kbd>Esc</Kbd>
-            <span className="text-muted-foreground/80">Back</span>
-          </KbdGroup>
+          {canBrowseUp && (
+            <KbdGroup>
+              <Kbd>
+                <ArrowLeft />
+              </Kbd>
+              <span className="text-muted-foreground/80">Go up</span>
+            </KbdGroup>
+          )}
         </div>
         <button
           type="button"

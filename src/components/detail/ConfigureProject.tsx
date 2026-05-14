@@ -1,11 +1,22 @@
 import { useState } from "react";
-import { FolderOpen, Plus, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  Copy as CopyIcon,
+  Folder,
+  FolderOpen,
+  Link as LinkIcon,
+  Plus,
+  Save,
+  X,
+} from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
+import { useFsExists } from "@/hooks/useFsExists";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useShigotoConfig } from "@/hooks/useShigotoConfig";
@@ -13,7 +24,12 @@ import { useShigotoWrite } from "@/hooks/useShigotoWrite";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
 import { configureProjectRoute } from "@/router";
-import type { LauncherCommand, ShigotoConfig } from "@shared/schemas";
+import type {
+  CarryOverEntry,
+  LauncherCommand,
+  ShigotoConfig,
+} from "@shared/schemas";
+import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
 export function ConfigureProject() {
@@ -80,6 +96,7 @@ interface FormState {
   setup: string;
   teardown: string;
   launchers: LauncherCommand[];
+  carryOver: CarryOverEntry[];
 }
 
 function fromConfig(
@@ -91,6 +108,7 @@ function fromConfig(
     setup: config?.scripts?.setup ?? "",
     teardown: config?.scripts?.teardown ?? "",
     launchers: config?.launchers ?? [],
+    carryOver: config?.carryOver ?? [],
   };
 }
 
@@ -111,6 +129,7 @@ function toConfig(
     defaultBranch: state.defaultBranch.trim(),
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
+    carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
   };
 }
 
@@ -175,6 +194,30 @@ function ConfigureForm({
     }));
   };
 
+  const addCarryOver = (entry: CarryOverEntry) => {
+    setForm((prev) =>
+      prev.carryOver.some((c) => c.path === entry.path)
+        ? prev
+        : { ...prev, carryOver: [...prev.carryOver, entry] },
+    );
+  };
+
+  const updateCarryOverMode = (path: string, mode: CarryOverEntry["mode"]) => {
+    setForm((prev) => ({
+      ...prev,
+      carryOver: prev.carryOver.map((c) =>
+        c.path === path ? { ...c, mode } : c,
+      ),
+    }));
+  };
+
+  const removeCarryOver = (path: string) => {
+    setForm((prev) => ({
+      ...prev,
+      carryOver: prev.carryOver.filter((c) => c.path !== path),
+    }));
+  };
+
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
@@ -230,6 +273,17 @@ function ConfigureForm({
               </p>
             </div>
           </section>
+
+          <Separator />
+
+          <CarryOverSection
+            projectId={projectId}
+            projectPath={projectPath}
+            entries={form.carryOver}
+            onAdd={addCarryOver}
+            onChangeMode={updateCarryOverMode}
+            onRemove={removeCarryOver}
+          />
 
           <Separator />
 
@@ -374,6 +428,175 @@ function ScriptField({
         rows={value.includes("\n") ? 4 : 2}
         className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
       />
+    </div>
+  );
+}
+
+interface CarryOverSectionProps {
+  projectId: string;
+  projectPath: string;
+  entries: CarryOverEntry[];
+  onAdd: (entry: CarryOverEntry) => void;
+  onChangeMode: (path: string, mode: CarryOverEntry["mode"]) => void;
+  onRemove: (path: string) => void;
+}
+
+function CarryOverSection({
+  projectId,
+  projectPath,
+  entries,
+  onAdd,
+  onChangeMode,
+  onRemove,
+}: CarryOverSectionProps) {
+  const [picking, setPicking] = useState(false);
+  const selectedPaths = new Set(entries.map((e) => e.path));
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <SectionHeading>Carry over</SectionHeading>
+        <p className="text-xs text-muted-foreground">
+          Files and folders from the main checkout to copy or symlink into every
+          new worktree. Useful for things git ignores, like{" "}
+          <span className="font-mono">.env</span>,{" "}
+          <span className="font-mono">node_modules</span>, or editor state.
+        </p>
+      </div>
+
+      {entries.length > 0 && (
+        <div className="space-y-1.5">
+          {entries.map((entry) => (
+            <CarryOverRow
+              key={entry.path}
+              entry={entry}
+              projectPath={projectPath}
+              onChangeMode={(mode) => onChangeMode(entry.path, mode)}
+              onRemove={() => onRemove(entry.path)}
+            />
+          ))}
+        </div>
+      )}
+
+      <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
+        <Plus />
+        Add file or folder
+      </Button>
+
+      {picking && (
+        <CarryOverPickerModal
+          projectId={projectId}
+          projectPath={projectPath}
+          selectedPaths={selectedPaths}
+          onPick={(entry) => onAdd(entry)}
+          onClose={() => setPicking(false)}
+        />
+      )}
+    </section>
+  );
+}
+
+interface CarryOverRowProps {
+  entry: CarryOverEntry;
+  projectPath: string;
+  onChangeMode: (mode: CarryOverEntry["mode"]) => void;
+  onRemove: () => void;
+}
+
+function CarryOverRow({
+  entry,
+  projectPath,
+  onChangeMode,
+  onRemove,
+}: CarryOverRowProps) {
+  const { data: exists, isLoading } = useFsExists(
+    `${projectPath}/${entry.path}`,
+  );
+  const missing = !isLoading && exists === false;
+  return (
+    <div className="group flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <Folder className="size-3.5 shrink-0 text-muted-foreground/40" />
+        <span
+          className={cn(
+            "min-w-0 truncate font-mono text-xs",
+            missing && "text-destructive",
+          )}
+          title={entry.path}
+        >
+          {entry.path}
+        </span>
+        {missing && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+            title="Source no longer exists in the main checkout. New worktrees will skip this entry."
+          >
+            <AlertTriangle className="size-3" />
+            missing
+          </span>
+        )}
+      </span>
+      <ModePicker mode={entry.mode} onChange={onChangeMode} />
+      <button
+        type="button"
+        onClick={onRemove}
+        aria-label={`Remove ${entry.path}`}
+        className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+      >
+        <X className="size-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function ModePicker({
+  mode,
+  onChange,
+}: {
+  mode: CarryOverEntry["mode"];
+  onChange: (mode: CarryOverEntry["mode"]) => void;
+}) {
+  const options: {
+    value: CarryOverEntry["mode"];
+    label: string;
+    Icon: typeof LinkIcon;
+    hint: string;
+  }[] = [
+    {
+      value: "symlink",
+      label: "Symlink",
+      Icon: LinkIcon,
+      hint: "Edits stay in sync with the main checkout.",
+    },
+    {
+      value: "copy",
+      label: "Copy",
+      Icon: CopyIcon,
+      hint: "Independent snapshot at worktree creation.",
+    },
+  ];
+  return (
+    <div className="inline-flex shrink-0 rounded-md border border-input p-0.5">
+      {options.map((opt) => {
+        const active = mode === opt.value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            title={opt.hint}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-[5px] px-2 py-0.5 text-[11px] transition-colors",
+              active
+                ? "bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <opt.Icon className="size-3" />
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -81,7 +81,7 @@ export function NewWorktree() {
             base: base || undefined,
           },
       {
-        onSuccess: (worktree) => {
+        onSuccess: ({ worktree }) => {
           void navigate({
             to: "/projects/$projectId/worktrees/$worktreeName",
             params: {

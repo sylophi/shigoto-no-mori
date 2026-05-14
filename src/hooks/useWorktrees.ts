@@ -4,7 +4,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import { toast } from "sonner";
+import type { CreateWorktreeResult, Project, Worktree } from "@shared/schemas";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
@@ -43,12 +44,24 @@ interface CreateWorktreeInput {
 
 export function useCreateWorktree() {
   const queryClient = useQueryClient();
-  return useMutation<Worktree, Error, CreateWorktreeInput>({
+  return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
     mutationFn: (input) => window.api.worktrees.create(input),
-    onSuccess: (_data, vars) => {
+    onSuccess: (result, vars) => {
       void queryClient.invalidateQueries({
         queryKey: ["worktrees", vars.projectId],
       });
+      const { applied, failures } = result.carryOver;
+      if (failures.length > 0) {
+        const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
+        const more = failures.length - lines.length;
+        toast.warning(
+          `Carried over ${applied} of ${applied + failures.length} entries`,
+          {
+            description:
+              lines.join("\n") + (more > 0 ? `\n…and ${more} more` : ""),
+          },
+        );
+      }
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });

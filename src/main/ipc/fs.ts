@@ -1,10 +1,13 @@
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   type DirectoryListing,
+  FsExistsPayloadSchema,
+  FsListEntriesPayloadSchema,
+  type FsListing,
   IsGitRepoPayloadSchema,
   ListDirectoryPayloadSchema,
   ScanForGitReposPayloadSchema,
@@ -110,6 +113,42 @@ export function registerFsHandlers(): void {
         ? expandHome(path)
         : resolve(expandHome(path));
       return scanForGitRepos(absolute);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.FsExists,
+    async (_event, rawPayload: unknown): Promise<boolean> => {
+      const { path } = FsExistsPayloadSchema.parse(rawPayload);
+      const expanded = expandHome(path);
+      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
+      try {
+        await access(absolute);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.FsListEntries,
+    async (_event, rawPayload: unknown): Promise<FsListing> => {
+      const { path } = FsListEntriesPayloadSchema.parse(rawPayload);
+      const expanded = expandHome(path);
+      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
+      const raw = await readdir(absolute, { withFileTypes: true });
+      const entries = raw
+        // .git is special (worktree metadata); never useful as carry-over,
+        // and it's where git stores its own state.
+        .filter((e) => e.name !== ".git")
+        .map((e) => ({ name: e.name, isDirectory: e.isDirectory() }))
+        // Folders before files, then alphabetical within each group.
+        .toSorted((a, b) => {
+          if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+      return { path: absolute, entries };
     },
   );
 }

@@ -5,8 +5,10 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS, type RuntimeInfo } from "@shared/channels";
 import type {
   BranchList,
+  CreateWorktreeResult,
   DetectedLauncher,
   DirectoryListing,
+  FsListing,
   GlobalConfig,
   LauncherEntry,
   Project,
@@ -30,6 +32,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsListBranches, { projectId }),
     pickWorktreeName: (projectId: string): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.ProjectsPickWorktreeName, { projectId }),
+    listIgnoredPaths: (projectId: string): Promise<string[]> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsListIgnoredPaths, { projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>
@@ -40,7 +44,7 @@ const api = {
       branchName?: string;
       base?: string;
       checkout?: boolean;
-    }): Promise<Worktree> =>
+    }): Promise<CreateWorktreeResult> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCreate, input),
     delete: (input: {
       projectId: string;
@@ -102,6 +106,10 @@ const api = {
       ipcRenderer.invoke(CHANNELS.FsScanForGitRepos, { path }),
     isGitRepo: (path: string): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.FsIsGitRepo, { path }),
+    exists: (path: string): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.FsExists, { path }),
+    listEntries: (path: string): Promise<FsListing> =>
+      ipcRenderer.invoke(CHANNELS.FsListEntries, { path }),
   },
   shigoto: {
     read: (projectId: string): Promise<ShigotoConfig | null> =>

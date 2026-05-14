@@ -44,7 +44,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
     if (create.isPending) return;
     try {
       const defaultBranch = await window.api.projects.defaultBranch(project.id);
-      const worktree = await create.mutateAsync({
+      const { worktree } = await create.mutateAsync({
         projectId: project.id,
         base: defaultBranch,
       });
