@@ -12,6 +12,7 @@ import type {
   FsStat,
   GlobalConfig,
   LauncherEntry,
+  PackageScriptsResult,
   Project,
   ScriptEvent,
   ScriptName,
@@ -161,6 +162,19 @@ const api = {
         ipcRenderer.off(CHANNELS.WindowBlurred, listener);
       };
     },
+  },
+  packageScripts: {
+    list: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<PackageScriptsResult | null> =>
+      ipcRenderer.invoke(CHANNELS.PackageScriptsList, input),
+    run: (input: {
+      projectId: string;
+      worktreeId: string;
+      scriptName: string;
+    }): Promise<{ runId: string }> =>
+      ipcRenderer.invoke(CHANNELS.PackageScriptsRun, input),
   },
   scripts: {
     run: (input: {

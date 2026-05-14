@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import type { WebContents } from "electron";
 import { CHANNELS } from "@shared/channels";
-import type { Project, ScriptEvent, ScriptName } from "@shared/schemas";
+import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 
 const runningScripts = new Map<string, ChildProcess>();
@@ -21,7 +21,10 @@ interface ScriptWorktree {
 
 interface RunArgs {
   command: string;
-  scriptName: ScriptName;
+  // Configured setup/teardown pass "setup"/"teardown"; package scripts
+  // pass the actual script name ("dev", "build", etc.). Stored verbatim
+  // into SHIGOMORI_SCRIPT_NAME for the script to read.
+  scriptName: string;
   worktree: ScriptWorktree;
   project: Pick<Project, "path" | "name">;
   projectBranch: string;

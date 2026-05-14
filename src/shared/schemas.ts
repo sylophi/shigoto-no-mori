@@ -332,6 +332,26 @@ export const RunScriptPayloadSchema = z.object({
   script: ScriptNameSchema,
 });
 
+export const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
+export type PackageManager = z.infer<typeof PackageManagerSchema>;
+
+export const PackageScriptsResultSchema = z.object({
+  scripts: z.record(z.string(), z.string()),
+  packageManager: PackageManagerSchema,
+});
+export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
+
+export const ListPackageScriptsPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+});
+
+export const RunPackageScriptPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  scriptName: z.string().min(1),
+});
+
 export const CancelScriptPayloadSchema = z.object({
   runId: z.string(),
 });

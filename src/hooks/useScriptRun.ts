@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { notifyError } from "@/lib/toast";
-import type { ScriptEvent, ScriptName } from "@shared/schemas";
+import type { ScriptEvent } from "@shared/schemas";
 
 const MAX_LOGS = 5_000;
 
@@ -14,11 +14,12 @@ export interface ScriptRunState {
   logs: LogLine[];
   running: boolean;
   exitCode: number | null;
-  start: (input: {
-    projectId: string;
-    worktreeId: string;
-    script: ScriptName;
-  }) => Promise<void>;
+  // Caller invokes the IPC; the hook tracks the resulting runId, streams
+  // its output, and surfaces errors via toast using `label` for the title.
+  start: (
+    runner: () => Promise<{ runId: string }>,
+    label: string,
+  ) => Promise<void>;
   cancel: () => Promise<void>;
   clear: () => void;
 }
@@ -71,20 +72,16 @@ export function useScriptRun(): ScriptRunState {
     logs,
     running,
     exitCode,
-    start: async ({ projectId, worktreeId, script }) => {
+    start: async (runner, label) => {
       setLogs([]);
       setExitCode(null);
       setRunning(true);
       try {
-        const { runId } = await window.api.scripts.run({
-          projectId,
-          worktreeId,
-          script,
-        });
+        const { runId } = await runner();
         activeRunId.current = runId;
       } catch (err) {
         setRunning(false);
-        notifyError(`Couldn't start ${script}`, err);
+        notifyError(`Couldn't start ${label}`, err);
       }
     },
     cancel: async () => {

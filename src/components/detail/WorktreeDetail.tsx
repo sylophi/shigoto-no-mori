@@ -32,6 +32,7 @@ import {
 } from "@/hooks/useWorktrees";
 import { worktreeRoute } from "@/router";
 import { LauncherRow } from "./LauncherRow";
+import { PackageScriptsSection } from "./PackageScriptsSection";
 import { ScriptsPanel } from "./ScriptsPanel";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
@@ -167,6 +168,8 @@ export function WorktreeDetail() {
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsPanel worktree={worktree} />
           </section>
+
+          <PackageScriptsSection worktree={worktree} />
 
           <Separator />
 

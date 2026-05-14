@@ -78,11 +78,15 @@ export function ScriptsPanel({ worktree }: ScriptsPanelProps) {
             size="sm"
             variant="ghost"
             onClick={() =>
-              run.start({
-                projectId: worktree.projectId,
-                worktreeId: worktree.id,
-                script: name,
-              })
+              run.start(
+                () =>
+                  window.api.scripts.run({
+                    projectId: worktree.projectId,
+                    worktreeId: worktree.id,
+                    script: name,
+                  }),
+                SCRIPT_LABELS[name],
+              )
             }
             disabled={run.running}
           >

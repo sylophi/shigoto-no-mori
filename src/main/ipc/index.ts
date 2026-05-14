@@ -2,6 +2,7 @@ import { registerBranchHandlers } from "./branches";
 import { registerFsHandlers } from "./fs";
 import { registerGlobalConfigHandlers } from "./globalConfig";
 import { registerLauncherHandlers } from "./launchers";
+import { registerPackageScriptHandlers } from "./packageScripts";
 import { registerProjectHandlers } from "./projects";
 import { registerRuntimeHandlers } from "./runtime";
 import { registerScriptHandlers } from "./scripts";
@@ -15,6 +16,7 @@ export function registerIpcHandlers(): void {
   registerBranchHandlers();
   registerLauncherHandlers();
   registerScriptHandlers();
+  registerPackageScriptHandlers();
   registerRuntimeHandlers();
   registerFsHandlers();
   registerShellHandlers();

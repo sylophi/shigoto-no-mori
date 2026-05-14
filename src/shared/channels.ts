@@ -19,6 +19,8 @@ export const CHANNELS = {
   ScriptsRun: "scripts:run",
   ScriptsCancel: "scripts:cancel",
   ScriptsEvent: "scripts:event",
+  PackageScriptsList: "packageScripts:list",
+  PackageScriptsRun: "packageScripts:run",
   LaunchersDetect: "launchers:detect",
   LaunchersForProject: "launchers:forProject",
   LaunchersLaunch: "launchers:launch",
