@@ -284,10 +284,10 @@ function ConfigureForm({
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Project launchers</SectionHeading>
+              <SectionHeading>Project tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
-                Buttons specific to this project. For launchers that should
-                appear in every project (editors, agents), use{" "}
+                Tools specific to this project. For tools you want available in
+                every project (editors, agents), use{" "}
                 <button
                   type="button"
                   onClick={() => openSettings()}
@@ -318,7 +318,7 @@ function ConfigureForm({
             )}
             <Button variant="ghost" size="sm" onClick={addLauncher}>
               <Plus />
-              Add project launcher
+              Add project tool
             </Button>
           </section>
 

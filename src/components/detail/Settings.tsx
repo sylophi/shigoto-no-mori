@@ -92,6 +92,9 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const { data: detected = [] } = useDetectedLaunchers();
   const write = useGlobalConfigWrite();
 
+  const availableTools = detected.filter((d) => d.available);
+  const missingTools = detected.filter((d) => !d.available);
+
   const initial = fromConfig(initialConfig);
   const [form, setForm] = useState<FormState>(initial);
   const [savedSnapshot, setSavedSnapshot] = useState<FormState>(initial);
@@ -183,20 +186,20 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <section className="space-y-4">
             <div>
-              <SectionHeading>Detected launchers</SectionHeading>
+              <SectionHeading>Detected tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Editors and tools found on this machine. Shown in every worktree
                 automatically.
               </p>
             </div>
-            {detected.length === 0 ? (
+            {availableTools.length === 0 ? (
               <p className="text-xs text-muted-foreground/70">
-                Nothing detected yet. Install a supported editor (Cursor, VS
-                Code, Zed, etc.) and Shigomori will pick it up on next launch.
+                Nothing detected yet. Install a supported tool below and
+                Shigomori will pick it up on next launch.
               </p>
             ) : (
               <div className="flex flex-wrap items-center gap-1.5">
-                {detected.map((d) => (
+                {availableTools.map((d) => (
                   <span
                     key={d.id}
                     className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground"
@@ -209,11 +212,38 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
             )}
           </section>
 
+          {missingTools.length > 0 && (
+            <>
+              <Separator />
+              <section className="space-y-4">
+                <div>
+                  <SectionHeading>Supported tools</SectionHeading>
+                  <p className="text-xs text-muted-foreground">
+                    Shigomori knows how to open worktrees in these too. Install
+                    any of them and they'll show up under detected.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {missingTools.map((d) => (
+                    <span
+                      key={d.id}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
+                      title="Not installed"
+                    >
+                      <LauncherIcon entry={d} className="size-3.5 opacity-60" />
+                      {d.label}
+                    </span>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
           <Separator />
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Global launchers</SectionHeading>
+              <SectionHeading>Custom tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Custom commands available in every worktree (e.g.{" "}
                 <span className="font-mono">claude</span>,{" "}
@@ -224,7 +254,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
             {form.launchers.length === 0 ? (
               <p className="text-xs text-muted-foreground/70">
                 None yet. Add one to surface a command in every project's
-                launcher dropdown.
+                launcher row.
               </p>
             ) : (
               <div className="space-y-2">

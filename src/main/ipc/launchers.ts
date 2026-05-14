@@ -48,16 +48,14 @@ function findCustomCommand(
 }
 
 function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
-  return apps
-    .filter((a) => a.available)
-    .map(
-      (a): DetectedLauncher => ({
-        kind: "detected",
-        id: `app:${a.id}`,
-        label: a.label,
-        available: true,
-      }),
-    );
+  return apps.map(
+    (a): DetectedLauncher => ({
+      kind: "detected",
+      id: `app:${a.id}`,
+      label: a.label,
+      available: a.available,
+    }),
+  );
 }
 
 export function registerLauncherHandlers(): void {
@@ -92,7 +90,7 @@ export function registerLauncherHandlers(): void {
       ]);
 
       const entries: LauncherEntry[] = [
-        ...detectedEntries(detected),
+        ...detectedEntries(detected).filter((e) => e.available),
         ...customEntriesFrom(globalConfig.launchers),
         ...customEntriesFrom(projectConfig?.launchers),
       ];

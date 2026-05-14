@@ -33,14 +33,14 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
     return (
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          No editors detected and no custom launchers configured.
+          No tools detected and no custom tools configured.
         </p>
         <Button
           variant="outline"
           size="sm"
           onClick={() => beginConfigureProject(worktree.projectId)}
         >
-          Configure launchers
+          Configure tools
         </Button>
       </div>
     );
