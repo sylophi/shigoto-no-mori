@@ -36,6 +36,12 @@ const CATALOG: CatalogEntry[] = [
     cli: "cursor",
   },
   {
+    id: "windsurf",
+    label: "Windsurf",
+    bundleNames: ["Windsurf.app"],
+    cli: "windsurf",
+  },
+  {
     id: "trae",
     label: "Trae",
     bundleNames: ["Trae.app"],

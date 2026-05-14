@@ -2,6 +2,7 @@
 // lucide fallback for tools without a recognizable logo on svgl.
 import { Folder, Sparkles, Terminal } from "lucide-react";
 import { useTheme } from "@/hooks/useTheme";
+import { Antigravity } from "@/components/ui/svgs/antigravity";
 import { CursorDark } from "@/components/ui/svgs/cursorDark";
 import { CursorLight } from "@/components/ui/svgs/cursorLight";
 import { Ghostty } from "@/components/ui/svgs/ghostty";
@@ -17,6 +18,8 @@ import { Sublimetext } from "@/components/ui/svgs/sublimetext";
 import { Vscode } from "@/components/ui/svgs/vscode";
 import { Vscodium } from "@/components/ui/svgs/vscodium";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
+import { WindsurfDark } from "@/components/ui/svgs/windsurfDark";
+import { WindsurfLight } from "@/components/ui/svgs/windsurfLight";
 import { ZedLogo } from "@/components/ui/svgs/zedLogo";
 import { ZedLogoDark } from "@/components/ui/svgs/zedLogoDark";
 import type { LauncherEntry } from "@shared/schemas";
@@ -44,6 +47,14 @@ export function LauncherIcon({
       ) : (
         <CursorLight className={className} />
       );
+    case "windsurf":
+      return resolved === "dark" ? (
+        <WindsurfDark className={className} />
+      ) : (
+        <WindsurfLight className={className} />
+      );
+    case "antigravity":
+      return <Antigravity className={className} />;
     case "vscode":
     case "vscode-insiders":
       return <Vscode className={className} />;
