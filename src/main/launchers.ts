@@ -24,19 +24,46 @@ interface CatalogEntry {
   cli?: string;
 }
 
-// The renderer maps each id to a brand SVG (or a lucide fallback).
+// The renderer maps each id to a brand SVG (or a lucide fallback). Catalog
+// shape mirrors T3 Code's editor list so any tool worth supporting there is
+// supported here too.
 const CATALOG: CatalogEntry[] = [
-  {
-    id: "vscode",
-    label: "VS Code",
-    bundleNames: ["Visual Studio Code.app", "VSCodium.app"],
-    cli: "code",
-  },
+  // Editors
   {
     id: "cursor",
     label: "Cursor",
     bundleNames: ["Cursor.app"],
     cli: "cursor",
+  },
+  {
+    id: "trae",
+    label: "Trae",
+    bundleNames: ["Trae.app"],
+    cli: "trae",
+  },
+  {
+    id: "kiro",
+    label: "Kiro",
+    bundleNames: ["Kiro.app"],
+    cli: "kiro",
+  },
+  {
+    id: "vscode",
+    label: "VS Code",
+    bundleNames: ["Visual Studio Code.app"],
+    cli: "code",
+  },
+  {
+    id: "vscode-insiders",
+    label: "VS Code Insiders",
+    bundleNames: ["Visual Studio Code - Insiders.app"],
+    cli: "code-insiders",
+  },
+  {
+    id: "vscodium",
+    label: "VSCodium",
+    bundleNames: ["VSCodium.app"],
+    cli: "codium",
   },
   {
     id: "zed",
@@ -45,11 +72,18 @@ const CATALOG: CatalogEntry[] = [
     cli: "zed",
   },
   {
+    id: "antigravity",
+    label: "Antigravity",
+    bundleNames: ["Antigravity.app"],
+    cli: "agy",
+  },
+  {
     id: "sublime",
     label: "Sublime Text",
     bundleNames: ["Sublime Text.app"],
     cli: "subl",
   },
+  // JetBrains family
   {
     id: "intellij",
     label: "IntelliJ IDEA",
@@ -57,11 +91,72 @@ const CATALOG: CatalogEntry[] = [
     cli: "idea",
   },
   {
+    id: "aqua",
+    label: "Aqua",
+    bundleNames: ["Aqua.app"],
+    cli: "aqua",
+  },
+  {
+    id: "clion",
+    label: "CLion",
+    bundleNames: ["CLion.app"],
+    cli: "clion",
+  },
+  {
+    id: "datagrip",
+    label: "DataGrip",
+    bundleNames: ["DataGrip.app"],
+    cli: "datagrip",
+  },
+  {
+    id: "dataspell",
+    label: "DataSpell",
+    bundleNames: ["DataSpell.app"],
+    cli: "dataspell",
+  },
+  {
+    id: "goland",
+    label: "GoLand",
+    bundleNames: ["GoLand.app"],
+    cli: "goland",
+  },
+  {
+    id: "phpstorm",
+    label: "PhpStorm",
+    bundleNames: ["PhpStorm.app"],
+    cli: "phpstorm",
+  },
+  {
+    id: "pycharm",
+    label: "PyCharm",
+    bundleNames: ["PyCharm.app", "PyCharm CE.app"],
+    cli: "pycharm",
+  },
+  {
+    id: "rider",
+    label: "Rider",
+    bundleNames: ["Rider.app"],
+    cli: "rider",
+  },
+  {
+    id: "rubymine",
+    label: "RubyMine",
+    bundleNames: ["RubyMine.app"],
+    cli: "rubymine",
+  },
+  {
+    id: "rustrover",
+    label: "RustRover",
+    bundleNames: ["RustRover.app"],
+    cli: "rustrover",
+  },
+  {
     id: "webstorm",
     label: "WebStorm",
     bundleNames: ["WebStorm.app"],
     cli: "webstorm",
   },
+  // Terminals (we go further than T3 here)
   {
     id: "ghostty",
     label: "Ghostty",
@@ -77,6 +172,7 @@ const CATALOG: CatalogEntry[] = [
     label: "Terminal",
     bundleNames: ["Utilities/Terminal.app"],
   },
+  // Other
   {
     id: "finder",
     label: "Finder",
