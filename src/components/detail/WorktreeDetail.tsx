@@ -235,7 +235,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           </div>
           {worktree.changedCount > 0 && (
             <span
-              title={`${worktree.changedCount} uncommitted change${worktree.changedCount === 1 ? "" : "s"}`}
+              title={`${worktree.changedCount} file${worktree.changedCount === 1 ? "" : "s"} changed`}
               className="tabular inline-flex shrink-0 items-center gap-1 pt-2 text-xs text-amber-500"
             >
               <FileDiff aria-hidden className="size-3.5" />

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Play, Search, Square } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { scoreMatch } from "@/components/ui/branch-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePackageScripts } from "@/hooks/usePackageScripts";
@@ -49,19 +48,6 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
   const hasLifecycle = setupCommand !== "" || teardownCommand !== "";
   const pkgHasScripts = pkg && Object.keys(pkg.scripts).length > 0;
-
-  if (!hasLifecycle && !pkgHasScripts) {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Nothing to run here yet.
-        </p>
-        <Button variant="outline" size="sm" onClick={goConfigure}>
-          Configure scripts
-        </Button>
-      </div>
-    );
-  }
 
   const lifecycleRows: { slot: ScriptSlot; label: string; command: string }[] =
     [];

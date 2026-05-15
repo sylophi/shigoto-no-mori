@@ -259,7 +259,7 @@ function ProjectHeader({
   );
 
   return (
-    <Tooltip open={isTruncated ? undefined : false}>
+    <Tooltip disabled={!isTruncated}>
       <TooltipTrigger render={trigger} />
       <TooltipContent>{project.name}</TooltipContent>
     </Tooltip>

@@ -5,7 +5,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import {
@@ -21,11 +21,15 @@ interface WorktreeRowProps {
 
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
-  const location = useLocation();
+  const matchRoute = useMatchRoute();
   const deletionPhase = useWorktreeDeletion(worktree.id);
   const activity = useWorktreeScriptActivity(worktree.id);
-  const expectedPath = `/projects/${encodeURIComponent(worktree.projectId)}/worktrees/${encodeURIComponent(worktree.name)}`;
-  const isSelected = location.pathname === expectedPath;
+  // Param-aware match avoids any URL-encoding pitfalls that string-comparing
+  // `location.pathname` would hit (e.g. worktree names with spaces).
+  const isSelected = !!matchRoute({
+    to: "/projects/$projectId/worktrees/$worktreeName",
+    params: { projectId: worktree.projectId, worktreeName: worktree.name },
+  });
 
   return (
     <button
@@ -142,8 +146,13 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount === 0) return null;
+  const label = `${worktree.changedCount} file${worktree.changedCount === 1 ? "" : "s"} changed`;
   return (
-    <span className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-amber-500">
+    <span
+      title={label}
+      aria-label={label}
+      className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-amber-500"
+    >
       <FileDiff aria-hidden className="size-3" />
       {worktree.changedCount}
     </span>
