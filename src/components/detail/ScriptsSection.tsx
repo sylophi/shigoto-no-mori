@@ -227,8 +227,8 @@ interface ScriptRowProps {
 function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
   const navigate = useNavigate();
   const { state, busy, start, stop } = useScriptRunner(worktree, slot);
-  // Idle rows have no run history; clicking through to an empty console
-  // is a dead end. Once any run starts the label becomes a link.
+  // No history means there's nothing for the console to show, so the
+  // right-side "view output" affordance only appears once a run lands.
   const hasHistory = state.status !== "idle";
 
   const openConsole = () =>
@@ -241,10 +241,12 @@ function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
       },
     });
 
+  const actionLabel = busy ? `Stop ${label}` : `Run ${label}`;
+
   return (
     <div
       className={cn(
-        "group flex items-stretch text-xs",
+        "flex items-stretch text-xs",
         !isLast && "border-b border-border",
       )}
     >
@@ -252,39 +254,37 @@ function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
         type="button"
         onClick={busy ? stop : start}
         disabled={state.cancelling}
-        aria-label={busy ? `Stop ${label}` : `Run ${label}`}
-        title={busy ? `Stop ${label}` : `Run ${label}`}
+        aria-label={actionLabel}
+        title={command ? `${actionLabel}\n${command}` : actionLabel}
         className={cn(
-          "flex w-7 shrink-0 items-center justify-center border-r border-border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+          "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           busy
             ? "text-destructive hover:bg-destructive/10"
-            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            : "hover:bg-accent",
         )}
       >
-        {busy ? <Square className="size-3" /> : <Play className="size-3" />}
+        {busy ? (
+          <Square aria-hidden className="size-3 shrink-0" />
+        ) : (
+          <Play
+            aria-hidden
+            className="size-3 shrink-0 text-muted-foreground"
+          />
+        )}
+        <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
       </button>
 
-      {hasHistory ? (
+      {hasHistory && (
         <button
           type="button"
           onClick={openConsole}
-          title={command}
-          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-accent/50"
+          aria-label={`View ${label} output`}
+          title="View output"
+          className="flex shrink-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
-          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
           <ScriptStatusBadge state={state} />
-          <ChevronRight
-            aria-hidden
-            className="size-3 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-          />
+          <ChevronRight aria-hidden className="size-3 shrink-0" />
         </button>
-      ) : (
-        <div
-          title={command}
-          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5"
-        >
-          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
-        </div>
       )}
     </div>
   );

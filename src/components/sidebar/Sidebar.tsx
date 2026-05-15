@@ -17,21 +17,26 @@ export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
 
   return (
-    <aside className="relative flex h-full flex-col bg-card">
+    <aside className="flex h-full flex-col bg-card">
       <SidebarHeader />
-      <ScrollArea className="flex-1">
-        <div className="flex flex-col gap-1 px-2 pt-0 pb-2">
-          {projects.map((project) => (
-            <ProjectGroup key={project.id} project={project} />
-          ))}
-          {!isLoading && projects.length === 0 && (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No projects yet.
-            </div>
-          )}
-        </div>
-      </ScrollArea>
-      <ActivityIndicator />
+      <div className="relative min-h-0 flex-1">
+        <ScrollArea className="size-full">
+          {/* pb leaves a reserved band at the bottom of the scroll
+              content so the activity indicator overlay never sits on
+              top of a project row when the list scrolls. */}
+          <div className="flex flex-col gap-1 px-2 pt-0 pb-10">
+            {projects.map((project) => (
+              <ProjectGroup key={project.id} project={project} />
+            ))}
+            {!isLoading && projects.length === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                No projects yet.
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+        <ActivityIndicator />
+      </div>
       <SidebarFooter />
     </aside>
   );
@@ -76,7 +81,10 @@ function ActivityIndicator() {
       aria-hidden={!visible}
       aria-label={visible ? "Syncing with git" : undefined}
       className={cn(
-        "pointer-events-none absolute bottom-10 left-3 text-muted-foreground/60 transition-opacity",
+        // Anchored to the scroll-area wrapper (not the aside), so it
+        // floats over the bottom-left of the visible viewport
+        // regardless of how far the project list has scrolled.
+        "pointer-events-none absolute bottom-3 left-3 text-muted-foreground/60 transition-opacity",
         visible ? "opacity-100" : "opacity-0",
       )}
     >
@@ -108,25 +116,6 @@ function SidebarFooter() {
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
       <button
         type="button"
-        onClick={() => openIn("add-project")}
-        aria-label="Add project"
-        title="Add project (⌘N)"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <FolderPlus className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => openIn("browse")}
-        aria-label="Command palette"
-        title="Command palette (⌘T)"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <Search className="size-3.5" />
-      </button>
-      <div className="flex-1" />
-      <button
-        type="button"
         onClick={() => void navigate({ to: "/settings" })}
         aria-label="Settings"
         aria-current={settingsActive ? "page" : undefined}
@@ -139,6 +128,25 @@ function SidebarFooter() {
         )}
       >
         <SettingsIcon className="size-3.5" />
+      </button>
+      <div className="flex-1" />
+      <button
+        type="button"
+        onClick={() => openIn("browse")}
+        aria-label="Command palette"
+        title="Command palette (⌘T)"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <Search className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => openIn("add-project")}
+        aria-label="Add project"
+        title="Add project (⌘N)"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <FolderPlus className="size-3.5" />
       </button>
     </div>
   );
