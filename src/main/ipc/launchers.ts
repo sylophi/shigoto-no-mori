@@ -10,7 +10,7 @@ import {
   ReadShigomoriPayloadSchema,
   type ShigomoriConfig,
 } from "@shared/schemas";
-import { findWorktreeIdentity } from "../git";
+import { findWorktreeIdentityOrThrow } from "../git";
 import { readGlobalConfig } from "../globalConfig";
 import {
   type DetectedApp,
@@ -133,12 +133,11 @@ export function registerLauncherHandlers(): void {
         LaunchPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
 
-      const worktree = await findWorktreeIdentity(
+      const worktree = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 
       if (launcherId.startsWith("app:")) {
         const appId = launcherId.slice("app:".length);

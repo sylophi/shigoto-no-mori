@@ -14,6 +14,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -396,14 +397,6 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
         )}
       </footer>
     </div>
-  );
-}
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h2>
   );
 }
 

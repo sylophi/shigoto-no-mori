@@ -1,8 +1,9 @@
 // Read the worktree's package.json scripts and detect which package
 // manager to launch them with. Discovery is lockfile-driven (matches
 // what corepack / pnpm / bun themselves use to decide).
-import { access, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathExists } from "./paths";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
@@ -11,27 +12,23 @@ export interface PackageScriptsResult {
   packageManager: PackageManager;
 }
 
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
+// Lockfiles in priority order: first one that exists wins. Matches
+// corepack/pnpm/bun's own resolution order.
+const LOCKFILE_MAP: Array<{ file: string; manager: PackageManager }> = [
+  { file: "bun.lockb", manager: "bun" },
+  { file: "bun.lock", manager: "bun" },
+  { file: "pnpm-lock.yaml", manager: "pnpm" },
+  { file: "yarn.lock", manager: "yarn" },
+];
 
 export async function detectPackageManager(
   cwd: string,
 ): Promise<PackageManager> {
-  if (
-    (await fileExists(join(cwd, "bun.lockb"))) ||
-    (await fileExists(join(cwd, "bun.lock")))
-  ) {
-    return "bun";
-  }
-  if (await fileExists(join(cwd, "pnpm-lock.yaml"))) return "pnpm";
-  if (await fileExists(join(cwd, "yarn.lock"))) return "yarn";
-  return "npm";
+  const hits = await Promise.all(
+    LOCKFILE_MAP.map((l) => pathExists(join(cwd, l.file))),
+  );
+  const idx = hits.findIndex(Boolean);
+  return idx >= 0 ? LOCKFILE_MAP[idx].manager : "npm";
 }
 
 export async function readPackageScripts(

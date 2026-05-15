@@ -15,7 +15,7 @@ import {
   createWorktree,
   deleteLocalBranch,
   describeWorktree,
-  findWorktreeIdentity,
+  findWorktreeIdentityOrThrow,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -64,12 +64,11 @@ export function registerWorktreeHandlers(): void {
       const { projectId, worktreeId, force } =
         DeleteWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      const target = await findWorktreeIdentity(
+      const target = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
       if (target.isPrimary) {
         throw new Error("Cannot delete the project's primary worktree");
       }
@@ -109,21 +108,17 @@ export function registerWorktreeHandlers(): void {
       const { projectId, worktreeId, newBranch } =
         RenameBranchPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      const target = await findWorktreeIdentity(
+      const target = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
       await renameBranch(target.path, newBranch);
-      const refreshed = await findWorktreeIdentity(
+      const refreshed = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!refreshed) {
-        throw new Error("Worktree disappeared after rename");
-      }
       return describeWorktree(refreshed);
     },
   );
@@ -134,21 +129,17 @@ export function registerWorktreeHandlers(): void {
       const { projectId, worktreeId, branch } =
         CheckoutBranchPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      const target = await findWorktreeIdentity(
+      const target = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!target) throw new Error(`Unknown worktree: ${worktreeId}`);
       await checkoutBranch(target.path, branch);
-      const refreshed = await findWorktreeIdentity(
+      const refreshed = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!refreshed) {
-        throw new Error("Worktree disappeared after checkout");
-      }
       return describeWorktree(refreshed);
     },
   );

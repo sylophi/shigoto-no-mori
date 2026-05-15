@@ -26,7 +26,6 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const activity = useWorktreeScriptActivity(worktree.id);
   const expectedPath = `/projects/${encodeURIComponent(worktree.projectId)}/worktrees/${encodeURIComponent(worktree.name)}`;
   const isSelected = location.pathname === expectedPath;
-  const deleting = deletionPhase !== undefined;
 
   return (
     <button
@@ -56,20 +55,48 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           {worktree.name}
         </span>
       </div>
-      {deleting && deletionPhase === "removing" ? (
-        <Loader2
-          className="size-3 shrink-0 animate-spin text-muted-foreground"
-          aria-label="Removing"
-        />
-      ) : activity || deleting ? (
-        <ActivityIcon kind={deleting ? "teardown" : activity!} />
-      ) : (
-        <>
-          <StatusIndicator worktree={worktree} />
-          <WorktreeKindIcon worktree={worktree} />
-        </>
-      )}
+      <RowTrailing
+        worktree={worktree}
+        deletionPhase={deletionPhase}
+        activity={activity}
+      />
     </button>
+  );
+}
+
+interface RowTrailingProps {
+  worktree: Worktree;
+  deletionPhase: "tearingDown" | "removing" | undefined;
+  activity: ScriptActivityKind | null;
+}
+
+// The right-edge cluster: a single spinner / activity icon / location +
+// status combo, chosen by priority. Pulled out so each case is a clean
+// early return instead of a triple ternary.
+function RowTrailing({
+  worktree,
+  deletionPhase,
+  activity,
+}: RowTrailingProps) {
+  if (deletionPhase === "removing") {
+    return (
+      <Loader2
+        className="size-3 shrink-0 animate-spin text-muted-foreground"
+        aria-label="Removing"
+      />
+    );
+  }
+  if (deletionPhase === "tearingDown") {
+    return <ActivityIcon kind="teardown" />;
+  }
+  if (activity) {
+    return <ActivityIcon kind={activity} />;
+  }
+  return (
+    <>
+      <StatusIndicator worktree={worktree} />
+      <WorktreeKindIcon worktree={worktree} />
+    </>
   );
 }
 

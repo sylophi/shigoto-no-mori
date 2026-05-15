@@ -52,11 +52,7 @@ const api = {
       projectId: string;
       worktreeId: string;
       force?: boolean;
-    }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesDelete, {
-        ...input,
-        force: input.force ?? false,
-      }),
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
     renameBranch: (input: {
       projectId: string;
       worktreeId: string;
@@ -85,11 +81,7 @@ const api = {
       projectId: string;
       name: string;
       force?: boolean;
-    }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.BranchesDelete, {
-        ...input,
-        force: input.force ?? false,
-      }),
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
   },
   dialog: {
     pickFolder: (): Promise<string | null> =>

@@ -12,6 +12,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
+import { SectionHeading as BaseSectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -400,11 +401,7 @@ function ConfigureForm({
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h2>
-  );
+  return <BaseSectionHeading className="mb-1">{children}</BaseSectionHeading>;
 }
 
 interface ScriptFieldProps {

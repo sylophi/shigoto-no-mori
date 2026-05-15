@@ -6,7 +6,7 @@ import {
   RunPackageScriptPayloadSchema,
 } from "@shared/schemas";
 import {
-  findWorktreeIdentity,
+  findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
   resolveDefaultBranch,
 } from "../git";
@@ -25,12 +25,11 @@ export function registerPackageScriptHandlers(): void {
       const { projectId, worktreeId } =
         ListPackageScriptsPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      const worktree = await findWorktreeIdentity(
+      const worktree = await findWorktreeIdentityOrThrow(
         project.id,
         project.path,
         worktreeId,
       );
-      if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
       return readPackageScripts(worktree.path);
     },
   );

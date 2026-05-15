@@ -1,6 +1,5 @@
-import { existsSync } from "node:fs";
-import { readdir, stat } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { access, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
@@ -14,7 +13,7 @@ import {
   ScanForGitReposPayloadSchema,
 } from "@shared/schemas";
 import { isGitRepo } from "../git";
-import { expandHome } from "../paths";
+import { toAbsolute } from "../paths";
 
 // Directories that virtually never contain git repos but are huge and slow to
 // walk. Skipped during the scan to keep it responsive.
@@ -77,20 +76,29 @@ export function registerFsHandlers(): void {
     CHANNELS.FsListDirectory,
     async (_event, rawPayload: unknown): Promise<DirectoryListing> => {
       const { path } = ListDirectoryPayloadSchema.parse(rawPayload);
-
-      const expanded = expandHome(path);
-      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
+      const absolute = toAbsolute(path);
 
       const entries = await readdir(absolute, { withFileTypes: true });
-      const dirs = entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
-        .map((e) => ({
-          name: e.name,
-          isGitRepo: existsSync(join(absolute, e.name, ".git")),
-        }))
+      const dirs = entries.filter(
+        (e) => e.isDirectory() && !e.name.startsWith("."),
+      );
+      // Async check in parallel beats `existsSync` per entry: same logic,
+      // doesn't block the event loop on slow filesystems.
+      const isGitRepoFlags = await Promise.all(
+        dirs.map(async (e) => {
+          try {
+            await access(join(absolute, e.name, ".git"));
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      );
+      const result = dirs
+        .map((e, i) => ({ name: e.name, isGitRepo: isGitRepoFlags[i] }))
         .toSorted((a, b) => a.name.localeCompare(b.name));
 
-      return { path: absolute, entries: dirs };
+      return { path: absolute, entries: result };
     },
   );
 
@@ -98,11 +106,9 @@ export function registerFsHandlers(): void {
     CHANNELS.FsIsGitRepo,
     async (_event, rawPayload: unknown): Promise<boolean> => {
       const { path } = IsGitRepoPayloadSchema.parse(rawPayload);
-      const expanded = expandHome(path);
-      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
       // `git rev-parse --git-dir` validates a real working repo: catches
       // missing/corrupted .git, bare repos, and linked worktrees alike.
-      return isGitRepo(absolute);
+      return isGitRepo(toAbsolute(path));
     },
   );
 
@@ -110,10 +116,7 @@ export function registerFsHandlers(): void {
     CHANNELS.FsScanForGitRepos,
     async (_event, rawPayload: unknown): Promise<string[]> => {
       const { path } = ScanForGitReposPayloadSchema.parse(rawPayload);
-      const absolute = isAbsolute(expandHome(path))
-        ? expandHome(path)
-        : resolve(expandHome(path));
-      return scanForGitRepos(absolute);
+      return scanForGitRepos(toAbsolute(path));
     },
   );
 
@@ -121,10 +124,8 @@ export function registerFsHandlers(): void {
     CHANNELS.FsStat,
     async (_event, rawPayload: unknown): Promise<FsStat> => {
       const { path } = FsStatPayloadSchema.parse(rawPayload);
-      const expanded = expandHome(path);
-      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
       try {
-        const s = await stat(absolute);
+        const s = await stat(toAbsolute(path));
         return { exists: true, isDirectory: s.isDirectory() };
       } catch {
         return { exists: false, isDirectory: false };
@@ -136,8 +137,7 @@ export function registerFsHandlers(): void {
     CHANNELS.FsListEntries,
     async (_event, rawPayload: unknown): Promise<FsListing> => {
       const { path } = FsListEntriesPayloadSchema.parse(rawPayload);
-      const expanded = expandHome(path);
-      const absolute = isAbsolute(expanded) ? expanded : resolve(expanded);
+      const absolute = toAbsolute(path);
       const raw = await readdir(absolute, { withFileTypes: true });
       const entries = raw
         // .git is special (worktree metadata); never useful as carry-over,

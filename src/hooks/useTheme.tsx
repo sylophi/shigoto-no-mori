@@ -9,7 +9,7 @@ interface ThemeState {
 }
 
 const ThemeContext = createContext<ThemeState | null>(null);
-const STORAGE_KEY = "shigomori.theme";
+export const THEME_STORAGE_KEY = "shigomori.theme";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
@@ -20,7 +20,7 @@ function getSystemTheme(): "light" | "dark" {
 
 function readStoredTheme(): Theme {
   if (typeof window === "undefined") return "system";
-  const stored = window.localStorage.getItem(STORAGE_KEY);
+  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
   }
@@ -54,7 +54,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [resolved]);
 
   const setTheme = (next: Theme) => {
-    window.localStorage.setItem(STORAGE_KEY, next);
+    window.localStorage.setItem(THEME_STORAGE_KEY, next);
     setThemeState(next);
     // Keep the main process in sync so the BrowserWindow paints the right
     // background on next launch and the native chrome tracks the new theme.

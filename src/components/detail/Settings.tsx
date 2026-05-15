@@ -11,6 +11,7 @@ import {
   SunMoon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SectionHeading as BaseSectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -18,7 +19,7 @@ import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useTheme } from "@/hooks/useTheme";
+import { THEME_STORAGE_KEY, useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
 import { PathSpan } from "@/components/ui/path-span";
 import { tildify } from "@/lib/projectPaths";
@@ -27,7 +28,6 @@ import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
-const THEME_STORAGE_KEY = "shigomori.theme";
 
 export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();
@@ -370,11 +370,7 @@ function AppearanceSection() {
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <h2 className="mb-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h2>
-  );
+  return <BaseSectionHeading className="mb-1">{children}</BaseSectionHeading>;
 }
 
 function ToggleRow({

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import type { Project } from "@shared/schemas";
 import { readKey } from "./store";
 
-const PROJECTS_KEY = "projects";
+export const PROJECTS_KEY = "projects";
 
 export function loadProjects(): Project[] {
   return readKey<Project[]>(PROJECTS_KEY, []);

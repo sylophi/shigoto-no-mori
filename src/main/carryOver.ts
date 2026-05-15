@@ -1,22 +1,13 @@
 // Best-effort: failed entries are collected and returned so the caller
 // can surface them, but they never abort worktree creation.
 
-import { cp, lstat, mkdir, stat, symlink } from "node:fs/promises";
+import { cp, mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CarryOverEntry, CarryOverFailure } from "@shared/schemas";
 
 export interface CarryOverResult {
   applied: number;
   failures: CarryOverFailure[];
-}
-
-async function pathExists(target: string): Promise<boolean> {
-  try {
-    await lstat(target);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 async function applyOne(
@@ -31,24 +22,25 @@ async function applyOne(
   } catch {
     return { path: entry.path, reason: "Source missing in main checkout" };
   }
-  if (await pathExists(dst)) {
-    // Worktree creation just made this dir, so anything pre-existing is
-    // something git itself put there (the branch tracks it). Don't overwrite.
-    return { path: entry.path, reason: "Destination already exists" };
-  }
   try {
     await mkdir(dirname(dst), { recursive: true });
     if (entry.mode === "symlink") {
       // Absolute target so the link survives moving the worktree dir around.
       await symlink(src, dst);
     } else {
-      // force:false matters even though we pre-check pathExists — otherwise
-      // a race between the check and cp would silently clobber files git
-      // just laid down.
+      // force:false makes cp throw EEXIST instead of overwriting files git
+      // just laid down (the branch already tracks them).
       await cp(src, dst, { recursive: true, force: false });
     }
     return null;
   } catch (err) {
+    const code =
+      err instanceof Error && "code" in err
+        ? (err as NodeJS.ErrnoException).code
+        : undefined;
+    if (code === "EEXIST" || code === "ERR_FS_CP_EEXIST") {
+      return { path: entry.path, reason: "Destination already exists" };
+    }
     return {
       path: entry.path,
       reason: err instanceof Error ? err.message : String(err),

@@ -24,14 +24,13 @@ import {
   findProjectOrThrow,
   listProjectsWithStatus,
   loadProjects,
+  PROJECTS_KEY,
 } from "../projects";
 import { readShigomoriConfig } from "../shigomori";
 import { writeKey } from "../store";
 
-const STORE_KEY = "projects";
-
 function saveProjects(projects: Project[]): void {
-  writeKey<Project[]>(STORE_KEY, projects);
+  writeKey<Project[]>(PROJECTS_KEY, projects);
 }
 
 export function registerProjectHandlers(): void {
