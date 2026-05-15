@@ -13,6 +13,14 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: "assets/icon",
+    appBundleId: "com.sylophi.shigomori",
+    appCopyright: "© 2026 sylophi",
+    // Empty object = ad-hoc sign with the `-` identity. Free, no Apple
+    // Developer account needed. Downgrades the post-download Gatekeeper
+    // experience from "damaged" (no bypass) to "unidentified developer"
+    // (System Settings → Open Anyway). Not a substitute for notarization
+    // if we ever ship beyond friends.
+    osxSign: {},
   },
   rebuildConfig: {},
   hooks: {
