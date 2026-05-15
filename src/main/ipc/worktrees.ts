@@ -23,6 +23,7 @@ import {
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
 import { applyCarryOver } from "../carryOver";
+import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
 
 export function registerWorktreeHandlers(): void {
@@ -80,6 +81,9 @@ export function registerWorktreeHandlers(): void {
           );
         }
       }
+      // Any package script still running here would be holding the
+      // worktree as its cwd; reap before git rips the directory.
+      await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force);
 
       // `git branch -D` refuses if the branch is still in use elsewhere,

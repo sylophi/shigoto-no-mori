@@ -1,0 +1,281 @@
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { ChevronRight, Play, Search, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { scoreMatch } from "@/components/ui/branch-combobox";
+import { Skeleton } from "@/components/ui/skeleton";
+import { usePackageScripts } from "@/hooks/usePackageScripts";
+import { useScriptRunner } from "@/hooks/useScriptRunner";
+import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
+import { cn } from "@/lib/utils";
+import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
+import type { PackageScriptsResult, Worktree } from "@shared/schemas";
+import { ScriptStatusBadge } from "./ScriptStatusBadge";
+
+interface ScriptsSectionProps {
+  worktree: Worktree;
+}
+
+export function ScriptsSection({ worktree }: ScriptsSectionProps) {
+  const navigate = useNavigate();
+  const { data: config, isLoading: configLoading } = useShigomoriConfig(
+    worktree.projectId,
+  );
+  const { data: pkg, isLoading: pkgLoading } = usePackageScripts(
+    worktree.projectId,
+    worktree.id,
+  );
+
+  const goConfigure = () =>
+    void navigate({
+      to: "/projects/$projectId/configure",
+      params: { projectId: worktree.projectId },
+    });
+
+  if (configLoading || pkgLoading) {
+    return (
+      <div className="space-y-1" aria-label="Loading scripts">
+        <Skeleton className="h-7 w-full" />
+        <Skeleton className="h-7 w-full" />
+      </div>
+    );
+  }
+
+  const setupCommand = config?.scripts?.setup?.trim() ?? "";
+  const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
+  const hasLifecycle = setupCommand !== "" || teardownCommand !== "";
+  const pkgHasScripts = pkg && Object.keys(pkg.scripts).length > 0;
+
+  if (!hasLifecycle && !pkgHasScripts) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Nothing to run here yet.
+        </p>
+        <Button variant="outline" size="sm" onClick={goConfigure}>
+          Configure scripts
+        </Button>
+      </div>
+    );
+  }
+
+  const lifecycleRows: { slot: ScriptSlot; label: string; command: string }[] =
+    [];
+  if (setupCommand) {
+    lifecycleRows.push({
+      slot: { kind: "setup" },
+      label: "Setup",
+      command: setupCommand,
+    });
+  }
+  if (teardownCommand) {
+    lifecycleRows.push({
+      slot: { kind: "teardown" },
+      label: "Teardown",
+      command: teardownCommand,
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      {lifecycleRows.length > 0 && (
+        <ScriptList>
+          {lifecycleRows.map((row, idx) => (
+            <ScriptRow
+              key={row.slot.kind}
+              worktree={worktree}
+              slot={row.slot}
+              label={row.label}
+              command={row.command}
+              isLast={idx === lifecycleRows.length - 1}
+            />
+          ))}
+        </ScriptList>
+      )}
+
+      {!hasLifecycle && (
+        <button
+          type="button"
+          onClick={goConfigure}
+          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Configure setup or teardown →
+        </button>
+      )}
+
+      {pkg && pkgHasScripts && (
+        <PackageScripts worktree={worktree} pkg={pkg} />
+      )}
+    </div>
+  );
+}
+
+function ScriptList({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="overflow-hidden rounded-md border border-border">
+      {children}
+    </div>
+  );
+}
+
+interface PackageScriptsProps {
+  worktree: Worktree;
+  pkg: PackageScriptsResult;
+}
+
+function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
+  const [expanded, setExpanded] = useState(false);
+  const [query, setQuery] = useState("");
+  const entries = Object.entries(pkg.scripts);
+
+  const filtered = query
+    ? entries
+        .map(([name, command]) => ({
+          name,
+          command,
+          score: scoreMatch(query, name),
+        }))
+        .filter((e) => e.score > 0)
+        .toSorted((a, b) => b.score - a.score)
+    : entries.map(([name, command]) => ({ name, command, score: 0 }));
+
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={expanded}
+        className="group flex w-full items-center gap-1.5 text-left text-xs transition-colors"
+      >
+        <ChevronRight
+          aria-hidden
+          className={cn(
+            "size-3 text-muted-foreground/60 transition-transform group-hover:text-muted-foreground",
+            expanded && "rotate-90",
+          )}
+        />
+        <span className="font-mono text-muted-foreground group-hover:text-foreground">
+          package.json
+        </span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="font-mono text-muted-foreground/70">
+          {pkg.packageManager}
+        </span>
+        <span className="tabular ml-auto text-muted-foreground/50">
+          {entries.length}
+        </span>
+      </button>
+
+      {expanded && (
+        <>
+          <div className="relative">
+            <Search
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground/60"
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search scripts…"
+              className="w-full rounded-md border border-input bg-background py-1 pr-2.5 pl-7 text-xs transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+            />
+          </div>
+
+          {filtered.length === 0 ? (
+            <p className="px-1 py-1 text-xs text-muted-foreground/70">
+              No matches.
+            </p>
+          ) : (
+            <ScriptList>
+              {filtered.map((entry, idx) => (
+                <ScriptRow
+                  key={entry.name}
+                  worktree={worktree}
+                  slot={{ kind: "package", name: entry.name }}
+                  label={entry.name}
+                  command={entry.command}
+                  isLast={idx === filtered.length - 1}
+                />
+              ))}
+            </ScriptList>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+interface ScriptRowProps {
+  worktree: Worktree;
+  slot: ScriptSlot;
+  label: string;
+  command: string;
+  isLast: boolean;
+}
+
+function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
+  const navigate = useNavigate();
+  const { state, busy, start, stop } = useScriptRunner(worktree, slot);
+  // Idle rows have no run history; clicking through to an empty console
+  // is a dead end. Once any run starts the label becomes a link.
+  const hasHistory = state.status !== "idle";
+
+  const openConsole = () =>
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+      params: {
+        projectId: worktree.projectId,
+        worktreeName: worktree.name,
+        scriptKey: slotToParam(slot),
+      },
+    });
+
+  return (
+    <div
+      className={cn(
+        "group flex items-stretch text-xs",
+        !isLast && "border-b border-border",
+      )}
+    >
+      <button
+        type="button"
+        onClick={busy ? stop : start}
+        disabled={state.cancelling}
+        aria-label={busy ? `Stop ${label}` : `Run ${label}`}
+        title={busy ? `Stop ${label}` : `Run ${label}`}
+        className={cn(
+          "flex w-7 shrink-0 items-center justify-center border-r border-border transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+          busy
+            ? "text-destructive hover:bg-destructive/10"
+            : "text-muted-foreground hover:bg-accent hover:text-foreground",
+        )}
+      >
+        {busy ? <Square className="size-3" /> : <Play className="size-3" />}
+      </button>
+
+      {hasHistory ? (
+        <button
+          type="button"
+          onClick={openConsole}
+          title={command}
+          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-accent/50"
+        >
+          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
+          <ScriptStatusBadge state={state} />
+          <ChevronRight
+            aria-hidden
+            className="size-3 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+          />
+        </button>
+      ) : (
+        <div
+          title={command}
+          className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5"
+        >
+          <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
+        </div>
+      )}
+    </div>
+  );
+}

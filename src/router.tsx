@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -6,14 +6,12 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import { useIsFetching } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
 import { ManageBranches } from "@/components/detail/ManageBranches";
 import { NewWorktree } from "@/components/detail/NewWorktree";
+import { ScriptConsole } from "@/components/detail/ScriptConsole";
 import { Settings } from "@/components/detail/Settings";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
 
@@ -81,60 +79,8 @@ function RootLayout() {
           className="absolute inset-x-0 top-0 z-30 h-7"
           style={{ ["-webkit-app-region" as never]: "drag" }}
         />
-        <ActivityIndicator />
         <Outlet />
       </main>
-    </div>
-  );
-}
-
-// Show the spinner immediately on fetching, then linger briefly after the
-// last fetch settles. Local git calls finish in tens of ms, so without the
-// linger you'd never perceive the flash.
-const SPINNER_LINGER_MS = 100;
-
-function ActivityIndicator() {
-  // Queries with `meta: { silentSpinner: true }` (e.g. branches, which
-  // shows its own popup spinner) don't count toward the global indicator.
-  const fetching = useIsFetching({
-    predicate: (q) => !q.meta?.silentSpinner,
-  });
-  const [visible, setVisible] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (fetching > 0) {
-      if (hideTimer.current) {
-        clearTimeout(hideTimer.current);
-        hideTimer.current = null;
-      }
-      setVisible(true);
-      return;
-    }
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-      hideTimer.current = null;
-    }, SPINNER_LINGER_MS);
-    return () => {
-      if (hideTimer.current) {
-        clearTimeout(hideTimer.current);
-        hideTimer.current = null;
-      }
-    };
-  }, [fetching]);
-
-  return (
-    <div
-      aria-hidden={!visible}
-      aria-label={visible ? "Syncing with git" : undefined}
-      className={cn(
-        // Mirror the page header's pt-7 px-6 so the spinner top/right
-        // aligns with the breadcrumb's top/left.
-        "pointer-events-none absolute top-7 right-6 z-40 text-muted-foreground",
-        visible ? "opacity-100" : "opacity-0",
-      )}
-    >
-      <Loader2 className="size-3.5 animate-spin" />
     </div>
   );
 }
@@ -199,6 +145,12 @@ const worktreeRoute = createRoute({
   component: KeyedWorktreeDetail,
 });
 
+const scriptConsoleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+  component: ScriptConsole,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
@@ -206,6 +158,7 @@ const routeTree = rootRoute.addChildren([
   configureProjectRoute,
   manageBranchesRoute,
   worktreeRoute,
+  scriptConsoleRoute,
 ]);
 
 export const router = createRouter({
@@ -224,6 +177,7 @@ export {
   configureProjectRoute,
   manageBranchesRoute,
   newWorktreeRoute,
+  scriptConsoleRoute,
   settingsRoute,
   worktreeRoute,
 };

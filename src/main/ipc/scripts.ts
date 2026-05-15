@@ -50,7 +50,8 @@ export function registerScriptHandlers(): void {
     CHANNELS.ScriptsCancel,
     async (_event, rawPayload: unknown): Promise<{ cancelled: boolean }> => {
       const { runId } = CancelScriptPayloadSchema.parse(rawPayload);
-      return { cancelled: cancelScript(runId) };
+      const cancelled = await cancelScript(runId);
+      return { cancelled };
     },
   );
 }

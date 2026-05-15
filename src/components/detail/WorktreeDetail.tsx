@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
+import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { useBranches } from "@/hooks/useBranches";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
@@ -32,13 +33,23 @@ import {
   useWorktrees,
 } from "@/hooks/useWorktrees";
 import { worktreeRoute } from "@/router";
+import {
+  scriptKey,
+  scriptRuns,
+  slotToParam,
+  useScriptRunState,
+} from "@/store/scriptRuns";
+import {
+  useWorktreeDeletion,
+  worktreeDeletions,
+} from "@/store/worktreeDeletions";
 import { LauncherRow } from "./LauncherRow";
-import { PackageScriptsSection } from "./PackageScriptsSection";
-import { ScriptsPanel } from "./ScriptsPanel";
+import { ScriptsSection } from "./ScriptsSection";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
   type CommitSummary,
   isRealBranch,
+  type Project,
   type Worktree,
 } from "@shared/schemas";
 
@@ -49,18 +60,10 @@ function deleteButtonLabel(busy: boolean, armed: boolean): string {
 
 export function WorktreeDetail() {
   const { projectId, worktreeName } = worktreeRoute.useParams();
-  const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
   const worktree = worktrees.find((w) => w.name === worktreeName);
-
-  const { data: runtime } = useRuntimeInfo();
-  const deleteMutation = useDeleteWorktree();
-  const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
-    useConfirmTwice(3_000);
-  const [needsForce, setNeedsForce] = useState(false);
-  const home = runtime?.homedir ?? null;
 
   if (!worktree || !project) {
     return (
@@ -70,39 +73,133 @@ export function WorktreeDetail() {
     );
   }
 
-  const busy = deleteMutation.isPending;
+  return <WorktreeDetailInner worktree={worktree} project={project} />;
+}
+
+interface InnerProps {
+  worktree: Worktree;
+  project: Project;
+}
+
+// Split from WorktreeDetail so per-worktree hooks (teardown state,
+// deletion phase) only attach when worktree+project resolved. Avoids
+// short-lived subscriptions on empty keys.
+function WorktreeDetailInner({ worktree, project }: InnerProps) {
+  const navigate = useNavigate();
+  const { data: runtime } = useRuntimeInfo();
+  const { data: config } = useShigomoriConfig(worktree.projectId);
+  const deleteMutation = useDeleteWorktree();
+  const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
+    useConfirmTwice(3_000);
+  const [needsForce, setNeedsForce] = useState(false);
+  const [teardownError, setTeardownError] = useState<string | null>(null);
+  const deletionPhase = useWorktreeDeletion(worktree.id);
+  const teardownKey = scriptKey(worktree.projectId, worktree.id, {
+    kind: "teardown",
+  });
+  const teardownState = useScriptRunState(teardownKey);
+  const home = runtime?.homedir ?? null;
+
+  const teardownConfigured =
+    (config?.scripts?.teardown ?? "").trim().length > 0;
+  const inLimbo = deletionPhase !== undefined;
+  const busy = deleteMutation.isPending || inLimbo;
+
+  const removeNow = (force: boolean) => {
+    worktreeDeletions.set(worktree.id, "removing");
+    deleteMutation.mutate(
+      { projectId: worktree.projectId, worktreeId: worktree.id, force },
+      {
+        onSuccess: () => {
+          worktreeDeletions.clear(worktree.id);
+          void navigate({ to: "/" });
+        },
+        onError: () => {
+          worktreeDeletions.clear(worktree.id);
+          setNeedsForce(true);
+        },
+      },
+    );
+  };
+
+  const runTeardownThenRemove = async () => {
+    setTeardownError(null);
+    worktreeDeletions.set(worktree.id, "tearingDown");
+    try {
+      await scriptRuns.start({
+        key: teardownKey,
+        worktreeId: worktree.id,
+        slot: { kind: "teardown" },
+        runner: () =>
+          window.api.scripts.run({
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+            script: "teardown",
+          }),
+      });
+    } catch (err) {
+      worktreeDeletions.clear(worktree.id);
+      setTeardownError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    const code = await scriptRuns.awaitExit(teardownKey);
+    if (code !== 0) {
+      worktreeDeletions.clear(worktree.id);
+      setTeardownError(
+        code === null
+          ? "Teardown script errored"
+          : `Teardown exited with code ${code}`,
+      );
+      return;
+    }
+    removeNow(false);
+  };
 
   const handleDelete = () => {
     confirmDeleteTrigger(() => {
-      deleteMutation.mutate(
-        {
-          projectId: worktree.projectId,
-          worktreeId: worktree.id,
-          force: false,
-        },
-        {
-          onSuccess: () => void navigate({ to: "/" }),
-          onError: () => setNeedsForce(true),
-        },
-      );
+      if (teardownConfigured) {
+        void runTeardownThenRemove();
+      } else {
+        removeNow(false);
+      }
     });
   };
 
   const handleForceDelete = () => {
-    deleteMutation.mutate(
-      {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        force: true,
-      },
-      { onSuccess: () => void navigate({ to: "/" }) },
-    );
+    removeNow(true);
   };
 
   const cancelForce = () => {
     setNeedsForce(false);
     deleteMutation.reset();
   };
+
+  const handleRetryTeardown = () => {
+    void runTeardownThenRemove();
+  };
+
+  const handleSkipTeardown = () => {
+    setTeardownError(null);
+    removeNow(false);
+  };
+
+  const handleCancelTeardownError = () => {
+    setTeardownError(null);
+  };
+
+  const handleCancelTeardown = () => {
+    void scriptRuns.cancel(teardownKey);
+  };
+
+  const openTeardownConsole = () =>
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+      params: {
+        projectId: worktree.projectId,
+        worktreeName: worktree.name,
+        scriptKey: slotToParam({ kind: "teardown" }),
+      },
+    });
 
   return (
     <div className="flex h-full flex-col">
@@ -129,33 +226,64 @@ export function WorktreeDetail() {
             home={home}
             className="min-w-0 flex-1 truncate font-mono"
           />
+          {worktree.isPrimary && (
+            <span title="Repo root" className="shrink-0">
+              <House
+                aria-label="Repo root"
+                className="size-3 text-muted-foreground/70"
+              />
+            </span>
+          )}
+          {!worktree.isPrimary && worktree.isExternal && (
+            <span title="External worktree" className="shrink-0">
+              <ExternalLink
+                aria-label="External worktree"
+                className="size-3 text-muted-foreground/70"
+              />
+            </span>
+          )}
         </div>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
-            {worktree.isPrimary ? (
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <House
-                  className="size-3 shrink-0 text-muted-foreground/70"
-                  aria-hidden
-                />
-                <span>Repo root</span>
-              </div>
-            ) : worktree.isExternal ? (
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <ExternalLink
-                  className="size-3 shrink-0 text-muted-foreground/70"
-                  aria-hidden
-                />
-                <span>External worktree</span>
-              </div>
-            ) : null}
           </div>
           <StatusPills worktree={worktree} />
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      {inLimbo && (
+        <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
+          <Loader2
+            aria-hidden
+            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+          />
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {deletionPhase === "tearingDown"
+              ? teardownState.cancelling
+                ? "Stopping teardown…"
+                : "Tearing down…"
+              : "Removing worktree…"}
+          </span>
+          {deletionPhase === "tearingDown" && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={openTeardownConsole}
+              className="shrink-0"
+            >
+              View output
+            </Button>
+          )}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-6 py-6",
+          inLimbo && "pointer-events-none opacity-50",
+        )}
+        aria-disabled={inLimbo}
+      >
         <div className="flex max-w-4xl flex-col gap-5">
           <section className="space-y-3">
             <SectionHeading>Launch</SectionHeading>
@@ -170,10 +298,8 @@ export function WorktreeDetail() {
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
-            <ScriptsPanel worktree={worktree} />
+            <ScriptsSection worktree={worktree} />
           </section>
-
-          <PackageScriptsSection worktree={worktree} />
 
           <Separator />
 
@@ -182,7 +308,43 @@ export function WorktreeDetail() {
       </div>
 
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
-        {needsForce ? (
+        {teardownError ? (
+          <>
+            <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
+              {teardownError}
+            </span>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={handleCancelTeardownError}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={openTeardownConsole}
+            >
+              View output
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={handleRetryTeardown}
+            >
+              Retry teardown
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={handleSkipTeardown}
+            >
+              <Trash2 />
+              Skip teardown
+            </Button>
+          </>
+        ) : needsForce ? (
           <>
             <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
               {deleteMutation.error?.message ?? "Has uncommitted changes."}
@@ -206,31 +368,38 @@ export function WorktreeDetail() {
               {busy ? "Deleting…" : "Force delete"}
             </Button>
           </>
+        ) : inLimbo && deletionPhase === "tearingDown" ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={handleCancelTeardown}
+            disabled={teardownState.cancelling}
+            className="ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 />
+            {teardownState.cancelling ? "Stopping…" : "Stop teardown"}
+          </Button>
         ) : (
-          <>
-            {worktree.isPrimary ? (
-              <span className="ml-auto shrink-0 text-xs text-muted-foreground/70">
-                Repo root
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="xs"
-                className={cn(
-                  "ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
-                  confirmDelete && "bg-destructive/10",
-                )}
-                disabled={busy}
-                onClick={handleDelete}
-                title={
-                  confirmDelete ? "Click again to confirm" : "Delete worktree"
-                }
-              >
-                <Trash2 />
-                {deleteButtonLabel(busy, confirmDelete)}
-              </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            className={cn(
+              "ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+              confirmDelete && "bg-destructive/10",
             )}
-          </>
+            disabled={busy || worktree.isPrimary}
+            onClick={handleDelete}
+            title={
+              worktree.isPrimary
+                ? "Repo root cannot be deleted"
+                : confirmDelete
+                  ? "Click again to confirm"
+                  : "Delete worktree"
+            }
+          >
+            <Trash2 />
+            {deleteButtonLabel(busy, confirmDelete)}
+          </Button>
         )}
       </footer>
     </div>
@@ -631,13 +800,9 @@ function StatusPills({ worktree }: { worktree: Worktree }) {
 
 function RelativeDate({ date }: { date: string }) {
   const value = new Date(date);
-  const diffMs = Date.now() - value.getTime();
-  const diffHours = Math.max(0, Math.round(diffMs / (1000 * 60 * 60)));
-  const label =
-    diffHours < 1
-      ? "just now"
-      : diffHours < 24
-        ? `${diffHours}h ago`
-        : `${Math.round(diffHours / 24)}d ago`;
-  return <span title={value.toLocaleString()}>{label}</span>;
+  return (
+    <span title={value.toLocaleString()}>
+      {formatRelativeTime(value.getTime())}
+    </span>
+  );
 }

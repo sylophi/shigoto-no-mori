@@ -5,6 +5,7 @@ import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
+import { killAllScripts, markShuttingDown } from "./main/scripts";
 import { readKey, writeKey } from "./main/store";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -94,4 +95,19 @@ app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+// Reap any scripts still running before Electron tears down. Without
+// this, long-lived processes (dev servers, watchers) the user kicked
+// off via a script keep running after Cmd-Q, orphaned to launchd.
+let isQuitting = false;
+app.on("before-quit", (event) => {
+  if (isQuitting) return;
+  isQuitting = true;
+  markShuttingDown();
+  event.preventDefault();
+  void killAllScripts({ graceMs: 1_500 }).finally(() => {
+    // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
+    app.exit(0);
+  });
 });
