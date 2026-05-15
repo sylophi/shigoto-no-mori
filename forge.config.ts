@@ -93,7 +93,11 @@ const config: ForgeConfig = {
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
-      [FuseV1Options.EnableCookieEncryption]: true,
+      // Disabled: the app has no cookies/sessions/autofill to protect,
+      // and turning this on triggers a "Shigoto no Mori wants to use
+      // your confidential information" keychain prompt on every launch
+      // since ad-hoc signatures differ between builds.
+      [FuseV1Options.EnableCookieEncryption]: false,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
