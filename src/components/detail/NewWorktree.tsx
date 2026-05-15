@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { CenteredMessage } from "@/components/ui/centered-message";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/usePickedWorktreeName";
@@ -49,11 +51,7 @@ export function NewWorktree() {
   }, [pickedName]);
 
   if (!project) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Project not found.
-      </div>
-    );
+    return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
   // The picker hides occupied branches, but free-text "Use as ref" can
@@ -179,11 +177,7 @@ export function NewWorktree() {
           </p>
         </div>
 
-        {errorMessage && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            {errorMessage}
-          </div>
-        )}
+        {errorMessage && <ErrorBanner>{errorMessage}</ErrorBanner>}
 
         <div className="flex items-center gap-2">
           <Button type="submit" disabled={!canSubmit || busy} size="sm">

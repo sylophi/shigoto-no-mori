@@ -42,7 +42,7 @@ export function LauncherIcon({
     return <Sparkles className={className} />;
   }
 
-  const appId = entry.id.replace(/^app:/, "");
+  const appId = entry.id.startsWith("app:") ? entry.id.slice(4) : entry.id;
   switch (appId) {
     case "cursor":
       return <AppIcon src={cursorIconUrl} className={className} />;

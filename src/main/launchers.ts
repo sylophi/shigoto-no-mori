@@ -188,14 +188,15 @@ const CATALOG: CatalogEntry[] = [
   },
 ];
 
+const APP_ROOTS = [
+  "/Applications",
+  `${homedir()}/Applications`,
+  "/System/Applications",
+] as const;
+
 function appExists(bundleName: string): boolean {
   if (bundleName === "__finder__") return true;
-  const roots = [
-    "/Applications",
-    `${homedir()}/Applications`,
-    "/System/Applications",
-  ];
-  for (const root of roots) {
+  for (const root of APP_ROOTS) {
     if (existsSync(`${root}/${bundleName}`)) return true;
   }
   return false;

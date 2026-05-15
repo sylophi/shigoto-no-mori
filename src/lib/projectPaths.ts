@@ -1,6 +1,8 @@
 // Unix-only path helpers for the filesystem-browse command palette mode.
 // Ported from T3 Code's projectPaths.ts.
 
+const TRAILING_SLASHES = /\/+$/;
+
 export function isFilesystemBrowseQuery(value: string): boolean {
   return (
     value.startsWith("/") ||
@@ -34,7 +36,7 @@ export function appendBrowsePathSegment(
 }
 
 export function getBrowseParentPath(currentPath: string): string | null {
-  const trimmed = currentPath.replace(/\/+$/, "");
+  const trimmed = currentPath.replace(TRAILING_SLASHES, "");
   if (trimmed === "" || trimmed === "~") return null;
   const idx = trimmed.lastIndexOf("/");
   if (idx < 0) return null;
@@ -51,7 +53,7 @@ export function canNavigateUp(currentPath: string): boolean {
 export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length <= 1) return trimmed;
-  return trimmed.replace(/\/+$/, "");
+  return trimmed.replace(TRAILING_SLASHES, "");
 }
 
 export function tildify(path: string, home: string | null | undefined): string {

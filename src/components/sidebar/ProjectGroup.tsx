@@ -25,7 +25,7 @@ import {
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
-import type { Project } from "@shared/types";
+import type { Project } from "@shared/schemas";
 import { WorktreeRow } from "./WorktreeRow";
 
 interface ProjectGroupProps {

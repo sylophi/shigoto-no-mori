@@ -11,6 +11,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { CenteredMessage } from "@/components/ui/centered-message";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -36,11 +37,7 @@ export function ManageBranches() {
   const [creating, setCreating] = useState(false);
 
   if (!project) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Project not found.
-      </div>
-    );
+    return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
   const worktreeByBranch = new Map<string, Worktree>();

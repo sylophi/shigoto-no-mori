@@ -11,7 +11,8 @@ import {
   SunMoon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SectionHeading as BaseSectionHeading } from "@/components/ui/section-heading";
+import { ErrorBanner } from "@/components/ui/error-banner";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -149,7 +150,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-5">
           <section className="space-y-3">
-            <SectionHeading>Location</SectionHeading>
+            <SectionHeading className="mb-1">Location</SectionHeading>
             {root && (
               <div className="flex font-mono text-sm select-text">
                 <PathSpan
@@ -203,7 +204,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           <Separator />
 
           <section className="space-y-3">
-            <SectionHeading>Worktrees</SectionHeading>
+            <SectionHeading className="mb-1">Worktrees</SectionHeading>
             <ToggleRow
               checked={form.deleteBranchOnRemove}
               onCheckedChange={(v) =>
@@ -218,7 +219,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <section className="space-y-4">
             <div>
-              <SectionHeading>Detected tools</SectionHeading>
+              <SectionHeading className="mb-1">Detected tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Editors and tools found on this machine. Shown in every worktree
                 automatically.
@@ -249,7 +250,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               <Separator />
               <section className="space-y-4">
                 <div>
-                  <SectionHeading>Supported tools</SectionHeading>
+                  <SectionHeading className="mb-1">Supported tools</SectionHeading>
                   <p className="text-xs text-muted-foreground">
                     Shigomori knows how to open worktrees in these too. Install
                     any of them and they'll show up under detected.
@@ -275,7 +276,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Custom tools</SectionHeading>
+              <SectionHeading className="mb-1">Custom tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Custom commands available in every worktree (e.g.{" "}
                 <span className="font-mono">claude</span>,{" "}
@@ -310,11 +311,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <DangerZone />
 
-          {write.error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {write.error.message}
-            </div>
-          )}
+          {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
         </div>
       </div>
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
@@ -351,7 +348,7 @@ function AppearanceSection() {
   ];
   return (
     <section className="space-y-3">
-      <SectionHeading>Appearance</SectionHeading>
+      <SectionHeading className="mb-1">Appearance</SectionHeading>
       <div className="flex flex-wrap items-center gap-1.5">
         {options.map(({ value, label, Icon }) => (
           <Button
@@ -369,9 +366,6 @@ function AppearanceSection() {
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <BaseSectionHeading className="mb-1">{children}</BaseSectionHeading>;
-}
 
 function ToggleRow({
   checked,
@@ -435,7 +429,7 @@ function DangerZone() {
 
   return (
     <section className="space-y-3">
-      <SectionHeading>Danger zone</SectionHeading>
+      <SectionHeading className="mb-1">Danger zone</SectionHeading>
       <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
         <div className="space-y-1">
           <div className="text-sm font-medium text-destructive">

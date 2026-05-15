@@ -318,6 +318,12 @@ export const ShellPathPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
+export const RuntimeInfoSchema = z.object({
+  shigomoriRoot: z.string().min(1),
+  homedir: z.string().min(1),
+  isDev: z.boolean(),
+});
+
 export const ThemeSchema = z.enum(["light", "dark", "system"]);
 export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,
@@ -385,3 +391,4 @@ export type DetectedLauncher = z.infer<typeof DetectedLauncherSchema>;
 export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;
 export type ScriptName = z.infer<typeof ScriptNameSchema>;
 export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;

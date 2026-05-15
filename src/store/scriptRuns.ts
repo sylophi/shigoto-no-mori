@@ -11,7 +11,7 @@
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
 import { useSyncExternalStore } from "react";
-import type { ScriptEvent } from "@shared/schemas";
+import type { ScriptEvent, ScriptName } from "@shared/schemas";
 
 // Max number of pty chunks kept for replay. Chunks vary in size (one
 // "data" event may carry a single byte or a 4 KB burst), so this is a
@@ -44,7 +44,7 @@ export interface ScriptRunState {
   cancelling: boolean;
 }
 
-type SlotKind = "setup" | "teardown" | "package";
+type SlotKind = ScriptName | "package";
 
 interface RunMeta {
   worktreeId: string;

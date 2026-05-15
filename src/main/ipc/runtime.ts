@@ -1,6 +1,7 @@
 import { app, ipcMain } from "electron";
 import { homedir } from "node:os";
-import { CHANNELS, type RuntimeInfo } from "@shared/channels";
+import { CHANNELS } from "@shared/channels";
+import type { RuntimeInfo } from "@shared/schemas";
 import { nukeEverything } from "../nuke";
 import { shigomoriRoot } from "../paths";
 

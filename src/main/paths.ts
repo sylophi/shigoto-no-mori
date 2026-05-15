@@ -29,3 +29,11 @@ export async function pathExists(target: string): Promise<boolean> {
     return false;
   }
 }
+
+export function isENOENT(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}

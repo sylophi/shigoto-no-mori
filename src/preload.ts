@@ -2,7 +2,16 @@
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
-import { CHANNELS, type RuntimeInfo } from "@shared/channels";
+import { CHANNELS } from "@shared/channels";
+
+// Subscribe to a no-payload broadcast channel and return the unsubscribe.
+function subscribe(channel: string) {
+  return (handler: () => void): (() => void) => {
+    const listener = () => handler();
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.off(channel, listener);
+  };
+}
 import type {
   BranchList,
   CreateWorktreeResult,
@@ -14,6 +23,7 @@ import type {
   LauncherEntry,
   PackageScriptsResult,
   Project,
+  RuntimeInfo,
   ScriptEvent,
   ScriptName,
   ShigomoriConfig,
@@ -124,36 +134,12 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
   },
   palette: {
-    onToggle: (handler: () => void): (() => void) => {
-      const listener = () => handler();
-      ipcRenderer.on(CHANNELS.PaletteToggle, listener);
-      return () => {
-        ipcRenderer.off(CHANNELS.PaletteToggle, listener);
-      };
-    },
-    onAddProject: (handler: () => void): (() => void) => {
-      const listener = () => handler();
-      ipcRenderer.on(CHANNELS.PaletteAddProject, listener);
-      return () => {
-        ipcRenderer.off(CHANNELS.PaletteAddProject, listener);
-      };
-    },
+    onToggle: subscribe(CHANNELS.PaletteToggle),
+    onAddProject: subscribe(CHANNELS.PaletteAddProject),
   },
   window: {
-    onFocused: (handler: () => void): (() => void) => {
-      const listener = () => handler();
-      ipcRenderer.on(CHANNELS.WindowFocused, listener);
-      return () => {
-        ipcRenderer.off(CHANNELS.WindowFocused, listener);
-      };
-    },
-    onBlurred: (handler: () => void): (() => void) => {
-      const listener = () => handler();
-      ipcRenderer.on(CHANNELS.WindowBlurred, listener);
-      return () => {
-        ipcRenderer.off(CHANNELS.WindowBlurred, listener);
-      };
-    },
+    onFocused: subscribe(CHANNELS.WindowFocused),
+    onBlurred: subscribe(CHANNELS.WindowBlurred),
   },
   packageScripts: {
     list: (input: {

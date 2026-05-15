@@ -91,11 +91,13 @@ function* extensionsOf(name: string): Generator<string> {
   }
 }
 
+const EMPTY: Record<string, string> = Object.freeze({});
+
 export function resolveFileIcon(name: string, light: boolean): string {
   const lower = name.toLowerCase();
-  const lightFileNames = light ? (m.light?.fileNames ?? {}) : {};
-  const lightFileExts = light ? (m.light?.fileExtensions ?? {}) : {};
-  const lightLangIds = light ? (m.light?.languageIds ?? {}) : {};
+  const lightFileNames = light ? (m.light?.fileNames ?? EMPTY) : EMPTY;
+  const lightFileExts = light ? (m.light?.fileExtensions ?? EMPTY) : EMPTY;
+  const lightLangIds = light ? (m.light?.languageIds ?? EMPTY) : EMPTY;
 
   const byName = lightFileNames[lower] ?? m.fileNames[lower];
   if (byName) return byName;

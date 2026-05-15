@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { RuntimeInfo } from "@shared/channels";
+import type { RuntimeInfo } from "@shared/schemas";
 
 export function useRuntimeInfo() {
   return useQuery<RuntimeInfo>({

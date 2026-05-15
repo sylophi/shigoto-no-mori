@@ -13,6 +13,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { CenteredMessage } from "@/components/ui/centered-message";
 import { CopyButton } from "@/components/ui/copy-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
@@ -67,11 +68,7 @@ export function WorktreeDetail() {
   const worktree = worktrees.find((w) => w.name === worktreeName);
 
   if (!worktree || !project) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Worktree not found.
-      </div>
-    );
+    return <CenteredMessage>Worktree not found.</CenteredMessage>;
   }
 
   return <WorktreeDetailInner worktree={worktree} project={project} />;
@@ -235,7 +232,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           </div>
           {worktree.changedCount > 0 && (
             <span
-              title={`${worktree.changedCount} file${worktree.changedCount === 1 ? "" : "s"} changed`}
+              title={`${worktree.changedCount} files changed`}
               className="tabular inline-flex shrink-0 items-center gap-1 pt-2 text-xs text-amber-500"
             >
               <FileDiff aria-hidden className="size-3.5" />

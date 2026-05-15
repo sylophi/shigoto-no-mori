@@ -13,7 +13,7 @@ import {
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
 import { useWorktreeDeletion } from "@/store/worktreeDeletions";
-import type { Worktree } from "@shared/types";
+import type { Worktree } from "@shared/schemas";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -146,7 +146,7 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount === 0) return null;
-  const label = `${worktree.changedCount} file${worktree.changedCount === 1 ? "" : "s"} changed`;
+  const label = `${worktree.changedCount} files changed`;
   return (
     <span
       title={label}

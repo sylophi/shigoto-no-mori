@@ -11,8 +11,10 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { CenteredMessage } from "@/components/ui/centered-message";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { MaterialIcon } from "@/components/ui/material-icon";
-import { SectionHeading as BaseSectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading } from "@/components/ui/section-heading";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -44,11 +46,7 @@ export function ConfigureProject() {
     useDefaultBranch(projectId);
 
   if (!project) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-        Project not found.
-      </div>
-    );
+    return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
   return (
@@ -225,7 +223,7 @@ function ConfigureForm({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-5">
           <section className="space-y-3">
-            <SectionHeading>Location</SectionHeading>
+            <SectionHeading className="mb-1">Location</SectionHeading>
             <div className="flex font-mono text-sm select-text">
               <PathSpan
                 path={projectPath}
@@ -251,7 +249,7 @@ function ConfigureForm({
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Worktrees</SectionHeading>
+              <SectionHeading className="mb-1">Worktrees</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Settings for branches created inside this project.
               </p>
@@ -295,7 +293,7 @@ function ConfigureForm({
 
           <section className="space-y-4">
             <div>
-              <SectionHeading>Scripts</SectionHeading>
+              <SectionHeading className="mb-1">Scripts</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Run inside the worktree directory. These env vars are available:
               </p>
@@ -330,7 +328,7 @@ function ConfigureForm({
 
           <section className="space-y-3">
             <div>
-              <SectionHeading>Custom tools</SectionHeading>
+              <SectionHeading className="mb-1">Custom tools</SectionHeading>
               <p className="text-xs text-muted-foreground">
                 Tools specific to this project. For tools you want available in
                 every project (editors, agents), use{" "}
@@ -368,11 +366,7 @@ function ConfigureForm({
             </Button>
           </section>
 
-          {write.error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              {write.error.message}
-            </div>
-          )}
+          {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
         </div>
       </div>
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
@@ -400,9 +394,6 @@ function ConfigureForm({
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return <BaseSectionHeading className="mb-1">{children}</BaseSectionHeading>;
-}
 
 interface ScriptFieldProps {
   id: string;
@@ -459,7 +450,7 @@ function CarryOverSection({
   return (
     <section className="space-y-3">
       <div>
-        <SectionHeading>Carry over</SectionHeading>
+        <SectionHeading className="mb-1">Carry over</SectionHeading>
         <p className="text-xs text-muted-foreground">
           Files and folders from the main checkout to copy or symlink into every
           new worktree. Useful for things git ignores, like{" "}

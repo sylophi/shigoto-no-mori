@@ -44,10 +44,4 @@ export const CHANNELS = {
   WindowBlurred: "window:blurred",
 } as const;
 
-export interface RuntimeInfo {
-  shigomoriRoot: string;
-  homedir: string;
-  isDev: boolean;
-}
-
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];

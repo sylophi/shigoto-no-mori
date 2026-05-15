@@ -2,10 +2,9 @@
 // that span every project (currently just custom launchers) and is kept
 // separate from state.json (runtime data) and from the per-project configs
 // at ~/shigomori[-dev]/projects/<projectId>.json.
-import { readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { mkdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { type GlobalConfig, GlobalConfigSchema } from "@shared/schemas";
+import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
 import { shigomoriRoot } from "./paths";
 
 const CACHE_TTL_MS = 5_000;
@@ -18,40 +17,12 @@ function configPath(): string {
 export async function readGlobalConfig(): Promise<GlobalConfig> {
   const now = Date.now();
   if (cached && cached.expires > now) return cached.value;
-
-  const path = configPath();
-  let value: GlobalConfig;
-  try {
-    const raw = await readFile(path, "utf8");
-    value = GlobalConfigSchema.parse(JSON.parse(raw));
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      "code" in error &&
-      (error as NodeJS.ErrnoException).code === "ENOENT"
-    ) {
-      value = {};
-    } else {
-      throw new Error(`Failed to read ${path}`, { cause: error });
-    }
-  }
-
+  const value = (await readJsonOrNull(configPath(), GlobalConfigSchema)) ?? {};
   cached = { value, expires: now + CACHE_TTL_MS };
   return value;
 }
 
 export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
-  const validated = GlobalConfigSchema.parse(config);
-  const target = configPath();
-  await mkdir(dirname(target), { recursive: true });
-  const temp = `${target}.tmp.${process.pid}.${Date.now()}`;
-  const json = `${JSON.stringify(validated, null, 2)}\n`;
-  await writeFile(temp, json, "utf8");
-  try {
-    await rename(temp, target);
-  } catch (error) {
-    await unlink(temp).catch(() => undefined);
-    throw error;
-  }
+  await atomicWriteJson(configPath(), GlobalConfigSchema.parse(config));
   cached = null;
 }
