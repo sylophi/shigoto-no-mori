@@ -10,3 +10,14 @@
 # ignoreScripts: true, strictDepBuilds: true.
 nodeLinker: hoisted
 blockExoticSubdeps: false
+# Explicit build-script trust. With your global `ignoreScripts: true` and
+# `strictDepBuilds: true`, anything not listed below fails the install —
+# so the split has to be exhaustive across all deps that ship build scripts.
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+  - lefthook
+ignoredBuiltDependencies:
+  - electron-winstaller
+  - fs-xattr
+  - macos-alias

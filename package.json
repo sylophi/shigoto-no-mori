@@ -18,18 +18,6 @@
     "format:check": "oxfmt --check .",
     "extract-icon": "scripts/extract-app-icon.sh"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild",
-      "lefthook"
-    ],
-    "ignoredBuiltDependencies": [
-      "electron-winstaller",
-      "fs-xattr",
-      "macos-alias"
-    ]
-  },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
     "@fontsource-variable/geist": "^5.2.8",
