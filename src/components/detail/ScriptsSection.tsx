@@ -8,7 +8,11 @@ import { usePackageScripts } from "@/hooks/usePackageScripts";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { cn } from "@/lib/utils";
-import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
+import {
+  slotToParam,
+  useWorktreeHasPackageActivity,
+  type ScriptSlot,
+} from "@/store/scriptRuns";
 import type { PackageScriptsResult, Worktree } from "@shared/schemas";
 import { ScriptStatusBadge } from "./ScriptStatusBadge";
 
@@ -124,7 +128,13 @@ interface PackageScriptsProps {
 }
 
 function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
-  const [expanded, setExpanded] = useState(false);
+  const hasActivity = useWorktreeHasPackageActivity(worktree.id);
+  // `null` means the user hasn't overridden the default; the section
+  // follows hasActivity in that case. A manual toggle sticks until
+  // the component unmounts (navigation), at which point a fresh
+  // mount falls back to hasActivity again.
+  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
+  const expanded = manualExpanded ?? hasActivity;
   const [query, setQuery] = useState("");
   const entries = Object.entries(pkg.scripts);
 
@@ -143,7 +153,7 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
     <div className="space-y-2">
       <button
         type="button"
-        onClick={() => setExpanded((v) => !v)}
+        onClick={() => setManualExpanded(!expanded)}
         aria-expanded={expanded}
         className="group flex w-full items-center gap-1.5 text-left text-xs transition-colors"
       >

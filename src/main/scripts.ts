@@ -1,12 +1,13 @@
-// Spawn per-project setup/teardown and package scripts with streamed
-// stdout/stderr events. Each script runs in its own process group so we
-// can stop the entire tree of children (dev servers, watchers, compilers
-// the user's command spawns), not just the wrapping shell.
+// Spawn per-project setup/teardown and package scripts and stream their
+// merged stdout+stderr to the renderer. Each script runs in its own
+// session so we can kill the entire tree of children (dev servers,
+// watchers, compilers the user's command spawns), not just the
+// wrapping shell.
 //
 // Kill strategy:
 //   1. SIGTERM the process group (negative pgid) — covers normal forks.
-//   2. Walk `ps` for any descendant that escaped the group (setsid,
-//      double-fork daemons) and SIGTERM those too.
+//   2. Walk `ps` for any descendant still reachable via ppid (e.g.
+//      double-forked daemons) and SIGTERM those too.
 //   3. After a grace period, SIGKILL anything still alive in either set.
 //
 // On app quit (see main.ts) we kill every running script the same way
@@ -33,9 +34,6 @@ interface ScriptWorktree {
 
 interface RunArgs {
   command: string;
-  // Configured setup/teardown pass "setup"/"teardown"; package scripts
-  // pass the actual script name. Stored verbatim into
-  // SHIGOMORI_SCRIPT_NAME for the script to read.
   scriptName: string;
   worktree: ScriptWorktree;
   project: Pick<Project, "id" | "path" | "name">;
@@ -54,8 +52,6 @@ interface RunRecord {
   startedAt: number;
   exited: boolean;
   cancelling: boolean;
-  // Resolves on 'exit' or 'error'. Used by cancel/killAll to await
-  // teardown without re-attaching listeners.
   done: Promise<void>;
   webContents: WebContents;
 }
@@ -78,14 +74,15 @@ function emit(webContents: WebContents, payload: ScriptEvent): void {
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
 // GUI launches depending on launchd state. os.userInfo().shell reads the
-// passwd entry directly. Flags `-l -i -c` source both .zprofile and
-// .zshrc (or bash equivalents) so tools users added to PATH via nvm /
-// pyenv / brew-shellenv inside their rc are available to the script.
+// passwd entry directly. We use a *login* shell (no `-i`) so the user's
+// `.zprofile` / `.bash_profile` runs without zsh's interactive-init
+// code (job control, gitstatus, prompt setup) throwing errors at us
+// when there's no controlling TTY.
 function resolveShell(): { command: string; args: string[] } {
   const fromEnv = process.env["SHELL"];
-  if (fromEnv) return { command: fromEnv, args: ["-l", "-i", "-c"] };
+  if (fromEnv) return { command: fromEnv, args: ["-l", "-c"] };
   const fromPasswd = userInfo().shell;
-  if (fromPasswd) return { command: fromPasswd, args: ["-l", "-i", "-c"] };
+  if (fromPasswd) return { command: fromPasswd, args: ["-l", "-c"] };
   return { command: "/bin/sh", args: ["-c"] };
 }
 
@@ -100,8 +97,8 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
 
 // Walks `ps` to find every process that descends from rootPid via the
 // ppid chain. Catches grandchildren that called setsid() and left our
-// process group — they're still reachable here as long as their ppid
-// hasn't been re-parented to init.
+// process group — still reachable here as long as their ppid hasn't
+// been re-parented to init.
 async function listDescendantPids(rootPid: number): Promise<number[]> {
   let stdout: string;
   try {
@@ -140,10 +137,6 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
   return out;
 }
 
-// Signal the process group first (negative pid targets the whole group),
-// then any descendant still reachable via ppid. The order matters: hit
-// the in-group processes synchronously before the async ps walk so we
-// minimize the window for the user's script to spawn more children.
 async function signalTree(record: RunRecord, signal: NodeJS.Signals): Promise<void> {
   safeKill(-record.pid, signal);
   const descendants = await listDescendantPids(record.pid);
@@ -180,8 +173,8 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (opts.reason) {
     emit(record.webContents, {
       runId: record.runId,
-      kind: "stderr",
-      data: `\n— ${opts.reason} —\n`,
+      kind: "data",
+      data: `\r\n\x1b[2m— ${opts.reason} —\x1b[0m\r\n`,
     });
   }
 
@@ -202,6 +195,14 @@ export function startScript(args: RunArgs): string {
   const runId = randomUUID();
   const env = {
     ...process.env,
+    // Convince modern tools (npm, pnpm, bun, vite, vitest, tsc, eslint
+    // …) to emit ANSI even though stdout isn't a TTY. xterm in the
+    // renderer interprets the codes.
+    FORCE_COLOR: "1",
+    TERM: "xterm-256color",
+    // Give programs that auto-format to terminal width a reasonable
+    // default rather than the conventional 80-col fallback.
+    COLUMNS: "120",
     [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
     [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
     [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
@@ -223,8 +224,6 @@ export function startScript(args: RunArgs): string {
     detached: true,
   });
 
-  // pid is undefined when spawn fails synchronously (rare; usually
-  // ENOENT or EACCES). Report and bail.
   if (!child.pid) {
     queueMicrotask(() => {
       emit(args.webContents, {
@@ -257,10 +256,12 @@ export function startScript(args: RunArgs): string {
   };
   runningScripts.set(runId, record);
 
+  // Both streams flow into a single "data" event so xterm sees one
+  // ordered byte stream (matches how a real terminal would render it).
   child.stdout?.on("data", (chunk: Buffer) => {
     emit(args.webContents, {
       runId,
-      kind: "stdout",
+      kind: "data",
       data: chunk.toString("utf8"),
     });
   });
@@ -268,17 +269,13 @@ export function startScript(args: RunArgs): string {
   child.stderr?.on("data", (chunk: Buffer) => {
     emit(args.webContents, {
       runId,
-      kind: "stderr",
+      kind: "data",
       data: chunk.toString("utf8"),
     });
   });
 
   child.on("error", (error) => {
-    emit(args.webContents, {
-      runId,
-      kind: "error",
-      data: error.message,
-    });
+    emit(args.webContents, { runId, kind: "error", data: error.message });
     if (!record.exited) {
       record.exited = true;
       resolveDone();
@@ -286,8 +283,14 @@ export function startScript(args: RunArgs): string {
     runningScripts.delete(runId);
   });
 
-  child.on("exit", (code) => {
-    emit(args.webContents, { runId, kind: "exit", code });
+  child.on("exit", (code, signal) => {
+    // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)
+    // because the shell wrapping the user's command translated the
+    // signal into an exit code. If we initiated the cancel, report
+    // null code so the UI shows "stopped" not "failed".
+    const wasSignal = signal !== null;
+    const reported = record.cancelling || wasSignal ? null : code;
+    emit(args.webContents, { runId, kind: "exit", code: reported });
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import Anser, { type AnserJsonEntry } from "anser";
 import { ArrowLeft, Play, Square, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -6,11 +7,11 @@ import { usePackageScripts } from "@/hooks/usePackageScripts";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/useWorktrees";
+import { cn } from "@/lib/utils";
 import {
   paramToSlot,
   scriptRuns,
   slotLabel,
-  type LogLine,
   type ScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
@@ -72,8 +73,7 @@ function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const label = slotLabel(slot);
 
   const clear = () => scriptRuns.clear(key);
-
-  const canClear = !busy && state.logs.length > 0;
+  const canClear = !busy && state.output.length > 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -134,26 +134,26 @@ function ConsoleBody({
   state: ScriptRunState;
   onClear: (() => void) | null;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLPreElement>(null);
   const stickRef = useRef(true);
 
-  // Honor the user's scroll position: if they scroll up to read history,
-  // don't yank them back down on every new line.
+  const tokens = parseOutput(state.output);
+
+  // Honor the user's scroll position: only auto-scroll if they're
+  // already pinned near the bottom.
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const distanceFromBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight;
-    stickRef.current = distanceFromBottom < 24;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickRef.current = distance < 24;
   };
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-    if (stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [state.logs]);
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [tokens]);
 
-  if (state.status === "idle" && state.logs.length === 0) {
+  if (state.status === "idle" && tokens.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
         No runs yet. Press Run to start.
@@ -162,18 +162,21 @@ function ConsoleBody({
   }
 
   return (
-    <div className="relative min-h-0 flex-1">
-      <div
+    <div className="relative min-h-0 flex-1 bg-background">
+      <pre
         ref={scrollRef}
         onScroll={onScroll}
-        className="h-full overflow-y-auto bg-background px-6 py-4 font-mono text-xs leading-relaxed select-text"
+        className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap select-text text-foreground"
       >
-        {state.logs.length === 0 ? (
-          <div className="text-muted-foreground">Starting…</div>
-        ) : (
-          state.logs.map((log) => <LogChunk key={log.id} log={log} />)
-        )}
-      </div>
+        {tokens.length === 0
+          ? "Starting…"
+          : tokens.map((tok, i) => (
+              // Output is append-only and tokens never reshuffle, so
+              // position is a stable identity here.
+              // oxlint-disable-next-line react/no-array-index-key
+              <AnsiSpan key={i} token={tok} />
+            ))}
+      </pre>
       {onClear && (
         <button
           type="button"
@@ -189,15 +192,99 @@ function ConsoleBody({
   );
 }
 
-function LogChunk({ log }: { log: LogLine }) {
-  const cls =
-    log.stream === "stderr" || log.stream === "error"
-      ? "text-destructive whitespace-pre-wrap"
-      : log.stream === "exit"
-        ? "text-muted-foreground whitespace-pre-wrap"
-        : "whitespace-pre-wrap";
-  return <span className={cls}>{log.text}</span>;
+// Combine chunks, collapse \r progress-bar overwrites within each line
+// (the last segment wins), then parse ANSI/SGR into colored + styled
+// tokens. \r-collapse runs before parsing so progress indicators that
+// don't change attributes mid-bar still show as one final line.
+function parseOutput(chunks: string[]): AnserJsonEntry[] {
+  if (chunks.length === 0) return [];
+  const collapsed = chunks
+    .join("")
+    .split("\n")
+    .map((line) =>
+      line.includes("\r") ? line.split("\r").pop() ?? line : line,
+    )
+    .join("\n");
+  return Anser.ansiToJson(collapsed, {
+    use_classes: true,
+    remove_empty: true,
+  });
 }
+
+function AnsiSpan({ token }: { token: AnserJsonEntry }) {
+  const decorations = token.decorations ?? [];
+  const style: React.CSSProperties = {};
+  // Anser's JSON emits raw color names in `fg` / `bg`:
+  //   - "ansi-red"..."ansi-bright-white" for the 16 base colors;
+  //     we need to append "-fg" / "-bg" to hit our CSS classes.
+  //   - "ansi-palette-N" for 256-color indices 16-255;
+  //     we resolve those to rgb() via the standard xterm palette.
+  //   - "ansi-truecolor" for 24-bit; the rgb string is in
+  //     fg_truecolor / bg_truecolor.
+  let fgClass: string | null = null;
+  let bgClass: string | null = null;
+  if (token.fg) {
+    const inline = resolveAnsiInline(token.fg, token.fg_truecolor);
+    if (inline) style.color = inline;
+    else fgClass = `${token.fg}-fg`;
+  }
+  if (token.bg) {
+    const inline = resolveAnsiInline(token.bg, token.bg_truecolor);
+    if (inline) style.backgroundColor = inline;
+    else bgClass = `${token.bg}-bg`;
+  }
+  const className = cn(
+    fgClass,
+    bgClass,
+    decorations.includes("bold") && "font-semibold",
+    decorations.includes("italic") && "italic",
+    decorations.includes("underline") && "underline",
+    decorations.includes("strikethrough") && "line-through",
+    decorations.includes("dim") && "opacity-60",
+    decorations.includes("hidden") && "invisible",
+  );
+  const hasStyle = style.color !== undefined || style.backgroundColor !== undefined;
+  if (!className && !hasStyle) return token.content;
+  return (
+    <span className={className} style={hasStyle ? style : undefined}>
+      {token.content}
+    </span>
+  );
+}
+
+const PALETTE_RE = /^ansi-palette-(\d+)$/;
+
+function resolveAnsiInline(
+  name: string,
+  truecolor: string | null,
+): string | null {
+  if (name === "ansi-truecolor" && truecolor) return `rgb(${truecolor})`;
+  const m = PALETTE_RE.exec(name);
+  if (!m) return null;
+  const idx = Number(m[1]);
+  if (idx < 16 || idx > 255) return null;
+  return PALETTE_256[idx - 16];
+}
+
+// 256-color palette covering indices 16-255 (0-15 hit the named CSS
+// classes). 16-231: 6x6x6 cube; 232-255: 24-step grayscale. Standard
+// values match what xterm and modern terminal emulators use.
+const PALETTE_256: string[] = (() => {
+  const cube = [0, 95, 135, 175, 215, 255];
+  const out: string[] = [];
+  for (let r = 0; r < 6; r++) {
+    for (let g = 0; g < 6; g++) {
+      for (let b = 0; b < 6; b++) {
+        out.push(`rgb(${cube[r]}, ${cube[g]}, ${cube[b]})`);
+      }
+    }
+  }
+  for (let i = 0; i < 24; i++) {
+    const v = 8 + i * 10;
+    out.push(`rgb(${v}, ${v}, ${v})`);
+  }
+  return out;
+})();
 
 function resolveCommand(
   slot: ScriptSlot,

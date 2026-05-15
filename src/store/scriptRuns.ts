@@ -13,7 +13,10 @@
 import { useSyncExternalStore } from "react";
 import type { ScriptEvent } from "@shared/schemas";
 
-const MAX_LOGS = 5_000;
+// Max number of pty chunks kept for replay. Chunks vary in size (one
+// "data" event may carry a single byte or a 4 KB burst), so this is a
+// rough ceiling. The console replays the buffer on mount.
+const MAX_CHUNKS = 5_000;
 
 export type ScriptSlot =
   | { kind: "setup" }
@@ -29,16 +32,12 @@ export type RunStatus =
   | "exited"
   | "errored";
 
-export interface LogLine {
-  id: number;
-  stream: "stdout" | "stderr" | "error" | "exit";
-  text: string;
-}
-
 export interface ScriptRunState {
   runId: string | null;
   status: RunStatus;
-  logs: LogLine[];
+  // Raw pty output chunks (already utf8-decoded). The console writes
+  // them straight into xterm; we don't try to interpret ANSI here.
+  output: string[];
   exitCode: number | null;
   startedAt: number | null;
   endedAt: number | null;
@@ -98,15 +97,19 @@ export function slotLabel(slot: ScriptSlot): string {
 const states = new Map<ScriptKey, ScriptRunState>();
 const meta = new Map<ScriptKey, RunMeta>();
 const runIdToKey = new Map<string, ScriptKey>();
+// Events that arrived before the `scripts.run` invoke resolved and let
+// us bind the runId to a key. With a real pty the shell can emit its
+// first bytes before the IPC return reaches the renderer, so buffer
+// here and flush in start() once we know the runId.
+const pendingByRunId = new Map<string, ScriptEvent[]>();
 const perKeySubs = new Map<ScriptKey, Set<() => void>>();
 const worktreeSubs = new Map<string, Set<() => void>>();
-let nextLogId = 0;
 let subscribed = false;
 
 const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
   status: "idle" as const,
-  logs: [],
+  output: [],
   exitCode: null,
   startedAt: null,
   endedAt: null,
@@ -145,29 +148,30 @@ function getState(key: ScriptKey): ScriptRunState {
   return states.get(key) ?? EMPTY_STATE;
 }
 
-function appendLogTo(
-  state: ScriptRunState,
-  line: Omit<LogLine, "id">,
-): ScriptRunState {
-  const entry: LogLine = { id: nextLogId++, ...line };
-  const logs =
-    state.logs.length >= MAX_LOGS
-      ? [...state.logs.slice(state.logs.length - MAX_LOGS + 1), entry]
-      : [...state.logs, entry];
-  return { ...state, logs };
+function appendChunk(state: ScriptRunState, chunk: string): ScriptRunState {
+  const output =
+    state.output.length >= MAX_CHUNKS
+      ? [...state.output.slice(state.output.length - MAX_CHUNKS + 1), chunk]
+      : [...state.output, chunk];
+  return { ...state, output };
 }
 
-function handleEvent(event: ScriptEvent): void {
-  const key = runIdToKey.get(event.runId);
-  if (!key) return;
+function exitSentinel(code: number | null): string {
+  // Dim divider so users can see where the run ended even if the
+  // program's last line didn't end with a newline.
+  if (code === null) return "\r\n\x1b[2m── stopped ──\x1b[0m\r\n";
+  if (code === 0) return "\r\n\x1b[2m── done ──\x1b[0m\r\n";
+  return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
+}
 
-  if (event.kind === "stdout" || event.kind === "stderr") {
-    setStateWithActivity(key, (s) => appendLogTo(s, { stream: event.kind, text: event.data }));
+function applyEvent(key: ScriptKey, event: ScriptEvent): void {
+  if (event.kind === "data") {
+    setStateWithActivity(key, (s) => appendChunk(s, event.data));
     return;
   }
   if (event.kind === "error") {
     setStateWithActivity(key, (s) => ({
-      ...appendLogTo(s, { stream: "error", text: event.data }),
+      ...appendChunk(s, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`),
       status: "errored",
     }));
     return;
@@ -178,16 +182,25 @@ function handleEvent(event: ScriptEvent): void {
     if (m) meta.set(key, { ...m, exitDeferred: null });
     runIdToKey.delete(event.runId);
     setStateWithActivity(key, (s) => ({
-      ...appendLogTo(s, {
-        stream: "exit",
-        text: `Exited with code ${event.code ?? "(signal)"}`,
-      }),
+      ...appendChunk(s, exitSentinel(event.code)),
       exitCode: event.code,
       status: "exited",
       endedAt: Date.now(),
       cancelling: false,
     }));
   }
+}
+
+function handleEvent(event: ScriptEvent): void {
+  const key = runIdToKey.get(event.runId);
+  if (key) {
+    applyEvent(key, event);
+    return;
+  }
+  // Stash until start() learns the runId and flushes us.
+  const bucket = pendingByRunId.get(event.runId) ?? [];
+  bucket.push(event);
+  pendingByRunId.set(event.runId, bucket);
 }
 
 export function ensureScriptEventSubscription(): void {
@@ -220,7 +233,7 @@ async function start(input: StartInput): Promise<void> {
   setStateWithActivity(input.key, () => ({
     runId: null,
     status: "starting",
-    logs: [],
+    output: [],
     exitCode: null,
     startedAt: Date.now(),
     endedAt: null,
@@ -234,7 +247,7 @@ async function start(input: StartInput): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setStateWithActivity(input.key, (s) => ({
-      ...appendLogTo(s, { stream: "error", text: message }),
+      ...appendChunk(s, `\r\n\x1b[31m${message}\x1b[0m\r\n`),
       status: "errored",
       endedAt: Date.now(),
     }));
@@ -246,6 +259,14 @@ async function start(input: StartInput): Promise<void> {
 
   runIdToKey.set(runId, input.key);
   setStateWithActivity(input.key, (s) => ({ ...s, runId, status: "running" }));
+
+  // Drain any events the pty produced before we knew the runId. Order
+  // is preserved (push/iterate FIFO) so xterm replay stays coherent.
+  const pending = pendingByRunId.get(runId);
+  if (pending) {
+    pendingByRunId.delete(runId);
+    for (const event of pending) applyEvent(input.key, event);
+  }
 }
 
 async function cancel(key: ScriptKey): Promise<void> {
@@ -346,6 +367,19 @@ function getActivityKind(worktreeId: string): ScriptActivityKind | null {
   return null;
 }
 
+// True if any package script for this worktree has run (or is
+// running). Drives whether the package.json section in the worktree
+// detail expands by default.
+function hasWorktreePackageActivity(worktreeId: string): boolean {
+  for (const [key, m] of meta) {
+    if (m.worktreeId !== worktreeId) continue;
+    if (m.slotKind !== "package") continue;
+    const s = states.get(key);
+    if (s && s.status !== "idle") return true;
+  }
+  return false;
+}
+
 export const scriptRuns = {
   start,
   cancel,
@@ -355,6 +389,7 @@ export const scriptRuns = {
   subscribe,
   subscribeWorktree,
   getActivityKind,
+  hasWorktreePackageActivity,
 };
 
 export function useWorktreeScriptActivity(
@@ -364,6 +399,14 @@ export function useWorktreeScriptActivity(
     (cb) => scriptRuns.subscribeWorktree(worktreeId, cb),
     () => scriptRuns.getActivityKind(worktreeId),
     () => null,
+  );
+}
+
+export function useWorktreeHasPackageActivity(worktreeId: string): boolean {
+  return useSyncExternalStore(
+    (cb) => scriptRuns.subscribeWorktree(worktreeId, cb),
+    () => scriptRuns.hasWorktreePackageActivity(worktreeId),
+    () => false,
   );
 }
 

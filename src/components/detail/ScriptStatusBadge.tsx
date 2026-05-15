@@ -53,7 +53,7 @@ export function ScriptStatusBadge({
     if (state.exitCode === null) {
       return (
         <span
-          className="tabular shrink-0 text-xs text-muted-foreground"
+          className="tabular shrink-0 text-xs text-muted-foreground select-text"
           title={timeTitle}
         >
           stopped{suffix}
@@ -63,7 +63,7 @@ export function ScriptStatusBadge({
     if (state.exitCode === 0) {
       return (
         <span
-          className="tabular shrink-0 text-xs text-muted-foreground"
+          className="tabular shrink-0 text-xs text-muted-foreground select-text"
           title={timeTitle}
         >
           done{suffix}
@@ -72,7 +72,7 @@ export function ScriptStatusBadge({
     }
     return (
       <span
-        className="tabular shrink-0 font-mono text-xs text-destructive"
+        className="tabular shrink-0 font-mono text-xs text-destructive select-text"
         title={timeTitle}
       >
         failed · exit {state.exitCode}
@@ -82,7 +82,9 @@ export function ScriptStatusBadge({
   }
   if (state.status === "errored") {
     return (
-      <span className="shrink-0 text-xs text-destructive">errored</span>
+      <span className="shrink-0 text-xs text-destructive select-text">
+        errored
+      </span>
     );
   }
   return null;

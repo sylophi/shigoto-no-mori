@@ -20,6 +20,9 @@ importers:
       '@tanstack/react-router':
         specifier: 1.169.2
         version: 1.169.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      anser:
+        specifier: ^2.3.5
+        version: 2.3.5
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -1579,6 +1582,9 @@ packages:
 
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
+
+  anser@2.3.5:
+    resolution: {integrity: sha512-vcZjxvvVoxTeR5XBNJB38oTu/7eDCZlwdz32N1eNgpyPF7j/Z7Idf+CUwQOkKKpJ7RJyjxgLHCM7vdIK0iCNMQ==}
 
   ansi-escapes@4.3.2:
     resolution: {integrity: sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ==}
@@ -5182,6 +5188,8 @@ snapshots:
       fast-uri: 3.1.2
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
+
+  anser@2.3.5: {}
 
   ansi-escapes@4.3.2:
     dependencies:

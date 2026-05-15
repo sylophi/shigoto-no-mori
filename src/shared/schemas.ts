@@ -356,9 +356,12 @@ export const CancelScriptPayloadSchema = z.object({
   runId: z.string(),
 });
 
+// stdout and stderr are merged into one "data" event so xterm renders
+// them in true interleave order (matches how a terminal would show
+// them). "error" covers spawn failures; "exit" is the final code
+// (null if the process died from a signal or we cancelled).
 export const ScriptEventSchema = z.discriminatedUnion("kind", [
-  z.object({ runId: z.string(), kind: z.literal("stdout"), data: z.string() }),
-  z.object({ runId: z.string(), kind: z.literal("stderr"), data: z.string() }),
+  z.object({ runId: z.string(), kind: z.literal("data"), data: z.string() }),
   z.object({
     runId: z.string(),
     kind: z.literal("exit"),
