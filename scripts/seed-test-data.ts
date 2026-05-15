@@ -81,7 +81,10 @@ async function commit(
   await git(repo, ["commit", "-m", message, "-q"]);
 }
 
-async function bareRemote(name: string, defaultBranch = "main"): Promise<string> {
+async function bareRemote(
+  name: string,
+  defaultBranch = "main",
+): Promise<string> {
   await mkdir(REMOTES, { recursive: true });
   await git(REMOTES, [
     "init",
@@ -152,7 +155,8 @@ async function seedBunBasic(): Promise<Manifest> {
   return {
     name: "bun-basic",
     path: repo,
-    purpose: "Bun project with rich scripts and gitignored carry-over candidates",
+    purpose:
+      "Bun project with rich scripts and gitignored carry-over candidates",
     tests: [
       "Package Scripts row should say 'bun' and list 7 scripts.",
       "Run each script: colors render (colorful), failure surfaces with exit 1 (lint), long-running cancels cleanly (dev), tree-spawn cancel kills all 3 sleeps.",
@@ -175,8 +179,7 @@ async function seedPnpmWorkspaces(): Promise<Manifest> {
       }),
       "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n",
       "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
-      "packages/foo/package.json":
-        `${JSON.stringify({ name: "@ws/foo", version: "0.0.0" }, null, 2)}\n`,
+      "packages/foo/package.json": `${JSON.stringify({ name: "@ws/foo", version: "0.0.0" }, null, 2)}\n`,
       "packages/foo/index.js": "module.exports = 'foo';\n",
     },
     "Initial workspaces",
@@ -237,7 +240,8 @@ async function seedNoPackageJson(): Promise<Manifest> {
   await commit(
     repo,
     {
-      "README.md": "# no-package-json\n\nPlain repo with no Node.js metadata.\n",
+      "README.md":
+        "# no-package-json\n\nPlain repo with no Node.js metadata.\n",
       "src/main.go": "package main\n\nfunc main() {}\n",
     },
     "Initial",
@@ -246,7 +250,9 @@ async function seedNoPackageJson(): Promise<Manifest> {
     name: "no-package-json",
     path: repo,
     purpose: "Repo without package.json",
-    tests: ["Package Scripts section should hide or show its empty state cleanly."],
+    tests: [
+      "Package Scripts section should hide or show its empty state cleanly.",
+    ],
   };
 }
 
@@ -537,7 +543,9 @@ async function seedPathSpaces(): Promise<Manifest> {
     repo,
     {
       "README.md": "# spaces in path\n",
-      "package.json": pkgJson("path-with-spaces", { hello: "echo 'spaces ok'" }),
+      "package.json": pkgJson("path-with-spaces", {
+        hello: "echo 'spaces ok'",
+      }),
     },
     "Initial",
   );
@@ -622,7 +630,9 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
   lines.push("## Supporting directories");
   lines.push("");
   lines.push("- `remotes/` — bare repos backing any repo with a real remote.");
-  lines.push("- `external/` — git worktrees pre-created outside the managed dir.");
+  lines.push(
+    "- `external/` — git worktrees pre-created outside the managed dir.",
+  );
   lines.push("- `.sidecar/` — internal clones used to push divergent commits.");
   lines.push("");
   await writeFile(join(ROOT, "README.md"), `${lines.join("\n")}\n`);
@@ -635,7 +645,9 @@ function printSummary(manifests: Manifest[], elapsedMs: number): void {
 
   console.log("");
   console.log(
-    green(`✓ Seeded ${manifests.length} repos in ${(elapsedMs / 1000).toFixed(1)}s`),
+    green(
+      `✓ Seeded ${manifests.length} repos in ${(elapsedMs / 1000).toFixed(1)}s`,
+    ),
   );
   console.log("");
   for (const m of manifests) {
@@ -643,12 +655,8 @@ function printSummary(manifests: Manifest[], elapsedMs: number): void {
     console.log(`    ${dim(m.purpose)}`);
   }
   console.log("");
-  console.log(
-    `Manifest with test checklists: ${dim(join(ROOT, "README.md"))}`,
-  );
-  console.log(
-    `Next: launch the app and Add Project for each path above.`,
-  );
+  console.log(`Manifest with test checklists: ${dim(join(ROOT, "README.md"))}`);
+  console.log(`Next: launch the app and Add Project for each path above.`);
 }
 
 async function main(): Promise<void> {
@@ -693,7 +701,8 @@ async function main(): Promise<void> {
     else
       failures.push({
         name: s.name,
-        error: r.reason instanceof Error ? r.reason : new Error(String(r.reason)),
+        error:
+          r.reason instanceof Error ? r.reason : new Error(String(r.reason)),
       });
   }
 

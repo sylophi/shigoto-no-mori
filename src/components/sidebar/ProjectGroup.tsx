@@ -70,10 +70,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
   if (missing) {
     return (
       <div className="group flex items-center gap-0.5 py-0.5">
-        <ProjectHeader
-          project={project}
-          missing
-        />
+        <ProjectHeader project={project} missing />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -223,9 +220,7 @@ function ProjectHeader({
   const baseClass =
     "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
   const trigger = missing ? (
-    <div
-      className={cn(baseClass, "text-muted-foreground/60")}
-    >
+    <div className={cn(baseClass, "text-muted-foreground/60")}>
       <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
       <span
         ref={nameRef}

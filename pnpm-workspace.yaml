@@ -10,14 +10,13 @@
 # ignoreScripts: true, strictDepBuilds: true.
 nodeLinker: hoisted
 blockExoticSubdeps: false
-# Explicit build-script trust. With your global `ignoreScripts: true` and
-# `strictDepBuilds: true`, anything not listed below fails the install —
-# so the split has to be exhaustive across all deps that ship build scripts.
-onlyBuiltDependencies:
-  - electron
-  - esbuild
-  - lefthook
-ignoredBuiltDependencies:
-  - electron-winstaller
-  - fs-xattr
-  - macos-alias
+# Per-package build-script trust. pnpm 11 uses this map (not the older
+# `onlyBuiltDependencies` / `ignoredBuiltDependencies` arrays) to gate
+# which dependencies are allowed to run install scripts.
+allowBuilds:
+  electron: true
+  esbuild: true
+  lefthook: true
+  electron-winstaller: false
+  fs-xattr: false
+  macos-alias: false

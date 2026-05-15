@@ -311,18 +311,10 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
             >
               Cancel
             </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={openTeardownConsole}
-            >
+            <Button variant="ghost" size="xs" onClick={openTeardownConsole}>
               View output
             </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={handleRetryTeardown}
-            >
+            <Button variant="ghost" size="xs" onClick={handleRetryTeardown}>
               Retry teardown
             </Button>
             <Button

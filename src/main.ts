@@ -21,8 +21,7 @@ const BG_DARK = "#1c1c1c";
 
 function bgFor(theme: Theme): string {
   const dark =
-    theme === "dark" ||
-    (theme === "system" && nativeTheme.shouldUseDarkColors);
+    theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors);
   return dark ? BG_DARK : BG_LIGHT;
 }
 

@@ -137,7 +137,10 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
   return out;
 }
 
-async function signalTree(record: RunRecord, signal: NodeJS.Signals): Promise<void> {
+async function signalTree(
+  record: RunRecord,
+  signal: NodeJS.Signals,
+): Promise<void> {
   safeKill(-record.pid, signal);
   const descendants = await listDescendantPids(record.pid);
   for (const pid of descendants) safeKill(pid, signal);
@@ -318,9 +321,7 @@ export async function killScriptsForWorktree(
   );
   if (targets.length === 0) return;
   await Promise.all(
-    targets.map((r) =>
-      killRecord(r, { reason: "Worktree removed", ...opts }),
-    ),
+    targets.map((r) => killRecord(r, { reason: "Worktree removed", ...opts })),
   );
 }
 

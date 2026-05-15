@@ -1,10 +1,4 @@
-import {
-  FileDiff,
-  Loader2,
-  Rocket,
-  Terminal,
-  Trash2,
-} from "lucide-react";
+import { FileDiff, Loader2, Rocket, Terminal, Trash2 } from "lucide-react";
 import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -77,11 +71,7 @@ interface RowTrailingProps {
 // The right-edge cluster: a single spinner / activity icon / location +
 // status combo, chosen by priority. Pulled out so each case is a clean
 // early return instead of a triple ternary.
-function RowTrailing({
-  worktree,
-  deletionPhase,
-  activity,
-}: RowTrailingProps) {
+function RowTrailing({ worktree, deletionPhase, activity }: RowTrailingProps) {
   if (deletionPhase === "removing") {
     return (
       <Loader2

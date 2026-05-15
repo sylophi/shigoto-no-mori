@@ -93,9 +93,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
         </button>
       )}
 
-      {pkg && pkgHasScripts && (
-        <PackageScripts worktree={worktree} pkg={pkg} />
-      )}
+      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
     </div>
   );
 }
@@ -244,18 +242,13 @@ function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
         title={command ? `${actionLabel}\n${command}` : actionLabel}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-          busy
-            ? "text-destructive hover:bg-destructive/10"
-            : "hover:bg-accent",
+          busy ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent",
         )}
       >
         {busy ? (
           <Square aria-hidden className="size-3 shrink-0" />
         ) : (
-          <Play
-            aria-hidden
-            className="size-3 shrink-0 text-muted-foreground"
-          />
+          <Play aria-hidden className="size-3 shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
       </button>

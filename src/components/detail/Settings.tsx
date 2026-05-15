@@ -29,7 +29,6 @@ import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
-
 export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();
 
@@ -267,7 +266,9 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               <Separator />
               <section className="space-y-4">
                 <div>
-                  <SectionHeading className="mb-1">Supported tools</SectionHeading>
+                  <SectionHeading className="mb-1">
+                    Supported tools
+                  </SectionHeading>
                   <p className="text-xs text-muted-foreground">
                     Shigomori knows how to open worktrees in these too. Install
                     any of them and they'll show up under detected.
@@ -387,7 +388,6 @@ function AppearanceSection({
     </section>
   );
 }
-
 
 function ToggleRow({
   checked,

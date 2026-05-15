@@ -20,8 +20,11 @@ import type { Worktree } from "@shared/schemas";
 import { ScriptStatusBadge } from "./ScriptStatusBadge";
 
 export function ScriptConsole() {
-  const { projectId, worktreeName, scriptKey: rawKey } =
-    scriptConsoleRoute.useParams();
+  const {
+    projectId,
+    worktreeName,
+    scriptKey: rawKey,
+  } = scriptConsoleRoute.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.name === worktreeName);
@@ -53,9 +56,7 @@ export function ScriptConsole() {
     );
   }
 
-  return (
-    <ScriptConsoleInner worktree={worktree} slot={slot} onBack={goBack} />
-  );
+  return <ScriptConsoleInner worktree={worktree} slot={slot} onBack={goBack} />;
 }
 
 interface InnerProps {
@@ -166,7 +167,7 @@ function ConsoleBody({
       <pre
         ref={scrollRef}
         onScroll={onScroll}
-        className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap select-text text-foreground"
+        className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground select-text"
       >
         {tokens.length === 0
           ? "Starting…"
@@ -202,7 +203,7 @@ function parseOutput(chunks: string[]): AnserJsonEntry[] {
     .join("")
     .split("\n")
     .map((line) =>
-      line.includes("\r") ? line.split("\r").pop() ?? line : line,
+      line.includes("\r") ? (line.split("\r").pop() ?? line) : line,
     )
     .join("\n");
   return Anser.ansiToJson(collapsed, {
@@ -243,7 +244,8 @@ function AnsiSpan({ token }: { token: AnserJsonEntry }) {
     decorations.includes("dim") && "opacity-60",
     decorations.includes("hidden") && "invisible",
   );
-  const hasStyle = style.color !== undefined || style.backgroundColor !== undefined;
+  const hasStyle =
+    style.color !== undefined || style.backgroundColor !== undefined;
   if (!className && !hasStyle) return token.content;
   return (
     <span className={className} style={hasStyle ? style : undefined}>
@@ -288,7 +290,10 @@ const PALETTE_256: string[] = (() => {
 
 function resolveCommand(
   slot: ScriptSlot,
-  config: { scripts?: { setup?: string; teardown?: string } } | null | undefined,
+  config:
+    | { scripts?: { setup?: string; teardown?: string } }
+    | null
+    | undefined,
   pkg: { scripts: Record<string, string> } | null | undefined,
 ): string {
   if (slot.kind === "setup") return config?.scripts?.setup ?? "";

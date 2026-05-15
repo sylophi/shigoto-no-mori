@@ -132,7 +132,6 @@ export function ManageBranches() {
   );
 }
 
-
 function NewBranchForm({
   projectId,
   defaultBase,

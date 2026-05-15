@@ -394,7 +394,6 @@ function ConfigureForm({
   );
 }
 
-
 interface ScriptFieldProps {
   id: string;
   label: string;

@@ -25,12 +25,7 @@ export type ScriptSlot =
 
 export type ScriptKey = string;
 
-export type RunStatus =
-  | "idle"
-  | "starting"
-  | "running"
-  | "exited"
-  | "errored";
+export type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 
 export interface ScriptRunState {
   runId: string | null;
@@ -273,7 +268,9 @@ async function cancel(key: ScriptKey): Promise<void> {
   const state = states.get(key);
   if (!state || !state.runId) return;
   if (state.status !== "running" && state.status !== "starting") return;
-  setStateWithActivity(key, (s) => (s.cancelling ? s : { ...s, cancelling: true }));
+  setStateWithActivity(key, (s) =>
+    s.cancelling ? s : { ...s, cancelling: true },
+  );
   try {
     await window.api.scripts.cancel(state.runId);
   } catch {

@@ -194,7 +194,11 @@ export async function findWorktreeIdentityOrThrow(
   projectPath: string,
   worktreeId: string,
 ): Promise<WorktreeIdentity> {
-  const identity = await findWorktreeIdentity(projectId, projectPath, worktreeId);
+  const identity = await findWorktreeIdentity(
+    projectId,
+    projectPath,
+    worktreeId,
+  );
   if (!identity) throw new Error(`Unknown worktree: ${worktreeId}`);
   return identity;
 }

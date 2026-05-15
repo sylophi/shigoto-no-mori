@@ -101,7 +101,9 @@ export function useCreateWorktree() {
         .catch((err) => {
           toast.warning("Setup didn't run", {
             description:
-              err instanceof Error ? err.message : "See Scripts on the worktree",
+              err instanceof Error
+                ? err.message
+                : "See Scripts on the worktree",
           });
         });
     },
