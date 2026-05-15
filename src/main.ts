@@ -3,10 +3,11 @@ import path from "node:path";
 import started from "electron-squirrel-startup";
 import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
+import { ensureShigomoriRoot } from "./main/bootstrap";
+import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
 import { killAllScripts, markShuttingDown } from "./main/scripts";
-import { readKey, writeKey } from "./main/store";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -15,15 +16,13 @@ if (started) {
 
 registerIpcHandlers();
 
-const THEME_KEY = "theme";
 const BG_LIGHT = "#ffffff";
 const BG_DARK = "#1c1c1c";
 
-function resolvedBgColor(): string {
-  const stored = readKey<Theme>(THEME_KEY, "system");
+function bgFor(theme: Theme): string {
   const dark =
-    stored === "dark" ||
-    (stored === "system" && nativeTheme.shouldUseDarkColors);
+    theme === "dark" ||
+    (theme === "system" && nativeTheme.shouldUseDarkColors);
   return dark ? BG_DARK : BG_LIGHT;
 }
 
@@ -37,7 +36,7 @@ const createWindow = () => {
     minHeight: 420,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: resolvedBgColor(),
+    backgroundColor: bgFor(readThemeSync()),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -64,37 +63,30 @@ const createWindow = () => {
   mainWindow.on("blur", sendBlur);
 };
 
-// Persist user-chosen theme so the next window can paint the right color
-// before the renderer mounts. Also nudges the current window so OS-level
-// chrome (titlebar, scrollbars) stays in sync after a theme change.
+// Live-update the window background as the renderer applies a theme
+// (including unsaved previews). The persistent value lives in
+// ~/shigomori[-dev]/config.json and is written by the renderer through
+// the globalConfig IPC; main only reads it back at next launch.
 ipcMain.handle(CHANNELS.RuntimeSetTheme, (_event, rawPayload: unknown) => {
   const { theme } = SetThemePayloadSchema.parse(rawPayload);
-  writeKey<Theme>(THEME_KEY, theme);
-  if (mainWindow) mainWindow.setBackgroundColor(resolvedBgColor());
+  if (mainWindow) mainWindow.setBackgroundColor(bgFor(theme));
 });
 
-// React to OS theme changes when the user has chosen "system".
+// React to OS theme changes when the saved theme is "system".
 nativeTheme.on("updated", () => {
   if (!mainWindow) return;
-  const stored = readKey<Theme>(THEME_KEY, "system");
-  if (stored === "system") mainWindow.setBackgroundColor(resolvedBgColor());
+  const stored = readThemeSync();
+  if (stored === "system") mainWindow.setBackgroundColor(bgFor(stored));
 });
 
-app.on("ready", () => {
+app.on("ready", async () => {
+  await ensureShigomoriRoot();
   buildAppMenu();
   createWindow();
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
-
-app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+  app.quit();
 });
 
 // Reap any scripts still running before Electron tears down. Without

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ExternalLink,
@@ -25,7 +25,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { PathSpan } from "@/components/ui/path-span";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
-import type { GlobalConfig, LauncherCommand } from "@shared/schemas";
+import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
@@ -68,12 +68,14 @@ function SettingsSkeleton() {
 }
 
 interface FormState {
+  theme: Theme;
   launchers: LauncherCommand[];
   deleteBranchOnRemove: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
   return {
+    theme: config.theme ?? "system",
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
   };
@@ -85,6 +87,8 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
   );
   return {
     ...original,
+    // Default is "system"; omit when on the default to keep config.json tidy.
+    theme: state.theme === "system" ? undefined : state.theme,
     launchers: valid.length > 0 ? valid : undefined,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
@@ -96,6 +100,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const { data: runtime } = useRuntimeInfo();
   const { data: detected = [] } = useDetectedLaunchers();
   const write = useGlobalConfigWrite();
+  const { setOverride } = useTheme();
 
   const availableTools = detected.filter((d) => d.available);
   const missingTools = detected.filter((d) => !d.available);
@@ -106,13 +111,25 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
 
+  // Drop any staged theme preview when leaving the settings page so the
+  // rest of the app falls back to the saved value.
+  useEffect(() => () => setOverride(null), [setOverride]);
+
   const handleSave = async () => {
     await write.mutateAsync(toConfig(initialConfig, form));
     setSavedSnapshot(form);
+    // No explicit setOverride(null) — the provider clears the override
+    // automatically once `saved` catches up to the staged value.
   };
 
   const handleDiscard = () => {
     setForm(savedSnapshot);
+    setOverride(null);
+  };
+
+  const pickTheme = (theme: Theme) => {
+    setForm({ ...form, theme });
+    setOverride(theme);
   };
 
   const updateLauncher = (id: string, patch: Partial<LauncherCommand>) => {
@@ -199,7 +216,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <Separator />
 
-          <AppearanceSection />
+          <AppearanceSection theme={form.theme} onPick={pickTheme} />
 
           <Separator />
 
@@ -339,9 +356,14 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   );
 }
 
-function AppearanceSection() {
-  const { theme, setTheme } = useTheme();
-  const options: { value: typeof theme; label: string; Icon: typeof Sun }[] = [
+function AppearanceSection({
+  theme,
+  onPick,
+}: {
+  theme: Theme;
+  onPick: (theme: Theme) => void;
+}) {
+  const options: { value: Theme; label: string; Icon: typeof Sun }[] = [
     { value: "light", label: "Light", Icon: Sun },
     { value: "dark", label: "Dark", Icon: Moon },
     { value: "system", label: "System", Icon: SunMoon },
@@ -355,7 +377,7 @@ function AppearanceSection() {
             key={value}
             variant={theme === value ? "secondary" : "outline"}
             size="sm"
-            onClick={() => setTheme(value)}
+            onClick={() => onPick(value)}
           >
             <Icon />
             {label}

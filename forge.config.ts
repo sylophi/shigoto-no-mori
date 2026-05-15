@@ -6,12 +6,29 @@ import { MakerRpm } from "@electron-forge/maker-rpm";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { rename } from "node:fs/promises";
+import path from "node:path";
 
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    icon: "assets/icon",
   },
   rebuildConfig: {},
+  hooks: {
+    postPackage: async (_config, result) => {
+      await Promise.all(
+        result.outputPaths.map(async (original, i) => {
+          const base = path.basename(original);
+          const renamed = base.replace(/^Shigoto no Mori-/, "shigomori-");
+          if (renamed === base) return;
+          const next = path.join(path.dirname(original), renamed);
+          await rename(original, next);
+          result.outputPaths[i] = next;
+        }),
+      );
+    },
+  },
   makers: [
     new MakerSquirrel({}),
     new MakerZIP({}, ["darwin"]),

@@ -261,11 +261,15 @@ export const ShigomoriConfigSchema = z.object({
   carryOver: z.array(CarryOverEntrySchema).optional(),
 });
 
+export const ThemeSchema = z.enum(["light", "dark", "system"]);
+export type Theme = z.infer<typeof ThemeSchema>;
+
 // Global, per-user config kept in ~/shigomori[-dev]/config.json. Holds
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.
 export const GlobalConfigSchema = z.object({
+  theme: ThemeSchema.optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
   // When true, deleting a worktree also force-deletes its checked-out
   // local branch (skipped if the branch is the primary's or is in use
@@ -324,11 +328,9 @@ export const RuntimeInfoSchema = z.object({
   isDev: z.boolean(),
 });
 
-export const ThemeSchema = z.enum(["light", "dark", "system"]);
 export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,
 });
-export type Theme = z.infer<typeof ThemeSchema>;
 
 export const ScriptNameSchema = z.enum(["setup", "teardown"]);
 

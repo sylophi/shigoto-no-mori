@@ -91,3 +91,6 @@ dist/
 
 # Electron-Forge
 out/
+
+# App icon intermediates (icon.icns and icon.png are the committed sources)
+assets/icon.iconset/
