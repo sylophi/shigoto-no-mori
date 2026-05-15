@@ -39,6 +39,10 @@ export const WorktreeSchema = z.object({
   // (i.e. created manually or by another tool). Primary checkouts are also
   // technically external; the UI tags only non-primary externals.
   isExternal: z.boolean(),
+  // True when HEAD points at a commit rather than a branch. In this case
+  // `branch` holds the short commit hash, not a real branch name — so
+  // rename is impossible and the UI styles it as a hash, not a branch.
+  detached: z.boolean(),
 });
 
 export const ProjectSchema = z.object({

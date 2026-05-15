@@ -110,6 +110,7 @@ interface WorktreeIdentity {
   path: string;
   isPrimary: boolean;
   isExternal: boolean;
+  detached: boolean;
 }
 
 export async function listWorktreeIdentities(
@@ -135,6 +136,7 @@ export async function listWorktreeIdentities(
         path: entry.path,
         isPrimary,
         isExternal: !entry.path.startsWith(managedPrefix),
+        detached: entry.detached ?? false,
       };
     });
 }
@@ -159,6 +161,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     lastCommit,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
+    detached: identity.detached,
   };
 }
 

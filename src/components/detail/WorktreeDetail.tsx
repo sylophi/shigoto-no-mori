@@ -494,6 +494,9 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   const begin = () => {
+    // Detached HEAD has no branch to rename — guard against any caller
+    // (incl. future keybindings) that bypasses the hidden pencil button.
+    if (worktree.detached) return;
     setDraft(worktree.branch);
     rename.reset();
     setEditing(true);
@@ -570,21 +573,35 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
     <div className="group/copy flex min-w-0 items-center gap-1.5">
       <h1
         ref={titleRef}
-        className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
+        className={cn(
+          "min-w-0 truncate font-mono text-2xl font-medium tracking-tight",
+          worktree.detached && "text-muted-foreground",
+        )}
+        title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
       >
         {worktree.branch}
       </h1>
-      <button
-        type="button"
-        onClick={begin}
-        aria-label="Rename branch"
-        title="Rename branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
-      >
-        <Pencil className="size-3.5" />
-      </button>
+      {worktree.detached && (
+        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+          detached
+        </span>
+      )}
+      {!worktree.detached && (
+        <button
+          type="button"
+          onClick={begin}
+          aria-label="Rename branch"
+          title="Rename branch"
+          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
+        >
+          <Pencil className="size-3.5" />
+        </button>
+      )}
       <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
-      <CopyButton value={worktree.branch} label="Copy branch name" />
+      <CopyButton
+        value={worktree.branch}
+        label={worktree.detached ? "Copy commit hash" : "Copy branch name"}
+      />
     </div>
   );
 }

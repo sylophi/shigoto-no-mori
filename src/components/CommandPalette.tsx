@@ -801,7 +801,7 @@ function ResultRow({
       ) : (
         <Square className="size-4 text-muted-foreground/60" />
       )}
-      <Folder className="size-4 text-muted-foreground/80" />
+      <FolderGit2 className="size-4 text-muted-foreground/80" />
       {showAbsolute ? (
         <PathSpan
           path={path}

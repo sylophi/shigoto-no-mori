@@ -31,7 +31,9 @@ export async function nukeEverything(): Promise<void> {
         // via git for this one. The shigomori root wipe below still happens.
         return;
       }
-      const targets = identities.filter((i) => !i.isPrimary);
+      // Skip externals: shigomori didn't create them, so we shouldn't
+      // delete them (or their branches) when wiping our own state.
+      const targets = identities.filter((i) => !i.isPrimary && !i.isExternal);
       await Promise.all(
         targets.map((i) =>
           removeWorktree(project.path, i.path, true).catch(() => undefined),

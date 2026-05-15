@@ -45,7 +45,14 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className={cn("truncate font-mono", isSelected && "font-medium")}>
+        <span
+          className={cn(
+            "truncate font-mono",
+            isSelected && "font-medium",
+            worktree.detached && "text-muted-foreground",
+          )}
+          title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
+        >
           {worktree.branch}
         </span>
         <span className="truncate text-[10px] text-muted-foreground">

@@ -1,4 +1,4 @@
-// Seeds /tmp/shigomori-seed/ with a tree of throwaway git repos that
+// Seeds a destination directory with a tree of throwaway git repos that
 // exercise every state surface in Shigoto no Mori's UI:
 //   - package-manager detection (bun / pnpm / yarn / npm / none)
 //   - ahead / behind / dirty / detached / unknown-branch worktrees
@@ -7,23 +7,28 @@
 //   - gitignored carry-over candidates
 //   - path shapes (spaces, unicode, deeply nested)
 //
-// Run:   bun scripts/seed-test-data.ts [--keep]
-// Wipes /tmp/shigomori-seed/ by default. --keep skips the wipe.
+// Run:   bun scripts/seed-test-data.ts <dest-dir> [--keep]
+// The destination directory is required so worktree `.git` pointers are
+// always self-contained at the chosen location — previously hard-coding
+// /tmp/shigomori-seed meant a second seeding could cross-link external
+// worktrees with the first repo's `.git` admin. Wipes <dest-dir> by
+// default; --keep skips the wipe.
 //
 // The script does NOT touch ~/shigomori-dev/. Add each repo via the app.
 
 import { execFile } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
 
-const ROOT = "/tmp/shigomori-seed";
-const REPOS = join(ROOT, "repos");
-const REMOTES = join(ROOT, "remotes");
-const EXTERNAL = join(ROOT, "external");
-const SIDECAR = join(ROOT, ".sidecar");
+// Filled in by main() before any seeder runs.
+let ROOT = "";
+let REPOS = "";
+let REMOTES = "";
+let EXTERNAL = "";
+let SIDECAR = "";
 
 interface Manifest {
   name: string;
@@ -605,13 +610,13 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
   const lines: string[] = [
     "# Shigoto no Mori — manual test seed",
     "",
-    "Throwaway repos under `/tmp/shigomori-seed/repos/`, each exercising a",
+    `Throwaway repos under \`${REPOS}/\`, each exercising a`,
     "different slice of the app. Add each one in the app and follow the",
     "checklist below.",
     "",
     "Regenerate any time with:",
     "",
-    "    bun scripts/seed-test-data.ts",
+    `    bun scripts/seed-test-data.ts ${ROOT}`,
     "",
     "## Repos",
     "",
@@ -659,8 +664,32 @@ function printSummary(manifests: Manifest[], elapsedMs: number): void {
   console.log(`Next: launch the app and Add Project for each path above.`);
 }
 
+function usage(): never {
+  console.error(
+    "Usage: bun scripts/seed-test-data.ts <dest-dir> [--keep]\n" +
+      "\n" +
+      "  <dest-dir>  Absolute or relative path where the seed tree will live.\n" +
+      "              Required so worktree `.git` pointers stay self-contained.\n" +
+      "  --keep      Skip wiping <dest-dir> before seeding.",
+  );
+  process.exit(2);
+}
+
 async function main(): Promise<void> {
-  const keep = process.argv.includes("--keep");
+  const argv = process.argv.slice(2);
+  const keep = argv.includes("--keep");
+  const positional = argv.filter((a) => !a.startsWith("--"));
+  if (positional.length !== 1) usage();
+  const dest = isAbsolute(positional[0])
+    ? positional[0]
+    : resolve(process.cwd(), positional[0]);
+
+  ROOT = dest;
+  REPOS = join(ROOT, "repos");
+  REMOTES = join(ROOT, "remotes");
+  EXTERNAL = join(ROOT, "external");
+  SIDECAR = join(ROOT, ".sidecar");
+
   const started = Date.now();
 
   if (!keep) {
