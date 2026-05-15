@@ -6,8 +6,12 @@ import { MakerRpm } from "@electron-forge/maker-rpm";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
-import { rename } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readdir, rename } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
+
+const exec = promisify(execFile);
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -15,24 +19,41 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
-    // Empty object = ad-hoc sign with the `-` identity. Free, no Apple
-    // Developer account needed. Downgrades the post-download Gatekeeper
-    // experience from "damaged" (no bypass) to "unidentified developer"
-    // (System Settings → Open Anyway). Not a substitute for notarization
-    // if we ever ship beyond friends.
-    osxSign: {},
+    // No `osxSign` here — the @electron/osx-sign@1.3.3 that Forge ships
+    // silently skips ad-hoc signing when no real cert is in the keychain.
+    // We codesign by hand in the postPackage hook below.
   },
   rebuildConfig: {},
   hooks: {
     postPackage: async (_config, result) => {
+      // Rename the per-platform output dir, then ad-hoc codesign the .app
+      // bundle inside. Renaming first so the codesign path is final.
       await Promise.all(
         result.outputPaths.map(async (original, i) => {
           const base = path.basename(original);
           const renamed = base.replace(/^Shigoto no Mori-/, "shigomori-");
-          if (renamed === base) return;
-          const next = path.join(path.dirname(original), renamed);
-          await rename(original, next);
-          result.outputPaths[i] = next;
+          if (renamed !== base) {
+            const next = path.join(path.dirname(original), renamed);
+            await rename(original, next);
+            result.outputPaths[i] = next;
+          }
+        }),
+      );
+
+      // macOS-only. Skip when the maker ran on a non-darwin platform
+      // (where there's no `codesign` and no .app bundle to sign).
+      if (process.platform !== "darwin") return;
+
+      await Promise.all(
+        result.outputPaths.map(async (dir) => {
+          const entries = await readdir(dir);
+          const appName = entries.find((e) => e.endsWith(".app"));
+          if (!appName) return;
+          const appPath = path.join(dir, appName);
+          // `--deep` is deprecated for fixing already-signed bundles, but
+          // it's still the supported way to apply a fresh ad-hoc signature
+          // across an Electron app's many nested frameworks and helpers.
+          await exec("codesign", ["--force", "--deep", "--sign", "-", appPath]);
         }),
       );
     },
