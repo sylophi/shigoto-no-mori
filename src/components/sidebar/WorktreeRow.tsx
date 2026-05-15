@@ -1,5 +1,5 @@
 import { FileDiff, Loader2, Rocket, Terminal, Trash2 } from "lucide-react";
-import { useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import {
@@ -15,15 +15,14 @@ interface WorktreeRowProps {
 
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
-  const matchRoute = useMatchRoute();
+  const { pathname } = useLocation();
   const deletionPhase = useWorktreeDeletion(worktree.id);
   const activity = useWorktreeScriptActivity(worktree.id);
-  // Param-aware match avoids any URL-encoding pitfalls that string-comparing
-  // `location.pathname` would hit (e.g. worktree names with spaces).
-  const isSelected = !!matchRoute({
-    to: "/projects/$projectId/worktrees/$worktreeName",
-    params: { projectId: worktree.projectId, worktreeName: worktree.name },
-  });
+  // Not useMatchRoute: its stable function return reads from a hidden
+  // store, which React Compiler can't see, so isSelected stays cached at
+  // false. location.pathname is already decoded, so no encoding here.
+  const isSelected =
+    pathname === `/projects/${worktree.projectId}/worktrees/${worktree.name}`;
 
   return (
     <button
