@@ -119,7 +119,7 @@ export function ManageBranches() {
                   {(branches?.remote ?? []).map((name) => (
                     <span
                       key={name}
-                      className="rounded-md bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground"
+                      className="rounded-md bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground select-text"
                     >
                       {name}
                     </span>
@@ -304,7 +304,9 @@ function BranchRow({
           className="flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate font-mono">{name}</span>
+        <span className="min-w-0 flex-1 truncate font-mono select-text">
+          {name}
+        </span>
       )}
 
       {checkedOut && !editing && (

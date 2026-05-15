@@ -122,7 +122,7 @@ export function PackageScriptsSection({
             {hasOutput && (
               <div
                 ref={scrollRef}
-                className="max-h-64 overflow-y-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-xs leading-relaxed"
+                className="max-h-64 overflow-y-auto rounded-md border border-border bg-card px-3 py-2 font-mono text-xs leading-relaxed select-text"
               >
                 {run.logs.length === 0 ? (
                   <div className="text-muted-foreground">Starting…</div>

@@ -247,6 +247,7 @@ export function findDetected(
 }
 
 async function openWithBundle(
+  id: string,
   bundleNames: string[],
   worktreePath: string,
 ): Promise<void> {
@@ -259,6 +260,17 @@ async function openWithBundle(
     throw new Error(`No installed app found for ${bundleNames.join(", ")}`);
   }
   const appName = match.replace(/^.+\//, "").replace(/\.app$/, "");
+  // Ghostty reuses an existing window on plain `open -a`; -n forces a new
+  // window and --working-directory lands it in the worktree.
+  if (id === "ghostty") {
+    await exec("open", [
+      "-na",
+      appName,
+      "--args",
+      `--working-directory=${worktreePath}`,
+    ]);
+    return;
+  }
   await exec("open", ["-a", appName, worktreePath]);
 }
 
@@ -272,7 +284,7 @@ export async function launchDetected(
 ): Promise<void> {
   // Prefer the bundle (more reliable, no PATH issues) when present.
   try {
-    await openWithBundle(app.bundleNames, worktreePath);
+    await openWithBundle(app.id, app.bundleNames, worktreePath);
     return;
   } catch (bundleError) {
     if (!app.cli) throw bundleError;

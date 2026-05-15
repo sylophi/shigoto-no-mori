@@ -298,7 +298,7 @@ function ConfigureForm({
               <p className="text-xs text-muted-foreground">
                 Run inside the worktree directory. These env vars are available:
               </p>
-              <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
+              <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground select-text">
                 {SCRIPT_ENV_DOCS.map((row) => (
                   <li key={row.name}>
                     <span className="font-mono text-foreground/80">

@@ -14,6 +14,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { CopyButton } from "@/components/ui/copy-button";
 import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
 import { cn } from "@/lib/utils";
@@ -132,20 +133,23 @@ export function WorktreeDetail() {
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
-            <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {worktree.isPrimary ? (
+            {worktree.isPrimary ? (
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <House
                   className="size-3 shrink-0 text-muted-foreground/70"
-                  aria-label="Repo root"
+                  aria-hidden
                 />
-              ) : worktree.isExternal ? (
+                <span>Repo root</span>
+              </div>
+            ) : worktree.isExternal ? (
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
                 <ExternalLink
                   className="size-3 shrink-0 text-muted-foreground/70"
-                  aria-label="External worktree"
+                  aria-hidden
                 />
-              ) : null}
-              <span className="truncate">{worktree.name}</span>
-            </div>
+                <span>External worktree</span>
+              </div>
+            ) : null}
           </div>
           <StatusPills worktree={worktree} />
         </div>
@@ -180,7 +184,7 @@ export function WorktreeDetail() {
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
         {needsForce ? (
           <>
-            <span className="min-w-0 flex-1 truncate text-xs text-destructive">
+            <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
               {deleteMutation.error?.message ?? "Has uncommitted changes."}
             </span>
             <Button
@@ -204,13 +208,8 @@ export function WorktreeDetail() {
           </>
         ) : (
           <>
-            <PathSpan
-              path={worktree.path}
-              home={home}
-              className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground select-text"
-            />
             {worktree.isPrimary ? (
-              <span className="shrink-0 text-xs text-muted-foreground/70">
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground/70">
                 Repo root
               </span>
             ) : (
@@ -218,7 +217,7 @@ export function WorktreeDetail() {
                 variant="ghost"
                 size="xs"
                 className={cn(
-                  "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                  "ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
                   confirmDelete && "bg-destructive/10",
                 )}
                 disabled={busy}
@@ -327,7 +326,7 @@ function CommitsSection({ worktree }: { worktree: Worktree }) {
 
 function CommitRow({ commit }: { commit: CommitSummary }) {
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 select-text">
       <div className="text-sm">{commit.subject}</div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="font-mono">{commit.hash}</span>
@@ -424,7 +423,7 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
   }
 
   return (
-    <div className="group/branch flex min-w-0 items-center gap-1.5">
+    <div className="group/copy flex min-w-0 items-center gap-1.5">
       <h1
         ref={titleRef}
         className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
@@ -436,11 +435,12 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
         onClick={begin}
         aria-label="Rename branch"
         title="Rename branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
       >
         <Pencil className="size-3.5" />
       </button>
       <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
+      <CopyButton value={worktree.branch} label="Copy branch name" />
     </div>
   );
 }
@@ -525,7 +525,7 @@ function BranchSwitcher({
       <Combobox.Trigger
         aria-label="Switch branch"
         title="Switch branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/branch:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
       >
         <ChevronsUpDown aria-hidden className="size-3.5" />
       </Combobox.Trigger>

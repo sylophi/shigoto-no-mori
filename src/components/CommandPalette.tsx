@@ -29,7 +29,7 @@ import {
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
-import { useNavigate } from "@tanstack/react-router";
+import { router } from "@/router";
 import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsIsGitRepo } from "@/hooks/useFsIsGitRepo";
@@ -85,13 +85,17 @@ export function CommandPalette() {
 function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   const { setOpen } = useCommandPalette();
   const { data: projects = [] } = useProjects();
-  const navigate = useNavigate();
 
   const worktreeQueries = useAllProjectWorktrees(projects, true);
   const allWorktrees = projects.flatMap((project, i) => {
     const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
     return trees.map((tree) => ({ project, tree }));
   });
+
+  // CommandPalette is rendered as a sibling of RouterProvider in App.tsx, so
+  // `useNavigate` here has no router context and silently no-ops. Use the
+  // module-level router instance directly instead.
+  const navigate = router.navigate.bind(router);
 
   const handle = (action: () => void) => () => {
     setOpen(false);
