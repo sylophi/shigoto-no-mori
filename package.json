@@ -21,10 +21,12 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "electron",
-      "electron-winstaller",
       "esbuild",
+      "lefthook"
+    ],
+    "ignoredBuiltDependencies": [
+      "electron-winstaller",
       "fs-xattr",
-      "lefthook",
       "macos-alias"
     ]
   },
