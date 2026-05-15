@@ -77,29 +77,6 @@ async function getChangedCount(worktreePath: string): Promise<number> {
   }
 }
 
-async function getAheadBehind(
-  worktreePath: string,
-  branch: string,
-): Promise<{ ahead: number; behind: number }> {
-  if (!branch || branch === UNKNOWN_BRANCH) return { ahead: 0, behind: 0 };
-  try {
-    // Compare against the configured upstream (@{u}). No upstream → no counts.
-    const stdout = await run(worktreePath, [
-      "rev-list",
-      "--left-right",
-      "--count",
-      `${branch}...@{u}`,
-    ]);
-    const [aheadStr, behindStr] = stdout.trim().split(/\s+/);
-    return {
-      ahead: Number.parseInt(aheadStr, 10) || 0,
-      behind: Number.parseInt(behindStr, 10) || 0,
-    };
-  } catch {
-    return { ahead: 0, behind: 0 };
-  }
-}
-
 async function getLastCommit(
   worktreePath: string,
 ): Promise<CommitSummary | null> {
@@ -163,8 +140,7 @@ export async function listWorktreeIdentities(
 }
 
 async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
-  const [{ ahead, behind }, changedCount, lastCommit] = await Promise.all([
-    getAheadBehind(identity.path, identity.branch),
+  const [changedCount, lastCommit] = await Promise.all([
     getChangedCount(identity.path),
     getLastCommit(identity.path),
   ]);
@@ -174,8 +150,11 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     name: identity.name,
     branch: identity.branch,
     path: identity.path,
-    ahead,
-    behind,
+    // Remote-comparison fields are intentionally hardcoded for now; we
+    // skip the `git rev-list` call entirely. Restore via git history if
+    // we want ahead/behind back.
+    ahead: 0,
+    behind: 0,
     changedCount,
     lastCommit,
     isPrimary: identity.isPrimary,

@@ -17,7 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
 import type { Project } from "@shared/types";
 import { WorktreeRow } from "./WorktreeRow";
@@ -64,18 +70,10 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
   if (missing) {
     return (
       <div className="group flex items-center gap-0.5 py-0.5">
-        <div
-          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-semibold tracking-wide text-muted-foreground/60 uppercase"
-          title={`${project.path} is missing on disk`}
-        >
-          <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
-          <span className="truncate line-through decoration-1">
-            {project.name}
-          </span>
-          <span className="text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
-            missing
-          </span>
-        </div>
+        <ProjectHeader
+          project={project}
+          missing
+        />
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -104,24 +102,11 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
   return (
     <div className="flex flex-col">
       <div className="group flex items-center gap-0.5 py-0.5">
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-semibold tracking-wide text-muted-foreground uppercase transition-colors hover:text-foreground"
-        >
-          <ChevronRight
-            className={cn(
-              "size-3 transition-transform",
-              expanded && "rotate-90",
-            )}
-          />
-          <span className="truncate">{project.name}</span>
-          {worktrees.length > 0 && (
-            <span className="tabular text-[10px] font-medium text-muted-foreground/60 normal-case">
-              {worktrees.length}
-            </span>
-          )}
-        </button>
+        <ProjectHeader
+          project={project}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
         <button
           type="button"
           onClick={() => void quickCreate()}
@@ -214,5 +199,69 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
         </div>
       )}
     </div>
+  );
+}
+
+interface ProjectHeaderProps {
+  project: Project;
+  expanded?: boolean;
+  onToggle?: () => void;
+  missing?: boolean;
+}
+
+// Header row shared by the healthy and missing-project branches. The
+// project name is `truncate`d, with a Tooltip that only opens when the
+// text actually overflows — uses `useIsTruncated` to suppress redundant
+// tooltips on names that already fit.
+function ProjectHeader({
+  project,
+  expanded,
+  onToggle,
+  missing,
+}: ProjectHeaderProps) {
+  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
+  const baseClass =
+    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
+  const trigger = missing ? (
+    <div
+      className={cn(baseClass, "text-muted-foreground/60")}
+    >
+      <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+      <span
+        ref={nameRef}
+        className="min-w-0 truncate line-through decoration-1"
+      >
+        {project.name}
+      </span>
+      <span className="shrink-0 text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
+        missing
+      </span>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        baseClass,
+        "text-muted-foreground transition-colors hover:text-foreground",
+      )}
+    >
+      <ChevronRight
+        className={cn(
+          "size-3 shrink-0 transition-transform",
+          expanded && "rotate-90",
+        )}
+      />
+      <span ref={nameRef} className="min-w-0 truncate">
+        {project.name}
+      </span>
+    </button>
+  );
+
+  return (
+    <Tooltip open={isTruncated ? undefined : false}>
+      <TooltipTrigger render={trigger} />
+      <TooltipContent>{project.name}</TooltipContent>
+    </Tooltip>
   );
 }

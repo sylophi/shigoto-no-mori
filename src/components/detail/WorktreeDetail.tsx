@@ -3,8 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
   ChevronsUpDown,
-  ExternalLink,
-  House,
+  FileDiff,
   Loader2,
   Pencil,
   Search,
@@ -17,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
+import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { useBranches } from "@/hooks/useBranches";
@@ -226,28 +226,21 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
             home={home}
             className="min-w-0 flex-1 truncate font-mono"
           />
-          {worktree.isPrimary && (
-            <span title="Repo root" className="shrink-0">
-              <House
-                aria-label="Repo root"
-                className="size-3 text-muted-foreground/70"
-              />
-            </span>
-          )}
-          {!worktree.isPrimary && worktree.isExternal && (
-            <span title="External worktree" className="shrink-0">
-              <ExternalLink
-                aria-label="External worktree"
-                className="size-3 text-muted-foreground/70"
-              />
-            </span>
-          )}
+          <WorktreeKindIcon worktree={worktree} />
         </div>
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
           </div>
-          <StatusPills worktree={worktree} />
+          {worktree.changedCount > 0 && (
+            <span
+              title={`${worktree.changedCount} uncommitted change${worktree.changedCount === 1 ? "" : "s"}`}
+              className="tabular inline-flex shrink-0 items-center gap-1 pt-2 text-xs text-amber-500"
+            >
+              <FileDiff aria-hidden className="size-3.5" />
+              {worktree.changedCount}
+            </span>
+          )}
         </div>
       </header>
 
@@ -758,43 +751,6 @@ function BranchSwitcher({
         </Combobox.Positioner>
       </Combobox.Portal>
     </Combobox.Root>
-  );
-}
-
-function StatusPills({ worktree }: { worktree: Worktree }) {
-  const pills: { label: string; tone: "neutral" | "warn" }[] = [];
-  if (worktree.ahead > 0) {
-    pills.push({ label: `↑ ${worktree.ahead}`, tone: "neutral" });
-  }
-  if (worktree.behind > 0) {
-    pills.push({ label: `↓ ${worktree.behind}`, tone: "neutral" });
-  }
-  if (worktree.changedCount > 0) {
-    pills.push({
-      label: `${worktree.changedCount} changed`,
-      tone: "warn",
-    });
-  }
-  if (pills.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 pt-1">
-      {pills.map((pill) => (
-        <span
-          key={pill.label}
-          className={cn(
-            "tabular inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-xs",
-            pill.tone === "neutral" &&
-              "border-border bg-card text-muted-foreground",
-            pill.tone === "warn" &&
-              "border-destructive/30 bg-destructive/10 text-destructive",
-          )}
-        >
-          {pill.label}
-        </span>
-      ))}
-    </div>
   );
 }
 

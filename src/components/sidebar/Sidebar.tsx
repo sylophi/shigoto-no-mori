@@ -21,10 +21,10 @@ export function Sidebar() {
       <SidebarHeader />
       <div className="relative min-h-0 flex-1">
         <ScrollArea className="size-full">
-          {/* pb leaves a reserved band at the bottom of the scroll
-              content so the activity indicator overlay never sits on
-              top of a project row when the list scrolls. */}
-          <div className="flex flex-col gap-1 px-2 pt-0 pb-10">
+          {/* Small pb keeps the activity-indicator overlay from sitting
+              flush on top of the last project row when scrolled all the
+              way down. */}
+          <div className="flex flex-col gap-1 px-2 pt-0 pb-3">
             {projects.map((project) => (
               <ProjectGroup key={project.id} project={project} />
             ))}

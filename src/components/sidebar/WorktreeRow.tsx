@@ -1,6 +1,5 @@
 import {
-  ExternalLink,
-  House,
+  FileDiff,
   Loader2,
   Rocket,
   Terminal,
@@ -8,6 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
@@ -65,19 +65,8 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         <ActivityIcon kind={deleting ? "teardown" : activity!} />
       ) : (
         <>
-          {worktree.isPrimary && (
-            <House
-              className="size-3 text-muted-foreground/60"
-              aria-label="Repo root"
-            />
-          )}
-          {!worktree.isPrimary && worktree.isExternal && (
-            <ExternalLink
-              className="size-3 text-muted-foreground/60"
-              aria-label="External worktree"
-            />
-          )}
           <StatusIndicator worktree={worktree} />
+          <WorktreeKindIcon worktree={worktree} />
         </>
       )}
     </button>
@@ -125,18 +114,11 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
 }
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
-  const parts: string[] = [];
-  if (worktree.ahead > 0) parts.push(`↑${worktree.ahead}`);
-  if (worktree.behind > 0) parts.push(`↓${worktree.behind}`);
-  if (worktree.changedCount > 0) parts.push(`●${worktree.changedCount}`);
-
-  if (parts.length === 0) {
-    return null;
-  }
-
+  if (worktree.changedCount === 0) return null;
   return (
-    <span className="tabular text-[10px] text-muted-foreground">
-      {parts.join(" ")}
+    <span className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-amber-500">
+      <FileDiff aria-hidden className="size-3" />
+      {worktree.changedCount}
     </span>
   );
 }
