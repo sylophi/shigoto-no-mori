@@ -178,6 +178,24 @@ export function useWorktreeDiff(
   });
 }
 
+// Commit diffs are immutable once the commit exists, so we can cache them
+// indefinitely. Keyed by hash so different commits don't share a slot.
+export function useCommitDiff(
+  projectId: string,
+  worktreeId: string | undefined,
+  hash: string,
+) {
+  return useQuery<string>({
+    queryKey: ["commit-diff", projectId, worktreeId, hash],
+    queryFn: () => {
+      if (!worktreeId) return "";
+      return window.api.worktrees.commitDiff({ projectId, worktreeId, hash });
+    },
+    enabled: !!worktreeId && hash.length > 0,
+    staleTime: Infinity,
+  });
+}
+
 export function useCheckoutBranch() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, CheckoutBranchInput>({

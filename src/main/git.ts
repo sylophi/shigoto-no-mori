@@ -120,28 +120,57 @@ export async function getWorktreeDiff(worktreePath: string): Promise<string> {
   return [tracked, ...additions].filter((s) => s.length > 0).join("");
 }
 
-async function getLastCommit(
+async function getRecentCommits(
   worktreePath: string,
-): Promise<CommitSummary | null> {
+  count: number,
+): Promise<CommitSummary[]> {
   try {
-    // Tab-delimited; safer than newlines for parsing.
-    const fmt = "%h%x09%an%x09%aI%x09%s";
+    // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
+    // on its own line after each commit's formatted output. A SOH (\x01)
+    // sentinel between records keeps parsing robust against subjects that
+    // contain tabs or newlines.
+    const SENTINEL = "\x01";
+    const fmt = `${SENTINEL}%h%x09%an%x09%aI%x09%s`;
     const stdout = await run(worktreePath, [
       "log",
-      "-1",
+      `-${count}`,
       `--pretty=format:${fmt}`,
+      "--shortstat",
     ]);
-    const [hash, author, date, ...subjectParts] = stdout.split("\t");
-    if (!hash) return null;
-    return {
-      hash,
-      author: author ?? "",
-      date: date ?? "",
-      subject: subjectParts.join("\t"),
-    };
+    const commits: CommitSummary[] = [];
+    for (const chunk of stdout.split(SENTINEL)) {
+      if (!chunk) continue;
+      const newlineAt = chunk.indexOf("\n");
+      const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
+      const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
+      const [hash, author, date, ...subjectParts] = header.split("\t");
+      if (!hash) continue;
+      const insMatch = /(\d+) insertions?\(\+\)/.exec(stats);
+      const delMatch = /(\d+) deletions?\(-\)/.exec(stats);
+      commits.push({
+        hash,
+        author: author ?? "",
+        date: date ?? "",
+        subject: subjectParts.join("\t"),
+        additions: insMatch ? Number(insMatch[1]) : 0,
+        deletions: delMatch ? Number(delMatch[1]) : 0,
+      });
+    }
+    return commits;
   } catch {
-    return null;
+    return [];
   }
+}
+
+// Unified patch of a single commit, with the commit metadata stripped
+// (`--format=`) so the output feeds straight into @pierre/diffs'
+// `parsePatchFiles`. Returns empty for commits without diffs (e.g. an
+// unconfigured merge commit).
+export async function getCommitDiff(
+  worktreePath: string,
+  hash: string,
+): Promise<string> {
+  return runLenient(worktreePath, ["show", "--format=", "--no-color", hash]);
 }
 
 interface WorktreeIdentity {
@@ -184,10 +213,15 @@ export async function listWorktreeIdentities(
     });
 }
 
+// How many recent commits to surface on the worktree detail page. Kept
+// small so the IPC payload stays tight; revisit if the UI grows a
+// "full history" view.
+const RECENT_COMMITS_COUNT = 3;
+
 async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
-  const [changedCount, lastCommit] = await Promise.all([
+  const [changedCount, recentCommits] = await Promise.all([
     getChangedCount(identity.path),
-    getLastCommit(identity.path),
+    getRecentCommits(identity.path, RECENT_COMMITS_COUNT),
   ]);
   return {
     id: identity.id,
@@ -201,7 +235,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     ahead: 0,
     behind: 0,
     changedCount,
-    lastCommit,
+    recentCommits,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
     detached: identity.detached,

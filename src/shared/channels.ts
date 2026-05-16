@@ -13,6 +13,7 @@ export const CHANNELS = {
   WorktreesRenameBranch: "worktrees:renameBranch",
   WorktreesCheckoutBranch: "worktrees:checkoutBranch",
   WorktreesDiff: "worktrees:diff",
+  WorktreesCommitDiff: "worktrees:commitDiff",
   BranchesCreate: "branches:create",
   BranchesRename: "branches:rename",
   BranchesDelete: "branches:delete",
