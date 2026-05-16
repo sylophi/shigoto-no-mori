@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { CopyButton } from "@/components/ui/copy-button";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -288,24 +287,18 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
         )}
         aria-disabled={inLimbo}
       >
-        <div className="flex max-w-4xl flex-col gap-5">
+        <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading>Launch</SectionHeading>
             <LauncherRow worktree={worktree} />
           </section>
 
-          <Separator />
-
           <CommitsSection worktree={worktree} />
-
-          <Separator />
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsSection worktree={worktree} />
           </section>
-
-          <Separator />
 
           <NotesSection worktree={worktree} />
         </div>

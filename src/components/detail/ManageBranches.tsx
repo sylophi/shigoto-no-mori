@@ -13,7 +13,6 @@ import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   useBranches,
@@ -61,7 +60,7 @@ export function ManageBranches() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-3xl flex-col gap-5">
+        <div className="flex max-w-3xl flex-col gap-10">
           <section className="space-y-3">
             <div className="flex items-center justify-between">
               <SectionHeading>Local branches</SectionHeading>
@@ -105,26 +104,23 @@ export function ManageBranches() {
           </section>
 
           {(branches?.remote ?? []).length > 0 && (
-            <>
-              <Separator />
-              <section className="space-y-3">
-                <SectionHeading>Remote-tracking branches</SectionHeading>
-                <p className="text-xs text-muted-foreground">
-                  Read-only references. Use one as a source when creating a new
-                  local branch.
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {(branches?.remote ?? []).map((name) => (
-                    <span
-                      key={name}
-                      className="rounded-md bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground select-text"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                </div>
-              </section>
-            </>
+            <section className="space-y-3">
+              <SectionHeading>Remote-tracking branches</SectionHeading>
+              <p className="text-xs text-muted-foreground">
+                Read-only references. Use one as a source when creating a new
+                local branch.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {(branches?.remote ?? []).map((name) => (
+                  <span
+                    key={name}
+                    className="rounded-md bg-muted/60 px-2 py-1 font-mono text-xs text-muted-foreground select-text"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </section>
           )}
         </div>
       </div>
