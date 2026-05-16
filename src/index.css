@@ -1,0 +1,203 @@
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-feature-settings: "tnum" 1;
+    user-select: none;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/*
+ * ANSI 16-color palette for script consoles. Class names match what
+ * `anser` emits with `use_classes: true`. OKLCH values are tuned for
+ * legibility against both light and dark backgrounds without a
+ * theme-specific override; the dim 8 colors match what tools normally
+ * use for severity (red = error, yellow = warn, etc.) and the bright
+ * 8 are punchier for emphasis. 256-color / truecolor still works
+ * through anser's inline-style fallback.
+ */
+@layer utilities {
+  .ansi-black-fg {
+    color: oklch(0.55 0.005 270);
+  }
+  .ansi-red-fg {
+    color: oklch(0.6 0.18 25);
+  }
+  .ansi-green-fg {
+    color: oklch(0.62 0.17 145);
+  }
+  .ansi-yellow-fg {
+    color: oklch(0.72 0.15 85);
+  }
+  .ansi-blue-fg {
+    color: oklch(0.62 0.17 250);
+  }
+  .ansi-magenta-fg {
+    color: oklch(0.62 0.2 320);
+  }
+  .ansi-cyan-fg {
+    color: oklch(0.68 0.13 200);
+  }
+  .ansi-white-fg {
+    color: oklch(0.85 0.005 270);
+  }
+
+  .ansi-bright-black-fg {
+    color: oklch(0.65 0.005 270);
+  }
+  .ansi-bright-red-fg {
+    color: oklch(0.72 0.2 25);
+  }
+  .ansi-bright-green-fg {
+    color: oklch(0.78 0.2 145);
+  }
+  .ansi-bright-yellow-fg {
+    color: oklch(0.85 0.16 85);
+  }
+  .ansi-bright-blue-fg {
+    color: oklch(0.75 0.2 250);
+  }
+  .ansi-bright-magenta-fg {
+    color: oklch(0.74 0.22 320);
+  }
+  .ansi-bright-cyan-fg {
+    color: oklch(0.8 0.15 200);
+  }
+  .ansi-bright-white-fg {
+    color: oklch(0.97 0.005 270);
+  }
+
+  .ansi-black-bg {
+    background-color: oklch(0.55 0.005 270 / 0.18);
+  }
+  .ansi-red-bg {
+    background-color: oklch(0.6 0.18 25 / 0.22);
+  }
+  .ansi-green-bg {
+    background-color: oklch(0.62 0.17 145 / 0.22);
+  }
+  .ansi-yellow-bg {
+    background-color: oklch(0.72 0.15 85 / 0.22);
+  }
+  .ansi-blue-bg {
+    background-color: oklch(0.62 0.17 250 / 0.22);
+  }
+  .ansi-magenta-bg {
+    background-color: oklch(0.62 0.2 320 / 0.22);
+  }
+  .ansi-cyan-bg {
+    background-color: oklch(0.68 0.13 200 / 0.22);
+  }
+  .ansi-white-bg {
+    background-color: oklch(0.85 0.005 270 / 0.18);
+  }
+
+  .ansi-bright-black-bg {
+    background-color: oklch(0.65 0.005 270 / 0.2);
+  }
+  .ansi-bright-red-bg {
+    background-color: oklch(0.72 0.2 25 / 0.24);
+  }
+  .ansi-bright-green-bg {
+    background-color: oklch(0.78 0.2 145 / 0.24);
+  }
+  .ansi-bright-yellow-bg {
+    background-color: oklch(0.85 0.16 85 / 0.24);
+  }
+  .ansi-bright-blue-bg {
+    background-color: oklch(0.75 0.2 250 / 0.24);
+  }
+  .ansi-bright-magenta-bg {
+    background-color: oklch(0.74 0.22 320 / 0.24);
+  }
+  .ansi-bright-cyan-bg {
+    background-color: oklch(0.8 0.15 200 / 0.24);
+  }
+  .ansi-bright-white-bg {
+    background-color: oklch(0.97 0.005 270 / 0.2);
+  }
+}

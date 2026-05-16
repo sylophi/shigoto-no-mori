@@ -1,0 +1,22 @@
+# Project-local pnpm settings.
+#
+# nodeLinker: hoisted — required by electron-forge so it can crawl a
+# flat node_modules tree when packaging.
+#
+# blockExoticSubdeps: false — project-scoped allowance for the
+# @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
+# pinned SHA, used by @electron/rebuild during native-module builds).
+# Your other guards still apply: minimumReleaseAge: 10080 (7 days),
+# ignoreScripts: true, strictDepBuilds: true.
+nodeLinker: hoisted
+blockExoticSubdeps: false
+# Per-package build-script trust. pnpm 11 uses this map (not the older
+# `onlyBuiltDependencies` / `ignoredBuiltDependencies` arrays) to gate
+# which dependencies are allowed to run install scripts.
+allowBuilds:
+  electron: true
+  esbuild: true
+  lefthook: true
+  electron-winstaller: false
+  fs-xattr: false
+  macos-alias: false

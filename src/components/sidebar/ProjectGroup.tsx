@@ -1,0 +1,262 @@
+import { useState } from "react";
+import {
+  AlertTriangle,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+} from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
+import { notifyError } from "@/lib/toast";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useIsTruncated } from "@/hooks/useIsTruncated";
+import { useRemoveProject } from "@/hooks/useProjects";
+import type { Project } from "@shared/schemas";
+import { WorktreeRow } from "./WorktreeRow";
+
+interface ProjectGroupProps {
+  project: Project;
+}
+
+export function ProjectGroup({ project }: ProjectGroupProps) {
+  const [expanded, setExpanded] = useState(true);
+  const navigate = useNavigate();
+  const missing = project.pathExists === false;
+  // Skip the listing query entirely when the project's path is gone —
+  // every git invocation would just ENOENT.
+  const {
+    data: worktrees = [],
+    isLoading,
+    error,
+  } = useWorktrees(missing ? null : project.id);
+  const removeProject = useRemoveProject();
+  const create = useCreateWorktree();
+
+  const quickCreate = async () => {
+    if (create.isPending) return;
+    try {
+      const defaultBranch = await window.api.projects.defaultBranch(project.id);
+      const { worktree } = await create.mutateAsync({
+        projectId: project.id,
+        base: defaultBranch,
+      });
+      void navigate({
+        to: "/projects/$projectId/worktrees/$worktreeName",
+        params: { projectId: project.id, worktreeName: worktree.name },
+      });
+    } catch (err) {
+      // useCreateWorktree already toasts its own failures; only surface
+      // the defaultBranch lookup failure here.
+      if (!create.isError) {
+        notifyError("Couldn't resolve default branch", err);
+      }
+    }
+  };
+
+  if (missing) {
+    return (
+      <div className="group flex items-center gap-0.5 py-0.5">
+        <ProjectHeader project={project} missing />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`More actions for ${project.name}`}
+                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" sideOffset={2}>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => removeProject.mutate(project.id)}
+            >
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div className="group flex items-center gap-0.5 py-0.5">
+        <ProjectHeader
+          project={project}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
+        <button
+          type="button"
+          onClick={() => void quickCreate()}
+          disabled={create.isPending}
+          aria-label={`Quick-create worktree in ${project.name}`}
+          title={`Quick-create worktree in ${project.name}`}
+          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
+          aria-busy={create.isPending}
+        >
+          {create.isPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <Plus className="size-3.5" />
+          )}
+        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label={`More actions for ${project.name}`}
+                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" sideOffset={2}>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/new",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              New worktree from…
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/branches",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Manage branches
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/configure",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Configure
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => removeProject.mutate(project.id)}
+            >
+              Remove
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {expanded && (
+        <div className="flex flex-col gap-0.5 pl-3">
+          {isLoading && (
+            <div
+              className="space-y-1 px-2 py-1.5"
+              aria-label="Loading worktrees"
+            >
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+          )}
+          {error && (
+            <div className="px-2 py-1 text-xs text-destructive">
+              Failed to list worktrees
+            </div>
+          )}
+          {!isLoading &&
+            !error &&
+            worktrees.map((worktree) => (
+              <WorktreeRow key={worktree.id} worktree={worktree} />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ProjectHeaderProps {
+  project: Project;
+  expanded?: boolean;
+  onToggle?: () => void;
+  missing?: boolean;
+}
+
+// Header row shared by the healthy and missing-project branches. The
+// project name is `truncate`d, with a Tooltip that only opens when the
+// text actually overflows — uses `useIsTruncated` to suppress redundant
+// tooltips on names that already fit.
+function ProjectHeader({
+  project,
+  expanded,
+  onToggle,
+  missing,
+}: ProjectHeaderProps) {
+  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
+  const baseClass =
+    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
+  const trigger = missing ? (
+    <div className={cn(baseClass, "text-muted-foreground/60")}>
+      <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+      <span
+        ref={nameRef}
+        className="min-w-0 truncate line-through decoration-1"
+      >
+        {project.name}
+      </span>
+      <span className="shrink-0 text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
+        missing
+      </span>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        baseClass,
+        "text-muted-foreground transition-colors hover:text-foreground",
+      )}
+    >
+      <ChevronRight
+        className={cn(
+          "size-3 shrink-0 transition-transform",
+          expanded && "rotate-90",
+        )}
+      />
+      <span ref={nameRef} className="min-w-0 truncate">
+        {project.name}
+      </span>
+    </button>
+  );
+
+  return (
+    <Tooltip disabled={!isTruncated}>
+      <TooltipTrigger render={trigger} />
+      <TooltipContent>{project.name}</TooltipContent>
+    </Tooltip>
+  );
+}

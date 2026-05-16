@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oxc-project/oxc/main/npm/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "react", "import", "jsx-a11y"],
+  "settings": {
+    "react": {
+      "version": "19.2.0"
+    }
+  },
+  "categories": {
+    "correctness": "error",
+    "perf": "error",
+    "suspicious": "error",
+    "pedantic": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "rules": {
+    "no-unused-vars": [
+      "error",
+      { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
+    ],
+    "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "react",
+            "importNames": ["useMemo", "useCallback", "memo"],
+            "message": "React Compiler memoizes automatically. Remove the import. If you have a demonstrated bailout, opt out with `// oxlint-disable-next-line no-restricted-imports -- <reason>`."
+          }
+        ]
+      }
+    ],
+    "react/react-in-jsx-scope": "off",
+    "react/jsx-no-constructed-context-values": "off"
+  },
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/out/**",
+    "**/dist/**",
+    "**/.vite/**"
+  ]
+}

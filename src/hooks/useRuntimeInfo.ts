@@ -1,0 +1,11 @@
+import { useQuery } from "@tanstack/react-query";
+import type { RuntimeInfo } from "@shared/schemas";
+
+export function useRuntimeInfo() {
+  return useQuery<RuntimeInfo>({
+    queryKey: ["runtime", "info"],
+    queryFn: () => window.api.runtime.info(),
+    staleTime: Number.POSITIVE_INFINITY,
+    meta: { errorTitle: "Couldn't read runtime info" },
+  });
+}
