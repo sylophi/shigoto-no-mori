@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import react from "@vitejs/plugin-react";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, loadEnv } from "vite";
 
@@ -17,11 +18,12 @@ export default defineConfig(({ mode }) => {
     server: port ? { port, strictPort: true } : undefined,
     plugins: [
       tailwindcss(),
-      react({
-        babel: {
-          plugins: ["babel-plugin-react-compiler"],
-        },
-      }),
+      react(),
+      // @vitejs/plugin-react v6 dropped its inline babel option (it
+      // switched to Oxc for Fast Refresh), so the React Compiler ships
+      // via @rolldown/plugin-babel using the canonical preset exported
+      // by the react plugin itself.
+      babel({ presets: [reactCompilerPreset()] }),
     ],
     build: {
       // Keep material-icon-theme SVGs as separate hashed files so each one
