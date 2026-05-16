@@ -161,6 +161,23 @@ interface CheckoutBranchInput {
   branch: string;
 }
 
+export function useWorktreeDiff(
+  projectId: string,
+  worktreeId: string | undefined,
+) {
+  return useQuery<string>({
+    queryKey: ["worktree-diff", projectId, worktreeId],
+    queryFn: () => {
+      if (!worktreeId) return "";
+      return window.api.worktrees.diff({ projectId, worktreeId });
+    },
+    enabled: !!worktreeId,
+    // Diff reflects working-tree state, which mutates outside our control;
+    // always refetch on mount so re-entering the page shows current state.
+    staleTime: 0,
+  });
+}
+
 export function useCheckoutBranch() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, CheckoutBranchInput>({

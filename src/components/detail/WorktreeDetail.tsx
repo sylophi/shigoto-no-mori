@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
+  ChevronRight,
   ChevronsUpDown,
   FileDiff,
   Loader2,
@@ -231,13 +232,28 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
             <BranchTitle worktree={worktree} />
           </div>
           {worktree.changedCount > 0 && (
-            <span
-              title={`${worktree.changedCount} files changed`}
-              className="tabular inline-flex shrink-0 items-center gap-1 pt-2 text-xs text-amber-500"
+            <button
+              type="button"
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/worktrees/$worktreeName/diff",
+                  params: {
+                    projectId: worktree.projectId,
+                    worktreeName: worktree.name,
+                  },
+                })
+              }
+              title="View uncommitted changes"
+              className="group/diff tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
             >
               <FileDiff aria-hidden className="size-3.5" />
-              {worktree.changedCount}
-            </span>
+              {worktree.changedCount}{" "}
+              {worktree.changedCount === 1 ? "file" : "files"} changed
+              <ChevronRight
+                aria-hidden
+                className="size-3.5 opacity-60 transition-transform group-hover/diff:translate-x-0.5"
+              />
+            </button>
           )}
         </div>
       </header>
