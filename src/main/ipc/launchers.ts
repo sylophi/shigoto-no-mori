@@ -87,7 +87,9 @@ export function registerLauncherHandlers(): void {
   ipcMain.handle(
     CHANNELS.LaunchersDetect,
     async (): Promise<DetectedLauncher[]> =>
-      detectedEntries(await detectApps()),
+      detectedEntries(await detectApps()).toSorted((a, b) =>
+        a.label.localeCompare(b.label),
+      ),
   );
 
   ipcMain.handle(
@@ -111,17 +113,20 @@ export function registerLauncherHandlers(): void {
         ...customEntriesFrom(projectConfig?.launchers),
       ];
 
-      // Sort by rolling-window use count (descending). toSorted is stable, so
-      // ties preserve the original detected → global → project order. The
-      // renderer query has a staleTime and useLaunch doesn't invalidate it,
-      // so the visible order stays put while the user interacts — only
-      // re-sorts when they navigate away and back (or the cache goes stale).
+      // Sort by rolling-window use count (descending), alphabetical by label
+      // as the tiebreaker so first-time users see a predictable A→Z list
+      // instead of the curated category order from launchers.ts. The renderer
+      // query has a staleTime and useLaunch doesn't invalidate it, so the
+      // visible order stays put while the user interacts — only re-sorts
+      // when they navigate away and back (or the cache goes stale).
       const log = readKey<UseLogMap>(USE_LOG_KEY, {});
       const now = Date.now();
       return {
-        entries: entries.toSorted(
-          (a, b) => recentScore(log, b.id, now) - recentScore(log, a.id, now),
-        ),
+        entries: entries.toSorted((a, b) => {
+          const diff =
+            recentScore(log, b.id, now) - recentScore(log, a.id, now);
+          return diff !== 0 ? diff : a.label.localeCompare(b.label);
+        }),
       };
     },
   );
