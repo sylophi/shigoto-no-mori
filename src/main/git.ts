@@ -10,7 +10,7 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
-import { pickWorktreeName } from "./animals";
+import { pickWorktreeName } from "./worktreeNames";
 import { shigomoriRoot } from "./paths";
 
 const exec = promisify(execFile);
