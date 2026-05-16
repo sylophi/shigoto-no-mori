@@ -1,7 +1,7 @@
 {
   "name": "shigoto-no-mori",
   "productName": "Shigoto no Mori",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight desktop app for managing git worktrees in parallel.",
   "main": ".vite/build/main.js",
   "private": true,

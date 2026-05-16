@@ -165,6 +165,10 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-5">
+          <AboutSection />
+
+          <Separator />
+
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
             {root && (
@@ -412,6 +416,18 @@ function ToggleRow({
         )}
       </div>
     </label>
+  );
+}
+
+function AboutSection() {
+  return (
+    <section className="space-y-3">
+      <SectionHeading className="mb-1">About</SectionHeading>
+      <div className="font-mono text-sm select-text">
+        {__APP_VERSION__}{" "}
+        <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+      </div>
+    </section>
   );
 }
 
