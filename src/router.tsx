@@ -13,6 +13,7 @@ import { ManageBranches } from "@/components/detail/ManageBranches";
 import { NewWorktree } from "@/components/detail/NewWorktree";
 import { ScriptConsole } from "@/components/detail/ScriptConsole";
 import { Settings } from "@/components/detail/Settings";
+import { CommitDiff } from "@/components/detail/CommitDiff";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/detail/WorktreeDiff";
 
@@ -158,6 +159,12 @@ const worktreeDiffRoute = createRoute({
   component: WorktreeDiff,
 });
 
+const commitDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeName/commits/$hash",
+  component: CommitDiff,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
@@ -167,6 +174,7 @@ const routeTree = rootRoute.addChildren([
   worktreeRoute,
   scriptConsoleRoute,
   worktreeDiffRoute,
+  commitDiffRoute,
 ]);
 
 export const router = createRouter({
@@ -182,6 +190,7 @@ declare module "@tanstack/react-router" {
 }
 
 export {
+  commitDiffRoute,
   configureProjectRoute,
   manageBranchesRoute,
   newWorktreeRoute,
