@@ -9,6 +9,7 @@ import {
   type Project,
   ProjectsDefaultBranchPayloadSchema,
   ProjectsListBranchesPayloadSchema,
+  ReorderProjectsPayloadSchema,
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
 import {
@@ -31,6 +32,29 @@ import { writeKey } from "../store";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);
+}
+
+function reorderProjects(
+  projects: Project[],
+  draggedId: string,
+  targetId: string,
+  position: "before" | "after",
+): Project[] {
+  if (draggedId === targetId) return projects;
+
+  const draggedIndex = projects.findIndex((p) => p.id === draggedId);
+  if (draggedIndex < 0) return projects;
+
+  const next = [...projects];
+  const [dragged] = next.splice(draggedIndex, 1);
+  if (!dragged) return projects;
+
+  const targetIndex = next.findIndex((p) => p.id === targetId);
+  if (targetIndex < 0) return projects;
+
+  const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
+  next.splice(insertIndex, 0, dragged);
+  return next;
 }
 
 export function registerProjectHandlers(): void {
@@ -62,6 +86,13 @@ export function registerProjectHandlers(): void {
   ipcMain.handle(CHANNELS.ProjectsRemove, (_event, rawPayload: unknown) => {
     const { id } = RemoveProjectPayloadSchema.parse(rawPayload);
     saveProjects(loadProjects().filter((p) => p.id !== id));
+  });
+
+  ipcMain.handle(CHANNELS.ProjectsReorder, (_event, rawPayload: unknown) => {
+    const { draggedId, targetId, position } =
+      ReorderProjectsPayloadSchema.parse(rawPayload);
+    const projects = loadProjects();
+    saveProjects(reorderProjects(projects, draggedId, targetId, position));
   });
 
   ipcMain.handle(

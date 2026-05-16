@@ -3,6 +3,7 @@ export const CHANNELS = {
   ProjectsList: "projects:list",
   ProjectsAdd: "projects:add",
   ProjectsRemove: "projects:remove",
+  ProjectsReorder: "projects:reorder",
   ProjectsDefaultBranch: "projects:defaultBranch",
   ProjectsListBranches: "projects:listBranches",
   ProjectsPickWorktreeName: "projects:pickWorktreeName",

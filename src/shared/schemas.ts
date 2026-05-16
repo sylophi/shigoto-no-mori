@@ -71,6 +71,12 @@ export const RemoveProjectPayloadSchema = z.object({
   id: z.string(),
 });
 
+export const ReorderProjectsPayloadSchema = z.object({
+  draggedId: z.string(),
+  targetId: z.string(),
+  position: z.enum(["before", "after"]),
+});
+
 export const ListWorktreesPayloadSchema = z.object({
   projectId: z.string(),
 });

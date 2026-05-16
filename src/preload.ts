@@ -38,6 +38,11 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsAdd, { path }),
     remove: (id: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ProjectsRemove, { id }),
+    reorder: (input: {
+      draggedId: string;
+      targetId: string;
+      position: "before" | "after";
+    }): Promise<void> => ipcRenderer.invoke(CHANNELS.ProjectsReorder, input),
     defaultBranch: (projectId: string): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.ProjectsDefaultBranch, { projectId }),
     listBranches: (projectId: string): Promise<BranchList> =>

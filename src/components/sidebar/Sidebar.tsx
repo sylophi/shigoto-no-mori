@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ChevronRight,
   FolderPlus,
   Loader2,
   Search,
@@ -7,14 +8,58 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useIsFetching } from "@tanstack/react-query";
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
-import { useProjects } from "@/hooks/useProjects";
+import { useProjects, useReorderProjects } from "@/hooks/useProjects";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Project } from "@shared/schemas";
 import { ProjectGroup } from "./ProjectGroup";
 
 export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
+  const reorderProjects = useReorderProjects();
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // distance: 5 lets a quick click still toggle expand; drag activates
+  // only after the pointer moves 5px while held.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over || active.id === over.id) return;
+    const draggedId = String(active.id);
+    const targetId = String(over.id);
+    const oldIndex = projects.findIndex((p) => p.id === draggedId);
+    const newIndex = projects.findIndex((p) => p.id === targetId);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const position: "before" | "after" =
+      oldIndex < newIndex ? "after" : "before";
+    reorderProjects.mutate({ draggedId, targetId, position });
+  };
+
+  const activeProject = activeId
+    ? (projects.find((p) => p.id === activeId) ?? null)
+    : null;
 
   return (
     <aside className="flex h-full flex-col bg-card">
@@ -25,9 +70,26 @@ export function Sidebar() {
               flush on top of the last project row when scrolled all the
               way down. */}
           <div className="flex flex-col gap-1 px-2 pt-0 pb-3">
-            {projects.map((project) => (
-              <ProjectGroup key={project.id} project={project} />
-            ))}
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveId(null)}
+            >
+              <SortableContext
+                items={projects.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {projects.map((project) => (
+                  <ProjectGroup key={project.id} project={project} />
+                ))}
+              </SortableContext>
+              <DragOverlay>
+                {activeProject ? (
+                  <ProjectDragPreview project={activeProject} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
             {!isLoading && projects.length === 0 && (
               <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                 No projects yet.
@@ -39,6 +101,17 @@ export function Sidebar() {
       </div>
       <SidebarFooter />
     </aside>
+  );
+}
+
+function ProjectDragPreview({ project }: { project: Project }) {
+  return (
+    <div className="cursor-grabbing rounded-md bg-card shadow-md outline -outline-offset-1 outline-foreground/25">
+      <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+        <ChevronRight className="size-3 shrink-0 rotate-90" />
+        <span className="min-w-0 truncate">{project.name}</span>
+      </div>
+    </div>
   );
 }
 

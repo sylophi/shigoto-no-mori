@@ -6,6 +6,9 @@ import {
   MoreHorizontal,
   Plus,
 } from "lucide-react";
+import type { DraggableSyntheticListeners } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
@@ -33,6 +36,18 @@ interface ProjectGroupProps {
 }
 
 export function ProjectGroup({ project }: ProjectGroupProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: project.id });
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
   const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
   const missing = project.pathExists === false;
@@ -69,40 +84,56 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
 
   if (missing) {
     return (
-      <div className="group flex items-center gap-0.5 py-0.5">
-        <ProjectHeader project={project} missing />
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={`More actions for ${project.name}`}
-                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+      <section
+        ref={setNodeRef}
+        style={sortableStyle}
+        className={cn("relative rounded-md", isDragging && "opacity-0")}
+        {...attributes}
+      >
+        <div className="group flex items-center gap-0.5 py-0.5">
+          <ProjectHeader project={project} missing listeners={listeners} />
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={`More actions for ${project.name}`}
+                  className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                >
+                  <MoreHorizontal className="size-3.5" />
+                </button>
+              }
+            />
+            <DropdownMenuContent align="end" sideOffset={2}>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => removeProject.mutate(project.id)}
               >
-                <MoreHorizontal className="size-3.5" />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" sideOffset={2}>
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => removeProject.mutate(project.id)}
-            >
-              Remove
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+                Remove
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="flex flex-col">
+    <section
+      ref={setNodeRef}
+      style={sortableStyle}
+      className={cn(
+        "relative flex flex-col rounded-md",
+        isDragging && "opacity-0",
+      )}
+      {...attributes}
+    >
       <div className="group flex items-center gap-0.5 py-0.5">
         <ProjectHeader
           project={project}
           expanded={expanded}
           onToggle={() => setExpanded((v) => !v)}
+          listeners={listeners}
         />
         <button
           type="button"
@@ -172,7 +203,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {expanded && (
+      {expanded && !isDragging && (
         <div className="flex flex-col gap-0.5 pl-3">
           {isLoading && (
             <div
@@ -195,7 +226,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             ))}
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -204,6 +235,7 @@ interface ProjectHeaderProps {
   expanded?: boolean;
   onToggle?: () => void;
   missing?: boolean;
+  listeners?: DraggableSyntheticListeners;
 }
 
 // Header row shared by the healthy and missing-project branches. The
@@ -215,12 +247,20 @@ function ProjectHeader({
   expanded,
   onToggle,
   missing,
+  listeners,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
     "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
   const trigger = missing ? (
-    <div className={cn(baseClass, "text-muted-foreground/60")}>
+    <div
+      {...listeners}
+      className={cn(
+        baseClass,
+        listeners && "cursor-grab active:cursor-grabbing",
+        "text-muted-foreground/60",
+      )}
+    >
       <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
       <span
         ref={nameRef}
@@ -236,8 +276,10 @@ function ProjectHeader({
     <button
       type="button"
       onClick={onToggle}
+      {...listeners}
       className={cn(
         baseClass,
+        listeners && "cursor-grab active:cursor-grabbing",
         "text-muted-foreground transition-colors hover:text-foreground",
       )}
     >
