@@ -9,6 +9,7 @@ import {
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
   type Worktree,
+  WorktreeDiffPayloadSchema,
 } from "@shared/schemas";
 import {
   checkoutBranch,
@@ -16,6 +17,7 @@ import {
   deleteLocalBranch,
   describeWorktree,
   findWorktreeIdentityOrThrow,
+  getWorktreeDiff,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -141,6 +143,21 @@ export function registerWorktreeHandlers(): void {
         worktreeId,
       );
       return describeWorktree(refreshed);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesDiff,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId, worktreeId } =
+        WorktreeDiffPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      return getWorktreeDiff(target.path);
     },
   );
 }

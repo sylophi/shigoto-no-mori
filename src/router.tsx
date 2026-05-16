@@ -14,6 +14,7 @@ import { NewWorktree } from "@/components/detail/NewWorktree";
 import { ScriptConsole } from "@/components/detail/ScriptConsole";
 import { Settings } from "@/components/detail/Settings";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
+import { WorktreeDiff } from "@/components/detail/WorktreeDiff";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -151,6 +152,12 @@ const scriptConsoleRoute = createRoute({
   component: ScriptConsole,
 });
 
+const worktreeDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeName/diff",
+  component: WorktreeDiff,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
@@ -159,6 +166,7 @@ const routeTree = rootRoute.addChildren([
   manageBranchesRoute,
   worktreeRoute,
   scriptConsoleRoute,
+  worktreeDiffRoute,
 ]);
 
 export const router = createRouter({
@@ -179,5 +187,6 @@ export {
   newWorktreeRoute,
   scriptConsoleRoute,
   settingsRoute,
+  worktreeDiffRoute,
   worktreeRoute,
 };

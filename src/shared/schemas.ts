@@ -145,6 +145,11 @@ export const CheckoutBranchPayloadSchema = z.object({
   branch: z.string().min(1),
 });
 
+export const WorktreeDiffPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+});
+
 // Branch operations against the project's primary repo (not tied to any
 // specific worktree). Used by the Manage Branches page.
 export const CreateBranchPayloadSchema = z.object({

@@ -31,6 +31,17 @@ async function run(cwd: string, args: string[]): Promise<string> {
   return stdout;
 }
 
+// Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
+// which exits 1 whenever there's a diff to print). Returns whatever
+// stdout was produced before exit, falling back to empty.
+async function runLenient(cwd: string, args: string[]): Promise<string> {
+  try {
+    return await run(cwd, args);
+  } catch (err) {
+    return (err as { stdout?: string }).stdout ?? "";
+  }
+}
+
 export async function isGitRepo(path: string): Promise<boolean> {
   try {
     await exec("git", ["rev-parse", "--git-dir"], { cwd: path });
@@ -75,6 +86,38 @@ async function getChangedCount(worktreePath: string): Promise<number> {
   } catch {
     return 0;
   }
+}
+
+// Unified patch of every uncommitted change in the worktree. Combines
+// `git diff HEAD` (covers staged + unstaged tracked edits) with a
+// /dev/null diff per untracked file so additions render alongside
+// modifications in @pierre/diffs. `runLenient` swallows the non-zero
+// exits `git diff --no-index` always emits when there's a diff.
+export async function getWorktreeDiff(worktreePath: string): Promise<string> {
+  const tracked = await runLenient(worktreePath, [
+    "diff",
+    "HEAD",
+    "--no-color",
+  ]);
+  const lsOutput = await runLenient(worktreePath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ]);
+  const untracked = lsOutput.split("\0").filter((s) => s.length > 0);
+  const additions = await Promise.all(
+    untracked.map((file) =>
+      runLenient(worktreePath, [
+        "diff",
+        "--no-index",
+        "--no-color",
+        "/dev/null",
+        file,
+      ]),
+    ),
+  );
+  return [tracked, ...additions].filter((s) => s.length > 0).join("");
 }
 
 async function getLastCommit(

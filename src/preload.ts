@@ -75,6 +75,8 @@ const api = {
       branch: string;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
+    diff: (input: { projectId: string; worktreeId: string }): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesDiff, input),
   },
   branches: {
     create: (input: {
