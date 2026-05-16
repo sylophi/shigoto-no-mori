@@ -1,8 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -13,6 +13,8 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
 
       - uses: pnpm/action-setup@v6
 
@@ -30,15 +32,15 @@ jobs:
       - name: Zip .app bundle
         # `ditto -c -k --keepParent` preserves resource forks, symlinks, and
         # signature metadata — the canonical way to archive a macOS bundle.
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           cd "out/shigomori-darwin-arm64"
           ditto -c -k --keepParent "Shigoto no Mori.app" \
-            "../../shigomori-darwin-arm64-${GITHUB_REF_NAME}.zip"
+            "../../shigomori-darwin-arm64-${TAG}.zip"
 
-      - name: Publish release
+      - name: Upload asset to release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            --generate-notes \
-            "shigomori-darwin-arm64-${GITHUB_REF_NAME}.zip"
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "${TAG}" "shigomori-darwin-arm64-${TAG}.zip"
