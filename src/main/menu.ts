@@ -21,6 +21,16 @@ export function buildAppMenu(): void {
             submenu: [
               { role: "about" },
               { type: "separator" },
+              {
+                label: "Settings…",
+                accelerator: "CmdOrCtrl+,",
+                click: (_item, focusedWindow) => {
+                  (
+                    focusedWindow as BrowserWindow | undefined
+                  )?.webContents.send(CHANNELS.NavOpenSettings);
+                },
+              },
+              { type: "separator" },
               { role: "services" },
               { type: "separator" },
               { role: "hide" },
@@ -44,6 +54,20 @@ export function buildAppMenu(): void {
             );
           },
         },
+        ...(isMac
+          ? ([] satisfies MenuItemConstructorOptions[])
+          : ([
+              { type: "separator" },
+              {
+                label: "Settings…",
+                accelerator: "CmdOrCtrl+,",
+                click: (_item, focusedWindow) => {
+                  (
+                    focusedWindow as BrowserWindow | undefined
+                  )?.webContents.send(CHANNELS.NavOpenSettings);
+                },
+              },
+            ] satisfies MenuItemConstructorOptions[])),
       ],
     },
     {
@@ -63,7 +87,7 @@ export function buildAppMenu(): void {
       submenu: [
         {
           label: "Command palette",
-          accelerator: "CmdOrCtrl+T",
+          accelerator: "CmdOrCtrl+P",
           click: (_item, focusedWindow) => {
             (focusedWindow as BrowserWindow | undefined)?.webContents.send(
               CHANNELS.PaletteToggle,

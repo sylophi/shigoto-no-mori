@@ -43,6 +43,7 @@ export const CHANNELS = {
   ShellShowItemInFolder: "shell:showItemInFolder",
   PaletteToggle: "palette:toggle",
   PaletteAddProject: "palette:addProject",
+  NavOpenSettings: "nav:openSettings",
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
 } as const;

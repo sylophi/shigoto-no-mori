@@ -150,6 +150,9 @@ const api = {
     onToggle: subscribe(CHANNELS.PaletteToggle),
     onAddProject: subscribe(CHANNELS.PaletteAddProject),
   },
+  nav: {
+    onOpenSettings: subscribe(CHANNELS.NavOpenSettings),
+  },
   window: {
     onFocused: subscribe(CHANNELS.WindowFocused),
     onBlurred: subscribe(CHANNELS.WindowBlurred),

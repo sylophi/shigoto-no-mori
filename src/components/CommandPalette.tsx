@@ -43,7 +43,7 @@ export function CommandPalette() {
   const { open, mode, setOpen, toggle, openIn } = useCommandPalette();
 
   // Both shortcuts are wired via native menu accelerators in src/main/menu.ts
-  // — View → Command palette (⌘T) and File → Add project… (⌘N).
+  // — View → Command palette (⌘P) and File → Add project… (⌘N).
   useEffect(() => window.api.palette.onToggle(toggle), [toggle]);
   useEffect(
     () => window.api.palette.onAddProject(() => openIn("add-project")),
