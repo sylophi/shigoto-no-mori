@@ -5,7 +5,9 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  useRouter,
 } from "@tanstack/react-router";
+import { ErrorFallback } from "@/components/ErrorFallback";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
@@ -177,10 +179,32 @@ const routeTree = rootRoute.addChildren([
   commitDiffRoute,
 ]);
 
+function RouteErrorFallback({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  const router = useRouter();
+  const retry = () => {
+    reset();
+    void router.invalidate();
+  };
+  return (
+    <ErrorFallback
+      error={error}
+      scope="view"
+      action={{ label: "Try again", onClick: retry }}
+    />
+  );
+}
+
 export const router = createRouter({
   routeTree,
   history: createMemoryHistory({ initialEntries: ["/"] }),
   defaultPreload: false,
+  defaultErrorComponent: RouteErrorFallback,
 });
 
 declare module "@tanstack/react-router" {
