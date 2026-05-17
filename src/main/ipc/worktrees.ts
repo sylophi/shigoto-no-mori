@@ -2,6 +2,7 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
+  CommitDiffPayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
   DeleteWorktreePayloadSchema,
@@ -9,6 +10,7 @@ import {
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
   type Worktree,
+  WorktreeDiffPayloadSchema,
 } from "@shared/schemas";
 import {
   checkoutBranch,
@@ -16,6 +18,8 @@ import {
   deleteLocalBranch,
   describeWorktree,
   findWorktreeIdentityOrThrow,
+  getCommitDiff,
+  getWorktreeDiff,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -141,6 +145,36 @@ export function registerWorktreeHandlers(): void {
         worktreeId,
       );
       return describeWorktree(refreshed);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesDiff,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId, worktreeId } =
+        WorktreeDiffPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      return getWorktreeDiff(target.path);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesCommitDiff,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId, worktreeId, hash } =
+        CommitDiffPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      return getCommitDiff(target.path, hash);
     },
   );
 }

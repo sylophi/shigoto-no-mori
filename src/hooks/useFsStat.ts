@@ -9,8 +9,7 @@ export function useFsStat(path: string | null) {
       return window.api.fs.stat(path);
     },
     enabled: path !== null,
-    // Warning chip + icon resolution in the carry-over section; the
-    // global indicator would be misleading.
-    meta: { silentError: true, silentSpinner: true },
+    // Inline warning chip + icon resolution renders its own error state.
+    meta: { silentError: true },
   });
 }

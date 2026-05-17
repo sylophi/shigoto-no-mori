@@ -13,7 +13,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
@@ -56,7 +55,6 @@ function SettingsSkeleton() {
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-4 w-72" />
       </div>
-      <Separator />
       <div className="space-y-3">
         <Skeleton className="h-3 w-16" />
         <Skeleton className="h-8 w-full" />
@@ -164,7 +162,9 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-3xl flex-col gap-5">
+        <div className="flex max-w-3xl flex-col gap-10">
+          <VersionSection />
+
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
             {root && (
@@ -213,11 +213,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
             </div>
           </section>
 
-          <Separator />
-
           <AppearanceSection theme={form.theme} onPick={pickTheme} />
-
-          <Separator />
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Worktrees</SectionHeading>
@@ -230,8 +226,6 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
             />
           </section>
-
-          <Separator />
 
           <section className="space-y-4">
             <div>
@@ -262,35 +256,30 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           </section>
 
           {missingTools.length > 0 && (
-            <>
-              <Separator />
-              <section className="space-y-4">
-                <div>
-                  <SectionHeading className="mb-1">
-                    Supported tools
-                  </SectionHeading>
-                  <p className="text-xs text-muted-foreground">
-                    Shigomori knows how to open worktrees in these too. Install
-                    any of them and they'll show up under detected.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {missingTools.map((d) => (
-                    <span
-                      key={d.id}
-                      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
-                      title="Not installed"
-                    >
-                      <LauncherIcon entry={d} className="size-3.5 opacity-60" />
-                      {d.label}
-                    </span>
-                  ))}
-                </div>
-              </section>
-            </>
+            <section className="space-y-4">
+              <div>
+                <SectionHeading className="mb-1">
+                  Supported tools
+                </SectionHeading>
+                <p className="text-xs text-muted-foreground">
+                  Shigomori knows how to open worktrees in these too. Install
+                  any of them and they'll show up under detected.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {missingTools.map((d) => (
+                  <span
+                    key={d.id}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
+                    title="Not installed"
+                  >
+                    <LauncherIcon entry={d} className="size-3.5 opacity-60" />
+                    {d.label}
+                  </span>
+                ))}
+              </div>
+            </section>
           )}
-
-          <Separator />
 
           <section className="space-y-3">
             <div>
@@ -324,8 +313,6 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               Add global launcher
             </Button>
           </section>
-
-          <Separator />
 
           <DangerZone />
 
@@ -415,6 +402,18 @@ function ToggleRow({
   );
 }
 
+function VersionSection() {
+  return (
+    <section className="space-y-3">
+      <SectionHeading className="mb-1">Version</SectionHeading>
+      <div className="font-mono text-sm select-text">
+        {__APP_VERSION__}{" "}
+        <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+      </div>
+    </section>
+  );
+}
+
 function DangerZone() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -471,7 +470,7 @@ function DangerZone() {
           onClick={handleNuke}
           title={
             armed
-              ? "Click again to confirm — this cannot be undone"
+              ? "Click again to confirm. This cannot be undone."
               : "Wipe all shigomori data"
           }
         >

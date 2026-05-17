@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
+  ChevronRight,
   ChevronsUpDown,
   FileDiff,
   Loader2,
@@ -16,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { CopyButton } from "@/components/ui/copy-button";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Separator } from "@/components/ui/separator";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -231,13 +231,25 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
             <BranchTitle worktree={worktree} />
           </div>
           {worktree.changedCount > 0 && (
-            <span
-              title={`${worktree.changedCount} files changed`}
-              className="tabular inline-flex shrink-0 items-center gap-1 pt-2 text-xs text-amber-500"
+            <button
+              type="button"
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/worktrees/$worktreeName/diff",
+                  params: {
+                    projectId: worktree.projectId,
+                    worktreeName: worktree.name,
+                  },
+                })
+              }
+              title="View uncommitted changes"
+              className="tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
             >
               <FileDiff aria-hidden className="size-3.5" />
-              {worktree.changedCount}
-            </span>
+              {worktree.changedCount}{" "}
+              {worktree.changedCount === 1 ? "file" : "files"} changed
+              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+            </button>
           )}
         </div>
       </header>
@@ -275,24 +287,18 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
         )}
         aria-disabled={inLimbo}
       >
-        <div className="flex max-w-4xl flex-col gap-5">
+        <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading>Launch</SectionHeading>
             <LauncherRow worktree={worktree} />
           </section>
 
-          <Separator />
-
           <CommitsSection worktree={worktree} />
-
-          <Separator />
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsSection worktree={worktree} />
           </section>
-
-          <Separator />
 
           <NotesSection worktree={worktree} />
         </div>
@@ -455,35 +461,95 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
 }
 
 function CommitsSection({ worktree }: { worktree: Worktree }) {
-  const last = worktree.lastCommit;
+  const commits = worktree.recentCommits;
   return (
     <section className="space-y-3">
-      <SectionHeading>Last commit</SectionHeading>
-      {last ? (
-        <CommitRow commit={last} />
-      ) : (
+      <SectionHeading>Recent commits</SectionHeading>
+      {commits.length === 0 ? (
         <div className="text-sm text-muted-foreground">No commits yet.</div>
+      ) : (
+        <ul className="space-y-2">
+          {commits.map((commit) => (
+            <li key={commit.hash}>
+              <CommitRow worktree={worktree} commit={commit} />
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );
 }
 
-function CommitRow({ commit }: { commit: CommitSummary }) {
+function CommitStats({
+  additions,
+  deletions,
+}: {
+  additions: number;
+  deletions: number;
+}) {
+  // emerald-500 / rose-500 read close to Pierre's dark/light addition
+  // and deletion hues without requiring shadow-DOM theme variables.
   return (
-    <div className="space-y-1 select-text">
-      <div className="text-sm">{commit.subject}</div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span className="font-mono">{commit.hash}</span>
-        <span aria-hidden className="text-muted-foreground/40">
-          ·
-        </span>
-        <span>{commit.author}</span>
-        <span aria-hidden className="text-muted-foreground/40">
-          ·
-        </span>
-        <RelativeDate date={commit.date} />
+    <span
+      aria-label={`${additions} additions, ${deletions} deletions`}
+      title={`${additions} additions, ${deletions} deletions`}
+      className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
+    >
+      <span className="text-emerald-500">+{additions}</span>
+      <span className="text-rose-500">−{deletions}</span>
+    </span>
+  );
+}
+
+function CommitRow({
+  worktree,
+  commit,
+}: {
+  worktree: Worktree;
+  commit: CommitSummary;
+}) {
+  const navigate = useNavigate();
+  const onClick = () =>
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeName/commits/$hash",
+      params: {
+        projectId: worktree.projectId,
+        worktreeName: worktree.name,
+        hash: commit.hash,
+      },
+    });
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="View this commit's diff"
+      className="-mx-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
+        <div className="w-full truncate text-sm">{commit.subject}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span className="font-mono">{commit.hash}</span>
+          <span aria-hidden className="text-muted-foreground/40">
+            ·
+          </span>
+          <span>{commit.author}</span>
+          <span aria-hidden className="text-muted-foreground/40">
+            ·
+          </span>
+          <RelativeDate date={commit.date} />
+        </div>
       </div>
-    </div>
+      {(commit.additions > 0 || commit.deletions > 0) && (
+        <CommitStats
+          additions={commit.additions}
+          deletions={commit.deletions}
+        />
+      )}
+      <ChevronRight
+        aria-hidden
+        className="size-3.5 shrink-0 text-muted-foreground/40"
+      />
+    </button>
   );
 }
 

@@ -142,7 +142,8 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount === 0) return null;
-  const label = `${worktree.changedCount} files changed`;
+  const noun = worktree.changedCount === 1 ? "file" : "files";
+  const label = `${worktree.changedCount} ${noun} changed`;
   return (
     <span
       title={label}

@@ -8,8 +8,6 @@ export function useIgnoredPaths(projectId: string | null) {
       return window.api.projects.listIgnoredPaths(projectId);
     },
     enabled: projectId !== null,
-    // Used inside the carry-over picker to grey out non-ignored entries.
-    // The picker is modal, so a global spinner would be misleading.
-    meta: { errorTitle: "Couldn't list ignored paths", silentSpinner: true },
+    meta: { errorTitle: "Couldn't list ignored paths" },
   });
 }

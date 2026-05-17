@@ -13,7 +13,9 @@ import { ManageBranches } from "@/components/detail/ManageBranches";
 import { NewWorktree } from "@/components/detail/NewWorktree";
 import { ScriptConsole } from "@/components/detail/ScriptConsole";
 import { Settings } from "@/components/detail/Settings";
+import { CommitDiff } from "@/components/detail/CommitDiff";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
+import { WorktreeDiff } from "@/components/detail/WorktreeDiff";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -151,6 +153,18 @@ const scriptConsoleRoute = createRoute({
   component: ScriptConsole,
 });
 
+const worktreeDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeName/diff",
+  component: WorktreeDiff,
+});
+
+const commitDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeName/commits/$hash",
+  component: CommitDiff,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
@@ -159,6 +173,8 @@ const routeTree = rootRoute.addChildren([
   manageBranchesRoute,
   worktreeRoute,
   scriptConsoleRoute,
+  worktreeDiffRoute,
+  commitDiffRoute,
 ]);
 
 export const router = createRouter({
@@ -174,10 +190,12 @@ declare module "@tanstack/react-router" {
 }
 
 export {
+  commitDiffRoute,
   configureProjectRoute,
   manageBranchesRoute,
   newWorktreeRoute,
   scriptConsoleRoute,
   settingsRoute,
+  worktreeDiffRoute,
   worktreeRoute,
 };

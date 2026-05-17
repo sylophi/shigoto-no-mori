@@ -177,7 +177,7 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
     emit(record.webContents, {
       runId: record.runId,
       kind: "data",
-      data: `\r\n\x1b[2m— ${opts.reason} —\x1b[0m\r\n`,
+      data: `\r\n\x1b[2m[${opts.reason}]\x1b[0m\r\n`,
     });
   }
 

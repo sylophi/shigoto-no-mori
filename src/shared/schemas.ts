@@ -6,6 +6,10 @@ export const CommitSummarySchema = z.object({
   subject: z.string(),
   author: z.string(),
   date: z.string(),
+  // Net additions/deletions across all files in this commit, parsed
+  // from `git log --shortstat`. Zero for empty/merge commits.
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
 });
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
@@ -30,7 +34,9 @@ export const WorktreeSchema = z.object({
   ahead: z.number().int().nonnegative(),
   behind: z.number().int().nonnegative(),
   changedCount: z.number().int().nonnegative(),
-  lastCommit: CommitSummarySchema.nullable(),
+  // Most-recent first. Empty when the worktree has no commits yet.
+  // Bounded by the backend (currently 3) so the IPC payload stays small.
+  recentCommits: z.array(CommitSummarySchema),
   port: z.number().int().positive().optional(),
   // The repo's primary checkout. Shown in the UI for context but never
   // removable — deleting it would mean detaching the project itself.
@@ -63,6 +69,12 @@ export const AddProjectPayloadSchema = z.object({
 
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string(),
+});
+
+export const ReorderProjectsPayloadSchema = z.object({
+  draggedId: z.string(),
+  targetId: z.string(),
+  position: z.enum(["before", "after"]),
 });
 
 export const ListWorktreesPayloadSchema = z.object({
@@ -143,6 +155,17 @@ export const CheckoutBranchPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   branch: z.string().min(1),
+});
+
+export const WorktreeDiffPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+});
+
+export const CommitDiffPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  hash: z.string().min(1),
 });
 
 // Branch operations against the project's primary repo (not tied to any
@@ -362,6 +385,11 @@ export const RunPackageScriptPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   scriptName: z.string().min(1),
+});
+
+export const SetLaunchToolsEnabledPayloadSchema = z.object({
+  enabled: z.boolean(),
+  projectId: z.string().optional(),
 });
 
 export const CancelScriptPayloadSchema = z.object({

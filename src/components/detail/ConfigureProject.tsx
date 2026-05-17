@@ -15,7 +15,6 @@ import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
@@ -81,7 +80,6 @@ function ConfigureSkeleton() {
         <Skeleton className="h-3 w-20" />
         <Skeleton className="h-4 w-72" />
       </div>
-      <Separator />
       <div className="space-y-3">
         <Skeleton className="h-3 w-16" />
         <Skeleton className="h-20 w-full" />
@@ -221,7 +219,7 @@ function ConfigureForm({
   return (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
-        <div className="flex max-w-3xl flex-col gap-5">
+        <div className="flex max-w-3xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
             <div className="flex font-mono text-sm select-text">
@@ -244,8 +242,6 @@ function ConfigureForm({
               Reveal in Finder
             </Button>
           </section>
-
-          <Separator />
 
           <section className="space-y-3">
             <div>
@@ -278,8 +274,6 @@ function ConfigureForm({
             </div>
           </section>
 
-          <Separator />
-
           <CarryOverSection
             projectId={projectId}
             projectPath={projectPath}
@@ -288,8 +282,6 @@ function ConfigureForm({
             onChangeMode={updateCarryOverMode}
             onRemove={removeCarryOver}
           />
-
-          <Separator />
 
           <section className="space-y-4">
             <div>
@@ -323,8 +315,6 @@ function ConfigureForm({
               onChange={(teardown) => setForm({ ...form, teardown })}
             />
           </section>
-
-          <Separator />
 
           <section className="space-y-3">
             <div>

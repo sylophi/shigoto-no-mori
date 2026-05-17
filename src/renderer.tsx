@@ -47,14 +47,7 @@ focusManager.setEventListener((handleFocus) => {
 // `meta: { errorTitle: "Couldn't load X" }` overrides the default title.
 declare module "@tanstack/react-query" {
   interface Register {
-    queryMeta: {
-      silentError?: boolean;
-      errorTitle?: string;
-      // Excludes this query from the global activity indicator. Use when
-      // the query has its own local loading affordance (e.g. branches in
-      // the dropdown popup).
-      silentSpinner?: boolean;
-    };
+    queryMeta: { silentError?: boolean; errorTitle?: string };
     mutationMeta: { silentError?: boolean; errorTitle?: string };
   }
 }

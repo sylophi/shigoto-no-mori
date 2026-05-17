@@ -10,10 +10,29 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
-import { pickWorktreeName } from "./animals";
+import { pickWorktreeName } from "./worktreeNames";
 import { shigomoriRoot } from "./paths";
 
-const exec = promisify(execFile);
+const execFileP = promisify(execFile);
+
+// Single chokepoint for every git invocation so we can timing-log them. The
+// global activity spinner was removed in favor of these console traces.
+async function exec(
+  args: string[],
+  options: { cwd: string; maxBuffer?: number },
+): Promise<{ stdout: string }> {
+  const start = performance.now();
+  try {
+    const result = await execFileP("git", args, options);
+    const elapsed = Math.round(performance.now() - start);
+    console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
+    return { stdout: result.stdout };
+  } catch (err) {
+    const elapsed = Math.round(performance.now() - start);
+    console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
+    throw err;
+  }
+}
 
 interface RawWorktreeEntry {
   path: string;
@@ -24,16 +43,24 @@ interface RawWorktreeEntry {
 }
 
 async function run(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await exec("git", args, {
-    cwd,
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  const { stdout } = await exec(args, { cwd, maxBuffer: 10 * 1024 * 1024 });
   return stdout;
+}
+
+// Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
+// which exits 1 whenever there's a diff to print). Returns whatever
+// stdout was produced before exit, falling back to empty.
+async function runLenient(cwd: string, args: string[]): Promise<string> {
+  try {
+    return await run(cwd, args);
+  } catch (err) {
+    return (err as { stdout?: string }).stdout ?? "";
+  }
 }
 
 export async function isGitRepo(path: string): Promise<boolean> {
   try {
-    await exec("git", ["rev-parse", "--git-dir"], { cwd: path });
+    await exec(["rev-parse", "--git-dir"], { cwd: path });
     return true;
   } catch {
     return false;
@@ -77,28 +104,89 @@ async function getChangedCount(worktreePath: string): Promise<number> {
   }
 }
 
-async function getLastCommit(
+// Unified patch of every uncommitted change in the worktree. Combines
+// `git diff HEAD` (covers staged + unstaged tracked edits) with a
+// /dev/null diff per untracked file so additions render alongside
+// modifications in @pierre/diffs. `runLenient` swallows the non-zero
+// exits `git diff --no-index` always emits when there's a diff.
+export async function getWorktreeDiff(worktreePath: string): Promise<string> {
+  const tracked = await runLenient(worktreePath, [
+    "diff",
+    "HEAD",
+    "--no-color",
+  ]);
+  const lsOutput = await runLenient(worktreePath, [
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "-z",
+  ]);
+  const untracked = lsOutput.split("\0").filter((s) => s.length > 0);
+  const additions = await Promise.all(
+    untracked.map((file) =>
+      runLenient(worktreePath, [
+        "diff",
+        "--no-index",
+        "--no-color",
+        "/dev/null",
+        file,
+      ]),
+    ),
+  );
+  return [tracked, ...additions].filter((s) => s.length > 0).join("");
+}
+
+async function getRecentCommits(
   worktreePath: string,
-): Promise<CommitSummary | null> {
+  count: number,
+): Promise<CommitSummary[]> {
   try {
-    // Tab-delimited; safer than newlines for parsing.
-    const fmt = "%h%x09%an%x09%aI%x09%s";
+    // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
+    // on its own line after each commit's formatted output. A SOH (\x01)
+    // sentinel between records keeps parsing robust against subjects that
+    // contain tabs or newlines.
+    const SENTINEL = "\x01";
+    const fmt = `${SENTINEL}%h%x09%an%x09%aI%x09%s`;
     const stdout = await run(worktreePath, [
       "log",
-      "-1",
+      `-${count}`,
       `--pretty=format:${fmt}`,
+      "--shortstat",
     ]);
-    const [hash, author, date, ...subjectParts] = stdout.split("\t");
-    if (!hash) return null;
-    return {
-      hash,
-      author: author ?? "",
-      date: date ?? "",
-      subject: subjectParts.join("\t"),
-    };
+    const commits: CommitSummary[] = [];
+    for (const chunk of stdout.split(SENTINEL)) {
+      if (!chunk) continue;
+      const newlineAt = chunk.indexOf("\n");
+      const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
+      const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
+      const [hash, author, date, ...subjectParts] = header.split("\t");
+      if (!hash) continue;
+      const insMatch = /(\d+) insertions?\(\+\)/.exec(stats);
+      const delMatch = /(\d+) deletions?\(-\)/.exec(stats);
+      commits.push({
+        hash,
+        author: author ?? "",
+        date: date ?? "",
+        subject: subjectParts.join("\t"),
+        additions: insMatch ? Number(insMatch[1]) : 0,
+        deletions: delMatch ? Number(delMatch[1]) : 0,
+      });
+    }
+    return commits;
   } catch {
-    return null;
+    return [];
   }
+}
+
+// Unified patch of a single commit, with the commit metadata stripped
+// (`--format=`) so the output feeds straight into @pierre/diffs'
+// `parsePatchFiles`. Returns empty for commits without diffs (e.g. an
+// unconfigured merge commit).
+export async function getCommitDiff(
+  worktreePath: string,
+  hash: string,
+): Promise<string> {
+  return runLenient(worktreePath, ["show", "--format=", "--no-color", hash]);
 }
 
 interface WorktreeIdentity {
@@ -141,10 +229,15 @@ export async function listWorktreeIdentities(
     });
 }
 
+// How many recent commits to surface on the worktree detail page. Kept
+// small so the IPC payload stays tight; revisit if the UI grows a
+// "full history" view.
+const RECENT_COMMITS_COUNT = 3;
+
 async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
-  const [changedCount, lastCommit] = await Promise.all([
+  const [changedCount, recentCommits] = await Promise.all([
     getChangedCount(identity.path),
-    getLastCommit(identity.path),
+    getRecentCommits(identity.path, RECENT_COMMITS_COUNT),
   ]);
   return {
     id: identity.id,
@@ -158,7 +251,7 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     ahead: 0,
     behind: 0,
     changedCount,
-    lastCommit,
+    recentCommits,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
     detached: identity.detached,
@@ -217,11 +310,9 @@ async function localBranchExists(
   branch: string,
 ): Promise<boolean> {
   try {
-    await exec(
-      "git",
-      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-      { cwd: projectPath },
-    );
+    await exec(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+      cwd: projectPath,
+    });
     return true;
   } catch {
     return false;
@@ -233,11 +324,9 @@ async function remoteRefExists(
   ref: string,
 ): Promise<boolean> {
   try {
-    await exec(
-      "git",
-      ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`],
-      { cwd: projectPath },
-    );
+    await exec(["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`], {
+      cwd: projectPath,
+    });
     return true;
   } catch {
     return false;
