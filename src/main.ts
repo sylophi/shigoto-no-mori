@@ -7,7 +7,12 @@ import { ensureShigomoriRoot } from "./main/bootstrap";
 import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
-import { killAllScripts, markShuttingDown } from "./main/scripts";
+import {
+  getInflightDeleteIds,
+  killAllScripts,
+  killScriptsForWorktree,
+  markShuttingDown,
+} from "./main/scripts";
 import { applyUserShellPath } from "./main/shellPath";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
@@ -95,14 +100,21 @@ app.on("window-all-closed", () => {
 // Reap any scripts still running before Electron tears down. Without
 // this, long-lived processes (dev servers, watchers) the user kicked
 // off via a script keep running after Cmd-Q, orphaned to launchd.
+//
+// For in-flight deletes we kill only the cleanup scripts for those
+// worktrees, leaving the worktree directory intact (safest partial
+// state). Then we reap everything else with killAllScripts.
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
-  void killAllScripts({ graceMs: 1_500 }).finally(() => {
-    // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
-    app.exit(0);
-  });
+  const inflight = getInflightDeleteIds();
+  void Promise.all(Array.from(inflight).map((id) => killScriptsForWorktree(id)))
+    .then(() => killAllScripts({ graceMs: 1_500 }))
+    .finally(() => {
+      // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
+      app.exit(0);
+    });
 });
