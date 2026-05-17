@@ -1,12 +1,26 @@
 import { useEffect } from "react";
 import { RouterProvider } from "@tanstack/react-router";
-import { ErrorBoundary } from "react-error-boundary";
+import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppErrorFallback } from "@/components/AppErrorFallback";
+import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CommandPaletteProvider } from "@/hooks/useCommandPalette";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { router } from "./router";
+
+function AppErrorFallback({ error }: FallbackProps) {
+  const err = error instanceof Error ? error : new Error(String(error));
+  return (
+    <ErrorFallback
+      error={err}
+      scope="app"
+      action={{
+        label: "Reload window",
+        onClick: () => window.location.reload(),
+      }}
+    />
+  );
+}
 
 export function App() {
   useEffect(

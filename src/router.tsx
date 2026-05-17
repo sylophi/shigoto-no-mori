@@ -7,8 +7,7 @@ import {
   Outlet,
   useRouter,
 } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
+import { ErrorFallback } from "@/components/ErrorFallback";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
@@ -193,20 +192,11 @@ function RouteErrorFallback({
     void router.invalidate();
   };
   return (
-    <div className="flex h-full items-center justify-center p-6">
-      <div className="w-full max-w-md space-y-3">
-        <h2 className="text-sm font-medium">This view crashed</h2>
-        <ErrorBanner>{error.message}</ErrorBanner>
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">
-            Or pick a different item in the sidebar.
-          </p>
-          <Button variant="outline" size="sm" onClick={retry}>
-            Try again
-          </Button>
-        </div>
-      </div>
-    </div>
+    <ErrorFallback
+      error={error}
+      scope="view"
+      action={{ label: "Try again", onClick: retry }}
+    />
   );
 }
 
