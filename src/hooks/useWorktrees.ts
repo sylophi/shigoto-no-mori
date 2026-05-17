@@ -33,12 +33,13 @@ export function useWorktrees(projectId: string | null) {
 
 // One query per project, sharing the per-project cache key with useWorktrees.
 // `enabled` toggles them all off when the consumer isn't visible (palette).
+// Skip projects whose path is gone — git would just ENOENT.
 export function useAllProjectWorktrees(projects: Project[], enabled = true) {
   return useQueries({
     queries: projects.map((project) => ({
       queryKey: ["worktrees", project.id],
       queryFn: () => window.api.worktrees.list(project.id),
-      enabled,
+      enabled: enabled && project.pathExists !== false,
       meta: { silentError: true },
     })),
   });
