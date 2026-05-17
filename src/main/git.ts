@@ -13,7 +13,26 @@ import {
 import { pickWorktreeName } from "./worktreeNames";
 import { shigomoriRoot } from "./paths";
 
-const exec = promisify(execFile);
+const execFileP = promisify(execFile);
+
+// Single chokepoint for every git invocation so we can timing-log them. The
+// global activity spinner was removed in favor of these console traces.
+async function exec(
+  args: string[],
+  options: { cwd: string; maxBuffer?: number },
+): Promise<{ stdout: string }> {
+  const start = performance.now();
+  try {
+    const result = await execFileP("git", args, options);
+    const elapsed = Math.round(performance.now() - start);
+    console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
+    return { stdout: result.stdout };
+  } catch (err) {
+    const elapsed = Math.round(performance.now() - start);
+    console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
+    throw err;
+  }
+}
 
 interface RawWorktreeEntry {
   path: string;
@@ -24,10 +43,7 @@ interface RawWorktreeEntry {
 }
 
 async function run(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await exec("git", args, {
-    cwd,
-    maxBuffer: 10 * 1024 * 1024,
-  });
+  const { stdout } = await exec(args, { cwd, maxBuffer: 10 * 1024 * 1024 });
   return stdout;
 }
 
@@ -44,7 +60,7 @@ async function runLenient(cwd: string, args: string[]): Promise<string> {
 
 export async function isGitRepo(path: string): Promise<boolean> {
   try {
-    await exec("git", ["rev-parse", "--git-dir"], { cwd: path });
+    await exec(["rev-parse", "--git-dir"], { cwd: path });
     return true;
   } catch {
     return false;
@@ -294,11 +310,9 @@ async function localBranchExists(
   branch: string,
 ): Promise<boolean> {
   try {
-    await exec(
-      "git",
-      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-      { cwd: projectPath },
-    );
+    await exec(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+      cwd: projectPath,
+    });
     return true;
   } catch {
     return false;
@@ -310,11 +324,9 @@ async function remoteRefExists(
   ref: string,
 ): Promise<boolean> {
   try {
-    await exec(
-      "git",
-      ["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`],
-      { cwd: projectPath },
-    );
+    await exec(["show-ref", "--verify", "--quiet", `refs/remotes/${ref}`], {
+      cwd: projectPath,
+    });
     return true;
   } catch {
     return false;

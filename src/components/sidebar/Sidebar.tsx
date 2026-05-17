@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   ChevronRight,
   FolderPlus,
-  Loader2,
   Search,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { useIsFetching } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -64,12 +62,9 @@ export function Sidebar() {
   return (
     <aside className="flex h-full flex-col bg-card">
       <SidebarHeader />
-      <div className="relative min-h-0 flex-1">
+      <div className="min-h-0 flex-1">
         <ScrollArea className="size-full">
-          {/* Small pb keeps the activity-indicator overlay from sitting
-              flush on top of the last project row when scrolled all the
-              way down. */}
-          <div className="flex flex-col gap-1 px-2 pt-0 pb-3">
+          <div className="flex flex-col gap-1 px-2 pt-0">
             <DndContext
               sensors={sensors}
               onDragStart={handleDragStart}
@@ -97,7 +92,6 @@ export function Sidebar() {
             )}
           </div>
         </ScrollArea>
-        <ActivityIndicator />
       </div>
       <SidebarFooter />
     </aside>
@@ -111,57 +105,6 @@ function ProjectDragPreview({ project }: { project: Project }) {
         <ChevronRight className="size-3 shrink-0 rotate-90" />
         <span className="min-w-0 truncate">{project.name}</span>
       </div>
-    </div>
-  );
-}
-
-const SPINNER_LINGER_MS = 100;
-
-function ActivityIndicator() {
-  // Queries with `meta: { silentSpinner: true }` show their own
-  // inline loaders and don't count toward this global indicator.
-  const fetching = useIsFetching({
-    predicate: (q) => !q.meta?.silentSpinner,
-  });
-  const [visible, setVisible] = useState(false);
-  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (fetching > 0) {
-      if (hideTimer.current) {
-        clearTimeout(hideTimer.current);
-        hideTimer.current = null;
-      }
-      setVisible(true);
-      return;
-    }
-    // Without a brief linger the indicator would never become
-    // perceptible: local git calls finish in tens of milliseconds.
-    hideTimer.current = setTimeout(() => {
-      setVisible(false);
-      hideTimer.current = null;
-    }, SPINNER_LINGER_MS);
-    return () => {
-      if (hideTimer.current) {
-        clearTimeout(hideTimer.current);
-        hideTimer.current = null;
-      }
-    };
-  }, [fetching]);
-
-  return (
-    <div
-      aria-hidden={!visible}
-      aria-label={visible ? "Syncing with git" : undefined}
-      className={cn(
-        // Anchored to the scroll-area wrapper (not the aside), so it
-        // floats over the bottom-left of the visible viewport
-        // regardless of how far the project list has scrolled.
-        "pointer-events-none absolute bottom-3 left-3 text-muted-foreground/60 transition-opacity",
-        visible ? "opacity-100" : "opacity-0",
-      )}
-    >
-      <Loader2 className="size-3.5 animate-spin" />
     </div>
   );
 }
