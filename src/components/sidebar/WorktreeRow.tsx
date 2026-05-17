@@ -1,4 +1,4 @@
-import { FileDiff, Loader2, Rocket, Terminal, Trash2 } from "lucide-react";
+import { FileDiff, Rocket, Terminal, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -6,7 +6,6 @@ import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
-import { useWorktreeDeletion } from "@/store/worktreeDeletions";
 import type { Worktree } from "@shared/schemas";
 
 interface WorktreeRowProps {
@@ -16,7 +15,6 @@ interface WorktreeRowProps {
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const deletionPhase = useWorktreeDeletion(worktree.id);
   const activity = useWorktreeScriptActivity(worktree.id);
   // Not useMatchRoute: its stable function return reads from a hidden
   // store, which React Compiler can't see, so isSelected stays cached at
@@ -36,12 +34,11 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           },
         })
       }
-      title={describeRow(worktree, deletionPhase, activity)}
+      title={describeRow(worktree, activity)}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
-        deletionPhase === "removing" && "opacity-50",
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">
@@ -59,36 +56,20 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           {worktree.name}
         </span>
       </div>
-      <RowTrailing
-        worktree={worktree}
-        deletionPhase={deletionPhase}
-        activity={activity}
-      />
+      <RowTrailing worktree={worktree} activity={activity} />
     </button>
   );
 }
 
 interface RowTrailingProps {
   worktree: Worktree;
-  deletionPhase: "tearingDown" | "removing" | undefined;
   activity: ScriptActivityKind | null;
 }
 
 // The right-edge cluster: a single spinner / activity icon / location +
 // status combo, chosen by priority. Pulled out so each case is a clean
 // early return instead of a triple ternary.
-function RowTrailing({ worktree, deletionPhase, activity }: RowTrailingProps) {
-  if (deletionPhase === "removing") {
-    return (
-      <Loader2
-        className="size-3 shrink-0 animate-spin text-muted-foreground"
-        aria-label="Removing"
-      />
-    );
-  }
-  if (deletionPhase === "tearingDown") {
-    return <ActivityIcon kind="teardown" />;
-  }
+function RowTrailing({ worktree, activity }: RowTrailingProps) {
   if (activity) {
     return <ActivityIcon kind={activity} />;
   }
@@ -102,11 +83,8 @@ function RowTrailing({ worktree, deletionPhase, activity }: RowTrailingProps) {
 
 function describeRow(
   worktree: Worktree,
-  deletionPhase: "tearingDown" | "removing" | undefined,
   activity: ScriptActivityKind | null,
 ): string | undefined {
-  if (deletionPhase === "tearingDown") return "Tearing down…";
-  if (deletionPhase === "removing") return "Removing…";
   if (activity === "setup") return "Running setup";
   if (activity === "teardown") return "Running teardown";
   if (activity === "package") return "Running a script";

@@ -40,6 +40,18 @@ interface RunArgs {
   projectBranch: string;
   defaultBranch: string;
   webContents: WebContents;
+  // When set, main is the initiator (lifecycle orchestration) and
+  // we emit a "started" event so the renderer binds runId to slot.
+  // Omit for renderer-driven runs -- the renderer already knows the
+  // slot from scriptRuns.start().
+  started?: {
+    slot:
+      | { kind: "setup" }
+      | { kind: "teardown" }
+      | { kind: "portPool"; phase: "provision" | "release" };
+    projectId: string;
+    worktreeId: string;
+  };
 }
 
 interface RunRecord {
@@ -57,7 +69,21 @@ interface RunRecord {
 }
 
 const runningScripts = new Map<string, RunRecord>();
+const exitObservers = new Map<string, (code: number | null) => void>();
+const inflightDeleteIds = new Set<string>();
 let shuttingDown = false;
+
+export function markDeleteInflight(worktreeId: string): void {
+  inflightDeleteIds.add(worktreeId);
+}
+
+export function clearDeleteInflight(worktreeId: string): void {
+  inflightDeleteIds.delete(worktreeId);
+}
+
+export function getInflightDeleteIds(): ReadonlySet<string> {
+  return inflightDeleteIds;
+}
 
 export function isShuttingDown(): boolean {
   return shuttingDown;
@@ -196,6 +222,17 @@ export function startScript(args: RunArgs): string {
   }
 
   const runId = randomUUID();
+
+  if (args.started) {
+    emit(args.webContents, {
+      runId,
+      kind: "started",
+      projectId: args.started.projectId,
+      worktreeId: args.started.worktreeId,
+      slot: args.started.slot,
+    });
+  }
+
   const env = {
     ...process.env,
     // Convince modern tools (npm, pnpm, bun, vite, vitest, tsc, eslint
@@ -235,6 +272,11 @@ export function startScript(args: RunArgs): string {
         data: "Failed to start script process",
       });
       emit(args.webContents, { runId, kind: "exit", code: null });
+      const observer = exitObservers.get(runId);
+      if (observer) {
+        exitObservers.delete(runId);
+        observer(null);
+      }
     });
     return runId;
   }
@@ -279,6 +321,11 @@ export function startScript(args: RunArgs): string {
 
   child.on("error", (error) => {
     emit(args.webContents, { runId, kind: "error", data: error.message });
+    const observer = exitObservers.get(runId);
+    if (observer) {
+      exitObservers.delete(runId);
+      observer(null);
+    }
     if (!record.exited) {
       record.exited = true;
       resolveDone();
@@ -294,6 +341,11 @@ export function startScript(args: RunArgs): string {
     const wasSignal = signal !== null;
     const reported = record.cancelling || wasSignal ? null : code;
     emit(args.webContents, { runId, kind: "exit", code: reported });
+    const observer = exitObservers.get(runId);
+    if (observer) {
+      exitObservers.delete(runId);
+      observer(reported);
+    }
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
@@ -331,4 +383,17 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   await Promise.all(
     targets.map((r) => killRecord(r, { reason: "App quit", ...opts })),
   );
+}
+
+export function startScriptForLifecycle(args: RunArgs): {
+  runId: string;
+  exit: Promise<number | null>;
+} {
+  let resolveExit!: (code: number | null) => void;
+  const exit = new Promise<number | null>((res) => {
+    resolveExit = res;
+  });
+  const runId = startScript(args);
+  exitObservers.set(runId, resolveExit);
+  return { runId, exit };
 }

@@ -11,7 +11,7 @@
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
 import { useSyncExternalStore } from "react";
-import type { ScriptEvent, ScriptName } from "@shared/schemas";
+import type { ScriptEvent } from "@shared/schemas";
 
 // Max number of pty chunks kept for replay. Chunks vary in size (one
 // "data" event may carry a single byte or a 4 KB burst), so this is a
@@ -21,6 +21,7 @@ const MAX_CHUNKS = 5_000;
 export type ScriptSlot =
   | { kind: "setup" }
   | { kind: "teardown" }
+  | { kind: "portPool"; phase: "provision" | "release" }
   | { kind: "package"; name: string };
 
 export type ScriptKey = string;
@@ -39,7 +40,19 @@ export interface ScriptRunState {
   cancelling: boolean;
 }
 
-type SlotKind = ScriptName | "package";
+type SlotKind =
+  | "setup"
+  | "teardown"
+  | "package"
+  | "portPoolProvision"
+  | "portPoolRelease";
+
+function deriveSlotKind(slot: ScriptSlot): SlotKind {
+  if (slot.kind === "portPool") {
+    return slot.phase === "provision" ? "portPoolProvision" : "portPoolRelease";
+  }
+  return slot.kind;
+}
 
 interface RunMeta {
   worktreeId: string;
@@ -50,7 +63,7 @@ interface RunMeta {
   } | null;
 }
 
-export type ScriptActivityKind = SlotKind;
+export type ScriptActivityKind = "setup" | "teardown" | "package";
 
 export function scriptKey(
   projectId: string,
@@ -60,6 +73,9 @@ export function scriptKey(
   if (slot.kind === "package") {
     return `${projectId} ${worktreeId} pkg ${slot.name}`;
   }
+  if (slot.kind === "portPool") {
+    return `${projectId} ${worktreeId} portPool ${slot.phase}`;
+  }
   return `${projectId} ${worktreeId} ${slot.kind}`;
 }
 
@@ -67,12 +83,21 @@ export function slotToParam(slot: ScriptSlot): string {
   if (slot.kind === "package") {
     return `pkg.${encodeURIComponent(slot.name)}`;
   }
+  if (slot.kind === "portPool") {
+    return `port-pool.${slot.phase}`;
+  }
   return slot.kind;
 }
 
 export function paramToSlot(param: string): ScriptSlot | null {
   if (param === "setup") return { kind: "setup" };
   if (param === "teardown") return { kind: "teardown" };
+  if (param === "port-pool.provision") {
+    return { kind: "portPool", phase: "provision" };
+  }
+  if (param === "port-pool.release") {
+    return { kind: "portPool", phase: "release" };
+  }
   if (param.startsWith("pkg.")) {
     try {
       return { kind: "package", name: decodeURIComponent(param.slice(4)) };
@@ -86,6 +111,11 @@ export function paramToSlot(param: string): ScriptSlot | null {
 export function slotLabel(slot: ScriptSlot): string {
   if (slot.kind === "setup") return "Setup";
   if (slot.kind === "teardown") return "Teardown";
+  if (slot.kind === "portPool") {
+    return slot.phase === "provision"
+      ? "Port-pool provision"
+      : "Port-pool release";
+  }
   return slot.name;
 }
 
@@ -186,13 +216,60 @@ function applyEvent(key: ScriptKey, event: ScriptEvent): void {
   }
 }
 
+function setMetaWithDeferred(
+  key: ScriptKey,
+  worktreeId: string,
+  slot: ScriptSlot,
+): void {
+  const prev = states.get(key);
+  if (prev?.runId) runIdToKey.delete(prev.runId);
+  let deferredResolve!: (code: number | null) => void;
+  const exitPromise = new Promise<number | null>((resolve) => {
+    deferredResolve = resolve;
+  });
+  meta.set(key, {
+    worktreeId,
+    slotKind: deriveSlotKind(slot),
+    exitDeferred: { promise: exitPromise, resolve: deferredResolve },
+  });
+}
+
+function bindRunIdAndDrain(key: ScriptKey, runId: string): void {
+  runIdToKey.set(runId, key);
+  const pending = pendingByRunId.get(runId);
+  if (pending) {
+    pendingByRunId.delete(runId);
+    for (const queued of pending) applyEvent(key, queued);
+  }
+}
+
+function bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
+  const key = scriptKey(event.projectId, event.worktreeId, event.slot);
+  setMetaWithDeferred(key, event.worktreeId, event.slot);
+
+  setStateWithActivity(key, () => ({
+    runId: event.runId,
+    status: "running",
+    output: [],
+    exitCode: null,
+    startedAt: Date.now(),
+    endedAt: null,
+    cancelling: false,
+  }));
+
+  bindRunIdAndDrain(key, event.runId);
+}
+
 function handleEvent(event: ScriptEvent): void {
+  if (event.kind === "started") {
+    bindStarted(event);
+    return;
+  }
   const key = runIdToKey.get(event.runId);
   if (key) {
     applyEvent(key, event);
     return;
   }
-  // Stash until start() learns the runId and flushes us.
   const bucket = pendingByRunId.get(event.runId) ?? [];
   bucket.push(event);
   pendingByRunId.set(event.runId, bucket);
@@ -212,18 +289,7 @@ interface StartInput {
 }
 
 async function start(input: StartInput): Promise<void> {
-  const prev = states.get(input.key);
-  if (prev?.runId) runIdToKey.delete(prev.runId);
-
-  let deferredResolve!: (code: number | null) => void;
-  const exitPromise = new Promise<number | null>((resolve) => {
-    deferredResolve = resolve;
-  });
-  meta.set(input.key, {
-    worktreeId: input.worktreeId,
-    slotKind: input.slot.kind,
-    exitDeferred: { promise: exitPromise, resolve: deferredResolve },
-  });
+  setMetaWithDeferred(input.key, input.worktreeId, input.slot);
 
   setStateWithActivity(input.key, () => ({
     runId: null,
@@ -252,16 +318,11 @@ async function start(input: StartInput): Promise<void> {
     throw err;
   }
 
-  runIdToKey.set(runId, input.key);
   setStateWithActivity(input.key, (s) => ({ ...s, runId, status: "running" }));
 
   // Drain any events the pty produced before we knew the runId. Order
   // is preserved (push/iterate FIFO) so xterm replay stays coherent.
-  const pending = pendingByRunId.get(runId);
-  if (pending) {
-    pendingByRunId.delete(runId);
-    for (const event of pending) applyEvent(input.key, event);
-  }
+  bindRunIdAndDrain(input.key, runId);
 }
 
 async function cancel(key: ScriptKey): Promise<void> {
@@ -355,9 +416,17 @@ function getActivityKind(worktreeId: string): ScriptActivityKind | null {
     const s = states.get(key);
     if (!s) continue;
     if (s.status !== "starting" && s.status !== "running") continue;
-    if (m.slotKind === "teardown") return "teardown";
-    if (m.slotKind === "setup") hasSetup = true;
-    else hasPackage = true;
+    // Release is conceptually like teardown -- highest priority tier.
+    if (m.slotKind === "teardown" || m.slotKind === "portPoolRelease") {
+      return "teardown";
+    }
+    if (m.slotKind === "setup" || m.slotKind === "portPoolProvision") {
+      hasSetup = true;
+      continue;
+    }
+    if (m.slotKind === "package") {
+      hasPackage = true;
+    }
   }
   if (hasSetup) return "setup";
   if (hasPackage) return "package";

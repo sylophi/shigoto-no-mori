@@ -24,6 +24,7 @@ function subscribeWith<T>(channel: string) {
 import type {
   BranchList,
   CreateWorktreeResult,
+  DeleteWorktreeResult,
   DetectedLauncher,
   DirectoryListing,
   FsListing,
@@ -76,7 +77,9 @@ const api = {
       projectId: string;
       worktreeId: string;
       force?: boolean;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
+      skipCleanup?: boolean;
+    }): Promise<DeleteWorktreeResult> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
     renameBranch: (input: {
       projectId: string;
       worktreeId: string;
@@ -152,6 +155,8 @@ const api = {
   shell: {
     openPath: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShellOpenExternal, { url }),
     showItemInFolder: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
   },
@@ -189,6 +194,15 @@ const api = {
       scriptName: string;
     }): Promise<{ runId: string }> =>
       ipcRenderer.invoke(CHANNELS.PackageScriptsRun, input),
+  },
+  portPool: {
+    isActive: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
+    isInstalled: (): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.PortPoolIsInstalled),
   },
   scripts: {
     run: (input: {

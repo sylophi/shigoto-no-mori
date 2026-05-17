@@ -134,15 +134,25 @@ export const CarryOverReportSchema = z.object({
   failures: z.array(CarryOverFailureSchema),
 });
 
+export const ScriptFailureSchema = z.object({
+  phase: z.enum(["setup", "portPoolProvision"]),
+  exitCode: z.number().nullable(),
+  runId: z.string(),
+});
+
+export type ScriptFailure = z.infer<typeof ScriptFailureSchema>;
+
 export const CreateWorktreeResultSchema = z.object({
   worktree: WorktreeSchema,
   carryOver: CarryOverReportSchema,
+  scriptFailures: z.array(ScriptFailureSchema),
 });
 
 export const DeleteWorktreePayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
-  force: z.boolean().default(false),
+  force: z.boolean().optional(),
+  skipCleanup: z.boolean().optional(),
 });
 
 export const RenameBranchPayloadSchema = z.object({
@@ -303,6 +313,14 @@ export const GlobalConfigSchema = z.object({
   // by another worktree). Off by default; matches git's native
   // `git worktree remove` behavior.
   deleteBranchOnRemove: z.boolean().optional(),
+  // When true, adding a project with a package.json seeds its setup
+  // script with `<detected-pm> install`. Only fires at project-add
+  // time; existing projects are untouched.
+  autoPopulateInstall: z.boolean().optional(),
+  // When true, projects with a valid port-pool.config.json run
+  // `port-pool provision` after setup at create and
+  // `port-pool release` before teardown at delete.
+  portPool: z.boolean().optional(),
 });
 
 export const WriteGlobalConfigPayloadSchema = z.object({
@@ -349,6 +367,10 @@ export const ShellPathPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
+export const ShellOpenExternalPayloadSchema = z.object({
+  url: z.string().url(),
+});
+
 export const RuntimeInfoSchema = z.object({
   shigomoriRoot: z.string().min(1),
   homedir: z.string().min(1),
@@ -359,7 +381,12 @@ export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,
 });
 
-export const ScriptNameSchema = z.enum(["setup", "teardown"]);
+export const ScriptNameSchema = z.enum([
+  "setup",
+  "teardown",
+  "port-pool-provision",
+  "port-pool-release",
+]);
 
 export const RunScriptPayloadSchema = z.object({
   projectId: z.string(),
@@ -408,7 +435,38 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
     code: z.number().nullable(),
   }),
   z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
+  // Emitted when main initiates a script (lifecycle orchestration);
+  // lets the renderer bind runId -> slot before data/exit arrive.
+  z.object({
+    runId: z.string(),
+    kind: z.literal("started"),
+    projectId: z.string(),
+    worktreeId: z.string(),
+    slot: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("setup") }),
+      z.object({ kind: z.literal("teardown") }),
+      z.object({
+        kind: z.literal("portPool"),
+        phase: z.enum(["provision", "release"]),
+      }),
+    ]),
+  }),
 ]);
+
+export const CleanupErrorSchema = z.object({
+  phase: z.enum(["teardown", "portPoolRelease"]),
+  exitCode: z.number().nullable(),
+  runId: z.string(),
+});
+
+export type CleanupError = z.infer<typeof CleanupErrorSchema>;
+
+export const DeleteWorktreeResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), cleanupError: CleanupErrorSchema }),
+]);
+
+export type DeleteWorktreeResult = z.infer<typeof DeleteWorktreeResultSchema>;
 
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;

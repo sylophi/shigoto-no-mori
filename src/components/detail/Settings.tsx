@@ -18,6 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
+import { usePortPoolInstalled } from "@/hooks/usePortPoolInstalled";
+import { cn } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { THEME_STORAGE_KEY, useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
@@ -68,6 +70,8 @@ interface FormState {
   theme: Theme;
   launchers: LauncherCommand[];
   deleteBranchOnRemove: boolean;
+  autoPopulateInstall: boolean;
+  portPool: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
@@ -75,6 +79,8 @@ function fromConfig(config: GlobalConfig): FormState {
     theme: config.theme ?? "system",
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
+    autoPopulateInstall: config.autoPopulateInstall ?? false,
+    portPool: config.portPool ?? false,
   };
 }
 
@@ -90,12 +96,16 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
+    // Default is false; only persist when explicitly enabled.
+    autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
+    portPool: state.portPool ? true : undefined,
   };
 }
 
 function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const { data: runtime } = useRuntimeInfo();
   const { data: detected = [] } = useDetectedLaunchers();
+  const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const write = useGlobalConfigWrite();
   const { setOverride } = useTheme();
 
@@ -224,6 +234,38 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               }
               label="Delete branch when removing worktree"
               description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
+            />
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading className="mb-1">Integrations</SectionHeading>
+            <ToggleRow
+              checked={form.autoPopulateInstall}
+              onCheckedChange={(v) =>
+                setForm({ ...form, autoPopulateInstall: v })
+              }
+              label="Auto-populate install command"
+              description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
+            />
+            <ToggleRow
+              checked={form.portPool}
+              onCheckedChange={(v) => setForm({ ...form, portPool: v })}
+              disabled={!portPoolInstalled}
+              label="Automatically use port-pool"
+              description={
+                portPoolInstalled ? (
+                  <>
+                    Allocates ports for new worktrees and releases them on
+                    delete. Activates when a project has a
+                    port-pool.config.json. <PortPoolLink />
+                  </>
+                ) : (
+                  <>
+                    Install <PortPoolLink>port-pool</PortPoolLink> to enable
+                    this integration.
+                  </>
+                )
+              }
             />
           </section>
 
@@ -376,21 +418,50 @@ function AppearanceSection({
   );
 }
 
+function PortPoolLink({ children }: { children?: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.api.shell
+          .openExternal("https://github.com/sylophi/port-pool")
+          .catch((err) => notifyError("Couldn't open port-pool", err));
+      }}
+      className="underline underline-offset-2 hover:text-foreground"
+    >
+      {children ?? "Learn more"}
+    </button>
+  );
+}
+
 function ToggleRow({
   checked,
   onCheckedChange,
   label,
   description,
+  disabled = false,
 }: {
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
   label: string;
-  description?: string;
+  description?: React.ReactNode;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3">
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
       <span className="mt-0.5">
-        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+        <Switch
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          disabled={disabled}
+        />
       </span>
       <div className="flex min-w-0 flex-col">
         <span className="text-sm">{label}</span>

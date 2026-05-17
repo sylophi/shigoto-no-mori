@@ -5,15 +5,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
-import {
-  clearScriptRunsForWorktree,
-  scriptKey,
-  scriptRuns,
-} from "@/store/scriptRuns";
+import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
 import type {
   CreateWorktreeResult,
+  DeleteWorktreeResult,
   Project,
-  ShigomoriConfig,
   Worktree,
 } from "@shared/schemas";
 
@@ -69,44 +65,20 @@ export function useCreateWorktree() {
           `Carried over ${applied} of ${applied + failures.length} entries`,
           {
             description:
-              lines.join("\n") + (more > 0 ? `\n…and ${more} more` : ""),
+              lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
           },
         );
       }
-      // Kick off the project's setup script for the new worktree. Read
-      // through the cache so we don't trigger an extra IPC roundtrip
-      // when the configure page has already fetched the config.
-      void queryClient
-        .ensureQueryData<ShigomoriConfig | null>({
-          queryKey: ["shigomori", vars.projectId],
-          queryFn: () => window.api.shigomori.read(vars.projectId),
-        })
-        .then((config) => {
-          const command = config?.scripts?.setup?.trim();
-          if (!command) return;
-          const key = scriptKey(vars.projectId, result.worktree.id, {
-            kind: "setup",
-          });
-          return scriptRuns.start({
-            key,
-            worktreeId: result.worktree.id,
-            slot: { kind: "setup" },
-            runner: () =>
-              window.api.scripts.run({
-                projectId: vars.projectId,
-                worktreeId: result.worktree.id,
-                script: "setup",
-              }),
-          });
-        })
-        .catch((err) => {
-          toast.warning("Setup didn't run", {
-            description:
-              err instanceof Error
-                ? err.message
-                : "See Scripts on the worktree",
-          });
+      for (const failure of result.scriptFailures) {
+        const label =
+          failure.phase === "setup" ? "Setup" : "Port-pool provision";
+        toast.warning(`${label} didn't complete cleanly`, {
+          description:
+            failure.exitCode === null
+              ? "See the script console for details."
+              : `Exited with code ${failure.exitCode}.`,
         });
+      }
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });
@@ -116,19 +88,24 @@ interface DeleteWorktreeInput {
   projectId: string;
   worktreeId: string;
   force?: boolean;
+  skipCleanup?: boolean;
 }
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
-  return useMutation<void, Error, DeleteWorktreeInput>({
+  return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationFn: (input) => window.api.worktrees.delete(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
-      });
-      clearScriptRunsForWorktree(vars.worktreeId);
+    onSuccess: (data, vars) => {
+      // Only invalidate + clear runs when the worktree was actually
+      // removed. Cleanup failures keep the worktree around for retry.
+      if (data.ok) {
+        void queryClient.invalidateQueries({
+          queryKey: ["worktrees", vars.projectId],
+        });
+        clearScriptRunsForWorktree(vars.worktreeId);
+      }
     },
-    // The detail page swaps into a force-delete prompt on failure — a
+    // The detail page swaps into a force-delete prompt on failure -- a
     // toast on top would be noise.
     meta: { silentError: true },
   });

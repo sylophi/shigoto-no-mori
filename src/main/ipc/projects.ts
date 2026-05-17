@@ -9,6 +9,7 @@ import {
   type Project,
   ProjectsDefaultBranchPayloadSchema,
   ProjectsListBranchesPayloadSchema,
+  type ShigomoriConfig,
   ReorderProjectsPayloadSchema,
   RemoveProjectPayloadSchema,
 } from "@shared/schemas";
@@ -20,6 +21,8 @@ import {
   pickAvailableWorktreeName,
   resolveDefaultBranch,
 } from "../git";
+import { readGlobalConfig } from "../globalConfig";
+import { readPackageScripts } from "../packageScripts";
 import { expandHome } from "../paths";
 import {
   findProjectOrThrow,
@@ -27,7 +30,7 @@ import {
   loadProjects,
   PROJECTS_KEY,
 } from "../projects";
-import { readShigomoriConfig } from "../shigomori";
+import { readShigomoriConfig, writeShigomoriConfig } from "../shigomori";
 import { writeKey } from "../store";
 
 function saveProjects(projects: Project[]): void {
@@ -80,6 +83,24 @@ export function registerProjectHandlers(): void {
     };
 
     saveProjects([...existing, project]);
+
+    // Seed a minimal config so downstream code (and the user) always has
+    // a stable file to work against. If the repo has no resolvable
+    // default branch yet (bare repo, unborn HEAD), skip seeding — the
+    // lazy path still works.
+    try {
+      const defaultBranch = await resolveDefaultBranch(path);
+      const seeded: ShigomoriConfig = { defaultBranch };
+      const globalConfig = await readGlobalConfig();
+      if (globalConfig.autoPopulateInstall) {
+        const pkg = await readPackageScripts(path);
+        if (pkg) seeded.scripts = { setup: `${pkg.packageManager} install` };
+      }
+      await writeShigomoriConfig(project.id, seeded);
+    } catch {
+      // Intentionally swallowed; config stays null until first Save.
+    }
+
     return project;
   });
 

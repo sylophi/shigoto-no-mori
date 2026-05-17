@@ -40,15 +40,13 @@ import {
   scriptRuns,
   slotToParam,
   useScriptRunState,
+  type ScriptSlot,
 } from "@/store/scriptRuns";
-import {
-  useWorktreeDeletion,
-  worktreeDeletions,
-} from "@/store/worktreeDeletions";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
+  type CleanupError,
   type CommitSummary,
   isRealBranch,
   type Project,
@@ -85,86 +83,72 @@ interface InnerProps {
 function WorktreeDetailInner({ worktree, project }: InnerProps) {
   const navigate = useNavigate();
   const { data: runtime } = useRuntimeInfo();
-  const { data: config } = useShigomoriConfig(worktree.projectId);
   const deleteMutation = useDeleteWorktree();
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(3_000);
   const [needsForce, setNeedsForce] = useState(false);
-  const [teardownError, setTeardownError] = useState<string | null>(null);
-  const deletionPhase = useWorktreeDeletion(worktree.id);
+  const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
+
+  // Derive limbo state from script-runs: any cleanup-tier script
+  // currently running indicates we're mid-cleanup; otherwise if the
+  // mutation is in flight we're in the remove phase.
   const teardownKey = scriptKey(worktree.projectId, worktree.id, {
     kind: "teardown",
   });
+  const releaseKey = scriptKey(worktree.projectId, worktree.id, {
+    kind: "portPool",
+    phase: "release",
+  });
   const teardownState = useScriptRunState(teardownKey);
+  const releaseState = useScriptRunState(releaseKey);
   const home = runtime?.homedir ?? null;
 
-  const teardownConfigured =
-    (config?.scripts?.teardown ?? "").trim().length > 0;
-  const inLimbo = deletionPhase !== undefined;
-  const busy = deleteMutation.isPending || inLimbo;
+  const cleanupRunning =
+    teardownState.status === "running" ||
+    teardownState.status === "starting" ||
+    releaseState.status === "running" ||
+    releaseState.status === "starting";
+  const busy = deleteMutation.isPending;
+  const inLimbo = cleanupRunning || busy;
 
-  const removeNow = (force: boolean) => {
-    worktreeDeletions.set(worktree.id, "removing");
+  // Tracks the flags from the most recent delete attempt so that the
+  // retry/skip affordances on a cleanup failure carry the user's
+  // original intent (notably: a force-delete that hit a cleanup error
+  // should stay force on retry/skip, since the worktree is still dirty).
+  const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
+
+  const runDelete = (opts: { force?: boolean; skipCleanup?: boolean } = {}) => {
+    if (!opts.skipCleanup) {
+      lastDeleteOptsRef.current = { force: opts.force };
+    }
+    setCleanupError(null);
     deleteMutation.mutate(
-      { projectId: worktree.projectId, worktreeId: worktree.id, force },
       {
-        onSuccess: () => {
-          worktreeDeletions.clear(worktree.id);
-          void navigate({ to: "/" });
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        ...opts,
+      },
+      {
+        onSuccess: (data) => {
+          if (data.ok) {
+            void navigate({ to: "/" });
+          } else {
+            setCleanupError(data.cleanupError);
+          }
         },
         onError: () => {
-          worktreeDeletions.clear(worktree.id);
           setNeedsForce(true);
         },
       },
     );
   };
 
-  const runTeardownThenRemove = async () => {
-    setTeardownError(null);
-    worktreeDeletions.set(worktree.id, "tearingDown");
-    try {
-      await scriptRuns.start({
-        key: teardownKey,
-        worktreeId: worktree.id,
-        slot: { kind: "teardown" },
-        runner: () =>
-          window.api.scripts.run({
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-            script: "teardown",
-          }),
-      });
-    } catch (err) {
-      worktreeDeletions.clear(worktree.id);
-      setTeardownError(err instanceof Error ? err.message : String(err));
-      return;
-    }
-    const code = await scriptRuns.awaitExit(teardownKey);
-    if (code !== 0) {
-      worktreeDeletions.clear(worktree.id);
-      setTeardownError(
-        code === null
-          ? "Teardown script errored"
-          : `Teardown exited with code ${code}`,
-      );
-      return;
-    }
-    removeNow(false);
-  };
-
   const handleDelete = () => {
-    confirmDeleteTrigger(() => {
-      if (teardownConfigured) {
-        void runTeardownThenRemove();
-      } else {
-        removeNow(false);
-      }
-    });
+    confirmDeleteTrigger(() => runDelete());
   };
 
   const handleForceDelete = () => {
-    removeNow(true);
+    runDelete({ force: true });
   };
 
   const cancelForce = () => {
@@ -172,32 +156,65 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
     deleteMutation.reset();
   };
 
-  const handleRetryTeardown = () => {
-    void runTeardownThenRemove();
+  const handleRetryCleanup = () => runDelete(lastDeleteOptsRef.current);
+  const handleSkipCleanup = () =>
+    runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true });
+  const handleCancelCleanupError = () => setCleanupError(null);
+  const handleCancelCleanup = () => {
+    if (teardownState.runId) {
+      void scriptRuns.cancel(teardownKey);
+    }
+    if (releaseState.runId) {
+      void scriptRuns.cancel(releaseKey);
+    }
   };
 
-  const handleSkipTeardown = () => {
-    setTeardownError(null);
-    removeNow(false);
-  };
-
-  const handleCancelTeardownError = () => {
-    setTeardownError(null);
-  };
-
-  const handleCancelTeardown = () => {
-    void scriptRuns.cancel(teardownKey);
-  };
-
-  const openTeardownConsole = () =>
+  const openCleanupConsole = () => {
+    let slot: ScriptSlot;
+    if (cleanupError) {
+      slot =
+        cleanupError.phase === "teardown"
+          ? { kind: "teardown" }
+          : { kind: "portPool", phase: "release" };
+    } else if (releaseState.runId) {
+      slot = { kind: "portPool", phase: "release" };
+    } else if (teardownState.runId) {
+      slot = { kind: "teardown" };
+    } else {
+      return;
+    }
     void navigate({
       to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
       params: {
         projectId: worktree.projectId,
         worktreeName: worktree.name,
-        scriptKey: slotToParam({ kind: "teardown" }),
+        scriptKey: slotToParam(slot),
       },
     });
+  };
+
+  // Decide which limbo phase label to show -- release runs before
+  // teardown, then the actual git remove.
+  const limboLabel = (() => {
+    if (
+      releaseState.status === "running" ||
+      releaseState.status === "starting"
+    ) {
+      return releaseState.cancelling
+        ? "Stopping port-pool release..."
+        : "Releasing ports...";
+    }
+    if (
+      teardownState.status === "running" ||
+      teardownState.status === "starting"
+    ) {
+      return teardownState.cancelling
+        ? "Stopping teardown..."
+        : "Tearing down...";
+    }
+    return "Removing worktree...";
+  })();
+  const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
 
   return (
     <div className="flex h-full flex-col">
@@ -261,17 +278,13 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
             className="size-3.5 shrink-0 animate-spin text-muted-foreground"
           />
           <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {deletionPhase === "tearingDown"
-              ? teardownState.cancelling
-                ? "Stopping teardown…"
-                : "Tearing down…"
-              : "Removing worktree…"}
+            {limboLabel}
           </span>
-          {deletionPhase === "tearingDown" && (
+          {cleanupRunning && (
             <Button
               variant="ghost"
               size="xs"
-              onClick={openTeardownConsole}
+              onClick={openCleanupConsole}
               className="shrink-0"
             >
               View output
@@ -305,32 +318,39 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
       </div>
 
       <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
-        {teardownError ? (
+        {cleanupError ? (
           <>
             <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
-              {teardownError}
+              {cleanupError.phase === "teardown"
+                ? "Teardown didn't complete cleanly"
+                : "Port-pool release didn't complete cleanly"}{" "}
+              (exit{" "}
+              {cleanupError.exitCode === null
+                ? "errored"
+                : cleanupError.exitCode}
+              ).
             </span>
             <Button
               variant="ghost"
               size="xs"
-              onClick={handleCancelTeardownError}
+              onClick={handleCancelCleanupError}
             >
               Cancel
             </Button>
-            <Button variant="ghost" size="xs" onClick={openTeardownConsole}>
+            <Button variant="ghost" size="xs" onClick={openCleanupConsole}>
               View output
             </Button>
-            <Button variant="ghost" size="xs" onClick={handleRetryTeardown}>
-              Retry teardown
+            <Button variant="ghost" size="xs" onClick={handleRetryCleanup}>
+              Retry
             </Button>
             <Button
               variant="ghost"
               size="xs"
               className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={handleSkipTeardown}
+              onClick={handleSkipCleanup}
             >
               <Trash2 />
-              Skip teardown
+              Skip cleanup
             </Button>
           </>
         ) : needsForce ? (
@@ -354,19 +374,19 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
               onClick={handleForceDelete}
             >
               <Trash2 />
-              {busy ? "Deleting…" : "Force delete"}
+              {busy ? "Deleting..." : "Force delete"}
             </Button>
           </>
-        ) : inLimbo && deletionPhase === "tearingDown" ? (
+        ) : cleanupRunning ? (
           <Button
             variant="ghost"
             size="xs"
-            onClick={handleCancelTeardown}
-            disabled={teardownState.cancelling}
+            onClick={handleCancelCleanup}
+            disabled={cleanupCancelling}
             className="ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
           >
             <Trash2 />
-            {teardownState.cancelling ? "Stopping…" : "Stop teardown"}
+            {cleanupCancelling ? "Stopping..." : "Stop cleanup"}
           </Button>
         ) : (
           <Button

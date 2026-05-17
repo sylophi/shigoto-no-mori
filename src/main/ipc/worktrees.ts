@@ -2,9 +2,11 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
+  CleanupErrorSchema,
   CommitDiffPayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
+  type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
   isRealBranch,
   ListWorktreesPayloadSchema,
@@ -20,6 +22,7 @@ import {
   findWorktreeIdentityOrThrow,
   getCommitDiff,
   getWorktreeDiff,
+  listWorktreeIdentities,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -29,6 +32,7 @@ import { findProjectOrThrow } from "../projects";
 import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
+import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -42,7 +46,7 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.WorktreesCreate,
-    async (_event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
+    async (event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
       const { projectId, worktreeName, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
@@ -52,20 +56,36 @@ export function registerWorktreeHandlers(): void {
         base,
         checkout: checkout ?? false,
       });
-      const config = await readShigomoriConfig(project.id).catch(() => null);
+      const [config, identities, global] = await Promise.all([
+        readShigomoriConfig(project.id).catch(() => null),
+        listWorktreeIdentities(project.id, project.path),
+        readGlobalConfig(),
+      ]);
       const carryOver = await applyCarryOver(
         project.path,
         worktree.path,
         config?.carryOver ?? [],
       );
-      return { worktree, carryOver };
+
+      const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+      const target = identities.find((i) => i.id === worktree.id) ?? worktree;
+      const scriptFailures = await runCreateLifecycle({
+        project,
+        worktree: target,
+        projectBranch,
+        config,
+        globalPortPoolEnabled: global.portPool === true,
+        webContents: event.sender,
+      });
+
+      return { worktree, carryOver, scriptFailures };
     },
   );
 
   ipcMain.handle(
     CHANNELS.WorktreesDelete,
-    async (_event, rawPayload: unknown): Promise<void> => {
-      const { projectId, worktreeId, force } =
+    async (event, rawPayload: unknown): Promise<DeleteWorktreeResult> => {
+      const { projectId, worktreeId, force, skipCleanup } =
         DeleteWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       const target = await findWorktreeIdentityOrThrow(
@@ -84,25 +104,58 @@ export function registerWorktreeHandlers(): void {
           );
         }
       }
-      // Any package script still running here would be holding the
-      // worktree as its cwd; reap before git rips the directory.
+
+      const global = await readGlobalConfig();
+
+      // Cleanup runs even on force-delete (force only bypasses the
+      // uncommitted-changes guard, not teardown / port-pool release).
+      // Electron's IPC strips structured properties off thrown errors,
+      // so we surface cleanup failures as a returned discriminated
+      // result instead -- the renderer's UI uses it to drive the
+      // retry/skip affordance.
+      if (skipCleanup !== true) {
+        const [config, identities] = await Promise.all([
+          readShigomoriConfig(project.id).catch(() => null),
+          listWorktreeIdentities(project.id, project.path),
+        ]);
+        const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+        try {
+          await runDeleteCleanup({
+            project,
+            worktree: target,
+            projectBranch,
+            config,
+            globalPortPoolEnabled: global.portPool === true,
+            webContents: event.sender,
+          });
+        } catch (err) {
+          const parsed = CleanupErrorSchema.safeParse(err);
+          if (parsed.success) {
+            return { ok: false, cleanupError: parsed.data };
+          }
+          throw err;
+        }
+      }
+
+      // Reap any package scripts still holding the worktree as cwd,
+      // then remove.
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, force);
+      await removeWorktree(project.path, target.path, force ?? false);
 
       // `git branch -D` refuses if the branch is still in use elsewhere,
       // so we don't need to guard against that case ourselves. Defaults
       // to true: if you're done with the worktree, you're done with the
       // local branch. (Remote branches are never touched.)
-      const config = await readGlobalConfig();
-      const shouldDeleteBranch = config.deleteBranchOnRemove ?? true;
+      const shouldDeleteBranch = global.deleteBranchOnRemove ?? true;
       if (shouldDeleteBranch && isRealBranch(target.branch)) {
         try {
           await deleteLocalBranch(project.path, target.branch);
         } catch {
           // Branch may be shared with another worktree or be the primary's
-          // HEAD — leaving it behind is the safe fallback.
+          // HEAD -- leaving it behind is the safe fallback.
         }
       }
+      return { ok: true };
     },
   );
 
