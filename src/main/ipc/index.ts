@@ -4,6 +4,7 @@ import { registerGlobalConfigHandlers } from "./globalConfig";
 import { registerLauncherHandlers } from "./launchers";
 import { registerMenuHandlers } from "./menu";
 import { registerPackageScriptHandlers } from "./packageScripts";
+import { registerPortPoolHandlers } from "./portPool";
 import { registerProjectHandlers } from "./projects";
 import { registerRuntimeHandlers } from "./runtime";
 import { registerScriptHandlers } from "./scripts";
@@ -18,6 +19,7 @@ export function registerIpcHandlers(): void {
   registerLauncherHandlers();
   registerScriptHandlers();
   registerPackageScriptHandlers();
+  registerPortPoolHandlers();
   registerRuntimeHandlers();
   registerFsHandlers();
   registerShellHandlers();

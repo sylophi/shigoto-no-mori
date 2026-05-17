@@ -190,6 +190,13 @@ const api = {
     }): Promise<{ runId: string }> =>
       ipcRenderer.invoke(CHANNELS.PackageScriptsRun, input),
   },
+  portPool: {
+    isActive: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
+  },
   scripts: {
     run: (input: {
       projectId: string;
