@@ -33,14 +33,20 @@ import { WorktreeRow } from "./WorktreeRow";
 type SidebarRow =
   | { kind: "project"; key: string; project: Project; expanded: boolean }
   | { kind: "worktree"; key: string; worktree: Worktree }
-  | { kind: "worktree-skeleton"; key: string; projectId: string; index: number }
+  | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string };
+
+const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
+  project: 28,
+  worktree: 40,
+  "worktree-skeleton": 36,
+  "worktree-error": 24,
+};
 
 export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
   const reorderProjects = useReorderProjects();
-  // Store collapsed ids — absence means expanded, matching the previous
-  // default-expanded behavior without needing to seed state on project load.
+  // Absence == expanded, so new projects default open.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -71,15 +77,8 @@ export function Sidebar() {
       if (query.isLoading) {
         out.push({
           kind: "worktree-skeleton",
-          key: `sk:${project.id}:0`,
+          key: `sk:${project.id}`,
           projectId: project.id,
-          index: 0,
-        });
-        out.push({
-          kind: "worktree-skeleton",
-          key: `sk:${project.id}:1`,
-          projectId: project.id,
-          index: 1,
         });
         return;
       }
@@ -107,7 +106,7 @@ export function Sidebar() {
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: () => 32,
+    estimateSize: (index) => ROW_SIZE_HINTS[rows[index]?.kind ?? "worktree"],
     overscan: 12,
     getItemKey: (index) => rows[index]?.key ?? index,
   });
@@ -140,9 +139,6 @@ export function Sidebar() {
     ? (projects.find((p) => p.id === activeId) ?? null)
     : null;
 
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
-
   return (
     <aside className="flex h-full flex-col bg-card">
       <SidebarHeader />
@@ -160,9 +156,9 @@ export function Sidebar() {
             >
               <div
                 className="relative px-2"
-                style={{ height: `${totalSize}px` }}
+                style={{ height: `${virtualizer.getTotalSize()}px` }}
               >
-                {virtualItems.map((vi) => {
+                {virtualizer.getVirtualItems().map((vi) => {
                   const row = rows[vi.index];
                   if (!row) return null;
                   return (
@@ -170,7 +166,10 @@ export function Sidebar() {
                       key={row.key}
                       data-index={vi.index}
                       ref={virtualizer.measureElement}
-                      className="absolute top-0 left-0 w-full"
+                      className={cn(
+                        "absolute top-0 left-0 w-full",
+                        row.kind !== "project" && "pl-3",
+                      )}
                       style={{ transform: `translateY(${vi.start}px)` }}
                     >
                       <RowContent row={row} onToggle={toggleExpanded} />
@@ -214,26 +213,19 @@ function RowContent({
     );
   }
   if (row.kind === "worktree") {
-    return (
-      <div className="pl-3">
-        <WorktreeRow worktree={row.worktree} />
-      </div>
-    );
+    return <WorktreeRow worktree={row.worktree} />;
   }
   if (row.kind === "worktree-skeleton") {
     return (
-      <div className="pl-3">
-        <div className="px-2 py-1.5" aria-label="Loading worktrees">
-          <Skeleton className={cn("h-4", row.index === 0 ? "w-32" : "w-24")} />
-        </div>
+      <div className="space-y-1 px-2 py-1.5" aria-label="Loading worktrees">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-24" />
       </div>
     );
   }
   return (
-    <div className="pl-3">
-      <div className="px-2 py-1 text-xs text-destructive">
-        Failed to list worktrees
-      </div>
+    <div className="px-2 py-1 text-xs text-destructive">
+      Failed to list worktrees
     </div>
   );
 }
