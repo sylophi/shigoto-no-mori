@@ -298,5 +298,6 @@ function resolveCommand(
 ): string {
   if (slot.kind === "setup") return config?.scripts?.setup ?? "";
   if (slot.kind === "teardown") return config?.scripts?.teardown ?? "";
+  if (slot.kind === "portPool") return "";
   return pkg?.scripts[slot.name] ?? "";
 }

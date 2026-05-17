@@ -33,18 +33,24 @@ export function useScriptRunner(
         key,
         worktreeId: worktree.id,
         slot,
-        runner: () =>
-          slot.kind === "package"
-            ? window.api.packageScripts.run({
-                projectId: worktree.projectId,
-                worktreeId: worktree.id,
-                scriptName: slot.name,
-              })
-            : window.api.scripts.run({
-                projectId: worktree.projectId,
-                worktreeId: worktree.id,
-                script: slot.kind,
-              }),
+        runner: () => {
+          if (slot.kind === "package") {
+            return window.api.packageScripts.run({
+              projectId: worktree.projectId,
+              worktreeId: worktree.id,
+              scriptName: slot.name,
+            });
+          }
+          if (slot.kind === "portPool") {
+            // Port-pool runs are main-initiated; manual play wires up in Task 8.
+            return Promise.resolve({ runId: "" });
+          }
+          return window.api.scripts.run({
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+            script: slot.kind,
+          });
+        },
       })
       .catch(() => {
         // Failure surfaces on state.status === "errored".
