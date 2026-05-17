@@ -6,7 +6,20 @@ import {
   type ScriptSlot,
   useScriptRunState,
 } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { ScriptName, Worktree } from "@shared/schemas";
+
+type NonPackageSlot =
+  | { kind: "setup" }
+  | { kind: "teardown" }
+  | { kind: "portPool"; phase: "provision" | "release" };
+
+function slotToScriptName(slot: NonPackageSlot): ScriptName {
+  if (slot.kind === "setup") return "setup";
+  if (slot.kind === "teardown") return "teardown";
+  return slot.phase === "provision"
+    ? "port-pool-provision"
+    : "port-pool-release";
+}
 
 export interface ScriptRunner {
   key: ScriptKey;
@@ -41,14 +54,10 @@ export function useScriptRunner(
               scriptName: slot.name,
             });
           }
-          if (slot.kind === "portPool") {
-            // Port-pool runs are main-initiated; manual play wires up in Task 8.
-            return Promise.resolve({ runId: "" });
-          }
           return window.api.scripts.run({
             projectId: worktree.projectId,
             worktreeId: worktree.id,
-            script: slot.kind,
+            script: slotToScriptName(slot),
           });
         },
       })

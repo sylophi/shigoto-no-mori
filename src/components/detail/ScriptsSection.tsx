@@ -4,6 +4,7 @@ import { ChevronRight, Play, Search, Square } from "lucide-react";
 import { scoreMatch } from "@/components/ui/branch-combobox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePackageScripts } from "@/hooks/usePackageScripts";
+import { usePortPoolActive } from "@/hooks/usePortPoolActive";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { cn } from "@/lib/utils";
@@ -28,6 +29,10 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     worktree.projectId,
     worktree.id,
   );
+  const { data: portPoolActive = false } = usePortPoolActive(
+    worktree.projectId,
+    worktree.id,
+  );
 
   const goConfigure = () =>
     void navigate({
@@ -46,7 +51,6 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
 
   const setupCommand = config?.scripts?.setup?.trim() ?? "";
   const teardownCommand = config?.scripts?.teardown?.trim() ?? "";
-  const hasLifecycle = setupCommand !== "" || teardownCommand !== "";
   const pkgHasScripts = pkg && Object.keys(pkg.scripts).length > 0;
 
   const lifecycleRows: { slot: ScriptSlot; label: string; command: string }[] =
@@ -58,6 +62,19 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
       command: setupCommand,
     });
   }
+  if (portPoolActive) {
+    const quotedPath = worktreeQuotedPath(worktree.path);
+    lifecycleRows.push({
+      slot: { kind: "portPool", phase: "provision" },
+      label: "Port-pool provision",
+      command: `port-pool provision ${quotedPath}`,
+    });
+    lifecycleRows.push({
+      slot: { kind: "portPool", phase: "release" },
+      label: "Port-pool release",
+      command: `port-pool release ${quotedPath}`,
+    });
+  }
   if (teardownCommand) {
     lifecycleRows.push({
       slot: { kind: "teardown" },
@@ -65,6 +82,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
       command: teardownCommand,
     });
   }
+  const hasLifecycle = lifecycleRows.length > 0;
 
   return (
     <div className="space-y-4">
@@ -72,7 +90,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
         <ScriptList>
           {lifecycleRows.map((row, idx) => (
             <ScriptRow
-              key={row.slot.kind}
+              key={slotToParam(row.slot)}
               worktree={worktree}
               slot={row.slot}
               label={row.label}
@@ -267,4 +285,8 @@ function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
       )}
     </div>
   );
+}
+
+function worktreeQuotedPath(path: string): string {
+  return `'${path.replace(/'/g, `'\\''`)}'`;
 }

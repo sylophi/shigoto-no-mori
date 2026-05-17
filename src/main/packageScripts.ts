@@ -65,7 +65,7 @@ export async function readPackageScripts(
 // All four package managers accept `<mgr> run <name>`. The bare alias
 // (`bun <name>`, `pnpm <name>`) works too for non-reserved names, but
 // `run` is unambiguous and matches what users normally type.
-function shellQuote(s: string): string {
+export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
