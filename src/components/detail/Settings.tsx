@@ -470,7 +470,7 @@ function DangerZone() {
           onClick={handleNuke}
           title={
             armed
-              ? "Click again to confirm — this cannot be undone"
+              ? "Click again to confirm. This cannot be undone."
               : "Wipe all shigomori data"
           }
         >

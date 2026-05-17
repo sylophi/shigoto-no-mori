@@ -162,7 +162,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
             ))}
             {hiddenWorktreeCount > 0 && (
               <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
-                +{hiddenWorktreeCount} more — type to search
+                +{hiddenWorktreeCount} more, type to search
               </div>
             )}
           </Command.Group>
@@ -194,7 +194,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
           ))}
           {hiddenProjectCount > 0 && (
             <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
-              +{hiddenProjectCount} more — type to search
+              +{hiddenProjectCount} more, type to search
             </div>
           )}
           <Command.Item
