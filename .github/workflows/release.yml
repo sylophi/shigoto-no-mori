@@ -26,6 +26,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # The shipped .app's Info.plist (CFBundleShortVersionString,
+      # CFBundleVersion) and Electron's app.getVersion() both come from
+      # package.json at packaging time. Patch it from the release tag so
+      # the displayed version always matches the tag, without anyone
+      # having to remember to bump package.json before tagging. Skipped
+      # for non-semver tags (e.g. "latest", "release-2026-05-17") so a
+      # weird tag can't corrupt the package.json that Forge reads.
+      - name: Sync package.json version with tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            pnpm pkg set version="$VERSION"
+          else
+            echo "Tag '$TAG' isn't semver — leaving package.json unchanged"
+          fi
+
       - name: Build .app
         run: pnpm run package
 
