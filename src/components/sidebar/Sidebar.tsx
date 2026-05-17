@@ -23,6 +23,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useProjects, useReorderProjects } from "@/hooks/useProjects";
+import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -242,13 +243,33 @@ function ProjectDragPreview({ project }: { project: Project }) {
 }
 
 function SidebarHeader() {
+  const { data: runtime } = useRuntimeInfo();
+  const isDev = runtime?.isDev ?? false;
+  // One-way peek at prod styling. Reset on unmount (window reload).
+  // Once flipped, the markup below is identical to the packaged build.
+  const [revealProd, setRevealProd] = useState(false);
+  const showDevStyle = isDev && !revealProd;
   return (
     <div
       className="flex h-[52px] items-center px-3 pl-[92px]"
       // macOS title-bar drag region
       style={{ ["-webkit-app-region" as never]: "drag" }}
     >
-      <div className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">
+      {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- internal dev affordance, no keyboard equivalent needed */}
+      <div
+        className={cn(
+          "min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight",
+          showDevStyle && "font-mono text-amber-500",
+        )}
+        onClick={showDevStyle ? () => setRevealProd(true) : undefined}
+        // Carve a no-drag hole only while the affordance is active so the
+        // click isn't eaten by the title-bar drag region.
+        style={
+          showDevStyle
+            ? { ["-webkit-app-region" as never]: "no-drag" }
+            : undefined
+        }
+      >
         Shigoto no Mori
       </div>
     </div>
