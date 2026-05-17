@@ -457,6 +457,13 @@ export const CleanupErrorSchema = z.object({
 
 export type CleanupError = z.infer<typeof CleanupErrorSchema>;
 
+export const DeleteWorktreeResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true) }),
+  z.object({ ok: z.literal(false), cleanupError: CleanupErrorSchema }),
+]);
+
+export type DeleteWorktreeResult = z.infer<typeof DeleteWorktreeResultSchema>;
+
 export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;

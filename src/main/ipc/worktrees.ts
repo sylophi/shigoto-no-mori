@@ -2,9 +2,11 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
+  type CleanupError,
   CommitDiffPayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
+  type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
   isRealBranch,
   ListWorktreesPayloadSchema,
@@ -80,7 +82,7 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.WorktreesDelete,
-    async (event, rawPayload: unknown): Promise<void> => {
+    async (event, rawPayload: unknown): Promise<DeleteWorktreeResult> => {
       const { projectId, worktreeId, force, skipCleanup } =
         DeleteWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
@@ -101,29 +103,37 @@ export function registerWorktreeHandlers(): void {
         }
       }
 
-      // Cleanup phase: force implies skipCleanup. Throws CleanupError
-      // on non-zero cleanup script exits -- the renderer's UI handles
-      // retry/skip.
+      const global = await readGlobalConfig();
+
+      // Cleanup phase: force implies skipCleanup. Electron's IPC strips
+      // structured properties off thrown errors, so we surface cleanup
+      // failures as a returned discriminated result instead -- the
+      // renderer's UI uses it to drive the retry/skip affordance.
       const shouldSkipCleanup = force === true || skipCleanup === true;
       if (!shouldSkipCleanup) {
-        const shigomori = await readShigomoriConfig(project.id).catch(
-          () => null,
-        );
-        const global = await readGlobalConfig();
+        const config = await readShigomoriConfig(project.id).catch(() => null);
         const identities = await listWorktreeIdentities(
           project.id,
           project.path,
         );
         const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
-        await runDeleteCleanup({
-          project,
-          worktree: target,
-          projectBranch,
-          config: shigomori,
-          globalPortPoolEnabled: global.portPool === true,
-          skipCleanup: false,
-          webContents: event.sender,
-        });
+        try {
+          await runDeleteCleanup({
+            project,
+            worktree: target,
+            projectBranch,
+            config,
+            globalPortPoolEnabled: global.portPool === true,
+            skipCleanup: false,
+            webContents: event.sender,
+          });
+        } catch (err) {
+          const cleanupError = asCleanupError(err);
+          if (cleanupError) {
+            return { ok: false, cleanupError };
+          }
+          throw err;
+        }
       }
 
       // Reap any package scripts still holding the worktree as cwd,
@@ -135,8 +145,7 @@ export function registerWorktreeHandlers(): void {
       // so we don't need to guard against that case ourselves. Defaults
       // to true: if you're done with the worktree, you're done with the
       // local branch. (Remote branches are never touched.)
-      const shouldDeleteBranch =
-        (await readGlobalConfig()).deleteBranchOnRemove ?? true;
+      const shouldDeleteBranch = global.deleteBranchOnRemove ?? true;
       if (shouldDeleteBranch && isRealBranch(target.branch)) {
         try {
           await deleteLocalBranch(project.path, target.branch);
@@ -145,6 +154,7 @@ export function registerWorktreeHandlers(): void {
           // HEAD -- leaving it behind is the safe fallback.
         }
       }
+      return { ok: true };
     },
   );
 
@@ -219,4 +229,25 @@ export function registerWorktreeHandlers(): void {
       return getCommitDiff(target.path, hash);
     },
   );
+}
+
+// Recover the structured CleanupError shape from a thrown unknown.
+// runDeleteCleanup rejects with an Error carrying enumerable
+// phase/exitCode/runId properties; we extract them defensively so the
+// renderer receives a typed result instead of a stripped message.
+function asCleanupError(err: unknown): CleanupError | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as Record<string, unknown>;
+  if (
+    (e.phase === "teardown" || e.phase === "portPoolRelease") &&
+    typeof e.runId === "string" &&
+    (typeof e.exitCode === "number" || e.exitCode === null)
+  ) {
+    return {
+      phase: e.phase,
+      exitCode: e.exitCode as number | null,
+      runId: e.runId,
+    };
+  }
+  return null;
 }

@@ -46,6 +46,7 @@ import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
+  type CleanupError,
   type CommitSummary,
   isRealBranch,
   type Project,
@@ -86,11 +87,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(3_000);
   const [needsForce, setNeedsForce] = useState(false);
-  const [cleanupError, setCleanupError] = useState<{
-    phase: "teardown" | "portPoolRelease";
-    exitCode: number | null;
-    runId: string;
-  } | null>(null);
+  const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
 
   // Derive limbo state from script-runs: any cleanup-tier script
   // currently running indicates we're mid-cleanup; otherwise if the
@@ -123,15 +120,14 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
         ...opts,
       },
       {
-        onSuccess: () => {
-          void navigate({ to: "/" });
-        },
-        onError: (err) => {
-          const cleanup = parseCleanupError(err);
-          if (cleanup) {
-            setCleanupError(cleanup);
-            return;
+        onSuccess: (data) => {
+          if (data.ok) {
+            void navigate({ to: "/" });
+          } else {
+            setCleanupError(data.cleanupError);
           }
+        },
+        onError: () => {
           setNeedsForce(true);
         },
       },
@@ -402,33 +398,6 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
       </footer>
     </div>
   );
-}
-
-// CleanupError survives the IPC bridge as a plain Error whose
-// enumerable phase/exitCode/runId carry the structured payload from
-// the main-process lifecycle.
-function parseCleanupError(err: Error): {
-  phase: "teardown" | "portPoolRelease";
-  exitCode: number | null;
-  runId: string;
-} | null {
-  const candidate = err as unknown as {
-    phase?: unknown;
-    exitCode?: unknown;
-    runId?: unknown;
-  };
-  if (
-    (candidate.phase === "teardown" || candidate.phase === "portPoolRelease") &&
-    typeof candidate.runId === "string" &&
-    (typeof candidate.exitCode === "number" || candidate.exitCode === null)
-  ) {
-    return {
-      phase: candidate.phase,
-      exitCode: candidate.exitCode,
-      runId: candidate.runId,
-    };
-  }
-  return null;
 }
 
 function NotesSection({ worktree }: { worktree: Worktree }) {

@@ -6,7 +6,12 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
-import type { CreateWorktreeResult, Project, Worktree } from "@shared/schemas";
+import type {
+  CreateWorktreeResult,
+  DeleteWorktreeResult,
+  Project,
+  Worktree,
+} from "@shared/schemas";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
@@ -88,15 +93,19 @@ interface DeleteWorktreeInput {
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
-  return useMutation<void, Error, DeleteWorktreeInput>({
+  return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationFn: (input) => window.api.worktrees.delete(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
-      });
-      clearScriptRunsForWorktree(vars.worktreeId);
+    onSuccess: (data, vars) => {
+      // Only invalidate + clear runs when the worktree was actually
+      // removed. Cleanup failures keep the worktree around for retry.
+      if (data.ok) {
+        void queryClient.invalidateQueries({
+          queryKey: ["worktrees", vars.projectId],
+        });
+        clearScriptRunsForWorktree(vars.worktreeId);
+      }
     },
-    // The detail page swaps into a force-delete prompt on failure — a
+    // The detail page swaps into a force-delete prompt on failure -- a
     // toast on top would be noise.
     meta: { silentError: true },
   });

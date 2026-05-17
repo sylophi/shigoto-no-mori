@@ -24,6 +24,7 @@ function subscribeWith<T>(channel: string) {
 import type {
   BranchList,
   CreateWorktreeResult,
+  DeleteWorktreeResult,
   DetectedLauncher,
   DirectoryListing,
   FsListing,
@@ -77,7 +78,8 @@ const api = {
       worktreeId: string;
       force?: boolean;
       skipCleanup?: boolean;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
+    }): Promise<DeleteWorktreeResult> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
     renameBranch: (input: {
       projectId: string;
       worktreeId: string;
