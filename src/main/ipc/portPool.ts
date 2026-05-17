@@ -3,7 +3,7 @@ import { z } from "zod";
 import { CHANNELS } from "@shared/channels";
 import { findWorktreeIdentityOrThrow } from "../git";
 import { readGlobalConfig } from "../globalConfig";
-import { isPortPoolConfigured } from "../portPool";
+import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
 import { findProjectOrThrow } from "../projects";
 
 const PayloadSchema = z.object({
@@ -18,6 +18,7 @@ export function registerPortPoolHandlers(): void {
       const { projectId, worktreeId } = PayloadSchema.parse(rawPayload);
       const global = await readGlobalConfig();
       if (!global.portPool) return false;
+      if (!(await isPortPoolInstalled())) return false;
       const project = findProjectOrThrow(projectId);
       const worktree = await findWorktreeIdentityOrThrow(
         project.id,
@@ -27,4 +28,8 @@ export function registerPortPoolHandlers(): void {
       return isPortPoolConfigured(worktree.path);
     },
   );
+
+  ipcMain.handle(CHANNELS.PortPoolIsInstalled, async (): Promise<boolean> => {
+    return isPortPoolInstalled();
+  });
 }

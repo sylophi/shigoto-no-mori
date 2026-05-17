@@ -196,6 +196,8 @@ const api = {
       worktreeId: string;
     }): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
+    isInstalled: (): Promise<boolean> =>
+      ipcRenderer.invoke(CHANNELS.PortPoolIsInstalled),
   },
   scripts: {
     run: (input: {
