@@ -7,7 +7,7 @@
 //   - gitignored carry-over candidates
 //   - path shapes (spaces, unicode, deeply nested)
 //
-// Run:   bun scripts/seed-test-data.ts <dest-dir> [--keep]
+// Run:   pnpm seed <dest-dir> [--keep]
 // The destination directory is required so worktree `.git` pointers are
 // always self-contained at the chosen location — previously hard-coding
 // /tmp/shigomori-seed meant a second seeding could cross-link external
@@ -744,7 +744,7 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
     "",
     "Regenerate any time with:",
     "",
-    `    bun scripts/seed-test-data.ts ${ROOT}`,
+    `    pnpm seed ${ROOT}`,
     "",
     "## Repos",
     "",
@@ -794,7 +794,7 @@ function printSummary(manifests: Manifest[], elapsedMs: number): void {
 
 function usage(): never {
   console.error(
-    "Usage: bun scripts/seed-test-data.ts <dest-dir> [--keep]\n" +
+    "Usage: pnpm seed <dest-dir> [--keep]\n" +
       "\n" +
       "  <dest-dir>  Absolute or relative path where the seed tree will live.\n" +
       "              Required so worktree `.git` pointers stay self-contained.\n" +
