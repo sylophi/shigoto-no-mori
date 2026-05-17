@@ -5,7 +5,10 @@ import {
   createRoute,
   createRouter,
   Outlet,
+  useRouter,
 } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { EmptyState } from "@/components/detail/EmptyState";
@@ -177,10 +180,41 @@ const routeTree = rootRoute.addChildren([
   commitDiffRoute,
 ]);
 
+function RouteErrorFallback({
+  error,
+  reset,
+}: {
+  error: Error;
+  reset: () => void;
+}) {
+  const router = useRouter();
+  const retry = () => {
+    reset();
+    void router.invalidate();
+  };
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <div className="w-full max-w-md space-y-3">
+        <h2 className="text-sm font-medium">This view crashed</h2>
+        <ErrorBanner>{error.message}</ErrorBanner>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Or pick a different item in the sidebar.
+          </p>
+          <Button variant="outline" size="sm" onClick={retry}>
+            Try again
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export const router = createRouter({
   routeTree,
   history: createMemoryHistory({ initialEntries: ["/"] }),
   defaultPreload: false,
+  defaultErrorComponent: RouteErrorFallback,
 });
 
 declare module "@tanstack/react-router" {
