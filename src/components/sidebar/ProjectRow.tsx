@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -19,23 +18,23 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
 import type { Project } from "@shared/schemas";
-import { WorktreeRow } from "./WorktreeRow";
 
-interface ProjectGroupProps {
+interface ProjectRowProps {
   project: Project;
+  expanded: boolean;
+  onToggle: () => void;
 }
 
-export function ProjectGroup({ project }: ProjectGroupProps) {
+export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   const {
     attributes,
     listeners,
@@ -48,16 +47,8 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const [expanded, setExpanded] = useState(true);
   const navigate = useNavigate();
   const missing = project.pathExists === false;
-  // Skip the listing query entirely when the project's path is gone —
-  // every git invocation would just ENOENT.
-  const {
-    data: worktrees = [],
-    isLoading,
-    error,
-  } = useWorktrees(missing ? null : project.id);
   const removeProject = useRemoveProject();
   const create = useCreateWorktree();
 
@@ -74,8 +65,6 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
         params: { projectId: project.id, worktreeName: worktree.name },
       });
     } catch (err) {
-      // useCreateWorktree already toasts its own failures; only surface
-      // the defaultBranch lookup failure here.
       if (!create.isError) {
         notifyError("Couldn't resolve default branch", err);
       }
@@ -84,7 +73,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
 
   if (missing) {
     return (
-      <section
+      <div
         ref={setNodeRef}
         style={sortableStyle}
         className={cn("relative rounded-md", isDragging && "opacity-0")}
@@ -114,25 +103,22 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section
+    <div
       ref={setNodeRef}
       style={sortableStyle}
-      className={cn(
-        "relative flex flex-col rounded-md",
-        isDragging && "opacity-0",
-      )}
+      className={cn("relative rounded-md", isDragging && "opacity-0")}
       {...attributes}
     >
       <div className="group flex items-center gap-0.5 py-0.5">
         <ProjectHeader
           project={project}
           expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
+          onToggle={onToggle}
           listeners={listeners}
         />
         <button
@@ -203,30 +189,7 @@ export function ProjectGroup({ project }: ProjectGroupProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      {expanded && !isDragging && (
-        <div className="flex flex-col gap-0.5 pl-3">
-          {isLoading && (
-            <div
-              className="space-y-1 px-2 py-1.5"
-              aria-label="Loading worktrees"
-            >
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-4 w-24" />
-            </div>
-          )}
-          {error && (
-            <div className="px-2 py-1 text-xs text-destructive">
-              Failed to list worktrees
-            </div>
-          )}
-          {!isLoading &&
-            !error &&
-            worktrees.map((worktree) => (
-              <WorktreeRow key={worktree.id} worktree={worktree} />
-            ))}
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 
