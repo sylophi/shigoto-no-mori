@@ -30,7 +30,7 @@ import { findProjectOrThrow } from "../projects";
 import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
-import { runDeleteCleanup } from "../worktreeLifecycle";
+import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -44,7 +44,7 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.WorktreesCreate,
-    async (_event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
+    async (event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
       const { projectId, worktreeName, branchName, base, checkout } =
         CreateWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
@@ -60,7 +60,21 @@ export function registerWorktreeHandlers(): void {
         worktree.path,
         config?.carryOver ?? [],
       );
-      return { worktree, carryOver, scriptFailures: [] };
+
+      const identities = await listWorktreeIdentities(project.id, project.path);
+      const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+      const target = identities.find((i) => i.id === worktree.id) ?? worktree;
+      const global = await readGlobalConfig();
+      const scriptFailures = await runCreateLifecycle({
+        project,
+        worktree: target,
+        projectBranch,
+        config,
+        globalPortPoolEnabled: global.portPool === true,
+        webContents: event.sender,
+      });
+
+      return { worktree, carryOver, scriptFailures };
     },
   );
 
