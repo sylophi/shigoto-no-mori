@@ -18,6 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
+import { usePortPoolInstalled } from "@/hooks/usePortPoolInstalled";
+import { cn } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { THEME_STORAGE_KEY, useTheme } from "@/hooks/useTheme";
 import { useNavigate } from "@tanstack/react-router";
@@ -69,6 +71,7 @@ interface FormState {
   launchers: LauncherCommand[];
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
+  portPool: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
@@ -77,6 +80,7 @@ function fromConfig(config: GlobalConfig): FormState {
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
+    portPool: config.portPool ?? false,
   };
 }
 
@@ -94,12 +98,14 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
+    portPool: state.portPool ? true : undefined,
   };
 }
 
 function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const { data: runtime } = useRuntimeInfo();
   const { data: detected = [] } = useDetectedLaunchers();
+  const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const write = useGlobalConfigWrite();
   const { setOverride } = useTheme();
 
@@ -240,6 +246,17 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               }
               label="Auto-populate install command"
               description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Applies only at project-add time; existing projects are untouched."
+            />
+            <ToggleRow
+              checked={form.portPool && portPoolInstalled}
+              onCheckedChange={(v) => setForm({ ...form, portPool: v })}
+              disabled={!portPoolInstalled}
+              label="Port-pool integration"
+              description={
+                portPoolInstalled
+                  ? "When a project has a port-pool.config.json, run port-pool provision after setup at create and port-pool release before teardown at delete. Runs show up under Scripts."
+                  : "Install the port-pool CLI to enable this integration."
+              }
             />
           </section>
 
@@ -397,16 +414,27 @@ function ToggleRow({
   onCheckedChange,
   label,
   description,
+  disabled = false,
 }: {
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
   label: string;
   description?: string;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3">
+    <label
+      className={cn(
+        "flex cursor-pointer items-start gap-3",
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
       <span className="mt-0.5">
-        <Switch checked={checked} onCheckedChange={onCheckedChange} />
+        <Switch
+          checked={checked}
+          onCheckedChange={onCheckedChange}
+          disabled={disabled}
+        />
       </span>
       <div className="flex min-w-0 flex-col">
         <span className="text-sm">{label}</span>
