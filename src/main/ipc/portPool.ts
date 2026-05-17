@@ -18,13 +18,12 @@ export function registerPortPoolHandlers(): void {
       const { projectId, worktreeId } = PayloadSchema.parse(rawPayload);
       const global = await readGlobalConfig();
       if (!global.portPool) return false;
-      if (!(await isPortPoolInstalled())) return false;
       const project = findProjectOrThrow(projectId);
-      const worktree = await findWorktreeIdentityOrThrow(
-        project.id,
-        project.path,
-        worktreeId,
-      );
+      const [installed, worktree] = await Promise.all([
+        isPortPoolInstalled(),
+        findWorktreeIdentityOrThrow(project.id, project.path, worktreeId),
+      ]);
+      if (!installed) return false;
       return isPortPoolConfigured(worktree.path);
     },
   );

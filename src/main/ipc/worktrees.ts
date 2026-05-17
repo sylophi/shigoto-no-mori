@@ -2,7 +2,7 @@ import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
   CheckoutBranchPayloadSchema,
-  type CleanupError,
+  CleanupErrorSchema,
   CommitDiffPayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
@@ -56,17 +56,19 @@ export function registerWorktreeHandlers(): void {
         base,
         checkout: checkout ?? false,
       });
-      const config = await readShigomoriConfig(project.id).catch(() => null);
+      const [config, identities, global] = await Promise.all([
+        readShigomoriConfig(project.id).catch(() => null),
+        listWorktreeIdentities(project.id, project.path),
+        readGlobalConfig(),
+      ]);
       const carryOver = await applyCarryOver(
         project.path,
         worktree.path,
         config?.carryOver ?? [],
       );
 
-      const identities = await listWorktreeIdentities(project.id, project.path);
       const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
       const target = identities.find((i) => i.id === worktree.id) ?? worktree;
-      const global = await readGlobalConfig();
       const scriptFailures = await runCreateLifecycle({
         project,
         worktree: target,
@@ -111,11 +113,10 @@ export function registerWorktreeHandlers(): void {
       // renderer's UI uses it to drive the retry/skip affordance.
       const shouldSkipCleanup = force === true || skipCleanup === true;
       if (!shouldSkipCleanup) {
-        const config = await readShigomoriConfig(project.id).catch(() => null);
-        const identities = await listWorktreeIdentities(
-          project.id,
-          project.path,
-        );
+        const [config, identities] = await Promise.all([
+          readShigomoriConfig(project.id).catch(() => null),
+          listWorktreeIdentities(project.id, project.path),
+        ]);
         const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
         try {
           await runDeleteCleanup({
@@ -124,20 +125,19 @@ export function registerWorktreeHandlers(): void {
             projectBranch,
             config,
             globalPortPoolEnabled: global.portPool === true,
-            skipCleanup: false,
             webContents: event.sender,
           });
         } catch (err) {
-          const cleanupError = asCleanupError(err);
-          if (cleanupError) {
-            return { ok: false, cleanupError };
+          const parsed = CleanupErrorSchema.safeParse(err);
+          if (parsed.success) {
+            return { ok: false, cleanupError: parsed.data };
           }
           throw err;
         }
       }
 
       // Reap any package scripts still holding the worktree as cwd,
-      // then remove. Same as before.
+      // then remove.
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force ?? false);
 
@@ -229,25 +229,4 @@ export function registerWorktreeHandlers(): void {
       return getCommitDiff(target.path, hash);
     },
   );
-}
-
-// Recover the structured CleanupError shape from a thrown unknown.
-// runDeleteCleanup rejects with an Error carrying enumerable
-// phase/exitCode/runId properties; we extract them defensively so the
-// renderer receives a typed result instead of a stripped message.
-function asCleanupError(err: unknown): CleanupError | null {
-  if (!err || typeof err !== "object") return null;
-  const e = err as Record<string, unknown>;
-  if (
-    (e.phase === "teardown" || e.phase === "portPoolRelease") &&
-    typeof e.runId === "string" &&
-    (typeof e.exitCode === "number" || e.exitCode === null)
-  ) {
-    return {
-      phase: e.phase,
-      exitCode: e.exitCode as number | null,
-      runId: e.runId,
-    };
-  }
-  return null;
 }

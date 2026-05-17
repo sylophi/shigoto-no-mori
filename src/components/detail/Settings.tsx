@@ -248,7 +248,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Applies only at project-add time; existing projects are untouched."
             />
             <ToggleRow
-              checked={form.portPool && portPoolInstalled}
+              checked={form.portPool}
               onCheckedChange={(v) => setForm({ ...form, portPool: v })}
               disabled={!portPoolInstalled}
               label="Port-pool integration"

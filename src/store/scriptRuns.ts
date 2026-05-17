@@ -216,21 +216,36 @@ function applyEvent(key: ScriptKey, event: ScriptEvent): void {
   }
 }
 
-function bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
-  const key = scriptKey(event.projectId, event.worktreeId, event.slot);
+function setMetaWithDeferred(
+  key: ScriptKey,
+  worktreeId: string,
+  slot: ScriptSlot,
+): void {
   const prev = states.get(key);
   if (prev?.runId) runIdToKey.delete(prev.runId);
-
   let deferredResolve!: (code: number | null) => void;
   const exitPromise = new Promise<number | null>((resolve) => {
     deferredResolve = resolve;
   });
   meta.set(key, {
-    worktreeId: event.worktreeId,
-    slotKind: deriveSlotKind(event.slot),
+    worktreeId,
+    slotKind: deriveSlotKind(slot),
     exitDeferred: { promise: exitPromise, resolve: deferredResolve },
   });
-  runIdToKey.set(event.runId, key);
+}
+
+function bindRunIdAndDrain(key: ScriptKey, runId: string): void {
+  runIdToKey.set(runId, key);
+  const pending = pendingByRunId.get(runId);
+  if (pending) {
+    pendingByRunId.delete(runId);
+    for (const queued of pending) applyEvent(key, queued);
+  }
+}
+
+function bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
+  const key = scriptKey(event.projectId, event.worktreeId, event.slot);
+  setMetaWithDeferred(key, event.worktreeId, event.slot);
 
   setStateWithActivity(key, () => ({
     runId: event.runId,
@@ -242,12 +257,7 @@ function bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
     cancelling: false,
   }));
 
-  // Drain any data/exit events that beat the "started" message.
-  const pending = pendingByRunId.get(event.runId);
-  if (pending) {
-    pendingByRunId.delete(event.runId);
-    for (const queued of pending) applyEvent(key, queued);
-  }
+  bindRunIdAndDrain(key, event.runId);
 }
 
 function handleEvent(event: ScriptEvent): void {
@@ -279,18 +289,7 @@ interface StartInput {
 }
 
 async function start(input: StartInput): Promise<void> {
-  const prev = states.get(input.key);
-  if (prev?.runId) runIdToKey.delete(prev.runId);
-
-  let deferredResolve!: (code: number | null) => void;
-  const exitPromise = new Promise<number | null>((resolve) => {
-    deferredResolve = resolve;
-  });
-  meta.set(input.key, {
-    worktreeId: input.worktreeId,
-    slotKind: deriveSlotKind(input.slot),
-    exitDeferred: { promise: exitPromise, resolve: deferredResolve },
-  });
+  setMetaWithDeferred(input.key, input.worktreeId, input.slot);
 
   setStateWithActivity(input.key, () => ({
     runId: null,
@@ -319,16 +318,11 @@ async function start(input: StartInput): Promise<void> {
     throw err;
   }
 
-  runIdToKey.set(runId, input.key);
   setStateWithActivity(input.key, (s) => ({ ...s, runId, status: "running" }));
 
   // Drain any events the pty produced before we knew the runId. Order
   // is preserved (push/iterate FIFO) so xterm replay stays coherent.
-  const pending = pendingByRunId.get(runId);
-  if (pending) {
-    pendingByRunId.delete(runId);
-    for (const event of pending) applyEvent(input.key, event);
-  }
+  bindRunIdAndDrain(input.key, runId);
 }
 
 async function cancel(key: ScriptKey): Promise<void> {

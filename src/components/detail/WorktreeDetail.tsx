@@ -160,13 +160,19 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
   };
 
   const openCleanupConsole = () => {
-    const slot: ScriptSlot = cleanupError
-      ? cleanupError.phase === "teardown"
-        ? { kind: "teardown" }
-        : { kind: "portPool", phase: "release" }
-      : releaseState.runId
-        ? { kind: "portPool", phase: "release" }
-        : { kind: "teardown" };
+    let slot: ScriptSlot;
+    if (cleanupError) {
+      slot =
+        cleanupError.phase === "teardown"
+          ? { kind: "teardown" }
+          : { kind: "portPool", phase: "release" };
+    } else if (releaseState.runId) {
+      slot = { kind: "portPool", phase: "release" };
+    } else if (teardownState.runId) {
+      slot = { kind: "teardown" };
+    } else {
+      return;
+    }
     void navigate({
       to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
       params: {
@@ -198,7 +204,6 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
     }
     return "Removing worktree...";
   })();
-  const showStopCleanupButton = cleanupRunning;
   const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
 
   return (
@@ -362,7 +367,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
               {busy ? "Deleting..." : "Force delete"}
             </Button>
           </>
-        ) : showStopCleanupButton ? (
+        ) : cleanupRunning ? (
           <Button
             variant="ghost"
             size="xs"

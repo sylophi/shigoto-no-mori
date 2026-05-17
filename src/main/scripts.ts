@@ -44,12 +44,14 @@ interface RunArgs {
   // we emit a "started" event so the renderer binds runId to slot.
   // Omit for renderer-driven runs -- the renderer already knows the
   // slot from scriptRuns.start().
-  startedSlot?:
-    | { kind: "setup" }
-    | { kind: "teardown" }
-    | { kind: "portPool"; phase: "provision" | "release" };
-  startedProjectId?: string;
-  startedWorktreeId?: string;
+  started?: {
+    slot:
+      | { kind: "setup" }
+      | { kind: "teardown" }
+      | { kind: "portPool"; phase: "provision" | "release" };
+    projectId: string;
+    worktreeId: string;
+  };
 }
 
 interface RunRecord {
@@ -221,13 +223,13 @@ export function startScript(args: RunArgs): string {
 
   const runId = randomUUID();
 
-  if (args.startedSlot && args.startedProjectId && args.startedWorktreeId) {
+  if (args.started) {
     emit(args.webContents, {
       runId,
       kind: "started",
-      projectId: args.startedProjectId,
-      worktreeId: args.startedWorktreeId,
-      slot: args.startedSlot,
+      projectId: args.started.projectId,
+      worktreeId: args.started.worktreeId,
+      slot: args.started.slot,
     });
   }
 
@@ -342,7 +344,7 @@ export function startScript(args: RunArgs): string {
     const observer = exitObservers.get(runId);
     if (observer) {
       exitObservers.delete(runId);
-      observer(code);
+      observer(reported);
     }
     record.exited = true;
     resolveDone();

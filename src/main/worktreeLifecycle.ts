@@ -10,6 +10,7 @@ import type {
   ShigomoriConfig,
 } from "@shared/schemas";
 import { resolveDefaultBranch } from "./git";
+import { shellQuote } from "./packageScripts";
 import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
 import {
   clearDeleteInflight,
@@ -39,6 +40,36 @@ interface CreateArgs {
   webContents: WebContents;
 }
 
+async function runStep(args: {
+  command: string;
+  scriptName: string;
+  slot:
+    | { kind: "setup" }
+    | { kind: "teardown" }
+    | { kind: "portPool"; phase: "provision" | "release" };
+  worktree: LifecycleWorktree;
+  project: LifecycleProject;
+  projectBranch: string;
+  defaultBranch: string;
+  webContents: WebContents;
+}): Promise<{ runId: string; exitCode: number | null }> {
+  const { runId, exit } = startScriptForLifecycle({
+    command: args.command,
+    scriptName: args.scriptName,
+    worktree: args.worktree,
+    project: args.project,
+    projectBranch: args.projectBranch,
+    defaultBranch: args.defaultBranch,
+    webContents: args.webContents,
+    started: {
+      slot: args.slot,
+      projectId: args.project.id,
+      worktreeId: args.worktree.id,
+    },
+  });
+  return { runId, exitCode: await exit };
+}
+
 export async function runCreateLifecycle(
   args: CreateArgs,
 ): Promise<ScriptFailure[]> {
@@ -50,42 +81,39 @@ export async function runCreateLifecycle(
 
   const setupCommand = args.config?.scripts?.setup?.trim();
   if (setupCommand) {
-    const { runId, exit } = startScriptForLifecycle({
+    const { runId, exitCode } = await runStep({
       command: setupCommand,
       scriptName: "setup",
+      slot: { kind: "setup" },
       worktree: args.worktree,
       project: args.project,
       projectBranch: args.projectBranch,
       defaultBranch,
       webContents: args.webContents,
-      startedSlot: { kind: "setup" },
-      startedProjectId: args.project.id,
-      startedWorktreeId: args.worktree.id,
     });
-    const code = await exit;
-    if (code !== 0) {
-      failures.push({ phase: "setup", exitCode: code, runId });
+    if (exitCode !== 0) {
+      failures.push({ phase: "setup", exitCode, runId });
     }
   }
 
-  if (args.globalPortPoolEnabled && (await isPortPoolInstalled())) {
-    const hasConfig = await isPortPoolConfigured(args.worktree.path);
-    if (hasConfig) {
-      const { runId, exit } = startScriptForLifecycle({
+  if (args.globalPortPoolEnabled) {
+    const [installed, hasConfig] = await Promise.all([
+      isPortPoolInstalled(),
+      isPortPoolConfigured(args.worktree.path),
+    ]);
+    if (installed && hasConfig) {
+      const { runId, exitCode } = await runStep({
         command: `port-pool provision ${shellQuote(args.worktree.path)}`,
         scriptName: "port-pool-provision",
+        slot: { kind: "portPool", phase: "provision" },
         worktree: args.worktree,
         project: args.project,
         projectBranch: args.projectBranch,
         defaultBranch,
         webContents: args.webContents,
-        startedSlot: { kind: "portPool", phase: "provision" },
-        startedProjectId: args.project.id,
-        startedWorktreeId: args.worktree.id,
       });
-      const code = await exit;
-      if (code !== 0) {
-        failures.push({ phase: "portPoolProvision", exitCode: code, runId });
+      if (exitCode !== 0) {
+        failures.push({ phase: "portPoolProvision", exitCode, runId });
       }
     }
   }
@@ -99,12 +127,10 @@ interface DeleteArgs {
   projectBranch: string;
   config: ShigomoriConfig | null;
   globalPortPoolEnabled: boolean;
-  skipCleanup: boolean;
   webContents: WebContents;
 }
 
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
-  if (args.skipCleanup) return;
   markDeleteInflight(args.worktree.id);
   try {
     const defaultBranch = await resolveDefaultBranch(
@@ -112,45 +138,42 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
       args.config?.defaultBranch,
     ).catch(() => "");
 
-    if (args.globalPortPoolEnabled && (await isPortPoolInstalled())) {
-      const hasConfig = await isPortPoolConfigured(args.worktree.path);
-      if (hasConfig) {
-        const { runId, exit } = startScriptForLifecycle({
+    if (args.globalPortPoolEnabled) {
+      const [installed, hasConfig] = await Promise.all([
+        isPortPoolInstalled(),
+        isPortPoolConfigured(args.worktree.path),
+      ]);
+      if (installed && hasConfig) {
+        const { runId, exitCode } = await runStep({
           command: `port-pool release ${shellQuote(args.worktree.path)}`,
           scriptName: "port-pool-release",
+          slot: { kind: "portPool", phase: "release" },
           worktree: args.worktree,
           project: args.project,
           projectBranch: args.projectBranch,
           defaultBranch,
           webContents: args.webContents,
-          startedSlot: { kind: "portPool", phase: "release" },
-          startedProjectId: args.project.id,
-          startedWorktreeId: args.worktree.id,
         });
-        const code = await exit;
-        if (code !== 0) {
-          throw cleanupError("portPoolRelease", code, runId);
+        if (exitCode !== 0) {
+          throw cleanupError("portPoolRelease", exitCode, runId);
         }
       }
     }
 
     const teardownCommand = args.config?.scripts?.teardown?.trim();
     if (teardownCommand) {
-      const { runId, exit } = startScriptForLifecycle({
+      const { runId, exitCode } = await runStep({
         command: teardownCommand,
         scriptName: "teardown",
+        slot: { kind: "teardown" },
         worktree: args.worktree,
         project: args.project,
         projectBranch: args.projectBranch,
         defaultBranch,
         webContents: args.webContents,
-        startedSlot: { kind: "teardown" },
-        startedProjectId: args.project.id,
-        startedWorktreeId: args.worktree.id,
       });
-      const code = await exit;
-      if (code !== 0) {
-        throw cleanupError("teardown", code, runId);
+      if (exitCode !== 0) {
+        throw cleanupError("teardown", exitCode, runId);
       }
     }
   } finally {
@@ -172,8 +195,4 @@ function cleanupError(
   err.exitCode = exitCode;
   err.runId = runId;
   return err;
-}
-
-function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
 }
