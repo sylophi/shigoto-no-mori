@@ -604,6 +604,134 @@ async function seedDeeplyNested(): Promise<Manifest> {
   };
 }
 
+async function seedPortPoolBasic(): Promise<Manifest> {
+  const repo = join(REPOS, "port-pool-basic");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# port-pool-basic\n\nValid port-pool.config.json with two ports written into a single .env.\n",
+      ".gitignore": ".env\nnode_modules/\n",
+      "package.json": pkgJson("port-pool-basic", {
+        dev: 'echo "web=$PORT api=$API_PORT" && sleep 3600',
+      }),
+      "bun.lock": "# bun lockfile placeholder\n",
+      "port-pool.config.json":
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            portNames: ["web", "api"],
+            envFiles: {
+              ".env": {
+                PORT: "${web}",
+                API_PORT: "${api}",
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+    },
+    "Initial",
+  );
+  return {
+    name: "port-pool-basic",
+    path: repo,
+    purpose: "Valid port-pool config with two ports and one .env file",
+    tests: [
+      "Toggle 'Automatically use port-pool' on in Settings.",
+      "Create a worktree -- ScriptsSection shows Port-pool provision and Port-pool release rows.",
+      "Provision runs at create. Check the new worktree's .env: PORT and API_PORT are populated.",
+      "Run dev -- the echoed values match the .env.",
+      "Delete the worktree -- Port-pool release runs before remove. Allocations dropped from `port-pool list`.",
+      "Toggle off in Settings, then add the project again -- no Port-pool rows appear.",
+    ],
+  };
+}
+
+async function seedPortPoolMonorepo(): Promise<Manifest> {
+  const repo = join(REPOS, "port-pool-monorepo");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# port-pool-monorepo\n\npnpm workspaces with port-pool at the root and env files in two packages.\n",
+      ".gitignore": ".env\napps/*/.env\napps/*/.env.local\nnode_modules/\n",
+      "pnpm-workspace.yaml": "packages:\n  - 'apps/*'\n",
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+      "package.json": pkgJson("port-pool-monorepo", {
+        dev: "echo 'run pnpm --filter web dev or pnpm --filter api dev'",
+      }),
+      "apps/web/package.json": `${JSON.stringify({ name: "@ws/web", version: "0.0.0", scripts: { dev: 'echo "web on $PORT api=$API_URL"' } }, null, 2)}\n`,
+      "apps/api/package.json": `${JSON.stringify({ name: "@ws/api", version: "0.0.0", scripts: { dev: 'echo "api on $PORT db=$DATABASE_URL"' } }, null, 2)}\n`,
+      "port-pool.config.json":
+        JSON.stringify(
+          {
+            schemaVersion: 1,
+            portNames: ["web", "api", "db"],
+            envFiles: {
+              ".env": {
+                DB_PORT: "${db}",
+              },
+              "apps/web/.env.local": {
+                PORT: "${web}",
+                API_URL: "http://localhost:${api}",
+              },
+              "apps/api/.env": {
+                PORT: "${api}",
+                DATABASE_URL: "postgres://localhost:${db}/app",
+              },
+            },
+          },
+          null,
+          2,
+        ) + "\n",
+    },
+    "Initial",
+  );
+  return {
+    name: "port-pool-monorepo",
+    path: repo,
+    purpose:
+      "pnpm workspaces + port-pool managing three ports across three env files",
+    tests: [
+      "Create a worktree -- provision populates root .env plus apps/web/.env.local plus apps/api/.env.",
+      "Verify the same ${api} value appears in apps/web/.env.local API_URL and apps/api/.env PORT.",
+      "Lifecycle rows render in order: Setup (if configured), Port-pool provision, Port-pool release, Teardown (if configured).",
+      "Delete worktree -- release runs first, then removeWorktree.",
+    ],
+  };
+}
+
+async function seedPortPoolInvalid(): Promise<Manifest> {
+  const repo = join(REPOS, "port-pool-invalid-config");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# port-pool-invalid-config\n\nport-pool.config.json missing schemaVersion. Integration should detect as inactive.\n",
+      "port-pool.config.json":
+        JSON.stringify({ portNames: ["foo"] }, null, 2) + "\n",
+    },
+    "Initial",
+  );
+  return {
+    name: "port-pool-invalid-config",
+    path: repo,
+    purpose:
+      "port-pool.config.json without schemaVersion -- gate should reject",
+    tests: [
+      "Toggle 'Automatically use port-pool' on. Add this project.",
+      "ScriptsSection shows NO Port-pool rows.",
+      "Create a worktree -- provision does not run (no toast, no console entries).",
+      "Confirms the loose schema check (schemaVersion field presence) is enforced.",
+    ],
+  };
+}
+
 // ─── Orchestration ────────────────────────────────────────────────────────
 
 async function writeReadme(manifests: Manifest[]): Promise<void> {
@@ -718,6 +846,9 @@ async function main(): Promise<void> {
     { name: "path with spaces", run: seedPathSpaces },
     { name: "プロジェクト", run: seedUnicodePath },
     { name: "deeply-nested", run: seedDeeplyNested },
+    { name: "port-pool-basic", run: seedPortPoolBasic },
+    { name: "port-pool-monorepo", run: seedPortPoolMonorepo },
+    { name: "port-pool-invalid-config", run: seedPortPoolInvalid },
   ];
 
   const results = await Promise.allSettled(seeders.map((s) => s.run()));
