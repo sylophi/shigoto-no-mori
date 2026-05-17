@@ -387,6 +387,11 @@ export const RunPackageScriptPayloadSchema = z.object({
   scriptName: z.string().min(1),
 });
 
+export const SetLaunchToolsEnabledPayloadSchema = z.object({
+  enabled: z.boolean(),
+  projectId: z.string().optional(),
+});
+
 export const CancelScriptPayloadSchema = z.object({
   runId: z.string(),
 });

@@ -12,6 +12,15 @@ function subscribe(channel: string) {
     return () => ipcRenderer.off(channel, listener);
   };
 }
+
+// Subscribe with a typed payload from main → renderer.
+function subscribeWith<T>(channel: string) {
+  return (handler: (payload: T) => void): (() => void) => {
+    const listener = (_e: unknown, payload: T) => handler(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.off(channel, listener);
+  };
+}
 import type {
   BranchList,
   CreateWorktreeResult,
@@ -152,6 +161,17 @@ const api = {
   },
   nav: {
     onOpenSettings: subscribe(CHANNELS.NavOpenSettings),
+    onLaunchById: subscribeWith<string>(CHANNELS.LaunchById),
+  },
+  menu: {
+    setLaunchToolsEnabled: (
+      enabled: boolean,
+      projectId?: string,
+    ): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.MenuSetLaunchToolsEnabled, {
+        enabled,
+        projectId,
+      }),
   },
   window: {
     onFocused: subscribe(CHANNELS.WindowFocused),
@@ -179,14 +199,7 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ScriptsRun, input),
     cancel: (runId: string): Promise<{ cancelled: boolean }> =>
       ipcRenderer.invoke(CHANNELS.ScriptsCancel, { runId }),
-    onEvent: (handler: (event: ScriptEvent) => void): (() => void) => {
-      const listener = (_event: unknown, payload: ScriptEvent) =>
-        handler(payload);
-      ipcRenderer.on(CHANNELS.ScriptsEvent, listener);
-      return () => {
-        ipcRenderer.off(CHANNELS.ScriptsEvent, listener);
-      };
-    },
+    onEvent: subscribeWith<ScriptEvent>(CHANNELS.ScriptsEvent),
   },
   launchers: {
     detected: (): Promise<DetectedLauncher[]> =>

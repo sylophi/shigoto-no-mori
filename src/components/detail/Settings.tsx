@@ -163,7 +163,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
     <>
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-10">
-          <AboutSection />
+          <VersionSection />
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
@@ -402,10 +402,10 @@ function ToggleRow({
   );
 }
 
-function AboutSection() {
+function VersionSection() {
   return (
     <section className="space-y-3">
-      <SectionHeading className="mb-1">About</SectionHeading>
+      <SectionHeading className="mb-1">Version</SectionHeading>
       <div className="font-mono text-sm select-text">
         {__APP_VERSION__}{" "}
         <span className="text-muted-foreground">({__APP_COMMIT__})</span>

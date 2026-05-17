@@ -9,8 +9,78 @@ import {
   type BrowserWindow,
 } from "electron";
 import { CHANNELS } from "@shared/channels";
+import { getLaunchersForProject } from "./ipc/launchers";
 
 const isMac = process.platform === "darwin";
+
+// ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
+const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
+
+interface LaunchToolEntry {
+  id: string;
+  label: string;
+}
+
+// Sticky entries for the File menu's ⌘1..⌘9. Computed in main from the same
+// ordering source as LauncherRow's buttons. The click handler sends the id
+// (not the index) so the renderer can't drift out of sync with the menu.
+let currentLaunchToolEntries: LaunchToolEntry[] = [];
+let currentLaunchToolsEnabled = false;
+
+function entriesEqual(a: LaunchToolEntry[], b: LaunchToolEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].label !== b[i].label) return false;
+  }
+  return true;
+}
+
+export async function setLaunchToolsEnabled(
+  enabled: boolean,
+  projectId?: string,
+): Promise<void> {
+  let nextEntries = currentLaunchToolEntries;
+  if (enabled && projectId) {
+    try {
+      const entries = await getLaunchersForProject(projectId);
+      nextEntries = entries
+        .slice(0, MAX_LAUNCH_TOOL_SHORTCUTS)
+        .map((e) => ({ id: e.id, label: e.label }));
+    } catch (err) {
+      console.warn(
+        `setLaunchToolsEnabled: lookup failed for ${projectId}`,
+        err,
+      );
+    }
+  }
+  const unchanged =
+    enabled === currentLaunchToolsEnabled &&
+    entriesEqual(nextEntries, currentLaunchToolEntries);
+  if (unchanged) return;
+  currentLaunchToolsEnabled = enabled;
+  currentLaunchToolEntries = nextEntries;
+  buildAppMenu();
+}
+
+function launchToolMenuItems(): MenuItemConstructorOptions[] {
+  if (currentLaunchToolEntries.length === 0) return [];
+  return [
+    { type: "separator" },
+    ...currentLaunchToolEntries.map(
+      (entry, i): MenuItemConstructorOptions => ({
+        label: entry.label,
+        accelerator: `CmdOrCtrl+${i + 1}`,
+        enabled: currentLaunchToolsEnabled,
+        click: (_item, focusedWindow) => {
+          (focusedWindow as BrowserWindow | undefined)?.webContents.send(
+            CHANNELS.LaunchById,
+            entry.id,
+          );
+        },
+      }),
+    ),
+  ];
+}
 
 export function buildAppMenu(): void {
   const template: MenuItemConstructorOptions[] = [
@@ -54,6 +124,7 @@ export function buildAppMenu(): void {
             );
           },
         },
+        ...launchToolMenuItems(),
         ...(isMac
           ? ([] satisfies MenuItemConstructorOptions[])
           : ([

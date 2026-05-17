@@ -74,6 +74,37 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
   );
 }
 
+// Authoritative ordering used by both the LauncherRow buttons and the File
+// menu ⌘1..⌘9 entries. Sort by rolling-window use count (descending),
+// alphabetical by label as the tiebreaker so first-time users see a
+// predictable A→Z list instead of the curated category order. The renderer
+// query has a staleTime and useLaunch doesn't invalidate it, so the visible
+// order stays put while the user interacts — only re-sorts when they
+// navigate away and back (or the cache goes stale).
+export async function getLaunchersForProject(
+  projectId: string,
+): Promise<LauncherEntry[]> {
+  const project = findProjectOrThrow(projectId);
+  const [detected, projectConfig, globalConfig] = await Promise.all([
+    detectApps(),
+    readShigomoriConfig(project.id),
+    readGlobalConfig(),
+  ]);
+
+  const entries: LauncherEntry[] = [
+    ...detectedEntries(detected).filter((e) => e.available),
+    ...customEntriesFrom(globalConfig.launchers),
+    ...customEntriesFrom(projectConfig?.launchers),
+  ];
+
+  const log = readKey<UseLogMap>(USE_LOG_KEY, {});
+  const now = Date.now();
+  return entries.toSorted((a, b) => {
+    const diff = recentScore(log, b.id, now) - recentScore(log, a.id, now);
+    return diff !== 0 ? diff : a.label.localeCompare(b.label);
+  });
+}
+
 export function registerLauncherHandlers(): void {
   ipcMain.handle(
     CHANNELS.ShigomoriRead,
@@ -99,35 +130,7 @@ export function registerLauncherHandlers(): void {
       rawPayload: unknown,
     ): Promise<{ entries: LauncherEntry[] }> => {
       const { projectId } = ReadShigomoriPayloadSchema.parse(rawPayload);
-      const project = findProjectOrThrow(projectId);
-
-      const [detected, projectConfig, globalConfig] = await Promise.all([
-        detectApps(),
-        readShigomoriConfig(project.id),
-        readGlobalConfig(),
-      ]);
-
-      const entries: LauncherEntry[] = [
-        ...detectedEntries(detected).filter((e) => e.available),
-        ...customEntriesFrom(globalConfig.launchers),
-        ...customEntriesFrom(projectConfig?.launchers),
-      ];
-
-      // Sort by rolling-window use count (descending), alphabetical by label
-      // as the tiebreaker so first-time users see a predictable A→Z list
-      // instead of the curated category order from launchers.ts. The renderer
-      // query has a staleTime and useLaunch doesn't invalidate it, so the
-      // visible order stays put while the user interacts — only re-sorts
-      // when they navigate away and back (or the cache goes stale).
-      const log = readKey<UseLogMap>(USE_LOG_KEY, {});
-      const now = Date.now();
-      return {
-        entries: entries.toSorted((a, b) => {
-          const diff =
-            recentScore(log, b.id, now) - recentScore(log, a.id, now);
-          return diff !== 0 ? diff : a.label.localeCompare(b.label);
-        }),
-      };
+      return { entries: await getLaunchersForProject(projectId) };
     },
   );
 

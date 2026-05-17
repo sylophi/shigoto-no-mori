@@ -44,6 +44,8 @@ export const CHANNELS = {
   PaletteToggle: "palette:toggle",
   PaletteAddProject: "palette:addProject",
   NavOpenSettings: "nav:openSettings",
+  LaunchById: "launch:byId",
+  MenuSetLaunchToolsEnabled: "menu:setLaunchToolsEnabled",
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
 } as const;
