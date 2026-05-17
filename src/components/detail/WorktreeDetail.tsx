@@ -111,7 +111,16 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
   const busy = deleteMutation.isPending;
   const inLimbo = cleanupRunning || busy;
 
+  // Tracks the flags from the most recent delete attempt so that the
+  // retry/skip affordances on a cleanup failure carry the user's
+  // original intent (notably: a force-delete that hit a cleanup error
+  // should stay force on retry/skip, since the worktree is still dirty).
+  const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
+
   const runDelete = (opts: { force?: boolean; skipCleanup?: boolean } = {}) => {
+    if (!opts.skipCleanup) {
+      lastDeleteOptsRef.current = { force: opts.force };
+    }
     setCleanupError(null);
     deleteMutation.mutate(
       {
@@ -147,8 +156,9 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
     deleteMutation.reset();
   };
 
-  const handleRetryCleanup = () => runDelete();
-  const handleSkipCleanup = () => runDelete({ skipCleanup: true });
+  const handleRetryCleanup = () => runDelete(lastDeleteOptsRef.current);
+  const handleSkipCleanup = () =>
+    runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true });
   const handleCancelCleanupError = () => setCleanupError(null);
   const handleCancelCleanup = () => {
     if (teardownState.runId) {

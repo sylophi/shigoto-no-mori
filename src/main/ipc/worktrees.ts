@@ -107,12 +107,13 @@ export function registerWorktreeHandlers(): void {
 
       const global = await readGlobalConfig();
 
-      // Cleanup phase: force implies skipCleanup. Electron's IPC strips
-      // structured properties off thrown errors, so we surface cleanup
-      // failures as a returned discriminated result instead -- the
-      // renderer's UI uses it to drive the retry/skip affordance.
-      const shouldSkipCleanup = force === true || skipCleanup === true;
-      if (!shouldSkipCleanup) {
+      // Cleanup runs even on force-delete (force only bypasses the
+      // uncommitted-changes guard, not teardown / port-pool release).
+      // Electron's IPC strips structured properties off thrown errors,
+      // so we surface cleanup failures as a returned discriminated
+      // result instead -- the renderer's UI uses it to drive the
+      // retry/skip affordance.
+      if (skipCleanup !== true) {
         const [config, identities] = await Promise.all([
           readShigomoriConfig(project.id).catch(() => null),
           listWorktreeIdentities(project.id, project.path),
