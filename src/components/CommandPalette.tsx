@@ -43,7 +43,7 @@ export function CommandPalette() {
   const { open, mode, setOpen, toggle, openIn } = useCommandPalette();
 
   // Both shortcuts are wired via native menu accelerators in src/main/menu.ts
-  // — View → Command palette (⌘P) and File → Add project… (⌘N).
+  // — View → Command palette (⌘⇧P, also ⌘P) and File → Add project… (⌘N).
   useEffect(() => window.api.palette.onToggle(toggle), [toggle]);
   useEffect(
     () => window.api.palette.onAddProject(() => openIn("add-project")),
@@ -85,12 +85,24 @@ export function CommandPalette() {
 function BrowseView({ onAddProject }: { onAddProject: () => void }) {
   const { setOpen } = useCommandPalette();
   const { data: projects = [] } = useProjects();
+  const [search, setSearch] = useState("");
 
   const worktreeQueries = useAllProjectWorktrees(projects, true);
   const allWorktrees = projects.flatMap((project, i) => {
     const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
     return trees.map((tree) => ({ project, tree }));
   });
+
+  // Cap each group when there's no query so the palette doesn't dump the
+  // entire forest on you. Typing expands to the full set (cmdk filters).
+  const LIST_CAP = 3;
+  const isFiltering = search.trim().length > 0;
+  const visibleWorktrees = isFiltering
+    ? allWorktrees
+    : allWorktrees.slice(0, LIST_CAP);
+  const visibleProjects = isFiltering ? projects : projects.slice(0, LIST_CAP);
+  const hiddenWorktreeCount = allWorktrees.length - visibleWorktrees.length;
+  const hiddenProjectCount = projects.length - visibleProjects.length;
 
   // CommandPalette is rendered as a sibling of RouterProvider in App.tsx, so
   // `useNavigate` here has no router context and silently no-ops. Use the
@@ -107,6 +119,8 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
       <Command.Input
         // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
         autoFocus
+        value={search}
+        onValueChange={setSearch}
         placeholder="Search worktrees, switch project, run a command…"
         className="w-full border-b border-border bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
       />
@@ -115,12 +129,12 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
           Nothing here.
         </Command.Empty>
 
-        {allWorktrees.length > 0 && (
+        {visibleWorktrees.length > 0 && (
           <Command.Group
             heading="Worktrees"
             className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
           >
-            {allWorktrees.map(({ project, tree }) => (
+            {visibleWorktrees.map(({ project, tree }) => (
               <Command.Item
                 key={tree.id}
                 value={`${tree.name} ${tree.branch} ${project.name} ${tree.path}`}
@@ -146,6 +160,11 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
                 </span>
               </Command.Item>
             ))}
+            {hiddenWorktreeCount > 0 && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
+                +{hiddenWorktreeCount} more — type to search
+              </div>
+            )}
           </Command.Group>
         )}
 
@@ -153,7 +172,7 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
           heading="Projects"
           className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:tracking-wide [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase"
         >
-          {projects.map((project) => (
+          {visibleProjects.map((project) => (
             <Command.Item
               key={`new-${project.id}`}
               value={`new worktree ${project.name}`}
@@ -173,6 +192,11 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
               </span>
             </Command.Item>
           ))}
+          {hiddenProjectCount > 0 && (
+            <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
+              +{hiddenProjectCount} more — type to search
+            </div>
+          )}
           <Command.Item
             value="add project local folder browse"
             onSelect={() => onAddProject()}

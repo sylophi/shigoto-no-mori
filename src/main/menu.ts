@@ -87,7 +87,20 @@ export function buildAppMenu(): void {
       submenu: [
         {
           label: "Command palette",
+          accelerator: "CmdOrCtrl+Shift+P",
+          click: (_item, focusedWindow) => {
+            (focusedWindow as BrowserWindow | undefined)?.webContents.send(
+              CHANNELS.PaletteToggle,
+            );
+          },
+        },
+        // Hidden synonym so ⌘P also opens the palette. Electron keeps the
+        // accelerator live for hidden items on macOS; for cross-platform
+        // reliability we'd need a renderer-side listener.
+        {
+          label: "Command palette (alt)",
           accelerator: "CmdOrCtrl+P",
+          visible: false,
           click: (_item, focusedWindow) => {
             (focusedWindow as BrowserWindow | undefined)?.webContents.send(
               CHANNELS.PaletteToggle,
