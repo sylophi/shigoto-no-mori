@@ -19,7 +19,9 @@ export function registerScriptHandlers(): void {
       const project = findProjectOrThrow(projectId);
 
       const config = await readShigomoriConfig(project.id);
-      const command = config?.scripts?.[script];
+      // scripts object only has user-configured setup/teardown keys;
+      // port-pool-* phases are handled by lifecycle orchestration in main.
+      const command = config?.scripts?.[script as "setup" | "teardown"];
       if (!command || command.trim() === "") {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }

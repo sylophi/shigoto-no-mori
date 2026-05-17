@@ -58,7 +58,7 @@ export function registerWorktreeHandlers(): void {
         worktree.path,
         config?.carryOver ?? [],
       );
-      return { worktree, carryOver };
+      return { worktree, carryOver, scriptFailures: [] };
     },
   );
 
@@ -87,7 +87,7 @@ export function registerWorktreeHandlers(): void {
       // Any package script still running here would be holding the
       // worktree as its cwd; reap before git rips the directory.
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, force);
+      await removeWorktree(project.path, target.path, force ?? false);
 
       // `git branch -D` refuses if the branch is still in use elsewhere,
       // so we don't need to guard against that case ourselves. Defaults
