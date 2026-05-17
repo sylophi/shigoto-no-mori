@@ -150,7 +150,7 @@ function SidebarFooter() {
         type="button"
         onClick={() => openIn("browse")}
         aria-label="Command palette"
-        title="Command palette (⌘T)"
+        title="Command palette (⌘⇧P)"
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Search className="size-3.5" />
