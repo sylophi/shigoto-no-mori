@@ -303,14 +303,12 @@ function ConfigureForm({
             <ScriptField
               id="script-setup"
               label="Setup"
-              placeholder="bun install"
               value={form.setup}
               onChange={(setup) => setForm({ ...form, setup })}
             />
             <ScriptField
               id="script-teardown"
               label="Teardown"
-              placeholder="rm -rf node_modules"
               value={form.teardown}
               onChange={(teardown) => setForm({ ...form, teardown })}
             />
@@ -387,18 +385,11 @@ function ConfigureForm({
 interface ScriptFieldProps {
   id: string;
   label: string;
-  placeholder: string;
   value: string;
   onChange: (value: string) => void;
 }
 
-function ScriptField({
-  id,
-  label,
-  placeholder,
-  value,
-  onChange,
-}: ScriptFieldProps) {
+function ScriptField({ id, label, value, onChange }: ScriptFieldProps) {
   return (
     <div className="space-y-1.5">
       <label htmlFor={id} className="block text-sm font-medium">
@@ -408,7 +399,6 @@ function ScriptField({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
         rows={value.includes("\n") ? 4 : 2}
         className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
       />

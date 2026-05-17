@@ -303,6 +303,10 @@ export const GlobalConfigSchema = z.object({
   // by another worktree). Off by default; matches git's native
   // `git worktree remove` behavior.
   deleteBranchOnRemove: z.boolean().optional(),
+  // When true, adding a project with a package.json seeds its setup
+  // script with `<detected-pm> install`. Only fires at project-add
+  // time; existing projects are untouched.
+  autoPopulateInstall: z.boolean().optional(),
 });
 
 export const WriteGlobalConfigPayloadSchema = z.object({

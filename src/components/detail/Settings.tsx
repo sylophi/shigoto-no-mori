@@ -68,6 +68,7 @@ interface FormState {
   theme: Theme;
   launchers: LauncherCommand[];
   deleteBranchOnRemove: boolean;
+  autoPopulateInstall: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
@@ -75,6 +76,7 @@ function fromConfig(config: GlobalConfig): FormState {
     theme: config.theme ?? "system",
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
+    autoPopulateInstall: config.autoPopulateInstall ?? false,
   };
 }
 
@@ -90,6 +92,8 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
+    // Default is false; only persist when explicitly enabled.
+    autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
   };
 }
 
@@ -224,6 +228,18 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               }
               label="Delete branch when removing worktree"
               description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
+            />
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading className="mb-1">Integrations</SectionHeading>
+            <ToggleRow
+              checked={form.autoPopulateInstall}
+              onCheckedChange={(v) =>
+                setForm({ ...form, autoPopulateInstall: v })
+              }
+              label="Auto-populate install command"
+              description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Applies only at project-add time; existing projects are untouched."
             />
           </section>
 
