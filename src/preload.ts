@@ -155,6 +155,8 @@ const api = {
   shell: {
     openPath: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
+    openExternal: (url: string): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.ShellOpenExternal, { url }),
     showItemInFolder: (path: string): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
   },

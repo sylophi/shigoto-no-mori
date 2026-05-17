@@ -42,6 +42,7 @@ export const CHANNELS = {
   GlobalConfigRead: "globalConfig:read",
   GlobalConfigWrite: "globalConfig:write",
   ShellOpenPath: "shell:openPath",
+  ShellOpenExternal: "shell:openExternal",
   ShellShowItemInFolder: "shell:showItemInFolder",
   PaletteToggle: "palette:toggle",
   PaletteAddProject: "palette:addProject",

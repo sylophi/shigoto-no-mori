@@ -2,7 +2,10 @@
 // in the user's default app and reveal items in the OS file manager.
 import { ipcMain, shell } from "electron";
 import { CHANNELS } from "@shared/channels";
-import { ShellPathPayloadSchema } from "@shared/schemas";
+import {
+  ShellOpenExternalPayloadSchema,
+  ShellPathPayloadSchema,
+} from "@shared/schemas";
 
 export function registerShellHandlers(): void {
   ipcMain.handle(
@@ -11,6 +14,14 @@ export function registerShellHandlers(): void {
       const { path } = ShellPathPayloadSchema.parse(rawPayload);
       const message = await shell.openPath(path);
       if (message) throw new Error(message);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.ShellOpenExternal,
+    async (_event, rawPayload: unknown) => {
+      const { url } = ShellOpenExternalPayloadSchema.parse(rawPayload);
+      await shell.openExternal(url);
     },
   );
 

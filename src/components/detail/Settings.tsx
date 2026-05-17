@@ -245,17 +245,26 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
                 setForm({ ...form, autoPopulateInstall: v })
               }
               label="Auto-populate install command"
-              description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Applies only at project-add time; existing projects are untouched."
+              description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
             />
             <ToggleRow
               checked={form.portPool}
               onCheckedChange={(v) => setForm({ ...form, portPool: v })}
               disabled={!portPoolInstalled}
-              label="Port-pool integration"
+              label="Automatically use port-pool"
               description={
-                portPoolInstalled
-                  ? "When a project has a port-pool.config.json, run port-pool provision after setup at create and port-pool release before teardown at delete. Runs show up under Scripts."
-                  : "Install the port-pool CLI to enable this integration."
+                portPoolInstalled ? (
+                  <>
+                    Allocates ports for new worktrees and releases them on
+                    delete. Activates when a project has a
+                    port-pool.config.json. <PortPoolLink />
+                  </>
+                ) : (
+                  <>
+                    Install <PortPoolLink>port-pool</PortPoolLink> to enable
+                    this integration.
+                  </>
+                )
               }
             />
           </section>
@@ -409,6 +418,24 @@ function AppearanceSection({
   );
 }
 
+function PortPoolLink({ children }: { children?: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.api.shell
+          .openExternal("https://github.com/sylophi/port-pool")
+          .catch((err) => notifyError("Couldn't open port-pool", err));
+      }}
+      className="underline underline-offset-2 hover:text-foreground"
+    >
+      {children ?? "Learn more"}
+    </button>
+  );
+}
+
 function ToggleRow({
   checked,
   onCheckedChange,
@@ -419,7 +446,7 @@ function ToggleRow({
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
   label: string;
-  description?: string;
+  description?: React.ReactNode;
   disabled?: boolean;
 }) {
   return (
