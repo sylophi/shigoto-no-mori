@@ -8,6 +8,7 @@ import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
 import { killAllScripts, markShuttingDown } from "./main/scripts";
+import { applyUserShellPath } from "./main/shellPath";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -79,6 +80,9 @@ nativeTheme.on("updated", () => {
 });
 
 app.on("ready", async () => {
+  // Packaged launches inherit launchd's stripped PATH; dev launches start
+  // from the user's terminal and already have the right one.
+  if (app.isPackaged) await applyUserShellPath();
   await ensureShigomoriRoot();
   buildAppMenu();
   createWindow();
