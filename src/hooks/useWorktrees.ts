@@ -116,6 +116,7 @@ interface DeleteWorktreeInput {
   projectId: string;
   worktreeId: string;
   force?: boolean;
+  skipCleanup?: boolean;
 }
 
 export function useDeleteWorktree() {

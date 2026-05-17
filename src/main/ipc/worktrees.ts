@@ -20,6 +20,7 @@ import {
   findWorktreeIdentityOrThrow,
   getCommitDiff,
   getWorktreeDiff,
+  listWorktreeIdentities,
   listWorktrees,
   removeWorktree,
   renameBranch,
@@ -29,6 +30,7 @@ import { findProjectOrThrow } from "../projects";
 import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
+import { runDeleteCleanup } from "../worktreeLifecycle";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -64,8 +66,8 @@ export function registerWorktreeHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.WorktreesDelete,
-    async (_event, rawPayload: unknown): Promise<void> => {
-      const { projectId, worktreeId, force } =
+    async (event, rawPayload: unknown): Promise<void> => {
+      const { projectId, worktreeId, force, skipCleanup } =
         DeleteWorktreePayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       const target = await findWorktreeIdentityOrThrow(
@@ -84,8 +86,34 @@ export function registerWorktreeHandlers(): void {
           );
         }
       }
-      // Any package script still running here would be holding the
-      // worktree as its cwd; reap before git rips the directory.
+
+      // Cleanup phase: force implies skipCleanup. Throws CleanupError
+      // on non-zero cleanup script exits -- the renderer's UI handles
+      // retry/skip.
+      const shouldSkipCleanup = force === true || skipCleanup === true;
+      if (!shouldSkipCleanup) {
+        const shigomori = await readShigomoriConfig(project.id).catch(
+          () => null,
+        );
+        const global = await readGlobalConfig();
+        const identities = await listWorktreeIdentities(
+          project.id,
+          project.path,
+        );
+        const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+        await runDeleteCleanup({
+          project,
+          worktree: target,
+          projectBranch,
+          config: shigomori,
+          globalPortPoolEnabled: global.portPool === true,
+          skipCleanup: false,
+          webContents: event.sender,
+        });
+      }
+
+      // Reap any package scripts still holding the worktree as cwd,
+      // then remove. Same as before.
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force ?? false);
 
@@ -93,14 +121,14 @@ export function registerWorktreeHandlers(): void {
       // so we don't need to guard against that case ourselves. Defaults
       // to true: if you're done with the worktree, you're done with the
       // local branch. (Remote branches are never touched.)
-      const config = await readGlobalConfig();
-      const shouldDeleteBranch = config.deleteBranchOnRemove ?? true;
+      const shouldDeleteBranch =
+        (await readGlobalConfig()).deleteBranchOnRemove ?? true;
       if (shouldDeleteBranch && isRealBranch(target.branch)) {
         try {
           await deleteLocalBranch(project.path, target.branch);
         } catch {
           // Branch may be shared with another worktree or be the primary's
-          // HEAD — leaving it behind is the safe fallback.
+          // HEAD -- leaving it behind is the safe fallback.
         }
       }
     },

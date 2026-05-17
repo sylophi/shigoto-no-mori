@@ -76,6 +76,7 @@ const api = {
       projectId: string;
       worktreeId: string;
       force?: boolean;
+      skipCleanup?: boolean;
     }): Promise<void> => ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
     renameBranch: (input: {
       projectId: string;
