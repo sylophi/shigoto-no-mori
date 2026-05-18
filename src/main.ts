@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
 import path from "node:path";
-import started from "electron-squirrel-startup";
 import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./main/bootstrap";
@@ -14,11 +13,6 @@ import {
   markShuttingDown,
 } from "./main/scripts";
 import { applyUserShellPath } from "./main/shellPath";
-
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (started) {
-  app.quit();
-}
 
 registerIpcHandlers();
 
