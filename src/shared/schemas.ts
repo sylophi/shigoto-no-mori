@@ -293,7 +293,7 @@ export const ShigomoriConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   portBase: z.number().int().positive().optional(),
   defaultBranch: z.string().min(1),
-  // Free-form per-worktree notes, keyed by Worktree.name (directory basename).
+  // Free-form per-worktree notes, keyed by Worktree.id (the path hash).
   notes: z.record(z.string(), z.string()).optional(),
   carryOver: z.array(CarryOverEntrySchema).optional(),
 });

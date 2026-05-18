@@ -420,7 +420,7 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
   const { data: resolvedDefaultBranch } = useDefaultBranch(worktree.projectId);
   const write = useShigomoriWrite();
 
-  const saved = config?.notes?.[worktree.name] ?? "";
+  const saved = config?.notes?.[worktree.id] ?? "";
   const [draft, setDraft] = useState(saved);
   const [hydratedFor, setHydratedFor] = useState<string | null>(null);
 
@@ -440,9 +440,9 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
     };
     const nextNotes = { ...config?.notes };
     if (next.trim().length === 0) {
-      delete nextNotes[worktree.name];
+      delete nextNotes[worktree.id];
     } else {
-      nextNotes[worktree.name] = next;
+      nextNotes[worktree.id] = next;
     }
     write.mutate({
       projectId: worktree.projectId,
