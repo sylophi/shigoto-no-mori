@@ -1,18 +1,5 @@
 import manifest from "material-icon-theme/dist/material-icons.json";
 
-const iconUrlByName: Record<string, string> = (() => {
-  const byPath = import.meta.glob(
-    "../../node_modules/material-icon-theme/icons/*.svg",
-    { query: "?url", import: "default", eager: true },
-  ) as Record<string, string>;
-  const byName: Record<string, string> = {};
-  for (const [path, url] of Object.entries(byPath)) {
-    const match = path.match(/\/([^/]+)\.svg$/);
-    if (match) byName[match[1]] = url;
-  }
-  return byName;
-})();
-
 type LightVariants = {
   fileExtensions?: Record<string, string>;
   fileNames?: Record<string, string>;
@@ -121,6 +108,12 @@ export function resolveFolderIcon(name: string, expanded: boolean): string {
   return map[lower] ?? (expanded ? m.folderExpanded : m.folder);
 }
 
-export function iconUrl(name: string): string | undefined {
-  return iconUrlByName[name];
+// Icons live in public/material-icons/ (synced from node_modules by
+// scripts/copy-material-icons.mjs). Anchoring at `import.meta.env.BASE_URL`
+// matters for packaged Electron: electron-forge's Vite plugin builds with
+// `base: './'` so the renderer works under file://, and a leading-slash
+// path would resolve to the filesystem root instead. In dev BASE_URL is
+// "/" so the URL is "/material-icons/<name>.svg" as before.
+export function iconUrl(name: string): string {
+  return `${import.meta.env.BASE_URL}material-icons/${name}.svg`;
 }

@@ -25,11 +25,9 @@ export function MaterialIcon({
     kind === "file"
       ? resolveFileIcon(name, light)
       : resolveFolderIcon(name, expanded);
-  const url = iconUrl(iconName);
-  if (!url) return null;
   return (
     <img
-      src={url}
+      src={iconUrl(iconName)}
       alt=""
       draggable={false}
       className={cn("size-4 shrink-0 select-none", className)}
