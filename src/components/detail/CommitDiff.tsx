@@ -26,15 +26,15 @@ const DIFF_STYLE = {
 } as React.CSSProperties;
 
 export function CommitDiff() {
-  const { projectId, worktreeName, hash } = commitDiffRoute.useParams();
+  const { projectId, worktreeId, hash } = commitDiffRoute.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [] } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.name === worktreeName);
+  const worktree = worktrees.find((w) => w.id === worktreeId);
 
   const goBack = () =>
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeName",
-      params: { projectId, worktreeName },
+      to: "/projects/$projectId/worktrees/$worktreeId",
+      params: { projectId, worktreeId },
     });
 
   if (!worktree) {

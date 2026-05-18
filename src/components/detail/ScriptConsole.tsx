@@ -22,18 +22,18 @@ import { ScriptStatusBadge } from "./ScriptStatusBadge";
 export function ScriptConsole() {
   const {
     projectId,
-    worktreeName,
+    worktreeId,
     scriptKey: rawKey,
   } = scriptConsoleRoute.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [] } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.name === worktreeName);
+  const worktree = worktrees.find((w) => w.id === worktreeId);
   const slot = paramToSlot(rawKey);
 
   const goBack = () =>
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeName",
-      params: { projectId, worktreeName },
+      to: "/projects/$projectId/worktrees/$worktreeId",
+      params: { projectId, worktreeId },
     });
 
   if (!worktree || !slot) {

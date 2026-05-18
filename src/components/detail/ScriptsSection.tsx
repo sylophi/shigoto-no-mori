@@ -235,10 +235,10 @@ function ScriptRow({ worktree, slot, label, command, isLast }: ScriptRowProps) {
 
   const openConsole = () =>
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
       params: {
         projectId: worktree.projectId,
-        worktreeName: worktree.name,
+        worktreeId: worktree.id,
         scriptKey: slotToParam(slot),
       },
     });

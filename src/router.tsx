@@ -124,8 +124,8 @@ const manageBranchesRoute = createRoute({
 // Force remount on params change so refetchOnMount: "always" fires
 // (TanStack Router keeps the same instance and just re-renders otherwise).
 function KeyedWorktreeDetail() {
-  const { projectId, worktreeName } = worktreeRoute.useParams();
-  return <WorktreeDetail key={`${projectId}:${worktreeName}`} />;
+  const { projectId, worktreeId } = worktreeRoute.useParams();
+  return <WorktreeDetail key={`${projectId}:${worktreeId}`} />;
 }
 
 function KeyedNewWorktree() {
@@ -145,25 +145,25 @@ function KeyedManageBranches() {
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeName",
+  path: "/projects/$projectId/worktrees/$worktreeId",
   component: KeyedWorktreeDetail,
 });
 
 const scriptConsoleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+  path: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
   component: ScriptConsole,
 });
 
 const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeName/diff",
+  path: "/projects/$projectId/worktrees/$worktreeId/diff",
   component: WorktreeDiff,
 });
 
 const commitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeName/commits/$hash",
+  path: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
   component: CommitDiff,
 });
 

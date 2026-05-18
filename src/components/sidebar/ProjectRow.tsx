@@ -61,8 +61,8 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
         base: defaultBranch,
       });
       void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeName",
-        params: { projectId: project.id, worktreeName: worktree.name },
+        to: "/projects/$projectId/worktrees/$worktreeId",
+        params: { projectId: project.id, worktreeId: worktree.id },
       });
     } catch (err) {
       if (!create.isError) {
