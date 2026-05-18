@@ -109,9 +109,11 @@ export function resolveFolderIcon(name: string, expanded: boolean): string {
 }
 
 // Icons live in public/material-icons/ (synced from node_modules by
-// scripts/copy-material-icons.mjs). Vite serves public/ at the site root
-// in both dev and prod, so this URL is stable across environments and
-// doesn't require Vite to generate per-icon ESM wrappers.
+// scripts/copy-material-icons.mjs). Anchoring at `import.meta.env.BASE_URL`
+// matters for packaged Electron: electron-forge's Vite plugin builds with
+// `base: './'` so the renderer works under file://, and a leading-slash
+// path would resolve to the filesystem root instead. In dev BASE_URL is
+// "/" so the URL is "/material-icons/<name>.svg" as before.
 export function iconUrl(name: string): string {
-  return `/material-icons/${name}.svg`;
+  return `${import.meta.env.BASE_URL}material-icons/${name}.svg`;
 }

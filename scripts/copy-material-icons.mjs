@@ -42,12 +42,28 @@ async function main() {
   const svgs = srcFiles.filter((f) => f.endsWith(".svg"));
   const destSet = new Set(destFiles);
 
+  // The manifest references some icons by their bare name even though only
+  // a `<name>.clone.svg` exists on disk (the icon-theme's convention for
+  // derived/styled variants). Resolve each bare name to either its plain
+  // file or its `.clone` fallback so callers can request a stable
+  // `<name>.svg` URL without 404s.
+  const bare = new Set(svgs.filter((f) => !f.endsWith(".clone.svg")));
+  const planned = new Map(); // outputName -> sourceName
+  for (const f of svgs) planned.set(f, f);
+  for (const f of svgs) {
+    if (!f.endsWith(".clone.svg")) continue;
+    const aliasName = f.slice(0, -".clone.svg".length) + ".svg";
+    if (bare.has(aliasName)) continue;
+    if (planned.has(aliasName)) continue;
+    planned.set(aliasName, f);
+  }
+
   let copied = 0;
   let removed = 0;
   await Promise.all(
-    svgs.map(async (name) => {
-      const from = join(SRC, name);
-      const to = join(DEST, name);
+    [...planned].map(async ([out, src]) => {
+      const from = join(SRC, src);
+      const to = join(DEST, out);
       const [fromStat, toStat] = await Promise.all([stat(from), maybeStat(to)]);
       if (
         toStat &&
@@ -63,10 +79,10 @@ async function main() {
 
   // Drop stale files that aren't in the current source (e.g. after upgrading
   // material-icon-theme to a version that removed an icon).
-  const svgSet = new Set(svgs);
+  const valid = new Set(planned.keys());
   await Promise.all(
     [...destSet].map(async (name) => {
-      if (svgSet.has(name)) return;
+      if (valid.has(name)) return;
       if (!name.endsWith(".svg")) return;
       const { rm } = await import("node:fs/promises");
       await rm(join(DEST, name));
@@ -77,7 +93,7 @@ async function main() {
   if (copied > 0 || removed > 0) {
     console.log(
       `[icons] synced material-icon-theme → public/material-icons (` +
-        `copied ${copied}, removed ${removed}, total ${svgs.length})`,
+        `copied ${copied}, removed ${removed}, total ${planned.size})`,
     );
   }
 }
