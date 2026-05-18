@@ -20,3 +20,8 @@ allowBuilds:
   electron-winstaller: false
   fs-xattr: false
   macos-alias: false
+# Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
+# hardlink path traversal via drive-relative linkpath. Pulled in transitively
+# through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
+overrides:
+  "tar@<7.5.10": "^7.5.10"
