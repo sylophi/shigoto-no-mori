@@ -7,7 +7,7 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFile } from "node:child_process";
-import { readdir, rename } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -26,22 +26,8 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   hooks: {
     postPackage: async (_config, result) => {
-      // Rename the per-platform output dir, then ad-hoc codesign the .app
-      // bundle inside. Renaming first so the codesign path is final.
-      await Promise.all(
-        result.outputPaths.map(async (original, i) => {
-          const base = path.basename(original);
-          const renamed = base.replace(/^Shigoto no Mori-/, "shigomori-");
-          if (renamed !== base) {
-            const next = path.join(path.dirname(original), renamed);
-            await rename(original, next);
-            result.outputPaths[i] = next;
-          }
-        }),
-      );
-
-      // macOS-only. Skip when the maker ran on a non-darwin platform
-      // (where there's no `codesign` and no .app bundle to sign).
+      // Ad-hoc codesign the .app bundle. macOS-only — skip on non-darwin
+      // platforms where there's no `codesign` and no .app bundle to sign.
       if (process.platform !== "darwin") return;
 
       await Promise.all(

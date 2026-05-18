@@ -53,7 +53,7 @@ jobs:
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
-          cd "out/shigomori-darwin-arm64"
+          cd "out/Shigoto no Mori-darwin-arm64"
           ditto -c -k --keepParent "Shigoto no Mori.app" \
             "../../shigomori-darwin-arm64-${TAG}.zip"
 
