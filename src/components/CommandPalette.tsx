@@ -141,10 +141,10 @@ function BrowseView({ onAddProject }: { onAddProject: () => void }) {
                 onSelect={handle(
                   () =>
                     void navigate({
-                      to: "/projects/$projectId/worktrees/$worktreeName",
+                      to: "/projects/$projectId/worktrees/$worktreeId",
                       params: {
                         projectId: project.id,
-                        worktreeName: tree.name,
+                        worktreeId: tree.id,
                       },
                     }),
                 )}

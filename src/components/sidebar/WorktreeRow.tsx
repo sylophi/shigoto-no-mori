@@ -20,17 +20,17 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.
   const isSelected =
-    pathname === `/projects/${worktree.projectId}/worktrees/${worktree.name}`;
+    pathname === `/projects/${worktree.projectId}/worktrees/${worktree.id}`;
 
   return (
     <button
       type="button"
       onClick={() =>
         void navigate({
-          to: "/projects/$projectId/worktrees/$worktreeName",
+          to: "/projects/$projectId/worktrees/$worktreeId",
           params: {
             projectId: worktree.projectId,
-            worktreeName: worktree.name,
+            worktreeId: worktree.id,
           },
         })
       }

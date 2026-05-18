@@ -300,8 +300,8 @@ function BranchRow({
           type="button"
           onClick={() =>
             void navigate({
-              to: "/projects/$projectId/worktrees/$worktreeName",
-              params: { projectId, worktreeName: worktree.name },
+              to: "/projects/$projectId/worktrees/$worktreeId",
+              params: { projectId, worktreeId: worktree.id },
             })
           }
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

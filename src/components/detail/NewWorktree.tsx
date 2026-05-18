@@ -81,10 +81,10 @@ export function NewWorktree() {
       {
         onSuccess: ({ worktree }) => {
           void navigate({
-            to: "/projects/$projectId/worktrees/$worktreeName",
+            to: "/projects/$projectId/worktrees/$worktreeId",
             params: {
               projectId: worktree.projectId,
-              worktreeName: worktree.name,
+              worktreeId: worktree.id,
             },
           });
         },

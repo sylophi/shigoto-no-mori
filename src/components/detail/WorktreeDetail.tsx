@@ -59,11 +59,11 @@ function deleteButtonLabel(busy: boolean, armed: boolean): string {
 }
 
 export function WorktreeDetail() {
-  const { projectId, worktreeName } = worktreeRoute.useParams();
+  const { projectId, worktreeId } = worktreeRoute.useParams();
   const { data: projects = [] } = useProjects();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
-  const worktree = worktrees.find((w) => w.name === worktreeName);
+  const worktree = worktrees.find((w) => w.id === worktreeId);
 
   if (!worktree || !project) {
     return <CenteredMessage>Worktree not found.</CenteredMessage>;
@@ -184,10 +184,10 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
       return;
     }
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeName/scripts/$scriptKey",
+      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
       params: {
         projectId: worktree.projectId,
-        worktreeName: worktree.name,
+        worktreeId: worktree.id,
         scriptKey: slotToParam(slot),
       },
     });
@@ -252,10 +252,10 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
               type="button"
               onClick={() =>
                 void navigate({
-                  to: "/projects/$projectId/worktrees/$worktreeName/diff",
+                  to: "/projects/$projectId/worktrees/$worktreeId/diff",
                   params: {
                     projectId: worktree.projectId,
-                    worktreeName: worktree.name,
+                    worktreeId: worktree.id,
                   },
                 })
               }
@@ -531,10 +531,10 @@ function CommitRow({
   const navigate = useNavigate();
   const onClick = () =>
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeName/commits/$hash",
+      to: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
       params: {
         projectId: worktree.projectId,
-        worktreeName: worktree.name,
+        worktreeId: worktree.id,
         hash: commit.hash,
       },
     });

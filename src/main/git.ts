@@ -1,6 +1,7 @@
 // Thin wrappers around git CLI via child_process. Each call returns the parsed
 // result; throws on non-zero exit.
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import { promisify } from "node:util";
@@ -201,6 +202,14 @@ interface WorktreeIdentity {
   detached: boolean;
 }
 
+// Derived purely from the absolute worktree path so the same path always
+// produces the same id, anywhere. Paths are globally unique on a
+// filesystem, so the hash is too. 12 hex chars (48 bits) leaves plenty
+// of collision headroom for the handful of worktrees a project holds.
+export function worktreeIdFromPath(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 12);
+}
+
 export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
@@ -217,7 +226,7 @@ export async function listWorktreeIdentities(
       // animal dirname; external ones use whatever the user named them.
       const name = basename(entry.path);
       return {
-        id: `${projectId}:${name}`,
+        id: worktreeIdFromPath(entry.path),
         projectId,
         name,
         branch,
