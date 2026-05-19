@@ -100,6 +100,34 @@ const api = {
       hash: string;
     }): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCommitDiff, input),
+    push: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> => ipcRenderer.invoke(CHANNELS.WorktreesPush, input),
+    pull: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> => ipcRenderer.invoke(CHANNELS.WorktreesPull, input),
+    pushForce: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesPushForce, input),
+    overwrite: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesOverwrite, input),
+    publish: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesPublish, input),
+    pullAndPush: (input: {
+      projectId: string;
+      worktreeId: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesPullAndPush, input),
   },
   branches: {
     create: (input: {

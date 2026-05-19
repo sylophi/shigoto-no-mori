@@ -31,8 +31,24 @@ export const WorktreeSchema = z.object({
   // its identity. May change via `git checkout` / `git branch -m`.
   branch: z.string(),
   path: z.string(),
+  // Commits this worktree has that its upstream doesn't, and vice versa.
+  // Both 0 when synced, when there's no upstream, or when HEAD is
+  // detached -- consumers should check `hasUpstream` to disambiguate.
   ahead: z.number().int().nonnegative(),
   behind: z.number().int().nonnegative(),
+  // True when the branch has an upstream configured AND that upstream
+  // still resolves (i.e. `@{u}` works). False for detached HEAD, brand-
+  // new local branches, or branches whose tracked remote was deleted.
+  hasUpstream: z.boolean(),
+  // True when the project has at least one git remote configured. Drives
+  // whether "Publish" is offered as an action versus only as a hint.
+  hasRemote: z.boolean(),
+  // Only meaningful when ahead > 0 && behind > 0. True when a merge
+  // probe (`git merge-tree --write-tree`) reports no conflicts. The
+  // Pull-and-push action tries `git rebase @{u}` first (linear history)
+  // and falls back to `git merge @{u}` if a per-commit replay would
+  // conflict -- the probe guarantees the merge will land.
+  divergedClean: z.boolean(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 3) so the IPC payload stays small.
@@ -50,6 +66,51 @@ export const WorktreeSchema = z.object({
   // rename is impossible and the UI styles it as a hash, not a branch.
   detached: z.boolean(),
 });
+
+// A worktree's relationship to its upstream, derived from the raw counts
+// on Worktree. The renderer switches on `kind` to pick the right pill;
+// the backend just reports facts so it stays dumb. "publish" covers
+// both "no upstream / remote exists" and "no upstream / no remote",
+// distinguished by `canPublish` so the UI can disable the button.
+export type RemoteSyncState =
+  | { kind: "detached" }
+  | { kind: "synced" }
+  | { kind: "publish"; canPublish: boolean }
+  | { kind: "ahead"; ahead: number }
+  | { kind: "behind"; behind: number }
+  | { kind: "pullAndPush"; ahead: number; behind: number }
+  | { kind: "diverged"; ahead: number; behind: number };
+
+export function deriveRemoteSyncState(
+  worktree: Pick<
+    Worktree,
+    | "ahead"
+    | "behind"
+    | "hasUpstream"
+    | "hasRemote"
+    | "divergedClean"
+    | "detached"
+    | "branch"
+  >,
+): RemoteSyncState {
+  if (worktree.detached || !isRealBranch(worktree.branch)) {
+    return { kind: "detached" };
+  }
+  if (!worktree.hasUpstream) {
+    return { kind: "publish", canPublish: worktree.hasRemote };
+  }
+  if (worktree.ahead === 0 && worktree.behind === 0) return { kind: "synced" };
+  if (worktree.behind === 0) return { kind: "ahead", ahead: worktree.ahead };
+  if (worktree.ahead === 0) return { kind: "behind", behind: worktree.behind };
+  if (worktree.divergedClean) {
+    return {
+      kind: "pullAndPush",
+      ahead: worktree.ahead,
+      behind: worktree.behind,
+    };
+  }
+  return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
+}
 
 export const ProjectSchema = z.object({
   id: z.string(),
@@ -165,6 +226,15 @@ export const CheckoutBranchPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   branch: z.string().min(1),
+});
+
+// Every remote-sync mutation operates on a single worktree, so payload
+// and result are shared across push/pull/force-push/overwrite/publish
+// /pull-and-push. The result is the refreshed Worktree so the renderer
+// can update its UI without an extra round trip.
+export const SyncWorktreePayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
 });
 
 export const WorktreeDiffPayloadSchema = z.object({

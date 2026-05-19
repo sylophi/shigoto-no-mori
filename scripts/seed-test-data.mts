@@ -363,15 +363,192 @@ async function seedAheadBehind(): Promise<Manifest> {
   await git(sidecar, ["push", "origin", "main", "-q"]);
 
   // Local diverges: one ahead (own commit), one behind (the sidecar push).
+  // Different files on each side, so merge-tree reports a clean merge.
   await commit(repo, { "local.txt": "local change\n" }, "Local commit");
   await git(repo, ["fetch", "origin", "-q"]);
   return {
     name: "ahead-behind-divergent",
     path: repo,
-    purpose: "Local main diverged from origin/main — 1 ahead AND 1 behind",
+    purpose: "Diverged 1/1 with non-overlapping changes — clean rebase path",
     tests: [
-      "Sidebar shows both ahead (↑1) and behind (↓1) indicators.",
-      "Last-commit metadata should still render (local HEAD).",
+      "Sidebar shows the indigo ↑1/↓1 indicator.",
+      "Detail header shows 'Pull and push ↑1↓1' (indigo). Clicking rebases (no merge commit lands) and then pushes; pill clears.",
+      "`git log --oneline` should show linear history after.",
+    ],
+  };
+}
+
+async function seedDivergedRebaseConflict(): Promise<Manifest> {
+  const remote = await bareRemote("diverged-rebase-conflict");
+  const repo = join(REPOS, "diverged-rebase-conflict");
+  await initRepo(repo);
+  await commit(repo, { "foo.txt": "line1\nline2\nline3\n" }, "Base");
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  // Remote changes line 2 to "REMOTE".
+  const sidecar = join(SIDECAR, "diverged-rebase-conflict");
+  await mkdir(SIDECAR, { recursive: true });
+  await git(SIDECAR, ["clone", remote, "diverged-rebase-conflict", "-q"]);
+  await git(sidecar, ["config", "user.name", "Other Dev"]);
+  await git(sidecar, ["config", "user.email", "other@example.com"]);
+  await commit(
+    sidecar,
+    { "foo.txt": "line1\nREMOTE\nline3\n" },
+    "Remote sets line 2 to REMOTE",
+  );
+  await git(sidecar, ["push", "origin", "main", "-q"]);
+
+  // Local: commit B changes line 2 to "local-B", commit C lands on
+  // "REMOTE" (matching remote's end state). Final tree matches remote
+  // -> merge-tree clean. But rebasing B onto the remote tip will try to
+  // replace "2" with "local-B" and find "REMOTE" instead -> conflict.
+  await commit(
+    repo,
+    { "foo.txt": "line1\nlocal-B\nline3\n" },
+    "Local B sets line 2 to local-B",
+  );
+  await commit(
+    repo,
+    { "foo.txt": "line1\nREMOTE\nline3\n" },
+    "Local C lands on REMOTE",
+  );
+  await git(repo, ["fetch", "origin", "-q"]);
+  return {
+    name: "diverged-rebase-conflict",
+    path: repo,
+    purpose:
+      "Final-tree merge is clean, but per-commit rebase conflicts on the intermediate state",
+    tests: [
+      "Sidebar shows the indigo ↑2/↓1 indicator (merge-tree probe is clean).",
+      "Detail header shows 'Pull and push ↑2↓1' (indigo). Clicking attempts a rebase, hits a conflict on commit B, aborts, then falls back to a merge.",
+      "`git log --oneline` should show a merge commit afterward (not linear).",
+    ],
+  };
+}
+
+async function seedAheadOnly(): Promise<Manifest> {
+  const remote = await bareRemote("ahead-only");
+  const repo = join(REPOS, "ahead-only");
+  await initRepo(repo);
+  await commit(
+    repo,
+    { "README.md": "# ahead-only\n", "log.txt": "line 1\n" },
+    "Base",
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+  await commit(repo, { "log.txt": "line 1\nline 2\n" }, "Add line 2");
+  await commit(repo, { "log.txt": "line 1\nline 2\nline 3\n" }, "Add line 3");
+  return {
+    name: "ahead-only",
+    path: repo,
+    purpose: "Local main has two unpushed commits",
+    tests: [
+      "Sidebar shows the emerald ↑2 indicator.",
+      "Detail header shows 'Push 2 commits' (emerald). Clicking pushes; the pill clears.",
+    ],
+  };
+}
+
+async function seedBehindOnly(): Promise<Manifest> {
+  const remote = await bareRemote("behind-only");
+  const repo = join(REPOS, "behind-only");
+  await initRepo(repo);
+  await commit(
+    repo,
+    { "README.md": "# behind-only\n", "log.txt": "line 1\n" },
+    "Base",
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+  // Sidecar pushes two commits that the local repo doesn't have.
+  const sidecar = join(SIDECAR, "behind-only");
+  await mkdir(SIDECAR, { recursive: true });
+  await git(SIDECAR, ["clone", remote, "behind-only", "-q"]);
+  await git(sidecar, ["config", "user.name", "Other Dev"]);
+  await git(sidecar, ["config", "user.email", "other@example.com"]);
+  await commit(
+    sidecar,
+    { "log.txt": "line 1\nremote line 2\n" },
+    "Remote line 2",
+  );
+  await commit(
+    sidecar,
+    { "log.txt": "line 1\nremote line 2\nremote line 3\n" },
+    "Remote line 3",
+  );
+  await git(sidecar, ["push", "origin", "main", "-q"]);
+  // Fetch so @{u} reflects the remote tip without merging.
+  await git(repo, ["fetch", "origin", "-q"]);
+  return {
+    name: "behind-only",
+    path: repo,
+    purpose: "Remote main has two commits the local doesn't",
+    tests: [
+      "Sidebar shows the sky ↓2 indicator.",
+      "Detail header shows 'Pull 2 commits' (sky). Clicking fast-forwards and the pill clears.",
+    ],
+  };
+}
+
+async function seedUnpublishedBranch(): Promise<Manifest> {
+  const remote = await bareRemote("unpublished-branch");
+  const repo = join(REPOS, "unpublished-branch");
+  await initRepo(repo);
+  await commit(repo, { "README.md": "# unpublished-branch\n" }, "Initial");
+  // Remote is wired up, but main is never pushed -- no upstream is set.
+  await git(repo, ["remote", "add", "origin", remote]);
+  return {
+    name: "unpublished-branch",
+    path: repo,
+    purpose: "Remote configured but `main` was never pushed (no upstream)",
+    tests: [
+      "Sidebar shows the violet cloud-upload icon.",
+      "Detail header shows 'Publish' (violet, enabled). Clicking runs `git push -u origin HEAD` and the pill clears.",
+    ],
+  };
+}
+
+async function seedDivergedConflicts(): Promise<Manifest> {
+  const remote = await bareRemote("diverged-conflicts");
+  const repo = join(REPOS, "diverged-conflicts");
+  await initRepo(repo);
+  await commit(repo, { "shared.txt": "alpha\nbeta\ngamma\n" }, "Base");
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  // Sidecar rewrites the middle line; local rewrites the same line
+  // differently. merge-tree will report a conflict.
+  const sidecar = join(SIDECAR, "diverged-conflicts");
+  await mkdir(SIDECAR, { recursive: true });
+  await git(SIDECAR, ["clone", remote, "diverged-conflicts", "-q"]);
+  await git(sidecar, ["config", "user.name", "Other Dev"]);
+  await git(sidecar, ["config", "user.email", "other@example.com"]);
+  await commit(
+    sidecar,
+    { "shared.txt": "alpha\nBETA from remote\ngamma\n" },
+    "Remote rewrites middle line",
+  );
+  await git(sidecar, ["push", "origin", "main", "-q"]);
+
+  await commit(
+    repo,
+    { "shared.txt": "alpha\nBETA from local\ngamma\n" },
+    "Local rewrites middle line",
+  );
+  await git(repo, ["fetch", "origin", "-q"]);
+  return {
+    name: "diverged-conflicts",
+    path: repo,
+    purpose:
+      "Diverged 1/1 with overlapping edits on `shared.txt` — merge-tree fails",
+    tests: [
+      "Sidebar shows the rose diverged indicator (1/1).",
+      "Detail header shows the rose trio [Overwrite | Push 1 | Pull 1].",
+      "  - Overwrite discards the local edit and snaps to the remote line.",
+      "  - Push 1 force-pushes; the sidecar's commit is dropped from the remote.",
+      "  - Pull 1 (rebase) surfaces a conflict in the terminal; the rebase stops mid-flight.",
     ],
   };
 }
@@ -839,6 +1016,11 @@ async function main(): Promise<void> {
     { name: "multi-remote", run: seedMultiRemote },
     { name: "non-standard-default", run: seedNonStandardDefault },
     { name: "ahead-behind-divergent", run: seedAheadBehind },
+    { name: "diverged-rebase-conflict", run: seedDivergedRebaseConflict },
+    { name: "ahead-only", run: seedAheadOnly },
+    { name: "behind-only", run: seedBehindOnly },
+    { name: "unpublished-branch", run: seedUnpublishedBranch },
+    { name: "diverged-conflicts", run: seedDivergedConflicts },
     { name: "many-branches", run: seedManyBranches },
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },

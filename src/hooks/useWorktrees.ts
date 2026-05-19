@@ -189,3 +189,55 @@ export function useCheckoutBranch() {
     meta: { errorTitle: "Couldn't switch branch" },
   });
 }
+
+interface SyncWorktreeInput {
+  projectId: string;
+  worktreeId: string;
+}
+
+// Factory for the family of remote-sync mutations (push, pull, force-
+// push, overwrite, publish, pull-and-push). Each one resolves to the
+// refreshed Worktree, and all share the same invalidation pattern --
+// only the API method and toast title differ.
+function makeSyncMutation(
+  apiMethod: (input: SyncWorktreeInput) => Promise<Worktree>,
+  errorTitle: string,
+) {
+  return () => {
+    const queryClient = useQueryClient();
+    return useMutation<Worktree, Error, SyncWorktreeInput>({
+      mutationFn: apiMethod,
+      onSuccess: (_data, vars) => {
+        void queryClient.invalidateQueries({
+          queryKey: ["worktrees", vars.projectId],
+        });
+      },
+      meta: { errorTitle },
+    });
+  };
+}
+
+export const usePushWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.push(input),
+  "Couldn't push",
+);
+export const usePullWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.pull(input),
+  "Couldn't pull",
+);
+export const usePushForceWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.pushForce(input),
+  "Couldn't force-push",
+);
+export const useOverwriteWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.overwrite(input),
+  "Couldn't overwrite from upstream",
+);
+export const usePublishWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.publish(input),
+  "Couldn't publish branch",
+);
+export const usePullAndPushWorktree = makeSyncMutation(
+  (input) => window.api.worktrees.pullAndPush(input),
+  "Couldn't pull and push",
+);

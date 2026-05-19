@@ -44,6 +44,7 @@ import {
 } from "@/store/scriptRuns";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
+import { WorktreeSyncPill } from "./WorktreeSyncPill";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import {
   type CleanupError,
@@ -247,7 +248,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
           </div>
-          {worktree.changedCount > 0 && (
+          {worktree.changedCount > 0 ? (
             <button
               type="button"
               onClick={() =>
@@ -267,6 +268,8 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
               {worktree.changedCount === 1 ? "file" : "files"} changed
               <ChevronRight aria-hidden className="size-3.5 opacity-60" />
             </button>
+          ) : (
+            <WorktreeSyncPill worktree={worktree} />
           )}
         </div>
       </header>
