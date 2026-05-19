@@ -253,24 +253,7 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               onCheckedChange={(v) => setForm({ ...form, githubCli: v })}
               disabled={!ghReady}
               label="Use GitHub CLI"
-              description={
-                !ghInstalled ? (
-                  <>
-                    Install <span className="font-mono">gh</span> to enable this
-                    integration.
-                  </>
-                ) : !ghAuthed ? (
-                  <>
-                    Run <span className="font-mono">gh auth login</span> to
-                    enable this integration.
-                  </>
-                ) : (
-                  <>
-                    Use your authenticated <span className="font-mono">gh</span>{" "}
-                    session for GitHub-related actions.
-                  </>
-                )
-              }
+              description={ghDescription(ghInstalled, ghAuthed)}
             />
             <ToggleRow
               checked={form.autoPopulateInstall}
@@ -446,6 +429,31 @@ function AppearanceSection({
         ))}
       </div>
     </section>
+  );
+}
+
+function ghDescription(installed: boolean, authed: boolean): React.ReactNode {
+  if (!installed) {
+    return (
+      <>
+        Install <span className="font-mono">gh</span> to enable this
+        integration.
+      </>
+    );
+  }
+  if (!authed) {
+    return (
+      <>
+        Run <span className="font-mono">gh auth login</span> to enable this
+        integration.
+      </>
+    );
+  }
+  return (
+    <>
+      Use your authenticated <span className="font-mono">gh</span> session for
+      GitHub-related actions.
+    </>
   );
 }
 

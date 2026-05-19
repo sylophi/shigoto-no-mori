@@ -1,6 +1,3 @@
-// GitHub CLI integration detection. The integration is "ready" when
-// the `gh` binary is on PATH and the user is authenticated. We split
-// the two so the UI can tell the user which step to take next.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { z } from "zod";
@@ -69,12 +66,9 @@ const prCache = new Map<
   { value: Map<string, PullRequest>; expires: number }
 >();
 
-// Fetches every PR (any state) in the project repo and indexes them by
-// the head branch name so worktrees can be paired up. Cached per-cwd for
-// a short window so repeated focus refreshes don't spawn a gh subprocess
-// each time. Returns an empty map when the integration is off, gh isn't
-// ready, or the call fails -- the PR field is a nice-to-have, never
-// load-bearing.
+// Indexed by head branch name. Cached per-cwd so repeated focus
+// refreshes don't respawn gh. Returns an empty map on any failure --
+// the PR data is decorative, never load-bearing.
 export async function listProjectPullRequests(
   cwd: string,
 ): Promise<Map<string, PullRequest>> {

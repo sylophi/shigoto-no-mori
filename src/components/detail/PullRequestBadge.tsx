@@ -1,32 +1,22 @@
-import {
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
-} from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
+import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
 import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
-import type { PullRequest, Worktree } from "@shared/schemas";
+import type { Worktree } from "@shared/schemas";
 
 interface Props {
   worktree: Worktree;
-  // Controls whether the PR title rides along after the number. The
-  // parent measures the row and toggles this off when there isn't room
+  // Parent measures the row and toggles this off when there isn't room
   // for both the title and a non-truncated branch name.
   showTitle?: boolean;
 }
 
-// Surfaces a clickable PR badge in the worktree header when a PR exists
-// for the current branch. Hidden when gh isn't ready, the integration
-// is off, or the branch has no PR -- the spot stays quiet otherwise.
 export function PullRequestBadge({ worktree, showTitle = false }: Props) {
   const { data: prs } = useProjectPullRequests(worktree.projectId);
   const pr = prs?.[worktree.branch];
   if (!pr) return null;
 
-  const { Icon, tone, label } = describe(pr);
+  const { Icon, tone, label } = describePullRequest(pr);
   return (
     <button
       type="button"
@@ -48,11 +38,7 @@ export function PullRequestBadge({ worktree, showTitle = false }: Props) {
   );
 }
 
-type Tone = "emerald" | "violet" | "rose" | "slate";
-
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
-
-const TONE_CLASSES: Record<Tone, string> = {
+const TONE_CLASSES: Record<PullRequestTone, string> = {
   emerald:
     "text-emerald-500 hover:bg-emerald-500/10 focus-visible:outline-emerald-500",
   violet:
@@ -61,20 +47,3 @@ const TONE_CLASSES: Record<Tone, string> = {
   slate:
     "text-muted-foreground hover:bg-muted focus-visible:outline-muted-foreground",
 };
-
-function describe(pr: PullRequest): {
-  Icon: IconType;
-  tone: Tone;
-  label: string;
-} {
-  if (pr.state === "MERGED") {
-    return { Icon: GitMerge, tone: "violet", label: "Merged PR" };
-  }
-  if (pr.state === "CLOSED") {
-    return { Icon: GitPullRequestClosed, tone: "rose", label: "Closed PR" };
-  }
-  if (pr.isDraft) {
-    return { Icon: GitPullRequestDraft, tone: "slate", label: "Draft PR" };
-  }
-  return { Icon: GitPullRequest, tone: "emerald", label: "Open PR" };
-}

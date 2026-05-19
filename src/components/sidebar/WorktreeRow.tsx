@@ -5,28 +5,20 @@ import {
   CloudUpload,
   FileDiff,
   GitCompareArrows,
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
   Rocket,
   Terminal,
   Trash2,
 } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
+import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
 import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
-import {
-  deriveRemoteSyncState,
-  type PullRequest,
-  type Worktree,
-} from "@shared/schemas";
+import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -139,52 +131,31 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
   );
 }
 
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
-
 function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
   const { data: prs } = useProjectPullRequests(worktree.projectId);
   const pr = prs?.[worktree.branch];
   if (!pr) return null;
-  const { Icon, tone, label } = describePr(pr);
+  const { Icon, tone, label } = describePullRequest(pr);
   return (
     <span
       title={`${label} #${pr.number}`}
       aria-label={`${label} #${pr.number}`}
-      className={cn("inline-flex shrink-0 items-center text-[10px]", tone)}
+      className={cn(
+        "inline-flex shrink-0 items-center text-[10px]",
+        TONE_CLASSES[tone],
+      )}
     >
       <Icon aria-hidden className="size-3" />
     </span>
   );
 }
 
-function describePr(pr: PullRequest): {
-  Icon: IconType;
-  tone: string;
-  label: string;
-} {
-  if (pr.state === "MERGED") {
-    return { Icon: GitMerge, tone: "text-violet-500", label: "Merged PR" };
-  }
-  if (pr.state === "CLOSED") {
-    return {
-      Icon: GitPullRequestClosed,
-      tone: "text-rose-500",
-      label: "Closed PR",
-    };
-  }
-  if (pr.isDraft) {
-    return {
-      Icon: GitPullRequestDraft,
-      tone: "text-muted-foreground",
-      label: "Draft PR",
-    };
-  }
-  return {
-    Icon: GitPullRequest,
-    tone: "text-emerald-500",
-    label: "Open PR",
-  };
-}
+const TONE_CLASSES: Record<PullRequestTone, string> = {
+  emerald: "text-emerald-500",
+  violet: "text-violet-500",
+  rose: "text-rose-500",
+  slate: "text-muted-foreground",
+};
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount > 0) {

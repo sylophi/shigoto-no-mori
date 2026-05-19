@@ -576,12 +576,10 @@ function CommitRow({
   );
 }
 
-// Layouts the branch title and the PR badge as a single row, deciding
-// whether the badge can carry the PR title alongside the number. The
-// decision is content-aware: a hidden duplicate of the row at natural
-// width tells us up front whether everything fits without clipping the
-// branch. That keeps the test independent of the visible state, so we
-// don't oscillate between show/hide as the layout flips.
+// A hidden natural-width duplicate of the row decides whether the PR
+// title fits without clipping the branch. The measurer is independent
+// of the visible `showTitle` state, so the decision can't oscillate as
+// the layout flips.
 function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const measurerRef = useRef<HTMLDivElement>(null);
@@ -592,9 +590,6 @@ function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
     const measurer = measurerRef.current;
     if (!row || !measurer) return;
     const check = () => {
-      // scrollWidth (not offsetWidth) so a freshly resized measurer
-      // still reports its intrinsic content width even if a parent
-      // happens to clip it for a frame.
       setShowTitle(measurer.scrollWidth <= row.clientWidth);
     };
     check();
@@ -618,9 +613,26 @@ function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
         aria-hidden
         className="pointer-events-none invisible absolute top-0 left-0 flex items-start gap-3 whitespace-nowrap"
       >
-        <BranchTitle worktree={worktree} />
+        <BranchTitleMeasurer branch={worktree.branch} />
         <PullRequestBadge worktree={worktree} showTitle />
       </div>
+    </div>
+  );
+}
+
+// Mimics BranchTitle's outer flex container width without re-mounting
+// BranchSwitcher's combobox/portal. The three boxes stand in for the
+// pencil/switcher/copy buttons (each is p-1 around a size-3.5 icon, so
+// 22px wide). Drift these if BranchTitle's button cluster changes.
+function BranchTitleMeasurer({ branch }: { branch: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-mono text-2xl font-medium tracking-tight">
+        {branch}
+      </span>
+      <span className="block size-[22px]" />
+      <span className="block size-[22px]" />
+      <span className="block size-[22px]" />
     </div>
   );
 }
