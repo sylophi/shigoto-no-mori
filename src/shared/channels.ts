@@ -32,6 +32,7 @@ export const CHANNELS = {
   PackageScriptsRun: "packageScripts:run",
   PortPoolIsActive: "portPool:isActive",
   PortPoolIsInstalled: "portPool:isInstalled",
+  GithubCliReadiness: "githubCli:readiness",
   LaunchersDetect: "launchers:detect",
   LaunchersForProject: "launchers:forProject",
   LaunchersLaunch: "launchers:launch",

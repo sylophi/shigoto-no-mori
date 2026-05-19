@@ -391,6 +391,15 @@ export const GlobalConfigSchema = z.object({
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
   portPool: z.boolean().optional(),
+  // When true, GitHub CLI features light up wherever they apply.
+  // Activates only when `gh` is on PATH and authenticated. On by
+  // default; matches the integration being opt-out rather than opt-in.
+  githubCli: z.boolean().optional(),
+});
+
+export const GithubCliReadinessSchema = z.object({
+  installed: z.boolean(),
+  authed: z.boolean(),
 });
 
 export const WriteGlobalConfigPayloadSchema = z.object({
@@ -543,6 +552,7 @@ export type Worktree = z.infer<typeof WorktreeSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
+export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;

@@ -29,6 +29,7 @@ import type {
   DirectoryListing,
   FsListing,
   FsStat,
+  GithubCliReadiness,
   GlobalConfig,
   LauncherEntry,
   PackageScriptsResult,
@@ -231,6 +232,10 @@ const api = {
       ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
     isInstalled: (): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.PortPoolIsInstalled),
+  },
+  githubCli: {
+    readiness: (): Promise<GithubCliReadiness> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliReadiness),
   },
   scripts: {
     run: (input: {

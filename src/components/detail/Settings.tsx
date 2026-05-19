@@ -18,6 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
+import { useGithubCliReadiness } from "@/hooks/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/usePortPoolInstalled";
 import { cn } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
@@ -72,6 +73,7 @@ interface FormState {
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
+  githubCli: boolean;
 }
 
 function fromConfig(config: GlobalConfig): FormState {
@@ -81,6 +83,7 @@ function fromConfig(config: GlobalConfig): FormState {
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
+    githubCli: config.githubCli ?? true,
   };
 }
 
@@ -99,6 +102,8 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
     portPool: state.portPool ? true : undefined,
+    // Default is true; same opt-out serialization as deleteBranchOnRemove.
+    githubCli: state.githubCli ? undefined : false,
   };
 }
 
@@ -106,6 +111,10 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const { data: runtime } = useRuntimeInfo();
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
+  const { data: githubCliReadiness } = useGithubCliReadiness();
+  const ghInstalled = githubCliReadiness?.installed ?? true;
+  const ghAuthed = githubCliReadiness?.authed ?? true;
+  const ghReady = ghInstalled && ghAuthed;
   const write = useGlobalConfigWrite();
   const { setOverride } = useTheme();
 
@@ -239,6 +248,30 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Integrations</SectionHeading>
+            <ToggleRow
+              checked={form.githubCli && ghReady}
+              onCheckedChange={(v) => setForm({ ...form, githubCli: v })}
+              disabled={!ghReady}
+              label="Use GitHub CLI"
+              description={
+                !ghInstalled ? (
+                  <>
+                    Install <span className="font-mono">gh</span> to enable this
+                    integration.
+                  </>
+                ) : !ghAuthed ? (
+                  <>
+                    Run <span className="font-mono">gh auth login</span> to
+                    enable this integration.
+                  </>
+                ) : (
+                  <>
+                    Use your authenticated <span className="font-mono">gh</span>{" "}
+                    session for GitHub-related actions.
+                  </>
+                )
+              }
+            />
             <ToggleRow
               checked={form.autoPopulateInstall}
               onCheckedChange={(v) =>
