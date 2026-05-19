@@ -99,6 +99,15 @@ export function useDeleteWorktree() {
       // Only invalidate + clear runs when the worktree was actually
       // removed. Cleanup failures keep the worktree around for retry.
       if (data.ok) {
+        // Drop the deleted entry from cache synchronously so consumers
+        // routing off the back of this mutation (e.g. EmptyState's
+        // first-worktree resolver) don't read the stale list during the
+        // invalidate's background refetch.
+        queryClient.setQueryData<Worktree[]>(
+          ["worktrees", vars.projectId],
+          (current) =>
+            current ? current.filter((w) => w.id !== vars.worktreeId) : current,
+        );
         void queryClient.invalidateQueries({
           queryKey: ["worktrees", vars.projectId],
         });
