@@ -553,7 +553,9 @@ function DangerZone() {
               : "Nuke everything"}
         </Button>
         {error && (
-          <div className="text-xs text-destructive">{error.message}</div>
+          <div className="text-xs text-destructive select-text">
+            {error.message}
+          </div>
         )}
       </div>
     </section>

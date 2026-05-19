@@ -172,7 +172,9 @@ export function NewWorktree() {
           />
           <p className="text-xs text-muted-foreground">
             {destLead}{" "}
-            <span className="font-mono text-foreground/80">{destPath}</span>
+            <span className="font-mono text-foreground/80 select-text">
+              {destPath}
+            </span>
             {destTrail}
           </p>
         </div>

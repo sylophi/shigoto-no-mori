@@ -647,7 +647,7 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
           <X className="size-4" />
         </button>
         {rename.error && (
-          <span className="truncate text-xs text-destructive">
+          <span className="truncate text-xs text-destructive select-text">
             {rename.error.message}
           </span>
         )}
@@ -828,7 +828,7 @@ function BranchSwitcher({
               ))}
             </Combobox.List>
             {checkout.error && (
-              <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive select-text">
                 {checkout.error.message}
               </div>
             )}

@@ -107,7 +107,9 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
         })}
       </div>
       {launch.error && (
-        <div className="text-xs text-destructive">{launch.error.message}</div>
+        <div className="text-xs text-destructive select-text">
+          {launch.error.message}
+        </div>
       )}
     </div>
   );
