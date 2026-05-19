@@ -1,10 +1,4 @@
-import {
-  ArrowDown,
-  ArrowDownUp,
-  ArrowUp,
-  CloudUpload,
-  Loader2,
-} from "lucide-react";
+import { ArrowDown, ArrowUp, CloudUpload, Loader2 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -86,7 +80,6 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
     return (
       <SingleAction
         tone="indigo"
-        icon={ArrowDownUp}
         label={`Pull and push ↑${state.ahead}↓${state.behind}`}
         title="git pull --rebase && git push"
         pending={pullAndPush.isPending}
