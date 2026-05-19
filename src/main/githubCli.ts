@@ -68,21 +68,20 @@ const prCache = new Map<
 
 // Indexed by head branch name. Cached per-cwd so repeated focus
 // refreshes don't respawn gh. Returns an empty map on any failure --
-// the PR data is decorative, never load-bearing.
+// the PR data is decorative, never load-bearing. The toggle + readiness
+// checks gate the cache too, so flipping the integration off takes
+// effect immediately rather than waiting out a stale TTL window.
 export async function listProjectPullRequests(
   cwd: string,
 ): Promise<Map<string, PullRequest>> {
+  const config = await readGlobalConfig();
+  if (config.githubCli === false) return new Map();
+  const readiness = await getGithubCliReadiness();
+  if (!readiness.installed || !readiness.authed) return new Map();
+
   const now = Date.now();
   const cached = prCache.get(cwd);
   if (cached && cached.expires > now) return cached.value;
-
-  const empty = new Map<string, PullRequest>();
-  const config = await readGlobalConfig();
-  if (config.githubCli === false) return cacheAndReturn(cwd, empty);
-  const readiness = await getGithubCliReadiness();
-  if (!readiness.installed || !readiness.authed) {
-    return cacheAndReturn(cwd, empty);
-  }
 
   let stdout: string;
   try {
@@ -102,16 +101,16 @@ export async function listProjectPullRequests(
     );
     stdout = result.stdout;
   } catch {
-    return cacheAndReturn(cwd, empty);
+    return cacheAndReturn(cwd, new Map());
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout);
   } catch {
-    return cacheAndReturn(cwd, empty);
+    return cacheAndReturn(cwd, new Map());
   }
   const validated = z.array(GhPrListItemSchema).safeParse(parsed);
-  if (!validated.success) return cacheAndReturn(cwd, empty);
+  if (!validated.success) return cacheAndReturn(cwd, new Map());
 
   const map = new Map<string, PullRequest>();
   // gh returns PRs newest-first; the first hit per branch wins so we
