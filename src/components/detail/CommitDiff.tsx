@@ -92,10 +92,10 @@ function CommitDiffInner({
         <BackButton onClick={onBack} label={worktree.branch} />
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="truncate text-xl font-medium tracking-tight">
+            <h1 className="truncate text-xl font-medium tracking-tight select-text">
               {commit?.subject ?? "Commit"}
             </h1>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-xs text-muted-foreground select-text">
               <span className="font-mono">{hash}</span>
               {commit && (
                 <>
@@ -127,7 +127,10 @@ function CommitDiffInner({
             No file changes to show. Merge commits render empty by default.
           </div>
         ) : (
-          <div className="flex flex-col gap-2 p-2" style={DIFF_STYLE}>
+          <div
+            className="flex flex-col gap-2 p-2 select-text"
+            style={DIFF_STYLE}
+          >
             {allFiles.map((fileDiff) => (
               <FileDiff
                 key={`${fileDiff.prevName ?? ""} ${fileDiff.name}`}
