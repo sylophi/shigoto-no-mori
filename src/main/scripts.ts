@@ -258,7 +258,11 @@ export function startScript(args: RunArgs): string {
   const child = spawn(shellCmd, [...shellArgs, args.command], {
     cwd: args.worktree.path,
     env,
-    stdio: ["ignore", "pipe", "pipe"],
+    // stdin is a pipe we never write to or close. Closed stdin (EOF on
+    // first read) makes tools like electron-forge and vite that listen
+    // for keystrokes ("rs", "q") interpret it as "user closed the
+    // terminal" and shut down, dragging the dev server with them.
+    stdio: ["pipe", "pipe", "pipe"],
     // New session = new process group with pgid === child.pid. Lets us
     // signal the whole tree via process.kill(-pid, sig).
     detached: true,

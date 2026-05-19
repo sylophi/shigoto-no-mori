@@ -139,6 +139,7 @@ function ConsoleBody({
   const stickRef = useRef(true);
 
   const tokens = parseOutput(state.output);
+  const rendered = renderTokens(tokens);
 
   // Honor the user's scroll position: only auto-scroll if they're
   // already pinned near the bottom.
@@ -169,14 +170,7 @@ function ConsoleBody({
         onScroll={onScroll}
         className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground select-text"
       >
-        {tokens.length === 0
-          ? "Starting…"
-          : tokens.map((tok, i) => (
-              // Output is append-only and tokens never reshuffle, so
-              // position is a stable identity here.
-              // oxlint-disable-next-line react/no-array-index-key
-              <AnsiSpan key={i} token={tok} />
-            ))}
+        {tokens.length === 0 ? "Starting…" : rendered}
       </pre>
       {onClear && (
         <button
@@ -252,6 +246,87 @@ function AnsiSpan({ token }: { token: AnserJsonEntry }) {
       {token.content}
     </span>
   );
+}
+
+// http(s) only — file:/mailto:/data: would surprise the user if we
+// routed them through openExternal. Trailing `.,;:!?)>]` is stripped
+// after the match so prose like "see http://x." doesn't swallow the
+// period.
+interface UrlRange {
+  start: number;
+  end: number;
+  url: string;
+}
+
+function findUrlRanges(text: string): UrlRange[] {
+  if (!text.includes("http")) return [];
+  const out: UrlRange[] = [];
+  for (const m of text.matchAll(/\bhttps?:\/\/[^\s<>"']+/g)) {
+    const url = m[0].replace(/[.,;:!?)>\]]+$/, "");
+    if (url.length === 0) continue;
+    out.push({ start: m.index, end: m.index + url.length, url });
+  }
+  return out;
+}
+
+// URLs are detected over the joined token text (not per-token) so a URL
+// whose styling changes mid-string -- Vite bolds the port, npm
+// underlines repo URLs, etc. -- still gets a single anchor wrapping its
+// styled spans.
+function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
+  const fullText = tokens.map((t) => t.content).join("");
+  const urls = findUrlRanges(fullText);
+  if (urls.length === 0) {
+    return tokens.map((tok, i) => (
+      // oxlint-disable-next-line react/no-array-index-key
+      <AnsiSpan key={i} token={tok} />
+    ));
+  }
+
+  let tokIdx = 0;
+  let tokStart = 0;
+  let key = 0;
+  const emit = (from: number, to: number, sink: React.ReactNode[]) => {
+    while (from < to) {
+      const tok = tokens[tokIdx]!;
+      const tokEnd = tokStart + tok.content.length;
+      const sliceEnd = Math.min(to, tokEnd);
+      const sliceTok: AnserJsonEntry = {
+        ...tok,
+        content: tok.content.slice(from - tokStart, sliceEnd - tokStart),
+      };
+      sink.push(<AnsiSpan key={key++} token={sliceTok} />);
+      from = sliceEnd;
+      if (from === tokEnd) {
+        tokStart = tokEnd;
+        tokIdx++;
+      }
+    }
+  };
+
+  const out: React.ReactNode[] = [];
+  let pos = 0;
+  for (const { start, end, url } of urls) {
+    emit(pos, start, out);
+    const children: React.ReactNode[] = [];
+    emit(start, end, children);
+    out.push(
+      <a
+        key={key++}
+        href={url}
+        onClick={(e) => {
+          e.preventDefault();
+          void window.api.shell.openExternal(url);
+        }}
+        className="cursor-pointer underline-offset-2 hover:underline"
+      >
+        {children}
+      </a>,
+    );
+    pos = end;
+  }
+  emit(pos, fullText.length, out);
+  return out;
 }
 
 const PALETTE_RE = /^ansi-palette-(\d+)$/;
