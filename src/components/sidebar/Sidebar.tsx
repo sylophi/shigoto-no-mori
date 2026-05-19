@@ -156,7 +156,7 @@ export function Sidebar() {
               strategy={verticalListSortingStrategy}
             >
               <div
-                className="relative px-2"
+                className="relative"
                 style={{ height: `${virtualizer.getTotalSize()}px` }}
               >
                 {virtualizer.getVirtualItems().map((vi) => {
@@ -168,8 +168,8 @@ export function Sidebar() {
                       data-index={vi.index}
                       ref={virtualizer.measureElement}
                       className={cn(
-                        "absolute top-0 left-0 w-full",
-                        row.kind !== "project" && "pl-3",
+                        "absolute top-0 left-0 w-full px-2",
+                        row.kind !== "project" && "pl-5",
                       )}
                       style={{ transform: `translateY(${vi.start}px)` }}
                     >
