@@ -37,7 +37,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SingleAction
         tone="violet"
         icon={CloudUpload}
-        label="Publish"
+        label="Publish branch"
         title={
           state.canPublish
             ? "Push branch to remote with upstream tracking"
