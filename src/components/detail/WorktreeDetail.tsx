@@ -139,14 +139,12 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
       {
         onSuccess: (data) => {
           if (data.ok) {
-            // Prefer the sibling above so the user's eye stays roughly in
-            // place; fall back to the one below if this was the first. If
-            // it was the only worktree in the project, hand off to "/"
-            // and let EmptyState pick the next project's first worktree.
+            // Prefer the sibling above so the user's eye stays in place.
             const index = siblings.findIndex((w) => w.id === worktree.id);
             const next =
-              (index > 0 ? siblings[index - 1] : undefined) ??
-              (index >= 0 ? siblings[index + 1] : undefined);
+              index >= 0
+                ? (siblings[index - 1] ?? siblings[index + 1])
+                : undefined;
             if (next) {
               void navigate({
                 to: "/projects/$projectId/worktrees/$worktreeId",

@@ -53,9 +53,7 @@ export function EmptyState() {
   if (projects.length === 0) {
     return <FirstRun onAdd={() => openIn("add-project")} />;
   }
-  // Either we're about to redirect, or we're waiting on a worktree query
-  // that may yet produce a redirect target. Render nothing rather than
-  // flash the no-selection copy.
+  // Suppress BetweenWorktrees while a redirect is pending or still resolvable.
   if (redirectProjectId || waitingForQuery) return null;
   return <BetweenWorktrees />;
 }
