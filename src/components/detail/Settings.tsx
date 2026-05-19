@@ -248,23 +248,21 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
               description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
             />
             <ToggleRow
-              checked={form.portPool}
+              checked={form.portPool && portPoolInstalled}
               onCheckedChange={(v) => setForm({ ...form, portPool: v })}
               disabled={!portPoolInstalled}
               label="Automatically use port-pool"
               description={
-                portPoolInstalled ? (
-                  <>
-                    Allocates ports for new worktrees and releases them on
-                    delete. Activates when a project has a
-                    port-pool.config.json. <PortPoolLink />
-                  </>
-                ) : (
-                  <>
-                    Install <PortPoolLink>port-pool</PortPoolLink> to enable
-                    this integration.
-                  </>
-                )
+                <>
+                  Allocates ports for new worktrees and releases them on delete.
+                  Activates when a project has a{" "}
+                  <span className="font-mono">port-pool.config.json</span>.{" "}
+                  <PortPoolLink>
+                    {portPoolInstalled
+                      ? "Learn more"
+                      : "Install port-pool to enable this integration."}
+                  </PortPoolLink>
+                </>
               }
             />
           </section>
@@ -452,11 +450,11 @@ function ToggleRow({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-start gap-3",
-        disabled && "cursor-not-allowed opacity-50",
+        "flex items-start gap-3",
+        disabled ? "cursor-not-allowed" : "cursor-pointer",
       )}
     >
-      <span className="mt-0.5">
+      <span className={cn("mt-0.5", disabled && "opacity-50")}>
         <Switch
           checked={checked}
           onCheckedChange={onCheckedChange}
@@ -464,7 +462,7 @@ function ToggleRow({
         />
       </span>
       <div className="flex min-w-0 flex-col">
-        <span className="text-sm">{label}</span>
+        <span className={cn("text-sm", disabled && "opacity-50")}>{label}</span>
         {description && (
           <span className="text-xs text-muted-foreground">{description}</span>
         )}
