@@ -11,6 +11,7 @@ import {
   isRealBranch,
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
+  SyncWorktreePayloadSchema,
   type Worktree,
   WorktreeDiffPayloadSchema,
 } from "@shared/schemas";
@@ -24,6 +25,12 @@ import {
   getWorktreeDiff,
   listWorktreeIdentities,
   listWorktrees,
+  overwriteFromUpstream,
+  publishCurrentBranch,
+  pullFastForward,
+  pullRebaseAndPush,
+  pushFastForward,
+  pushForceWithLease,
   removeWorktree,
   renameBranch,
 } from "../git";
@@ -230,4 +237,42 @@ export function registerWorktreeHandlers(): void {
       return getCommitDiff(target.path, hash);
     },
   );
+
+  // Remote-sync mutations all share the same shape: resolve the worktree,
+  // run a git action, return the freshly-described worktree so the
+  // renderer can replace its cached row in one round trip.
+  const registerSync = (
+    channel: string,
+    action: (worktreePath: string, projectPath: string) => Promise<void>,
+  ) => {
+    ipcMain.handle(
+      channel,
+      async (_event, rawPayload: unknown): Promise<Worktree> => {
+        const { projectId, worktreeId } =
+          SyncWorktreePayloadSchema.parse(rawPayload);
+        const project = findProjectOrThrow(projectId);
+        const target = await findWorktreeIdentityOrThrow(
+          project.id,
+          project.path,
+          worktreeId,
+        );
+        await action(target.path, project.path);
+        const refreshed = await findWorktreeIdentityOrThrow(
+          project.id,
+          project.path,
+          worktreeId,
+        );
+        return describeWorktree(refreshed, project.path);
+      },
+    );
+  };
+
+  registerSync(CHANNELS.WorktreesPush, (wt) => pushFastForward(wt));
+  registerSync(CHANNELS.WorktreesPull, (wt) => pullFastForward(wt));
+  registerSync(CHANNELS.WorktreesPushForce, (wt) => pushForceWithLease(wt));
+  registerSync(CHANNELS.WorktreesOverwrite, (wt) => overwriteFromUpstream(wt));
+  registerSync(CHANNELS.WorktreesPublish, (wt, pp) =>
+    publishCurrentBranch(wt, pp),
+  );
+  registerSync(CHANNELS.WorktreesPullAndPush, (wt) => pullRebaseAndPush(wt));
 }

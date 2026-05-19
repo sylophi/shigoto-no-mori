@@ -105,6 +105,55 @@ async function getChangedCount(worktreePath: string): Promise<number> {
   }
 }
 
+interface RemoteSync {
+  ahead: number;
+  behind: number;
+  hasUpstream: boolean;
+  divergedClean: boolean;
+}
+
+// Probes how the worktree's HEAD relates to its upstream. Failure of the
+// rev-list call is taken as "no upstream" -- either the branch was never
+// pushed, or HEAD is detached. `divergedClean` runs a `merge-tree`
+// probe only when both sides have unique commits; it tells the UI
+// whether `pull --rebase && push` would land cleanly.
+async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
+  let ahead = 0;
+  let behind = 0;
+  let hasUpstream = false;
+  try {
+    const stdout = await run(worktreePath, [
+      "rev-list",
+      "--left-right",
+      "--count",
+      "HEAD...@{u}",
+    ]);
+    const [a, b] = stdout.trim().split(/\s+/);
+    ahead = Number(a) || 0;
+    behind = Number(b) || 0;
+    hasUpstream = true;
+  } catch {
+    return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
+  }
+  if (ahead === 0 || behind === 0) {
+    return { ahead, behind, hasUpstream, divergedClean: false };
+  }
+  // Diverged: ask git whether a merge would land without conflicts.
+  // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
+  // when conflicts would arise (or on git < 2.38, where we treat the
+  // unknown as "not clean" -- safer default).
+  let divergedClean = false;
+  try {
+    await exec(["merge-tree", "--write-tree", "HEAD", "@{u}"], {
+      cwd: worktreePath,
+    });
+    divergedClean = true;
+  } catch {
+    divergedClean = false;
+  }
+  return { ahead, behind, hasUpstream, divergedClean };
+}
+
 // Unified patch of every uncommitted change in the worktree. Combines
 // `git diff HEAD` (covers staged + unstaged tracked edits) with a
 // /dev/null diff per untracked file so additions render alongside
@@ -243,10 +292,14 @@ export async function listWorktreeIdentities(
 // "full history" view.
 const RECENT_COMMITS_COUNT = 3;
 
-async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
-  const [changedCount, recentCommits] = await Promise.all([
+async function buildWorktree(
+  identity: WorktreeIdentity,
+  hasRemote: boolean,
+): Promise<Worktree> {
+  const [changedCount, recentCommits, remoteSync] = await Promise.all([
     getChangedCount(identity.path),
     getRecentCommits(identity.path, RECENT_COMMITS_COUNT),
+    getRemoteSync(identity.path),
   ]);
   return {
     id: identity.id,
@@ -254,11 +307,11 @@ async function buildWorktree(identity: WorktreeIdentity): Promise<Worktree> {
     name: identity.name,
     branch: identity.branch,
     path: identity.path,
-    // Remote-comparison fields are intentionally hardcoded for now; we
-    // skip the `git rev-list` call entirely. Restore via git history if
-    // we want ahead/behind back.
-    ahead: 0,
-    behind: 0,
+    ahead: remoteSync.ahead,
+    behind: remoteSync.behind,
+    hasUpstream: remoteSync.hasUpstream,
+    hasRemote,
+    divergedClean: remoteSync.divergedClean,
     changedCount,
     recentCommits,
     isPrimary: identity.isPrimary,
@@ -271,18 +324,24 @@ export async function listWorktrees(
   projectId: string,
   projectPath: string,
 ): Promise<Worktree[]> {
-  const identities = await listWorktreeIdentities(projectId, projectPath);
+  const [identities, remotes] = await Promise.all([
+    listWorktreeIdentities(projectId, projectPath),
+    listRemotes(projectPath),
+  ]);
+  const hasRemote = remotes.length > 0;
   // Primary first so it anchors the sidebar list as the canonical checkout.
   const ordered = identities.toSorted((a, b) =>
     a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
   );
-  return Promise.all(ordered.map(buildWorktree));
+  return Promise.all(ordered.map((id) => buildWorktree(id, hasRemote)));
 }
 
 export async function describeWorktree(
   identity: WorktreeIdentity,
+  projectPath?: string,
 ): Promise<Worktree> {
-  return buildWorktree(identity);
+  const remotes = await listRemotes(projectPath ?? identity.path);
+  return buildWorktree(identity, remotes.length > 0);
 }
 
 export async function findWorktreeIdentity(
@@ -493,12 +552,15 @@ export async function createWorktree(
   // Re-read identity from `git worktree list` so the returned worktree's
   // branch reflects what git actually settled on (e.g. checking out
   // `origin/main` creates a local `main` tracking branch).
-  const fresh = await listWorktreeIdentities(projectId, projectPath);
+  const [fresh, remotes] = await Promise.all([
+    listWorktreeIdentities(projectId, projectPath),
+    listRemotes(projectPath),
+  ]);
   const identity = fresh.find((w) => w.path === worktreePath);
   if (!identity) {
     throw new Error("Worktree disappeared after creation");
   }
-  return buildWorktree(identity);
+  return buildWorktree(identity, remotes.length > 0);
 }
 
 // Rename the branch currently checked out in a worktree.
@@ -574,4 +636,54 @@ export async function removeWorktree(
   const args = ["worktree", "remove", worktreePath];
   if (force) args.push("--force");
   await run(projectPath, args);
+}
+
+// Remote sync mutations. Each operates on a single worktree's checkout
+// and lets `git` surface any failure as a non-zero exit (which `run`
+// turns into a thrown Error -- the IPC layer relays the message verbatim
+// into the renderer's toast).
+
+export async function pushFastForward(worktreePath: string): Promise<void> {
+  await run(worktreePath, ["push"]);
+}
+
+export async function pullFastForward(worktreePath: string): Promise<void> {
+  await run(worktreePath, ["pull", "--ff-only"]);
+}
+
+export async function pushForceWithLease(worktreePath: string): Promise<void> {
+  await run(worktreePath, ["push", "--force-with-lease"]);
+}
+
+// "Overwrite": throw away the local divergence and snap to the upstream.
+// Fetch first so `@{u}` reflects the current remote tip.
+export async function overwriteFromUpstream(
+  worktreePath: string,
+): Promise<void> {
+  await run(worktreePath, ["fetch"]);
+  await run(worktreePath, ["reset", "--hard", "@{u}"]);
+}
+
+// Publish: push the current branch to the first configured remote with
+// upstream tracking. `HEAD` resolves to whatever's checked out, and `-u`
+// wires up `branch.<name>.{remote,merge}` so subsequent pulls/pushes
+// don't need an explicit remote.
+export async function publishCurrentBranch(
+  worktreePath: string,
+  projectPath: string,
+): Promise<void> {
+  const remotes = await listRemotes(projectPath);
+  const first = remotes[0];
+  if (!first) throw new Error("No git remote configured");
+  await run(worktreePath, ["push", "-u", first, "HEAD"]);
+}
+
+// Combined resolution for the "diverged but mergeable" state: rebase
+// local commits onto the freshly fetched upstream, then push the result.
+// If the rebase hits an unexpected conflict (the merge-tree probe was
+// wrong), git leaves the rebase in progress -- the error surfaces in
+// the renderer and the user resolves it in their terminal.
+export async function pullRebaseAndPush(worktreePath: string): Promise<void> {
+  await run(worktreePath, ["pull", "--rebase"]);
+  await run(worktreePath, ["push"]);
 }
