@@ -139,6 +139,7 @@ function ConsoleBody({
   const stickRef = useRef(true);
 
   const tokens = parseOutput(state.output);
+  const rendered = renderTokens(tokens);
 
   // Honor the user's scroll position: only auto-scroll if they're
   // already pinned near the bottom.
@@ -169,7 +170,7 @@ function ConsoleBody({
         onScroll={onScroll}
         className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground select-text"
       >
-        {tokens.length === 0 ? "Starting…" : renderTokens(tokens)}
+        {tokens.length === 0 ? "Starting…" : rendered}
       </pre>
       {onClear && (
         <button
@@ -247,15 +248,10 @@ function AnsiSpan({ token }: { token: AnserJsonEntry }) {
   );
 }
 
-// http(s) URLs only — file:/mailto:/data: aren't typical in build output
-// and would surprise the user if we routed them through openExternal.
-// Anything but whitespace and HTML-unsafe chars is fair game inside the
-// URL (RFC 3986 allows `: / ? # [ ] @ ! $ & ' ( ) * + , ; = - . _ ~ %`);
-// trailing `.,;:!?)>]` is stripped after the match so prose like
-// "see http://x." doesn't swallow the period.
-const URL_RE = /\bhttps?:\/\/[^\s<>"']+/g;
-const TRAILING_PUNCT_RE = /[.,;:!?)>\]]+$/;
-
+// http(s) only — file:/mailto:/data: would surprise the user if we
+// routed them through openExternal. Trailing `.,;:!?)>]` is stripped
+// after the match so prose like "see http://x." doesn't swallow the
+// period.
 interface UrlRange {
   start: number;
   end: number;
@@ -265,48 +261,58 @@ interface UrlRange {
 function findUrlRanges(text: string): UrlRange[] {
   if (!text.includes("http")) return [];
   const out: UrlRange[] = [];
-  URL_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = URL_RE.exec(text)) !== null) {
-    const url = match[0].replace(TRAILING_PUNCT_RE, "");
+  for (const m of text.matchAll(/\bhttps?:\/\/[^\s<>"']+/g)) {
+    const url = m[0].replace(/[.,;:!?)>\]]+$/, "");
     if (url.length === 0) continue;
-    out.push({ start: match.index, end: match.index + url.length, url });
+    out.push({ start: m.index, end: m.index + url.length, url });
   }
   return out;
 }
 
-// Walk tokens once, emitting AnsiSpan slices. URLs are detected over the
-// joined token text (not per-token), so a URL whose styling changes
-// mid-string -- Vite bolds the port, npm underlines repo URLs, etc. --
-// is still wrapped in a single anchor that contains the styled spans.
+// URLs are detected over the joined token text (not per-token) so a URL
+// whose styling changes mid-string -- Vite bolds the port, npm
+// underlines repo URLs, etc. -- still gets a single anchor wrapping its
+// styled spans.
 function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
   const fullText = tokens.map((t) => t.content).join("");
   const urls = findUrlRanges(fullText);
   if (urls.length === 0) {
     return tokens.map((tok, i) => (
-      // Output is append-only and tokens never reshuffle, so position is
-      // a stable identity here.
       // oxlint-disable-next-line react/no-array-index-key
       <AnsiSpan key={i} token={tok} />
     ));
   }
 
-  const out: React.ReactNode[] = [];
-  let openLink: {
-    url: string;
-    end: number;
-    children: React.ReactNode[];
-  } | null = null;
-  let nextUrlIdx = 0;
-  let cursor = 0;
-  let segKey = 0;
+  let tokIdx = 0;
+  let tokStart = 0;
+  let key = 0;
+  const emit = (from: number, to: number, sink: React.ReactNode[]) => {
+    while (from < to) {
+      const tok = tokens[tokIdx]!;
+      const tokEnd = tokStart + tok.content.length;
+      const sliceEnd = Math.min(to, tokEnd);
+      const sliceTok: AnserJsonEntry = {
+        ...tok,
+        content: tok.content.slice(from - tokStart, sliceEnd - tokStart),
+      };
+      sink.push(<AnsiSpan key={key++} token={sliceTok} />);
+      from = sliceEnd;
+      if (from === tokEnd) {
+        tokStart = tokEnd;
+        tokIdx++;
+      }
+    }
+  };
 
-  const closeLink = () => {
-    if (!openLink) return;
-    const { url, children } = openLink;
+  const out: React.ReactNode[] = [];
+  let pos = 0;
+  for (const { start, end, url } of urls) {
+    emit(pos, start, out);
+    const children: React.ReactNode[] = [];
+    emit(start, end, children);
     out.push(
       <a
-        key={`l${segKey++}`}
+        key={key++}
         href={url}
         onClick={(e) => {
           e.preventDefault();
@@ -317,51 +323,9 @@ function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
         {children}
       </a>,
     );
-    openLink = null;
-  };
-
-  for (let i = 0; i < tokens.length; i++) {
-    const tok = tokens[i];
-    if (!tok) continue;
-    let pos = 0; // offset within this token
-    while (pos < tok.content.length) {
-      const absPos = cursor + pos;
-      let boundary = cursor + tok.content.length;
-      if (openLink) {
-        boundary = Math.min(boundary, openLink.end);
-      } else if (nextUrlIdx < urls.length) {
-        boundary = Math.min(boundary, urls[nextUrlIdx]!.start);
-      }
-      const sliceLen = boundary - absPos;
-      if (sliceLen > 0) {
-        const sliceTok: AnserJsonEntry = {
-          ...tok,
-          content: tok.content.slice(pos, pos + sliceLen),
-        };
-        const node = <AnsiSpan key={`s${segKey++}`} token={sliceTok} />;
-        if (openLink) openLink.children.push(node);
-        else out.push(node);
-        pos += sliceLen;
-      }
-      const newAbsPos = cursor + pos;
-      if (openLink && newAbsPos === openLink.end) {
-        closeLink();
-      } else if (
-        !openLink &&
-        nextUrlIdx < urls.length &&
-        newAbsPos === urls[nextUrlIdx]!.start
-      ) {
-        const range = urls[nextUrlIdx]!;
-        openLink = { url: range.url, end: range.end, children: [] };
-        nextUrlIdx++;
-      }
-    }
-    cursor += tok.content.length;
+    pos = end;
   }
-
-  // Defensive: a URL whose end exceeds fullText shouldn't be possible
-  // since findUrlRanges clamps to match bounds, but close anyway.
-  closeLink();
+  emit(pos, fullText.length, out);
   return out;
 }
 
