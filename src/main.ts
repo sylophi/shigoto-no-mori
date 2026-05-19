@@ -3,6 +3,7 @@ import path from "node:path";
 import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./main/bootstrap";
+import { attachContextMenu } from "./main/contextMenu";
 import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
@@ -60,6 +61,8 @@ const createWindow = () => {
   const sendBlur = () => mainWindow?.webContents.send(CHANNELS.WindowBlurred);
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
+
+  attachContextMenu(mainWindow);
 };
 
 // Live-update the window background as the renderer applies a theme
