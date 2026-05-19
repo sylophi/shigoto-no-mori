@@ -116,7 +116,9 @@ interface RemoteSync {
 // rev-list call is taken as "no upstream" -- either the branch was never
 // pushed, or HEAD is detached. `divergedClean` runs a `merge-tree`
 // probe only when both sides have unique commits; it tells the UI
-// whether `pull --rebase && push` would land cleanly.
+// whether a whole-tree merge would land cleanly. The action behind
+// the "Pull and push" button tries `rebase` first and falls back to
+// `merge` on a per-commit conflict, so this probe gates that fallback.
 async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
   let ahead = 0;
   let behind = 0;
