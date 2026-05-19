@@ -34,6 +34,7 @@ import type {
   LauncherEntry,
   PackageScriptsResult,
   Project,
+  PullRequest,
   RuntimeInfo,
   ScriptEvent,
   ScriptName,
@@ -236,6 +237,10 @@ const api = {
   githubCli: {
     readiness: (): Promise<GithubCliReadiness> =>
       ipcRenderer.invoke(CHANNELS.GithubCliReadiness),
+    projectPullRequests: (input: {
+      projectId: string;
+    }): Promise<Record<string, PullRequest>> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliProjectPullRequests, input),
   },
   scripts: {
     run: (input: {

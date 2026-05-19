@@ -20,6 +20,15 @@ export const UNKNOWN_BRANCH = "(unknown)";
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;
 
+export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
+
+export const PullRequestSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.string().url(),
+  state: PullRequestStateSchema,
+  isDraft: z.boolean(),
+});
+
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -553,6 +562,8 @@ export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
+export type PullRequestState = z.infer<typeof PullRequestStateSchema>;
+export type PullRequest = z.infer<typeof PullRequestSchema>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;

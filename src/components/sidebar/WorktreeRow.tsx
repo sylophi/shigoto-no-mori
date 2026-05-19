@@ -5,18 +5,28 @@ import {
   CloudUpload,
   FileDiff,
   GitCompareArrows,
+  GitMerge,
+  GitPullRequest,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
   Rocket,
   Terminal,
   Trash2,
 } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
 import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
-import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import {
+  deriveRemoteSyncState,
+  type PullRequest,
+  type Worktree,
+} from "@shared/schemas";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -86,6 +96,7 @@ function RowTrailing({ worktree, activity }: RowTrailingProps) {
   return (
     <>
       <StatusIndicator worktree={worktree} />
+      <PullRequestIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} />
     </>
   );
@@ -126,6 +137,53 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
       className="size-3 shrink-0 animate-pulse text-violet-500"
     />
   );
+}
+
+type IconType = ComponentType<SVGProps<SVGSVGElement>>;
+
+function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
+  const { data: prs } = useProjectPullRequests(worktree.projectId);
+  const pr = prs?.[worktree.branch];
+  if (!pr) return null;
+  const { Icon, tone, label } = describePr(pr);
+  return (
+    <span
+      title={`${label} #${pr.number}`}
+      aria-label={`${label} #${pr.number}`}
+      className={cn("inline-flex shrink-0 items-center text-[10px]", tone)}
+    >
+      <Icon aria-hidden className="size-3" />
+    </span>
+  );
+}
+
+function describePr(pr: PullRequest): {
+  Icon: IconType;
+  tone: string;
+  label: string;
+} {
+  if (pr.state === "MERGED") {
+    return { Icon: GitMerge, tone: "text-violet-500", label: "Merged PR" };
+  }
+  if (pr.state === "CLOSED") {
+    return {
+      Icon: GitPullRequestClosed,
+      tone: "text-rose-500",
+      label: "Closed PR",
+    };
+  }
+  if (pr.isDraft) {
+    return {
+      Icon: GitPullRequestDraft,
+      tone: "text-muted-foreground",
+      label: "Draft PR",
+    };
+  }
+  return {
+    Icon: GitPullRequest,
+    tone: "text-emerald-500",
+    label: "Open PR",
+  };
 }
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {

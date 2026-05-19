@@ -43,6 +43,7 @@ import {
   type ScriptSlot,
 } from "@/store/scriptRuns";
 import { LauncherRow } from "./LauncherRow";
+import { PullRequestBadge } from "./PullRequestBadge";
 import { ScriptsSection } from "./ScriptsSection";
 import { WorktreeSyncPill } from "./WorktreeSyncPill";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
@@ -244,7 +245,12 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           />
           <WorktreeKindIcon worktree={worktree} />
         </div>
-        <BranchTitle worktree={worktree} />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <BranchTitle worktree={worktree} />
+          </div>
+          <PullRequestBadge worktree={worktree} />
+        </div>
       </header>
 
       {inLimbo && (
