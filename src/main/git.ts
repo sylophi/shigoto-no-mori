@@ -678,12 +678,17 @@ export async function publishCurrentBranch(
   await run(worktreePath, ["push", "-u", first, "HEAD"]);
 }
 
-// Combined resolution for the "diverged but mergeable" state: rebase
-// local commits onto the freshly fetched upstream, then push the result.
-// If the rebase hits an unexpected conflict (the merge-tree probe was
-// wrong), git leaves the rebase in progress -- the error surfaces in
-// the renderer and the user resolves it in their terminal.
-export async function pullRebaseAndPush(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["pull", "--rebase"]);
+// Combined resolution for the "diverged but mergeable" state: merge
+// the upstream into HEAD (creating a merge commit if needed), then push.
+// We deliberately do NOT use --rebase here even though linear history
+// would be nicer: `merge-tree --write-tree` (the probe that gated this
+// state) only verifies that the FINAL trees merge cleanly, whereas
+// `pull --rebase` replays each local commit individually -- so a
+// per-commit conflict can strand the worktree mid-rebase even though
+// the end-state merge is clean. Sticking to the merge flow keeps the
+// probe and the action equivalent. `--no-rebase` defends against any
+// `pull.rebase=true` in the user's config.
+export async function pullMergeAndPush(worktreePath: string): Promise<void> {
+  await run(worktreePath, ["pull", "--no-rebase"]);
   await run(worktreePath, ["push"]);
 }

@@ -372,7 +372,7 @@ async function seedAheadBehind(): Promise<Manifest> {
     purpose: "Diverged 1/1 with non-overlapping changes — cleanly mergeable",
     tests: [
       "Sidebar shows the indigo ↑1/↓1 indicator.",
-      "Detail header shows 'Pull and push ↑1↓1' (indigo). Clicking runs `git pull --rebase && git push` and the pill clears.",
+      "Detail header shows 'Pull and push ↑1↓1' (indigo). Clicking runs `git pull --no-rebase && git push` (one merge commit lands) and the pill clears.",
     ],
   };
 }

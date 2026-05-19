@@ -81,7 +81,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SingleAction
         tone="indigo"
         label={`Pull and push ↑${state.ahead}↓${state.behind}`}
-        title="git pull --rebase && git push"
+        title="git pull --no-rebase && git push"
         pending={pullAndPush.isPending}
         onClick={() => pullAndPush.mutate(input)}
       />

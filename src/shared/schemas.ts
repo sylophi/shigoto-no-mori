@@ -45,7 +45,9 @@ export const WorktreeSchema = z.object({
   hasRemote: z.boolean(),
   // Only meaningful when ahead > 0 && behind > 0. True when a merge
   // probe (`git merge-tree --write-tree`) reports no conflicts -- meaning
-  // `pull --rebase && push` is very likely to land cleanly.
+  // `pull --no-rebase && push` will land cleanly (creating a merge
+  // commit). We don't promise `pull --rebase` would work because the
+  // probe only verifies the final-tree merge, not per-commit replay.
   divergedClean: z.boolean(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.
