@@ -169,14 +169,7 @@ function ConsoleBody({
         onScroll={onScroll}
         className="h-full w-full overflow-auto px-4 py-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground select-text"
       >
-        {tokens.length === 0
-          ? "Starting…"
-          : tokens.map((tok, i) => (
-              // Output is append-only and tokens never reshuffle, so
-              // position is a stable identity here.
-              // oxlint-disable-next-line react/no-array-index-key
-              <AnsiSpan key={i} token={tok} />
-            ))}
+        {tokens.length === 0 ? "Starting…" : renderTokens(tokens)}
       </pre>
       {onClear && (
         <button
@@ -252,6 +245,124 @@ function AnsiSpan({ token }: { token: AnserJsonEntry }) {
       {token.content}
     </span>
   );
+}
+
+// http(s) URLs only — file:/mailto:/data: aren't typical in build output
+// and would surprise the user if we routed them through openExternal.
+// Anything but whitespace and HTML-unsafe chars is fair game inside the
+// URL (RFC 3986 allows `: / ? # [ ] @ ! $ & ' ( ) * + , ; = - . _ ~ %`);
+// trailing `.,;:!?)>]` is stripped after the match so prose like
+// "see http://x." doesn't swallow the period.
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+/g;
+const TRAILING_PUNCT_RE = /[.,;:!?)>\]]+$/;
+
+interface UrlRange {
+  start: number;
+  end: number;
+  url: string;
+}
+
+function findUrlRanges(text: string): UrlRange[] {
+  if (!text.includes("http")) return [];
+  const out: UrlRange[] = [];
+  URL_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = URL_RE.exec(text)) !== null) {
+    const url = match[0].replace(TRAILING_PUNCT_RE, "");
+    if (url.length === 0) continue;
+    out.push({ start: match.index, end: match.index + url.length, url });
+  }
+  return out;
+}
+
+// Walk tokens once, emitting AnsiSpan slices. URLs are detected over the
+// joined token text (not per-token), so a URL whose styling changes
+// mid-string -- Vite bolds the port, npm underlines repo URLs, etc. --
+// is still wrapped in a single anchor that contains the styled spans.
+function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
+  const fullText = tokens.map((t) => t.content).join("");
+  const urls = findUrlRanges(fullText);
+  if (urls.length === 0) {
+    return tokens.map((tok, i) => (
+      // Output is append-only and tokens never reshuffle, so position is
+      // a stable identity here.
+      // oxlint-disable-next-line react/no-array-index-key
+      <AnsiSpan key={i} token={tok} />
+    ));
+  }
+
+  const out: React.ReactNode[] = [];
+  let openLink: {
+    url: string;
+    end: number;
+    children: React.ReactNode[];
+  } | null = null;
+  let nextUrlIdx = 0;
+  let cursor = 0;
+  let segKey = 0;
+
+  const closeLink = () => {
+    if (!openLink) return;
+    const { url, children } = openLink;
+    out.push(
+      <a
+        key={`l${segKey++}`}
+        href={url}
+        onClick={(e) => {
+          e.preventDefault();
+          void window.api.shell.openExternal(url);
+        }}
+        className="cursor-pointer underline-offset-2 hover:underline"
+      >
+        {children}
+      </a>,
+    );
+    openLink = null;
+  };
+
+  for (let i = 0; i < tokens.length; i++) {
+    const tok = tokens[i];
+    if (!tok) continue;
+    let pos = 0; // offset within this token
+    while (pos < tok.content.length) {
+      const absPos = cursor + pos;
+      let boundary = cursor + tok.content.length;
+      if (openLink) {
+        boundary = Math.min(boundary, openLink.end);
+      } else if (nextUrlIdx < urls.length) {
+        boundary = Math.min(boundary, urls[nextUrlIdx]!.start);
+      }
+      const sliceLen = boundary - absPos;
+      if (sliceLen > 0) {
+        const sliceTok: AnserJsonEntry = {
+          ...tok,
+          content: tok.content.slice(pos, pos + sliceLen),
+        };
+        const node = <AnsiSpan key={`s${segKey++}`} token={sliceTok} />;
+        if (openLink) openLink.children.push(node);
+        else out.push(node);
+        pos += sliceLen;
+      }
+      const newAbsPos = cursor + pos;
+      if (openLink && newAbsPos === openLink.end) {
+        closeLink();
+      } else if (
+        !openLink &&
+        nextUrlIdx < urls.length &&
+        newAbsPos === urls[nextUrlIdx]!.start
+      ) {
+        const range = urls[nextUrlIdx]!;
+        openLink = { url: range.url, end: range.end, children: [] };
+        nextUrlIdx++;
+      }
+    }
+    cursor += tok.content.length;
+  }
+
+  // Defensive: a URL whose end exceeds fullText shouldn't be possible
+  // since findUrlRanges clamps to match bounds, but close anyway.
+  closeLink();
+  return out;
 }
 
 const PALETTE_RE = /^ansi-palette-(\d+)$/;
