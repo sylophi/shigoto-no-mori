@@ -1,17 +1,60 @@
+import { useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useProjects } from "@/hooks/useProjects";
+import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 
 export function EmptyState() {
-  const { data: projects = [] } = useProjects();
+  const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { openIn } = useCommandPalette();
-  const hasProjects = projects.length > 0;
+  const navigate = useNavigate();
+  const worktreeQueries = useAllProjectWorktrees(projects);
 
-  if (!hasProjects) {
+  // Walk projects in order so we redirect to the first worktree the user
+  // would see in the sidebar. Wait on in-flight queries for an earlier
+  // project rather than skipping past it -- otherwise a slow first project
+  // would lose its turn to a later one.
+  let redirectProjectId: string | null = null;
+  let redirectWorktreeId: string | null = null;
+  let waitingForQuery = false;
+  for (let i = 0; i < projects.length; i++) {
+    const project = projects[i];
+    if (!project || project.pathExists === false) continue;
+    const query = worktreeQueries[i];
+    if (!query) continue;
+    if (query.isLoading) {
+      waitingForQuery = true;
+      break;
+    }
+    const first = (query.data ?? [])[0];
+    if (first) {
+      redirectProjectId = project.id;
+      redirectWorktreeId = first.id;
+      break;
+    }
+  }
+
+  useEffect(() => {
+    if (!redirectProjectId || !redirectWorktreeId) return;
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeId",
+      params: {
+        projectId: redirectProjectId,
+        worktreeId: redirectWorktreeId,
+      },
+      replace: true,
+    });
+  }, [redirectProjectId, redirectWorktreeId, navigate]);
+
+  if (projectsLoading) return null;
+  if (projects.length === 0) {
     return <FirstRun onAdd={() => openIn("add-project")} />;
   }
+  // Suppress BetweenWorktrees while a redirect is pending or still resolvable.
+  if (redirectProjectId || waitingForQuery) return null;
   return <BetweenWorktrees />;
 }
 
@@ -52,7 +95,8 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
             or{" "}
             <KbdGroup className="mx-0.5 inline-flex">
               <Kbd>⌘</Kbd>
-              <Kbd>T</Kbd>
+              <Kbd>⇧</Kbd>
+              <Kbd>P</Kbd>
             </KbdGroup>{" "}
             for the palette
           </span>
@@ -66,16 +110,15 @@ function BetweenWorktrees() {
   return (
     <div className="flex h-full items-center justify-center p-8">
       <div className="max-w-sm space-y-3 text-center">
-        <p className="text-sm text-muted-foreground">
-          Pick a worktree from the sidebar to begin.
-        </p>
+        <p className="text-sm text-muted-foreground">Nothing selected.</p>
         <p className="text-xs text-muted-foreground/70">
-          or press{" "}
+          Pick a worktree from the sidebar, or press{" "}
           <KbdGroup className="mx-0.5 inline-flex">
             <Kbd>⌘</Kbd>
-            <Kbd>T</Kbd>
+            <Kbd>⇧</Kbd>
+            <Kbd>P</Kbd>
           </KbdGroup>{" "}
-          to jump
+          to jump.
         </p>
       </div>
     </div>
