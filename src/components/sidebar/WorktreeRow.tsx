@@ -12,6 +12,8 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
+import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
 import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
@@ -86,6 +88,7 @@ function RowTrailing({ worktree, activity }: RowTrailingProps) {
   return (
     <>
       <StatusIndicator worktree={worktree} />
+      <PullRequestIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} />
     </>
   );
@@ -127,6 +130,32 @@ function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
     />
   );
 }
+
+function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
+  const { data: prs } = useProjectPullRequests(worktree.projectId);
+  const pr = prs?.[worktree.branch];
+  if (!pr) return null;
+  const { Icon, tone, label } = describePullRequest(pr);
+  return (
+    <span
+      title={`${label} #${pr.number}`}
+      aria-label={`${label} #${pr.number}`}
+      className={cn(
+        "inline-flex shrink-0 items-center text-[10px]",
+        TONE_CLASSES[tone],
+      )}
+    >
+      <Icon aria-hidden className="size-3" />
+    </span>
+  );
+}
+
+const TONE_CLASSES: Record<PullRequestTone, string> = {
+  emerald: "text-emerald-500",
+  violet: "text-violet-500",
+  rose: "text-rose-500",
+  slate: "text-muted-foreground",
+};
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount > 0) {

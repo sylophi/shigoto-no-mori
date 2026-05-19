@@ -1,5 +1,6 @@
 import { registerBranchHandlers } from "./branches";
 import { registerFsHandlers } from "./fs";
+import { registerGithubCliHandlers } from "./githubCli";
 import { registerGlobalConfigHandlers } from "./globalConfig";
 import { registerLauncherHandlers } from "./launchers";
 import { registerMenuHandlers } from "./menu";
@@ -20,6 +21,7 @@ export function registerIpcHandlers(): void {
   registerScriptHandlers();
   registerPackageScriptHandlers();
   registerPortPoolHandlers();
+  registerGithubCliHandlers();
   registerRuntimeHandlers();
   registerFsHandlers();
   registerShellHandlers();

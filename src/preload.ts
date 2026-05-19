@@ -29,10 +29,12 @@ import type {
   DirectoryListing,
   FsListing,
   FsStat,
+  GithubCliReadiness,
   GlobalConfig,
   LauncherEntry,
   PackageScriptsResult,
   Project,
+  PullRequest,
   RuntimeInfo,
   ScriptEvent,
   ScriptName,
@@ -231,6 +233,14 @@ const api = {
       ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
     isInstalled: (): Promise<boolean> =>
       ipcRenderer.invoke(CHANNELS.PortPoolIsInstalled),
+  },
+  githubCli: {
+    readiness: (): Promise<GithubCliReadiness> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliReadiness),
+    projectPullRequests: (input: {
+      projectId: string;
+    }): Promise<Record<string, PullRequest>> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliProjectPullRequests, input),
   },
   scripts: {
     run: (input: {

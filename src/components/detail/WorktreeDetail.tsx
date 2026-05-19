@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
@@ -43,6 +43,7 @@ import {
   type ScriptSlot,
 } from "@/store/scriptRuns";
 import { LauncherRow } from "./LauncherRow";
+import { PullRequestBadge } from "./PullRequestBadge";
 import { ScriptsSection } from "./ScriptsSection";
 import { WorktreeSyncPill } from "./WorktreeSyncPill";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
@@ -265,34 +266,7 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
           />
           <WorktreeKindIcon worktree={worktree} />
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <BranchTitle worktree={worktree} />
-          </div>
-          {worktree.changedCount > 0 ? (
-            <button
-              type="button"
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/worktrees/$worktreeId/diff",
-                  params: {
-                    projectId: worktree.projectId,
-                    worktreeId: worktree.id,
-                  },
-                })
-              }
-              title="View uncommitted changes"
-              className="tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
-            >
-              <FileDiff aria-hidden className="size-3.5" />
-              {worktree.changedCount}{" "}
-              {worktree.changedCount === 1 ? "file" : "files"} changed
-              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-            </button>
-          ) : (
-            <WorktreeSyncPill worktree={worktree} />
-          )}
-        </div>
+        <BranchHeaderRow worktree={worktree} />
       </header>
 
       {inLimbo && (
@@ -505,10 +479,36 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
 }
 
 function CommitsSection({ worktree }: { worktree: Worktree }) {
+  const navigate = useNavigate();
   const commits = worktree.recentCommits;
   return (
     <section className="space-y-3">
-      <SectionHeading>Recent commits</SectionHeading>
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>Branch</SectionHeading>
+        {worktree.changedCount > 0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              void navigate({
+                to: "/projects/$projectId/worktrees/$worktreeId/diff",
+                params: {
+                  projectId: worktree.projectId,
+                  worktreeId: worktree.id,
+                },
+              })
+            }
+            title="View uncommitted changes"
+            className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
+          >
+            <FileDiff aria-hidden className="size-3.5" />
+            {worktree.changedCount}{" "}
+            {worktree.changedCount === 1 ? "file" : "files"} changed
+            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+          </button>
+        ) : (
+          <WorktreeSyncPill worktree={worktree} />
+        )}
+      </div>
       {commits.length === 0 ? (
         <div className="text-sm text-muted-foreground">No commits yet.</div>
       ) : (
@@ -594,6 +594,67 @@ function CommitRow({
         className="size-3.5 shrink-0 text-muted-foreground/40"
       />
     </button>
+  );
+}
+
+// A hidden natural-width duplicate of the row decides whether the PR
+// title fits without clipping the branch. The measurer is independent
+// of the visible `showTitle` state, so the decision can't oscillate as
+// the layout flips.
+function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measurerRef = useRef<HTMLDivElement>(null);
+  const [showTitle, setShowTitle] = useState(false);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measurer = measurerRef.current;
+    if (!row || !measurer) return;
+    const check = () => {
+      setShowTitle(measurer.scrollWidth <= row.clientWidth);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(row);
+    observer.observe(measurer);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={rowRef}
+      className="relative flex items-start justify-between gap-3"
+    >
+      <div className="min-w-0 flex-1">
+        <BranchTitle worktree={worktree} />
+      </div>
+      <PullRequestBadge worktree={worktree} showTitle={showTitle} />
+      <div
+        ref={measurerRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute top-0 left-0 flex items-start gap-3 whitespace-nowrap"
+      >
+        <BranchTitleMeasurer branch={worktree.branch} />
+        <PullRequestBadge worktree={worktree} showTitle />
+      </div>
+    </div>
+  );
+}
+
+// Mimics BranchTitle's outer flex container width without re-mounting
+// BranchSwitcher's combobox/portal. The three boxes stand in for the
+// pencil/switcher/copy buttons (each is p-1 around a size-3.5 icon, so
+// 22px wide). Drift these if BranchTitle's button cluster changes.
+function BranchTitleMeasurer({ branch }: { branch: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="font-mono text-2xl font-medium tracking-tight">
+        {branch}
+      </span>
+      <span className="block size-[22px]" />
+      <span className="block size-[22px]" />
+      <span className="block size-[22px]" />
+    </div>
   );
 }
 
