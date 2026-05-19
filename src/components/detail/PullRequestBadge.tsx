@@ -12,12 +12,16 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 
 interface Props {
   worktree: Worktree;
+  // Controls whether the PR title rides along after the number. The
+  // parent measures the row and toggles this off when there isn't room
+  // for both the title and a non-truncated branch name.
+  showTitle?: boolean;
 }
 
 // Surfaces a clickable PR badge in the worktree header when a PR exists
 // for the current branch. Hidden when gh isn't ready, the integration
 // is off, or the branch has no PR -- the spot stays quiet otherwise.
-export function PullRequestBadge({ worktree }: Props) {
+export function PullRequestBadge({ worktree, showTitle = false }: Props) {
   const { data: prs } = useProjectPullRequests(worktree.projectId);
   const pr = prs?.[worktree.branch];
   if (!pr) return null;
@@ -31,13 +35,14 @@ export function PullRequestBadge({ worktree }: Props) {
           .openExternal(pr.url)
           .catch((err) => notifyError("Couldn't open pull request", err));
       }}
-      title={`${label} ${pr.url}`}
+      title={`${label} #${pr.number} — ${pr.title}`}
       className={cn(
-        "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs transition-colors focus-visible:outline-2",
+        "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs whitespace-nowrap transition-colors focus-visible:outline-2",
         TONE_CLASSES[tone],
       )}
     >
       <Icon aria-hidden className="size-3.5" />
+      {showTitle && <span>{pr.title}</span>}
       {`#${pr.number}`}
     </button>
   );

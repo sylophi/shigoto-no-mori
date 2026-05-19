@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
@@ -245,12 +245,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           />
           <WorktreeKindIcon worktree={worktree} />
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <BranchTitle worktree={worktree} />
-          </div>
-          <PullRequestBadge worktree={worktree} />
-        </div>
+        <BranchHeaderRow worktree={worktree} />
       </header>
 
       {inLimbo && (
@@ -578,6 +573,55 @@ function CommitRow({
         className="size-3.5 shrink-0 text-muted-foreground/40"
       />
     </button>
+  );
+}
+
+// Layouts the branch title and the PR badge as a single row, deciding
+// whether the badge can carry the PR title alongside the number. The
+// decision is content-aware: a hidden duplicate of the row at natural
+// width tells us up front whether everything fits without clipping the
+// branch. That keeps the test independent of the visible state, so we
+// don't oscillate between show/hide as the layout flips.
+function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measurerRef = useRef<HTMLDivElement>(null);
+  const [showTitle, setShowTitle] = useState(false);
+
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const measurer = measurerRef.current;
+    if (!row || !measurer) return;
+    const check = () => {
+      // scrollWidth (not offsetWidth) so a freshly resized measurer
+      // still reports its intrinsic content width even if a parent
+      // happens to clip it for a frame.
+      setShowTitle(measurer.scrollWidth <= row.clientWidth);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(row);
+    observer.observe(measurer);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={rowRef}
+      className="relative flex items-start justify-between gap-3"
+    >
+      <div className="min-w-0 flex-1">
+        <BranchTitle worktree={worktree} />
+      </div>
+      <PullRequestBadge worktree={worktree} showTitle={showTitle} />
+      <div
+        ref={measurerRef}
+        aria-hidden
+        className="pointer-events-none invisible absolute top-0 left-0 flex items-start gap-3 whitespace-nowrap"
+      >
+        <BranchTitle worktree={worktree} />
+        <PullRequestBadge worktree={worktree} showTitle />
+      </div>
+    </div>
   );
 }
 

@@ -56,6 +56,7 @@ async function isAuthed(): Promise<boolean> {
 const GhPrListItemSchema = z.object({
   number: z.number().int().positive(),
   url: z.string().url(),
+  title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   headRefName: z.string(),
@@ -101,7 +102,7 @@ export async function listProjectPullRequests(
         "--limit",
         String(PR_LIST_LIMIT),
         "--json",
-        "number,url,state,isDraft,headRefName",
+        "number,url,title,state,isDraft,headRefName",
       ],
       { cwd },
     );
@@ -126,6 +127,7 @@ export async function listProjectPullRequests(
     map.set(item.headRefName, {
       number: item.number,
       url: item.url,
+      title: item.title,
       state: item.state,
       isDraft: item.isDraft,
     });

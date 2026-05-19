@@ -25,6 +25,7 @@ export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 export const PullRequestSchema = z.object({
   number: z.number().int().positive(),
   url: z.string().url(),
+  title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
 });
