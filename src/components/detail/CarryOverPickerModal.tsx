@@ -221,7 +221,7 @@ export function CarryOverPickerModal({
               Loading...
             </div>
           ) : error ? (
-            <div className="px-3 py-3 text-xs text-destructive">
+            <div className="px-3 py-3 text-xs text-destructive select-text">
               {error.message}
             </div>
           ) : entries.length === 0 ? (

@@ -320,7 +320,7 @@ function BranchRow({
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {needsForce ? (
             <>
-              <span className="px-2 text-xs text-destructive">
+              <span className="px-2 text-xs text-destructive select-text">
                 {del.error?.message ?? "Has unmerged commits."}
               </span>
               <Button
