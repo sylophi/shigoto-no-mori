@@ -4,7 +4,6 @@ import {
   ArrowUp,
   CloudUpload,
   Loader2,
-  RotateCcw,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/utils";
@@ -96,38 +95,33 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
     );
   }
 
-  // Diverged with conflicts -- present the three explicit resolutions.
-  const busy = overwrite.isPending || pushForce.isPending || pull.isPending;
+  // Diverged with conflicts -- both directions destroy something, so the
+  // row is labelled "Overwrite" and the two actions each pick a side:
+  // Push force-overwrites the remote; Pull (reset --hard) overwrites local.
+  const busy = pushForce.isPending || overwrite.isPending;
   return (
     <div
-      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick how to resolve.`}
+      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side to keep.`}
       className="tabular inline-flex shrink-0 items-stretch self-center overflow-hidden rounded-md border border-rose-500/40 text-xs text-rose-500"
     >
-      <DivergedButton
-        icon={RotateCcw}
-        label="Overwrite"
-        title="git fetch && git reset --hard @{u} -- discards your local commits"
-        pending={overwrite.isPending}
-        busy={busy}
-        onClick={() => overwrite.mutate(input)}
-      />
+      <span className="inline-flex items-center px-2 py-1 font-medium">
+        Overwrite
+      </span>
       <DivergedButton
         icon={ArrowUp}
         label={`Push ${state.ahead}`}
-        title="git push --force-with-lease -- overwrites the remote"
+        title="git push --force-with-lease -- overwrites the remote with your local"
         pending={pushForce.isPending}
         busy={busy}
         onClick={() => pushForce.mutate(input)}
-        bordered
       />
       <DivergedButton
         icon={ArrowDown}
         label={`Pull ${state.behind}`}
-        title="git pull --rebase -- replays your commits on top of remote"
-        pending={pull.isPending}
+        title="git fetch && git reset --hard @{u} -- discards your local commits"
+        pending={overwrite.isPending}
         busy={busy}
-        onClick={() => pull.mutate(input)}
-        bordered
+        onClick={() => overwrite.mutate(input)}
       />
     </div>
   );
@@ -196,7 +190,6 @@ interface DivergedButtonProps {
   pending: boolean;
   busy: boolean;
   onClick: () => void;
-  bordered?: boolean;
 }
 
 function DivergedButton({
@@ -206,7 +199,6 @@ function DivergedButton({
   pending,
   busy,
   onClick,
-  bordered,
 }: DivergedButtonProps) {
   const DisplayIcon = pending ? Loader2 : Icon;
   return (
@@ -215,16 +207,13 @@ function DivergedButton({
       onClick={onClick}
       disabled={busy}
       title={title}
-      className={cn(
-        "inline-flex items-center gap-1 px-2 py-1 transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50",
-        bordered && "border-l border-rose-500/40",
-      )}
+      className="inline-flex items-center gap-1 border-l border-rose-500/40 px-2 py-1 transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
     >
+      {label}
       <DisplayIcon
         aria-hidden
         className={cn("size-3.5", pending && "animate-spin")}
       />
-      {label}
     </button>
   );
 }
