@@ -108,7 +108,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         label="Overwrite"
         title="git fetch && git reset --hard @{u} -- discards your local commits"
         pending={overwrite.isPending}
-        disabled={busy && !overwrite.isPending}
+        busy={busy}
         onClick={() => overwrite.mutate(input)}
       />
       <DivergedButton
@@ -116,7 +116,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         label={`Push ${state.ahead}`}
         title="git push --force-with-lease -- overwrites the remote"
         pending={pushForce.isPending}
-        disabled={busy && !pushForce.isPending}
+        busy={busy}
         onClick={() => pushForce.mutate(input)}
         bordered
       />
@@ -125,7 +125,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         label={`Pull ${state.behind}`}
         title="git pull --rebase -- replays your commits on top of remote"
         pending={pull.isPending}
-        disabled={busy && !pull.isPending}
+        busy={busy}
         onClick={() => pull.mutate(input)}
         bordered
       />
@@ -194,7 +194,7 @@ interface DivergedButtonProps {
   label: string;
   title: string;
   pending: boolean;
-  disabled: boolean;
+  busy: boolean;
   onClick: () => void;
   bordered?: boolean;
 }
@@ -204,7 +204,7 @@ function DivergedButton({
   label,
   title,
   pending,
-  disabled,
+  busy,
   onClick,
   bordered,
 }: DivergedButtonProps) {
@@ -213,7 +213,7 @@ function DivergedButton({
     <button
       type="button"
       onClick={onClick}
-      disabled={disabled || pending}
+      disabled={busy}
       title={title}
       className={cn(
         "inline-flex items-center gap-1 px-2 py-1 transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50",

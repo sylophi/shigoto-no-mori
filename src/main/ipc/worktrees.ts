@@ -104,7 +104,7 @@ export function registerWorktreeHandlers(): void {
         throw new Error("Cannot delete the project's primary worktree");
       }
       if (!force) {
-        const full = await describeWorktree(target);
+        const full = await describeWorktree(target, project.path);
         if (full.changedCount > 0) {
           throw new Error(
             `Worktree has ${full.changedCount} uncommitted change(s). Pass force=true to remove anyway.`,
@@ -183,7 +183,7 @@ export function registerWorktreeHandlers(): void {
         project.path,
         worktreeId,
       );
-      return describeWorktree(refreshed);
+      return describeWorktree(refreshed, project.path);
     },
   );
 
@@ -204,7 +204,7 @@ export function registerWorktreeHandlers(): void {
         project.path,
         worktreeId,
       );
-      return describeWorktree(refreshed);
+      return describeWorktree(refreshed, project.path);
     },
   );
 

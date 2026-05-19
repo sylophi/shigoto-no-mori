@@ -338,9 +338,9 @@ export async function listWorktrees(
 
 export async function describeWorktree(
   identity: WorktreeIdentity,
-  projectPath?: string,
+  projectPath: string,
 ): Promise<Worktree> {
-  const remotes = await listRemotes(projectPath ?? identity.path);
+  const remotes = await listRemotes(projectPath);
   return buildWorktree(identity, remotes.length > 0);
 }
 
