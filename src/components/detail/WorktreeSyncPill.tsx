@@ -105,9 +105,10 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side wins.`}
       className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
     >
-      <span className="px-1.5 text-rose-500">Overwrite</span>
+      <span className="px-1.5 text-rose-500">overwrite:</span>
       <SingleAction
         tone="rose"
+        icon={ArrowUp}
         label={`Push ${state.ahead}`}
         title="git push --force-with-lease -- overwrites the remote"
         pending={pushForce.isPending}
@@ -116,6 +117,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       />
       <SingleAction
         tone="rose"
+        icon={ArrowDown}
         label={`Pull ${state.behind}`}
         title="git fetch && git reset --hard @{u} -- overwrites local"
         pending={overwrite.isPending}
