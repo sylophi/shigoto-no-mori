@@ -98,7 +98,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side wins.`}
       className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
     >
-      <span className="px-1.5 text-rose-500">overwrite:</span>
+      <span className="px-1.5 text-rose-500">Overwrite:</span>
       <SingleAction
         tone="rose"
         icon={ArrowUp}
