@@ -180,11 +180,11 @@ function SingleAction({
         TONE_CLASSES[tone],
       )}
     >
+      {label}
       <DisplayIcon
         aria-hidden
         className={cn("size-3.5", pending && "animate-spin")}
       />
-      {label}
     </button>
   );
 }
