@@ -95,39 +95,38 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
     );
   }
 
-  // Diverged with conflicts -- both directions destroy something, so the
-  // row is labelled "Overwrite" and the two actions each pick a side:
-  // Push force-overwrites the remote; Pull (reset --hard) overwrites local.
+  // Histories have truly diverged. The only safe pre-confirmed moves are
+  // "overwrite the remote" (force-push) or "overwrite local" (reset hard).
+  // pull --rebase would almost certainly fail mid-flight here, so we don't
+  // offer it -- the user picks which side wins.
   const busy = pushForce.isPending || overwrite.isPending;
   return (
-    <div
-      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side to keep.`}
-      className="tabular inline-flex shrink-0 items-stretch self-center overflow-hidden rounded-md border border-rose-500/40 text-xs text-rose-500"
+    <span
+      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side wins.`}
+      className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
     >
-      <span className="inline-flex items-center px-2 py-1 font-medium">
-        Overwrite
-      </span>
-      <DivergedButton
-        icon={ArrowUp}
+      <span className="px-1.5 text-rose-500">Overwrite</span>
+      <SingleAction
+        tone="rose"
         label={`Push ${state.ahead}`}
-        title="git push --force-with-lease -- overwrites the remote with your local"
+        title="git push --force-with-lease -- overwrites the remote"
         pending={pushForce.isPending}
-        busy={busy}
+        disabled={busy}
         onClick={() => pushForce.mutate(input)}
       />
-      <DivergedButton
-        icon={ArrowDown}
+      <SingleAction
+        tone="rose"
         label={`Pull ${state.behind}`}
-        title="git fetch && git reset --hard @{u} -- discards your local commits"
+        title="git fetch && git reset --hard @{u} -- overwrites local"
         pending={overwrite.isPending}
-        busy={busy}
+        disabled={busy}
         onClick={() => overwrite.mutate(input)}
       />
-    </div>
+    </span>
   );
 }
 
-type Tone = "violet" | "emerald" | "sky" | "indigo";
+type Tone = "violet" | "emerald" | "sky" | "indigo" | "rose";
 
 // Tone-to-class lookup. Spelled out so Tailwind's JIT keeps the classes
 // in the build instead of pruning the dynamic interpolation.
@@ -139,13 +138,14 @@ const TONE_CLASSES: Record<Tone, string> = {
   sky: "text-sky-500 hover:bg-sky-500/10 focus-visible:outline-sky-500",
   indigo:
     "text-indigo-500 hover:bg-indigo-500/10 focus-visible:outline-indigo-500",
+  rose: "text-rose-500 hover:bg-rose-500/10 focus-visible:outline-rose-500",
 };
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 interface SingleActionProps {
   tone: Tone;
-  icon: IconType;
+  icon?: IconType;
   label: string;
   title: string;
   pending: boolean;
@@ -175,45 +175,12 @@ function SingleAction({
       )}
     >
       {label}
-      <DisplayIcon
-        aria-hidden
-        className={cn("size-3.5", pending && "animate-spin")}
-      />
-    </button>
-  );
-}
-
-interface DivergedButtonProps {
-  icon: IconType;
-  label: string;
-  title: string;
-  pending: boolean;
-  busy: boolean;
-  onClick: () => void;
-}
-
-function DivergedButton({
-  icon: Icon,
-  label,
-  title,
-  pending,
-  busy,
-  onClick,
-}: DivergedButtonProps) {
-  const DisplayIcon = pending ? Loader2 : Icon;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      title={title}
-      className="inline-flex items-center gap-1 border-l border-rose-500/40 px-2 py-1 transition-colors hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {label}
-      <DisplayIcon
-        aria-hidden
-        className={cn("size-3.5", pending && "animate-spin")}
-      />
+      {DisplayIcon && (
+        <DisplayIcon
+          aria-hidden
+          className={cn("size-3.5", pending && "animate-spin")}
+        />
+      )}
     </button>
   );
 }
