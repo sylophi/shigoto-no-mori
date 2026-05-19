@@ -28,7 +28,7 @@ import {
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
-  pullMergeAndPush,
+  pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
   removeWorktree,
@@ -274,5 +274,7 @@ export function registerWorktreeHandlers(): void {
   registerSync(CHANNELS.WorktreesPublish, (wt, pp) =>
     publishCurrentBranch(wt, pp),
   );
-  registerSync(CHANNELS.WorktreesPullAndPush, (wt) => pullMergeAndPush(wt));
+  registerSync(CHANNELS.WorktreesPullAndPush, (wt) =>
+    pullRebaseOrMergeAndPush(wt),
+  );
 }

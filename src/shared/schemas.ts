@@ -44,10 +44,10 @@ export const WorktreeSchema = z.object({
   // whether "Publish" is offered as an action versus only as a hint.
   hasRemote: z.boolean(),
   // Only meaningful when ahead > 0 && behind > 0. True when a merge
-  // probe (`git merge-tree --write-tree`) reports no conflicts -- meaning
-  // `pull --no-rebase && push` will land cleanly (creating a merge
-  // commit). We don't promise `pull --rebase` would work because the
-  // probe only verifies the final-tree merge, not per-commit replay.
+  // probe (`git merge-tree --write-tree`) reports no conflicts. The
+  // Pull-and-push action tries `git rebase @{u}` first (linear history)
+  // and falls back to `git merge @{u}` if a per-commit replay would
+  // conflict -- the probe guarantees the merge will land.
   divergedClean: z.boolean(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.

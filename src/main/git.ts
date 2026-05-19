@@ -678,17 +678,29 @@ export async function publishCurrentBranch(
   await run(worktreePath, ["push", "-u", first, "HEAD"]);
 }
 
-// Combined resolution for the "diverged but mergeable" state: merge
-// the upstream into HEAD (creating a merge commit if needed), then push.
-// We deliberately do NOT use --rebase here even though linear history
-// would be nicer: `merge-tree --write-tree` (the probe that gated this
-// state) only verifies that the FINAL trees merge cleanly, whereas
-// `pull --rebase` replays each local commit individually -- so a
-// per-commit conflict can strand the worktree mid-rebase even though
-// the end-state merge is clean. Sticking to the merge flow keeps the
-// probe and the action equivalent. `--no-rebase` defends against any
-// `pull.rebase=true` in the user's config.
-export async function pullMergeAndPush(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["pull", "--no-rebase"]);
+// Combined resolution for the "diverged but mergeable" state. Tries
+// rebase first for linear history; if a per-commit conflict strands the
+// rebase, aborts and falls back to a whole-tree merge -- which the
+// `merge-tree --write-tree` probe (gating this state) already validated
+// as clean. If the fallback merge unexpectedly conflicts too (probe was
+// wrong), aborts the merge before propagating so the worktree isn't
+// left in a half-merged state.
+export async function pullRebaseOrMergeAndPush(
+  worktreePath: string,
+): Promise<void> {
+  await run(worktreePath, ["fetch"]);
+  try {
+    await run(worktreePath, ["rebase", "@{u}"]);
+  } catch {
+    // Rebase hit a per-commit conflict. Restore the pre-rebase HEAD and
+    // try a whole-tree merge instead.
+    await runLenient(worktreePath, ["rebase", "--abort"]);
+    try {
+      await run(worktreePath, ["merge", "@{u}"]);
+    } catch (err) {
+      await runLenient(worktreePath, ["merge", "--abort"]);
+      throw err;
+    }
+  }
   await run(worktreePath, ["push"]);
 }
