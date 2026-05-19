@@ -244,34 +244,7 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
           />
           <WorktreeKindIcon worktree={worktree} />
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <BranchTitle worktree={worktree} />
-          </div>
-          {worktree.changedCount > 0 ? (
-            <button
-              type="button"
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/worktrees/$worktreeId/diff",
-                  params: {
-                    projectId: worktree.projectId,
-                    worktreeId: worktree.id,
-                  },
-                })
-              }
-              title="View uncommitted changes"
-              className="tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
-            >
-              <FileDiff aria-hidden className="size-3.5" />
-              {worktree.changedCount}{" "}
-              {worktree.changedCount === 1 ? "file" : "files"} changed
-              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-            </button>
-          ) : (
-            <WorktreeSyncPill worktree={worktree} />
-          )}
-        </div>
+        <BranchTitle worktree={worktree} />
       </header>
 
       {inLimbo && (
@@ -484,10 +457,36 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
 }
 
 function CommitsSection({ worktree }: { worktree: Worktree }) {
+  const navigate = useNavigate();
   const commits = worktree.recentCommits;
   return (
     <section className="space-y-3">
-      <SectionHeading>Recent commits</SectionHeading>
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>Branch</SectionHeading>
+        {worktree.changedCount > 0 ? (
+          <button
+            type="button"
+            onClick={() =>
+              void navigate({
+                to: "/projects/$projectId/worktrees/$worktreeId/diff",
+                params: {
+                  projectId: worktree.projectId,
+                  worktreeId: worktree.id,
+                },
+              })
+            }
+            title="View uncommitted changes"
+            className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
+          >
+            <FileDiff aria-hidden className="size-3.5" />
+            {worktree.changedCount}{" "}
+            {worktree.changedCount === 1 ? "file" : "files"} changed
+            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+          </button>
+        ) : (
+          <WorktreeSyncPill worktree={worktree} />
+        )}
+      </div>
       {commits.length === 0 ? (
         <div className="text-sm text-muted-foreground">No commits yet.</div>
       ) : (
