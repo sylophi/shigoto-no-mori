@@ -70,18 +70,25 @@ export function WorktreeDetail() {
     return <CenteredMessage>Worktree not found.</CenteredMessage>;
   }
 
-  return <WorktreeDetailInner worktree={worktree} project={project} />;
+  return (
+    <WorktreeDetailInner
+      worktree={worktree}
+      project={project}
+      siblings={worktrees}
+    />
+  );
 }
 
 interface InnerProps {
   worktree: Worktree;
   project: Project;
+  siblings: Worktree[];
 }
 
 // Split from WorktreeDetail so per-worktree hooks (teardown state,
 // deletion phase) only attach when worktree+project resolved. Avoids
 // short-lived subscriptions on empty keys.
-function WorktreeDetailInner({ worktree, project }: InnerProps) {
+function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
   const navigate = useNavigate();
   const { data: runtime } = useRuntimeInfo();
   const deleteMutation = useDeleteWorktree();
@@ -132,7 +139,23 @@ function WorktreeDetailInner({ worktree, project }: InnerProps) {
       {
         onSuccess: (data) => {
           if (data.ok) {
-            void navigate({ to: "/" });
+            // Prefer the sibling above so the user's eye stays roughly in
+            // place; fall back to the one below if this was the first. If
+            // it was the only worktree in the project, hand off to "/"
+            // and let EmptyState pick the next project's first worktree.
+            const index = siblings.findIndex((w) => w.id === worktree.id);
+            const next =
+              (index > 0 ? siblings[index - 1] : undefined) ??
+              (index >= 0 ? siblings[index + 1] : undefined);
+            if (next) {
+              void navigate({
+                to: "/projects/$projectId/worktrees/$worktreeId",
+                params: { projectId: project.id, worktreeId: next.id },
+                replace: true,
+              });
+            } else {
+              void navigate({ to: "/", replace: true });
+            }
           } else {
             setCleanupError(data.cleanupError);
           }
