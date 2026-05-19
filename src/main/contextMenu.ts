@@ -32,14 +32,16 @@ export function attachContextMenu(window: BrowserWindow): void {
     const hasSelection = params.selectionText.trim().length > 0;
     const isEditable = params.isEditable;
 
-    if (params.misspelledWord && params.dictionarySuggestions.length > 0) {
-      for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
-        items.push({
-          label: suggestion,
-          click: () => window.webContents.replaceMisspelling(suggestion),
-        });
+    if (params.misspelledWord) {
+      if (params.dictionarySuggestions.length > 0) {
+        for (const suggestion of params.dictionarySuggestions.slice(0, 5)) {
+          items.push({
+            label: suggestion,
+            click: () => window.webContents.replaceMisspelling(suggestion),
+          });
+        }
+        items.push({ type: "separator" });
       }
-      items.push({ type: "separator" });
       items.push({
         label: "Add to Dictionary",
         click: () =>
