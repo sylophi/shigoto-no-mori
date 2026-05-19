@@ -3,6 +3,9 @@ import { MakerZIP } from "@electron-forge/maker-zip";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { config as loadEnv } from "dotenv";
+
+loadEnv();
 
 const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
   ? {
