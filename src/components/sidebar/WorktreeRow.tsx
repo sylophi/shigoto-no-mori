@@ -150,13 +150,13 @@ function StatusIndicator({ worktree }: { worktree: Worktree }) {
   // count, tone-colored. The detail header carries the actions and full
   // labels; this is just a "needs attention" signal for the sidebar.
   if (state.kind === "publish") {
+    // Without a remote there's no action to take, so the icon would just be
+    // noise on every "personal" repo without an origin. Detail header still
+    // shows the disabled Publish button for discoverability.
+    if (!state.canPublish) return null;
     return (
       <span
-        title={
-          state.canPublish
-            ? "Branch not yet published"
-            : "Branch not yet published (no remote configured)"
-        }
+        title="Branch not yet published"
         aria-label="Unpublished branch"
         className="inline-flex shrink-0 items-center text-[10px] text-violet-500"
       >
