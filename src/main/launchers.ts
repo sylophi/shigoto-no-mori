@@ -72,6 +72,11 @@ const CATALOG: CatalogEntry[] = [
     cli: "agy",
   },
   {
+    id: "codex",
+    label: "Codex",
+    bundleNames: ["Codex.app"],
+  },
+  {
     id: "sublime",
     label: "Sublime Text",
     bundleNames: ["Sublime Text.app"],
