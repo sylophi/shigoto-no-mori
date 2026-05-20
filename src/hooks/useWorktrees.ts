@@ -125,13 +125,14 @@ export function useDeleteWorktree() {
 }
 
 export function useIsDeletingWorktree(worktreeId: string): boolean {
-  const count = useIsMutating({
-    mutationKey: DELETE_WORKTREE_MUTATION_KEY,
-    predicate: (m) =>
-      (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
-      worktreeId,
-  });
-  return count > 0;
+  return (
+    useIsMutating({
+      mutationKey: DELETE_WORKTREE_MUTATION_KEY,
+      predicate: (m) =>
+        (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
+        worktreeId,
+    }) > 0
+  );
 }
 
 interface RenameBranchInput {
