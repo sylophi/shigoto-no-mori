@@ -33,8 +33,9 @@ async function applyOne(
 ): Promise<ApplyOutcome> {
   const src = join(sourcePath, entry.path);
   const dst = join(destPath, entry.path);
+  let srcIsDir: boolean;
   try {
-    await stat(src);
+    srcIsDir = (await stat(src)).isDirectory();
   } catch {
     return {
       failure: { path: entry.path, reason: "Source missing in main checkout" },
@@ -46,11 +47,12 @@ async function applyOne(
     if (entry.mode === "symlink") {
       // Absolute target so the link survives moving the worktree dir around.
       await symlink(src, dst);
-      // Tell git to ignore this path: a symlink-to-directory would otherwise
-      // surface as an untracked entry that `git diff --no-index` can't render
-      // (it tries to recurse through the link), giving "1 file changed" with
-      // a blank diff body. The symlink is shared state, never a change.
-      return { failure: null, excludePath: entry.path };
+      // Only directory symlinks need to be hidden from git: `git diff
+      // --no-index` tries to recurse through the link and errors, leaving
+      // the file with a "1 file changed" count but a blank diff body.
+      // File symlinks render fine as a `120000` patch, so we leave them
+      // visible as ordinary uncommitted changes.
+      return { failure: null, excludePath: srcIsDir ? entry.path : null };
     }
     // force:false makes cp throw EEXIST instead of overwriting files git
     // just laid down (the branch already tracks them).
