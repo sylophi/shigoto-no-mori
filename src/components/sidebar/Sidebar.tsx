@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   FolderPlus,
@@ -27,6 +27,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "@/lib/toast";
 import type { Project, Worktree } from "@shared/schemas";
 import { ProjectRow } from "./ProjectRow";
 import { WorktreeRow } from "./WorktreeRow";
@@ -61,6 +62,21 @@ export function Sidebar() {
   };
 
   const worktreeQueries = useAllProjectWorktrees(projects, true);
+
+  // The per-project query is silent so the all-projects palette fan-out
+  // doesn't spam toasts; here we coalesce the same observations into one.
+  const failedCount = worktreeQueries.filter((q) => q.error).length;
+  useEffect(() => {
+    const id = "worktrees-fanout-error";
+    if (failedCount === 0) {
+      toast.dismiss(id);
+      return;
+    }
+    toast.error(
+      `Couldn't load worktrees for ${failedCount} ${failedCount === 1 ? "project" : "projects"}`,
+      { id },
+    );
+  }, [failedCount]);
 
   const rows: SidebarRow[] = (() => {
     const out: SidebarRow[] = [];
