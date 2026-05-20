@@ -11,7 +11,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useConvertExternalWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
-import { isRealBranch, type Worktree } from "@shared/schemas";
+import type { Worktree } from "@shared/schemas";
 
 type RowStatus =
   | { kind: "idle" }
@@ -43,12 +43,14 @@ export function ConvertExternalWorktrees() {
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
 
-  const proposedName = (worktree: Worktree): string => {
-    const branchOrSha = worktree.branch;
-    return isRealBranch(branchOrSha)
-      ? sanitizeBranchForPath(branchOrSha)
-      : branchOrSha;
-  };
+  // For detached HEADs `worktree.branch` is a short SHA -- pass it
+  // through unchanged so the managed worktree gets a hash-named dir.
+  // (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
+  // never see here.)
+  const proposedName = (worktree: Worktree): string =>
+    worktree.detached
+      ? worktree.branch
+      : sanitizeBranchForPath(worktree.branch);
   const proposedPath = (worktree: Worktree): string =>
     `${root}/worktrees/${project.name}/${proposedName(worktree)}`;
 
@@ -237,7 +239,7 @@ function ConvertRow({
   onToggle,
   isLast,
 }: ConvertRowProps) {
-  const detached = !isRealBranch(worktree.branch);
+  const detached = worktree.detached;
   const dirty = worktree.changedCount > 0;
   const oldPath = tildify(worktree.path, home);
   const interactive = !disabled && status.kind !== "done";

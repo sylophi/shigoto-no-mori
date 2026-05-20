@@ -749,11 +749,11 @@ async function seedConvertibleExternals(): Promise<Manifest> {
     purpose:
       "Five external worktrees covering slashed, unicode, long, detached, and remote-backed branches for the Convert External flow",
     tests: [
-      "Project dropdown → 'Convert external worktrees…' lists all 5 externals (primary is excluded).",
+      "Project dropdown → 'Convert external worktrees' lists all 5 externals (primary is excluded).",
       "Each row shows the old external path → new ~/shigomori-dev/worktrees/convertible-externals/<slug> path. Slashes become hyphens; the unicode branch keeps its characters; the long branch stays readable.",
       "The 'dirty-edits' row shows the amber 'N uncommitted' pill.",
       "The 'pinned-commit' row shows the 'detached' pill and the short SHA where a branch name would be.",
-      "Select all → button reads 'Convert (wipes 5 worktrees)'.",
+      "Select all → '5 of 5 selected' shows in the row above the list; the submit button just reads 'Convert'.",
       "Convert just the dirty one first: confirm the destructive banner copy, then run. Old directory disappears, new managed worktree at ~/shigomori-dev/worktrees/convertible-externals/<slug> exists, the in-flight edits and scratch.txt are gone.",
       "Convert the remaining four. Each succeeds; detached one stays detached at the same SHA; release/1.0.0 still tracks origin/release/1.0.0 (0/0).",
       "After all five convert, the page shows the empty state and the sidebar no longer marks any worktree as External.",

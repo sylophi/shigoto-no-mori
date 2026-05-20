@@ -10,7 +10,6 @@ import {
   CreateWorktreePayloadSchema,
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
-  isRealBranch,
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
   SyncWorktreePayloadSchema,
@@ -116,9 +115,9 @@ export function registerWorktreeHandlers(): void {
       // because the whole point of converting is to wipe whatever's in
       // the old directory and start fresh from the branch tip.
       const branchOrSha = target.branch;
-      const worktreeName = isRealBranch(branchOrSha)
-        ? sanitizeBranchForPath(branchOrSha)
-        : branchOrSha;
+      const worktreeName = target.detached
+        ? branchOrSha
+        : sanitizeBranchForPath(branchOrSha);
 
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, true);
