@@ -9,6 +9,7 @@ import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/usePickedWorktreeName";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useBranches } from "@/hooks/useBranches";
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
@@ -32,6 +33,7 @@ export function NewWorktree() {
   const { data: defaultBranch } = useDefaultBranch(projectId);
   const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
+  const { data: branches } = useBranches(projectId);
   const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
   const occupiedBranches = worktrees
@@ -68,6 +70,13 @@ export function NewWorktree() {
   // still smuggle one in — block submit and surface why.
   const baseOccupied = mode === "checkout" && occupiedBranches.includes(base);
 
+  // `git worktree add -b` refuses an existing branch name. Catch it
+  // up-front so the form mirrors the source/folder collision warnings.
+  const branchTaken =
+    mode === "branch-from" &&
+    branchName.length > 0 &&
+    (branches?.local.includes(branchName) ?? false);
+
   // Raw `worktreeName` is held separately from the sanitized `folderName`
   // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
   // be unreachable — the trailing `-` would be trimmed before the `2`).
@@ -83,6 +92,7 @@ export function NewWorktree() {
     (mode === "checkout" || branchName.length > 0) &&
     folderName.length > 0 &&
     !folderTaken &&
+    !branchTaken &&
     !baseOccupied;
 
   const handleCreate = () => {
@@ -192,6 +202,12 @@ export function NewWorktree() {
             autoFocus
             className={TEXT_INPUT_CLASS}
           />
+          {branchTaken && (
+            <p className="text-xs text-destructive">
+              A branch named <span className="font-mono">{branchName}</span>{" "}
+              already exists in this project.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
