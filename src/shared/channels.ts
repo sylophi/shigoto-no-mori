@@ -31,6 +31,8 @@ export const CHANNELS = {
   ScriptsEvent: "scripts:event",
   PackageScriptsList: "packageScripts:list",
   PackageScriptsRun: "packageScripts:run",
+  PackageScriptsGetSort: "packageScripts:getSort",
+  PackageScriptsSetSort: "packageScripts:setSort",
   PortPoolIsActive: "portPool:isActive",
   PortPoolIsInstalled: "portPool:isInstalled",
   GithubCliReadiness: "githubCli:readiness",

@@ -12,6 +12,13 @@ export function usePackageScripts(
       return window.api.packageScripts.list({ projectId, worktreeId });
     },
     enabled: projectId !== null && worktreeId !== null,
+    // Lock the sorted order for the lifetime of the route mount, matching
+    // the launcher's behavior. The list refetches on mount but never
+    // reshuffles under the user when a script bumps its use count or the
+    // window regains focus.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     meta: { errorTitle: "Couldn't read package.json scripts" },
   });
 }
