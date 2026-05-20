@@ -32,6 +32,7 @@ import type {
   GithubCliReadiness,
   GlobalConfig,
   LauncherEntry,
+  LaunchToolMenuEntry,
   PackageScriptsResult,
   Project,
   PullRequest,
@@ -201,11 +202,11 @@ const api = {
   menu: {
     setLaunchToolsEnabled: (
       enabled: boolean,
-      projectId?: string,
+      entries?: LaunchToolMenuEntry[],
     ): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.MenuSetLaunchToolsEnabled, {
         enabled,
-        projectId,
+        entries,
       }),
   },
   window: {

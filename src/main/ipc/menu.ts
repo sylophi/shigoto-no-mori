@@ -6,10 +6,10 @@ import { setLaunchToolsEnabled } from "../menu";
 export function registerMenuHandlers(): void {
   ipcMain.handle(
     CHANNELS.MenuSetLaunchToolsEnabled,
-    async (_event, rawPayload: unknown) => {
-      const { enabled, projectId } =
+    (_event, rawPayload: unknown) => {
+      const { enabled, entries } =
         SetLaunchToolsEnabledPayloadSchema.parse(rawPayload);
-      await setLaunchToolsEnabled(enabled, projectId);
+      setLaunchToolsEnabled(enabled, entries);
     },
   );
 }

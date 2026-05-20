@@ -503,10 +503,19 @@ export const RunPackageScriptPayloadSchema = z.object({
   scriptName: z.string().min(1),
 });
 
+export const LaunchToolMenuEntrySchema = z.object({
+  id: z.string(),
+  label: z.string(),
+});
+
 export const SetLaunchToolsEnabledPayloadSchema = z.object({
   enabled: z.boolean(),
-  projectId: z.string().optional(),
+  // When enabling, the renderer passes the exact entries it's showing so
+  // ⌘1..⌘9 always mirror the visible launcher row. Omit when disabling.
+  entries: z.array(LaunchToolMenuEntrySchema).optional(),
 });
+
+export type LaunchToolMenuEntry = z.infer<typeof LaunchToolMenuEntrySchema>;
 
 export const CancelScriptPayloadSchema = z.object({
   runId: z.string(),
