@@ -88,7 +88,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
                 <button
                   type="button"
                   aria-label={`More actions for ${project.name}`}
-                  className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                  className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
                 >
                   <MoreHorizontal className="size-3.5" />
                 </button>
@@ -128,7 +128,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           disabled={create.isPending}
           aria-label={`Quick-create worktree in ${project.name}`}
           title={`Quick-create worktree in ${project.name}`}
-          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
+          className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
           aria-busy={create.isPending}
         >
           {create.isPending ? (
@@ -143,7 +143,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
               <button
                 type="button"
                 aria-label={`More actions for ${project.name}`}
-                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <MoreHorizontal className="size-3.5" />
               </button>
