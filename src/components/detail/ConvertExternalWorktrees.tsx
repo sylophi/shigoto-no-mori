@@ -135,7 +135,7 @@ export function ConvertExternalWorktrees() {
             <p className="mt-1 leading-relaxed">
               Each selected worktree is removed from its current location and
               re-checked-out under{" "}
-              <span className="font-mono">
+              <span className="font-mono select-text">
                 {root}/worktrees/{project.name}/
               </span>
               . Uncommitted changes, untracked files, and any state inside the
@@ -237,6 +237,7 @@ function ConvertRow({
   const detached = !isRealBranch(worktree.branch);
   const dirty = worktree.changedCount > 0;
   const oldPath = tildify(worktree.path, home);
+  const interactive = !disabled && status.kind !== "done";
 
   return (
     <label
@@ -244,20 +245,21 @@ function ConvertRow({
         "group flex items-start gap-3 px-3 py-3 text-sm",
         !isLast && "border-b border-border",
         disabled && "opacity-70",
+        interactive && "cursor-pointer",
       )}
     >
       <input
         type="checkbox"
         checked={checked}
         onChange={onToggle}
-        disabled={disabled || status.kind === "done"}
+        disabled={!interactive}
         className="mt-1 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
       />
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "min-w-0 truncate font-mono",
+              "min-w-0 truncate font-mono select-text",
               detached && "text-muted-foreground",
             )}
             title={detached ? "Detached HEAD (commit hash)" : worktree.branch}
