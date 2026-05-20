@@ -4,6 +4,7 @@ import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./main/bootstrap";
 import { attachContextMenu } from "./main/contextMenu";
+import { refreshAllProjects, startBackgroundFetch } from "./main/fetch";
 import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
@@ -57,7 +58,10 @@ const createWindow = () => {
   // and `visibilitychange` events don't fire on every Electron focus
   // transition (notably ⌘Tab between apps), so React Query's
   // refetch-on-focus needs this signal to be reliable.
-  const sendFocus = () => mainWindow?.webContents.send(CHANNELS.WindowFocused);
+  const sendFocus = () => {
+    mainWindow?.webContents.send(CHANNELS.WindowFocused);
+    refreshAllProjects();
+  };
   const sendBlur = () => mainWindow?.webContents.send(CHANNELS.WindowBlurred);
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
@@ -88,6 +92,7 @@ app.on("ready", async () => {
   await ensureShigomoriRoot();
   buildAppMenu();
   createWindow();
+  startBackgroundFetch();
 });
 
 app.on("window-all-closed", () => {

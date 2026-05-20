@@ -460,6 +460,33 @@ export async function resolveDefaultBranch(
   throw new Error(`No local branches found in ${projectPath}`);
 }
 
+// Coalesces overlapping callers onto a single in-flight fetch so the
+// focus-driven sweep, the periodic refresh, and a pre-action call from
+// `createWorktree` can't dogpile a slow remote.
+const fetchInflight = new Map<string, Promise<void>>();
+
+export async function fetchAllRemotes(projectPath: string): Promise<void> {
+  const existing = fetchInflight.get(projectPath);
+  if (existing) return existing;
+  const p = run(projectPath, ["fetch", "--all", "--quiet", "--prune"])
+    .then(() => undefined)
+    .finally(() => {
+      fetchInflight.delete(projectPath);
+    });
+  fetchInflight.set(projectPath, p);
+  return p;
+}
+
+// Single-string snapshot of every remote-tracking ref + its SHA. Compared
+// before/after a fetch to skip the broadcast when nothing actually moved.
+export async function snapshotRemoteRefs(projectPath: string): Promise<string> {
+  return run(projectPath, [
+    "for-each-ref",
+    "--format=%(objectname) %(refname)",
+    "refs/remotes/",
+  ]);
+}
+
 export async function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
@@ -536,6 +563,14 @@ export async function createWorktree(
     projectName,
     worktreeName,
   );
+
+  // Refresh remote-tracking refs so the new worktree starts at the actual
+  // upstream tip. Without this, `refs/remotes/origin/main` is whatever the
+  // last fetch left behind -- which often matches local `main` and looks
+  // like the worktree silently used the local branch as its base.
+  if (base && (await remoteRefExists(projectPath, base))) {
+    await fetchAllRemotes(projectPath).catch(() => undefined);
+  }
 
   await mkdir(dirname(worktreePath), { recursive: true });
   if (checkout) {

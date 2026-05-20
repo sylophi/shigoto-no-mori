@@ -59,6 +59,7 @@ export const CHANNELS = {
   MenuSetLaunchToolsEnabled: "menu:setLaunchToolsEnabled",
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
+  GitRefsRefreshed: "git:refsRefreshed",
 } as const;
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];
