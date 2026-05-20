@@ -1,9 +1,11 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
+import { sanitizeBranchForPath } from "@shared/branches";
 import {
   CheckoutBranchPayloadSchema,
   CleanupErrorSchema,
   CommitDiffPayloadSchema,
+  ConvertExternalWorktreePayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
   type DeleteWorktreeResult,
@@ -78,6 +80,69 @@ export function registerWorktreeHandlers(): void {
       const scriptFailures = await runCreateLifecycle({
         project,
         worktree: target,
+        projectBranch,
+        config,
+        globalPortPoolEnabled: global.portPool === true,
+        webContents: event.sender,
+      });
+
+      return { worktree, carryOver, scriptFailures };
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesConvertExternal,
+    async (event, rawPayload: unknown): Promise<CreateWorktreeResult> => {
+      const { projectId, worktreeId } =
+        ConvertExternalWorktreePayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (target.isPrimary) {
+        throw new Error("The primary checkout can't be converted");
+      }
+      if (!target.isExternal) {
+        throw new Error("Worktree is already shigomori-managed");
+      }
+
+      // The worktree's branch (or short hash, for a detached HEAD) is what
+      // we'll re-check-out in the new managed location. Externals were
+      // created outside shigomori, so we skip teardown / port-pool release
+      // -- we never ran the matching provision on the way in. Force-remove
+      // because the whole point of converting is to wipe whatever's in
+      // the old directory and start fresh from the branch tip.
+      const branchOrSha = target.branch;
+      const worktreeName = target.detached
+        ? branchOrSha
+        : sanitizeBranchForPath(branchOrSha);
+
+      await killScriptsForWorktree(worktreeId);
+      await removeWorktree(project.path, target.path, true);
+
+      const worktree = await createWorktree(project.id, project.path, {
+        requestedWorktreeName: worktreeName,
+        base: branchOrSha,
+        checkout: true,
+      });
+      const [config, identities, global] = await Promise.all([
+        readShigomoriConfig(project.id).catch(() => null),
+        listWorktreeIdentities(project.id, project.path),
+        readGlobalConfig(),
+      ]);
+      const carryOver = await applyCarryOver(
+        project.path,
+        worktree.path,
+        config?.carryOver ?? [],
+      );
+
+      const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+      const fresh = identities.find((i) => i.id === worktree.id) ?? worktree;
+      const scriptFailures = await runCreateLifecycle({
+        project,
+        worktree: fresh,
         projectBranch,
         config,
         globalPortPoolEnabled: global.portPool === true,

@@ -659,6 +659,108 @@ async function seedPreExistingWorktrees(): Promise<Manifest> {
   };
 }
 
+async function seedConvertibleExternals(): Promise<Manifest> {
+  const remote = await bareRemote("convertible-externals");
+  const repo = join(REPOS, "convertible-externals");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# convertible-externals\n\nFive externals exercising the 'Convert external worktrees' flow.\n",
+      ".gitignore": ".env\n.env.local\n.vscode/\nnode_modules/\n*.log\n",
+      "package.json": pkgJson("convertible-externals", {
+        setup: "echo 'setup ran for' \"$SHIGOMORI_WORKTREE_NAME\"",
+        dev: "echo 'dev' && sleep 3600",
+      }),
+      "src/index.ts": "export {};\n",
+    },
+    "Initial",
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  // Gitignored carry-over candidates so post-conversion we can confirm the
+  // managed worktree got a fresh ones (or symlinks) instead of the old
+  // external's copies.
+  await writeAt(
+    repo,
+    ".env",
+    "FAKE_API_KEY=primary\nFAKE_DB_URL=postgres://localhost/primary\n",
+  );
+  await writeAt(
+    repo,
+    ".vscode/settings.json",
+    '{"editor.formatOnSave":true}\n',
+  );
+
+  // Branch with a slash — slugified into a hyphenated dir name.
+  await git(repo, ["branch", "feat/auth-flow"]);
+  // Unicode branch — should round-trip through sanitizeBranchForPath.
+  await git(repo, ["branch", "feat/日本語ブランチ"]);
+  // Long branch — should still produce a usable dir name.
+  await git(repo, [
+    "branch",
+    "experiment/extremely-long-branch-name-to-stress-the-managed-path-preview-and-confirm-no-overflow",
+  ]);
+  // Branch with a remote upstream so the converted worktree should retain
+  // the same ahead/behind story (0/0) right after conversion.
+  await git(repo, ["branch", "release/1.0.0"]);
+  await git(repo, ["push", "-u", "origin", "release/1.0.0", "-q"]);
+
+  await mkdir(EXTERNAL, { recursive: true });
+  const baseExternal = join(EXTERNAL, "convertible-externals");
+  await mkdir(baseExternal, { recursive: true });
+
+  // 1. Clean slashed branch.
+  const cleanSlashed = join(baseExternal, "clean-slashed");
+  await git(repo, ["worktree", "add", cleanSlashed, "feat/auth-flow"]);
+
+  // 2. Dirty external — modified tracked file + untracked file. The convert
+  //    flow's destructive warning should make clear this gets wiped.
+  const dirty = join(baseExternal, "dirty-edits");
+  await git(repo, [
+    "worktree",
+    "add",
+    dirty,
+    "experiment/extremely-long-branch-name-to-stress-the-managed-path-preview-and-confirm-no-overflow",
+  ]);
+  await writeAt(dirty, "src/index.ts", "export const local = 'edit';\n");
+  await writeAt(dirty, "scratch.txt", "untracked work that will vanish\n");
+
+  // 3. Unicode branch.
+  const unicode = join(baseExternal, "unicode-branch");
+  await git(repo, ["worktree", "add", unicode, "feat/日本語ブランチ"]);
+
+  // 4. Detached HEAD at the initial commit so the resulting managed worktree
+  //    stays detached at the same SHA.
+  const detached = join(baseExternal, "pinned-commit");
+  const head = (await git(repo, ["rev-parse", "HEAD"])).trim();
+  await git(repo, ["worktree", "add", "--detach", detached, head]);
+
+  // 5. Remote-backed branch (release/1.0.0). Useful for verifying upstream
+  //    state survives the round-trip.
+  const remoteBacked = join(baseExternal, "remote-backed");
+  await git(repo, ["worktree", "add", remoteBacked, "release/1.0.0"]);
+
+  return {
+    name: "convertible-externals",
+    path: repo,
+    purpose:
+      "Five external worktrees covering slashed, unicode, long, detached, and remote-backed branches for the Convert External flow",
+    tests: [
+      "Project dropdown → 'Convert external worktrees' lists all 5 externals (primary is excluded).",
+      "Each row shows the old external path → new ~/shigomori-dev/worktrees/convertible-externals/<slug> path. Slashes become hyphens; the unicode branch keeps its characters; the long branch stays readable.",
+      "The 'dirty-edits' row shows the amber 'N uncommitted' pill.",
+      "The 'pinned-commit' row shows the 'detached' pill and the short SHA where a branch name would be.",
+      "Select all → '5 of 5 selected' shows in the row above the list; the submit button just reads 'Convert'.",
+      "Convert just the dirty one first: confirm the destructive banner copy, then run. Old directory disappears, new managed worktree at ~/shigomori-dev/worktrees/convertible-externals/<slug> exists, the in-flight edits and scratch.txt are gone.",
+      "Convert the remaining four. Each succeeds; detached one stays detached at the same SHA; release/1.0.0 still tracks origin/release/1.0.0 (0/0).",
+      "After all five convert, the page shows the empty state and the sidebar no longer marks any worktree as External.",
+    ],
+  };
+}
+
 async function seedCarryoverRich(): Promise<Manifest> {
   const repo = join(REPOS, "carryover-rich");
   await initRepo(repo);
@@ -1024,6 +1126,7 @@ async function main(): Promise<void> {
     { name: "many-branches", run: seedManyBranches },
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
+    { name: "convertible-externals", run: seedConvertibleExternals },
     { name: "carryover-rich", run: seedCarryoverRich },
     { name: "path with spaces", run: seedPathSpaces },
     { name: "プロジェクト", run: seedUnicodePath },

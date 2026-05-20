@@ -219,6 +219,11 @@ export const CreateWorktreeResultSchema = z.object({
   scriptFailures: z.array(ScriptFailureSchema),
 });
 
+export const ConvertExternalWorktreePayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+});
+
 export const DeleteWorktreePayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
