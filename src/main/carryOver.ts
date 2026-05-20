@@ -79,6 +79,16 @@ async function applyOne(
   }
 }
 
+// Backslash-escape gitignore metacharacters so a literal path like
+// `cache[dev]` or `build*` survives intact -- otherwise the glob would
+// either fail to match the actual directory or sweep in unintended
+// siblings, defeating the whole point of the exclude. `/` is the path
+// separator and must stay raw; backslash itself goes first so we don't
+// double-escape what we just added.
+function escapeGitignorePattern(path: string): string {
+  return path.replace(/\\/g, "\\\\").replace(/([*?[\]#!])/g, "\\$1");
+}
+
 // `info/exclude` lives in the common dir (shared across primary + worktrees).
 // That's fine for carry-over: the picker is project-scoped, so every worktree
 // already wants these paths ignored, and the primary doesn't have a symlink
@@ -105,7 +115,7 @@ async function appendExcludes(
   // Leading slash anchors the pattern to the worktree root so we don't
   // accidentally swallow a same-named file in a nested directory.
   const toAdd = paths
-    .map((p) => `/${p}`)
+    .map((p) => `/${escapeGitignorePattern(p)}`)
     .filter((line) => !existingLines.has(line));
   if (toAdd.length === 0) return;
   await mkdir(dirname(excludeFile), { recursive: true });
