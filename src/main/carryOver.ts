@@ -84,9 +84,14 @@ async function applyOne(
 // either fail to match the actual directory or sweep in unintended
 // siblings, defeating the whole point of the exclude. `/` is the path
 // separator and must stay raw; backslash itself goes first so we don't
-// double-escape what we just added.
+// double-escape what we just added. Trailing spaces also need escaping
+// because git silently strips them from patterns, so a directory named
+// `cache ` would otherwise land as `/cache` and miss the real path.
 function escapeGitignorePattern(path: string): string {
-  return path.replace(/\\/g, "\\\\").replace(/([*?[\]#!])/g, "\\$1");
+  return path
+    .replace(/\\/g, "\\\\")
+    .replace(/([*?[\]#!])/g, "\\$1")
+    .replace(/ (?= *$)/g, "\\ ");
 }
 
 // `info/exclude` lives in the common dir (shared across primary + worktrees).
