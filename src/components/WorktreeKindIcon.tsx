@@ -17,22 +17,25 @@ function kindOf(worktree: Worktree): keyof typeof KINDS | null {
   return null;
 }
 
-export function WorktreeKindIcon({ worktree }: { worktree: Worktree }) {
+export function WorktreeKindIcon({
+  worktree,
+  showTooltip = true,
+}: {
+  worktree: Worktree;
+  showTooltip?: boolean;
+}) {
   const kind = kindOf(worktree);
   if (!kind) return null;
   const { Icon, label } = KINDS[kind];
+  const icon = (
+    <span className="inline-flex shrink-0">
+      <Icon aria-label={label} className="size-3 text-muted-foreground/70" />
+    </span>
+  );
+  if (!showTooltip) return icon;
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={
-          <span className="inline-flex shrink-0">
-            <Icon
-              aria-label={label}
-              className="size-3 text-muted-foreground/70"
-            />
-          </span>
-        }
-      />
+      <TooltipTrigger render={icon} />
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   );
