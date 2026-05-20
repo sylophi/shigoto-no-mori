@@ -46,7 +46,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           },
         })
       }
-      title={describeRow(worktree, activity)}
+      title={describeRow(activity)}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
@@ -89,20 +89,15 @@ function RowTrailing({ worktree, activity }: RowTrailingProps) {
     <>
       <StatusIndicator worktree={worktree} />
       <PullRequestIndicator worktree={worktree} />
-      <WorktreeKindIcon worktree={worktree} />
+      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
   );
 }
 
-function describeRow(
-  worktree: Worktree,
-  activity: ScriptActivityKind | null,
-): string | undefined {
+function describeRow(activity: ScriptActivityKind | null): string | undefined {
   if (activity === "setup") return "Running setup";
   if (activity === "teardown") return "Running teardown";
   if (activity === "package") return "Running a script";
-  if (worktree.isPrimary) return "Repo root";
-  if (worktree.isExternal) return `External worktree at ${worktree.path}`;
   return undefined;
 }
 
