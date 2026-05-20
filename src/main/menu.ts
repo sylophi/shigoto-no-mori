@@ -9,25 +9,24 @@ import {
   type BrowserWindow,
 } from "electron";
 import { CHANNELS } from "@shared/channels";
-import { getLaunchersForProject } from "./ipc/launchers";
+import type { LaunchToolMenuEntry } from "@shared/schemas";
 
 const isMac = process.platform === "darwin";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
 
-interface LaunchToolEntry {
-  id: string;
-  label: string;
-}
-
-// Sticky entries for the File menu's ⌘1..⌘9. Computed in main from the same
-// ordering source as LauncherRow's buttons. The click handler sends the id
-// (not the index) so the renderer can't drift out of sync with the menu.
-let currentLaunchToolEntries: LaunchToolEntry[] = [];
+// Sticky entries for the File menu's ⌘1..⌘9. The renderer owns ordering
+// (it ships whatever the visible LauncherRow is showing) so the menu and
+// the row can never disagree. The click handler sends the id (not the
+// index) so the renderer can't drift out of sync with the menu.
+let currentLaunchToolEntries: LaunchToolMenuEntry[] = [];
 let currentLaunchToolsEnabled = false;
 
-function entriesEqual(a: LaunchToolEntry[], b: LaunchToolEntry[]): boolean {
+function entriesEqual(
+  a: LaunchToolMenuEntry[],
+  b: LaunchToolMenuEntry[],
+): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (a[i].id !== b[i].id || a[i].label !== b[i].label) return false;
@@ -35,24 +34,16 @@ function entriesEqual(a: LaunchToolEntry[], b: LaunchToolEntry[]): boolean {
   return true;
 }
 
-export async function setLaunchToolsEnabled(
+export function setLaunchToolsEnabled(
   enabled: boolean,
-  projectId?: string,
-): Promise<void> {
-  let nextEntries = currentLaunchToolEntries;
-  if (enabled && projectId) {
-    try {
-      const entries = await getLaunchersForProject(projectId);
-      nextEntries = entries
-        .slice(0, MAX_LAUNCH_TOOL_SHORTCUTS)
-        .map((e) => ({ id: e.id, label: e.label }));
-    } catch (err) {
-      console.warn(
-        `setLaunchToolsEnabled: lookup failed for ${projectId}`,
-        err,
-      );
-    }
-  }
+  entries?: LaunchToolMenuEntry[],
+): void {
+  // No entries means "just toggle the enabled flag on whatever we last
+  // displayed", so unmount cleanups can grey out the shortcuts without
+  // erasing them.
+  const nextEntries = entries
+    ? entries.slice(0, MAX_LAUNCH_TOOL_SHORTCUTS)
+    : currentLaunchToolEntries;
   const unchanged =
     enabled === currentLaunchToolsEnabled &&
     entriesEqual(nextEntries, currentLaunchToolEntries);

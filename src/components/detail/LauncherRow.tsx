@@ -17,12 +17,18 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   const navigate = useNavigate();
   const entries = data?.entries ?? [];
 
-  // Main owns the ⌘1..⌘9 ordering; we just signal which project is in scope
-  // and dispatch on the launcherId main sends back. Splitting the unmount
-  // disable into its own effect avoids a disabled flash on data refetches.
+  // The visible row is the single source of truth for ⌘1..⌘9 ordering:
+  // we ship exactly what we're rendering up to main, so the menu can never
+  // shuffle out from under the buttons. Splitting the unmount disable into
+  // its own effect avoids a disabled flash on data refetches.
   useEffect(() => {
-    void window.api.menu.setLaunchToolsEnabled(true, worktree.projectId);
-  }, [data, worktree.projectId]);
+    if (!data) return;
+    const menuEntries = data.entries.map((e) => ({
+      id: e.id,
+      label: e.label,
+    }));
+    void window.api.menu.setLaunchToolsEnabled(true, menuEntries);
+  }, [data]);
 
   useEffect(() => {
     return () => {

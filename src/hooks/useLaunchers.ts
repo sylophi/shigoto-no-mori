@@ -24,6 +24,13 @@ export function useLauncherForProject(projectId: string | null) {
       return window.api.launchers.forProject(projectId);
     },
     enabled: projectId !== null,
+    // Lock the order for the lifetime of the route mount. The page picks
+    // up a fresh list when the user navigates in (refetchOnMount: "always"
+    // from the global default), but never reshuffles under them on window
+    // focus or reconnect.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     meta: { errorTitle: "Couldn't load launchers" },
   });
 }
