@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Check, FileDiff, Loader2, X } from "lucide-react";
+import { Check, FileDiff, Loader2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -253,25 +253,25 @@ function ConvertRow({
         disabled={disabled || status.kind === "done"}
         className="mt-1 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
       />
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex items-center gap-2">
           <span
             className={cn(
-              "truncate font-mono",
+              "min-w-0 truncate font-mono",
               detached && "text-muted-foreground",
             )}
-            title={detached ? "Detached HEAD (commit hash)" : undefined}
+            title={detached ? "Detached HEAD (commit hash)" : worktree.branch}
           >
             {worktree.branch}
           </span>
           {detached && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
               detached
             </span>
           )}
           {dirty && (
             <span
-              className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
               title="Uncommitted changes will be wiped"
             >
               <FileDiff aria-hidden className="size-3" />
@@ -279,13 +279,22 @@ function ConvertRow({
             </span>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-muted-foreground">
-          <span className="break-all select-text">{oldPath}</span>
-          <ArrowRight aria-hidden className="size-3 shrink-0" />
-          <span className="break-all text-foreground/80 select-text">
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 font-mono text-xs">
+          <dt className="text-muted-foreground/60">from</dt>
+          <dd
+            className="min-w-0 truncate text-muted-foreground select-text"
+            title={worktree.path}
+          >
+            {oldPath}
+          </dd>
+          <dt className="text-muted-foreground/60">to</dt>
+          <dd
+            className="min-w-0 truncate text-foreground/80 select-text"
+            title={proposedPath}
+          >
             {proposedPath}
-          </span>
-        </div>
+          </dd>
+        </dl>
         {status.kind === "error" && (
           <p className="text-xs text-destructive select-text">
             {status.message}
