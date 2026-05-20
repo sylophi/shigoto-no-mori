@@ -17,7 +17,7 @@
 // The script does NOT touch ~/shigomori-dev/. Add each repo via the app.
 
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
@@ -718,6 +718,52 @@ async function seedCarryoverRich(): Promise<Manifest> {
   };
 }
 
+// Pre-built worktree with a symlink-mode carry-over of an untracked
+// directory. Mirrors what `applyCarryOver` produces: the symlink itself
+// plus a matching entry in the shared `.git/info/exclude` so git treats
+// the path as ignored. Without the exclude line the symlink would surface
+// as an untracked `?? shared-deps`, and `git diff --no-index` would
+// blow up on the symlink-to-directory, leaving the diff body blank.
+async function seedCarryoverSymlinkDir(): Promise<Manifest> {
+  const repo = join(REPOS, "carryover-symlink-dir");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md": "# carryover-symlink-dir\n",
+      ".gitignore": "shared-deps/\n",
+      "src/index.ts": "export {};\n",
+    },
+    "Initial",
+  );
+  await writeAt(repo, "shared-deps/lib/index.js", "module.exports = 1;\n");
+  await writeAt(
+    repo,
+    "shared-deps/lib/package.json",
+    `${JSON.stringify({ name: "lib", version: "1.0.0" })}\n`,
+  );
+  await mkdir(EXTERNAL, { recursive: true });
+  const worktreePath = join(EXTERNAL, "carryover-symlink-dir-feat");
+  await git(repo, ["worktree", "add", worktreePath, "-b", "feat/sym-repro"]);
+  // Absolute target so the link survives moving the worktree dir, matching
+  // what `applyCarryOver` would produce for a Symlink-mode entry.
+  await symlink(join(repo, "shared-deps"), join(worktreePath, "shared-deps"));
+  // Same `info/exclude` entry applyCarryOver writes -- leading slash anchors
+  // the pattern to the worktree root, hides the symlink from git status.
+  await appendFile(join(repo, ".git/info/exclude"), "/shared-deps\n");
+  return {
+    name: "carryover-symlink-dir",
+    path: repo,
+    purpose:
+      "Pre-built worktree with a directory symlink carry-over (excluded via .git/info/exclude)",
+    tests: [
+      "Add project. Sidebar should show the primary plus a `feat/sym-repro` worktree (External).",
+      "Open `feat/sym-repro`. Sync pill should report no uncommitted changes; Uncommitted changes view shows the empty state.",
+      "To exercise the pre-fix bug: remove the `/shared-deps` line from `repos/carryover-symlink-dir/.git/info/exclude` -- count returns to 1 and the diff body is blank.",
+    ],
+  };
+}
+
 async function seedPathSpaces(): Promise<Manifest> {
   const repo = join(REPOS, "path with spaces");
   await initRepo(repo);
@@ -1025,6 +1071,7 @@ async function main(): Promise<void> {
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
     { name: "carryover-rich", run: seedCarryoverRich },
+    { name: "carryover-symlink-dir", run: seedCarryoverSymlinkDir },
     { name: "path with spaces", run: seedPathSpaces },
     { name: "プロジェクト", run: seedUnicodePath },
     { name: "deeply-nested", run: seedDeeplyNested },
