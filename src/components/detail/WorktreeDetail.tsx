@@ -47,6 +47,7 @@ import { PullRequestBadge } from "./PullRequestBadge";
 import { ScriptsSection } from "./ScriptsSection";
 import { WorktreeSyncPill } from "./WorktreeSyncPill";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
+import { sanitizeBranchName } from "@shared/branches";
 import {
   type CleanupError,
   type CommitSummary,
@@ -698,7 +699,7 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
           autoFocus
           value={draft}
           disabled={rename.isPending}
-          onChange={(e) => setDraft(e.target.value.replace(/ /g, "-"))}
+          onChange={(e) => setDraft(sanitizeBranchName(e.target.value))}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
