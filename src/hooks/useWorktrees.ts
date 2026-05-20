@@ -1,4 +1,5 @@
 import {
+  useIsMutating,
   useMutation,
   useQueries,
   useQuery,
@@ -91,9 +92,12 @@ interface DeleteWorktreeInput {
   skipCleanup?: boolean;
 }
 
+const DELETE_WORKTREE_MUTATION_KEY = ["delete-worktree"] as const;
+
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
+    mutationKey: DELETE_WORKTREE_MUTATION_KEY,
     mutationFn: (input) => window.api.worktrees.delete(input),
     onSuccess: (data, vars) => {
       // Only invalidate + clear runs when the worktree was actually
@@ -118,6 +122,16 @@ export function useDeleteWorktree() {
     // toast on top would be noise.
     meta: { silentError: true },
   });
+}
+
+export function useIsDeletingWorktree(worktreeId: string): boolean {
+  const count = useIsMutating({
+    mutationKey: DELETE_WORKTREE_MUTATION_KEY,
+    predicate: (m) =>
+      (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
+      worktreeId,
+  });
+  return count > 0;
 }
 
 interface RenameBranchInput {

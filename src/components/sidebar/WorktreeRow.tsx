@@ -12,6 +12,7 @@ import {
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { useIsDeletingWorktree } from "@/hooks/useWorktrees";
 import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
 import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
 import {
@@ -28,6 +29,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const activity = useWorktreeScriptActivity(worktree.id);
+  const isDeleting = useIsDeletingWorktree(worktree.id);
   // Not useMatchRoute: its stable function return reads from a hidden
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.
@@ -46,11 +48,12 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           },
         })
       }
-      title={describeRow(activity)}
+      title={describeRow(activity, isDeleting)}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
+        isDeleting && "opacity-50",
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col">
@@ -68,7 +71,11 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           {worktree.name}
         </span>
       </div>
-      <RowTrailing worktree={worktree} activity={activity} />
+      <RowTrailing
+        worktree={worktree}
+        activity={activity}
+        isDeleting={isDeleting}
+      />
     </button>
   );
 }
@@ -76,12 +83,19 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
 interface RowTrailingProps {
   worktree: Worktree;
   activity: ScriptActivityKind | null;
+  isDeleting: boolean;
 }
 
 // The right-edge cluster: a single spinner / activity icon / location +
 // status combo, chosen by priority. Pulled out so each case is a clean
 // early return instead of a triple ternary.
-function RowTrailing({ worktree, activity }: RowTrailingProps) {
+function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
+  // Deletion spans cleanup scripts + the final git remove; the script
+  // activity covers only cleanup, so keep the trash pulsing for the
+  // whole mutation regardless of which phase is active.
+  if (isDeleting) {
+    return <ActivityIcon kind="teardown" />;
+  }
   if (activity) {
     return <ActivityIcon kind={activity} />;
   }
@@ -94,7 +108,11 @@ function RowTrailing({ worktree, activity }: RowTrailingProps) {
   );
 }
 
-function describeRow(activity: ScriptActivityKind | null): string | undefined {
+function describeRow(
+  activity: ScriptActivityKind | null,
+  isDeleting: boolean,
+): string | undefined {
+  if (isDeleting) return "Deleting worktree";
   if (activity === "setup") return "Running setup";
   if (activity === "teardown") return "Running teardown";
   if (activity === "package") return "Running a script";
