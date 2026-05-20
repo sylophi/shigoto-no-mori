@@ -136,7 +136,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           }}
           disabled={create.isPending}
           aria-label={`Quick-create worktree in ${project.name}`}
-          title={`Quick-create worktree in ${project.name} (⇧/⌘-click to customize)`}
+          title={`Quick-create worktree in ${project.name}`}
           className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
           aria-busy={create.isPending}
         >
