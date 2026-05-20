@@ -10,6 +10,7 @@ import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import antigravityIconUrl from "@/assets/app-icons/antigravity.png";
+import claudeIconUrl from "@/assets/app-icons/claude.png";
 import codexIconUrl from "@/assets/app-icons/codex.png";
 import cursorIconUrl from "@/assets/app-icons/cursor.png";
 import finderIconUrl from "@/assets/app-icons/finder.png";
@@ -69,6 +70,8 @@ export function LauncherIcon({
       return <AppIcon src={antigravityIconUrl} className={className} />;
     case "codex":
       return <AppIcon src={codexIconUrl} className={className} />;
+    case "claude":
+      return <AppIcon src={claudeIconUrl} className={className} />;
     case "windsurf":
       return <AppIcon src={windsurfIconUrl} className={className} />;
     case "vscodium":

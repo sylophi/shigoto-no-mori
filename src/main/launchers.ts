@@ -77,6 +77,11 @@ const CATALOG: CatalogEntry[] = [
     bundleNames: ["Codex.app"],
   },
   {
+    id: "claude",
+    label: "Claude",
+    bundleNames: ["Claude.app"],
+  },
+  {
     id: "sublime",
     label: "Sublime Text",
     bundleNames: ["Sublime Text.app"],
@@ -288,6 +293,13 @@ export async function launchDetected(
   app: DetectedApp,
   worktreePath: string,
 ): Promise<void> {
+  if (app.id === "claude") {
+    const url = new URL("claude://code/new");
+    url.searchParams.set("folder", worktreePath);
+    await exec("open", [url.toString()]);
+    return;
+  }
+
   // Prefer the bundle (more reliable, no PATH issues) when present.
   try {
     await openWithBundle(app.id, app.bundleNames, worktreePath);
