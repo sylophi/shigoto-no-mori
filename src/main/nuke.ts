@@ -5,9 +5,8 @@
 // The original project repos on disk are untouched — we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
-import { isRealBranch } from "@shared/schemas";
 import {
-  deleteLocalBranch,
+  deleteBranchAfterWorktreeRemoval,
   listWorktreeIdentities,
   removeWorktree,
 } from "./git";
@@ -32,22 +31,19 @@ export async function nukeEverything(): Promise<void> {
         return;
       }
       // Skip externals: shigomori didn't create them, so we shouldn't
-      // delete them (or their branches) when wiping our own state.
+      // delete them when wiping our own state. (Branches are filtered
+      // the same way inside deleteBranchAfterWorktreeRemoval.)
       const targets = identities.filter((i) => !i.isPrimary && !i.isExternal);
       await Promise.all(
         targets.map((i) =>
           removeWorktree(project.path, i.path, true).catch(() => undefined),
         ),
       );
-      if (deleteBranches) {
-        await Promise.all(
-          targets
-            .filter((i) => isRealBranch(i.branch))
-            .map((i) =>
-              deleteLocalBranch(project.path, i.branch).catch(() => undefined),
-            ),
-        );
-      }
+      await Promise.all(
+        targets.map((i) =>
+          deleteBranchAfterWorktreeRemoval(project.path, i, deleteBranches),
+        ),
+      );
     }),
   );
   await rm(shigomoriRoot(), { recursive: true, force: true });
