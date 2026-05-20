@@ -698,7 +698,7 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
           autoFocus
           value={draft}
           disabled={rename.isPending}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => setDraft(e.target.value.replace(/ /g, "-"))}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
