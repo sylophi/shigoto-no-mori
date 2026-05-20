@@ -212,6 +212,11 @@ const api = {
     onFocused: subscribe(CHANNELS.WindowFocused),
     onBlurred: subscribe(CHANNELS.WindowBlurred),
   },
+  git: {
+    onRefsRefreshed: subscribeWith<{ projectId: string }>(
+      CHANNELS.GitRefsRefreshed,
+    ),
+  },
   packageScripts: {
     list: (input: {
       projectId: string;

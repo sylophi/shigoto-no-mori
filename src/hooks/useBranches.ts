@@ -13,12 +13,18 @@ export function useBranches(projectId: string | null) {
   });
 }
 
-function invalidateBranchState(
+// Anything derived from refs/heads or refs/remotes for a project: branches,
+// worktrees (each carries ahead/behind + recent commits), and the resolved
+// default branch (which depends on which refs exist). Branch and worktree
+// mutations call this; the renderer also calls it when main broadcasts a
+// background-fetch update.
+export function invalidateBranchState(
   qc: ReturnType<typeof useQueryClient>,
   projectId: string,
 ) {
   void qc.invalidateQueries({ queryKey: ["branches", projectId] });
   void qc.invalidateQueries({ queryKey: ["worktrees", projectId] });
+  void qc.invalidateQueries({ queryKey: ["defaultBranch", projectId] });
 }
 
 interface CreateBranchInput {
