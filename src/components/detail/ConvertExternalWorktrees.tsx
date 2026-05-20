@@ -192,13 +192,7 @@ export function ConvertExternalWorktrees() {
                   onClick={() => void runConversions()}
                   disabled={selected.size === 0 || batchRunning}
                 >
-                  {batchRunning
-                    ? "Converting…"
-                    : selected.size === 0
-                      ? "Convert"
-                      : `Convert (wipes ${selected.size} worktree${
-                          selected.size === 1 ? "" : "s"
-                        })`}
+                  {batchRunning ? "Converting…" : "Convert"}
                 </Button>
                 <Button
                   type="button"

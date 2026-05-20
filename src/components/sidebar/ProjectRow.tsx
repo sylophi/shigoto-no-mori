@@ -178,7 +178,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
                 })
               }
             >
-              Convert external worktrees…
+              Convert external worktrees
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>
