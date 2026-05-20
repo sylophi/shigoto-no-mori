@@ -471,9 +471,6 @@ function NotesSection({ worktree }: { worktree: Worktree }) {
         rows={3}
         className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
       />
-      {write.error && (
-        <div className="text-xs text-destructive">{write.error.message}</div>
-      )}
     </section>
   );
 }

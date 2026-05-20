@@ -221,8 +221,8 @@ export function CarryOverPickerModal({
               Loading...
             </div>
           ) : error ? (
-            <div className="px-3 py-3 text-xs text-destructive select-text">
-              {error.message}
+            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+              Couldn't read folder.
             </div>
           ) : entries.length === 0 ? (
             <div className="px-3 py-6 text-center text-xs text-muted-foreground">

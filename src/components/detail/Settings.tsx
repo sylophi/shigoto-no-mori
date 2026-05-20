@@ -530,7 +530,6 @@ function DangerZone() {
   const { data: runtime } = useRuntimeInfo();
   const { armed, trigger } = useConfirmTwice(5_000);
   const [nuking, setNuking] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
 
   const home = runtime?.homedir ?? null;
   const root = runtime?.shigomoriRoot
@@ -540,7 +539,6 @@ function DangerZone() {
   const handleNuke = () => {
     trigger(async () => {
       setNuking(true);
-      setError(null);
       try {
         await window.api.runtime.nuke();
         try {
@@ -550,8 +548,8 @@ function DangerZone() {
         }
         await queryClient.invalidateQueries();
         void navigate({ to: "/" });
-      } catch (e) {
-        setError(e instanceof Error ? e : new Error(String(e)));
+      } catch (err) {
+        notifyError("Couldn't nuke shigomori data", err);
       } finally {
         setNuking(false);
       }
@@ -591,11 +589,6 @@ function DangerZone() {
               ? "Click again to confirm"
               : "Nuke everything"}
         </Button>
-        {error && (
-          <div className="text-xs text-destructive select-text">
-            {error.message}
-          </div>
-        )}
       </div>
     </section>
   );

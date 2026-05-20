@@ -73,8 +73,8 @@ export function DiffView({
             Computing diff…
           </div>
         ) : error ? (
-          <div className="flex h-full items-center justify-center px-6 text-sm text-destructive select-text">
-            {error.message}
+          <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
+            Couldn't compute diff.
           </div>
         ) : allFiles.length === 0 ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
