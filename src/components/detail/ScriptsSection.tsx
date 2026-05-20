@@ -27,6 +27,7 @@ import {
 import type {
   PackageScriptSortMode,
   PackageScriptsResult,
+  PackageScriptUsage,
   Worktree,
 } from "@shared/schemas";
 import { ScriptStatusBadge } from "./ScriptStatusBadge";
@@ -300,7 +301,7 @@ interface SortableEntry {
 function sortEntries(
   entries: ReadonlyArray<[string, string]>,
   mode: PackageScriptSortMode,
-  usage: PackageScriptsResult["usage"],
+  usage: Record<string, PackageScriptUsage>,
 ): SortableEntry[] {
   const mapped: SortableEntry[] = entries.map(([name, command]) => ({
     name,
@@ -312,16 +313,12 @@ function sortEntries(
     case "alphabetical":
       return mapped.toSorted((a, b) => a.name.localeCompare(b.name));
     case "recent":
-      // Falls back to alphabetical when neither script has been run, so
-      // first-time users still see a predictable list.
       return mapped.toSorted((a, b) => {
         const diff =
           (usage[b.name]?.lastUsed ?? 0) - (usage[a.name]?.lastUsed ?? 0);
         return diff !== 0 ? diff : a.name.localeCompare(b.name);
       });
     case "frequent":
-      // Matches the launcher's rolling-window algorithm: recent-count
-      // descending, alphabetical as the tiebreaker.
       return mapped.toSorted((a, b) => {
         const diff =
           (usage[b.name]?.recentCount ?? 0) - (usage[a.name]?.recentCount ?? 0);

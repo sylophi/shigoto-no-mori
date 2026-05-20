@@ -22,21 +22,14 @@ import {
 import { findProjectOrThrow } from "../projects";
 import { readShigomoriConfig } from "../shigomori";
 import { readKey, writeKey } from "../store";
+import { countWithin, pruneAndPush } from "../useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the
 // count of timestamps within the window.
 const USE_LOG_KEY = "launcherUseLog";
-const WINDOW_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
 
 type UseLogMap = Record<string, number[]>;
-
-function recentScore(log: UseLogMap, id: string, now: number): number {
-  const cutoff = now - WINDOW_MS;
-  let n = 0;
-  for (const t of log[id] ?? []) if (t >= cutoff) n++;
-  return n;
-}
 
 function customEntriesFrom(
   launchers: LauncherCommand[] | undefined,
@@ -100,7 +93,8 @@ export async function getLaunchersForProject(
   const log = readKey<UseLogMap>(USE_LOG_KEY, {});
   const now = Date.now();
   return entries.toSorted((a, b) => {
-    const diff = recentScore(log, b.id, now) - recentScore(log, a.id, now);
+    const diff =
+      countWithin(log[b.id] ?? [], now) - countWithin(log[a.id] ?? [], now);
     return diff !== 0 ? diff : a.label.localeCompare(b.label);
   });
 }
@@ -179,10 +173,6 @@ export function registerLauncherHandlers(): void {
 
 function bumpUseCount(launcherId: string): void {
   const log = readKey<UseLogMap>(USE_LOG_KEY, {});
-  const now = Date.now();
-  const cutoff = now - WINDOW_MS;
-  const fresh = (log[launcherId] ?? []).filter((t) => t >= cutoff);
-  fresh.push(now);
-  log[launcherId] = fresh;
+  log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
   writeKey<UseLogMap>(USE_LOG_KEY, log);
 }

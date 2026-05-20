@@ -11,17 +11,18 @@ export function usePackageScriptSort(projectId: string | null) {
       return window.api.packageScripts.getSort(projectId);
     },
     enabled: projectId !== null,
-    // The preference doesn't change behind our back; once loaded, the mode
-    // sticks for the session unless the user picks a new one (which writes
-    // through the mutation below).
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script sort preference" },
   });
 }
 
+interface SortMutationContext {
+  previous?: PackageScriptSortMode;
+}
+
 export function useSetPackageScriptSort(projectId: string | null) {
   const queryClient = useQueryClient();
-  return useMutation<void, Error, PackageScriptSortMode>({
+  return useMutation<void, Error, PackageScriptSortMode, SortMutationContext>({
     mutationFn: async (mode) => {
       if (!projectId) return;
       await window.api.packageScripts.setSort(projectId, mode);
@@ -38,10 +39,11 @@ export function useSetPackageScriptSort(projectId: string | null) {
       return { previous };
     },
     onError: (_err, _mode, ctx) => {
-      const previous = (ctx as { previous?: PackageScriptSortMode } | undefined)
-        ?.previous;
-      if (previous !== undefined) {
-        queryClient.setQueryData(["packageScriptSort", projectId], previous);
+      if (ctx?.previous !== undefined) {
+        queryClient.setQueryData(
+          ["packageScriptSort", projectId],
+          ctx.previous,
+        );
       }
     },
     meta: { errorTitle: "Couldn't save script sort preference" },
