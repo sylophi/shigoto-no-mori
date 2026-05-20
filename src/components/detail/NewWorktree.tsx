@@ -181,10 +181,7 @@ export function NewWorktree() {
 
         {errorMessage && <ErrorBanner>{errorMessage}</ErrorBanner>}
 
-        <div className="flex items-center gap-2">
-          <Button type="submit" disabled={!canSubmit || busy} size="sm">
-            {busy ? "Creating…" : "Create worktree"}
-          </Button>
+        <div className="flex items-center justify-end gap-2">
           <Button
             type="button"
             variant="ghost"
@@ -193,6 +190,9 @@ export function NewWorktree() {
             disabled={busy}
           >
             Cancel
+          </Button>
+          <Button type="submit" disabled={!canSubmit || busy} size="sm">
+            {busy ? "Creating…" : "Create worktree"}
           </Button>
         </div>
       </form>

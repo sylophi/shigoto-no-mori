@@ -185,15 +185,7 @@ export function ConvertExternalWorktrees() {
                 ))}
               </div>
 
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void runConversions()}
-                  disabled={selected.size === 0 || batchRunning}
-                >
-                  {batchRunning ? "Converting…" : "Convert"}
-                </Button>
+              <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
                   variant="ghost"
@@ -202,6 +194,14 @@ export function ConvertExternalWorktrees() {
                   disabled={batchRunning}
                 >
                   {batchRunning ? "Working…" : "Cancel"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void runConversions()}
+                  disabled={selected.size === 0 || batchRunning}
+                >
+                  {batchRunning ? "Converting…" : "Convert"}
                 </Button>
               </div>
             </>
