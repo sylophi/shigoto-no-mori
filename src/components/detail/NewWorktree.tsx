@@ -21,6 +21,9 @@ import { isRealBranch } from "@shared/schemas";
 
 type Mode = "branch-from" | "checkout";
 
+const TEXT_INPUT_CLASS =
+  "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
+
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
   const navigate = useNavigate();
@@ -65,11 +68,9 @@ export function NewWorktree() {
   // still smuggle one in — block submit and surface why.
   const baseOccupied = mode === "checkout" && occupiedBranches.includes(base);
 
-  // Whatever is shown to the user (and goes into the payload) runs
-  // through the path sanitizer so a name like `feat/foo` collapses to
-  // `feat-foo` and a bare `.` or trailing whitespace can't slip through.
-  // The custom input keeps its raw string so trailing dashes survive
-  // mid-typing (otherwise you couldn't type `my-folder-2`).
+  // Raw `worktreeName` is held separately from the sanitized `folderName`
+  // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
+  // be unreachable — the trailing `-` would be trimmed before the `2`).
   const folderSource = mode === "checkout" ? base : branchName;
   const folderName = sanitizeBranchForPath(
     useBranchAsFolder ? folderSource : worktreeName,
@@ -189,7 +190,7 @@ export function NewWorktree() {
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
             autoFocus
-            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className={TEXT_INPUT_CLASS}
           />
         </div>
 
@@ -229,7 +230,7 @@ export function NewWorktree() {
             }
             placeholder={pickedName ?? "huggy-salamander"}
             disabled={busy || useBranchAsFolder}
-            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className={TEXT_INPUT_CLASS}
           />
           {folderTaken && (
             <p className="text-xs text-destructive">
