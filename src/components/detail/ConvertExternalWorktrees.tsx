@@ -152,8 +152,8 @@ export function ConvertExternalWorktrees() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : externals.length === 0 ? (
             <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              No external worktrees to convert. Anything you create from
-              shigomori already lives in the managed tree.
+              No external worktrees to convert. Anything you create from Shigoto
+              no Mori already lives in the managed tree.
             </div>
           ) : (
             <>
