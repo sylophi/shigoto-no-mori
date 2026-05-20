@@ -548,15 +548,18 @@ export async function createWorktree(
 ): Promise<Worktree> {
   const { requestedWorktreeName, branchName, base, checkout } = opts;
   // Dirname is decoupled from the branch — a random animal that isn't
-  // already used by another worktree in this project. The renderer may
-  // pre-pick (see ProjectsPickWorktreeName) so it can preview the path;
-  // we honor that pick unless it got taken in the meantime.
+  // already used by another worktree in this project. When the caller
+  // supplies a name we treat it as a user-chosen destination and fail
+  // loudly on collision; only the unset case falls back to an animal
+  // pick (the renderer's pre-pick also flows through here).
   const existing = await listWorktreeIdentities(projectId, projectPath);
   const used = new Set(existing.map((w) => w.name));
-  const worktreeName =
-    requestedWorktreeName && !used.has(requestedWorktreeName)
-      ? requestedWorktreeName
-      : pickWorktreeName(used);
+  if (requestedWorktreeName && used.has(requestedWorktreeName)) {
+    throw new Error(
+      `A worktree folder named "${requestedWorktreeName}" already exists in this project.`,
+    );
+  }
+  const worktreeName = requestedWorktreeName || pickWorktreeName(used);
   const projectName = basename(projectPath);
   const worktreePath = join(
     shigomoriRoot(),
