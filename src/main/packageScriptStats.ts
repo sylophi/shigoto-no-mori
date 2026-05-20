@@ -16,9 +16,14 @@ const SORT_KEY = "packageScriptSort";
 type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;
 
+// "frequent" is the implicit default: new repos open with the most-used
+// scripts on top, and switching back to it deletes the persisted entry
+// instead of writing it.
+const IMPLICIT_MODE: PackageScriptSortMode = "frequent";
+
 export function readScriptSort(projectId: string): PackageScriptSortMode {
   const map = readKey<SortMap>(SORT_KEY, {});
-  return map[projectId] ?? "default";
+  return map[projectId] ?? IMPLICIT_MODE;
 }
 
 export function writeScriptSort(
@@ -26,10 +31,13 @@ export function writeScriptSort(
   mode: PackageScriptSortMode,
 ): void {
   const map = readKey<SortMap>(SORT_KEY, {});
-  if (map[projectId] === mode || (mode === "default" && !(projectId in map))) {
+  if (
+    map[projectId] === mode ||
+    (mode === IMPLICIT_MODE && !(projectId in map))
+  ) {
     return;
   }
-  if (mode === "default") {
+  if (mode === IMPLICIT_MODE) {
     delete map[projectId];
   } else {
     map[projectId] = mode;

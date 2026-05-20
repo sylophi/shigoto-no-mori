@@ -36,10 +36,10 @@ const SORT_OPTIONS: ReadonlyArray<{
   value: PackageScriptSortMode;
   label: string;
 }> = [
-  { value: "default", label: "package.json order" },
-  { value: "alphabetical", label: "Alphabetical" },
-  { value: "recent", label: "Most recently used" },
   { value: "frequent", label: "Most used" },
+  { value: "recent", label: "Most recently used" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "manifest", label: "package.json" },
 ];
 
 interface ScriptsSectionProps {
@@ -164,7 +164,7 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const expanded = manualExpanded ?? hasActivity;
   const [query, setQuery] = useState("");
-  const { data: sortMode = "default" } = usePackageScriptSort(
+  const { data: sortMode = "frequent" } = usePackageScriptSort(
     worktree.projectId,
   );
   const setSortMode = useSetPackageScriptSort(worktree.projectId);
@@ -201,13 +201,6 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
           />
           <span className="font-mono text-muted-foreground group-hover:text-foreground">
             package.json
-          </span>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="font-mono text-muted-foreground/70">
-            {pkg.packageManager}
-          </span>
-          <span className="tabular ml-auto text-muted-foreground/50">
-            {entries.length}
           </span>
         </button>
         {expanded && (
@@ -265,17 +258,14 @@ function SortMenu({
   value: PackageScriptSortMode;
   onChange: (mode: PackageScriptSortMode) => void;
 }) {
-  const current =
-    SORT_OPTIONS.find((o) => o.value === value) ?? SORT_OPTIONS[0];
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Sort scripts"
-        title={`Sort: ${current.label}`}
         className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
       >
         <ArrowDownUp aria-hidden className="size-3" />
-        <span className="hidden sm:inline">{current.label}</span>
+        <span>Sort</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
         <DropdownMenuRadioGroup
@@ -308,7 +298,7 @@ function sortEntries(
     command,
   }));
   switch (mode) {
-    case "default":
+    case "manifest":
       return mapped;
     case "alphabetical":
       return mapped.toSorted((a, b) => a.name.localeCompare(b.name));

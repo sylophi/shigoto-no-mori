@@ -509,7 +509,7 @@ export const PackageScriptsResultSchema = z.object({
 export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
 
 export const PackageScriptSortModeSchema = z.enum([
-  "default",
+  "manifest",
   "alphabetical",
   "recent",
   "frequent",

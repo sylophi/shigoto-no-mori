@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PackageScriptSortMode } from "@shared/schemas";
 
-const DEFAULT_MODE: PackageScriptSortMode = "default";
+const DEFAULT_MODE: PackageScriptSortMode = "frequent";
 
 export function usePackageScriptSort(projectId: string | null) {
   return useQuery<PackageScriptSortMode>({
