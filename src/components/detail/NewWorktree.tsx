@@ -12,6 +12,7 @@ import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
+import { sanitizeBranchName } from "@shared/branches";
 import { isRealBranch } from "@shared/schemas";
 
 type Mode = "branch-from" | "checkout";
@@ -163,7 +164,7 @@ export function NewWorktree() {
             id="branch-name"
             type="text"
             value={mode === "checkout" ? base : branchName}
-            onChange={(e) => setBranchName(e.target.value)}
+            onChange={(e) => setBranchName(sanitizeBranchName(e.target.value))}
             placeholder="feat/new-thing"
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
