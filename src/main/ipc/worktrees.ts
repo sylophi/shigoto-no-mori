@@ -8,7 +8,6 @@ import {
   CreateWorktreePayloadSchema,
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
-  isRealBranch,
   ListWorktreesPayloadSchema,
   RenameBranchPayloadSchema,
   SyncWorktreePayloadSchema,
@@ -18,7 +17,7 @@ import {
 import {
   checkoutBranch,
   createWorktree,
-  deleteLocalBranch,
+  deleteBranchAfterWorktreeRemoval,
   describeWorktree,
   findWorktreeIdentityOrThrow,
   getCommitDiff,
@@ -116,11 +115,14 @@ export function registerWorktreeHandlers(): void {
 
       // Cleanup runs even on force-delete (force only bypasses the
       // uncommitted-changes guard, not teardown / port-pool release).
+      // External worktrees were created outside shigomori, so we never
+      // ran setup or port-pool provision for them -- skip the symmetric
+      // teardown / release so we don't touch state we don't own.
       // Electron's IPC strips structured properties off thrown errors,
       // so we surface cleanup failures as a returned discriminated
       // result instead -- the renderer's UI uses it to drive the
       // retry/skip affordance.
-      if (skipCleanup !== true) {
+      if (skipCleanup !== true && !target.isExternal) {
         const [config, identities] = await Promise.all([
           readShigomoriConfig(project.id).catch(() => null),
           listWorktreeIdentities(project.id, project.path),
@@ -149,19 +151,13 @@ export function registerWorktreeHandlers(): void {
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force ?? false);
 
-      // `git branch -D` refuses if the branch is still in use elsewhere,
-      // so we don't need to guard against that case ourselves. Defaults
-      // to true: if you're done with the worktree, you're done with the
-      // local branch. (Remote branches are never touched.)
-      const shouldDeleteBranch = global.deleteBranchOnRemove ?? true;
-      if (shouldDeleteBranch && isRealBranch(target.branch)) {
-        try {
-          await deleteLocalBranch(project.path, target.branch);
-        } catch {
-          // Branch may be shared with another worktree or be the primary's
-          // HEAD -- leaving it behind is the safe fallback.
-        }
-      }
+      // Defaults to true: if you're done with the worktree, you're done
+      // with the local branch. (Remote branches are never touched.)
+      await deleteBranchAfterWorktreeRemoval(
+        project.path,
+        target,
+        global.deleteBranchOnRemove ?? true,
+      );
       return { ok: true };
     },
   );

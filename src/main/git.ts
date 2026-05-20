@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import {
   type BranchList,
   type CommitSummary,
+  isRealBranch,
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
@@ -627,6 +628,27 @@ export async function deleteLocalBranch(
   branch: string,
 ): Promise<void> {
   await run(projectPath, ["branch", "-D", branch]);
+}
+
+// Centralizes the "delete the local branch after the worktree is gone"
+// policy shared by per-worktree delete and the nuke-everything path:
+// honor the global toggle, never touch externals (we didn't create the
+// branch), skip placeholder branches, and swallow failures since the
+// branch may be shared with another worktree or be the primary's HEAD --
+// leaving it behind is always the safe fallback.
+export async function deleteBranchAfterWorktreeRemoval(
+  projectPath: string,
+  identity: WorktreeIdentity,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled) return;
+  if (identity.isExternal) return;
+  if (!isRealBranch(identity.branch)) return;
+  try {
+    await deleteLocalBranch(projectPath, identity.branch);
+  } catch {
+    // see comment above
+  }
 }
 
 // Create a local branch pointing at `base` (or HEAD if omitted). When
