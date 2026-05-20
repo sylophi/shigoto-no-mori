@@ -131,8 +131,10 @@ export function ConvertExternalWorktrees() {
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-6">
           <ErrorBanner>
-            <p className="font-medium">This is destructive.</p>
-            <p className="mt-1 leading-relaxed">
+            <p className="text-[11px] font-semibold tracking-wide uppercase">
+              This is destructive
+            </p>
+            <p className="mt-2 leading-relaxed">
               Each selected worktree is removed from its current location and
               re-checked-out under{" "}
               <span className="font-mono select-text">
@@ -140,8 +142,9 @@ export function ConvertExternalWorktrees() {
               </span>
               . Uncommitted changes, untracked files, and any state inside the
               old worktree directory are wiped. The branch is then checked out
-              fresh under shigomori&apos;s pipelines: carry-over, setup script,
-              and port-pool provision all run as if you had just created it.
+              fresh under Shigoto no Mori&apos;s pipelines: carry-over, setup
+              script, and port-pool provision all run as if you had just created
+              it.
             </p>
           </ErrorBanner>
 
