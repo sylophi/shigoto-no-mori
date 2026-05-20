@@ -84,6 +84,54 @@ export function useCreateWorktree() {
   });
 }
 
+interface ConvertExternalWorktreeInput {
+  projectId: string;
+  worktreeId: string;
+}
+
+export function useConvertExternalWorktree() {
+  const queryClient = useQueryClient();
+  return useMutation<CreateWorktreeResult, Error, ConvertExternalWorktreeInput>(
+    {
+      mutationFn: (input) => window.api.worktrees.convertExternal(input),
+      onSuccess: (result, vars) => {
+        void queryClient.invalidateQueries({
+          queryKey: ["worktrees", vars.projectId],
+        });
+        // The old external worktree's id no longer maps to anything on disk
+        // -- drop any cached script runs so they don't linger in the UI.
+        clearScriptRunsForWorktree(vars.worktreeId);
+        const { applied, failures } = result.carryOver;
+        if (failures.length > 0) {
+          const lines = failures
+            .slice(0, 4)
+            .map((f) => `${f.path}: ${f.reason}`);
+          const more = failures.length - lines.length;
+          toast.warning(
+            `Carried over ${applied} of ${applied + failures.length} entries`,
+            {
+              description:
+                lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
+            },
+          );
+        }
+        for (const failure of result.scriptFailures) {
+          const label =
+            failure.phase === "setup" ? "Setup" : "Port-pool provision";
+          toast.warning(`${label} didn't complete cleanly`, {
+            description:
+              failure.exitCode === null
+                ? "See the script console for details."
+                : `Exited with code ${failure.exitCode}.`,
+          });
+        }
+      },
+      // The page surfaces per-row errors inline; a toast on top would be noise.
+      meta: { silentError: true },
+    },
+  );
+}
+
 interface DeleteWorktreeInput {
   projectId: string;
   worktreeId: string;

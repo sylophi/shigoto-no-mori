@@ -173,6 +173,16 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
+                  to: "/projects/$projectId/convert-external",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Convert external worktrees…
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
                   to: "/projects/$projectId/configure",
                   params: { projectId: project.id },
                 })
