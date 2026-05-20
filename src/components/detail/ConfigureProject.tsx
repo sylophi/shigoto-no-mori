@@ -5,13 +5,13 @@ import {
   FolderOpen,
   Link as LinkIcon,
   Plus,
-  Save,
   X,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
+import { EditorFooter } from "@/components/detail/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -357,27 +357,14 @@ function ConfigureForm({
           {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
         </div>
       </div>
-      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={handleDiscard}
-          disabled={!isDirty || write.isPending}
-        >
-          Discard
-        </Button>
-        <Button
-          size="xs"
-          onClick={() => void handleSave()}
-          disabled={!canSave || write.isPending}
-        >
-          <Save />
-          {write.isPending ? "Saving…" : "Save"}
-        </Button>
-      </footer>
+      <EditorFooter
+        isDirty={isDirty}
+        canSave={canSave}
+        isPending={write.isPending}
+        isSuccess={write.isSuccess}
+        onDiscard={handleDiscard}
+        onSave={() => void handleSave()}
+      />
     </>
   );
 }

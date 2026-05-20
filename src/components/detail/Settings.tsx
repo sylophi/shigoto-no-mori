@@ -6,11 +6,11 @@ import {
   Flame,
   Moon,
   Plus,
-  Save,
   Sun,
   SunMoon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EditorFooter } from "@/components/detail/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -375,27 +375,13 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
           {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
         </div>
       </div>
-      <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          {isDirty ? "Unsaved changes" : write.isSuccess ? "Saved." : ""}
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          onClick={handleDiscard}
-          disabled={!isDirty || write.isPending}
-        >
-          Discard
-        </Button>
-        <Button
-          size="xs"
-          onClick={() => void handleSave()}
-          disabled={!isDirty || write.isPending}
-        >
-          <Save />
-          {write.isPending ? "Saving…" : "Save"}
-        </Button>
-      </footer>
+      <EditorFooter
+        isDirty={isDirty}
+        isPending={write.isPending}
+        isSuccess={write.isSuccess}
+        onDiscard={handleDiscard}
+        onSave={() => void handleSave()}
+      />
     </>
   );
 }
