@@ -124,7 +124,16 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
         />
         <button
           type="button"
-          onClick={() => void quickCreate()}
+          onClick={(e) => {
+            if (e.shiftKey || e.metaKey) {
+              void navigate({
+                to: "/projects/$projectId/new",
+                params: { projectId: project.id },
+              });
+              return;
+            }
+            void quickCreate();
+          }}
           disabled={create.isPending}
           aria-label={`Quick-create worktree in ${project.name}`}
           title={`Quick-create worktree in ${project.name}`}

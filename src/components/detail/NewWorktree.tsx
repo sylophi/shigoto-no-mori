@@ -9,13 +9,21 @@ import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/usePickedWorktreeName";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useBranches } from "@/hooks/useBranches";
 import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
-import { sanitizeBranchName } from "@shared/branches";
+import {
+  sanitizeBranchForPath,
+  sanitizeBranchName,
+  sanitizeWorktreeNameInput,
+} from "@shared/branches";
 import { isRealBranch } from "@shared/schemas";
 
 type Mode = "branch-from" | "checkout";
+
+const TEXT_INPUT_CLASS =
+  "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
@@ -25,6 +33,7 @@ export function NewWorktree() {
   const { data: defaultBranch } = useDefaultBranch(projectId);
   const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
+  const { data: branches } = useBranches(projectId);
   const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
   const occupiedBranches = worktrees
@@ -33,6 +42,8 @@ export function NewWorktree() {
   const [mode, setMode] = useState<Mode>("branch-from");
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
+  const [worktreeName, setWorktreeName] = useState("");
+  const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
   const baseSeeded = useRef(false);
   const branchSeeded = useRef(false);
   const create = useCreateWorktree();
@@ -59,9 +70,29 @@ export function NewWorktree() {
   // still smuggle one in — block submit and surface why.
   const baseOccupied = mode === "checkout" && occupiedBranches.includes(base);
 
+  // `git worktree add -b` refuses an existing branch name. Catch it
+  // up-front so the form mirrors the source/folder collision warnings.
+  const branchTaken =
+    mode === "branch-from" &&
+    branchName.length > 0 &&
+    (branches?.local.includes(branchName) ?? false);
+
+  // Raw `worktreeName` is held separately from the sanitized `folderName`
+  // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
+  // be unreachable — the trailing `-` would be trimmed before the `2`).
+  const folderSource = mode === "checkout" ? base : branchName;
+  const folderName = sanitizeBranchForPath(
+    useBranchAsFolder ? folderSource : worktreeName,
+  );
+  const folderTaken =
+    folderName.length > 0 && worktrees.some((w) => w.name === folderName);
+
   const canSubmit =
     base.length > 0 &&
     (mode === "checkout" || branchName.length > 0) &&
+    folderName.length > 0 &&
+    !folderTaken &&
+    !branchTaken &&
     !baseOccupied;
 
   const handleCreate = () => {
@@ -69,13 +100,13 @@ export function NewWorktree() {
       mode === "checkout"
         ? {
             projectId: project.id,
-            worktreeName: pickedName || undefined,
+            worktreeName: folderName,
             base,
             checkout: true,
           }
         : {
             projectId: project.id,
-            worktreeName: pickedName || undefined,
+            worktreeName: folderName,
             branchName,
             base: base || undefined,
           },
@@ -106,7 +137,7 @@ export function NewWorktree() {
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
-  const destPath = `${root}/worktrees/${project.name}/${pickedName ?? "…"}`;
+  const destPath = `${root}/worktrees/${project.name}/${folderName || "…"}`;
   const destLead =
     mode === "branch-from"
       ? "A new branch created off the source. Checked out into"
@@ -169,8 +200,61 @@ export function NewWorktree() {
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
             autoFocus
-            className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className={TEXT_INPUT_CLASS}
           />
+          {branchTaken && (
+            <p className="text-xs text-destructive">
+              A branch named <span className="font-mono">{branchName}</span>{" "}
+              already exists in this project.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <label
+              htmlFor="worktree-name"
+              className="block text-sm font-medium"
+            >
+              Worktree folder
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+              <input
+                type="checkbox"
+                checked={useBranchAsFolder}
+                onChange={(e) => {
+                  const next = e.target.checked;
+                  if (!next) {
+                    // Seed the editable field with whatever was just shown,
+                    // so toggling off doesn't blow away the user's context.
+                    setWorktreeName(folderName);
+                  }
+                  setUseBranchAsFolder(next);
+                }}
+                disabled={busy}
+                className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
+              />
+              Use {mode === "checkout" ? "source" : "branch"} name
+            </label>
+          </div>
+          <input
+            id="worktree-name"
+            type="text"
+            value={useBranchAsFolder ? folderName : worktreeName}
+            onChange={(e) =>
+              setWorktreeName(sanitizeWorktreeNameInput(e.target.value))
+            }
+            placeholder={pickedName ?? "huggy-salamander"}
+            disabled={busy || useBranchAsFolder}
+            className={TEXT_INPUT_CLASS}
+          />
+          {folderTaken && (
+            <p className="text-xs text-destructive">
+              A worktree folder named{" "}
+              <span className="font-mono">{folderName}</span> already exists in
+              this project.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             {destLead}{" "}
             <span className="font-mono text-foreground/80 select-text">

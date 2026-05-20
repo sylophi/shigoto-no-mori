@@ -31,3 +31,12 @@ const INVALID_BRANCH_INPUT_CHARS = /[^A-Za-z0-9._/-]/g;
 export function sanitizeBranchName(name: string): string {
   return name.replace(INVALID_BRANCH_INPUT_CHARS, "-");
 }
+
+// Live sanitizer for worktree-folder-name text inputs. Same safe set as
+// branch names but forward slashes are out too — a folder name is a
+// single path segment, so `/` would smuggle in a subdirectory.
+const INVALID_WORKTREE_NAME_INPUT_CHARS = /[^A-Za-z0-9._-]/g;
+
+export function sanitizeWorktreeNameInput(name: string): string {
+  return name.replace(INVALID_WORKTREE_NAME_INPUT_CHARS, "-");
+}
