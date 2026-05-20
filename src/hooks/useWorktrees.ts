@@ -138,7 +138,9 @@ export function useRenameBranch() {
         queryKey: ["branches", vars.projectId],
       });
     },
-    meta: { errorTitle: "Couldn't rename branch" },
+    // The inline rename input surfaces the error next to the field; a
+    // global toast on top would be noise.
+    meta: { silentError: true },
   });
 }
 
@@ -162,6 +164,7 @@ export function useWorktreeDiff(
     // Diff reflects working-tree state, which mutates outside our control;
     // always refetch on mount so re-entering the page shows current state.
     staleTime: 0,
+    meta: { errorTitle: "Couldn't compute diff" },
   });
 }
 
@@ -180,6 +183,7 @@ export function useCommitDiff(
     },
     enabled: !!worktreeId && hash.length > 0,
     staleTime: Infinity,
+    meta: { errorTitle: "Couldn't compute diff" },
   });
 }
 
@@ -195,7 +199,9 @@ export function useCheckoutBranch() {
         queryKey: ["branches", vars.projectId],
       });
     },
-    meta: { errorTitle: "Couldn't switch branch" },
+    // The branch combobox surfaces the error inline so the user can pick a
+    // different branch without leaving the dropdown; toast would duplicate.
+    meta: { silentError: true },
   });
 }
 

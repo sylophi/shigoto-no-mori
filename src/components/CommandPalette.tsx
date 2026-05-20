@@ -34,6 +34,7 @@ import { useAddProject, useProjects } from "@/hooks/useProjects";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useFsIsGitRepo } from "@/hooks/useFsIsGitRepo";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
+import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -268,7 +269,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
   const [scanRoot, setScanRoot] = useState<string>("");
   const [scanResults, setScanResults] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [scanError, setScanError] = useState<Error | null>(null);
   const [bulkAdding, setBulkAdding] = useState(false);
 
   // ---------- Browse mode ----------
@@ -317,7 +317,7 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
       await addProject.mutateAsync(target);
       onClose();
     } catch {
-      // Error rendered inline below.
+      // useAddProject surfaces the error via toast.
     }
   };
 
@@ -328,7 +328,7 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
       await addProject.mutateAsync(picked);
       onClose();
     } catch {
-      // Error rendered inline.
+      // useAddProject surfaces the error via toast.
     }
   };
 
@@ -339,7 +339,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
     if (!hasTrailingSlash(browseDir)) return;
     setScanRoot(browseDir);
     setStage("scanning");
-    setScanError(null);
     try {
       const results = await window.api.fs.scanForGitRepos(browseDir);
       const existingPaths = new Set(existingProjects.map((p) => p.path));
@@ -348,8 +347,8 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
       setSelected(new Set(newOnly));
       setHighlighted("");
       setStage("results");
-    } catch (e) {
-      setScanError(e instanceof Error ? e : new Error(String(e)));
+    } catch (err) {
+      notifyError("Couldn't scan for git repos", err);
       setStage("browse");
     }
   };
@@ -358,7 +357,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
     setStage("browse");
     setScanResults([]);
     setSelected(new Set());
-    setScanError(null);
     setHighlighted("");
   };
 
@@ -579,11 +577,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
             Loading…
           </div>
         )}
-        {error && (
-          <div className="px-3 py-3 text-xs text-destructive">
-            {error.message}
-          </div>
-        )}
         {!isLoading && !error && filtered.length === 0 && (
           <div className="px-3 py-3 text-center text-xs text-muted-foreground">
             {leafFilter.length > 0
@@ -592,12 +585,6 @@ function AddProjectView({ onClose }: AddProjectViewProps) {
           </div>
         )}
       </Command.List>
-
-      {(addProject.error || scanError) && (
-        <div className="border-t border-destructive/30 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-          {addProject.error?.message ?? scanError?.message}
-        </div>
-      )}
 
       <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
         <div className="flex items-center gap-3">

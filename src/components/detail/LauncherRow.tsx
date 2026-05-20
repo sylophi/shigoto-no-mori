@@ -84,33 +84,26 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        {entries.map((entry) => {
-          const pending =
-            launch.isPending && launch.variables?.launcherId === entry.id;
-          return (
-            <Button
-              key={entry.id}
-              variant="outline"
-              size="sm"
-              onClick={() => run(entry)}
-            >
-              {pending ? (
-                <Loader2 className="animate-spin" />
-              ) : (
-                <LauncherIcon entry={entry} />
-              )}
-              <span>{entry.label}</span>
-            </Button>
-          );
-        })}
-      </div>
-      {launch.error && (
-        <div className="text-xs text-destructive select-text">
-          {launch.error.message}
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-2">
+      {entries.map((entry) => {
+        const pending =
+          launch.isPending && launch.variables?.launcherId === entry.id;
+        return (
+          <Button
+            key={entry.id}
+            variant="outline"
+            size="sm"
+            onClick={() => run(entry)}
+          >
+            {pending ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <LauncherIcon entry={entry} />
+            )}
+            <span>{entry.label}</span>
+          </Button>
+        );
+      })}
     </div>
   );
 }

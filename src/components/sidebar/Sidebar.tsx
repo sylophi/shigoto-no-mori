@@ -225,8 +225,8 @@ function RowContent({
     );
   }
   return (
-    <div className="px-2 py-1 text-xs text-destructive">
-      Failed to list worktrees
+    <div className="px-2 py-1 text-xs text-muted-foreground">
+      Couldn't load worktrees.
     </div>
   );
 }
