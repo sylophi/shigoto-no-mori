@@ -170,7 +170,7 @@ function NewBranchForm({
           id="new-branch-name"
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => setName(e.target.value.replace(/ /g, "-"))}
           placeholder="feat/new-thing"
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused on opening form
           autoFocus
@@ -275,7 +275,7 @@ function BranchRow({
       {editing ? (
         <input
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => setDraft(e.target.value.replace(/ /g, "-"))}
           onKeyDown={(e) => {
             if (e.key === "Enter") commitRename();
             if (e.key === "Escape") {

@@ -163,7 +163,7 @@ export function NewWorktree() {
             id="branch-name"
             type="text"
             value={mode === "checkout" ? base : branchName}
-            onChange={(e) => setBranchName(e.target.value)}
+            onChange={(e) => setBranchName(e.target.value.replace(/ /g, "-"))}
             placeholder="feat/new-thing"
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
