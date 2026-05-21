@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -57,6 +58,14 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   // project. Menu stays open while armed; second click within the timeout
   // fires the actual remove.
   const { armed: removeArmed, trigger: triggerRemove } = useConfirmTwice(3_000);
+  // Controlled so right-clicking the header can pop the same dropdown
+  // open (anchored to the `…` button) without a separate context menu.
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const onHeaderContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    setMenuOpen(true);
+  };
 
   const quickCreate = async () => {
     if (create.isPending) return;
@@ -86,8 +95,13 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
         {...attributes}
       >
         <div className="group flex items-center gap-0.5 py-0.5">
-          <ProjectHeader project={project} missing listeners={listeners} />
-          <DropdownMenu>
+          <ProjectHeader
+            project={project}
+            missing
+            listeners={listeners}
+            onContextMenu={onHeaderContextMenu}
+          />
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger
               render={
                 <button
@@ -130,6 +144,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           expanded={expanded}
           onToggle={onToggle}
           listeners={listeners}
+          onContextMenu={onHeaderContextMenu}
         />
         <button
           type="button"
@@ -155,7 +170,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <Plus className="size-3.5" />
           )}
         </button>
-        <DropdownMenu>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger
             render={
               <button
@@ -249,6 +264,7 @@ interface ProjectHeaderProps {
   onToggle?: () => void;
   missing?: boolean;
   listeners?: DraggableSyntheticListeners;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 // Header row shared by the healthy and missing-project branches. The
@@ -261,6 +277,7 @@ function ProjectHeader({
   onToggle,
   missing,
   listeners,
+  onContextMenu,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
@@ -268,6 +285,7 @@ function ProjectHeader({
   const trigger = missing ? (
     <div
       {...listeners}
+      onContextMenu={onContextMenu}
       className={cn(
         baseClass,
         listeners && "cursor-grab active:cursor-grabbing",
@@ -289,6 +307,7 @@ function ProjectHeader({
     <button
       type="button"
       onClick={onToggle}
+      onContextMenu={onContextMenu}
       {...listeners}
       className={cn(
         baseClass,
