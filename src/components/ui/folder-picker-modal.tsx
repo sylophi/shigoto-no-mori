@@ -4,14 +4,13 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  Check,
   CornerLeftUp,
   Folder,
 } from "lucide-react";
+import finderIconUrl from "@/assets/app-icons/finder.png";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -48,9 +47,6 @@ export function FolderPickerModal({
   onPick,
   onClose,
 }: FolderPickerModalProps) {
-  const { data: runtime } = useRuntimeInfo();
-  const home = runtime?.homedir ?? null;
-
   // Seed the input value with the caller's path; otherwise drop into ~/.
   // When an initialPath is provided we append "/" so the listing fires
   // immediately rather than treating the basename as a leaf filter.
@@ -173,7 +169,6 @@ export function FolderPickerModal({
               aria-label={`${confirmLabel} (${confirmKbd})`}
               title={`${confirmLabel} (${confirmKbd})`}
             >
-              <Check />
               <span>{confirmLabel}</span>
               <KbdGroup className="pointer-events-none">
                 <Kbd>{confirmKbd}</Kbd>
@@ -231,35 +226,46 @@ export function FolderPickerModal({
             )}
           </Command.List>
 
-          <div className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-            <KbdGroup>
-              <Kbd>
-                <ArrowUp />
-              </Kbd>
-              <Kbd>
-                <ArrowDown />
-              </Kbd>
-              <span className="text-muted-foreground/80">Navigate</span>
-            </KbdGroup>
-            {hasHighlighted && (
-              <KbdGroup>
-                <Kbd>↩</Kbd>
-                <span className="text-muted-foreground/80">Enter folder</span>
-              </KbdGroup>
-            )}
-            {canBrowseUp && (
+          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
               <KbdGroup>
                 <Kbd>
-                  <ArrowLeft />
+                  <ArrowUp />
                 </Kbd>
-                <span className="text-muted-foreground/80">Go up</span>
+                <Kbd>
+                  <ArrowDown />
+                </Kbd>
+                <span className="text-muted-foreground/80">Navigate</span>
               </KbdGroup>
-            )}
-            {home && query === "~/" && (
-              <span className="ml-auto truncate text-muted-foreground/60">
-                Start typing a path
-              </span>
-            )}
+              {hasHighlighted && (
+                <KbdGroup>
+                  <Kbd>↩</Kbd>
+                  <span className="text-muted-foreground/80">Enter folder</span>
+                </KbdGroup>
+              )}
+              {canBrowseUp && (
+                <KbdGroup>
+                  <Kbd>
+                    <ArrowLeft />
+                  </Kbd>
+                  <span className="text-muted-foreground/80">Go up</span>
+                </KbdGroup>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                const picked = await window.api.dialog.pickFolder({
+                  title,
+                  buttonLabel: confirmLabel,
+                });
+                if (picked) onPick(picked);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
+            >
+              <img src={finderIconUrl} alt="" className="size-4" />
+              Open in Finder
+            </button>
           </div>
         </Command>
       </div>
