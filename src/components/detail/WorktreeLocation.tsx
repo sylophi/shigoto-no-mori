@@ -34,20 +34,18 @@ const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "managed-root",
     label: "Managed root",
-    description: "All projects' worktrees live in one place. Easy to nuke.",
+    description: "All projects' worktrees live in one place.",
     recommended: true,
   },
   {
     value: "in-project",
     label: "In project",
-    description:
-      "Worktrees live inside the primary at .shigomori/worktrees/. Useful for tools (Turbopack, etc.) that walk up to a workspace root.",
+    description: "Worktrees live inside the primary at .shigomori/worktrees/.",
   },
   {
     value: "custom",
     label: "Custom path",
-    description:
-      "Pick your own directory. Not recommended — can collide with other repos and complicates external-vs-managed detection.",
+    description: "Pick your own directory. Not recommended.",
   },
 ];
 
@@ -261,9 +259,9 @@ function LocationForm({
         {LAYOUT_OPTIONS.map((opt) => {
           const checked = layout === opt.value;
           const hasCustomPath = customPath.trim().length > 0;
-          // Skip the preview line entirely for an empty custom layout
-          // rather than rendering a "/your/custom/path/<name>" stub —
-          // the picker button below carries the next action instead.
+          // Skip the preview line entirely for an empty custom layout.
+          // The picker button below carries the next action instead, so
+          // a "/your/custom/path/<name>" stub would just be noise.
           const previewPath =
             opt.value === "custom" && !hasCustomPath
               ? null
@@ -386,7 +384,7 @@ function LocationForm({
           <Info aria-hidden className="size-4 shrink-0" />
           <span>
             {movable.length === 0
-              ? "No managed worktrees yet — the layout setting will apply to new ones."
+              ? "No managed worktrees yet. The layout setting will apply to new ones."
               : "All managed worktrees already live at this location."}
           </span>
         </div>

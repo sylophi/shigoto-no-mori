@@ -276,7 +276,7 @@ export async function listWorktreeIdentities(
     readShigomoriConfig(projectId).catch(() => null),
   ]);
   // A worktree counts as managed if it sits under any layout we know
-  // about — managed root, in-project, or the configured custom path.
+  // about (managed root, in-project, or the configured custom path).
   // This keeps mixed states (some worktrees still in the old layout
   // after a partial migration) from mislabeling rows as external.
   const managedPrefixes = managedPrefixesFor(projectPath, config);

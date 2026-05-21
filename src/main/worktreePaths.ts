@@ -26,8 +26,8 @@ export function resolveWorktreeBase(
 
 // Every path prefix that should count as "managed" for this project.
 // All known layouts are included unconditionally so worktrees created
-// under a previous layout still appear managed after the user switches —
-// until they run the migration.
+// under a previous layout still appear managed after the user switches,
+// up until they run the migration.
 export function managedPrefixesFor(
   projectPath: string,
   config: ShigomoriConfig | null,
