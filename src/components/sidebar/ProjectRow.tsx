@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -58,13 +58,15 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   // project. Menu stays open while armed; second click within the timeout
   // fires the actual remove.
   const { armed: removeArmed, trigger: triggerRemove } = useConfirmTwice(3_000);
-  // Controlled so right-clicking the header can pop the same dropdown
-  // open (anchored to the `…` button) without a separate context menu.
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Right-clicking the header pops the same dropdown anchored to the
+  // `…` button. Synthesizing a click on the trigger reuses base-ui's
+  // normal open flow, which avoids the stray-pointer behavior we'd get
+  // by toggling a controlled `open` prop ourselves.
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const onHeaderContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
-    setMenuOpen(true);
+    triggerRef.current?.click();
   };
 
   const quickCreate = async () => {
@@ -101,10 +103,11 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             listeners={listeners}
             onContextMenu={onHeaderContextMenu}
           />
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu>
             <DropdownMenuTrigger
               render={
                 <button
+                  ref={triggerRef}
                   type="button"
                   aria-label={`More actions for ${project.name}`}
                   className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
@@ -170,10 +173,11 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <Plus className="size-3.5" />
           )}
         </button>
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+        <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
+                ref={triggerRef}
                 type="button"
                 aria-label={`More actions for ${project.name}`}
                 className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
