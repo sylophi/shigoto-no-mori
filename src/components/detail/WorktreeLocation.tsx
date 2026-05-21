@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
 import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -151,6 +152,7 @@ function LocationForm({
   const [customPathError, setCustomPathError] = useState<string | null>(null);
   const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
   const [batchRunning, setBatchRunning] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const layoutInputs = {
     layout,
@@ -316,17 +318,11 @@ function LocationForm({
                   <div className="space-y-1 pt-1">
                     <button
                       type="button"
-                      onClick={async (event) => {
+                      onClick={(event) => {
                         // The wrapping label would otherwise re-fire the
                         // click and toggle the radio off/on around the picker.
                         event.preventDefault();
-                        const picked = await window.api.dialog.pickFolder({
-                          title: "Pick a worktree location",
-                          buttonLabel: "Use this folder",
-                        });
-                        if (!picked) return;
-                        setCustomPath(picked);
-                        if (customPathError) setCustomPathError(null);
+                        setPickerOpen(true);
                       }}
                       className={cn(
                         "flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 text-left font-mono text-xs transition-colors hover:bg-accent",
@@ -419,6 +415,20 @@ function LocationForm({
           {submitLabel}
         </Button>
       </div>
+
+      {pickerOpen && (
+        <FolderPickerModal
+          initialPath={customPath.trim() || undefined}
+          title="Filter folders…"
+          confirmLabel="Use this folder"
+          onPick={(path) => {
+            setCustomPath(path);
+            if (customPathError) setCustomPathError(null);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </>
   );
 }
