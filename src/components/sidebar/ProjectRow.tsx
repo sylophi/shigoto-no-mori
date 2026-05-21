@@ -24,6 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
@@ -52,6 +53,10 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   const missing = project.pathExists === false;
   const removeProject = useRemoveProject();
   const create = useCreateWorktree();
+  // Two-step confirm so accidentally landing on "Remove" doesn't drop the
+  // project. Menu stays open while armed; second click within the timeout
+  // fires the actual remove.
+  const { armed: removeArmed, trigger: triggerRemove } = useConfirmTwice(3_000);
 
   const quickCreate = async () => {
     if (create.isPending) return;
@@ -97,9 +102,13 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuContent align="end" sideOffset={2}>
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => removeProject.mutate(project.id)}
+                closeOnClick={removeArmed}
+                onClick={(event) => {
+                  if (!removeArmed) event.preventDefault();
+                  triggerRemove(() => removeProject.mutate(project.id));
+                }}
               >
-                Remove
+                {removeArmed ? "Click again to confirm" : "Remove"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -169,16 +178,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             >
               New worktree from…
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/branches",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Manage branches
-            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
@@ -202,6 +202,17 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
+                  to: "/projects/$projectId/branches",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Manage branches
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
                   to: "/projects/$projectId/configure",
                   params: { projectId: project.id },
                 })
@@ -209,12 +220,15 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             >
               Configure
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={() => removeProject.mutate(project.id)}
+              closeOnClick={removeArmed}
+              onClick={(event) => {
+                if (!removeArmed) event.preventDefault();
+                triggerRemove(() => removeProject.mutate(project.id));
+              }}
             >
-              Remove
+              {removeArmed ? "Click again to confirm" : "Remove"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
