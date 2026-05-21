@@ -151,7 +151,6 @@ function LocationForm({
   const [customPathError, setCustomPathError] = useState<string | null>(null);
   const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchDone, setBatchDone] = useState(false);
 
   const layoutInputs = {
     layout,
@@ -181,8 +180,7 @@ function LocationForm({
     return null;
   };
 
-  const canSubmit =
-    (layoutChanged || toMove.length > 0) && !batchRunning && !batchDone;
+  const canSubmit = (layoutChanged || toMove.length > 0) && !batchRunning;
 
   const handleApply = async () => {
     const validationError = validateCustomPath();
@@ -215,7 +213,6 @@ function LocationForm({
 
     if (toMove.length === 0) {
       setBatchRunning(false);
-      setBatchDone(true);
       return;
     }
 
@@ -251,14 +248,13 @@ function LocationForm({
     }
 
     setBatchRunning(false);
-    setBatchDone(true);
   };
 
   const submitLabel = batchRunning ? "Moving…" : "Move";
 
   return (
     <>
-      <fieldset className="space-y-2" disabled={batchRunning || batchDone}>
+      <fieldset className="space-y-2" disabled={batchRunning}>
         <legend className="sr-only">Worktree location</legend>
         {LAYOUT_OPTIONS.map((opt) => {
           const checked = layout === opt.value;
@@ -346,7 +342,7 @@ function LocationForm({
         })}
       </fieldset>
 
-      {toMove.length > 0 && !batchDone && (
+      {toMove.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
           <p className="text-[11px] font-semibold tracking-wide uppercase">
             Heads up
@@ -377,7 +373,7 @@ function LocationForm({
         </div>
       )}
 
-      {toMove.length === 0 && !batchDone && (
+      {toMove.length === 0 && (
         <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
           <Info aria-hidden className="size-4 shrink-0" />
           <span>
@@ -398,7 +394,7 @@ function LocationForm({
           onClick={() => navigate({ to: "/" })}
           disabled={batchRunning}
         >
-          {batchDone ? "Close" : "Cancel"}
+          Cancel
         </Button>
         <Button
           type="button"
