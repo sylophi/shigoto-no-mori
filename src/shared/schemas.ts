@@ -224,6 +224,14 @@ export const ConvertExternalWorktreePayloadSchema = z.object({
   worktreeId: z.string(),
 });
 
+export const RelocateWorktreePayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  // Absolute target directory for the moved worktree (parent is
+  // created if it doesn't exist).
+  destinationPath: z.string().min(1),
+});
+
 export const DeleteWorktreePayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
@@ -367,6 +375,22 @@ export const CarryOverEntrySchema = z.object({
   mode: z.enum(["copy", "symlink"]),
 });
 
+// Where shigomori's managed worktrees for this project live on disk.
+// - managed-root: ~/shigomori[-dev]/worktrees/<projectName>/<worktreeName>
+//   (default; one place for every project's worktrees, easy to nuke)
+// - in-project: <projectPath>/.shigomori/worktrees/<worktreeName>
+//   (sits inside the primary; lets tools that walk up to a workspace
+//   root, like Turbopack, accept symlinked node_modules from carry-over)
+// - custom: <customWorktreePath>/<worktreeName>
+//   (escape hatch; not recommended -- can collide with other repos and
+//   complicates external-vs-managed detection)
+export const WorktreeLayoutSchema = z.enum([
+  "managed-root",
+  "in-project",
+  "custom",
+]);
+export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
+
 export const ShigomoriConfigSchema = z.object({
   scripts: z
     .object({
@@ -381,6 +405,9 @@ export const ShigomoriConfigSchema = z.object({
   // Free-form per-worktree notes, keyed by Worktree.id (the path hash).
   notes: z.record(z.string(), z.string()).optional(),
   carryOver: z.array(CarryOverEntrySchema).optional(),
+  worktreeLayout: WorktreeLayoutSchema.optional(),
+  // Absolute path; only meaningful when worktreeLayout === "custom".
+  customWorktreePath: z.string().optional(),
 });
 
 export const ThemeSchema = z.enum(["light", "dark", "system"]);

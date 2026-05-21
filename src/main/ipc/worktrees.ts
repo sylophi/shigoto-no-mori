@@ -11,6 +11,7 @@ import {
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
+  RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
   SyncWorktreePayloadSchema,
   type Worktree,
@@ -32,6 +33,7 @@ import {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
+  relocateWorktree,
   removeWorktree,
   renameBranch,
 } from "../git";
@@ -150,6 +152,37 @@ export function registerWorktreeHandlers(): void {
       });
 
       return { worktree, carryOver, scriptFailures };
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesRelocate,
+    async (_event, rawPayload: unknown): Promise<Worktree> => {
+      const { projectId, worktreeId, destinationPath } =
+        RelocateWorktreePayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (target.isPrimary) {
+        throw new Error("The primary checkout can't be relocated");
+      }
+      if (target.path === destinationPath) {
+        // Already where it should be; refresh the row but skip the move.
+        return describeWorktree(target, project.path);
+      }
+      await relocateWorktree(project.path, target.path, destinationPath);
+      // The worktree's id is derived from its path, so the moved worktree
+      // has a new id. Re-read identities and find by the new path instead
+      // of the stale worktreeId.
+      const refreshed = await listWorktreeIdentities(project.id, project.path);
+      const moved = refreshed.find((w) => w.path === destinationPath);
+      if (!moved) {
+        throw new Error("Worktree disappeared after move");
+      }
+      return describeWorktree(moved, project.path);
     },
   );
 

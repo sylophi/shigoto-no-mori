@@ -192,6 +192,16 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
+                  to: "/projects/$projectId/worktree-location",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Worktree location
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
                   to: "/projects/$projectId/configure",
                   params: { projectId: project.id },
                 })

@@ -11,6 +11,7 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { ConfigureProject } from "@/components/detail/ConfigureProject";
 import { ConvertExternalWorktrees } from "@/components/detail/ConvertExternalWorktrees";
+import { WorktreeLocation } from "@/components/detail/WorktreeLocation";
 import { EmptyState } from "@/components/detail/EmptyState";
 import { ManageBranches } from "@/components/detail/ManageBranches";
 import { NewWorktree } from "@/components/detail/NewWorktree";
@@ -128,6 +129,12 @@ const convertExternalRoute = createRoute({
   component: KeyedConvertExternal,
 });
 
+const worktreeLocationRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktree-location",
+  component: KeyedWorktreeLocation,
+});
+
 // Force remount on params change so refetchOnMount: "always" fires
 // (TanStack Router keeps the same instance and just re-renders otherwise).
 function KeyedWorktreeDetail() {
@@ -153,6 +160,11 @@ function KeyedManageBranches() {
 function KeyedConvertExternal() {
   const { projectId } = convertExternalRoute.useParams();
   return <ConvertExternalWorktrees key={projectId} />;
+}
+
+function KeyedWorktreeLocation() {
+  const { projectId } = worktreeLocationRoute.useParams();
+  return <WorktreeLocation key={projectId} />;
 }
 
 const worktreeRoute = createRoute({
@@ -186,6 +198,7 @@ const routeTree = rootRoute.addChildren([
   configureProjectRoute,
   manageBranchesRoute,
   convertExternalRoute,
+  worktreeLocationRoute,
   worktreeRoute,
   scriptConsoleRoute,
   worktreeDiffRoute,
@@ -235,5 +248,6 @@ export {
   scriptConsoleRoute,
   settingsRoute,
   worktreeDiffRoute,
+  worktreeLocationRoute,
   worktreeRoute,
 };

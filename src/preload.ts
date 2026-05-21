@@ -81,6 +81,12 @@ const api = {
       worktreeId: string;
     }): Promise<CreateWorktreeResult> =>
       ipcRenderer.invoke(CHANNELS.WorktreesConvertExternal, input),
+    relocate: (input: {
+      projectId: string;
+      worktreeId: string;
+      destinationPath: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesRelocate, input),
     delete: (input: {
       projectId: string;
       worktreeId: string;
