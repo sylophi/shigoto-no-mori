@@ -1,35 +1,46 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, type KeyboardEvent } from "react";
+import { Command } from "cmdk";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Check,
   CornerLeftUp,
   Folder,
-  Loader2,
-  Search,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { MaterialIcon } from "@/components/ui/material-icon";
-import { PathSpan } from "@/components/ui/path-span";
-import { cn } from "@/lib/utils";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import {
+  appendBrowsePathSegment,
+  canNavigateUp,
+  getBrowseDirectoryPath,
+  getBrowseLeafSegment,
+  getBrowseParentPath,
+  hasTrailingSlash,
+  normalizeForSubmit,
+} from "@/lib/projectPaths";
 
 interface FolderPickerModalProps {
-  // Absolute path the picker opens at; falls back to ~/ when omitted.
+  // Initial value for the path-as-input. Defaults to "~/" so the picker
+  // opens on the user's home folder.
   initialPath?: string;
+  // Header text shown above the input. Stays small and contextual.
   title?: string;
+  // Label for the primary submit button. Mirrors AddProjectView's "Add".
   confirmLabel?: string;
+  // The directory the user confirms. Always an absolute path (or "~/..."
+  // form; main-side IPC handlers resolve `~`).
   onPick: (path: string) => void;
   onClose: () => void;
 }
 
-// In-app folder picker. Lets the user walk the filesystem and confirm a
-// directory; returns the absolute path of the directory currently shown
-// in the header. Used wherever a flow needs to capture a folder path
-// without falling back to the native OS dialog.
+// Folder picker built on the same path-as-input pattern as the Add
+// Project command palette: typing a path lists the directory live, the
+// list filters by the trailing leaf segment, and ↩ confirms / enters
+// the highlighted entry. Open as a modal from anywhere that needs the
+// user to pick a folder.
 export function FolderPickerModal({
   initialPath,
   title = "Pick a folder",
@@ -39,93 +50,92 @@ export function FolderPickerModal({
 }: FolderPickerModalProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const [cwd, setCwd] = useState<string>(initialPath ?? home ?? "~/");
-  const [filter, setFilter] = useState("");
-  const [highlightedIdx, setHighlightedIdx] = useState(0);
-  const listRef = useRef<HTMLUListElement | null>(null);
 
-  // Once runtime info arrives, snap the cwd to the real home if the
-  // caller didn't pass an initial path. Without this, the picker would
-  // stay parked at the "~/" sentinel and never resolve.
-  useEffect(() => {
-    if (!initialPath && home && cwd === "~/") {
-      setCwd(home);
-    }
-  }, [home, initialPath, cwd]);
+  // Seed the input value with the caller's path; otherwise drop into ~/.
+  // When an initialPath is provided we append "/" so the listing fires
+  // immediately rather than treating the basename as a leaf filter.
+  const seed = initialPath
+    ? initialPath.endsWith("/")
+      ? initialPath
+      : `${initialPath}/`
+    : "~/";
+  const [query, setQuery] = useState<string>(seed);
+  const [highlighted, setHighlighted] = useState<string>("");
 
-  const { data: listing, isLoading, error } = useFsListDirectory(cwd);
+  const browseDir = getBrowseDirectoryPath(query);
+  const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
+  const listingEnabled = browseDir.length > 0 && hasTrailingSlash(browseDir);
+  const {
+    data: listing,
+    isLoading,
+    error,
+  } = useFsListDirectory(browseDir, listingEnabled);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const atRoot = cwd === "/";
-
-  const goUp = () => {
-    if (atRoot) return;
-    const idx = cwd.lastIndexOf("/");
-    if (idx < 0) return;
-    const parent = idx === 0 ? "/" : cwd.slice(0, idx);
-    setCwd(parent);
-    setFilter("");
-  };
-
-  const navigateInto = (name: string) => {
-    setCwd(cwd === "/" ? `/${name}` : `${cwd}/${name}`);
-    setFilter("");
-  };
-
-  const trimmed = filter.trim().toLowerCase();
-  const entries = (listing?.entries ?? []).filter((e) =>
-    trimmed ? e.name.toLowerCase().includes(trimmed) : true,
+  const filtered = (listing?.entries ?? []).filter((e) =>
+    e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
   );
 
-  useEffect(() => {
-    setHighlightedIdx(0);
-  }, [cwd, filter]);
+  const browseTo = (name: string) => {
+    setQuery(appendBrowsePathSegment(query, name));
+    setHighlighted("");
+  };
 
-  useEffect(() => {
-    if (entries.length === 0) return;
-    listRef.current
-      ?.querySelector(`[data-row-idx="${highlightedIdx}"]`)
-      ?.scrollIntoView({ block: "nearest" });
-  }, [highlightedIdx, entries.length]);
-
-  const onInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightedIdx((i) =>
-        entries.length === 0 ? 0 : Math.min(i + 1, entries.length - 1),
-      );
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightedIdx((i) => Math.max(i - 1, 0));
-      return;
-    }
-    if (e.key === "Enter" || e.key === "ArrowRight") {
-      const target = entries[highlightedIdx];
-      if (target) {
-        e.preventDefault();
-        navigateInto(target.name);
-      }
-      return;
-    }
-    if (e.key === "ArrowLeft" && filter === "" && !atRoot) {
-      e.preventDefault();
-      goUp();
+  const browseUp = () => {
+    const parent = getBrowseParentPath(query);
+    if (parent) {
+      setQuery(parent);
+      setHighlighted("");
     }
   };
 
-  const resolvedCwd = listing?.path ?? cwd;
+  const submitTarget = normalizeForSubmit(query);
+  // The folder we'd confirm is the resolved listing path when the input
+  // ends in "/" (so the user is "inside" that folder); otherwise it's
+  // whatever they've typed verbatim.
+  const confirmTarget = listingEnabled
+    ? (listing?.path ?? submitTarget)
+    : submitTarget;
+  const canConfirm = confirmTarget.length > 0 && !error;
+  const hasHighlighted = highlighted.startsWith("browse:");
+
+  const confirm = () => {
+    if (!canConfirm) return;
+    onPick(confirmTarget);
+  };
+
+  const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+      return;
+    }
+    if (e.key === "Enter" && !hasHighlighted) {
+      e.preventDefault();
+      e.stopPropagation();
+      confirm();
+      return;
+    }
+    if (e.key === "ArrowLeft" && canNavigateUp(query) && !leafFilter) {
+      e.preventDefault();
+      e.stopPropagation();
+      browseUp();
+      return;
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+      return;
+    }
+    if (e.key === "Backspace" && query === "") {
+      e.preventDefault();
+      onClose();
+    }
+  };
+
+  const canBrowseUp = canNavigateUp(query);
+  const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
 
   return (
     <div
@@ -135,140 +145,123 @@ export function FolderPickerModal({
       }}
       className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
     >
-      <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
-        <header className="flex items-center gap-2 border-b border-border px-3 py-2">
-          {!atRoot && (
-            <button
-              type="button"
-              onClick={goUp}
-              aria-label="Go up"
-              title="Go up"
-              className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <ArrowLeft className="size-4" />
-            </button>
-          )}
-          <Folder className="size-4 shrink-0 text-muted-foreground/80" />
-          <PathSpan
-            path={resolvedCwd}
-            home={home}
-            className="min-w-0 flex-1 truncate font-mono text-sm select-text"
-          />
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close picker"
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <X className="size-4" />
-          </button>
-        </header>
-
-        <div className="flex items-center justify-between gap-2 border-b border-border bg-card/40 px-3 py-1.5">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5">
-            <Search className="size-3.5 text-muted-foreground" />
-            <input
-              type="text"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              onKeyDown={onInputKeyDown}
-              placeholder={title}
+      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
+        <Command
+          label={title}
+          loop
+          shouldFilter={false}
+          value={highlighted}
+          onValueChange={setHighlighted}
+        >
+          <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
+            <Command.Input
               // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
               autoFocus
-              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
+              value={query}
+              onValueChange={setQuery}
+              onKeyDown={onInputKeyDown}
+              placeholder="Enter a path (e.g. ~/projects/)"
+              className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
             />
-          </div>
-          <Button
-            type="button"
-            size="xs"
-            onClick={() => onPick(resolvedCwd)}
-            disabled={isLoading || !!error}
-          >
-            {confirmLabel}
-          </Button>
-        </div>
-
-        <div className="max-h-[60vh] min-h-[12rem] overflow-y-auto p-1">
-          {!atRoot && (
-            <button
+            <Button
               type="button"
-              onClick={goUp}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              size="xs"
+              variant="outline"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={confirm}
+              disabled={!canConfirm}
+              aria-label={`${confirmLabel} (${confirmKbd})`}
+              title={`${confirmLabel} (${confirmKbd})`}
             >
-              <CornerLeftUp className="size-3.5" />
-              <span className="font-mono">..</span>
-            </button>
-          )}
+              <Check />
+              <span>{confirmLabel}</span>
+              <KbdGroup className="pointer-events-none">
+                <Kbd>{confirmKbd}</Kbd>
+              </KbdGroup>
+            </Button>
+          </div>
 
-          {isLoading && !listing ? (
-            <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Loading…
-            </div>
-          ) : error ? (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-              Couldn't read folder.
-            </div>
-          ) : entries.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-              {trimmed ? `No folders matching "${trimmed}".` : "Empty folder."}
-            </div>
-          ) : (
-            <ul ref={listRef} className="divide-y divide-border/40">
-              {entries.map((entry, idx) => (
-                // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- keyboard nav lives on the focused filter input above
-                <li
+          <Command.List className="max-h-96 overflow-y-auto p-2">
+            {canBrowseUp && (
+              <Command.Item
+                value="browse:up"
+                keywords={[".."]}
+                onSelect={browseUp}
+                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+              >
+                <CornerLeftUp className="size-4 text-muted-foreground/80" />
+                <span className="font-mono text-muted-foreground">..</span>
+              </Command.Item>
+            )}
+
+            {filtered.map((entry) => {
+              const entryPath = `${browseDir}${entry.name}`;
+              return (
+                <Command.Item
                   key={entry.name}
-                  data-row-idx={idx}
-                  className={cn(
-                    "group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5",
-                    idx === highlightedIdx &&
-                      "bg-accent text-accent-foreground",
-                  )}
-                  onClick={() => navigateInto(entry.name)}
-                  onMouseEnter={() => setHighlightedIdx(idx)}
+                  value={`browse:${entryPath}`}
+                  keywords={[entry.name]}
+                  onSelect={() => browseTo(entry.name)}
+                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
                 >
-                  <MaterialIcon
-                    kind="folder"
-                    name={entry.name}
-                    expanded={idx === highlightedIdx}
-                    className="size-4"
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate font-mono text-xs"
-                    title={entry.name}
-                  >
-                    {entry.name}/
+                  <Folder className="size-4 text-muted-foreground/80" />
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {entry.name}
                   </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                </Command.Item>
+              );
+            })}
 
-        <div className="flex items-center gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-          <KbdGroup>
-            <Kbd>
-              <ArrowUp />
-            </Kbd>
-            <Kbd>
-              <ArrowDown />
-            </Kbd>
-            <span className="text-muted-foreground/80">Navigate</span>
-          </KbdGroup>
-          <KbdGroup>
-            <Kbd>↩</Kbd>
-            <span className="text-muted-foreground/80">Enter folder</span>
-          </KbdGroup>
-          {!atRoot && (
+            {isLoading && !listing && (
+              <div className="px-3 py-3 text-xs text-muted-foreground">
+                Loading…
+              </div>
+            )}
+            {!isLoading && !error && filtered.length === 0 && (
+              <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+                {leafFilter.length > 0
+                  ? `No folders matching "${leafFilter}".`
+                  : "Empty directory."}
+              </div>
+            )}
+            {error && (
+              <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+                Couldn't read folder.
+              </div>
+            )}
+          </Command.List>
+
+          <div className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
             <KbdGroup>
               <Kbd>
-                <ArrowLeft />
+                <ArrowUp />
               </Kbd>
-              <span className="text-muted-foreground/80">Go up</span>
+              <Kbd>
+                <ArrowDown />
+              </Kbd>
+              <span className="text-muted-foreground/80">Navigate</span>
             </KbdGroup>
-          )}
-        </div>
+            {hasHighlighted && (
+              <KbdGroup>
+                <Kbd>↩</Kbd>
+                <span className="text-muted-foreground/80">Enter folder</span>
+              </KbdGroup>
+            )}
+            {canBrowseUp && (
+              <KbdGroup>
+                <Kbd>
+                  <ArrowLeft />
+                </Kbd>
+                <span className="text-muted-foreground/80">Go up</span>
+              </KbdGroup>
+            )}
+            {home && query === "~/" && (
+              <span className="ml-auto truncate text-muted-foreground/60">
+                Start typing a path
+              </span>
+            )}
+          </div>
+        </Command>
       </div>
     </div>
   );
