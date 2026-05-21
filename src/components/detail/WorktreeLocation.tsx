@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Info } from "lucide-react";
+import { ArrowRight, FolderOpen, Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -314,21 +314,39 @@ function LocationForm({
                 </p>
                 {opt.value === "custom" && checked && (
                   <div className="space-y-1 pt-1">
-                    <input
-                      type="text"
-                      value={customPath}
-                      onChange={(e) => {
-                        setCustomPath(e.target.value);
-                        if (customPathError) setCustomPathError(null);
-                      }}
-                      placeholder="/absolute/path/to/worktrees"
-                      className={cn(
-                        "w-full rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none transition-colors focus:ring-2 focus:ring-ring/30",
-                        customPathError
-                          ? "border-destructive focus:border-destructive"
-                          : "border-input focus:border-ring",
-                      )}
-                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={customPath}
+                        onChange={(e) => {
+                          setCustomPath(e.target.value);
+                          if (customPathError) setCustomPathError(null);
+                        }}
+                        placeholder="/absolute/path/to/worktrees"
+                        className={cn(
+                          "min-w-0 flex-1 rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none transition-colors focus:ring-2 focus:ring-ring/30",
+                          customPathError
+                            ? "border-destructive focus:border-destructive"
+                            : "border-input focus:border-ring",
+                        )}
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const picked = await window.api.dialog.pickFolder({
+                            title: "Pick a worktree location",
+                            buttonLabel: "Use this folder",
+                          });
+                          if (!picked) return;
+                          setCustomPath(picked);
+                          if (customPathError) setCustomPathError(null);
+                        }}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        <FolderOpen className="size-3" />
+                        Browse
+                      </button>
+                    </div>
                     {customPathError && (
                       <p className="text-xs text-destructive">
                         {customPathError}

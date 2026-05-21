@@ -309,6 +309,15 @@ export const FsStatPayloadSchema = z.object({
   path: z.string().min(1),
 });
 
+// Optional copy for the native folder picker. Defaults to the
+// "Add a project" wording for backwards compatibility.
+export const PickFolderPayloadSchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    buttonLabel: z.string().min(1).optional(),
+  })
+  .optional();
+
 // Slim subset of fs.Stats; "exists: false" means the path is missing or
 // unreadable. Used by the carry-over row to render a missing warning and
 // pick the right icon (file vs folder).

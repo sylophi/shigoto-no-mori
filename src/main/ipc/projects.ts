@@ -5,6 +5,7 @@ import {
   AddProjectPayloadSchema,
   type BranchList,
   ListIgnoredPathsPayloadSchema,
+  PickFolderPayloadSchema,
   PickWorktreeNamePayloadSchema,
   type Project,
   ProjectsDefaultBranchPayloadSchema,
@@ -154,13 +155,17 @@ export function registerProjectHandlers(): void {
     },
   );
 
-  ipcMain.handle(CHANNELS.DialogPickFolder, async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ["openDirectory", "createDirectory"],
-      title: "Add a project",
-      buttonLabel: "Add project",
-    });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
-  });
+  ipcMain.handle(
+    CHANNELS.DialogPickFolder,
+    async (_event, rawPayload: unknown) => {
+      const opts = PickFolderPayloadSchema.parse(rawPayload);
+      const result = await dialog.showOpenDialog({
+        properties: ["openDirectory", "createDirectory"],
+        title: opts?.title ?? "Add a project",
+        buttonLabel: opts?.buttonLabel ?? "Add project",
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    },
+  );
 }
