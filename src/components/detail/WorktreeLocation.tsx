@@ -260,9 +260,13 @@ function LocationForm({
         <legend className="sr-only">Worktree location</legend>
         {LAYOUT_OPTIONS.map((opt) => {
           const checked = layout === opt.value;
+          const hasCustomPath = customPath.trim().length > 0;
+          // Skip the preview line entirely for an empty custom layout
+          // rather than rendering a "/your/custom/path/<name>" stub —
+          // the picker button below carries the next action instead.
           const previewPath =
-            opt.value === "custom" && !customPath.trim()
-              ? "/your/custom/path/<name>"
+            opt.value === "custom" && !hasCustomPath
+              ? null
               : tildify(
                   worktreePathFor(
                     {
@@ -308,37 +312,31 @@ function LocationForm({
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {opt.description}
                 </p>
-                <p
-                  className="truncate font-mono text-xs text-foreground/70 select-text"
-                  title={previewPath}
-                >
-                  {previewPath}
-                </p>
-                {opt.value === "custom" && checked && (
+                {previewPath && (
+                  <p
+                    className="truncate font-mono text-xs text-foreground/70 select-text"
+                    title={previewPath}
+                  >
+                    {previewPath}
+                  </p>
+                )}
+                {opt.value === "custom" && (
                   <div className="space-y-1 pt-1">
-                    <button
+                    <Button
                       type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={!checked}
                       onClick={(event) => {
                         // The wrapping label would otherwise re-fire the
                         // click and toggle the radio off/on around the picker.
                         event.preventDefault();
                         setPickerOpen(true);
                       }}
-                      className={cn(
-                        "flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 text-left font-mono text-xs transition-colors hover:bg-accent",
-                        customPathError ? "border-destructive" : "border-input",
-                      )}
                     >
-                      <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate select-text",
-                          !customPath && "text-muted-foreground",
-                        )}
-                      >
-                        {customPath || "Choose a folder…"}
-                      </span>
-                    </button>
+                      <FolderOpen />
+                      {hasCustomPath ? "Change folder" : "Choose folder…"}
+                    </Button>
                     {customPathError && (
                       <p className="text-xs text-destructive">
                         {customPathError}
