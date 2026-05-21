@@ -314,39 +314,35 @@ function LocationForm({
                 </p>
                 {opt.value === "custom" && checked && (
                   <div className="space-y-1 pt-1">
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={customPath}
-                        onChange={(e) => {
-                          setCustomPath(e.target.value);
-                          if (customPathError) setCustomPathError(null);
-                        }}
-                        placeholder="/absolute/path/to/worktrees"
+                    <button
+                      type="button"
+                      onClick={async (event) => {
+                        // The wrapping label would otherwise re-fire the
+                        // click and toggle the radio off/on around the picker.
+                        event.preventDefault();
+                        const picked = await window.api.dialog.pickFolder({
+                          title: "Pick a worktree location",
+                          buttonLabel: "Use this folder",
+                        });
+                        if (!picked) return;
+                        setCustomPath(picked);
+                        if (customPathError) setCustomPathError(null);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-md border bg-background px-2 py-1 text-left font-mono text-xs transition-colors hover:bg-accent",
+                        customPathError ? "border-destructive" : "border-input",
+                      )}
+                    >
+                      <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
+                      <span
                         className={cn(
-                          "min-w-0 flex-1 rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none transition-colors focus:ring-2 focus:ring-ring/30",
-                          customPathError
-                            ? "border-destructive focus:border-destructive"
-                            : "border-input focus:border-ring",
+                          "min-w-0 flex-1 truncate select-text",
+                          !customPath && "text-muted-foreground",
                         )}
-                      />
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const picked = await window.api.dialog.pickFolder({
-                            title: "Pick a worktree location",
-                            buttonLabel: "Use this folder",
-                          });
-                          if (!picked) return;
-                          setCustomPath(picked);
-                          if (customPathError) setCustomPathError(null);
-                        }}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-input bg-background px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                       >
-                        <FolderOpen className="size-3" />
-                        Browse
-                      </button>
-                    </div>
+                        {customPath || "Choose a folder…"}
+                      </span>
+                    </button>
                     {customPathError && (
                       <p className="text-xs text-destructive">
                         {customPathError}
