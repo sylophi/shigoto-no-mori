@@ -176,6 +176,11 @@ export function registerWorktreeHandlers(): void {
         // Already where it should be; refresh the row but skip the move.
         return describeWorktree(target, project.path);
       }
+      // Reap scripts running with the old worktree as cwd before the
+      // move. Otherwise the process keeps running in the moved directory
+      // while the renderer drops the run state on success, leaving an
+      // unmanageable child until app quit. Matches the delete handler.
+      await killScriptsForWorktree(worktreeId);
       await relocateWorktree(project.path, target.path, destinationPath);
       // Sweep the old parent dir if it's one we own (managed root's
       // per-project subdir, or the in-project .shigomori scaffolding).
