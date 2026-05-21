@@ -3,7 +3,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
   type BranchList,
@@ -12,8 +12,13 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
+import { readShigomoriConfig } from "./shigomori";
 import { pickWorktreeName } from "./worktreeNames";
-import { shigomoriRoot } from "./paths";
+import {
+  isManagedPath,
+  managedPrefixesFor,
+  resolveWorktreeBase,
+} from "./worktreePaths";
 
 const execFileP = promisify(execFile);
 
@@ -266,8 +271,15 @@ export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  const stdout = await run(projectPath, ["worktree", "list", "--porcelain"]);
-  const managedPrefix = join(shigomoriRoot(), "worktrees") + sep;
+  const [stdout, config] = await Promise.all([
+    run(projectPath, ["worktree", "list", "--porcelain"]),
+    readShigomoriConfig(projectId).catch(() => null),
+  ]);
+  // A worktree counts as managed if it sits under any layout we know
+  // about (managed root, in-project, or the configured custom path).
+  // This keeps mixed states (some worktrees still in the old layout
+  // after a partial migration) from mislabeling rows as external.
+  const managedPrefixes = managedPrefixesFor(projectPath, config);
   return parsePorcelain(stdout)
     .filter((e) => !e.bare)
     .map((entry, index) => {
@@ -284,7 +296,7 @@ export async function listWorktreeIdentities(
         branch,
         path: entry.path,
         isPrimary,
-        isExternal: !entry.path.startsWith(managedPrefix),
+        isExternal: !isManagedPath(entry.path, managedPrefixes),
         detached: entry.detached ?? false,
       };
     });
@@ -560,11 +572,9 @@ export async function createWorktree(
     );
   }
   const worktreeName = requestedWorktreeName || pickWorktreeName(used);
-  const projectName = basename(projectPath);
+  const config = await readShigomoriConfig(projectId).catch(() => null);
   const worktreePath = join(
-    shigomoriRoot(),
-    "worktrees",
-    projectName,
+    resolveWorktreeBase(projectPath, config),
     worktreeName,
   );
 
@@ -698,6 +708,20 @@ export async function removeWorktree(
   const args = ["worktree", "remove", worktreePath];
   if (force) args.push("--force");
   await run(projectPath, args);
+}
+
+// Moves a worktree's checkout to a new directory. `git worktree move`
+// preserves the working tree, index, and untracked files; the absolute
+// carry-over symlinks stay valid because their targets don't change. Git
+// refuses if the worktree is locked, dirty in a way that conflicts with
+// the move, or the destination already exists.
+export async function relocateWorktree(
+  projectPath: string,
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  await mkdir(dirname(newPath), { recursive: true });
+  await run(projectPath, ["worktree", "move", oldPath, newPath]);
 }
 
 // Remote sync mutations. Each operates on a single worktree's checkout

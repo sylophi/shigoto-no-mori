@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { sanitizeBranchForPath } from "@shared/branches";
@@ -11,6 +12,7 @@ import {
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
+  RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
   SyncWorktreePayloadSchema,
   type Worktree,
@@ -32,8 +34,10 @@ import {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
+  relocateWorktree,
   removeWorktree,
   renameBranch,
+  worktreeIdFromPath,
 } from "../git";
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
@@ -41,6 +45,7 @@ import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
+import { pruneEmptyManagedParents } from "../worktreePaths";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -154,6 +159,53 @@ export function registerWorktreeHandlers(): void {
   );
 
   ipcMain.handle(
+    CHANNELS.WorktreesRelocate,
+    async (_event, rawPayload: unknown): Promise<Worktree> => {
+      const { projectId, worktreeId, destinationPath } =
+        RelocateWorktreePayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (target.isPrimary) {
+        throw new Error("The primary checkout can't be relocated");
+      }
+      if (target.path === destinationPath) {
+        // Already where it should be; refresh the row but skip the move.
+        return describeWorktree(target, project.path);
+      }
+      // Reap scripts running with the old worktree as cwd before the
+      // move. Otherwise the process keeps running in the moved directory
+      // while the renderer drops the run state on success, leaving an
+      // unmanageable child until app quit. Matches the delete handler.
+      await killScriptsForWorktree(worktreeId);
+      await relocateWorktree(project.path, target.path, destinationPath);
+      // Sweep the old parent dir if it's one we own (managed root's
+      // per-project subdir, or the in-project .shigomori scaffolding).
+      // The custom layout is deliberately skipped: the directory there
+      // is user-chosen and could sit next to unrelated files. Best
+      // effort: failures are swallowed so concurrent moves don't race.
+      await pruneEmptyManagedParents(target.path, project.path);
+      // Everything we need for the moved identity is already known:
+      // the id is path-derived, branch/detached survive the move, and we
+      // just moved it into a managed prefix the user picked. Skipping
+      // the post-move `git worktree list` keeps the relocate batch fast.
+      return describeWorktree(
+        {
+          ...target,
+          id: worktreeIdFromPath(destinationPath),
+          name: basename(destinationPath),
+          path: destinationPath,
+          isExternal: false,
+        },
+        project.path,
+      );
+    },
+  );
+
+  ipcMain.handle(
     CHANNELS.WorktreesDelete,
     async (event, rawPayload: unknown): Promise<DeleteWorktreeResult> => {
       const { projectId, worktreeId, force, skipCleanup } =
@@ -215,6 +267,12 @@ export function registerWorktreeHandlers(): void {
       // then remove.
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force ?? false);
+      // Same cleanup as relocate: if this was the last worktree under a
+      // managed parent, sweep the empty dir away. Custom paths are left
+      // alone since they're user-chosen.
+      if (!target.isExternal) {
+        await pruneEmptyManagedParents(target.path, project.path);
+      }
 
       // Defaults to true: if you're done with the worktree, you're done
       // with the local branch. (Remote branches are never touched.)

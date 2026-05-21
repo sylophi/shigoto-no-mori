@@ -133,6 +133,29 @@ export function useConvertExternalWorktree() {
   );
 }
 
+interface RelocateWorktreeInput {
+  projectId: string;
+  worktreeId: string;
+  destinationPath: string;
+}
+
+export function useRelocateWorktree() {
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, RelocateWorktreeInput>({
+    mutationFn: (input) => window.api.worktrees.relocate(input),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["worktrees", vars.projectId],
+      });
+      // The relocated worktree's id changes (it's derived from path), so
+      // any cached script runs keyed by the pre-move id are stranded.
+      clearScriptRunsForWorktree(vars.worktreeId);
+    },
+    // The page surfaces per-row errors inline; a toast on top would be noise.
+    meta: { silentError: true },
+  });
+}
+
 interface DeleteWorktreeInput {
   projectId: string;
   worktreeId: string;

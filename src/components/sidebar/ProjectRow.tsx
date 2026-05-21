@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import {
   AlertTriangle,
   ChevronRight,
@@ -24,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
@@ -52,6 +54,28 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   const missing = project.pathExists === false;
   const removeProject = useRemoveProject();
   const create = useCreateWorktree();
+  // Two-step confirm so accidentally landing on "Remove" doesn't drop the
+  // project. Menu stays open while armed; second click within the timeout
+  // fires the actual remove. The arm is cleared whenever the dropdown
+  // closes so a leftover armed state can't fire on the next open.
+  const {
+    armed: removeArmed,
+    trigger: triggerRemove,
+    reset: resetRemoveArm,
+  } = useConfirmTwice(3_000);
+  const onMenuOpenChange = (open: boolean) => {
+    if (!open) resetRemoveArm();
+  };
+  // Right-clicking the header pops the same dropdown anchored to the
+  // `…` button. Synthesizing a click on the trigger reuses base-ui's
+  // normal open flow, which avoids the stray-pointer behavior we'd get
+  // by toggling a controlled `open` prop ourselves.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const onHeaderContextMenu = (event: React.MouseEvent) => {
+    event.preventDefault();
+    triggerRef.current?.click();
+  };
 
   const quickCreate = async () => {
     if (create.isPending) return;
@@ -81,11 +105,17 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
         {...attributes}
       >
         <div className="group flex items-center gap-0.5 py-0.5">
-          <ProjectHeader project={project} missing listeners={listeners} />
-          <DropdownMenu>
+          <ProjectHeader
+            project={project}
+            missing
+            listeners={listeners}
+            onContextMenu={onHeaderContextMenu}
+          />
+          <DropdownMenu onOpenChange={onMenuOpenChange}>
             <DropdownMenuTrigger
               render={
                 <button
+                  ref={triggerRef}
                   type="button"
                   aria-label={`More actions for ${project.name}`}
                   className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
@@ -97,9 +127,13 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuContent align="end" sideOffset={2}>
               <DropdownMenuItem
                 variant="destructive"
-                onClick={() => removeProject.mutate(project.id)}
+                closeOnClick={removeArmed}
+                onClick={(event) => {
+                  if (!removeArmed) event.preventDefault();
+                  triggerRemove(() => removeProject.mutate(project.id));
+                }}
               >
-                Remove
+                {removeArmed ? "Click again to confirm" : "Remove"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -121,6 +155,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           expanded={expanded}
           onToggle={onToggle}
           listeners={listeners}
+          onContextMenu={onHeaderContextMenu}
         />
         <button
           type="button"
@@ -146,10 +181,11 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <Plus className="size-3.5" />
           )}
         </button>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={onMenuOpenChange}>
           <DropdownMenuTrigger
             render={
               <button
+                ref={triggerRef}
                 type="button"
                 aria-label={`More actions for ${project.name}`}
                 className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
@@ -160,6 +196,12 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           />
           <DropdownMenuContent align="end" sideOffset={2}>
             <DropdownMenuItem
+              disabled={create.isPending}
+              onClick={() => void quickCreate()}
+            >
+              Quick create
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={() =>
                 void navigate({
                   to: "/projects/$projectId/new",
@@ -169,16 +211,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             >
               New worktree from…
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/branches",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Manage branches
-            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
@@ -192,6 +225,27 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <DropdownMenuItem
               onClick={() =>
                 void navigate({
+                  to: "/projects/$projectId/worktree-location",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Set worktree location
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/branches",
+                  params: { projectId: project.id },
+                })
+              }
+            >
+              Manage branches
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() =>
+                void navigate({
                   to: "/projects/$projectId/configure",
                   params: { projectId: project.id },
                 })
@@ -199,12 +253,15 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             >
               Configure
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
-              onClick={() => removeProject.mutate(project.id)}
+              closeOnClick={removeArmed}
+              onClick={(event) => {
+                if (!removeArmed) event.preventDefault();
+                triggerRemove(() => removeProject.mutate(project.id));
+              }}
             >
-              Remove
+              {removeArmed ? "Click again to confirm" : "Remove"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -219,6 +276,7 @@ interface ProjectHeaderProps {
   onToggle?: () => void;
   missing?: boolean;
   listeners?: DraggableSyntheticListeners;
+  onContextMenu?: (event: React.MouseEvent) => void;
 }
 
 // Header row shared by the healthy and missing-project branches. The
@@ -231,6 +289,7 @@ function ProjectHeader({
   onToggle,
   missing,
   listeners,
+  onContextMenu,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
@@ -238,6 +297,7 @@ function ProjectHeader({
   const trigger = missing ? (
     <div
       {...listeners}
+      onContextMenu={onContextMenu}
       className={cn(
         baseClass,
         listeners && "cursor-grab active:cursor-grabbing",
@@ -259,6 +319,7 @@ function ProjectHeader({
     <button
       type="button"
       onClick={onToggle}
+      onContextMenu={onContextMenu}
       {...listeners}
       className={cn(
         baseClass,

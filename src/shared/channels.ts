@@ -11,6 +11,7 @@ export const CHANNELS = {
   WorktreesList: "worktrees:list",
   WorktreesCreate: "worktrees:create",
   WorktreesConvertExternal: "worktrees:convertExternal",
+  WorktreesRelocate: "worktrees:relocate",
   WorktreesDelete: "worktrees:delete",
   WorktreesRenameBranch: "worktrees:renameBranch",
   WorktreesCheckoutBranch: "worktrees:checkoutBranch",

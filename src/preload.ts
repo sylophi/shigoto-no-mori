@@ -82,6 +82,12 @@ const api = {
       worktreeId: string;
     }): Promise<CreateWorktreeResult> =>
       ipcRenderer.invoke(CHANNELS.WorktreesConvertExternal, input),
+    relocate: (input: {
+      projectId: string;
+      worktreeId: string;
+      destinationPath: string;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesRelocate, input),
     delete: (input: {
       projectId: string;
       worktreeId: string;
@@ -156,8 +162,11 @@ const api = {
     }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
   },
   dialog: {
-    pickFolder: (): Promise<string | null> =>
-      ipcRenderer.invoke(CHANNELS.DialogPickFolder),
+    pickFolder: (options?: {
+      title?: string;
+      buttonLabel?: string;
+    }): Promise<string | null> =>
+      ipcRenderer.invoke(CHANNELS.DialogPickFolder, options),
   },
   runtime: {
     info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),

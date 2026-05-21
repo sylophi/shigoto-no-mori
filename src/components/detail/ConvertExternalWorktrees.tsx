@@ -1,23 +1,20 @@
 import { useState } from "react";
-import { Check, FileDiff, Loader2, X } from "lucide-react";
+import { FileDiff } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { useConvertExternalWorktree, useWorktrees } from "@/hooks/useWorktrees";
 import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
-
-type RowStatus =
-  | { kind: "idle" }
-  | { kind: "running" }
-  | { kind: "done" }
-  | { kind: "error"; message: string };
+import { worktreePathFor } from "@shared/worktreeLayout";
 
 export function ConvertExternalWorktrees() {
   const { projectId } = convertExternalRoute.useParams();
@@ -25,6 +22,7 @@ export function ConvertExternalWorktrees() {
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading } = useWorktrees(projectId);
+  const { data: config } = useShigomoriConfig(projectId);
   const convert = useConvertExternalWorktree();
 
   const project = projects.find((p) => p.id === projectId);
@@ -39,9 +37,6 @@ export function ConvertExternalWorktrees() {
   }
 
   const home = runtime?.homedir ?? null;
-  const root = runtime?.shigomoriRoot
-    ? tildify(runtime.shigomoriRoot, home)
-    : "~/shigomori";
 
   // For detached HEADs `worktree.branch` is a short SHA -- pass it
   // through unchanged so the managed worktree gets a hash-named dir.
@@ -51,8 +46,21 @@ export function ConvertExternalWorktrees() {
     worktree.detached
       ? worktree.branch
       : sanitizeBranchForPath(worktree.branch);
-  const proposedPath = (worktree: Worktree): string =>
-    `${root}/worktrees/${project.name}/${proposedName(worktree)}`;
+  const proposedPath = (worktree: Worktree): string => {
+    if (!runtime) return "";
+    return tildify(
+      worktreePathFor(
+        {
+          layout: config?.worktreeLayout ?? "managed-root",
+          projectPath: project.path,
+          shigomoriRoot: runtime.shigomoriRoot,
+          customPath: config?.customWorktreePath ?? null,
+        },
+        proposedName(worktree),
+      ),
+      home,
+    );
+  };
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -138,15 +146,12 @@ export function ConvertExternalWorktrees() {
             </p>
             <p className="mt-2 leading-relaxed">
               Each selected worktree is removed from its current location and
-              re-checked-out under{" "}
-              <span className="font-mono select-text">
-                {root}/worktrees/{project.name}/
-              </span>
-              . Uncommitted changes, untracked files, and any state inside the
-              old worktree directory are wiped. The branch is then checked out
-              fresh under Shigoto no Mori&apos;s pipelines: carry-over, setup
-              script, and port-pool provision all run as if you had just created
-              it.
+              re-checked-out under this project&apos;s managed worktree
+              location. Uncommitted changes, untracked files, and any state
+              inside the old worktree directory are wiped. The branch is then
+              checked out fresh under Shigoto no Mori&apos;s pipelines:
+              carry-over, setup script, and port-pool provision all run as if
+              you had just created it.
             </p>
           </ErrorBanner>
 
@@ -308,35 +313,14 @@ function ConvertRow({
           </p>
         )}
       </div>
-      <RowStatusBadge status={status} />
+      <RowStatusBadge
+        status={status}
+        labels={{
+          running: "Converting",
+          done: "Converted",
+          error: "Conversion failed",
+        }}
+      />
     </label>
   );
-}
-
-function RowStatusBadge({ status }: { status: RowStatus }) {
-  if (status.kind === "running") {
-    return (
-      <Loader2
-        aria-label="Converting"
-        className="mt-1 size-4 shrink-0 animate-spin text-muted-foreground"
-      />
-    );
-  }
-  if (status.kind === "done") {
-    return (
-      <Check
-        aria-label="Converted"
-        className="mt-1 size-4 shrink-0 text-emerald-500"
-      />
-    );
-  }
-  if (status.kind === "error") {
-    return (
-      <X
-        aria-label="Conversion failed"
-        className="mt-1 size-4 shrink-0 text-destructive"
-      />
-    );
-  }
-  return null;
 }
