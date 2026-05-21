@@ -1086,13 +1086,14 @@ async function seedManyScripts(): Promise<Manifest> {
     purpose:
       "Repo with 30 package.json scripts for exercising sort modes and search",
     tests: [
-      "Section header shows '30' as the count.",
-      "Open the sort dropdown — default (package.json order) is selected; entries appear in insertion order (alphabetized here, but exercising the package.json-order branch).",
-      "Switch to Alphabetical — order is identical here, so this confirms the sort runs without flicker.",
-      "Run a handful of scripts (e.g. `validate`, `lint`, `test`, `db:seed`). Re-mount the detail page; switch to 'Most recently used' — those four float to the top in run order (latest first), tiebroken alphabetically.",
-      "Run `lint` several more times. Switch to 'Most used' — `lint` becomes top; ties below it sort alphabetically.",
-      "The sort preference is persisted: navigate away, return, and the same mode is selected.",
-      "Open a different project with package scripts — its sort starts at the default; sort is per-repo.",
+      "First visit: section starts on 'Most used' (the implicit default for a fresh repo) — with no run history yet, entries fall back to alphabetical.",
+      "Switch to 'package.json' — entries appear in the manifest's declared order (alphabetized in this fixture, but exercising the manifest-order branch).",
+      "Switch to Alphabetical — order is identical here, confirming the sort runs without flicker.",
+      "Run a handful of scripts (e.g. `validate`, `lint`, `test`, `db:seed`). Navigate away and back; switch to 'Most recently used' — those four float to the top in run order (latest first), tiebroken alphabetically.",
+      "Run `lint` several more times. Re-mount the page, then 'Most used' shows `lint` on top; ties below it sort alphabetically.",
+      "Order does NOT shift mid-session when a script is bumped — only on re-mount (matches launcher behavior).",
+      "The sort preference is persisted: pick a non-default mode, restart, and the same mode is selected.",
+      "Open a different project with package scripts — its sort starts on 'Most used'; sort is per-repo.",
       "Search overrides the sort while the query box is non-empty (relevance order); clearing the query restores the chosen sort.",
     ],
   };
