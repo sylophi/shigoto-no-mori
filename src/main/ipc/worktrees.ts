@@ -45,6 +45,7 @@ import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
+import { pruneEmptyManagedParents } from "../worktreePaths";
 
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
@@ -176,6 +177,12 @@ export function registerWorktreeHandlers(): void {
         return describeWorktree(target, project.path);
       }
       await relocateWorktree(project.path, target.path, destinationPath);
+      // Sweep the old parent dir if it's one we own (managed root's
+      // per-project subdir, or the in-project .shigomori scaffolding).
+      // The custom layout is deliberately skipped: the directory there
+      // is user-chosen and could sit next to unrelated files. Best
+      // effort: failures are swallowed so concurrent moves don't race.
+      await pruneEmptyManagedParents(target.path, project.path);
       // Everything we need for the moved identity is already known:
       // the id is path-derived, branch/detached survive the move, and we
       // just moved it into a managed prefix the user picked. Skipping
