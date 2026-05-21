@@ -159,6 +159,11 @@ function LocationForm({
     customPath: customPath.trim() || null,
   };
 
+  // Custom layout with no folder picked yet has no resolvable
+  // destination. Without this guard, worktreeBaseFor falls back to
+  // managed-root and we'd compute a misleading toMove diff.
+  const customMissing = layout === "custom" && !customPath.trim();
+
   // Non-primary worktrees only -- the primary checkout sits at projectPath
   // and can't be moved. Externals can't be moved either: `git worktree
   // move` works only on managed worktrees we created.
@@ -167,7 +172,9 @@ function LocationForm({
   const proposedFor = (worktree: Worktree): string =>
     worktreePathFor(layoutInputs, worktree.name);
 
-  const toMove = movable.filter((w) => proposedFor(w) !== w.path);
+  const toMove = customMissing
+    ? []
+    : movable.filter((w) => proposedFor(w) !== w.path);
 
   const layoutChanged =
     layout !== savedLayout || customPath.trim() !== savedCustomPath.trim();
@@ -180,7 +187,8 @@ function LocationForm({
     return null;
   };
 
-  const canSubmit = (layoutChanged || toMove.length > 0) && !batchRunning;
+  const canSubmit =
+    (layoutChanged || toMove.length > 0) && !batchRunning && !customMissing;
 
   const handleApply = async () => {
     const validationError = validateCustomPath();
@@ -383,9 +391,11 @@ function LocationForm({
         <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
           <Info aria-hidden className="size-4 shrink-0" />
           <span>
-            {movable.length === 0
-              ? "No managed worktrees yet. The layout setting will apply to new ones."
-              : "All managed worktrees already live at this location."}
+            {customMissing
+              ? "Pick a folder to continue."
+              : movable.length === 0
+                ? "No managed worktrees yet. The layout setting will apply to new ones."
+                : "All managed worktrees already live at this location."}
           </span>
         </div>
       )}
