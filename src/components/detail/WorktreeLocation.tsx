@@ -142,8 +142,16 @@ function LocationForm({
   const write = useShigomoriWrite();
   const relocate = useRelocateWorktree();
 
-  const savedLayout: WorktreeLayout = config?.worktreeLayout ?? "managed-root";
-  const savedCustomPath = config?.customWorktreePath ?? "";
+  // Mirror the persisted config in local state so we can flip it
+  // immediately after a successful save. Reading the config prop
+  // directly would lag while the shigomori query refetches, which
+  // briefly re-enables the Move button after a batch completes.
+  const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(
+    config?.worktreeLayout ?? "managed-root",
+  );
+  const [savedCustomPath, setSavedCustomPath] = useState<string>(
+    config?.customWorktreePath ?? "",
+  );
 
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
@@ -212,6 +220,8 @@ function LocationForm({
             layout === "custom" ? customPath.trim() : undefined,
         };
         await write.mutateAsync({ projectId, config: nextConfig });
+        setSavedLayout(layout);
+        setSavedCustomPath(layout === "custom" ? customPath.trim() : "");
       }
     } catch {
       // useShigomoriWrite already surfaces an error toast via its meta.
