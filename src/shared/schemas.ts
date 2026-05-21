@@ -491,11 +491,30 @@ export const RunScriptPayloadSchema = z.object({
 export const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 
+export const PackageScriptUsageSchema = z.object({
+  // Epoch ms of the most recent run; 0 when the script has never been run.
+  lastUsed: z.number().int().nonnegative(),
+  // Number of runs within the rolling-frequency window (matches the
+  // launcher's algorithm). 0 when the script has never been run inside
+  // the window.
+  recentCount: z.number().int().nonnegative(),
+});
+export type PackageScriptUsage = z.infer<typeof PackageScriptUsageSchema>;
+
 export const PackageScriptsResultSchema = z.object({
   scripts: z.record(z.string(), z.string()),
   packageManager: PackageManagerSchema,
+  usage: z.record(z.string(), PackageScriptUsageSchema),
 });
 export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
+
+export const PackageScriptSortModeSchema = z.enum([
+  "manifest",
+  "alphabetical",
+  "recent",
+  "frequent",
+]);
+export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
 export const ListPackageScriptsPayloadSchema = z.object({
   projectId: z.string(),
@@ -506,6 +525,15 @@ export const RunPackageScriptPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   scriptName: z.string().min(1),
+});
+
+export const GetPackageScriptSortPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+export const SetPackageScriptSortPayloadSchema = z.object({
+  projectId: z.string(),
+  mode: PackageScriptSortModeSchema,
 });
 
 export const LaunchToolMenuEntrySchema = z.object({

@@ -1030,6 +1030,75 @@ async function seedPortPoolMonorepo(): Promise<Manifest> {
   };
 }
 
+async function seedManyScripts(): Promise<Manifest> {
+  const repo = join(REPOS, "many-scripts");
+  await initRepo(repo);
+  // 30 scripts spanning the alphabet and the typical buckets you'd want to
+  // sort by (dev/build/test/lint/format/release/db/deploy/etc.). Each one
+  // is cheap to run so it's easy to click through and seed the use log
+  // when exercising the "Most recently used" and "Most used" sort modes.
+  const scripts: Record<string, string> = {
+    "analyze:bundle": "echo 'analyzing bundle...'",
+    build: "echo 'build complete'",
+    "build:prod": "echo 'production build complete'",
+    "build:staging": "echo 'staging build complete'",
+    "check:deps": "echo 'checking deps for updates'",
+    clean: "echo 'cleaning build artifacts'",
+    "clean:cache": "echo 'cleaning cache'",
+    "db:migrate": "echo 'running migrations'",
+    "db:reset": "echo 'reset database'",
+    "db:seed": "echo 'seeding database'",
+    "deploy:prod": "echo 'deploy to prod'",
+    "deploy:staging": "echo 'deploy to staging'",
+    dev: "echo 'starting dev server...' && sleep 3600",
+    "docs:build": "echo 'docs built'",
+    "docs:serve": "echo 'serving docs' && sleep 3600",
+    format: "echo 'formatting'",
+    "format:check": "echo 'format check'",
+    lint: "echo 'linting'",
+    "lint:fix": "echo 'lint --fix'",
+    preview: "echo 'preview server' && sleep 3600",
+    release: "echo 'releasing'",
+    "release:dry": "echo 'release dry run'",
+    start: "echo 'started'",
+    storybook: "echo 'storybook running' && sleep 3600",
+    test: "echo '5 passed'",
+    "test:e2e": "echo 'e2e passed'",
+    "test:unit": "echo 'unit passed'",
+    "test:watch": "echo 'watching tests' && sleep 3600",
+    typecheck: "echo 'tsc clean'",
+    validate: "echo 'validate'",
+  };
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# many-scripts\n\n30 scripts for exercising the per-repo sort modes (default / alphabetical / most recently used / most used).\n",
+      ".gitignore": "node_modules/\n",
+      "package.json": pkgJson("many-scripts", scripts),
+      "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+    },
+    "Initial",
+  );
+  return {
+    name: "many-scripts",
+    path: repo,
+    purpose:
+      "Repo with 30 package.json scripts for exercising sort modes and search",
+    tests: [
+      "First visit: section starts on 'Most used' (the implicit default for a fresh repo) — with no run history yet, entries fall back to alphabetical.",
+      "Switch to 'package.json' — entries appear in the manifest's declared order (alphabetized in this fixture, but exercising the manifest-order branch).",
+      "Switch to Alphabetical — order is identical here, confirming the sort runs without flicker.",
+      "Run a handful of scripts (e.g. `validate`, `lint`, `test`, `db:seed`). Navigate away and back; switch to 'Most recently used' — those four float to the top in run order (latest first), tiebroken alphabetically.",
+      "Run `lint` several more times. Re-mount the page, then 'Most used' shows `lint` on top; ties below it sort alphabetically.",
+      "Order does NOT shift mid-session when a script is bumped — only on re-mount (matches launcher behavior).",
+      "The sort preference is persisted: pick a non-default mode, restart, and the same mode is selected.",
+      "Open a different project with package scripts — its sort starts on 'Most used'; sort is per-repo.",
+      "Search overrides the sort while the query box is non-empty (relevance order); clearing the query restores the chosen sort.",
+    ],
+  };
+}
+
 async function seedPortPoolInvalid(): Promise<Manifest> {
   const repo = join(REPOS, "port-pool-invalid-config");
   await initRepo(repo);
@@ -1181,6 +1250,7 @@ async function main(): Promise<void> {
     { name: "port-pool-basic", run: seedPortPoolBasic },
     { name: "port-pool-monorepo", run: seedPortPoolMonorepo },
     { name: "port-pool-invalid-config", run: seedPortPoolInvalid },
+    { name: "many-scripts", run: seedManyScripts },
   ];
 
   const results = await Promise.allSettled(seeders.map((s) => s.run()));

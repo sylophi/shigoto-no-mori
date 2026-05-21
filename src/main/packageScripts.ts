@@ -7,7 +7,10 @@ import { pathExists } from "./paths";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
-export interface PackageScriptsResult {
+// Raw read of `package.json` + the package manager we'd use to run a
+// script. The IPC layer enriches this with per-script usage stats before
+// handing it to the renderer.
+export interface PackageScriptsFileResult {
   scripts: Record<string, string>;
   packageManager: PackageManager;
 }
@@ -33,7 +36,7 @@ export async function detectPackageManager(
 
 export async function readPackageScripts(
   cwd: string,
-): Promise<PackageScriptsResult | null> {
+): Promise<PackageScriptsFileResult | null> {
   let raw: string;
   try {
     raw = await readFile(join(cwd, "package.json"), "utf8");

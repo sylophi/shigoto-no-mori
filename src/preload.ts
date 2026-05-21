@@ -33,6 +33,7 @@ import type {
   GlobalConfig,
   LauncherEntry,
   LaunchToolMenuEntry,
+  PackageScriptSortMode,
   PackageScriptsResult,
   Project,
   PullRequest,
@@ -235,6 +236,10 @@ const api = {
       scriptName: string;
     }): Promise<{ runId: string }> =>
       ipcRenderer.invoke(CHANNELS.PackageScriptsRun, input),
+    getSort: (projectId: string): Promise<PackageScriptSortMode> =>
+      ipcRenderer.invoke(CHANNELS.PackageScriptsGetSort, { projectId }),
+    setSort: (projectId: string, mode: PackageScriptSortMode): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.PackageScriptsSetSort, { projectId, mode }),
   },
   portPool: {
     isActive: (input: {

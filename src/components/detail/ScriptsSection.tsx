@@ -1,9 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Play, Search, Square } from "lucide-react";
+import { ArrowDownUp, ChevronRight, Play, Search, Square } from "lucide-react";
 import { scoreMatch } from "@/components/ui/branch-combobox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePackageScripts } from "@/hooks/usePackageScripts";
+import {
+  usePackageScriptSort,
+  useSetPackageScriptSort,
+} from "@/hooks/usePackageScriptSort";
 import { usePortPoolActive } from "@/hooks/usePortPoolActive";
 import { useScriptRunner } from "@/hooks/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
@@ -13,8 +24,23 @@ import {
   useWorktreeHasPackageActivity,
   type ScriptSlot,
 } from "@/store/scriptRuns";
-import type { PackageScriptsResult, Worktree } from "@shared/schemas";
+import type {
+  PackageScriptSortMode,
+  PackageScriptsResult,
+  PackageScriptUsage,
+  Worktree,
+} from "@shared/schemas";
 import { ScriptStatusBadge } from "./ScriptStatusBadge";
+
+const SORT_OPTIONS: ReadonlyArray<{
+  value: PackageScriptSortMode;
+  label: string;
+}> = [
+  { value: "frequent", label: "Most used" },
+  { value: "recent", label: "Most recently used" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "manifest", label: "package.json" },
+];
 
 interface ScriptsSectionProps {
   worktree: Worktree;
@@ -138,45 +164,52 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
   const expanded = manualExpanded ?? hasActivity;
   const [query, setQuery] = useState("");
+  const { data: sortMode = "frequent" } = usePackageScriptSort(
+    worktree.projectId,
+  );
+  const setSortMode = useSetPackageScriptSort(worktree.projectId);
   const entries = Object.entries(pkg.scripts);
 
-  const filtered = query
-    ? entries
-        .map(([name, command]) => ({
-          name,
-          command,
-          score: scoreMatch(query, name),
+  const sorted = sortEntries(entries, sortMode, pkg.usage);
+
+  const filtered: SortableEntry[] = query
+    ? sorted
+        .map((e) => ({
+          name: e.name,
+          command: e.command,
+          score: scoreMatch(query, e.name),
         }))
         .filter((e) => e.score > 0)
         .toSorted((a, b) => b.score - a.score)
-    : entries.map(([name, command]) => ({ name, command, score: 0 }));
+    : sorted;
 
   return (
     <div className="space-y-2">
-      <button
-        type="button"
-        onClick={() => setManualExpanded(!expanded)}
-        aria-expanded={expanded}
-        className="group flex w-full items-center gap-1.5 text-left text-xs transition-colors"
-      >
-        <ChevronRight
-          aria-hidden
-          className={cn(
-            "size-3 text-muted-foreground/60 transition-transform group-hover:text-muted-foreground",
-            expanded && "rotate-90",
-          )}
-        />
-        <span className="font-mono text-muted-foreground group-hover:text-foreground">
-          package.json
-        </span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="font-mono text-muted-foreground/70">
-          {pkg.packageManager}
-        </span>
-        <span className="tabular ml-auto text-muted-foreground/50">
-          {entries.length}
-        </span>
-      </button>
+      <div className="flex items-center gap-1.5 text-xs">
+        <button
+          type="button"
+          onClick={() => setManualExpanded(!expanded)}
+          aria-expanded={expanded}
+          className="group flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors"
+        >
+          <ChevronRight
+            aria-hidden
+            className={cn(
+              "size-3 text-muted-foreground/60 transition-transform group-hover:text-muted-foreground",
+              expanded && "rotate-90",
+            )}
+          />
+          <span className="font-mono text-muted-foreground group-hover:text-foreground">
+            package.json
+          </span>
+        </button>
+        {expanded && (
+          <SortMenu
+            value={sortMode}
+            onChange={(mode) => setSortMode.mutate(mode)}
+          />
+        )}
+      </div>
 
       {expanded && (
         <>
@@ -216,6 +249,72 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
       )}
     </div>
   );
+}
+
+function SortMenu({
+  value,
+  onChange,
+}: {
+  value: PackageScriptSortMode;
+  onChange: (mode: PackageScriptSortMode) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Sort scripts"
+        className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
+      >
+        <ArrowDownUp aria-hidden className="size-3" />
+        <span>Sort</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={4} className="min-w-44">
+        <DropdownMenuRadioGroup
+          value={value}
+          onValueChange={(v) => onChange(v as PackageScriptSortMode)}
+        >
+          {SORT_OPTIONS.map((option) => (
+            <DropdownMenuRadioItem key={option.value} value={option.value}>
+              {option.label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+interface SortableEntry {
+  name: string;
+  command: string;
+}
+
+function sortEntries(
+  entries: ReadonlyArray<[string, string]>,
+  mode: PackageScriptSortMode,
+  usage: Record<string, PackageScriptUsage>,
+): SortableEntry[] {
+  const mapped: SortableEntry[] = entries.map(([name, command]) => ({
+    name,
+    command,
+  }));
+  switch (mode) {
+    case "manifest":
+      return mapped;
+    case "alphabetical":
+      return mapped.toSorted((a, b) => a.name.localeCompare(b.name));
+    case "recent":
+      return mapped.toSorted((a, b) => {
+        const diff =
+          (usage[b.name]?.lastUsed ?? 0) - (usage[a.name]?.lastUsed ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      });
+    case "frequent":
+      return mapped.toSorted((a, b) => {
+        const diff =
+          (usage[b.name]?.recentCount ?? 0) - (usage[a.name]?.recentCount ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      });
+  }
 }
 
 interface ScriptRowProps {

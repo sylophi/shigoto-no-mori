@@ -1,9 +1,12 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
+  GetPackageScriptSortPayloadSchema,
   ListPackageScriptsPayloadSchema,
+  type PackageScriptSortMode,
   type PackageScriptsResult,
   RunPackageScriptPayloadSchema,
+  SetPackageScriptSortPayloadSchema,
 } from "@shared/schemas";
 import {
   findWorktreeIdentityOrThrow,
@@ -11,6 +14,12 @@ import {
   resolveDefaultBranch,
 } from "../git";
 import { buildScriptCommand, readPackageScripts } from "../packageScripts";
+import {
+  bumpScriptUseCount,
+  readScriptSort,
+  usageFor,
+  writeScriptSort,
+} from "../packageScriptStats";
 import { findProjectOrThrow } from "../projects";
 import { startScript } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
@@ -30,7 +39,31 @@ export function registerPackageScriptHandlers(): void {
         project.path,
         worktreeId,
       );
-      return readPackageScripts(worktree.path);
+      const file = await readPackageScripts(worktree.path);
+      if (!file) return null;
+      return {
+        ...file,
+        usage: usageFor(project.id, Object.keys(file.scripts)),
+      };
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.PackageScriptsGetSort,
+    async (_event, rawPayload: unknown): Promise<PackageScriptSortMode> => {
+      const { projectId } = GetPackageScriptSortPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return readScriptSort(project.id);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.PackageScriptsSetSort,
+    async (_event, rawPayload: unknown): Promise<void> => {
+      const { projectId, mode } =
+        SetPackageScriptSortPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      writeScriptSort(project.id, mode);
     },
   );
 
@@ -68,6 +101,7 @@ export function registerPackageScriptHandlers(): void {
         defaultBranch,
         webContents: event.sender,
       });
+      bumpScriptUseCount(project.id, scriptName);
       return { runId };
     },
   );
