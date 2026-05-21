@@ -3,12 +3,10 @@
 // is the single source of truth for "where do new worktrees go?" and the
 // matching "is this path one we manage?" check.
 
-import { basename, join, sep } from "node:path";
+import { sep } from "node:path";
 import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
-import { worktreeBaseFor } from "@shared/worktreeLayout";
+import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
 import { shigomoriRoot } from "./paths";
-
-const IN_PROJECT_SUBDIR = ".shigomori/worktrees";
 
 export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
   return config?.worktreeLayout ?? "managed-root";
@@ -27,21 +25,25 @@ export function resolveWorktreeBase(
 }
 
 // Every path prefix that should count as "managed" for this project.
-// We always include the managed-root prefix and the in-project prefix so
-// worktrees created under a previous layout still appear managed after
-// the user switches — until they run the migration. Custom path joins in
-// when configured.
+// All known layouts are included unconditionally so worktrees created
+// under a previous layout still appear managed after the user switches —
+// until they run the migration.
 export function managedPrefixesFor(
   projectPath: string,
   config: ShigomoriConfig | null,
 ): string[] {
-  const prefixes = [
-    join(shigomoriRoot(), "worktrees", basename(projectPath)) + sep,
-    join(projectPath, IN_PROJECT_SUBDIR) + sep,
-  ];
-  const custom = config?.customWorktreePath?.trim();
-  if (custom) prefixes.push(custom + sep);
-  return prefixes;
+  const customPath = config?.customWorktreePath?.trim() ?? null;
+  return ALL_WORKTREE_LAYOUTS.flatMap((layout) => {
+    if (layout === "custom" && !customPath) return [];
+    return [
+      worktreeBaseFor({
+        layout,
+        projectPath,
+        shigomoriRoot: shigomoriRoot(),
+        customPath,
+      }) + sep,
+    ];
+  });
 }
 
 export function isManagedPath(

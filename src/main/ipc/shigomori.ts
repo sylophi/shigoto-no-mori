@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { WriteShigomoriPayloadSchema } from "@shared/schemas";
+import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
 import { appendExcludes } from "../gitExclude";
 import { findProjectOrThrow } from "../projects";
 import { writeShigomoriConfig } from "../shigomori";
@@ -17,10 +18,16 @@ export function registerShigomoriHandlers(): void {
       // project opts into the in-project layout. Idempotent: appendExcludes
       // skips lines that already exist.
       if (config.worktreeLayout === "in-project") {
-        await appendExcludes(project.path, [".shigomori"]).catch(() => {
+        try {
+          await appendExcludes(project.path, [IN_PROJECT_ROOT_DIR]);
+        } catch (err) {
           // Non-fatal: the user can still use the layout, they'll just see
           // .shigomori/ in their git status until they exclude it manually.
-        });
+          console.warn(
+            `[shigomori] couldn't append ${IN_PROJECT_ROOT_DIR} to info/exclude:`,
+            err,
+          );
+        }
       }
     },
   );

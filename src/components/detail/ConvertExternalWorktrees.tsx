@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Check, FileDiff, Loader2, X } from "lucide-react";
+import { FileDiff } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
 import { useProjects } from "@/hooks/useProjects";
@@ -14,12 +15,6 @@ import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
-
-type RowStatus =
-  | { kind: "idle" }
-  | { kind: "running" }
-  | { kind: "done" }
-  | { kind: "error"; message: string };
 
 export function ConvertExternalWorktrees() {
   const { projectId } = convertExternalRoute.useParams();
@@ -318,35 +313,14 @@ function ConvertRow({
           </p>
         )}
       </div>
-      <RowStatusBadge status={status} />
+      <RowStatusBadge
+        status={status}
+        labels={{
+          running: "Converting",
+          done: "Converted",
+          error: "Conversion failed",
+        }}
+      />
     </label>
   );
-}
-
-function RowStatusBadge({ status }: { status: RowStatus }) {
-  if (status.kind === "running") {
-    return (
-      <Loader2
-        aria-label="Converting"
-        className="mt-1 size-4 shrink-0 animate-spin text-muted-foreground"
-      />
-    );
-  }
-  if (status.kind === "done") {
-    return (
-      <Check
-        aria-label="Converted"
-        className="mt-1 size-4 shrink-0 text-emerald-500"
-      />
-    );
-  }
-  if (status.kind === "error") {
-    return (
-      <X
-        aria-label="Conversion failed"
-        className="mt-1 size-4 shrink-0 text-destructive"
-      />
-    );
-  }
-  return null;
 }

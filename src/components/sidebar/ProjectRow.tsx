@@ -197,7 +197,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
                 })
               }
             >
-              Worktree location
+              Set worktree location
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() =>

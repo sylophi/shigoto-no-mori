@@ -6,7 +6,16 @@
 
 import type { WorktreeLayout } from "./schemas";
 
-const IN_PROJECT_SUBDIR = ".shigomori/worktrees";
+// Project-relative directory used by the "in-project" layout. Top-level
+// component (`.shigomori`) is also the path appended to the primary's
+// `.git/info/exclude` so it stays out of `git status`.
+export const IN_PROJECT_ROOT_DIR = ".shigomori";
+export const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
+export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
+  "managed-root",
+  "in-project",
+  "custom",
+];
 
 // posix-style join: trims trailing slashes from `base`, then concatenates.
 // Both main (node:path) and renderer call sites work with forward-slash

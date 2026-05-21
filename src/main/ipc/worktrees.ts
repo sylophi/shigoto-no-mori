@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { sanitizeBranchForPath } from "@shared/branches";
@@ -36,6 +37,7 @@ import {
   relocateWorktree,
   removeWorktree,
   renameBranch,
+  worktreeIdFromPath,
 } from "../git";
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
@@ -174,15 +176,20 @@ export function registerWorktreeHandlers(): void {
         return describeWorktree(target, project.path);
       }
       await relocateWorktree(project.path, target.path, destinationPath);
-      // The worktree's id is derived from its path, so the moved worktree
-      // has a new id. Re-read identities and find by the new path instead
-      // of the stale worktreeId.
-      const refreshed = await listWorktreeIdentities(project.id, project.path);
-      const moved = refreshed.find((w) => w.path === destinationPath);
-      if (!moved) {
-        throw new Error("Worktree disappeared after move");
-      }
-      return describeWorktree(moved, project.path);
+      // Everything we need for the moved identity is already known:
+      // the id is path-derived, branch/detached survive the move, and we
+      // just moved it into a managed prefix the user picked. Skipping
+      // the post-move `git worktree list` keeps the relocate batch fast.
+      return describeWorktree(
+        {
+          ...target,
+          id: worktreeIdFromPath(destinationPath),
+          name: basename(destinationPath),
+          path: destinationPath,
+          isExternal: false,
+        },
+        project.path,
+      );
     },
   );
 

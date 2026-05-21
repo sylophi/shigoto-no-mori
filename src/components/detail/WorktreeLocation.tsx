@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { ArrowRight, Check, Info, Loader2, X } from "lucide-react";
+import { ArrowRight, Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
+import { useDefaultBranch } from "@/hooks/useDefaultBranch";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
@@ -19,12 +21,6 @@ import type {
   WorktreeLayout,
 } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
-
-type RowStatus =
-  | { kind: "idle" }
-  | { kind: "running" }
-  | { kind: "done" }
-  | { kind: "error"; message: string };
 
 interface LayoutOption {
   value: WorktreeLayout;
@@ -62,11 +58,20 @@ export function WorktreeLocation() {
     useWorktrees(projectId);
   const { data: config, isLoading: configLoading } =
     useShigomoriConfig(projectId);
+  const { data: resolvedDefaultBranch, isLoading: branchLoading } =
+    useDefaultBranch(projectId);
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
   }
+
+  const formReady =
+    !configLoading &&
+    !worktreesLoading &&
+    !branchLoading &&
+    !!runtime &&
+    !!resolvedDefaultBranch;
 
   return (
     <div className="flex h-full flex-col">
@@ -83,7 +88,7 @@ export function WorktreeLocation() {
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
         <div className="flex max-w-3xl flex-col gap-6">
-          {configLoading || worktreesLoading || !runtime ? (
+          {!formReady ? (
             <LocationSkeleton />
           ) : (
             <LocationForm
@@ -93,6 +98,7 @@ export function WorktreeLocation() {
               home={runtime.homedir}
               worktrees={worktrees}
               config={config ?? null}
+              resolvedDefaultBranch={resolvedDefaultBranch}
             />
           )}
         </div>
@@ -121,6 +127,7 @@ interface LocationFormProps {
   home: string;
   worktrees: Worktree[];
   config: ShigomoriConfig | null;
+  resolvedDefaultBranch: string;
 }
 
 function LocationForm({
@@ -130,6 +137,7 @@ function LocationForm({
   home,
   worktrees,
   config,
+  resolvedDefaultBranch,
 }: LocationFormProps) {
   const navigate = useNavigate();
   const write = useShigomoriWrite();
@@ -187,8 +195,12 @@ function LocationForm({
 
     try {
       if (layoutChanged) {
+        // If the project has no on-disk config yet, fall back to the
+        // resolved default branch (same source ConfigureProject uses)
+        // so we never invent a branch name like "main" on a repo that
+        // uses "master" or "trunk".
         const nextConfig: ShigomoriConfig = {
-          ...(config ?? { defaultBranch: "main" }),
+          ...(config ?? { defaultBranch: resolvedDefaultBranch }),
           worktreeLayout: layout,
           customWorktreePath:
             layout === "custom" ? customPath.trim() : undefined,
@@ -207,7 +219,6 @@ function LocationForm({
       return;
     }
 
-    // Snapshot the queue + status so it's stable across the run.
     const queue = toMove.map((w) => ({
       worktree: w,
       destination: proposedFor(w),
@@ -243,108 +254,97 @@ function LocationForm({
     setBatchDone(true);
   };
 
-  const submitLabel = (() => {
-    if (batchRunning) return "Moving…";
-    if (batchDone) return "Done";
-    if (toMove.length > 0) {
-      return toMove.length === 1
-        ? "Move 1 worktree"
-        : `Move ${toMove.length} worktrees`;
-    }
-    return "Save";
-  })();
+  const submitLabel = batchRunning ? "Moving…" : "Move";
 
   return (
     <>
-      <section className="space-y-3">
-        <fieldset className="space-y-2" disabled={batchRunning || batchDone}>
-          <legend className="sr-only">Worktree location</legend>
-          {LAYOUT_OPTIONS.map((opt) => {
-            const checked = layout === opt.value;
-            const previewPath =
-              opt.value === "custom" && !customPath.trim()
-                ? "/your/custom/path/<name>"
-                : tildify(
-                    worktreePathFor(
-                      {
-                        layout: opt.value,
-                        projectPath,
-                        shigomoriRoot,
-                        customPath:
-                          opt.value === "custom"
-                            ? customPath.trim() || null
-                            : null,
-                      },
-                      "<name>",
-                    ),
-                    home,
-                  );
-            return (
-              <label
-                key={opt.value}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-colors",
-                  checked
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-accent/30",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="worktree-layout"
-                  value={opt.value}
-                  checked={checked}
-                  onChange={() => setLayout(opt.value)}
-                  className="mt-0.5 size-4 shrink-0 accent-primary"
-                />
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{opt.label}</span>
-                    {opt.recommended && (
-                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                        recommended
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {opt.description}
-                  </p>
-                  <p
-                    className="truncate font-mono text-xs text-foreground/70 select-text"
-                    title={previewPath}
-                  >
-                    {previewPath}
-                  </p>
-                  {opt.value === "custom" && checked && (
-                    <div className="space-y-1 pt-1">
-                      <input
-                        type="text"
-                        value={customPath}
-                        onChange={(e) => {
-                          setCustomPath(e.target.value);
-                          if (customPathError) setCustomPathError(null);
-                        }}
-                        placeholder="/absolute/path/to/worktrees"
-                        className={cn(
-                          "w-full rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none transition-colors focus:ring-2 focus:ring-ring/30",
-                          customPathError
-                            ? "border-destructive focus:border-destructive"
-                            : "border-input focus:border-ring",
-                        )}
-                      />
-                      {customPathError && (
-                        <p className="text-xs text-destructive">
-                          {customPathError}
-                        </p>
-                      )}
-                    </div>
+      <fieldset className="space-y-2" disabled={batchRunning || batchDone}>
+        <legend className="sr-only">Worktree location</legend>
+        {LAYOUT_OPTIONS.map((opt) => {
+          const checked = layout === opt.value;
+          const previewPath =
+            opt.value === "custom" && !customPath.trim()
+              ? "/your/custom/path/<name>"
+              : tildify(
+                  worktreePathFor(
+                    {
+                      layout: opt.value,
+                      projectPath,
+                      shigomoriRoot,
+                      customPath:
+                        opt.value === "custom"
+                          ? customPath.trim() || null
+                          : null,
+                    },
+                    "<name>",
+                  ),
+                  home,
+                );
+          return (
+            <label
+              key={opt.value}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-colors",
+                checked
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:bg-accent/30",
+              )}
+            >
+              <input
+                type="radio"
+                name="worktree-layout"
+                value={opt.value}
+                checked={checked}
+                onChange={() => setLayout(opt.value)}
+                className="mt-0.5 size-4 shrink-0 accent-primary"
+              />
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{opt.label}</span>
+                  {opt.recommended && (
+                    <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                      recommended
+                    </span>
                   )}
                 </div>
-              </label>
-            );
-          })}
-        </fieldset>
-      </section>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {opt.description}
+                </p>
+                <p
+                  className="truncate font-mono text-xs text-foreground/70 select-text"
+                  title={previewPath}
+                >
+                  {previewPath}
+                </p>
+                {opt.value === "custom" && checked && (
+                  <div className="space-y-1 pt-1">
+                    <input
+                      type="text"
+                      value={customPath}
+                      onChange={(e) => {
+                        setCustomPath(e.target.value);
+                        if (customPathError) setCustomPathError(null);
+                      }}
+                      placeholder="/absolute/path/to/worktrees"
+                      className={cn(
+                        "w-full rounded-md border bg-background px-2 py-1 font-mono text-xs outline-none transition-colors focus:ring-2 focus:ring-ring/30",
+                        customPathError
+                          ? "border-destructive focus:border-destructive"
+                          : "border-input focus:border-ring",
+                      )}
+                    />
+                    {customPathError && (
+                      <p className="text-xs text-destructive">
+                        {customPathError}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </label>
+          );
+        })}
+      </fieldset>
 
       {toMove.length > 0 && !batchDone && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
@@ -482,35 +482,10 @@ function RelocateRow({
           </p>
         )}
       </div>
-      <RowStatusBadge status={status} />
+      <RowStatusBadge
+        status={status}
+        labels={{ running: "Moving", done: "Moved", error: "Move failed" }}
+      />
     </div>
   );
-}
-
-function RowStatusBadge({ status }: { status: RowStatus }) {
-  if (status.kind === "running") {
-    return (
-      <Loader2
-        aria-label="Moving"
-        className="mt-1 size-4 shrink-0 animate-spin text-muted-foreground"
-      />
-    );
-  }
-  if (status.kind === "done") {
-    return (
-      <Check
-        aria-label="Moved"
-        className="mt-1 size-4 shrink-0 text-emerald-500"
-      />
-    );
-  }
-  if (status.kind === "error") {
-    return (
-      <X
-        aria-label="Move failed"
-        className="mt-1 size-4 shrink-0 text-destructive"
-      />
-    );
-  }
-  return null;
 }
