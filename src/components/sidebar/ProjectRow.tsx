@@ -169,6 +169,12 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           />
           <DropdownMenuContent align="end" sideOffset={2}>
             <DropdownMenuItem
+              disabled={create.isPending}
+              onClick={() => void quickCreate()}
+            >
+              Quick create
+            </DropdownMenuItem>
+            <DropdownMenuItem
               onClick={() =>
                 void navigate({
                   to: "/projects/$projectId/new",
