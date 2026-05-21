@@ -21,7 +21,7 @@ import type {
   Worktree,
   WorktreeLayout,
 } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { worktreeBaseFor, worktreePathFor } from "@shared/worktreeLayout";
 
 interface LayoutOption {
   value: WorktreeLayout;
@@ -273,21 +273,16 @@ function LocationForm({
           const previewPath =
             opt.value === "custom" && !hasCustomPath
               ? null
-              : tildify(
-                  worktreePathFor(
-                    {
-                      layout: opt.value,
-                      projectPath,
-                      shigomoriRoot,
-                      customPath:
-                        opt.value === "custom"
-                          ? customPath.trim() || null
-                          : null,
-                    },
-                    "<name>",
-                  ),
+              : `${tildify(
+                  worktreeBaseFor({
+                    layout: opt.value,
+                    projectPath,
+                    shigomoriRoot,
+                    customPath:
+                      opt.value === "custom" ? customPath.trim() || null : null,
+                  }),
                   home,
-                );
+                )}/`;
           return (
             <label
               key={opt.value}
