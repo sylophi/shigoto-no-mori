@@ -85,10 +85,7 @@ export async function pruneEmptyManagedParents(
     if (removed) {
       await tryRmdir(dirname(parent));
     }
-    return;
   }
-
-  // Anything else (custom path, externals, unexpected) is left intact.
 }
 
 async function tryRmdir(path: string): Promise<boolean> {

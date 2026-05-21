@@ -262,6 +262,12 @@ export function registerWorktreeHandlers(): void {
       // then remove.
       await killScriptsForWorktree(worktreeId);
       await removeWorktree(project.path, target.path, force ?? false);
+      // Same cleanup as relocate: if this was the last worktree under a
+      // managed parent, sweep the empty dir away. Custom paths are left
+      // alone since they're user-chosen.
+      if (!target.isExternal) {
+        await pruneEmptyManagedParents(target.path, project.path);
+      }
 
       // Defaults to true: if you're done with the worktree, you're done
       // with the local branch. (Remote branches are never touched.)

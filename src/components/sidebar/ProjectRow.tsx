@@ -56,8 +56,16 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
   const create = useCreateWorktree();
   // Two-step confirm so accidentally landing on "Remove" doesn't drop the
   // project. Menu stays open while armed; second click within the timeout
-  // fires the actual remove.
-  const { armed: removeArmed, trigger: triggerRemove } = useConfirmTwice(3_000);
+  // fires the actual remove. The arm is cleared whenever the dropdown
+  // closes so a leftover armed state can't fire on the next open.
+  const {
+    armed: removeArmed,
+    trigger: triggerRemove,
+    reset: resetRemoveArm,
+  } = useConfirmTwice(3_000);
+  const onMenuOpenChange = (open: boolean) => {
+    if (!open) resetRemoveArm();
+  };
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get
@@ -103,7 +111,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             listeners={listeners}
             onContextMenu={onHeaderContextMenu}
           />
-          <DropdownMenu>
+          <DropdownMenu onOpenChange={onMenuOpenChange}>
             <DropdownMenuTrigger
               render={
                 <button
@@ -173,7 +181,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             <Plus className="size-3.5" />
           )}
         </button>
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={onMenuOpenChange}>
           <DropdownMenuTrigger
             render={
               <button

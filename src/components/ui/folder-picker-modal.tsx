@@ -21,16 +21,14 @@ import {
   normalizeForSubmit,
 } from "@/lib/projectPaths";
 
+// Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`
+// reads it back to tell "a row is highlighted" from "nothing is".
+const BROWSE_VALUE_PREFIX = "browse:";
+
 interface FolderPickerModalProps {
-  // Initial value for the path-as-input. Defaults to "~/" so the picker
-  // opens on the user's home folder.
   initialPath?: string;
-  // Header text shown above the input. Stays small and contextual.
   title?: string;
-  // Label for the primary submit button. Mirrors AddProjectView's "Add".
   confirmLabel?: string;
-  // The directory the user confirms. Always an absolute path (or "~/..."
-  // form; main-side IPC handlers resolve `~`).
   onPick: (path: string) => void;
   onClose: () => void;
 }
@@ -38,8 +36,7 @@ interface FolderPickerModalProps {
 // Folder picker built on the same path-as-input pattern as the Add
 // Project command palette: typing a path lists the directory live, the
 // list filters by the trailing leaf segment, and ↩ confirms / enters
-// the highlighted entry. Open as a modal from anywhere that needs the
-// user to pick a folder.
+// the highlighted entry.
 export function FolderPickerModal({
   initialPath,
   title = "Pick a folder",
@@ -92,7 +89,7 @@ export function FolderPickerModal({
     ? (listing?.path ?? submitTarget)
     : submitTarget;
   const canConfirm = confirmTarget.length > 0 && !error;
-  const hasHighlighted = highlighted.startsWith("browse:");
+  const hasHighlighted = highlighted.startsWith(BROWSE_VALUE_PREFIX);
 
   const confirm = () => {
     if (!canConfirm) return;
@@ -179,7 +176,7 @@ export function FolderPickerModal({
           <Command.List className="max-h-96 overflow-y-auto p-2">
             {canBrowseUp && (
               <Command.Item
-                value="browse:up"
+                value={`${BROWSE_VALUE_PREFIX}up`}
                 keywords={[".."]}
                 onSelect={browseUp}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
@@ -194,7 +191,7 @@ export function FolderPickerModal({
               return (
                 <Command.Item
                   key={entry.name}
-                  value={`browse:${entryPath}`}
+                  value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
                   keywords={[entry.name]}
                   onSelect={() => browseTo(entry.name)}
                   className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"

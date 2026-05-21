@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowRight, FolderOpen, Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -145,13 +145,18 @@ function LocationForm({
   // Mirror the persisted config in local state so we can flip it
   // immediately after a successful save. Reading the config prop
   // directly would lag while the shigomori query refetches, which
-  // briefly re-enables the Move button after a batch completes.
-  const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(
-    config?.worktreeLayout ?? "managed-root",
-  );
-  const [savedCustomPath, setSavedCustomPath] = useState<string>(
-    config?.customWorktreePath ?? "",
-  );
+  // briefly re-enables the Move button after a batch completes. The
+  // effect below resyncs the mirror when the prop changes (e.g.
+  // another window writes the same project's config).
+  const configLayout = config?.worktreeLayout ?? "managed-root";
+  const configCustomPath = config?.customWorktreePath ?? "";
+  const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(configLayout);
+  const [savedCustomPath, setSavedCustomPath] =
+    useState<string>(configCustomPath);
+  useEffect(() => {
+    setSavedLayout(configLayout);
+    setSavedCustomPath(configCustomPath);
+  }, [configLayout, configCustomPath]);
 
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
