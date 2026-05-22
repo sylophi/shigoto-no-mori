@@ -58,79 +58,143 @@ const GhPrListItemSchema = z.object({
   isDraft: z.boolean(),
   headRefName: z.string(),
 });
+type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
 
-const PR_CACHE_TTL_MS = 30_000;
+const PR_CACHE_TTL_MS = 5 * 60_000;
 const PR_LIST_LIMIT = 200;
 const prCache = new Map<
   string,
   { value: Map<string, PullRequest>; expires: number }
 >();
 
-// Indexed by head branch name. Cached per-cwd so repeated focus
-// refreshes don't respawn gh. Returns an empty map on any failure --
-// the PR data is decorative, never load-bearing. The toggle + readiness
-// checks gate the cache too, so flipping the integration off takes
-// effect immediately rather than waiting out a stale TTL window.
-export async function listProjectPullRequests(
-  cwd: string,
-): Promise<Map<string, PullRequest>> {
+// Toggle + readiness gate any path that's about to spawn `gh`. Returns
+// false when the integration is off or gh isn't ready, so callers can
+// short-circuit before doing IO.
+async function ghReady(): Promise<boolean> {
   const config = await readGlobalConfig();
-  if (config.githubCli === false) return new Map();
-  const readiness = await getGithubCliReadiness();
-  if (!readiness.installed || !readiness.authed) return new Map();
+  if (config.githubCli === false) return false;
+  const { installed, authed } = await getGithubCliReadiness();
+  return installed && authed;
+}
 
-  const now = Date.now();
-  const cached = prCache.get(cwd);
-  if (cached && cached.expires > now) return cached.value;
-
-  let stdout: string;
+// Runs `gh pr list ...` with the standard JSON projection. Returns the
+// parsed rows on success or null on any failure (gh exit, JSON, schema).
+async function runGhPrList(
+  cwd: string,
+  extraArgs: string[],
+): Promise<GhPrListItem[] | null> {
   try {
-    const result = await execFileP(
+    const { stdout } = await execFileP(
       "gh",
       [
         "pr",
         "list",
         "--state",
         "all",
-        "--limit",
-        String(PR_LIST_LIMIT),
+        ...extraArgs,
         "--json",
         "number,url,title,state,isDraft,headRefName",
       ],
       { cwd },
     );
-    stdout = result.stdout;
+    const parsed: unknown = JSON.parse(stdout);
+    const validated = z.array(GhPrListItemSchema).safeParse(parsed);
+    return validated.success ? validated.data : null;
   } catch {
-    return cacheAndReturn(cwd, new Map());
+    return null;
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    return cacheAndReturn(cwd, new Map());
-  }
-  const validated = z.array(GhPrListItemSchema).safeParse(parsed);
-  if (!validated.success) return cacheAndReturn(cwd, new Map());
+}
 
+function toPullRequest(item: GhPrListItem): PullRequest {
+  return {
+    number: item.number,
+    url: item.url,
+    title: item.title,
+    state: item.state,
+    isDraft: item.isDraft,
+  };
+}
+
+// Indexed by head branch name. The cache is repopulated by the background
+// sweep in fetch.ts -- this read path just serves whatever's there.
+// Toggle + readiness checks gate the cache too, so flipping the
+// integration off takes effect immediately.
+export async function listProjectPullRequests(
+  cwd: string,
+): Promise<Map<string, PullRequest>> {
+  if (!(await ghReady())) return new Map();
+  const cached = prCache.get(cwd);
+  if (cached && cached.expires > Date.now()) return cached.value;
+  return refreshProjectPullRequests(cwd);
+}
+
+// Bypass the cache and repopulate. Used by the background sweep.
+export async function refreshProjectPullRequests(
+  cwd: string,
+): Promise<Map<string, PullRequest>> {
+  if (!(await ghReady())) return cacheAndReturn(cwd, new Map());
+  const rows = await runGhPrList(cwd, ["--limit", String(PR_LIST_LIMIT)]);
+  if (rows === null) {
+    // Transient gh / network failure -- preserve the previous map so the
+    // sidebar dots don't blink out on a single bad sweep. Fall through
+    // to caching empty only when we've never had a value.
+    const previous = prCache.get(cwd)?.value;
+    return previous ?? cacheAndReturn(cwd, new Map());
+  }
+  // gh returns PRs newest-first; first hit per branch wins so we surface
+  // the freshest PR when a branch has been reused.
   const map = new Map<string, PullRequest>();
-  // gh returns PRs newest-first; the first hit per branch wins so we
-  // surface the freshest PR if a branch has been reused.
-  for (const item of validated.data) {
+  for (const item of rows) {
     if (map.has(item.headRefName)) continue;
-    map.set(item.headRefName, {
-      number: item.number,
-      url: item.url,
-      title: item.title,
-      state: item.state,
-      isDraft: item.isDraft,
-    });
+    map.set(item.headRefName, toPullRequest(item));
   }
   return cacheAndReturn(cwd, map);
+}
+
+// Single-branch lookup for the currently open worktree page. Uncached --
+// invalidations from focus / refs-changed must actually hit gh. The
+// --head filter is server-side so this stays cheap regardless of repo
+// PR count.
+export async function getWorktreePullRequest(
+  cwd: string,
+  branch: string,
+): Promise<PullRequest | null> {
+  if (!(await ghReady())) return null;
+  const rows = await runGhPrList(cwd, ["--head", branch, "--limit", "1"]);
+  const first = rows?.[0];
+  return first ? toPullRequest(first) : null;
 }
 
 export function clearProjectPullRequestCache(cwd?: string): void {
   if (cwd) prCache.delete(cwd);
   else prCache.clear();
+}
+
+export function readCachedProjectPullRequests(
+  cwd: string,
+): Map<string, PullRequest> | null {
+  return prCache.get(cwd)?.value ?? null;
+}
+
+export function pullRequestMapsEqual(
+  a: Map<string, PullRequest> | null,
+  b: Map<string, PullRequest>,
+): boolean {
+  if (!a || a.size !== b.size) return false;
+  for (const [branch, pa] of a) {
+    const pb = b.get(branch);
+    if (!pb) return false;
+    if (
+      pa.number !== pb.number ||
+      pa.state !== pb.state ||
+      pa.isDraft !== pb.isDraft ||
+      pa.title !== pb.title ||
+      pa.url !== pb.url
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function cacheAndReturn(

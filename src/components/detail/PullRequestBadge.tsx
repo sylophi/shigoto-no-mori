@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
 import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
-import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
+import { useWorktreePullRequest } from "@/hooks/useWorktreePullRequest";
 import type { Worktree } from "@shared/schemas";
 
 interface Props {
@@ -12,8 +12,10 @@ interface Props {
 }
 
 export function PullRequestBadge({ worktree, showTitle = false }: Props) {
-  const { data: prs } = useProjectPullRequests(worktree.projectId);
-  const pr = prs?.[worktree.branch];
+  const { data: pr } = useWorktreePullRequest(
+    worktree.projectId,
+    worktree.branch,
+  );
   if (!pr) return null;
 
   const { Icon, tone, label } = describePullRequest(pr);

@@ -8,6 +8,8 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { CommandPaletteProvider } from "@/hooks/useCommandPalette";
 import { ThemeProvider } from "@/hooks/useTheme";
 import { invalidateBranchState } from "@/hooks/useBranches";
+import { invalidateProjectPullRequests } from "@/hooks/useProjectPullRequests";
+import { invalidateAllWorktreePullRequests } from "@/hooks/useWorktreePullRequest";
 import { router } from "./router";
 
 function AppErrorFallback({ error }: FallbackProps) {
@@ -39,6 +41,25 @@ export function App() {
     () =>
       window.api.git.onRefsRefreshed(({ projectId }) => {
         invalidateBranchState(queryClient, projectId);
+        // Refs moving usually means PR state moved too (merge landed,
+        // head pushed). Sidebar dots wait for the sweep instead.
+        invalidateAllWorktreePullRequests(queryClient);
+      }),
+    [queryClient],
+  );
+
+  useEffect(
+    () =>
+      window.api.window.onFocused(() => {
+        invalidateAllWorktreePullRequests(queryClient);
+      }),
+    [queryClient],
+  );
+
+  useEffect(
+    () =>
+      window.api.githubCli.onProjectPullRequestsRefreshed(({ projectId }) => {
+        invalidateProjectPullRequests(queryClient, projectId);
       }),
     [queryClient],
   );
