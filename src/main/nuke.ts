@@ -8,7 +8,8 @@ import { rm } from "node:fs/promises";
 import {
   deleteBranchAfterWorktreeRemoval,
   listWorktreeIdentities,
-  removeWorktree,
+  pruneStaleWorktrees,
+  removeWorktreeForce,
 } from "./git";
 import { readGlobalConfig } from "./globalConfig";
 import { shigomoriRoot } from "./paths";
@@ -36,7 +37,7 @@ export async function nukeEverything(): Promise<void> {
       const targets = identities.filter((i) => !i.isPrimary && !i.isExternal);
       await Promise.all(
         targets.map((i) =>
-          removeWorktree(project.path, i.path, true).catch(() => undefined),
+          removeWorktreeForce(project.path, i.path).catch(() => undefined),
         ),
       );
       await Promise.all(
@@ -47,4 +48,10 @@ export async function nukeEverything(): Promise<void> {
     }),
   );
   await rm(shigomoriRoot(), { recursive: true, force: true });
+  // The root rm wipes any managed-root worktree dirs whose
+  // `git worktree remove` failed silently above, leaving stale admin
+  // entries behind. Sweep them per project now that the dirs are gone.
+  await Promise.all(
+    projects.map((p) => pruneStaleWorktrees(p.path).catch(() => undefined)),
+  );
 }

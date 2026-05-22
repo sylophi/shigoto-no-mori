@@ -36,6 +36,7 @@ import {
   pushForceWithLease,
   relocateWorktree,
   removeWorktree,
+  removeWorktreeForce,
   renameBranch,
   worktreeIdFromPath,
 } from "../git";
@@ -125,7 +126,7 @@ export function registerWorktreeHandlers(): void {
         : sanitizeBranchForPath(branchOrSha);
 
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, true);
+      await removeWorktreeForce(project.path, target.path);
 
       const worktree = await createWorktree(project.id, project.path, {
         requestedWorktreeName: worktreeName,
@@ -264,9 +265,15 @@ export function registerWorktreeHandlers(): void {
       }
 
       // Reap any package scripts still holding the worktree as cwd,
-      // then remove.
+      // then remove. Force-delete routes through the wipe fallback so
+      // ENOTEMPTY (untracked content git couldn't sweep) doesn't strand
+      // the user with a half-removed worktree.
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, force ?? false);
+      if (force) {
+        await removeWorktreeForce(project.path, target.path);
+      } else {
+        await removeWorktree(project.path, target.path, false);
+      }
       // Same cleanup as relocate: if this was the last worktree under a
       // managed parent, sweep the empty dir away. Custom paths are left
       // alone since they're user-chosen.

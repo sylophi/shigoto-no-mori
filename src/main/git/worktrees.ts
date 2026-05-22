@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import {
   type CommitSummary,
@@ -364,6 +364,37 @@ export async function removeWorktree(
   const args = ["worktree", "remove", worktreePath];
   if (force) args.push("--force");
   await run(projectPath, args);
+}
+
+// Force-removes a worktree, falling back to a manual wipe when git's
+// recursive rmdir fails with ENOTEMPTY (untracked content git couldn't
+// sweep -- caches, files held open). We don't retry `git worktree
+// remove` after fs.rm because once the dir is gone, remove errors out
+// on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
+// real bugs stay visible.
+export async function removeWorktreeForce(
+  projectPath: string,
+  worktreePath: string,
+): Promise<void> {
+  try {
+    await removeWorktree(projectPath, worktreePath, true);
+    return;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!/Directory not empty|ENOTEMPTY/i.test(msg)) {
+      throw err;
+    }
+    console.warn(`[worktrees] force-wipe fallback: ${msg}`);
+  }
+  await rm(worktreePath, { recursive: true, force: true });
+  await pruneStaleWorktrees(projectPath);
+}
+
+// Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
+// gone. Used after a fallback fs.rm and after the nuke-everything root
+// wipe to keep `git worktree list` honest.
+export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
+  await run(projectPath, ["worktree", "prune"]);
 }
 
 // Moves a worktree's checkout to a new directory. `git worktree move`
