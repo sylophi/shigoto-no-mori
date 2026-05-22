@@ -134,7 +134,13 @@ export async function refreshProjectPullRequests(
 ): Promise<Map<string, PullRequest>> {
   if (!(await ghReady())) return cacheAndReturn(cwd, new Map());
   const rows = await runGhPrList(cwd, ["--limit", String(PR_LIST_LIMIT)]);
-  if (rows === null) return cacheAndReturn(cwd, new Map());
+  if (rows === null) {
+    // Transient gh / network failure -- preserve the previous map so the
+    // sidebar dots don't blink out on a single bad sweep. Fall through
+    // to caching empty only when we've never had a value.
+    const previous = prCache.get(cwd)?.value;
+    return previous ?? cacheAndReturn(cwd, new Map());
+  }
   // gh returns PRs newest-first; first hit per branch wins so we surface
   // the freshest PR when a branch has been reused.
   const map = new Map<string, PullRequest>();
