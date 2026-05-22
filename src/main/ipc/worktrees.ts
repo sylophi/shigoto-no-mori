@@ -42,7 +42,6 @@ import {
 } from "../git";
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
-import { applyCarryOver } from "../carryOver";
 import { killScriptsForWorktree } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
@@ -75,24 +74,27 @@ export function registerWorktreeHandlers(): void {
         listWorktreeIdentities(project.id, project.path),
         readGlobalConfig(),
       ]);
-      const carryOver = await applyCarryOver(
-        project.path,
-        worktree.path,
-        config?.carryOver ?? [],
-      );
 
       const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
       const target = identities.find((i) => i.id === worktree.id) ?? worktree;
-      const scriptFailures = await runCreateLifecycle({
+      // Fire-and-forget so the renderer can navigate to the new worktree
+      // instantly. Carry-over, setup, and port-pool provision run in the
+      // background; the renderer follows along via WorktreeLifecyclePhase
+      // events and the sidebar activity icon driven by ScriptsEvent.
+      void runCreateLifecycle({
         project,
         worktree: target,
         projectBranch,
         config,
+        carryOverEntries: config?.carryOver ?? [],
+        primaryWorktreePath: project.path,
         globalPortPoolEnabled: global.portPool === true,
         webContents: event.sender,
+      }).catch((err) => {
+        console.error("create lifecycle failed", err);
       });
 
-      return { worktree, carryOver, scriptFailures };
+      return { worktree };
     },
   );
 
@@ -138,24 +140,23 @@ export function registerWorktreeHandlers(): void {
         listWorktreeIdentities(project.id, project.path),
         readGlobalConfig(),
       ]);
-      const carryOver = await applyCarryOver(
-        project.path,
-        worktree.path,
-        config?.carryOver ?? [],
-      );
 
       const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
       const fresh = identities.find((i) => i.id === worktree.id) ?? worktree;
-      const scriptFailures = await runCreateLifecycle({
+      void runCreateLifecycle({
         project,
         worktree: fresh,
         projectBranch,
         config,
+        carryOverEntries: config?.carryOver ?? [],
+        primaryWorktreePath: project.path,
         globalPortPoolEnabled: global.portPool === true,
         webContents: event.sender,
+      }).catch((err) => {
+        console.error("convert-external lifecycle failed", err);
       });
 
-      return { worktree, carryOver, scriptFailures };
+      return { worktree };
     },
   );
 

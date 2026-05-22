@@ -4,11 +4,16 @@
 // can't leave a worktree half-torn-down. Live output keeps flowing
 // to the renderer via "started" events emitted by startScript.
 import type { WebContents } from "electron";
+import { CHANNELS } from "@shared/channels";
 import type {
+  CarryOverEntry,
+  CarryOverReport,
   CleanupError,
-  ScriptFailure,
   ShigomoriConfig,
+  WorktreeCarryOverComplete,
+  WorktreeLifecyclePhase,
 } from "@shared/schemas";
+import { applyCarryOver } from "./carryOver";
 import { resolveDefaultBranch } from "./git";
 import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
 import { resolveScriptCommand } from "./scriptCommand";
@@ -36,8 +41,26 @@ interface CreateArgs {
   worktree: LifecycleWorktree;
   projectBranch: string;
   config: ShigomoriConfig | null;
+  carryOverEntries: CarryOverEntry[];
+  primaryWorktreePath: string;
   globalPortPoolEnabled: boolean;
   webContents: WebContents;
+}
+
+function emitPhase(
+  webContents: WebContents,
+  payload: WorktreeLifecyclePhase,
+): void {
+  if (webContents.isDestroyed()) return;
+  webContents.send(CHANNELS.WorktreeLifecyclePhase, payload);
+}
+
+function emitCarryOverComplete(
+  webContents: WebContents,
+  payload: WorktreeCarryOverComplete,
+): void {
+  if (webContents.isDestroyed()) return;
+  webContents.send(CHANNELS.WorktreeCarryOverComplete, payload);
 }
 
 async function runStep(args: {
@@ -70,63 +93,87 @@ async function runStep(args: {
   return { runId, exitCode: await exit };
 }
 
-export async function runCreateLifecycle(
-  args: CreateArgs,
-): Promise<ScriptFailure[]> {
-  const failures: ScriptFailure[] = [];
-  const defaultBranch = await resolveDefaultBranch(
-    args.project.path,
-    args.config?.defaultBranch,
-  ).catch(() => "");
-
-  const setupCommand = resolveScriptCommand(
-    "setup",
-    args.config,
-    args.worktree.path,
-  );
-  if (setupCommand) {
-    const { runId, exitCode } = await runStep({
-      command: setupCommand,
-      scriptName: "setup",
-      slot: { kind: "setup" },
-      worktree: args.worktree,
-      project: args.project,
-      projectBranch: args.projectBranch,
-      defaultBranch,
-      webContents: args.webContents,
-    });
-    if (exitCode !== 0) {
-      failures.push({ phase: "setup", exitCode, runId });
+// Runs in the background after the IPC handler returns. The renderer
+// reflects progress via two channels: WorktreeLifecyclePhase for the
+// banner label, and WorktreeCarryOverComplete for the failure toast.
+// Per-script output flows through the existing ScriptsEvent channel
+// (started/data/exit), which also drives the sidebar activity icon.
+export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
+  const projectId = args.project.id;
+  const worktreeId = args.worktree.id;
+  try {
+    if (args.carryOverEntries.length > 0) {
+      emitPhase(args.webContents, {
+        projectId,
+        worktreeId,
+        phase: "carryOver",
+      });
+      const report: CarryOverReport = await applyCarryOver(
+        args.primaryWorktreePath,
+        args.worktree.path,
+        args.carryOverEntries,
+      );
+      emitCarryOverComplete(args.webContents, {
+        projectId,
+        worktreeId,
+        report,
+      });
     }
-  }
 
-  if (args.globalPortPoolEnabled) {
-    const [installed, hasConfig] = await Promise.all([
-      isPortPoolInstalled(),
-      isPortPoolConfigured(args.worktree.path),
-    ]);
-    if (installed && hasConfig) {
-      const { runId, exitCode } = await runStep({
-        command: resolveScriptCommand(
-          "port-pool-provision",
-          args.config,
-          args.worktree.path,
-        ),
-        scriptName: "port-pool-provision",
-        slot: { kind: "portPool", phase: "provision" },
+    const defaultBranch = await resolveDefaultBranch(
+      args.project.path,
+      args.config?.defaultBranch,
+    ).catch(() => "");
+
+    const setupCommand = resolveScriptCommand(
+      "setup",
+      args.config,
+      args.worktree.path,
+    );
+    if (setupCommand) {
+      emitPhase(args.webContents, { projectId, worktreeId, phase: "setup" });
+      await runStep({
+        command: setupCommand,
+        scriptName: "setup",
+        slot: { kind: "setup" },
         worktree: args.worktree,
         project: args.project,
         projectBranch: args.projectBranch,
         defaultBranch,
         webContents: args.webContents,
       });
-      if (exitCode !== 0) {
-        failures.push({ phase: "portPoolProvision", exitCode, runId });
+    }
+
+    if (args.globalPortPoolEnabled) {
+      const [installed, hasConfig] = await Promise.all([
+        isPortPoolInstalled(),
+        isPortPoolConfigured(args.worktree.path),
+      ]);
+      if (installed && hasConfig) {
+        emitPhase(args.webContents, {
+          projectId,
+          worktreeId,
+          phase: "portPoolProvision",
+        });
+        await runStep({
+          command: resolveScriptCommand(
+            "port-pool-provision",
+            args.config,
+            args.worktree.path,
+          ),
+          scriptName: "port-pool-provision",
+          slot: { kind: "portPool", phase: "provision" },
+          worktree: args.worktree,
+          project: args.project,
+          projectBranch: args.projectBranch,
+          defaultBranch,
+          webContents: args.webContents,
+        });
       }
     }
+  } finally {
+    emitPhase(args.webContents, { projectId, worktreeId, phase: "idle" });
   }
-
-  return failures;
 }
 
 interface DeleteArgs {

@@ -19,6 +19,7 @@ import {
   useScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
+import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
 import { BranchHeaderRow } from "./worktreeDetail/BranchHeader";
@@ -90,6 +91,35 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
     releaseState.status === "starting";
   const busy = deleteMutation.isPending;
   const inLimbo = cleanupRunning || busy;
+
+  // Create-side lifecycle: carry-over -> setup -> port-pool provision.
+  // Suppressed while inLimbo so a delete-during-setup race shows the
+  // destructive banner instead. The page is locked the same way as
+  // during delete so the user can't kick off launches mid-setup.
+  const createPhase = useWorktreeCreatePhase(worktree.id);
+  const inCreate = createPhase !== null && !inLimbo;
+  const createLabel = (() => {
+    if (createPhase === "carryOver") return "Carrying over files...";
+    if (createPhase === "setup") return "Setting up...";
+    if (createPhase === "portPoolProvision") return "Provisioning ports...";
+    return null;
+  })();
+  const openCreateConsole = () => {
+    const slot: ScriptSlot =
+      createPhase === "portPoolProvision"
+        ? { kind: "portPool", phase: "provision" }
+        : { kind: "setup" };
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
+      params: {
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        scriptKey: slotToParam(slot),
+      },
+    });
+  };
+  const createConsoleAvailable =
+    createPhase === "setup" || createPhase === "portPoolProvision";
 
   // Tracks the flags from the most recent delete attempt so that the
   // retry/skip affordances on a cleanup failure carry the user's
@@ -262,12 +292,34 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
         </div>
       )}
 
+      {inCreate && createLabel && (
+        <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
+          <Loader2
+            aria-hidden
+            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+          />
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {createLabel}
+          </span>
+          {createConsoleAvailable && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={openCreateConsole}
+              className="shrink-0"
+            >
+              View output
+            </Button>
+          )}
+        </div>
+      )}
+
       <div
         className={cn(
           "min-h-0 flex-1 overflow-y-auto px-6 py-6",
-          inLimbo && "pointer-events-none opacity-50",
+          (inLimbo || inCreate) && "pointer-events-none opacity-50",
         )}
-        aria-disabled={inLimbo}
+        aria-disabled={inLimbo || inCreate}
       >
         <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">
