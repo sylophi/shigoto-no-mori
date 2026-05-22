@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConfirmTwice } from "@/hooks/useConfirmTwice";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
@@ -68,7 +68,7 @@ export function ProjectRow({
     armed: removeArmed,
     trigger: triggerRemove,
     reset: resetRemoveArm,
-  } = useConfirmTwice(3_000);
+  } = useConfirmTwice(CONFIRM_QUICK_MS);
   const onMenuOpenChange = (open: boolean) => {
     if (!open) resetRemoveArm();
   };

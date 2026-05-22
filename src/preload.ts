@@ -3,24 +3,6 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
-
-// Subscribe to a no-payload broadcast channel and return the unsubscribe.
-function subscribe(channel: string) {
-  return (handler: () => void): (() => void) => {
-    const listener = () => handler();
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.off(channel, listener);
-  };
-}
-
-// Subscribe with a typed payload from main → renderer.
-function subscribeWith<T>(channel: string) {
-  return (handler: (payload: T) => void): (() => void) => {
-    const listener = (_e: unknown, payload: T) => handler(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.off(channel, listener);
-  };
-}
 import type {
   BranchList,
   CreateWorktreeResult,
@@ -44,6 +26,17 @@ import type {
   Theme,
   Worktree,
 } from "@shared/schemas";
+
+// Subscribes to a main → renderer broadcast channel and returns the
+// unsubscribe. `T = void` covers no-payload channels without a separate
+// helper; pass `T` explicitly to type the payload.
+function subscribe<T = void>(channel: string) {
+  return (handler: (payload: T) => void): (() => void) => {
+    const listener = (_e: unknown, payload: T) => handler(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.off(channel, listener);
+  };
+}
 
 const api = {
   projects: {
@@ -212,7 +205,7 @@ const api = {
   },
   nav: {
     onOpenSettings: subscribe(CHANNELS.NavOpenSettings),
-    onLaunchById: subscribeWith<string>(CHANNELS.LaunchById),
+    onLaunchById: subscribe<string>(CHANNELS.LaunchById),
   },
   menu: {
     setLaunchToolsEnabled: (
@@ -229,7 +222,7 @@ const api = {
     onBlurred: subscribe(CHANNELS.WindowBlurred),
   },
   git: {
-    onRefsRefreshed: subscribeWith<{ projectId: string }>(
+    onRefsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GitRefsRefreshed,
     ),
   },
@@ -271,7 +264,7 @@ const api = {
       branch: string;
     }): Promise<PullRequest | null> =>
       ipcRenderer.invoke(CHANNELS.GithubCliWorktreePullRequest, input),
-    onProjectPullRequestsRefreshed: subscribeWith<{ projectId: string }>(
+    onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GithubCliProjectPullRequestsRefreshed,
     ),
   },
@@ -284,7 +277,7 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ScriptsRun, input),
     cancel: (runId: string): Promise<{ cancelled: boolean }> =>
       ipcRenderer.invoke(CHANNELS.ScriptsCancel, { runId }),
-    onEvent: subscribeWith<ScriptEvent>(CHANNELS.ScriptsEvent),
+    onEvent: subscribe<ScriptEvent>(CHANNELS.ScriptsEvent),
   },
   launchers: {
     detected: (): Promise<DetectedLauncher[]> =>

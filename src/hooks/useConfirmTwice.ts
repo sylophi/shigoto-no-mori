@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
+// Two-step confirm sentinels. Lower for reversible-ish ops (removing a
+// project from the list); higher for destructive ones (delete worktree,
+// nuke shigomori state) so a stray double-click can't trigger them.
+export const CONFIRM_QUICK_MS = 3_000;
+export const CONFIRM_DESTRUCTIVE_MS = 5_000;
+
 // Two-step confirm pattern: first click arms, second click within `timeoutMs`
 // invokes the action. The armed flag auto-clears after the timeout, or
 // when the caller invokes `reset` (e.g. when the host menu closes).

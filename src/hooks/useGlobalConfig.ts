@@ -12,19 +12,19 @@ export function useGlobalConfig() {
 }
 
 export function useGlobalConfigWrite() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (config: GlobalConfig) => {
       await window.api.globalConfig.write(config);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
       // Launcher catalogs for every project depend on global custom launchers.
-      qc.invalidateQueries({ queryKey: ["launchers"] });
+      queryClient.invalidateQueries({ queryKey: ["launchers"] });
       // Toggling the GitHub CLI integration flips both readiness gating
       // and the project PR list -- refetch immediately rather than wait
       // for the next focus/mount.
-      qc.invalidateQueries({ queryKey: ["githubCli"] });
+      queryClient.invalidateQueries({ queryKey: ["githubCli"] });
     },
     meta: { errorTitle: "Couldn't save settings" },
   });

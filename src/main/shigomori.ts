@@ -4,31 +4,22 @@ import { join } from "node:path";
 import { type ShigomoriConfig, ShigomoriConfigSchema } from "@shared/schemas";
 import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
 import { shigomoriRoot } from "./paths";
-
-const CACHE_TTL_MS = 5_000;
-const cache = new Map<
-  string,
-  { value: ShigomoriConfig | null; expires: number }
->();
+import { ttlMapCache } from "./ttlCache";
 
 function configPathFor(projectId: string): string {
   return join(shigomoriRoot(), "projects", `${projectId}.json`);
 }
 
+// Failures aren't cached -- a bad config should error every read so the
+// user notices and fixes it.
+const cache = ttlMapCache<string, ShigomoriConfig | null>(5_000, (projectId) =>
+  readJsonOrNull(configPathFor(projectId), ShigomoriConfigSchema),
+);
+
 export async function readShigomoriConfig(
   projectId: string,
 ): Promise<ShigomoriConfig | null> {
-  const now = Date.now();
-  const hit = cache.get(projectId);
-  if (hit && hit.expires > now) return hit.value;
-  // Failures aren't cached — a bad config should error every read so the
-  // user notices and fixes it.
-  const value = await readJsonOrNull(
-    configPathFor(projectId),
-    ShigomoriConfigSchema,
-  );
-  cache.set(projectId, { value, expires: now + CACHE_TTL_MS });
-  return value;
+  return cache.get(projectId);
 }
 
 export async function writeShigomoriConfig(
@@ -39,5 +30,5 @@ export async function writeShigomoriConfig(
     configPathFor(projectId),
     ShigomoriConfigSchema.parse(config),
   );
-  cache.delete(projectId);
+  cache.invalidate(projectId);
 }

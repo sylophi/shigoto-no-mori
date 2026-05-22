@@ -15,7 +15,12 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { useConfirmTwice } from "@/hooks/useConfirmTwice";
+import {
+  CONFIRM_DESTRUCTIVE_MS,
+  useConfirmTwice,
+} from "@/hooks/useConfirmTwice";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { useLauncherListEditor } from "@/hooks/useLauncherListEditor";
 import { useDetectedLaunchers } from "@/hooks/useLaunchers";
 import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
 import { useGithubCliReadiness } from "@/hooks/useGithubCliReadiness";
@@ -121,11 +126,8 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
   const availableTools = detected.filter((d) => d.available);
   const missingTools = detected.filter((d) => !d.available);
 
-  const initial = fromConfig(initialConfig);
-  const [form, setForm] = useState<FormState>(initial);
-  const [savedSnapshot, setSavedSnapshot] = useState<FormState>(initial);
-
-  const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
+  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
+    useDirtyForm<FormState>(fromConfig(initialConfig));
 
   // Drop any staged theme preview when leaving the settings page so the
   // rest of the app falls back to the saved value.
@@ -148,31 +150,8 @@ function SettingsForm({ initialConfig }: { initialConfig: GlobalConfig }) {
     setOverride(theme);
   };
 
-  const updateLauncher = (id: string, patch: Partial<LauncherCommand>) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.map((l) =>
-        l.id === id ? { ...l, ...patch } : l,
-      ),
-    }));
-  };
-
-  const removeLauncher = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.filter((l) => l.id !== id),
-    }));
-  };
-
-  const addLauncher = () => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: [
-        ...prev.launchers,
-        { id: crypto.randomUUID(), label: "", command: "" },
-      ],
-    }));
-  };
+  const { addLauncher, updateLauncher, removeLauncher } =
+    useLauncherListEditor(setForm);
 
   const home = runtime?.homedir ?? null;
   const root = runtime?.shigomoriRoot ?? null;
@@ -514,7 +493,7 @@ function DangerZone() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
-  const { armed, trigger } = useConfirmTwice(5_000);
+  const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   const [nuking, setNuking] = useState(false);
 
   const home = runtime?.homedir ?? null;

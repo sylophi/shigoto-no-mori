@@ -131,9 +131,6 @@ export const ProjectSchema = z.object({
   pathExists: z.boolean().optional(),
 });
 
-export const ProjectsListResultSchema = z.array(ProjectSchema);
-export const WorktreesListResultSchema = z.array(WorktreeSchema);
-
 export const AddProjectPayloadSchema = z.object({
   path: z.string(),
 });
@@ -167,12 +164,6 @@ export const PickWorktreeNamePayloadSchema = z.object({
 export const ListIgnoredPathsPayloadSchema = z.object({
   projectId: z.string(),
 });
-
-// Raw output from `git ls-files --others --ignored --exclude-standard
-// --directory`: relative paths, with trailing "/" on fully-ignored folders.
-// The renderer derives membership by checking exact match or any ancestor
-// folder match.
-export const IgnoredPathsSchema = z.array(z.string());
 
 export const BranchListSchema = z.object({
   local: z.array(z.string()),

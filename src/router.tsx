@@ -20,6 +20,7 @@ import { Settings } from "@/components/detail/Settings";
 import { CommitDiff } from "@/components/detail/CommitDiff";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/detail/WorktreeDiff";
+import { dragRegion } from "@/lib/utils";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -83,7 +84,7 @@ function RootLayout() {
         <div
           aria-hidden
           className="absolute inset-x-0 top-0 z-30 h-7"
-          style={{ ["-webkit-app-region" as never]: "drag" }}
+          style={dragRegion("drag")}
         />
         <Outlet />
       </main>
