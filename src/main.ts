@@ -15,6 +15,7 @@ import {
   markShuttingDown,
 } from "./main/scripts";
 import { applyUserShellPath } from "./main/shellPath";
+import { startUpdater } from "./main/updater";
 
 registerIpcHandlers();
 
@@ -93,6 +94,7 @@ app.on("ready", async () => {
   buildAppMenu();
   createWindow();
   startBackgroundFetch();
+  startUpdater();
 });
 
 app.on("window-all-closed", () => {

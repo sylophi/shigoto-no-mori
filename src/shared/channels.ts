@@ -67,6 +67,10 @@ export const CHANNELS = {
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
   GitRefsRefreshed: "git:refsRefreshed",
+  UpdaterGet: "updater:get",
+  UpdaterCheck: "updater:check",
+  UpdaterInstall: "updater:install",
+  UpdaterState: "updater:state",
 } as const;
 
 export type ChannelName = (typeof CHANNELS)[keyof typeof CHANNELS];

@@ -498,6 +498,24 @@ export const RuntimeInfoSchema = z.object({
   isDev: z.boolean(),
 });
 
+// In-app updater state. `downloading` covers both "found an update" and
+// "still pulling bytes" -- macOS's autoUpdater doesn't expose progress,
+// so we collapse them. `ready` carries the version we'll restart into.
+export const UpdaterStateSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("idle") }),
+  z.object({ kind: z.literal("checking") }),
+  z.object({ kind: z.literal("downloading") }),
+  z.object({
+    kind: z.literal("ready"),
+    version: z.string(),
+    notes: z.string().optional(),
+    // ISO 8601; null when the OS gave us an unparseable date.
+    releaseDate: z.string().nullable(),
+  }),
+  z.object({ kind: z.literal("error"), message: z.string() }),
+]);
+export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
+
 export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,
 });

@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "description": "Lightweight desktop app for managing git worktrees in parallel.",
   "main": ".vite/build/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sylophi/shigoto-no-mori.git"
+  },
   "private": true,
   "packageManager": "pnpm@11.1.1",
   "scripts": {
@@ -51,6 +55,7 @@
     "@electron-forge/plugin-auto-unpack-natives": "^7.11.1",
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
+    "@electron-forge/publisher-github": "7.11.1",
     "@electron-forge/shared-types": "^7.11.1",
     "@electron/fuses": "^1.8.0",
     "@rolldown/plugin-babel": "^0.2.3",

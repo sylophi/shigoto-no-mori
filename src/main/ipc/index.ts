@@ -11,6 +11,7 @@ import { registerRuntimeHandlers } from "./runtime";
 import { registerScriptHandlers } from "./scripts";
 import { registerShellHandlers } from "./shell";
 import { registerShigomoriHandlers } from "./shigomori";
+import { registerUpdaterHandlers } from "./updater";
 import { registerWorktreeHandlers } from "./worktrees";
 
 export function registerIpcHandlers(): void {
@@ -28,4 +29,5 @@ export function registerIpcHandlers(): void {
   registerShigomoriHandlers();
   registerGlobalConfigHandlers();
   registerMenuHandlers();
+  registerUpdaterHandlers();
 }
