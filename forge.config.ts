@@ -3,12 +3,26 @@ import { MakerZIP } from "@electron-forge/maker-zip";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
-import { execFile } from "node:child_process";
-import { readdir } from "node:fs/promises";
-import path from "node:path";
-import { promisify } from "node:util";
+import { config as loadEnv } from "dotenv";
 
-const exec = promisify(execFile);
+loadEnv();
+
+const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
+  ? {
+      keychainProfile: process.env.APPLE_NOTARY_KEYCHAIN_PROFILE,
+    }
+  : process.env.APPLE_ID &&
+      process.env.APPLE_APP_SPECIFIC_PASSWORD &&
+      process.env.APPLE_TEAM_ID
+    ? {
+        appleId: process.env.APPLE_ID,
+        appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
+        teamId: process.env.APPLE_TEAM_ID,
+      }
+    : undefined;
+
+const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY);
+const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -16,31 +30,20 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
-    // No `osxSign` here — the @electron/osx-sign@1.3.3 that Forge ships
-    // silently skips ad-hoc signing when no real cert is in the keychain.
-    // We codesign by hand in the postPackage hook below.
+    ...(shouldSignMac
+      ? {
+          osxSign: {
+            identity: process.env.APPLE_SIGNING_IDENTITY,
+          },
+        }
+      : {}),
+    ...(shouldNotarizeMac
+      ? {
+          osxNotarize: osxNotarizeConfig,
+        }
+      : {}),
   },
   rebuildConfig: {},
-  hooks: {
-    postPackage: async (_config, result) => {
-      // Ad-hoc codesign the .app bundle. macOS-only — skip on non-darwin
-      // platforms where there's no `codesign` and no .app bundle to sign.
-      if (process.platform !== "darwin") return;
-
-      await Promise.all(
-        result.outputPaths.map(async (dir) => {
-          const entries = await readdir(dir);
-          const appName = entries.find((e) => e.endsWith(".app"));
-          if (!appName) return;
-          const appPath = path.join(dir, appName);
-          // `--deep` is deprecated for fixing already-signed bundles, but
-          // it's still the supported way to apply a fresh ad-hoc signature
-          // across an Electron app's many nested frameworks and helpers.
-          await exec("codesign", ["--force", "--deep", "--sign", "-", appPath]);
-        }),
-      );
-    },
-  },
   makers: [new MakerZIP({}, ["darwin"])],
   plugins: [
     new VitePlugin({
