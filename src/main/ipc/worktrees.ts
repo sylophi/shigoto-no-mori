@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { basename } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
@@ -30,7 +29,6 @@ import {
   listWorktreeIdentities,
   listWorktrees,
   overwriteFromUpstream,
-  pruneWorktreeAdmin,
   publishCurrentBranch,
   pullFastForward,
   pullRebaseOrMergeAndPush,
@@ -38,6 +36,7 @@ import {
   pushForceWithLease,
   relocateWorktree,
   removeWorktree,
+  removeWorktreeForce,
   renameBranch,
   worktreeIdFromPath,
 } from "../git";
@@ -127,21 +126,7 @@ export function registerWorktreeHandlers(): void {
         : sanitizeBranchForPath(branchOrSha);
 
       await killScriptsForWorktree(worktreeId);
-      // `git worktree remove --force` overrides git's clean-tree guard,
-      // but the final rmdir can still fail (e.g. "Directory not empty"
-      // when untracked content -- codex caches, node_modules races,
-      // files held open by other processes -- survives git's sweep).
-      // Conversion's contract is "wipe the old dir and start fresh", so
-      // fall back to fs.rm + `git worktree prune` to drop the admin
-      // entry. We avoid retrying `git worktree remove` after fs.rm
-      // because once the dir is gone, remove errors out on "not on
-      // disk".
-      try {
-        await removeWorktree(project.path, target.path, true);
-      } catch {
-        await rm(target.path, { recursive: true, force: true });
-        await pruneWorktreeAdmin(project.path);
-      }
+      await removeWorktreeForce(project.path, target.path);
 
       const worktree = await createWorktree(project.id, project.path, {
         requestedWorktreeName: worktreeName,
@@ -280,9 +265,15 @@ export function registerWorktreeHandlers(): void {
       }
 
       // Reap any package scripts still holding the worktree as cwd,
-      // then remove.
+      // then remove. Force-delete routes through the wipe fallback so
+      // ENOTEMPTY (untracked content git couldn't sweep) doesn't strand
+      // the user with a half-removed worktree.
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, force ?? false);
+      if (force) {
+        await removeWorktreeForce(project.path, target.path);
+      } else {
+        await removeWorktree(project.path, target.path, false);
+      }
       // Same cleanup as relocate: if this was the last worktree under a
       // managed parent, sweep the empty dir away. Custom paths are left
       // alone since they're user-chosen.

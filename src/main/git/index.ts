@@ -16,9 +16,9 @@ export {
   listWorktreeIdentities,
   listWorktrees,
   pickAvailableWorktreeName,
-  pruneWorktreeAdmin,
   relocateWorktree,
   removeWorktree,
+  removeWorktreeForce,
   worktreeIdFromPath,
 } from "./worktrees";
 export {
