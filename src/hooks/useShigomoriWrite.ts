@@ -7,15 +7,15 @@ interface WriteVariables {
 }
 
 export function useShigomoriWrite() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ projectId, config }: WriteVariables) => {
       await window.api.shigomori.write(projectId, config);
       return { projectId };
     },
     onSuccess: ({ projectId }) => {
-      qc.invalidateQueries({ queryKey: ["shigomori", projectId] });
-      qc.invalidateQueries({ queryKey: ["launchers", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["shigomori", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["launchers", projectId] });
     },
     meta: { errorTitle: "Couldn't save project config" },
   });

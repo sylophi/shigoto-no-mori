@@ -5,8 +5,8 @@ import {
   RunScriptPayloadSchema,
 } from "@shared/schemas";
 import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
-import { shellQuote } from "../packageScripts";
 import { findProjectOrThrow } from "../projects";
+import { resolveScriptCommand } from "../scriptCommand";
 import { cancelScript, startScript } from "../scripts";
 import { readShigomoriConfig } from "../shigomori";
 
@@ -30,21 +30,8 @@ export function registerScriptHandlers(): void {
       const worktree = identities.find((i) => i.id === worktreeId);
       if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 
-      let command: string;
-      if (script === "setup") {
-        command = config?.scripts?.setup ?? "";
-      } else if (script === "teardown") {
-        command = config?.scripts?.teardown ?? "";
-      } else if (script === "port-pool-provision") {
-        command = `port-pool provision ${shellQuote(worktree.path)}`;
-      } else if (script === "port-pool-release") {
-        command = `port-pool release ${shellQuote(worktree.path)}`;
-      } else {
-        // Exhaustive guard for the ScriptName union.
-        const exhaustive: never = script;
-        throw new Error(`Unknown script: ${String(exhaustive)}`);
-      }
-      if (!command.trim()) {
+      const command = resolveScriptCommand(script, config, worktree.path);
+      if (!command) {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 

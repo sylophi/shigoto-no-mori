@@ -20,7 +20,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { cn } from "@/lib/utils";
+import { cn, dragRegion } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useProjects, useReorderProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
@@ -288,7 +288,7 @@ function SidebarHeader() {
     <div
       className="flex h-[52px] items-center px-3 pl-[92px]"
       // macOS title-bar drag region
-      style={{ ["-webkit-app-region" as never]: "drag" }}
+      style={dragRegion("drag")}
     >
       {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- internal dev affordance, no keyboard equivalent needed */}
       <div
@@ -299,11 +299,7 @@ function SidebarHeader() {
         onClick={showDevStyle ? () => setRevealProd(true) : undefined}
         // Carve a no-drag hole only while the affordance is active so the
         // click isn't eaten by the title-bar drag region.
-        style={
-          showDevStyle
-            ? { ["-webkit-app-region" as never]: "no-drag" }
-            : undefined
-        }
+        style={showDevStyle ? dragRegion("no-drag") : undefined}
       >
         Shigoto no Mori
       </div>

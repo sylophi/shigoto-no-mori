@@ -50,6 +50,32 @@ interface CreateWorktreeInput {
   checkout?: boolean;
 }
 
+// Toasts the carry-over and script-failure summaries returned by both
+// `create` and `convertExternal`. Same shape, same UX intent.
+function notifyCreateLifecycleResult(result: CreateWorktreeResult): void {
+  const { applied, failures } = result.carryOver;
+  if (failures.length > 0) {
+    const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
+    const more = failures.length - lines.length;
+    toast.warning(
+      `Carried over ${applied} of ${applied + failures.length} entries`,
+      {
+        description:
+          lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
+      },
+    );
+  }
+  for (const failure of result.scriptFailures) {
+    const label = failure.phase === "setup" ? "Setup" : "Port-pool provision";
+    toast.warning(`${label} didn't complete cleanly`, {
+      description:
+        failure.exitCode === null
+          ? "See the script console for details."
+          : `Exited with code ${failure.exitCode}.`,
+    });
+  }
+}
+
 export function useCreateWorktree() {
   const queryClient = useQueryClient();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
@@ -58,28 +84,7 @@ export function useCreateWorktree() {
       void queryClient.invalidateQueries({
         queryKey: ["worktrees", vars.projectId],
       });
-      const { applied, failures } = result.carryOver;
-      if (failures.length > 0) {
-        const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
-        const more = failures.length - lines.length;
-        toast.warning(
-          `Carried over ${applied} of ${applied + failures.length} entries`,
-          {
-            description:
-              lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
-          },
-        );
-      }
-      for (const failure of result.scriptFailures) {
-        const label =
-          failure.phase === "setup" ? "Setup" : "Port-pool provision";
-        toast.warning(`${label} didn't complete cleanly`, {
-          description:
-            failure.exitCode === null
-              ? "See the script console for details."
-              : `Exited with code ${failure.exitCode}.`,
-        });
-      }
+      notifyCreateLifecycleResult(result);
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });
@@ -102,30 +107,7 @@ export function useConvertExternalWorktree() {
         // The old external worktree's id no longer maps to anything on disk
         // -- drop any cached script runs so they don't linger in the UI.
         clearScriptRunsForWorktree(vars.worktreeId);
-        const { applied, failures } = result.carryOver;
-        if (failures.length > 0) {
-          const lines = failures
-            .slice(0, 4)
-            .map((f) => `${f.path}: ${f.reason}`);
-          const more = failures.length - lines.length;
-          toast.warning(
-            `Carried over ${applied} of ${applied + failures.length} entries`,
-            {
-              description:
-                lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
-            },
-          );
-        }
-        for (const failure of result.scriptFailures) {
-          const label =
-            failure.phase === "setup" ? "Setup" : "Port-pool provision";
-          toast.warning(`${label} didn't complete cleanly`, {
-            description:
-              failure.exitCode === null
-                ? "See the script console for details."
-                : `Exited with code ${failure.exitCode}.`,
-          });
-        }
+        notifyCreateLifecycleResult(result);
       },
       // The page surfaces per-row errors inline; a toast on top would be noise.
       meta: { silentError: true },
@@ -296,49 +278,46 @@ interface SyncWorktreeInput {
   worktreeId: string;
 }
 
-// Factory for the family of remote-sync mutations (push, pull, force-
-// push, overwrite, publish, pull-and-push). Each one resolves to the
-// refreshed Worktree, and all share the same invalidation pattern --
-// only the API method and toast title differ.
-function makeSyncMutation(
+// Shared shape for the remote-sync family (push, pull, force-push,
+// overwrite, publish, pull-and-push). Every one resolves to the
+// refreshed Worktree and only differs in the API method + error title.
+function useSyncMutation(
   apiMethod: (input: SyncWorktreeInput) => Promise<Worktree>,
   errorTitle: string,
 ) {
-  return () => {
-    const queryClient = useQueryClient();
-    return useMutation<Worktree, Error, SyncWorktreeInput>({
-      mutationFn: apiMethod,
-      onSuccess: (_data, vars) => {
-        void queryClient.invalidateQueries({
-          queryKey: ["worktrees", vars.projectId],
-        });
-      },
-      meta: { errorTitle },
-    });
-  };
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, SyncWorktreeInput>({
+    mutationFn: apiMethod,
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["worktrees", vars.projectId],
+      });
+    },
+    meta: { errorTitle },
+  });
 }
 
-export const usePushWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.push(input),
-  "Couldn't push",
-);
-export const usePullWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.pull(input),
-  "Couldn't pull",
-);
-export const usePushForceWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.pushForce(input),
-  "Couldn't force-push",
-);
-export const useOverwriteWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.overwrite(input),
-  "Couldn't overwrite from upstream",
-);
-export const usePublishWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.publish(input),
-  "Couldn't publish branch",
-);
-export const usePullAndPushWorktree = makeSyncMutation(
-  (input) => window.api.worktrees.pullAndPush(input),
-  "Couldn't pull and push",
-);
+export const usePushWorktree = () =>
+  useSyncMutation((i) => window.api.worktrees.push(i), "Couldn't push");
+export const usePullWorktree = () =>
+  useSyncMutation((i) => window.api.worktrees.pull(i), "Couldn't pull");
+export const usePushForceWorktree = () =>
+  useSyncMutation(
+    (i) => window.api.worktrees.pushForce(i),
+    "Couldn't force-push",
+  );
+export const useOverwriteWorktree = () =>
+  useSyncMutation(
+    (i) => window.api.worktrees.overwrite(i),
+    "Couldn't overwrite from upstream",
+  );
+export const usePublishWorktree = () =>
+  useSyncMutation(
+    (i) => window.api.worktrees.publish(i),
+    "Couldn't publish branch",
+  );
+export const usePullAndPushWorktree = () =>
+  useSyncMutation(
+    (i) => window.api.worktrees.pullAndPush(i),
+    "Couldn't pull and push",
+  );

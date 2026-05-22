@@ -10,6 +10,7 @@ import {
 import finderIconUrl from "@/assets/app-icons/finder.png";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/useFsListDirectory";
 import {
   appendBrowsePathSegment,
@@ -131,141 +132,135 @@ export function FolderPickerModal({
   const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
 
   return (
-    <div
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
-    >
-      <div className="w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5">
-        <Command
-          label={title}
-          loop
-          shouldFilter={false}
-          value={highlighted}
-          onValueChange={setHighlighted}
-        >
-          <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
-            <Command.Input
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
-              autoFocus
-              value={query}
-              onValueChange={setQuery}
-              onKeyDown={onInputKeyDown}
-              placeholder="Enter a path (e.g. ~/projects/)"
-              className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
-            />
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={confirm}
-              disabled={!canConfirm}
-              aria-label={`${confirmLabel} (${confirmKbd})`}
-              title={`${confirmLabel} (${confirmKbd})`}
-            >
-              <span>{confirmLabel}</span>
-              <KbdGroup className="pointer-events-none">
-                <Kbd>{confirmKbd}</Kbd>
-              </KbdGroup>
-            </Button>
-          </div>
+    // Escape is owned by the Command.Input handler so it can also exit
+    // typeahead state; let the input swallow it before the shell sees it.
+    <ModalShell onClose={onClose} closeOnEscape={false}>
+      <Command
+        label={title}
+        loop
+        shouldFilter={false}
+        value={highlighted}
+        onValueChange={setHighlighted}
+      >
+        <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
+          <Command.Input
+            // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
+            autoFocus
+            value={query}
+            onValueChange={setQuery}
+            onKeyDown={onInputKeyDown}
+            placeholder="Enter a path (e.g. ~/projects/)"
+            className="min-w-0 flex-1 bg-transparent py-1 font-mono text-sm outline-none placeholder:font-sans placeholder:text-muted-foreground"
+          />
+          <Button
+            type="button"
+            size="xs"
+            variant="outline"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={confirm}
+            disabled={!canConfirm}
+            aria-label={`${confirmLabel} (${confirmKbd})`}
+            title={`${confirmLabel} (${confirmKbd})`}
+          >
+            <span>{confirmLabel}</span>
+            <KbdGroup className="pointer-events-none">
+              <Kbd>{confirmKbd}</Kbd>
+            </KbdGroup>
+          </Button>
+        </div>
 
-          <Command.List className="max-h-96 overflow-y-auto p-2">
-            {canBrowseUp && (
+        <Command.List className="max-h-96 overflow-y-auto p-2">
+          {canBrowseUp && (
+            <Command.Item
+              value={`${BROWSE_VALUE_PREFIX}up`}
+              keywords={[".."]}
+              onSelect={browseUp}
+              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+            >
+              <CornerLeftUp className="size-4 text-muted-foreground/80" />
+              <span className="font-mono text-muted-foreground">..</span>
+            </Command.Item>
+          )}
+
+          {filtered.map((entry) => {
+            const entryPath = `${browseDir}${entry.name}`;
+            return (
               <Command.Item
-                value={`${BROWSE_VALUE_PREFIX}up`}
-                keywords={[".."]}
-                onSelect={browseUp}
+                key={entry.name}
+                value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
+                keywords={[entry.name]}
+                onSelect={() => browseTo(entry.name)}
                 className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
               >
-                <CornerLeftUp className="size-4 text-muted-foreground/80" />
-                <span className="font-mono text-muted-foreground">..</span>
+                <Folder className="size-4 text-muted-foreground/80" />
+                <span className="min-w-0 flex-1 truncate font-mono">
+                  {entry.name}
+                </span>
               </Command.Item>
-            )}
+            );
+          })}
 
-            {filtered.map((entry) => {
-              const entryPath = `${browseDir}${entry.name}`;
-              return (
-                <Command.Item
-                  key={entry.name}
-                  value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
-                  keywords={[entry.name]}
-                  onSelect={() => browseTo(entry.name)}
-                  className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-                >
-                  <Folder className="size-4 text-muted-foreground/80" />
-                  <span className="min-w-0 flex-1 truncate font-mono">
-                    {entry.name}
-                  </span>
-                </Command.Item>
-              );
-            })}
+          {isLoading && !listing && (
+            <div className="px-3 py-3 text-xs text-muted-foreground">
+              Loading…
+            </div>
+          )}
+          {!isLoading && !error && filtered.length === 0 && (
+            <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+              {leafFilter.length > 0
+                ? `No folders matching "${leafFilter}".`
+                : "Empty directory."}
+            </div>
+          )}
+          {error && (
+            <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+              Couldn't read folder.
+            </div>
+          )}
+        </Command.List>
 
-            {isLoading && !listing && (
-              <div className="px-3 py-3 text-xs text-muted-foreground">
-                Loading…
-              </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-3">
+            <KbdGroup>
+              <Kbd>
+                <ArrowUp />
+              </Kbd>
+              <Kbd>
+                <ArrowDown />
+              </Kbd>
+              <span className="text-muted-foreground/80">Navigate</span>
+            </KbdGroup>
+            {hasHighlighted && (
+              <KbdGroup>
+                <Kbd>↩</Kbd>
+                <span className="text-muted-foreground/80">Enter folder</span>
+              </KbdGroup>
             )}
-            {!isLoading && !error && filtered.length === 0 && (
-              <div className="px-3 py-3 text-center text-xs text-muted-foreground">
-                {leafFilter.length > 0
-                  ? `No folders matching "${leafFilter}".`
-                  : "Empty directory."}
-              </div>
-            )}
-            {error && (
-              <div className="px-3 py-3 text-center text-xs text-muted-foreground">
-                Couldn't read folder.
-              </div>
-            )}
-          </Command.List>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-            <div className="flex items-center gap-3">
+            {canBrowseUp && (
               <KbdGroup>
                 <Kbd>
-                  <ArrowUp />
+                  <ArrowLeft />
                 </Kbd>
-                <Kbd>
-                  <ArrowDown />
-                </Kbd>
-                <span className="text-muted-foreground/80">Navigate</span>
+                <span className="text-muted-foreground/80">Go up</span>
               </KbdGroup>
-              {hasHighlighted && (
-                <KbdGroup>
-                  <Kbd>↩</Kbd>
-                  <span className="text-muted-foreground/80">Enter folder</span>
-                </KbdGroup>
-              )}
-              {canBrowseUp && (
-                <KbdGroup>
-                  <Kbd>
-                    <ArrowLeft />
-                  </Kbd>
-                  <span className="text-muted-foreground/80">Go up</span>
-                </KbdGroup>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={async () => {
-                const picked = await window.api.dialog.pickFolder({
-                  title,
-                  buttonLabel: confirmLabel,
-                });
-                if (picked) onPick(picked);
-              }}
-              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
-            >
-              <img src={finderIconUrl} alt="" className="size-4" />
-              Open in Finder
-            </button>
+            )}
           </div>
-        </Command>
-      </div>
-    </div>
+          <button
+            type="button"
+            onClick={async () => {
+              const picked = await window.api.dialog.pickFolder({
+                title,
+                buttonLabel: confirmLabel,
+              });
+              if (picked) onPick(picked);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
+          >
+            <img src={finderIconUrl} alt="" className="size-4" />
+            Open in Finder
+          </button>
+        </div>
+      </Command>
+    </ModalShell>
   );
 }

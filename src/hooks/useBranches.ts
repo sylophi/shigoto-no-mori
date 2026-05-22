@@ -19,12 +19,14 @@ export function useBranches(projectId: string | null) {
 // mutations call this; the renderer also calls it when main broadcasts a
 // background-fetch update.
 export function invalidateBranchState(
-  qc: ReturnType<typeof useQueryClient>,
+  queryClient: ReturnType<typeof useQueryClient>,
   projectId: string,
 ) {
-  void qc.invalidateQueries({ queryKey: ["branches", projectId] });
-  void qc.invalidateQueries({ queryKey: ["worktrees", projectId] });
-  void qc.invalidateQueries({ queryKey: ["defaultBranch", projectId] });
+  void queryClient.invalidateQueries({ queryKey: ["branches", projectId] });
+  void queryClient.invalidateQueries({ queryKey: ["worktrees", projectId] });
+  void queryClient.invalidateQueries({
+    queryKey: ["defaultBranch", projectId],
+  });
 }
 
 interface CreateBranchInput {
@@ -34,10 +36,11 @@ interface CreateBranchInput {
 }
 
 export function useCreateBranch() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation<void, Error, CreateBranchInput>({
     mutationFn: (input) => window.api.branches.create(input),
-    onSuccess: (_data, vars) => invalidateBranchState(qc, vars.projectId),
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     meta: { errorTitle: "Couldn't create branch" },
   });
 }
@@ -49,10 +52,11 @@ interface RenameAnyBranchInput {
 }
 
 export function useRenameAnyBranch() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation<void, Error, RenameAnyBranchInput>({
     mutationFn: (input) => window.api.branches.rename(input),
-    onSuccess: (_data, vars) => invalidateBranchState(qc, vars.projectId),
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     meta: { errorTitle: "Couldn't rename branch" },
   });
 }
@@ -64,10 +68,11 @@ interface DeleteBranchInput {
 }
 
 export function useDeleteBranch() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation<void, Error, DeleteBranchInput>({
     mutationFn: (input) => window.api.branches.delete(input),
-    onSuccess: (_data, vars) => invalidateBranchState(qc, vars.projectId),
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     // The page surfaces an inline force-delete prompt on the first
     // non-force failure; toast on top would be noise.
     meta: { silentError: true },

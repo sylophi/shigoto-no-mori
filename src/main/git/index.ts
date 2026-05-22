@@ -1,0 +1,42 @@
+// Thin wrappers around the git CLI. Each file owns one slice of the
+// surface (worktrees, branches, remotes, diff, sync). Importers should
+// keep using `from "../git"` — this barrel hides the layout.
+export { isGitRepo } from "./core";
+export {
+  fetchAllRemotes,
+  listRemotes,
+  resolveDefaultBranch,
+  snapshotRemoteRefs,
+} from "./remotes";
+export {
+  createWorktree,
+  deriveProjectName,
+  describeWorktree,
+  findWorktreeIdentityOrThrow,
+  listWorktreeIdentities,
+  listWorktrees,
+  pickAvailableWorktreeName,
+  relocateWorktree,
+  removeWorktree,
+  worktreeIdFromPath,
+} from "./worktrees";
+export {
+  checkoutBranch,
+  createLocalBranch,
+  deleteAnyLocalBranch,
+  deleteBranchAfterWorktreeRemoval,
+  deleteLocalBranch,
+  listBranches,
+  listIgnoredPaths,
+  renameAnyLocalBranch,
+  renameBranch,
+} from "./branches";
+export { getCommitDiff, getWorktreeDiff } from "./diff";
+export {
+  overwriteFromUpstream,
+  publishCurrentBranch,
+  pullFastForward,
+  pullRebaseOrMergeAndPush,
+  pushFastForward,
+  pushForceWithLease,
+} from "./sync";

@@ -18,6 +18,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/useDefaultBranch";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { useLauncherListEditor } from "@/hooks/useLauncherListEditor";
 import { useFsStat } from "@/hooks/useFsStat";
 import { useProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
@@ -149,11 +151,8 @@ function ConfigureForm({
   const navigate = useNavigate();
   const write = useShigomoriWrite();
 
-  const initial = fromConfig(initialConfig, resolvedDefaultBranch);
-  const [form, setForm] = useState<FormState>(initial);
-  const [savedSnapshot, setSavedSnapshot] = useState<FormState>(initial);
-
-  const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
+  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
+    useDirtyForm<FormState>(fromConfig(initialConfig, resolvedDefaultBranch));
   const canSave = isDirty && form.defaultBranch.trim().length > 0;
 
   const handleSave = async () => {
@@ -166,31 +165,8 @@ function ConfigureForm({
     setForm(savedSnapshot);
   };
 
-  const updateLauncher = (id: string, patch: Partial<LauncherCommand>) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.map((l) =>
-        l.id === id ? { ...l, ...patch } : l,
-      ),
-    }));
-  };
-
-  const removeLauncher = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.filter((l) => l.id !== id),
-    }));
-  };
-
-  const addLauncher = () => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: [
-        ...prev.launchers,
-        { id: crypto.randomUUID(), label: "", command: "" },
-      ],
-    }));
-  };
+  const { addLauncher, updateLauncher, removeLauncher } =
+    useLauncherListEditor(setForm);
 
   const addCarryOver = (entry: CarryOverEntry) => {
     setForm((prev) =>

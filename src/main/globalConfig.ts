@@ -12,25 +12,24 @@ import {
 } from "@shared/schemas";
 import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
 import { shigomoriRoot } from "./paths";
-
-const CACHE_TTL_MS = 5_000;
-let cached: { value: GlobalConfig; expires: number } | null = null;
+import { ttlValueCache } from "./ttlCache";
 
 function configPath(): string {
   return join(shigomoriRoot(), "config.json");
 }
 
+const cache = ttlValueCache<GlobalConfig>(
+  5_000,
+  async () => (await readJsonOrNull(configPath(), GlobalConfigSchema)) ?? {},
+);
+
 export async function readGlobalConfig(): Promise<GlobalConfig> {
-  const now = Date.now();
-  if (cached && cached.expires > now) return cached.value;
-  const value = (await readJsonOrNull(configPath(), GlobalConfigSchema)) ?? {};
-  cached = { value, expires: now + CACHE_TTL_MS };
-  return value;
+  return cache.get();
 }
 
 export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
   await atomicWriteJson(configPath(), GlobalConfigSchema.parse(config));
-  cached = null;
+  cache.invalidate();
 }
 
 // Sync read used by the main process at window-create time, where async

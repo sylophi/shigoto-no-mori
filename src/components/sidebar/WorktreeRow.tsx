@@ -9,6 +9,7 @@ import {
   Terminal,
   Trash2,
 } from "lucide-react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -150,39 +151,70 @@ function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
   if (!pr) return null;
   const { Icon, tone, label } = describePullRequest(pr);
   return (
-    <span
+    <StatusPill
+      icon={Icon}
+      tone={tone}
       title={`${label} #${pr.number}`}
       aria-label={`${label} #${pr.number}`}
-      className={cn(
-        "inline-flex shrink-0 items-center text-[10px]",
-        TONE_CLASSES[tone],
-      )}
-    >
-      <Icon aria-hidden className="size-3" />
-    </span>
+    />
   );
 }
 
-const TONE_CLASSES: Record<PullRequestTone, string> = {
+const TONE_CLASSES: Record<PillTone, string> = {
   emerald: "text-emerald-500",
   violet: "text-violet-500",
   rose: "text-rose-500",
   slate: "text-muted-foreground",
+  amber: "text-amber-500",
+  sky: "text-sky-500",
+  indigo: "text-indigo-500",
 };
+
+// Superset of PullRequestTone so the PR badge and sync-state badges
+// share one pill primitive. Add new tones as new states show up.
+type PillTone = PullRequestTone | "amber" | "sky" | "indigo";
+
+interface StatusPillProps {
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  tone: PillTone;
+  title: string;
+  "aria-label": string;
+  children?: ReactNode;
+}
+
+// Compact icon-and-optional-count badge. Numeric children get tabular
+// figures so adjacent pills don't shift width as counts change.
+function StatusPill({
+  icon: Icon,
+  tone,
+  title,
+  "aria-label": ariaLabel,
+  children,
+}: StatusPillProps) {
+  return (
+    <span
+      title={title}
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-flex shrink-0 items-center text-[10px]",
+        children != null && "tabular gap-0.5",
+        TONE_CLASSES[tone],
+      )}
+    >
+      <Icon aria-hidden className="size-3" />
+      {children}
+    </span>
+  );
+}
 
 function StatusIndicator({ worktree }: { worktree: Worktree }) {
   if (worktree.changedCount > 0) {
     const noun = worktree.changedCount === 1 ? "file" : "files";
     const label = `${worktree.changedCount} ${noun} changed`;
     return (
-      <span
-        title={label}
-        aria-label={label}
-        className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-amber-500"
-      >
-        <FileDiff aria-hidden className="size-3" />
+      <StatusPill icon={FileDiff} tone="amber" title={label} aria-label={label}>
         {worktree.changedCount}
-      </span>
+      </StatusPill>
     );
   }
   const state = deriveRemoteSyncState(worktree);
@@ -197,59 +229,58 @@ function StatusIndicator({ worktree }: { worktree: Worktree }) {
     // shows the disabled Publish button for discoverability.
     if (!state.canPublish) return null;
     return (
-      <span
+      <StatusPill
+        icon={CloudUpload}
+        tone="violet"
         title="Branch not yet published"
         aria-label="Unpublished branch"
-        className="inline-flex shrink-0 items-center text-[10px] text-violet-500"
-      >
-        <CloudUpload aria-hidden className="size-3" />
-      </span>
+      />
     );
   }
   if (state.kind === "ahead") {
     return (
-      <span
+      <StatusPill
+        icon={ArrowUp}
+        tone="emerald"
         title={`${state.ahead} commit${state.ahead === 1 ? "" : "s"} to push`}
         aria-label={`${state.ahead} ahead`}
-        className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-emerald-500"
       >
-        <ArrowUp aria-hidden className="size-3" />
         {state.ahead}
-      </span>
+      </StatusPill>
     );
   }
   if (state.kind === "behind") {
     return (
-      <span
+      <StatusPill
+        icon={ArrowDown}
+        tone="sky"
         title={`${state.behind} commit${state.behind === 1 ? "" : "s"} to pull`}
         aria-label={`${state.behind} behind`}
-        className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-sky-500"
       >
-        <ArrowDown aria-hidden className="size-3" />
         {state.behind}
-      </span>
+      </StatusPill>
     );
   }
   if (state.kind === "pullAndPush") {
     return (
-      <span
+      <StatusPill
+        icon={ArrowDownUp}
+        tone="indigo"
         title={`${state.ahead} ahead, ${state.behind} behind -- mergeable`}
         aria-label={`${state.ahead} ahead, ${state.behind} behind`}
-        className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-indigo-500"
       >
-        <ArrowDownUp aria-hidden className="size-3" />
         {state.ahead}/{state.behind}
-      </span>
+      </StatusPill>
     );
   }
   return (
-    <span
+    <StatusPill
+      icon={GitCompareArrows}
+      tone="rose"
       title={`Diverged: ${state.ahead} ahead, ${state.behind} behind`}
       aria-label={`Diverged ${state.ahead}/${state.behind}`}
-      className="tabular inline-flex shrink-0 items-center gap-0.5 text-[10px] text-rose-500"
     >
-      <GitCompareArrows aria-hidden className="size-3" />
       {state.ahead}/{state.behind}
-    </span>
+    </StatusPill>
   );
 }

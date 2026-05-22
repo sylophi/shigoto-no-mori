@@ -85,10 +85,6 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
   return inflightDeleteIds;
 }
 
-export function isShuttingDown(): boolean {
-  return shuttingDown;
-}
-
 export function markShuttingDown(): void {
   shuttingDown = true;
 }

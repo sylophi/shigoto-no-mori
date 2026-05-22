@@ -10,8 +10,8 @@ import type {
   ShigomoriConfig,
 } from "@shared/schemas";
 import { resolveDefaultBranch } from "./git";
-import { shellQuote } from "./packageScripts";
 import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
+import { resolveScriptCommand } from "./scriptCommand";
 import {
   clearDeleteInflight,
   markDeleteInflight,
@@ -79,7 +79,11 @@ export async function runCreateLifecycle(
     args.config?.defaultBranch,
   ).catch(() => "");
 
-  const setupCommand = args.config?.scripts?.setup?.trim();
+  const setupCommand = resolveScriptCommand(
+    "setup",
+    args.config,
+    args.worktree.path,
+  );
   if (setupCommand) {
     const { runId, exitCode } = await runStep({
       command: setupCommand,
@@ -103,7 +107,11 @@ export async function runCreateLifecycle(
     ]);
     if (installed && hasConfig) {
       const { runId, exitCode } = await runStep({
-        command: `port-pool provision ${shellQuote(args.worktree.path)}`,
+        command: resolveScriptCommand(
+          "port-pool-provision",
+          args.config,
+          args.worktree.path,
+        ),
         scriptName: "port-pool-provision",
         slot: { kind: "portPool", phase: "provision" },
         worktree: args.worktree,
@@ -145,7 +153,11 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
       ]);
       if (installed && hasConfig) {
         const { runId, exitCode } = await runStep({
-          command: `port-pool release ${shellQuote(args.worktree.path)}`,
+          command: resolveScriptCommand(
+            "port-pool-release",
+            args.config,
+            args.worktree.path,
+          ),
           scriptName: "port-pool-release",
           slot: { kind: "portPool", phase: "release" },
           worktree: args.worktree,
@@ -160,7 +172,11 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
       }
     }
 
-    const teardownCommand = args.config?.scripts?.teardown?.trim();
+    const teardownCommand = resolveScriptCommand(
+      "teardown",
+      args.config,
+      args.worktree.path,
+    );
     if (teardownCommand) {
       const { runId, exitCode } = await runStep({
         command: teardownCommand,
