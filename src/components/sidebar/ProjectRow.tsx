@@ -35,9 +35,15 @@ interface ProjectRowProps {
   project: Project;
   expanded: boolean;
   onToggle: () => void;
+  arrangeMode: boolean;
 }
 
-export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
+export function ProjectRow({
+  project,
+  expanded,
+  onToggle,
+  arrangeMode,
+}: ProjectRowProps) {
   const {
     attributes,
     listeners,
@@ -45,7 +51,7 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: project.id });
+  } = useSortable({ id: project.id, disabled: !arrangeMode });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -110,33 +116,36 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
             missing
             listeners={listeners}
             onContextMenu={onHeaderContextMenu}
+            arrangeMode={arrangeMode}
           />
-          <DropdownMenu onOpenChange={onMenuOpenChange}>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  ref={triggerRef}
-                  type="button"
-                  aria-label={`More actions for ${project.name}`}
-                  className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+          {!arrangeMode && (
+            <DropdownMenu onOpenChange={onMenuOpenChange}>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    ref={triggerRef}
+                    type="button"
+                    aria-label={`More actions for ${project.name}`}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" sideOffset={2}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  closeOnClick={removeArmed}
+                  onClick={(event) => {
+                    if (!removeArmed) event.preventDefault();
+                    triggerRemove(() => removeProject.mutate(project.id));
+                  }}
                 >
-                  <MoreHorizontal className="size-3.5" />
-                </button>
-              }
-            />
-            <DropdownMenuContent align="end" sideOffset={2}>
-              <DropdownMenuItem
-                variant="destructive"
-                closeOnClick={removeArmed}
-                onClick={(event) => {
-                  if (!removeArmed) event.preventDefault();
-                  triggerRemove(() => removeProject.mutate(project.id));
-                }}
-              >
-                {removeArmed ? "Click again to confirm" : "Remove"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  {removeArmed ? "Click again to confirm" : "Remove"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     );
@@ -156,115 +165,120 @@ export function ProjectRow({ project, expanded, onToggle }: ProjectRowProps) {
           onToggle={onToggle}
           listeners={listeners}
           onContextMenu={onHeaderContextMenu}
+          arrangeMode={arrangeMode}
         />
-        <button
-          type="button"
-          onClick={(e) => {
-            if (e.shiftKey || e.metaKey) {
-              void navigate({
-                to: "/projects/$projectId/new",
-                params: { projectId: project.id },
-              });
-              return;
-            }
-            void quickCreate();
-          }}
-          disabled={create.isPending}
-          aria-label={`Quick-create worktree in ${project.name}`}
-          title={`Quick-create worktree in ${project.name}`}
-          className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
-          aria-busy={create.isPending}
-        >
-          {create.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Plus className="size-3.5" />
-          )}
-        </button>
-        <DropdownMenu onOpenChange={onMenuOpenChange}>
-          <DropdownMenuTrigger
-            render={
-              <button
-                ref={triggerRef}
-                type="button"
-                aria-label={`More actions for ${project.name}`}
-                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
-              >
-                <MoreHorizontal className="size-3.5" />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" sideOffset={2}>
-            <DropdownMenuItem
-              disabled={create.isPending}
-              onClick={() => void quickCreate()}
-            >
-              Quick create
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/new",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              New worktree from…
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/convert-external",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Convert external worktrees
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/worktree-location",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Set worktree location
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/branches",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Manage branches
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/configure",
-                  params: { projectId: project.id },
-                })
-              }
-            >
-              Configure
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              closeOnClick={removeArmed}
-              onClick={(event) => {
-                if (!removeArmed) event.preventDefault();
-                triggerRemove(() => removeProject.mutate(project.id));
+        {!arrangeMode && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                if (e.shiftKey || e.metaKey) {
+                  void navigate({
+                    to: "/projects/$projectId/new",
+                    params: { projectId: project.id },
+                  });
+                  return;
+                }
+                void quickCreate();
               }}
+              disabled={create.isPending}
+              aria-label={`Quick-create worktree in ${project.name}`}
+              title={`Quick-create worktree in ${project.name}`}
+              className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
+              aria-busy={create.isPending}
             >
-              {removeArmed ? "Click again to confirm" : "Remove"}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              {create.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Plus className="size-3.5" />
+              )}
+            </button>
+            <DropdownMenu onOpenChange={onMenuOpenChange}>
+              <DropdownMenuTrigger
+                render={
+                  <button
+                    ref={triggerRef}
+                    type="button"
+                    aria-label={`More actions for ${project.name}`}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </button>
+                }
+              />
+              <DropdownMenuContent align="end" sideOffset={2}>
+                <DropdownMenuItem
+                  disabled={create.isPending}
+                  onClick={() => void quickCreate()}
+                >
+                  Quick create
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigate({
+                      to: "/projects/$projectId/new",
+                      params: { projectId: project.id },
+                    })
+                  }
+                >
+                  New worktree from…
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigate({
+                      to: "/projects/$projectId/convert-external",
+                      params: { projectId: project.id },
+                    })
+                  }
+                >
+                  Convert external worktrees
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigate({
+                      to: "/projects/$projectId/worktree-location",
+                      params: { projectId: project.id },
+                    })
+                  }
+                >
+                  Set worktree location
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigate({
+                      to: "/projects/$projectId/branches",
+                      params: { projectId: project.id },
+                    })
+                  }
+                >
+                  Manage branches
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() =>
+                    void navigate({
+                      to: "/projects/$projectId/configure",
+                      params: { projectId: project.id },
+                    })
+                  }
+                >
+                  Configure
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  variant="destructive"
+                  closeOnClick={removeArmed}
+                  onClick={(event) => {
+                    if (!removeArmed) event.preventDefault();
+                    triggerRemove(() => removeProject.mutate(project.id));
+                  }}
+                >
+                  {removeArmed ? "Click again to confirm" : "Remove"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        )}
       </div>
     </div>
   );
@@ -277,6 +291,7 @@ interface ProjectHeaderProps {
   missing?: boolean;
   listeners?: DraggableSyntheticListeners;
   onContextMenu?: (event: React.MouseEvent) => void;
+  arrangeMode?: boolean;
 }
 
 // Header row shared by the healthy and missing-project branches. The
@@ -290,19 +305,38 @@ function ProjectHeader({
   missing,
   listeners,
   onContextMenu,
+  arrangeMode,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
     "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
-  const trigger = missing ? (
+  const trigger = arrangeMode ? (
     <div
       {...listeners}
       onContextMenu={onContextMenu}
       className={cn(
         baseClass,
-        listeners && "cursor-grab active:cursor-grabbing",
-        "text-muted-foreground/60",
+        "cursor-grab text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing",
+        missing && "text-muted-foreground/60 hover:text-muted-foreground",
       )}
+    >
+      {missing && (
+        <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+      )}
+      <span
+        ref={nameRef}
+        className={cn(
+          "min-w-0 truncate",
+          missing && "line-through decoration-1",
+        )}
+      >
+        {project.name}
+      </span>
+    </div>
+  ) : missing ? (
+    <div
+      onContextMenu={onContextMenu}
+      className={cn(baseClass, "text-muted-foreground/60")}
     >
       <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
       <span
@@ -320,10 +354,8 @@ function ProjectHeader({
       type="button"
       onClick={onToggle}
       onContextMenu={onContextMenu}
-      {...listeners}
       className={cn(
         baseClass,
-        listeners && "cursor-grab active:cursor-grabbing",
         "text-muted-foreground transition-colors hover:text-foreground",
       )}
     >

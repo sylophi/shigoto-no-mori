@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ChevronRight,
+  ArrowUpDown,
   FolderPlus,
   Search,
   Settings as SettingsIcon,
@@ -51,6 +51,7 @@ export function Sidebar() {
   // Absence == expanded, so new projects default open.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [arrangeMode, setArrangeMode] = useState(false);
 
   const toggleExpanded = (projectId: string) => {
     setCollapsed((prev) => {
@@ -78,46 +79,53 @@ export function Sidebar() {
     );
   }, [failedCount]);
 
-  const rows: SidebarRow[] = (() => {
-    const out: SidebarRow[] = [];
-    projects.forEach((project, i) => {
-      const expanded = !collapsed.has(project.id);
-      out.push({
+  const rows: SidebarRow[] = arrangeMode
+    ? projects.map((project) => ({
         kind: "project",
         key: `p:${project.id}`,
         project,
-        expanded,
-      });
-      if (!expanded || project.pathExists === false) return;
-      const query = worktreeQueries[i];
-      if (!query) return;
-      if (query.isLoading) {
-        out.push({
-          kind: "worktree-skeleton",
-          key: `sk:${project.id}`,
-          projectId: project.id,
+        expanded: false,
+      }))
+    : (() => {
+        const out: SidebarRow[] = [];
+        projects.forEach((project, i) => {
+          const expanded = !collapsed.has(project.id);
+          out.push({
+            kind: "project",
+            key: `p:${project.id}`,
+            project,
+            expanded,
+          });
+          if (!expanded || project.pathExists === false) return;
+          const query = worktreeQueries[i];
+          if (!query) return;
+          if (query.isLoading) {
+            out.push({
+              kind: "worktree-skeleton",
+              key: `sk:${project.id}`,
+              projectId: project.id,
+            });
+            return;
+          }
+          if (query.error) {
+            out.push({
+              kind: "worktree-error",
+              key: `err:${project.id}`,
+              projectId: project.id,
+            });
+            return;
+          }
+          const trees = (query.data ?? []) as Worktree[];
+          for (const worktree of trees) {
+            out.push({
+              kind: "worktree",
+              key: `w:${worktree.id}`,
+              worktree,
+            });
+          }
         });
-        return;
-      }
-      if (query.error) {
-        out.push({
-          kind: "worktree-error",
-          key: `err:${project.id}`,
-          projectId: project.id,
-        });
-        return;
-      }
-      const trees = (query.data ?? []) as Worktree[];
-      for (const worktree of trees) {
-        out.push({
-          kind: "worktree",
-          key: `w:${worktree.id}`,
-          worktree,
-        });
-      }
-    });
-    return out;
-  })();
+        return out;
+      })();
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const virtualizer = useVirtualizer({
@@ -189,7 +197,11 @@ export function Sidebar() {
                       )}
                       style={{ transform: `translateY(${vi.start}px)` }}
                     >
-                      <RowContent row={row} onToggle={toggleExpanded} />
+                      <RowContent
+                        row={row}
+                        onToggle={toggleExpanded}
+                        arrangeMode={arrangeMode}
+                      />
                     </div>
                   );
                 })}
@@ -208,7 +220,10 @@ export function Sidebar() {
           )}
         </ScrollArea>
       </div>
-      <SidebarFooter />
+      <SidebarFooter
+        arrangeMode={arrangeMode}
+        onToggleArrange={() => setArrangeMode((v) => !v)}
+      />
     </aside>
   );
 }
@@ -216,9 +231,11 @@ export function Sidebar() {
 function RowContent({
   row,
   onToggle,
+  arrangeMode,
 }: {
   row: SidebarRow;
   onToggle: (projectId: string) => void;
+  arrangeMode: boolean;
 }) {
   if (row.kind === "project") {
     return (
@@ -226,6 +243,7 @@ function RowContent({
         project={row.project}
         expanded={row.expanded}
         onToggle={() => onToggle(row.project.id)}
+        arrangeMode={arrangeMode}
       />
     );
   }
@@ -248,10 +266,11 @@ function RowContent({
 }
 
 function ProjectDragPreview({ project }: { project: Project }) {
+  // Matches the arrange-mode ProjectHeader layout so the preview lines
+  // up exactly with the row the cursor grabbed.
   return (
-    <div className="cursor-grabbing rounded-md bg-card shadow-md outline -outline-offset-1 outline-foreground/25">
-      <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-        <ChevronRight className="size-3 shrink-0 rotate-90" />
+    <div className="py-0.5">
+      <div className="flex cursor-grabbing items-center rounded-md bg-card px-2 py-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase shadow-md outline -outline-offset-1 outline-foreground/25">
         <span className="min-w-0 truncate">{project.name}</span>
       </div>
     </div>
@@ -292,11 +311,30 @@ function SidebarHeader() {
   );
 }
 
-function SidebarFooter() {
+function SidebarFooter({
+  arrangeMode,
+  onToggleArrange,
+}: {
+  arrangeMode: boolean;
+  onToggleArrange: () => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { openIn } = useCommandPalette();
   const settingsActive = location.pathname === "/settings";
+  if (arrangeMode) {
+    return (
+      <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
+        <button
+          type="button"
+          onClick={onToggleArrange}
+          className="rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
       <button
@@ -313,6 +351,15 @@ function SidebarFooter() {
         )}
       >
         <SettingsIcon className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onToggleArrange}
+        aria-label="Arrange projects"
+        title="Arrange projects"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <ArrowUpDown className="size-3.5" />
       </button>
       <div className="flex-1" />
       <button
