@@ -4,7 +4,7 @@ import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./main/bootstrap";
 import { attachContextMenu } from "./main/contextMenu";
-import { refreshAllProjects, startBackgroundFetch } from "./main/fetch";
+import { refreshAllProjectGitRefs, startBackgroundFetch } from "./main/fetch";
 import { readThemeSync } from "./main/globalConfig";
 import { registerIpcHandlers } from "./main/ipc";
 import { buildAppMenu } from "./main/menu";
@@ -60,7 +60,7 @@ const createWindow = () => {
   // refetch-on-focus needs this signal to be reliable.
   const sendFocus = () => {
     mainWindow?.webContents.send(CHANNELS.WindowFocused);
-    refreshAllProjects();
+    refreshAllProjectGitRefs();
   };
   const sendBlur = () => mainWindow?.webContents.send(CHANNELS.WindowBlurred);
   mainWindow.on("focus", sendFocus);

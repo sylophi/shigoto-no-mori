@@ -38,6 +38,9 @@ export const CHANNELS = {
   PortPoolIsInstalled: "portPool:isInstalled",
   GithubCliReadiness: "githubCli:readiness",
   GithubCliProjectPullRequests: "githubCli:projectPullRequests",
+  GithubCliWorktreePullRequest: "githubCli:worktreePullRequest",
+  GithubCliProjectPullRequestsRefreshed:
+    "githubCli:projectPullRequestsRefreshed",
   LaunchersDetect: "launchers:detect",
   LaunchersForProject: "launchers:forProject",
   LaunchersLaunch: "launchers:launch",

@@ -266,6 +266,14 @@ const api = {
       projectId: string;
     }): Promise<Record<string, PullRequest>> =>
       ipcRenderer.invoke(CHANNELS.GithubCliProjectPullRequests, input),
+    worktreePullRequest: (input: {
+      projectId: string;
+      branch: string;
+    }): Promise<PullRequest | null> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliWorktreePullRequest, input),
+    onProjectPullRequestsRefreshed: subscribeWith<{ projectId: string }>(
+      CHANNELS.GithubCliProjectPullRequestsRefreshed,
+    ),
   },
   scripts: {
     run: (input: {
