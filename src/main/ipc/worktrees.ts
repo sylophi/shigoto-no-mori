@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { basename } from "node:path";
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
@@ -29,6 +30,7 @@ import {
   listWorktreeIdentities,
   listWorktrees,
   overwriteFromUpstream,
+  pruneWorktreeAdmin,
   publishCurrentBranch,
   pullFastForward,
   pullRebaseOrMergeAndPush,
@@ -125,7 +127,21 @@ export function registerWorktreeHandlers(): void {
         : sanitizeBranchForPath(branchOrSha);
 
       await killScriptsForWorktree(worktreeId);
-      await removeWorktree(project.path, target.path, true);
+      // `git worktree remove --force` overrides git's clean-tree guard,
+      // but the final rmdir can still fail (e.g. "Directory not empty"
+      // when untracked content -- codex caches, node_modules races,
+      // files held open by other processes -- survives git's sweep).
+      // Conversion's contract is "wipe the old dir and start fresh", so
+      // fall back to fs.rm + `git worktree prune` to drop the admin
+      // entry. We avoid retrying `git worktree remove` after fs.rm
+      // because once the dir is gone, remove errors out on "not on
+      // disk".
+      try {
+        await removeWorktree(project.path, target.path, true);
+      } catch {
+        await rm(target.path, { recursive: true, force: true });
+        await pruneWorktreeAdmin(project.path);
+      }
 
       const worktree = await createWorktree(project.id, project.path, {
         requestedWorktreeName: worktreeName,

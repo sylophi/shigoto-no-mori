@@ -366,6 +366,16 @@ export async function removeWorktree(
   await run(projectPath, args);
 }
 
+// Drops admin entries for worktrees whose checkout dir is gone.
+// Used as the bookkeeping half of a fallback wipe when
+// `git worktree remove` fails (e.g. "Directory not empty" because some
+// untracked content resisted removal): caller blows the directory away
+// with fs.rm, then calls this so `git worktree list` doesn't keep the
+// stale entry.
+export async function pruneWorktreeAdmin(projectPath: string): Promise<void> {
+  await run(projectPath, ["worktree", "prune"]);
+}
+
 // Moves a worktree's checkout to a new directory. `git worktree move`
 // preserves the working tree, index, and untracked files; the absolute
 // carry-over symlinks stay valid because their targets don't change. Git
