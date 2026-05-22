@@ -387,6 +387,13 @@ export async function removeWorktreeForce(
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
   await rm(worktreePath, { recursive: true, force: true });
+  await pruneStaleWorktrees(projectPath);
+}
+
+// Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
+// gone. Used after a fallback fs.rm and after the nuke-everything root
+// wipe to keep `git worktree list` honest.
+export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
   await run(projectPath, ["worktree", "prune"]);
 }
 

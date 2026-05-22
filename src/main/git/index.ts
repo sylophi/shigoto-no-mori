@@ -16,6 +16,7 @@ export {
   listWorktreeIdentities,
   listWorktrees,
   pickAvailableWorktreeName,
+  pruneStaleWorktrees,
   relocateWorktree,
   removeWorktree,
   removeWorktreeForce,
