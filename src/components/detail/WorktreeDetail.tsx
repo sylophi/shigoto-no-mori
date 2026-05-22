@@ -32,6 +32,22 @@ function deleteButtonLabel(busy: boolean, armed: boolean): string {
   return armed ? "Confirm delete?" : "Delete worktree";
 }
 
+// Shared header strip for any background lifecycle (create or delete):
+// a spinner and a phase label.
+function LifecycleBanner({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
+      <Loader2
+        aria-hidden
+        className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+      />
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function WorktreeDetail() {
   const { projectId, worktreeId } = worktreeRoute.useParams();
   const { data: projects = [] } = useProjects();
@@ -104,22 +120,6 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
     if (createPhase === "portPoolProvision") return "Provisioning ports...";
     return null;
   })();
-  const openCreateConsole = () => {
-    const slot: ScriptSlot =
-      createPhase === "portPoolProvision"
-        ? { kind: "portPool", phase: "provision" }
-        : { kind: "setup" };
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-      params: {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        scriptKey: slotToParam(slot),
-      },
-    });
-  };
-  const createConsoleAvailable =
-    createPhase === "setup" || createPhase === "portPoolProvision";
 
   // Tracks the flags from the most recent delete attempt so that the
   // retry/skip affordances on a cleanup failure carry the user's
@@ -270,56 +270,19 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
         <BranchHeaderRow worktree={worktree} />
       </header>
 
-      {inLimbo && (
-        <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
-          <Loader2
-            aria-hidden
-            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-          />
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {limboLabel}
-          </span>
-          {cleanupRunning && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={openCleanupConsole}
-              className="shrink-0"
-            >
-              View output
-            </Button>
-          )}
-        </div>
-      )}
-
-      {inCreate && createLabel && (
-        <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
-          <Loader2
-            aria-hidden
-            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-          />
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {createLabel}
-          </span>
-          {createConsoleAvailable && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={openCreateConsole}
-              className="shrink-0"
-            >
-              View output
-            </Button>
-          )}
-        </div>
-      )}
+      {inLimbo ? (
+        <LifecycleBanner label={limboLabel} />
+      ) : inCreate && createLabel ? (
+        <LifecycleBanner label={createLabel} />
+      ) : null}
 
       <div
         className={cn(
           "min-h-0 flex-1 overflow-y-auto px-6 py-6",
-          (inLimbo || inCreate) && "pointer-events-none opacity-50",
+          (inLimbo || createPhase === "carryOver") &&
+            "pointer-events-none opacity-50",
         )}
-        aria-disabled={inLimbo || inCreate}
+        aria-disabled={inLimbo || createPhase === "carryOver"}
       >
         <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">
