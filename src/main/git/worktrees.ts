@@ -325,12 +325,10 @@ export async function createWorktree(
     worktreeName,
   );
 
-  // Refresh just the one remote-tracking ref the new worktree will sit
-  // on. Without this, refs/remotes/<base> is whatever the last fetch
-  // left behind -- which often matches local main and looks like the
-  // worktree silently used the local branch as its base. Narrow fetch
-  // (one remote + one branch) keeps the spinner short even when the
-  // project has many remotes or large unrelated histories to pull.
+  // Refresh the remote-tracking ref the new worktree will sit on.
+  // Without this, refs/remotes/<base> is whatever the last fetch left
+  // behind -- which often matches local main and looks like the
+  // worktree silently used the local branch as its base.
   if (base && (await remoteRefExists(projectPath, base))) {
     const split = await splitRemoteRef(projectPath, base);
     if (split) {

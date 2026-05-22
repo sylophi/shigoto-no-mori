@@ -200,14 +200,20 @@ export const CreateWorktreeResultSchema = z.object({
   worktree: WorktreeSchema,
 });
 
+// Phases the create lifecycle steps through, in order. Skipped if the
+// phase has no work (no carry-over entries, no setup script, port-pool
+// disabled). "idle" is the terminal sentinel emitted from `finally`.
+export const CreatePhaseSchema = z.enum([
+  "carryOver",
+  "setup",
+  "portPoolProvision",
+]);
+export type CreatePhase = z.infer<typeof CreatePhaseSchema>;
+
 export const WorktreeLifecyclePhaseSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
-  // "idle" marks the lifecycle as fully finished. The order is fixed:
-  // carryOver -> setup -> portPoolProvision -> idle. Phases that have no
-  // work (no setup script configured, port-pool disabled, no carry-over
-  // entries) are skipped without emitting.
-  phase: z.enum(["carryOver", "setup", "portPoolProvision", "idle"]),
+  phase: z.union([CreatePhaseSchema, z.literal("idle")]),
 });
 
 export type WorktreeLifecyclePhase = z.infer<

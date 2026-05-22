@@ -95,8 +95,7 @@ export async function resolveDefaultBranch(
 
 // Coalesces overlapping callers onto a single in-flight fetch so the
 // focus-driven sweep and the periodic refresh can't dogpile a slow
-// remote. Create-time fetches go through `fetchRemoteRef` instead --
-// they only need one ref, not the whole world.
+// remote.
 const fetchInflight = new Map<string, Promise<void>>();
 
 export async function fetchAllRemotes(projectPath: string): Promise<void> {
@@ -131,8 +130,8 @@ export async function splitRemoteRef(
   return best;
 }
 
-// Fetches just one branch from one remote. Used by create so we don't
-// pay the `fetch --all` cost for a single ref the user asked for.
+// One branch from one remote -- cheaper than `fetch --all` when only
+// that ref is needed.
 export async function fetchRemoteRef(
   projectPath: string,
   remote: string,

@@ -20,6 +20,7 @@ import {
   type ScriptSlot,
 } from "@/store/scriptRuns";
 import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
+import type { CreatePhase } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
 import { BranchHeaderRow } from "./worktreeDetail/BranchHeader";
@@ -32,8 +33,12 @@ function deleteButtonLabel(busy: boolean, armed: boolean): string {
   return armed ? "Confirm delete?" : "Delete worktree";
 }
 
-// Shared header strip for any background lifecycle (create or delete):
-// a spinner and a phase label.
+const CREATE_PHASE_LABEL = {
+  carryOver: "Carrying over files...",
+  setup: "Setting up...",
+  portPoolProvision: "Provisioning ports...",
+} satisfies Record<CreatePhase, string>;
+
 function LifecycleBanner({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
@@ -108,18 +113,15 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
   const busy = deleteMutation.isPending;
   const inLimbo = cleanupRunning || busy;
 
-  // Create-side lifecycle: carry-over -> setup -> port-pool provision.
-  // Suppressed while inLimbo so a delete-during-setup race shows the
-  // destructive banner instead. The page is locked the same way as
-  // during delete so the user can't kick off launches mid-setup.
+  // Banner-only for setup / port-pool provision: those are user scripts
+  // (`pnpm install` etc.) that can run alongside the user opening files
+  // or kicking off launches. Carry-over moves real files into the new
+  // worktree, so we lock the page until it finishes. inLimbo wins -- a
+  // delete-during-setup race shows the destructive banner instead.
   const createPhase = useWorktreeCreatePhase(worktree.id);
-  const inCreate = createPhase !== null && !inLimbo;
-  const createLabel = (() => {
-    if (createPhase === "carryOver") return "Carrying over files...";
-    if (createPhase === "setup") return "Setting up...";
-    if (createPhase === "portPoolProvision") return "Provisioning ports...";
-    return null;
-  })();
+  const createLabel =
+    !inLimbo && createPhase ? CREATE_PHASE_LABEL[createPhase] : null;
+  const locked = inLimbo || createPhase === "carryOver";
 
   // Tracks the flags from the most recent delete attempt so that the
   // retry/skip affordances on a cleanup failure carry the user's
@@ -272,17 +274,16 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
 
       {inLimbo ? (
         <LifecycleBanner label={limboLabel} />
-      ) : inCreate && createLabel ? (
+      ) : createLabel ? (
         <LifecycleBanner label={createLabel} />
       ) : null}
 
       <div
         className={cn(
           "min-h-0 flex-1 overflow-y-auto px-6 py-6",
-          (inLimbo || createPhase === "carryOver") &&
-            "pointer-events-none opacity-50",
+          locked && "pointer-events-none opacity-50",
         )}
-        aria-disabled={inLimbo || createPhase === "carryOver"}
+        aria-disabled={locked}
       >
         <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">

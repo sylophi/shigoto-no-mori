@@ -1,5 +1,5 @@
 import { basename } from "node:path";
-import { ipcMain } from "electron";
+import { ipcMain, type WebContents } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { sanitizeBranchForPath } from "@shared/branches";
 import {
@@ -12,6 +12,7 @@ import {
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
   ListWorktreesPayloadSchema,
+  type Project,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
   SyncWorktreePayloadSchema,
@@ -47,6 +48,17 @@ import { readShigomoriConfig } from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
 import { pruneEmptyManagedParents } from "../worktreePaths";
 
+function spawnCreateLifecycle(
+  label: string,
+  project: Project,
+  worktree: Worktree,
+  webContents: WebContents,
+): void {
+  void runCreateLifecycle({ project, worktree, webContents }).catch((err) => {
+    console.error(`${label} lifecycle failed`, err);
+  });
+}
+
 export function registerWorktreeHandlers(): void {
   ipcMain.handle(
     CHANNELS.WorktreesList,
@@ -69,31 +81,11 @@ export function registerWorktreeHandlers(): void {
         base,
         checkout: checkout ?? false,
       });
-      const [config, identities, global] = await Promise.all([
-        readShigomoriConfig(project.id).catch(() => null),
-        listWorktreeIdentities(project.id, project.path),
-        readGlobalConfig(),
-      ]);
-
-      const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
-      const target = identities.find((i) => i.id === worktree.id) ?? worktree;
       // Fire-and-forget so the renderer can navigate to the new worktree
       // instantly. Carry-over, setup, and port-pool provision run in the
       // background; the renderer follows along via WorktreeLifecyclePhase
       // events and the sidebar activity icon driven by ScriptsEvent.
-      void runCreateLifecycle({
-        project,
-        worktree: target,
-        projectBranch,
-        config,
-        carryOverEntries: config?.carryOver ?? [],
-        primaryWorktreePath: project.path,
-        globalPortPoolEnabled: global.portPool === true,
-        webContents: event.sender,
-      }).catch((err) => {
-        console.error("create lifecycle failed", err);
-      });
-
+      spawnCreateLifecycle("create", project, worktree, event.sender);
       return { worktree };
     },
   );
@@ -135,27 +127,7 @@ export function registerWorktreeHandlers(): void {
         base: branchOrSha,
         checkout: true,
       });
-      const [config, identities, global] = await Promise.all([
-        readShigomoriConfig(project.id).catch(() => null),
-        listWorktreeIdentities(project.id, project.path),
-        readGlobalConfig(),
-      ]);
-
-      const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
-      const fresh = identities.find((i) => i.id === worktree.id) ?? worktree;
-      void runCreateLifecycle({
-        project,
-        worktree: fresh,
-        projectBranch,
-        config,
-        carryOverEntries: config?.carryOver ?? [],
-        primaryWorktreePath: project.path,
-        globalPortPoolEnabled: global.portPool === true,
-        webContents: event.sender,
-      }).catch((err) => {
-        console.error("convert-external lifecycle failed", err);
-      });
-
+      spawnCreateLifecycle("convert-external", project, worktree, event.sender);
       return { worktree };
     },
   );

@@ -5,9 +5,9 @@
 // store only reflects events it broadcasts.
 import { useSyncExternalStore } from "react";
 import { toast } from "sonner";
-import type { WorktreeLifecyclePhase } from "@shared/schemas";
+import type { CreatePhase } from "@shared/schemas";
 
-export type CreatePhase = Exclude<WorktreeLifecyclePhase["phase"], "idle">;
+export type { CreatePhase } from "@shared/schemas";
 
 const phases = new Map<string, CreatePhase>();
 const subs = new Map<string, Set<() => void>>();

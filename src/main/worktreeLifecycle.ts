@@ -6,15 +6,14 @@
 import type { WebContents } from "electron";
 import { CHANNELS } from "@shared/channels";
 import type {
-  CarryOverEntry,
-  CarryOverReport,
   CleanupError,
   ShigomoriConfig,
   WorktreeCarryOverComplete,
   WorktreeLifecyclePhase,
 } from "@shared/schemas";
 import { applyCarryOver } from "./carryOver";
-import { resolveDefaultBranch } from "./git";
+import { listWorktreeIdentities, resolveDefaultBranch } from "./git";
+import { readGlobalConfig } from "./globalConfig";
 import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
 import { resolveScriptCommand } from "./scriptCommand";
 import {
@@ -22,6 +21,7 @@ import {
   markDeleteInflight,
   startScriptForLifecycle,
 } from "./scripts";
+import { readShigomoriConfig } from "./shigomori";
 
 interface LifecycleWorktree {
   id: string;
@@ -39,11 +39,6 @@ interface LifecycleProject {
 interface CreateArgs {
   project: LifecycleProject;
   worktree: LifecycleWorktree;
-  projectBranch: string;
-  config: ShigomoriConfig | null;
-  carryOverEntries: CarryOverEntry[];
-  primaryWorktreePath: string;
-  globalPortPoolEnabled: boolean;
   webContents: WebContents;
 }
 
@@ -93,25 +88,26 @@ async function runStep(args: {
   return { runId, exitCode: await exit };
 }
 
-// Runs in the background after the IPC handler returns. The renderer
-// reflects progress via two channels: WorktreeLifecyclePhase for the
-// banner label, and WorktreeCarryOverComplete for the failure toast.
-// Per-script output flows through the existing ScriptsEvent channel
-// (started/data/exit), which also drives the sidebar activity icon.
+// Fire-and-forget after the create IPC returns. Progress flows back
+// via WorktreeLifecyclePhase + WorktreeCarryOverComplete + the existing
+// ScriptsEvent channel.
 export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
   const projectId = args.project.id;
   const worktreeId = args.worktree.id;
   try {
-    if (args.carryOverEntries.length > 0) {
+    const config = await readShigomoriConfig(projectId).catch(() => null);
+
+    const carryOverEntries = config?.carryOver ?? [];
+    if (carryOverEntries.length > 0) {
       emitPhase(args.webContents, {
         projectId,
         worktreeId,
         phase: "carryOver",
       });
-      const report: CarryOverReport = await applyCarryOver(
-        args.primaryWorktreePath,
+      const report = await applyCarryOver(
+        args.project.path,
         args.worktree.path,
-        args.carryOverEntries,
+        carryOverEntries,
       );
       emitCarryOverComplete(args.webContents, {
         projectId,
@@ -120,16 +116,26 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
       });
     }
 
-    const defaultBranch = await resolveDefaultBranch(
-      args.project.path,
-      args.config?.defaultBranch,
-    ).catch(() => "");
-
     const setupCommand = resolveScriptCommand(
       "setup",
-      args.config,
+      config,
       args.worktree.path,
     );
+    const portPoolNeeded = await willRunPortPoolProvision(args.worktree.path);
+
+    if (!setupCommand && !portPoolNeeded) return;
+
+    // Scripts need projectBranch (for $SHIGOMORI_PROJECT_BRANCH) and the
+    // resolved default branch (for $SHIGOMORI_DEFAULT_BRANCH). Skip both
+    // reads when no script will run.
+    const [identities, defaultBranch] = await Promise.all([
+      listWorktreeIdentities(projectId, args.project.path),
+      resolveDefaultBranch(args.project.path, config?.defaultBranch).catch(
+        () => "",
+      ),
+    ]);
+    const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+
     if (setupCommand) {
       emitPhase(args.webContents, { projectId, worktreeId, phase: "setup" });
       await runStep({
@@ -138,42 +144,48 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         slot: { kind: "setup" },
         worktree: args.worktree,
         project: args.project,
-        projectBranch: args.projectBranch,
+        projectBranch,
         defaultBranch,
         webContents: args.webContents,
       });
     }
 
-    if (args.globalPortPoolEnabled) {
-      const [installed, hasConfig] = await Promise.all([
-        isPortPoolInstalled(),
-        isPortPoolConfigured(args.worktree.path),
-      ]);
-      if (installed && hasConfig) {
-        emitPhase(args.webContents, {
-          projectId,
-          worktreeId,
-          phase: "portPoolProvision",
-        });
-        await runStep({
-          command: resolveScriptCommand(
-            "port-pool-provision",
-            args.config,
-            args.worktree.path,
-          ),
-          scriptName: "port-pool-provision",
-          slot: { kind: "portPool", phase: "provision" },
-          worktree: args.worktree,
-          project: args.project,
-          projectBranch: args.projectBranch,
-          defaultBranch,
-          webContents: args.webContents,
-        });
-      }
+    if (portPoolNeeded) {
+      emitPhase(args.webContents, {
+        projectId,
+        worktreeId,
+        phase: "portPoolProvision",
+      });
+      await runStep({
+        command: resolveScriptCommand(
+          "port-pool-provision",
+          config,
+          args.worktree.path,
+        ),
+        scriptName: "port-pool-provision",
+        slot: { kind: "portPool", phase: "provision" },
+        worktree: args.worktree,
+        project: args.project,
+        projectBranch,
+        defaultBranch,
+        webContents: args.webContents,
+      });
     }
   } finally {
     emitPhase(args.webContents, { projectId, worktreeId, phase: "idle" });
   }
+}
+
+async function willRunPortPoolProvision(
+  worktreePath: string,
+): Promise<boolean> {
+  const global = await readGlobalConfig();
+  if (global.portPool !== true) return false;
+  const [installed, hasConfig] = await Promise.all([
+    isPortPoolInstalled(),
+    isPortPoolConfigured(worktreePath),
+  ]);
+  return installed && hasConfig;
 }
 
 interface DeleteArgs {
