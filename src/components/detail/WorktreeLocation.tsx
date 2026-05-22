@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowRight, FolderOpen, Info } from "lucide-react";
+import { FolderOpen, Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -26,7 +26,7 @@ import { worktreeBaseFor, worktreePathFor } from "@shared/worktreeLayout";
 interface LayoutOption {
   value: WorktreeLayout;
   label: string;
-  description: string;
+  description?: string;
   recommended?: boolean;
 }
 
@@ -34,7 +34,7 @@ const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "managed-root",
     label: "Managed root",
-    description: "All projects' worktrees live in one place.",
+    description: "Worktrees live under Shigomori's shared root.",
     recommended: true,
   },
   {
@@ -45,7 +45,6 @@ const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "custom",
     label: "Custom path",
-    description: "Pick your own directory. Not recommended.",
   },
 ];
 
@@ -325,9 +324,11 @@ function LocationForm({
                     </span>
                   )}
                 </div>
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {opt.description}
-                </p>
+                {opt.description && (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {opt.description}
+                  </p>
+                )}
                 {previewPath && (
                   <p
                     className="truncate font-mono text-xs text-foreground/70 select-text"
@@ -375,9 +376,8 @@ function LocationForm({
             {toMove.length === 1
               ? "1 worktree will move to the new location. "
               : `${toMove.length} worktrees will move to the new location. `}
-            Uncommitted changes and untracked files are preserved. Open editors,
-            terminals, and IDE projects pointed at the old paths will need to be
-            reopened.
+            Uncommitted changes and untracked files are preserved. Repoint any
+            open editors, terminals, or IDE projects to the new paths.
           </p>
         </div>
       )}
@@ -494,24 +494,22 @@ function RelocateRow({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <span
+        <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 font-mono text-xs">
+          <dt className="text-muted-foreground/60">from</dt>
+          <dd
             className="min-w-0 truncate text-muted-foreground select-text"
             title={worktree.path}
           >
             {fromPath}
-          </span>
-          <ArrowRight
-            aria-hidden
-            className="size-3 shrink-0 text-muted-foreground/60"
-          />
-          <span
+          </dd>
+          <dt className="text-muted-foreground/60">to</dt>
+          <dd
             className="min-w-0 truncate text-foreground/80 select-text"
             title={destination}
           >
             {toPath}
-          </span>
-        </div>
+          </dd>
+        </dl>
         {status.kind === "error" && (
           <p className="text-xs text-destructive select-text">
             {status.message}
