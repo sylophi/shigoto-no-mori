@@ -1335,7 +1335,6 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
     '| convertible-externals | `src/routes/__root.tsx` → `public/icon.svg` | JSX `{ rel: "icon", href: ... }` parser |',
   );
   lines.push("| プロジェクト | `favicon.svg` | unicode cwd |");
-  lines.push();
   lines.push(
     "| no-remote | `static/favicon.svg` | Docusaurus / SvelteKit / Hugo `static/` bucket |",
   );

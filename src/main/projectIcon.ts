@@ -243,6 +243,12 @@ async function loadCache(): Promise<Map<string, IconCacheEntry>> {
 // memoryCache before we serialize. Without this, the fan-out of N
 // parallel IPCs from the sidebar's first render races itself on the
 // index.json tmp + rename and surfaces ENOENT.
+//
+// Errors are logged and swallowed inside the loop because every
+// coalesced caller awaits the same promise: an inner-loop rejection
+// would otherwise propagate to callers whose own mutation already
+// landed on disk in an earlier iteration. The next persist gets a
+// fresh shot anyway.
 let persistInFlight: Promise<void> | null = null;
 let persistPending = false;
 
@@ -253,11 +259,14 @@ function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
   }
   persistInFlight = (async () => {
     try {
-      await atomicWriteJson(indexPath(), Object.fromEntries(map));
-      while (persistPending) {
+      do {
         persistPending = false;
-        await atomicWriteJson(indexPath(), Object.fromEntries(map));
-      }
+        try {
+          await atomicWriteJson(indexPath(), Object.fromEntries(map));
+        } catch (error) {
+          console.warn("[icon-cache] failed to persist index:", error);
+        }
+      } while (persistPending);
     } finally {
       persistInFlight = null;
     }
@@ -265,7 +274,9 @@ function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
   return persistInFlight;
 }
 
-async function buildEntry(sourcePath: string): Promise<IconCacheEntry | null> {
+async function buildEntry(
+  sourcePath: string,
+): Promise<{ entry: IconCacheEntry; bytes: Buffer } | null> {
   let sourceBytes: Buffer;
   let st: Stats;
   try {
@@ -277,12 +288,15 @@ async function buildEntry(sourcePath: string): Promise<IconCacheEntry | null> {
     return null;
   }
   return {
-    sourcePath,
-    sourceHash: sha256(sourceBytes),
-    sourceSize: st.size,
-    sourceMtimeMs: st.mtimeMs,
-    mime: mimeForPath(sourcePath),
-    updatedAt: Date.now(),
+    entry: {
+      sourcePath,
+      sourceHash: sha256(sourceBytes),
+      sourceSize: st.size,
+      sourceMtimeMs: st.mtimeMs,
+      mime: mimeForPath(sourcePath),
+      updatedAt: Date.now(),
+    },
+    bytes: sourceBytes,
   };
 }
 
@@ -381,12 +395,11 @@ async function readProjectIconInner(
   const resolved = await resolveIconPath(projectPath);
   if (!resolved) return null;
 
-  const entry = await buildEntry(resolved);
-  if (!entry) return null;
-  cache.set(projectPath, entry);
+  const built = await buildEntry(resolved);
+  if (!built) return null;
+  cache.set(projectPath, built.entry);
   await persistCache(cache);
-  const bytes = await readFile(entry.sourcePath);
-  return { mime: entry.mime, base64: bytes.toString("base64") };
+  return { mime: built.entry.mime, base64: built.bytes.toString("base64") };
 }
 
 export async function forgetProjectIcon(projectPath: string): Promise<void> {
