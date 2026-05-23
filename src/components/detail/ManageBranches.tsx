@@ -228,7 +228,6 @@ function BranchRow({
   const del = useDeleteBranch();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(name);
-  const [needsForce, setNeedsForce] = useState(false);
   const checkedOut = !!worktree;
 
   const commitRename = () => {
@@ -247,22 +246,6 @@ function BranchRow({
           setDraft(name);
         },
       },
-    );
-  };
-
-  const handleDelete = () => {
-    del.mutate(
-      { projectId, name, force: false },
-      {
-        onError: () => setNeedsForce(true),
-      },
-    );
-  };
-
-  const handleForceDelete = () => {
-    del.mutate(
-      { projectId, name, force: true },
-      { onSuccess: () => setNeedsForce(false) },
     );
   };
 
@@ -319,60 +302,29 @@ function BranchRow({
 
       {!editing && (
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          {needsForce ? (
-            <>
-              <span className="px-2 text-xs text-destructive select-text">
-                {del.error?.message ?? "Has unmerged commits."}
-              </span>
-              <Button
-                size="xs"
-                variant="ghost"
-                onClick={() => {
-                  setNeedsForce(false);
-                  del.reset();
-                }}
-                disabled={del.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                size="xs"
-                variant="ghost"
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={handleForceDelete}
-                disabled={del.isPending}
-              >
-                <Trash2 />
-                {del.isPending ? "Deleting…" : "Force delete"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                aria-label={`Rename ${name}`}
-                title="Rename"
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <Pencil className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={checkedOut || del.isPending}
-                aria-label={`Delete ${name}`}
-                title={
-                  checkedOut
-                    ? "Switch to a different branch in this worktree first"
-                    : "Delete"
-                }
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            aria-label={`Rename ${name}`}
+            title="Rename"
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => del.mutate({ projectId, name })}
+            disabled={checkedOut || del.isPending}
+            aria-label={`Delete ${name}`}
+            title={
+              checkedOut
+                ? "Switch to a different branch in this worktree first"
+                : "Delete"
+            }
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+          >
+            <Trash2 className="size-3.5" />
+          </button>
         </div>
       )}
 

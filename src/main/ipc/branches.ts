@@ -36,10 +36,9 @@ export function registerBranchHandlers(): void {
   ipcMain.handle(
     CHANNELS.BranchesDelete,
     async (_event, rawPayload: unknown): Promise<void> => {
-      const { projectId, name, force } =
-        DeleteBranchPayloadSchema.parse(rawPayload);
+      const { projectId, name } = DeleteBranchPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
-      await deleteAnyLocalBranch(project.path, name, force);
+      await deleteAnyLocalBranch(project.path, name);
     },
   );
 }

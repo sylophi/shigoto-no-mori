@@ -279,7 +279,6 @@ export const RenameAnyBranchPayloadSchema = z.object({
 export const DeleteBranchPayloadSchema = z.object({
   projectId: z.string(),
   name: z.string().min(1),
-  force: z.boolean().default(false),
 });
 
 // Filesystem browser used by the Add Project palette.
