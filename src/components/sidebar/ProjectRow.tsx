@@ -36,6 +36,10 @@ interface ProjectRowProps {
   expanded: boolean;
   onToggle: () => void;
   arrangeMode: boolean;
+  // True while the cursor is anywhere in this project's region in the
+  // sidebar (header row or any of its child worktree rows). Drives the
+  // visibility of the inline action buttons.
+  isHovered: boolean;
 }
 
 export function ProjectRow({
@@ -43,6 +47,7 @@ export function ProjectRow({
   expanded,
   onToggle,
   arrangeMode,
+  isHovered,
 }: ProjectRowProps) {
   const {
     attributes,
@@ -110,7 +115,7 @@ export function ProjectRow({
         className={cn("relative rounded-md", isDragging && "opacity-0")}
         {...attributes}
       >
-        <div className="group flex items-center gap-0.5 py-0.5">
+        <div className="flex items-center gap-0.5 py-0.5">
           <ProjectHeader
             project={project}
             missing
@@ -126,7 +131,10 @@ export function ProjectRow({
                     ref={triggerRef}
                     type="button"
                     aria-label={`More actions for ${project.name}`}
-                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                    className={cn(
+                      "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100",
+                      isHovered ? "opacity-100" : "opacity-0",
+                    )}
                   >
                     <MoreHorizontal className="size-3.5" />
                   </button>
@@ -158,7 +166,7 @@ export function ProjectRow({
       className={cn("relative rounded-md", isDragging && "opacity-0")}
       {...attributes}
     >
-      <div className="group flex items-center gap-0.5 py-0.5">
+      <div className="flex items-center gap-0.5 py-0.5">
         <ProjectHeader
           project={project}
           expanded={expanded}
@@ -184,7 +192,10 @@ export function ProjectRow({
               disabled={create.isPending}
               aria-label={`Quick-create worktree in ${project.name}`}
               title={`Quick-create worktree in ${project.name}`}
-              className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100"
+              className={cn(
+                "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",
+                isHovered ? "opacity-100" : "opacity-0",
+              )}
               aria-busy={create.isPending}
             >
               {create.isPending ? (
@@ -200,7 +211,10 @@ export function ProjectRow({
                     ref={triggerRef}
                     type="button"
                     aria-label={`More actions for ${project.name}`}
-                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:bg-accent hover:text-foreground aria-expanded:opacity-100"
+                    className={cn(
+                      "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100",
+                      isHovered ? "opacity-100" : "opacity-0",
+                    )}
                   >
                     <MoreHorizontal className="size-3.5" />
                   </button>
