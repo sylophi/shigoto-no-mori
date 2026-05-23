@@ -25,6 +25,7 @@ import type {
   ScriptEvent,
   ScriptName,
   ShigomoriConfig,
+  ShigomoriWorktreeData,
   Theme,
   UpdaterState,
   Worktree,
@@ -207,6 +208,23 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ShigomoriRead, { projectId }),
     write: (projectId: string, config: ShigomoriConfig): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.ShigomoriWrite, { projectId, config }),
+  },
+  worktreeData: {
+    read: (
+      projectId: string,
+      worktreeId: string,
+    ): Promise<ShigomoriWorktreeData | null> =>
+      ipcRenderer.invoke(CHANNELS.WorktreeDataRead, { projectId, worktreeId }),
+    write: (
+      projectId: string,
+      worktreeId: string,
+      data: ShigomoriWorktreeData,
+    ): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.WorktreeDataWrite, {
+        projectId,
+        worktreeId,
+        data,
+      }),
   },
   globalConfig: {
     read: (): Promise<GlobalConfig> =>

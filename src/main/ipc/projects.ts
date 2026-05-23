@@ -34,7 +34,11 @@ import {
   PROJECTS_KEY,
 } from "../projects";
 import { forgetProjectIcon, readProjectIcon } from "../projectIcon";
-import { readShigomoriConfig, writeShigomoriConfig } from "../shigomori";
+import {
+  deleteProjectState,
+  readShigomoriConfig,
+  writeShigomoriConfig,
+} from "../shigomori";
 import { writeKey } from "../store";
 
 function saveProjects(projects: Project[]): void {
@@ -118,6 +122,10 @@ export function registerProjectHandlers(): void {
       // Drop the project's icon-cache entry so the cache doesn't grow
       // unbounded as projects come and go.
       if (removed) await forgetProjectIcon(removed.path);
+      // Same idea for the project's on-disk state directory (project.json
+      // + per-worktree files). Best effort -- a stray dir won't break
+      // anything, but we'd rather not leak it across re-adds.
+      await deleteProjectState(id);
     },
   );
 

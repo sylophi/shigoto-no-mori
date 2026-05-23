@@ -49,7 +49,12 @@ import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
 import { killScriptsForWorktree } from "../scripts";
 import { dropShelved, isShelved, setShelved } from "../shelvedWorktrees";
-import { readShigomoriConfig } from "../shigomori";
+import {
+  deleteWorktreeData,
+  readShigomoriConfig,
+  readWorktreeData,
+  writeWorktreeData,
+} from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
 import { pruneEmptyManagedParents } from "../worktreePaths";
 
@@ -162,8 +167,10 @@ export function registerWorktreeHandlers(): void {
       // unmanageable child until app quit. Matches the delete handler.
       await killScriptsForWorktree(worktreeId);
       // The id is path-derived, so the relocate changes it; carry the
-      // shelf flag forward to the new id and clear the stale entry.
+      // shelf flag and per-worktree state forward to the new id and
+      // clear the stale entries.
       const carryShelved = isShelved(worktreeId);
+      const carryData = await readWorktreeData(project.id, worktreeId);
       await relocateWorktree(project.path, target.path, destinationPath);
       // Sweep the old parent dir if it's one we own (managed root's
       // per-project subdir, or the in-project .shigomori scaffolding).
@@ -175,6 +182,10 @@ export function registerWorktreeHandlers(): void {
       if (carryShelved) {
         dropShelved(worktreeId);
         setShelved(newId, true);
+      }
+      if (carryData) {
+        await writeWorktreeData(project.id, newId, carryData);
+        await deleteWorktreeData(project.id, worktreeId);
       }
       // Everything we need for the moved identity is already known:
       // the id is path-derived, branch/detached survive the move, and we
@@ -278,6 +289,10 @@ export function registerWorktreeHandlers(): void {
       // Drop any lingering shelf state for this id so a future
       // worktree at the same path doesn't inherit it.
       dropShelved(worktreeId);
+      // Same idea for per-worktree state (notes etc.) -- the id is
+      // path-derived, but we still drop the file so a stale entry can't
+      // resurface if the path is ever reused.
+      await deleteWorktreeData(project.id, worktreeId);
       return { ok: true };
     },
   );

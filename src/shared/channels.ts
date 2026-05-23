@@ -30,6 +30,8 @@ export const CHANNELS = {
   BranchesRename: "branches:rename",
   BranchesDelete: "branches:delete",
   ShigomoriRead: "shigomori:read",
+  WorktreeDataRead: "worktreeData:read",
+  WorktreeDataWrite: "worktreeData:write",
   ScriptsRun: "scripts:run",
   ScriptsCancel: "scripts:cancel",
   ScriptsEvent: "scripts:event",
