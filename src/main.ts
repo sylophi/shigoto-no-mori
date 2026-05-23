@@ -13,6 +13,7 @@ import {
   killAllScripts,
   killScriptsForWorktree,
   markShuttingDown,
+  signalAllScriptsBestEffort,
 } from "./main/scripts";
 import { applyUserShellPath } from "./main/shellPath";
 import { isInstallingUpdate, startUpdater } from "./main/updater";
@@ -111,12 +112,20 @@ app.on("window-all-closed", () => {
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
-  // An update-triggered quit needs to flow through naturally so
-  // Squirrel's ShipIt helper sees the parent PID die and can swap
-  // bundles. Skipping cleanup here orphans any running scripts to
-  // launchd for a few seconds until the relaunched app boots; that's
-  // the price of a working update.
-  if (isInstallingUpdate()) return;
+  // An update-triggered quit has to flow through Electron's natural
+  // quit so Squirrel's ShipIt helper detects the parent PID exit and
+  // swaps bundles. Awaiting the full kill chain here would block that
+  // handoff for up to ~1.5s (grace + SIGKILL); instead we fire SIGTERM
+  // to every script's process group synchronously and let the natural
+  // quit window (~100ms) give well-behaved scripts a chance to clean
+  // up. The trade-off vs the normal-quit path: misbehaving children
+  // don't get the SIGKILL fallback and may end up reparented to
+  // launchd. Acceptable for an explicit, user-initiated update.
+  if (isInstallingUpdate()) {
+    markShuttingDown();
+    signalAllScriptsBestEffort("SIGTERM");
+    return;
+  }
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
