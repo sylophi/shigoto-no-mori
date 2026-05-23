@@ -30,6 +30,22 @@ export const PullRequestSchema = z.object({
   isDraft: z.boolean(),
 });
 
+// Field-by-field equality. Used to gate cache write-throughs and sweep
+// broadcasts so unchanged PRs don't notify observers. Update if
+// PullRequestSchema gains a field that affects the UI.
+export function pullRequestsEqual(
+  a: z.infer<typeof PullRequestSchema>,
+  b: z.infer<typeof PullRequestSchema>,
+): boolean {
+  return (
+    a.number === b.number &&
+    a.state === b.state &&
+    a.isDraft === b.isDraft &&
+    a.title === b.title &&
+    a.url === b.url
+  );
+}
+
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string(),

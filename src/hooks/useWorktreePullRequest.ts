@@ -1,5 +1,10 @@
-import { useQuery, type useQueryClient } from "@tanstack/react-query";
-import type { PullRequest } from "@shared/schemas";
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
+import { pullRequestsEqual, type PullRequest } from "@shared/schemas";
+import { projectPullRequestsKey } from "./useProjectPullRequests";
 
 const WORKTREE_PR_KEY_PREFIX = ["githubCli", "worktreePullRequest"] as const;
 
@@ -19,13 +24,50 @@ export function invalidateAllWorktreePullRequests(
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
 // opening a worktree feels instant; App.tsx invalidates it explicitly on
 // window focus and on git refs changing, so we opt out of TanStack's
-// stale-gated focus refetch path.
+// stale-gated focus refetch path. Silent on error to match the sweep's
+// swallow behavior -- a transient gh failure shouldn't toast.
 export function useWorktreePullRequest(projectId: string, branch: string) {
+  const queryClient = useQueryClient();
   return useQuery<PullRequest | null>({
     queryKey: worktreePullRequestKey(projectId, branch),
-    queryFn: () =>
-      window.api.githubCli.worktreePullRequest({ projectId, branch }),
+    queryFn: async () => {
+      const pr = await window.api.githubCli.worktreePullRequest({
+        projectId,
+        branch,
+      });
+      // Without this, the sidebar dot waits up to a full sweep tick to
+      // catch a PR merging on GitHub even after the user opened the
+      // worktree. The IPC throws on transient gh failure, so we only
+      // reach here with ground truth -- never clobber the project map
+      // on a network hiccup. The sweep in main/fetch.ts still covers
+      // branches the user hasn't visited.
+      mirrorIntoProjectMap(queryClient, projectId, branch, pr);
+      return pr;
+    },
     refetchOnWindowFocus: false,
-    meta: { errorTitle: "Couldn't load pull request" },
+    meta: { silentError: true },
   });
+}
+
+function mirrorIntoProjectMap(
+  queryClient: QueryClient,
+  projectId: string,
+  branch: string,
+  pr: PullRequest | null,
+): void {
+  queryClient.setQueryData<Record<string, PullRequest>>(
+    projectPullRequestsKey(projectId),
+    (prev) => {
+      if (!prev) return prev;
+      const current = prev[branch];
+      if (pr === null) {
+        if (current === undefined) return prev;
+        const next = { ...prev };
+        delete next[branch];
+        return next;
+      }
+      if (current && pullRequestsEqual(current, pr)) return prev;
+      return { ...prev, [branch]: pr };
+    },
+  );
 }
