@@ -61,7 +61,8 @@ export const WorktreeSchema = z.object({
   divergedClean: z.boolean(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.
-  // Bounded by the backend (currently 3) so the IPC payload stays small.
+  // Bounded by the backend (currently 4) so the IPC payload stays
+  // small: 3 for the teaser plus 1 extra to signal "more available".
   recentCommits: z.array(CommitSummarySchema),
   port: z.number().int().positive().optional(),
   // The repo's primary checkout. Shown in the UI for context but never
@@ -280,6 +281,15 @@ export const CommitDiffPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   hash: z.string().min(1),
+});
+
+export const ListCommitsPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  // `git log --skip=N -n COUNT`; the renderer pages through with skip
+  // = pageIndex * count and stops when fewer than `count` come back.
+  skip: z.number().int().nonnegative(),
+  count: z.number().int().positive().max(200),
 });
 
 // Branch operations against the project's primary repo (not tied to any

@@ -17,6 +17,7 @@ export const CHANNELS = {
   WorktreesCheckoutBranch: "worktrees:checkoutBranch",
   WorktreesDiff: "worktrees:diff",
   WorktreesCommitDiff: "worktrees:commitDiff",
+  WorktreesListCommits: "worktrees:listCommits",
   WorktreesPush: "worktrees:push",
   WorktreesPull: "worktrees:pull",
   WorktreesPushForce: "worktrees:pushForce",

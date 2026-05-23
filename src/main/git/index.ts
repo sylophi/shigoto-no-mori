@@ -13,6 +13,7 @@ export {
   deriveProjectName,
   describeWorktree,
   findWorktreeIdentityOrThrow,
+  listCommits,
   listWorktreeIdentities,
   listWorktrees,
   pickAvailableWorktreeName,

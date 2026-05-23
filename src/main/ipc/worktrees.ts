@@ -6,11 +6,13 @@ import {
   CheckoutBranchPayloadSchema,
   CleanupErrorSchema,
   CommitDiffPayloadSchema,
+  type CommitSummary,
   ConvertExternalWorktreePayloadSchema,
   type CreateWorktreeResult,
   CreateWorktreePayloadSchema,
   type DeleteWorktreeResult,
   DeleteWorktreePayloadSchema,
+  ListCommitsPayloadSchema,
   ListWorktreesPayloadSchema,
   type Project,
   RelocateWorktreePayloadSchema,
@@ -27,6 +29,7 @@ import {
   findWorktreeIdentityOrThrow,
   getCommitDiff,
   getWorktreeDiff,
+  listCommits,
   listWorktreeIdentities,
   listWorktrees,
   overwriteFromUpstream,
@@ -334,6 +337,21 @@ export function registerWorktreeHandlers(): void {
         worktreeId,
       );
       return getCommitDiff(target.path, hash);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesListCommits,
+    async (_event, rawPayload: unknown): Promise<CommitSummary[]> => {
+      const { projectId, worktreeId, skip, count } =
+        ListCommitsPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      return listCommits(target.path, { skip, count });
     },
   );
 

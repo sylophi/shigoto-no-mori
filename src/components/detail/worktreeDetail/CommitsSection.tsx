@@ -1,13 +1,20 @@
-import { ChevronRight, FileDiff } from "lucide-react";
+import { useState } from "react";
+import { ChevronRight, FileDiff, History } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { formatRelativeTime } from "@/lib/relativeTime";
-import type { CommitSummary, Worktree } from "@shared/schemas";
+import type { Worktree } from "@shared/schemas";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
+import { BranchHistoryDrawer } from "./BranchHistoryDrawer";
+import { CommitRow } from "./CommitRow";
 
 export function CommitsSection({ worktree }: { worktree: Worktree }) {
   const navigate = useNavigate();
-  const commits = worktree.recentCommits;
+  // The backend hands back up to 4 rows: 3 for the teaser plus 1 extra
+  // we use as the "more available" probe. Slicing here keeps the
+  // teaser's visible shape decoupled from that probe.
+  const commits = worktree.recentCommits.slice(0, 3);
+  const showAll = worktree.recentCommits.length > 3;
+  const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -47,88 +54,25 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           ))}
         </ul>
       )}
-    </section>
-  );
-}
-
-function CommitStats({
-  additions,
-  deletions,
-}: {
-  additions: number;
-  deletions: number;
-}) {
-  // emerald-500 / rose-500 read close to Pierre's dark/light addition
-  // and deletion hues without requiring shadow-DOM theme variables.
-  return (
-    <span
-      aria-label={`${additions} additions, ${deletions} deletions`}
-      title={`${additions} additions, ${deletions} deletions`}
-      className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
-    >
-      <span className="text-emerald-500">+{additions}</span>
-      <span className="text-rose-500">−{deletions}</span>
-    </span>
-  );
-}
-
-function CommitRow({
-  worktree,
-  commit,
-}: {
-  worktree: Worktree;
-  commit: CommitSummary;
-}) {
-  const navigate = useNavigate();
-  const onClick = () =>
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
-      params: {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        hash: commit.hash,
-      },
-    });
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title="View this commit's diff"
-      className="-mx-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
-    >
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-        <div className="w-full truncate text-sm">{commit.subject}</div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="font-mono">{commit.hash}</span>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
-          </span>
-          <span>{commit.author}</span>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
-          </span>
-          <RelativeDate date={commit.date} />
+      {showAll && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            title="Browse full branch history"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            <History aria-hidden className="size-3.5" />
+            Show all
+            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+          </button>
         </div>
-      </div>
-      {(commit.additions > 0 || commit.deletions > 0) && (
-        <CommitStats
-          additions={commit.additions}
-          deletions={commit.deletions}
-        />
       )}
-      <ChevronRight
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground/40"
+      <BranchHistoryDrawer
+        worktree={worktree}
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
       />
-    </button>
-  );
-}
-
-function RelativeDate({ date }: { date: string }) {
-  const value = new Date(date);
-  return (
-    <span title={value.toLocaleString()}>
-      {formatRelativeTime(value.getTime())}
-    </span>
+    </section>
   );
 }
