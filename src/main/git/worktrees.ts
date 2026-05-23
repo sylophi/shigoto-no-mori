@@ -115,43 +115,50 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
   return { ahead, behind, hasUpstream, divergedClean };
 }
 
-async function getRecentCommits(
+// `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
+// on its own line after each commit's formatted output. A SOH (\x01)
+// sentinel between records keeps parsing robust against subjects that
+// contain tabs or newlines.
+const LOG_SENTINEL = "\x01";
+const LOG_FORMAT = `${LOG_SENTINEL}%h%x09%an%x09%aI%x09%s`;
+
+function parseLog(stdout: string): CommitSummary[] {
+  const commits: CommitSummary[] = [];
+  for (const chunk of stdout.split(LOG_SENTINEL)) {
+    if (!chunk) continue;
+    const newlineAt = chunk.indexOf("\n");
+    const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
+    const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
+    const [hash, author, date, ...subjectParts] = header.split("\t");
+    if (!hash) continue;
+    const insMatch = /(\d+) insertions?\(\+\)/.exec(stats);
+    const delMatch = /(\d+) deletions?\(-\)/.exec(stats);
+    commits.push({
+      hash,
+      author: author ?? "",
+      date: date ?? "",
+      subject: subjectParts.join("\t"),
+      additions: insMatch ? Number(insMatch[1]) : 0,
+      deletions: delMatch ? Number(delMatch[1]) : 0,
+    });
+  }
+  return commits;
+}
+
+// Paginated branch history. `skip` walks back through `git log HEAD` so
+// the renderer's infinite-scroll drawer can page in chunks; the teaser
+// in the detail page passes skip=0 with a small count. Returns [] on
+// any git failure (empty repo, detached state mid-rebase) so callers
+// don't have to fork on error.
+export async function listCommits(
   worktreePath: string,
-  count: number,
+  opts: { skip: number; count: number },
 ): Promise<CommitSummary[]> {
   try {
-    // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
-    // on its own line after each commit's formatted output. A SOH (\x01)
-    // sentinel between records keeps parsing robust against subjects that
-    // contain tabs or newlines.
-    const SENTINEL = "\x01";
-    const fmt = `${SENTINEL}%h%x09%an%x09%aI%x09%s`;
-    const stdout = await run(worktreePath, [
-      "log",
-      `-${count}`,
-      `--pretty=format:${fmt}`,
-      "--shortstat",
-    ]);
-    const commits: CommitSummary[] = [];
-    for (const chunk of stdout.split(SENTINEL)) {
-      if (!chunk) continue;
-      const newlineAt = chunk.indexOf("\n");
-      const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
-      const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
-      const [hash, author, date, ...subjectParts] = header.split("\t");
-      if (!hash) continue;
-      const insMatch = /(\d+) insertions?\(\+\)/.exec(stats);
-      const delMatch = /(\d+) deletions?\(-\)/.exec(stats);
-      commits.push({
-        hash,
-        author: author ?? "",
-        date: date ?? "",
-        subject: subjectParts.join("\t"),
-        additions: insMatch ? Number(insMatch[1]) : 0,
-        deletions: delMatch ? Number(delMatch[1]) : 0,
-      });
-    }
-    return commits;
+    const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
+    args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
+    const stdout = await run(worktreePath, args);
+    return parseLog(stdout);
   } catch {
     return [];
   }
@@ -212,10 +219,11 @@ export async function listWorktreeIdentities(
     });
 }
 
-// How many recent commits to surface on the worktree detail page. Kept
-// small so the IPC payload stays tight; revisit if the UI grows a
-// "full history" view.
-const RECENT_COMMITS_COUNT = 3;
+// How many recent commits to surface on the worktree detail page. The
+// teaser renders the first 3; the 4th (if present) is what tells the
+// renderer there's more history to scroll, so it can show the "Show
+// all" affordance without a second round trip.
+const RECENT_COMMITS_COUNT = 4;
 
 async function buildWorktree(
   identity: WorktreeIdentity,
@@ -223,7 +231,7 @@ async function buildWorktree(
 ): Promise<Worktree> {
   const [changedCount, recentCommits, remoteSync] = await Promise.all([
     getChangedCount(identity.path),
-    getRecentCommits(identity.path, RECENT_COMMITS_COUNT),
+    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
     getRemoteSync(identity.path),
   ]);
   return {

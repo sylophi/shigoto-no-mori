@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
 import type {
   BranchList,
+  CommitSummary,
   CreateWorktreeResult,
   DeleteWorktreeResult,
   DetectedLauncher,
@@ -117,6 +118,13 @@ const api = {
       hash: string;
     }): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.WorktreesCommitDiff, input),
+    listCommits: (input: {
+      projectId: string;
+      worktreeId: string;
+      skip: number;
+      count: number;
+    }): Promise<CommitSummary[]> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesListCommits, input),
     push: (input: {
       projectId: string;
       worktreeId: string;
