@@ -10,6 +10,7 @@ import {
 } from "@shared/schemas";
 import {
   getGithubCliReadiness,
+  getPullRequestDiff,
   getRepoMergeConfig,
   getWorktreePullRequest,
   listProjectPullRequests,
@@ -24,6 +25,11 @@ const ProjectPayloadSchema = z.object({
 const WorktreePullRequestPayloadSchema = z.object({
   projectId: z.string(),
   branch: z.string(),
+});
+
+const PullRequestDiffPayloadSchema = z.object({
+  projectId: z.string(),
+  number: z.number().int().positive(),
 });
 
 export function registerGithubCliHandlers(): void {
@@ -79,6 +85,16 @@ export function registerGithubCliHandlers(): void {
         number,
         method,
       });
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.GithubCliPullRequestDiff,
+    async (_event, rawPayload: unknown): Promise<string> => {
+      const { projectId, number } =
+        PullRequestDiffPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return getPullRequestDiff({ cwd: project.path, number });
     },
   );
 }

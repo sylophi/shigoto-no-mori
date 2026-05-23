@@ -234,6 +234,12 @@ const GhPrDetailSchema = z.object({
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
+  baseRefName: z.string(),
+  author: z.object({ login: z.string().optional() }).passthrough().nullish(),
+  updatedAt: z.string(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  changedFiles: z.number().int().nonnegative(),
   statusCheckRollup: z.array(StatusCheckRollupItemSchema).default([]),
 });
 
@@ -305,7 +311,7 @@ async function runGhPrListDetail(
       "--limit",
       "1",
       "--json",
-      "number,url,title,state,isDraft,mergeStateStatus,statusCheckRollup",
+      "number,url,title,state,isDraft,mergeStateStatus,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
     ],
     { cwd },
   );
@@ -330,6 +336,12 @@ async function runGhPrListDetail(
     state: first.state,
     isDraft: first.isDraft,
     mergeState: first.mergeStateStatus as PullRequestMergeState,
+    baseRefName: first.baseRefName,
+    authorLogin: first.author?.login ?? "ghost",
+    updatedAt: first.updatedAt,
+    additions: first.additions,
+    deletions: first.deletions,
+    changedFiles: first.changedFiles,
     checks: summarizeChecks(checkList),
     checkList,
   };
@@ -381,6 +393,34 @@ export async function getRepoMergeConfig(
     return value;
   } catch {
     return null;
+  }
+}
+
+// Streams `gh pr diff <num>` as plain unified diff text, ready to hand
+// to DiffView. Throws on gh failure so the renderer can show the error
+// inline (vs. silently rendering an empty diff).
+export async function getPullRequestDiff(opts: {
+  cwd: string;
+  number: number;
+}): Promise<string> {
+  if (!(await ghReady())) {
+    throw new Error("GitHub CLI isn't ready");
+  }
+  try {
+    // PR diffs are usually small but can run into the MB range; bump the
+    // buffer so a sprawling PR doesn't ENOBUFS.
+    const { stdout } = await execFileP(
+      "gh",
+      ["pr", "diff", String(opts.number)],
+      { cwd: opts.cwd, maxBuffer: 32 * 1024 * 1024 },
+    );
+    return stdout;
+  } catch (err) {
+    const message =
+      err instanceof Error && err.message
+        ? trimGhError(err.message)
+        : "gh pr diff failed";
+    throw new Error(message, { cause: err });
   }
 }
 

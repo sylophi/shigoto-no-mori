@@ -96,6 +96,17 @@ export type PullRequestChecksSummary = z.infer<
 // extra fields make `gh pr list` materially slower.
 export const PullRequestDetailSchema = PullRequestSchema.extend({
   mergeState: PullRequestMergeStateSchema,
+  // The PR's target branch (e.g. "main"). Shown in the section so the
+  // user can see what they're merging into without leaving the app.
+  baseRefName: z.string(),
+  // GitHub login of whoever opened the PR. Worktrees may be checked
+  // out by teammates' branches, so the author isn't always the local user.
+  authorLogin: z.string(),
+  // ISO 8601 timestamp of the PR's last update (commit, comment, etc.).
+  updatedAt: z.string(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+  changedFiles: z.number().int().nonnegative(),
   checks: PullRequestChecksSummarySchema,
   checkList: z.array(PullRequestCheckSchema),
 });

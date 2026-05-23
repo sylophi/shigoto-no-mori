@@ -322,6 +322,11 @@ const api = {
       method: MergeMethod;
     }): Promise<void> =>
       ipcRenderer.invoke(CHANNELS.GithubCliMergePullRequest, input),
+    pullRequestDiff: (input: {
+      projectId: string;
+      number: number;
+    }): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliPullRequestDiff, input),
     onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GithubCliProjectPullRequestsRefreshed,
     ),

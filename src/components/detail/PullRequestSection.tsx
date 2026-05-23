@@ -7,9 +7,11 @@ import {
   CircleDashed,
   CircleSlash,
   ExternalLink,
+  FileDiff,
   Loader2,
   MinusCircle,
 } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -25,6 +27,7 @@ import { useRepoMergeConfig } from "@/hooks/useRepoMergeConfig";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
 import { useWorktreePullRequest } from "@/hooks/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/relativeTime";
 import { notifyError } from "@/lib/toast";
 import {
   MERGE_METHOD_LABEL,
@@ -49,18 +52,16 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
     worktree.projectId,
     worktree.branch,
   );
-
   if (worktree.detached || !pr) return null;
-
   return (
     <section className="space-y-3">
       <SectionHeading>Pull request</SectionHeading>
-      <PullRequestCard worktree={worktree} pr={pr} />
+      <PullRequestBody worktree={worktree} pr={pr} />
     </section>
   );
 }
 
-function PullRequestCard({
+function PullRequestBody({
   worktree,
   pr,
 }: {
@@ -70,13 +71,20 @@ function PullRequestCard({
   const { data: repoConfig } = useRepoMergeConfig(worktree.projectId);
   const { data: shigomori } = useShigomoriConfig(worktree.projectId);
   const isOpen = pr.state === "OPEN";
+  const hasStats = pr.changedFiles > 0;
+  const hasChecks = pr.checks.total > 0;
 
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-card/40 p-4">
-      <PrHeader pr={pr} />
-      {isOpen && pr.checks.total > 0 && <ChecksRow pr={pr} />}
+    <div className="space-y-4">
+      <PullRequestIdentity pr={pr} />
+      {(hasStats || (isOpen && hasChecks)) && (
+        <div className="-mx-2 space-y-0.5">
+          {hasStats && <ChangesRow worktree={worktree} pr={pr} />}
+          {isOpen && hasChecks && <ChecksRow pr={pr} />}
+        </div>
+      )}
       {isOpen && (
-        <MergeRow
+        <MergeBox
           worktree={worktree}
           pr={pr}
           repoConfig={repoConfig ?? null}
@@ -87,44 +95,136 @@ function PullRequestCard({
   );
 }
 
-function PrHeader({ pr }: { pr: PullRequestDetail }) {
-  const { Icon, tone, label } = describePullRequest(pr);
+// Title row + meta. The left side describes the PR's state and where
+// it's going; the right side carries lifecycle metadata (author + when
+// it was last touched). Splitting them keeps each cluster grammatical.
+function PullRequestIdentity({ pr }: { pr: PullRequestDetail }) {
+  const updatedAt = new Date(pr.updatedAt);
   return (
-    <div className="flex min-w-0 items-start gap-3">
-      <span
-        className={cn(
-          "tabular inline-flex shrink-0 items-center gap-1.5 self-start rounded-md px-2 py-1 text-xs whitespace-nowrap",
-          PILL_TONE_CLASSES[tone],
-        )}
-        title={label}
-      >
-        <Icon aria-hidden className="size-3.5" />
-        {STATE_LABEL[pr.state]}
-        {pr.isDraft && pr.state === "OPEN" && " · Draft"}
-      </span>
-      <a
-        href={pr.url}
-        onClick={(e) => {
-          e.preventDefault();
-          window.api.shell
-            .openExternal(pr.url)
-            .catch((err) => notifyError("Couldn't open pull request", err));
-        }}
-        className="group/title inline-flex min-w-0 flex-1 items-baseline gap-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-ring"
-        title={`Open #${pr.number} on GitHub`}
-      >
-        <span className="truncate text-sm font-medium text-foreground group-hover/title:text-primary group-hover/title:underline">
-          {pr.title}
-        </span>
-        <span className="tabular shrink-0 text-xs text-muted-foreground">
+    <div className="space-y-1.5">
+      <h3 className="text-lg leading-snug font-medium select-text">
+        <PullRequestTitleLink pr={pr} />{" "}
+        <span className="font-normal text-muted-foreground/60">
           #{pr.number}
         </span>
-        <ExternalLink
-          aria-hidden
-          className="size-3 shrink-0 self-center text-muted-foreground/60 opacity-0 transition-opacity group-hover/title:opacity-100"
-        />
-      </a>
+      </h3>
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <PullRequestStatePill pr={pr} />
+          <span>into</span>
+          <BranchChip name={pr.baseRefName} />
+        </div>
+        <span className="select-text" title={updatedAt.toLocaleString()}>
+          Opened by{" "}
+          <span className="text-foreground/80">@{pr.authorLogin}</span>, updated{" "}
+          {formatRelativeTime(updatedAt.getTime())}
+        </span>
+      </div>
     </div>
+  );
+}
+
+function PullRequestTitleLink({ pr }: { pr: PullRequestDetail }) {
+  return (
+    <a
+      href={pr.url}
+      onClick={(e) => {
+        e.preventDefault();
+        openPullRequest(pr.url);
+      }}
+      className="rounded text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+      title={`Open #${pr.number} on GitHub`}
+    >
+      {pr.title}
+    </a>
+  );
+}
+
+function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
+  const { Icon, tone, label } = describePullRequest(pr);
+  const stateLabel =
+    pr.isDraft && pr.state === "OPEN" ? "Draft" : STATE_LABEL[pr.state];
+  return (
+    <a
+      href={pr.url}
+      onClick={(e) => {
+        e.preventDefault();
+        openPullRequest(pr.url);
+      }}
+      title={`Open ${label} on GitHub`}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors focus-visible:outline-2",
+        STATE_PILL_CLASSES[tone],
+      )}
+    >
+      <Icon aria-hidden className="size-3.5" />
+      {stateLabel}
+    </a>
+  );
+}
+
+// Inline code-style chip for branch names, matching GitHub's PR header
+// chips. Used in the identity meta line and inside the merge box.
+function BranchChip({ name }: { name: string }) {
+  return (
+    <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground select-text">
+      {name}
+    </code>
+  );
+}
+
+function ChangesRow({
+  worktree,
+  pr,
+}: {
+  worktree: Worktree;
+  pr: PullRequestDetail;
+}) {
+  const navigate = useNavigate();
+  const fileNoun = pr.changedFiles === 1 ? "file" : "files";
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        void navigate({
+          to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+          params: { projectId: worktree.projectId, worktreeId: worktree.id },
+        })
+      }
+      title="View pull request diff"
+      className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <FileDiff
+        aria-hidden
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
+      <span className="flex-1 text-foreground">
+        {pr.changedFiles} {fileNoun} changed
+      </span>
+      <DiffStats additions={pr.additions} deletions={pr.deletions} />
+      <ChevronRight
+        aria-hidden
+        className="size-3.5 shrink-0 text-muted-foreground/40"
+      />
+    </button>
+  );
+}
+
+function DiffStats({
+  additions,
+  deletions,
+}: {
+  additions: number;
+  deletions: number;
+}) {
+  return (
+    <span
+      aria-label={`${additions} additions, ${deletions} deletions`}
+      className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
+    >
+      <span className="text-emerald-500">+{additions}</span>
+      <span className="text-rose-500">−{deletions}</span>
+    </span>
   );
 }
 
@@ -132,27 +232,33 @@ function ChecksRow({ pr }: { pr: PullRequestDetail }) {
   const [expanded, setExpanded] = useState(false);
   const summary = describeChecks(pr.checks);
   if (!summary) return null;
-
   return (
-    <div className="space-y-2">
+    <>
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className={cn(
-          "tabular inline-flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-muted",
-          CHECK_TONE_TEXT[summary.tone],
-        )}
+        aria-expanded={expanded}
+        title="Toggle check details"
+        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
       >
-        {expanded ? (
-          <ChevronDown aria-hidden className="size-3.5" />
-        ) : (
-          <ChevronRight aria-hidden className="size-3.5" />
-        )}
         <ChecksSummaryIcon tone={summary.tone} />
-        {summary.label}
+        <span className={cn("flex-1", TONE_TEXT[summary.tone])}>
+          {summary.label}
+        </span>
+        {expanded ? (
+          <ChevronDown
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground/40"
+          />
+        ) : (
+          <ChevronRight
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground/40"
+          />
+        )}
       </button>
       {expanded && (
-        <ul className="space-y-0.5 pl-7">
+        <ul className="space-y-0.5 pl-8">
           {pr.checkList.map((check, i) => (
             // oxlint-disable-next-line react/no-array-index-key -- check names aren't unique across providers
             <li key={`${check.name}::${i}`}>
@@ -161,17 +267,22 @@ function ChecksRow({ pr }: { pr: PullRequestDetail }) {
           ))}
         </ul>
       )}
-    </div>
+    </>
   );
 }
 
 function CheckEntry({ check }: { check: PullRequestCheck }) {
   const { Icon, tone } = CHECK_BUCKET_ICON[check.bucket];
-  const Inner = (
+  const isPending = check.bucket === "pending";
+  const Body = (
     <>
       <Icon
         aria-hidden
-        className={cn("size-3.5 shrink-0", CHECK_TONE_TEXT[tone])}
+        className={cn(
+          "size-3 shrink-0",
+          TONE_TEXT[tone],
+          isPending && "animate-spin",
+        )}
       />
       <span className="min-w-0 flex-1 truncate text-foreground">
         {check.name}
@@ -186,8 +297,8 @@ function CheckEntry({ check }: { check: PullRequestCheck }) {
   );
   if (!check.url) {
     return (
-      <div className="flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs">
-        {Inner}
+      <div className="flex items-center gap-1.5 px-1.5 py-0.5 text-xs">
+        {Body}
       </div>
     );
   }
@@ -201,14 +312,14 @@ function CheckEntry({ check }: { check: PullRequestCheck }) {
           .openExternal(url)
           .catch((err) => notifyError("Couldn't open check", err));
       }}
-      className="group/check flex items-center gap-2 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+      className="group/check flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
     >
-      {Inner}
+      {Body}
     </a>
   );
 }
 
-function MergeRow({
+function MergeBox({
   worktree,
   pr,
   repoConfig,
@@ -225,13 +336,11 @@ function MergeRow({
   const mergeState = describeMergeState(pr.mergeState);
 
   if (!primary) {
-    // gh said no merge methods are allowed -- still show the reason so
-    // the user understands why no button is available.
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <CircleSlash aria-hidden className="size-3.5" />
+      <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+        <CircleSlash aria-hidden className="size-3.5 shrink-0" />
         No merge methods are enabled for this repo.
-      </div>
+      </p>
     );
   }
 
@@ -246,36 +355,25 @@ function MergeRow({
         number: pr.number,
         method,
       },
-      {
-        onSuccess: () => reset(),
-      },
+      { onSuccess: () => reset() },
     );
   };
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        <span className="inline-flex items-center gap-2 text-sm">
           <MergeStateIcon tone={mergeState.tone} />
-          <span className={cn(CHECK_TONE_TEXT[mergeState.tone])}>
-            {mergeState.label}
-          </span>
-        </div>
+          <span className={TONE_TEXT[mergeState.tone]}>{mergeState.label}</span>
+        </span>
         <div className="inline-flex items-stretch">
           <Button
             type="button"
             size="sm"
-            variant={armed ? "destructive" : "default"}
+            variant={armed ? "destructive" : "outline"}
             disabled={disabled}
-            onClick={() =>
-              trigger(() => {
-                runMerge(primary);
-              })
-            }
-            className={cn(
-              others.length > 0 &&
-                "rounded-r-none border-r border-r-primary-foreground/20",
-            )}
+            onClick={() => trigger(() => runMerge(primary))}
+            className={cn(others.length > 0 && "rounded-r-none border-r-0")}
           >
             {merge.isPending ? (
               <>
@@ -295,7 +393,7 @@ function MergeRow({
                   <Button
                     type="button"
                     size="sm"
-                    variant="default"
+                    variant="outline"
                     disabled={disabled}
                     aria-label="Choose merge method"
                     className="rounded-l-none px-1.5"
@@ -323,21 +421,30 @@ function MergeRow({
   );
 }
 
+function openPullRequest(url: string): void {
+  window.api.shell
+    .openExternal(url)
+    .catch((err) => notifyError("Couldn't open pull request", err));
+}
+
 const STATE_LABEL: Record<PullRequestDetail["state"], string> = {
   OPEN: "Open",
   MERGED: "Merged",
   CLOSED: "Closed",
 };
 
-const PILL_TONE_CLASSES: Record<PullRequestTone, string> = {
-  emerald: "bg-emerald-500/10 text-emerald-500",
-  violet: "bg-violet-500/10 text-violet-500",
-  rose: "bg-rose-500/10 text-rose-500",
-  slate: "bg-muted text-muted-foreground",
-  amber: "bg-amber-500/10 text-amber-500",
+const STATE_PILL_CLASSES: Record<PullRequestTone, string> = {
+  emerald:
+    "text-emerald-500 hover:bg-emerald-500/10 focus-visible:outline-emerald-500",
+  violet:
+    "text-violet-500 hover:bg-violet-500/10 focus-visible:outline-violet-500",
+  rose: "text-rose-500 hover:bg-rose-500/10 focus-visible:outline-rose-500",
+  slate:
+    "text-muted-foreground hover:bg-muted focus-visible:outline-muted-foreground",
+  amber: "text-amber-500 hover:bg-amber-500/10 focus-visible:outline-amber-500",
 };
 
-const CHECK_TONE_TEXT: Record<PullRequestTone, string> = {
+const TONE_TEXT: Record<PullRequestTone, string> = {
   emerald: "text-emerald-500",
   violet: "text-violet-500",
   rose: "text-rose-500",
@@ -346,13 +453,18 @@ const CHECK_TONE_TEXT: Record<PullRequestTone, string> = {
 };
 
 function ChecksSummaryIcon({ tone }: { tone: PullRequestTone }) {
-  if (tone === "rose") {
-    return <CircleAlert aria-hidden className="size-3.5" />;
-  }
-  if (tone === "amber") {
-    return <Loader2 aria-hidden className="size-3.5 animate-spin" />;
-  }
-  return <CircleCheck aria-hidden className="size-3.5" />;
+  const Icon =
+    tone === "rose" ? CircleAlert : tone === "amber" ? Loader2 : CircleCheck;
+  return (
+    <Icon
+      aria-hidden
+      className={cn(
+        "size-3.5 shrink-0",
+        TONE_TEXT[tone],
+        tone === "amber" && "animate-spin",
+      )}
+    />
+  );
 }
 
 function MergeStateIcon({ tone }: { tone: PullRequestTone }) {
@@ -363,10 +475,7 @@ function MergeStateIcon({ tone }: { tone: PullRequestTone }) {
         ? CircleDashed
         : CircleCheck;
   return (
-    <Icon
-      aria-hidden
-      className={cn("size-3.5 shrink-0", CHECK_TONE_TEXT[tone])}
-    />
+    <Icon aria-hidden className={cn("size-3.5 shrink-0", TONE_TEXT[tone])} />
   );
 }
 

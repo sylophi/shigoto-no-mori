@@ -51,20 +51,16 @@ export function describeMergeState(
     case "CLEAN":
       return { label: "Ready to merge", tone: "emerald", canMerge: true };
     case "HAS_HOOKS":
-      return {
-        label: "Ready to merge (post-merge hooks will run)",
-        tone: "emerald",
-        canMerge: true,
-      };
+      return { label: "Ready to merge", tone: "emerald", canMerge: true };
     case "UNSTABLE":
       return {
-        label: "Mergeable with failing or pending checks",
+        label: "Mergeable, checks not passing",
         tone: "amber",
         canMerge: true,
       };
     case "BEHIND":
       return {
-        label: "Behind base branch — gh will update before merging",
+        label: "Behind base, will update first",
         tone: "amber",
         canMerge: true,
       };
@@ -77,11 +73,7 @@ export function describeMergeState(
     case "DIRTY":
       return { label: "Conflicts with base", tone: "rose", canMerge: false };
     case "DRAFT":
-      return {
-        label: "Draft — mark as ready to merge",
-        tone: "slate",
-        canMerge: false,
-      };
+      return { label: "Draft", tone: "slate", canMerge: false };
     case "UNKNOWN":
       return {
         label: "Mergeable state unknown",
@@ -102,24 +94,21 @@ export function describeChecks(
   summary: PullRequestChecksSummary,
 ): ChecksDescriptor | null {
   if (summary.total === 0) return null;
+  const checks = summary.total === 1 ? "check" : "checks";
   if (summary.failing > 0) {
     return {
-      label: `${summary.failing} failing · ${summary.total} total`,
+      label: `${summary.failing} of ${summary.total} ${checks} failing`,
       tone: "rose",
     };
   }
   if (summary.pending > 0) {
     return {
-      label: `${summary.pending} pending · ${summary.total} total`,
+      label: `${summary.pending} of ${summary.total} ${checks} pending`,
       tone: "amber",
     };
   }
-  const passing = summary.passed + summary.neutral + summary.skipped;
   return {
-    label:
-      passing === summary.total
-        ? `${summary.total} ${summary.total === 1 ? "check" : "checks"} passed`
-        : `${passing} of ${summary.total} passed`,
+    label: `${summary.total} ${checks} passed`,
     tone: "emerald",
   };
 }

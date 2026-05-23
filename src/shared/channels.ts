@@ -48,6 +48,7 @@ export const CHANNELS = {
   GithubCliWorktreePullRequest: "githubCli:worktreePullRequest",
   GithubCliRepoMergeConfig: "githubCli:repoMergeConfig",
   GithubCliMergePullRequest: "githubCli:mergePullRequest",
+  GithubCliPullRequestDiff: "githubCli:pullRequestDiff",
   GithubCliProjectPullRequestsRefreshed:
     "githubCli:projectPullRequestsRefreshed",
   LaunchersDetect: "launchers:detect",
