@@ -27,11 +27,16 @@
 }
 
 .dark {
-  --background: var(--color-neutral-950);
+  /* Canvas is lifted one step above pure-black neutral-950 -- matches
+     the lighter main panel in apps like Codex, and reads less heavy
+     against the vibrancy-blurred sidebar. Card/popover then sit a step
+     above the canvas so dropdowns and the command palette still
+     elevate cleanly. */
+  --background: var(--color-neutral-900);
   --foreground: var(--color-neutral-50);
-  --card: var(--color-neutral-900);
+  --card: oklch(0.245 0 0);
   --card-foreground: var(--color-neutral-50);
-  --popover: var(--color-neutral-900);
+  --popover: oklch(0.245 0 0);
   --popover-foreground: var(--color-neutral-50);
   --primary: var(--color-neutral-200);
   --primary-foreground: var(--color-neutral-900);
@@ -81,13 +86,44 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
   body {
-    @apply bg-background font-sans text-foreground antialiased;
+    /* Stays transparent so the BrowserWindow vibrancy material shows
+       through under the sidebar. The main detail pane paints its own
+       opaque `bg-background`. */
+    background: transparent;
+  }
+  body {
+    @apply font-sans text-foreground antialiased;
     font-feature-settings: "tnum" 1;
     user-select: none;
   }
   .tabular {
     font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Sidebar-scoped token overrides. The aside is the only surface
+   * painted on top of the macOS vibrancy material, so the global
+   * muted/accent shades (tuned for an opaque card surface) read as
+   * washed-out icons and sticker-like selection here. Both themes get
+   * tuned values; the cascade keeps the rest of the app's palette
+   * untouched because these selectors only match inside <aside>.
+   */
+  aside {
+    /* Push muted labels and icons darker on the lightly-tinted white,
+       so footer icons and project headers don't fade into the blur. */
+    --muted-foreground: var(--color-neutral-600);
+    /* Translucent black for hover/selection -- a solid neutral-100
+       fill barely shows on the translucent surface and an opaque fill
+       looks pasted on. */
+    --accent: oklch(0 0 0 / 0.06);
+  }
+  .dark aside {
+    --muted-foreground: var(--color-neutral-300);
+    /* Translucent white mirrors the light-mode pattern: blends with
+       the vibrancy instead of stamping a solid neutral-800 rectangle. */
+    --accent: oklch(1 0 0 / 0.1);
   }
 }
 

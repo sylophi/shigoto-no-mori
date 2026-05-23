@@ -20,14 +20,17 @@ import { isInstallingUpdate, startUpdater } from "./main/updater";
 
 registerIpcHandlers();
 
-const BG_LIGHT = "#ffffff";
-const BG_DARK = "#1c1c1c";
-
-function bgFor(theme: Theme): string {
-  const dark =
-    theme === "dark" || (theme === "system" && nativeTheme.shouldUseDarkColors);
-  return dark ? BG_DARK : BG_LIGHT;
+// Drives the AppKit appearance for the whole app, which is what the
+// NSVisualEffectView under `vibrancy` reads to pick its light/dark
+// material. Without this, the sidebar vibrancy stays glued to the OS
+// appearance regardless of the in-app theme.
+function applyAppearance(theme: Theme): void {
+  nativeTheme.themeSource = theme;
 }
+
+// Set before the BrowserWindow is created so the first paint already
+// has the right vibrancy material.
+applyAppearance(readThemeSync());
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -39,7 +42,12 @@ const createWindow = () => {
     minHeight: 420,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
-    backgroundColor: bgFor(readThemeSync()),
+    // Transparent shell so the macOS NSVisualEffectView material set via
+    // `vibrancy` shows through the regions where the renderer paints no
+    // background (currently just the sidebar column).
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -71,20 +79,13 @@ const createWindow = () => {
   attachContextMenu(mainWindow);
 };
 
-// Live-update the window background as the renderer applies a theme
-// (including unsaved previews). The persistent value lives in
-// ~/shigomori[-dev]/config.json and is written by the renderer through
-// the globalConfig IPC; main only reads it back at next launch.
+// Track the renderer's applied theme (including unsaved previews) so
+// the vibrancy material follows the in-app appearance rather than the
+// OS one. The persistent value lives in ~/shigomori[-dev]/config.json
+// and is written by the renderer through the globalConfig IPC.
 ipcMain.handle(CHANNELS.RuntimeSetTheme, (_event, rawPayload: unknown) => {
   const { theme } = SetThemePayloadSchema.parse(rawPayload);
-  if (mainWindow) mainWindow.setBackgroundColor(bgFor(theme));
-});
-
-// React to OS theme changes when the saved theme is "system".
-nativeTheme.on("updated", () => {
-  if (!mainWindow) return;
-  const stored = readThemeSync();
-  if (stored === "system") mainWindow.setBackgroundColor(bgFor(stored));
+  applyAppearance(theme);
 });
 
 app.on("ready", async () => {

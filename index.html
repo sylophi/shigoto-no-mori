@@ -6,8 +6,9 @@
     <title>Shigoto no Mori</title>
     <script>
       // Apply persisted theme synchronously before any CSS or React runs, so
-      // the first paint matches the user's choice. Mirrors the BrowserWindow
-      // backgroundColor set in src/main.ts.
+      // the first paint matches the user's choice. The window itself is
+      // transparent (vibrancy: "sidebar" in src/main.ts); the opaque
+      // background is painted by the main detail pane only.
       (function () {
         try {
           var stored = localStorage.getItem("shigoto.theme") || "system";
@@ -18,7 +19,6 @@
           var html = document.documentElement;
           if (dark) html.classList.add("dark");
           html.style.colorScheme = dark ? "dark" : "light";
-          html.style.background = dark ? "#1c1c1c" : "#ffffff";
         } catch (_) {
           // localStorage may be unavailable in some contexts; render light.
         }
