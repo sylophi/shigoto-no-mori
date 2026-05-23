@@ -269,6 +269,9 @@ const api = {
     onRefsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GitRefsRefreshed,
     ),
+    onFetchActive: subscribe<{ projectId: string; active: boolean }>(
+      CHANNELS.GitFetchActive,
+    ),
   },
   packageScripts: {
     list: (input: {

@@ -76,6 +76,7 @@ export const CHANNELS = {
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
   GitRefsRefreshed: "git:refsRefreshed",
+  GitFetchActive: "git:fetchActive",
   UpdaterGet: "updater:get",
   UpdaterCheck: "updater:check",
   UpdaterInstall: "updater:install",

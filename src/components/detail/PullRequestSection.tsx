@@ -19,7 +19,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useMergePullRequest } from "@/hooks/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/useRepoMergeConfig";
@@ -46,23 +45,12 @@ import type {
 } from "@shared/schemas";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
-  const { data: pr, isLoading } = useWorktreePullRequest(
+  const { data: pr } = useWorktreePullRequest(
     worktree.projectId,
     worktree.branch,
   );
 
-  if (worktree.detached) return null;
-
-  if (isLoading) {
-    return (
-      <section className="space-y-3">
-        <SectionHeading>Pull request</SectionHeading>
-        <Skeleton className="h-20 w-full" />
-      </section>
-    );
-  }
-
-  if (!pr) return null;
+  if (worktree.detached || !pr) return null;
 
   return (
     <section className="space-y-3">

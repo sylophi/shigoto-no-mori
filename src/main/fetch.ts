@@ -38,6 +38,7 @@ async function maybeFetchProject(
 ): Promise<void> {
   const ts = lastFetchedAt.get(projectId) ?? 0;
   if (Date.now() - ts < FRESHNESS_MS) return;
+  broadcast(CHANNELS.GitFetchActive, { projectId, active: true });
   try {
     const before = await snapshotRemoteRefs(projectPath);
     await fetchAllRemotes(projectPath);
@@ -48,6 +49,8 @@ async function maybeFetchProject(
     }
   } catch {
     // Network/auth failure -- leave refs stale, surface elsewhere if it matters.
+  } finally {
+    broadcast(CHANNELS.GitFetchActive, { projectId, active: false });
   }
 }
 
