@@ -53,6 +53,10 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
+  // Tracks the project whose region the cursor is currently over (header
+  // row OR one of its child rows). Lets the ProjectRow keep its action
+  // buttons visible while the cursor sits on a worktree below it.
+  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
 
   const toggleExpanded = (projectId: string) => {
     setCollapsed((prev) => {
@@ -187,6 +191,7 @@ export function Sidebar() {
                 {virtualizer.getVirtualItems().map((vi) => {
                   const row = rows[vi.index];
                   if (!row) return null;
+                  const rowProjectId = projectIdForRow(row);
                   return (
                     <div
                       key={row.key}
@@ -197,11 +202,18 @@ export function Sidebar() {
                         row.kind !== "project" && "pl-5",
                       )}
                       style={{ transform: `translateY(${vi.start}px)` }}
+                      onMouseEnter={() => setHoveredProjectId(rowProjectId)}
+                      onMouseLeave={() =>
+                        setHoveredProjectId((cur) =>
+                          cur === rowProjectId ? null : cur,
+                        )
+                      }
                     >
                       <RowContent
                         row={row}
                         onToggle={toggleExpanded}
                         arrangeMode={arrangeMode}
+                        isHovered={hoveredProjectId === rowProjectId}
                       />
                     </div>
                   );
@@ -229,14 +241,22 @@ export function Sidebar() {
   );
 }
 
+function projectIdForRow(row: SidebarRow): string {
+  if (row.kind === "project") return row.project.id;
+  if (row.kind === "worktree") return row.worktree.projectId;
+  return row.projectId;
+}
+
 function RowContent({
   row,
   onToggle,
   arrangeMode,
+  isHovered,
 }: {
   row: SidebarRow;
   onToggle: (projectId: string) => void;
   arrangeMode: boolean;
+  isHovered: boolean;
 }) {
   if (row.kind === "project") {
     return (
@@ -245,6 +265,7 @@ function RowContent({
         expanded={row.expanded}
         onToggle={() => onToggle(row.project.id)}
         arrangeMode={arrangeMode}
+        isHovered={isHovered}
       />
     );
   }
