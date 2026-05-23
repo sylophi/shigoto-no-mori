@@ -493,11 +493,11 @@ function VersionSection() {
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">Version</SectionHeading>
-      <div className="font-mono text-sm select-text">
-        {__APP_VERSION__}{" "}
-        <span className="text-muted-foreground">({__APP_COMMIT__})</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="font-mono text-sm select-text">
+          {__APP_VERSION__}{" "}
+          <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+        </div>
         {ready ? (
           <Button
             size="sm"
@@ -505,7 +505,7 @@ function VersionSection() {
             disabled={install.isPending}
           >
             <RefreshCw />
-            Restart to update to {ready.version}
+            Restart to update to v{ready.version}
           </Button>
         ) : (
           <Button
@@ -522,12 +522,16 @@ function VersionSection() {
             {kind === "checking" ? "Checking…" : "Check for updates"}
           </Button>
         )}
-        <UpdaterStatusLine state={state} />
       </div>
+      <UpdaterStatusLine state={state} />
     </section>
   );
 }
 
+// The button already speaks for itself when an update is ready, so we
+// only surface a status line for the states where the button alone is
+// ambiguous: idle ("you already checked, nothing to do"), downloading
+// ("we're working on it"), and error.
 function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
   if (!state) return null;
   if (state.kind === "idle") {
@@ -535,24 +539,19 @@ function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
       <span className="text-xs text-muted-foreground">You're up to date.</span>
     );
   }
-  if (state.kind === "checking") return null;
   if (state.kind === "downloading") {
     return (
       <span className="text-xs text-muted-foreground">Downloading update…</span>
     );
   }
-  if (state.kind === "ready") {
+  if (state.kind === "error") {
     return (
-      <span className="text-xs text-muted-foreground">
-        Update {state.version} ready to install.
+      <span className="text-xs text-destructive" title={state.message}>
+        Update check failed.
       </span>
     );
   }
-  return (
-    <span className="text-xs text-destructive" title={state.message}>
-      Update check failed.
-    </span>
-  );
+  return null;
 }
 
 function DangerZone() {
