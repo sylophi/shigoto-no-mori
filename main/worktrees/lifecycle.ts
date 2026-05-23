@@ -4,6 +4,7 @@
 // can't leave a worktree half-torn-down. Live output keeps flowing
 // to the renderer via "started" events emitted by startScript.
 import type { WebContents } from "electron";
+import { Effect } from "effect";
 import { CHANNELS } from "@shared/channels";
 import type {
   CleanupError,
@@ -14,13 +15,9 @@ import type {
 import { applyCarryOver } from "./carryOver";
 import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
 import { readGlobalConfig } from "../config/global";
-import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
+import { PortPool, runPortPoolProgram } from "../portPool";
 import { resolveScriptCommand } from "../scripts/command";
-import {
-  clearDeleteInflight,
-  markDeleteInflight,
-  startScriptForLifecycle,
-} from "../scripts";
+import { Script, runScriptProgram } from "../scripts";
 import { readShigomoriConfig } from "../config/project";
 
 interface LifecycleWorktree {
@@ -71,20 +68,22 @@ async function runStep(args: {
   defaultBranch: string;
   webContents: WebContents;
 }): Promise<{ runId: string; exitCode: number | null }> {
-  const { runId, exit } = startScriptForLifecycle({
-    command: args.command,
-    scriptName: args.scriptName,
-    worktree: args.worktree,
-    project: args.project,
-    projectBranch: args.projectBranch,
-    defaultBranch: args.defaultBranch,
-    webContents: args.webContents,
-    started: {
-      slot: args.slot,
-      projectId: args.project.id,
-      worktreeId: args.worktree.id,
-    },
-  });
+  const { runId, exit } = await runScriptProgram(
+    Script.startForLifecycle({
+      command: args.command,
+      scriptName: args.scriptName,
+      worktree: args.worktree,
+      project: args.project,
+      projectBranch: args.projectBranch,
+      defaultBranch: args.defaultBranch,
+      webContents: args.webContents,
+      started: {
+        slot: args.slot,
+        projectId: args.project.id,
+        worktreeId: args.worktree.id,
+      },
+    }),
+  );
   return { runId, exitCode: await exit };
 }
 
@@ -181,11 +180,11 @@ async function willRunPortPoolProvision(
 ): Promise<boolean> {
   const global = await readGlobalConfig();
   if (global.portPool !== true) return false;
-  const [installed, hasConfig] = await Promise.all([
-    isPortPoolInstalled(),
-    isPortPoolConfigured(worktreePath),
-  ]);
-  return installed && hasConfig;
+  return runPortPoolProgram(
+    PortPool.isActive(worktreePath).pipe(
+      Effect.catchAll(() => Effect.succeed(false)),
+    ),
+  );
 }
 
 interface DeleteArgs {
@@ -198,7 +197,7 @@ interface DeleteArgs {
 }
 
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
-  markDeleteInflight(args.worktree.id);
+  await runScriptProgram(Script.markDeleteInflight(args.worktree.id));
   try {
     const defaultBranch = await resolveDefaultBranch(
       args.project.path,
@@ -206,11 +205,12 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
     ).catch(() => "");
 
     if (args.globalPortPoolEnabled) {
-      const [installed, hasConfig] = await Promise.all([
-        isPortPoolInstalled(),
-        isPortPoolConfigured(args.worktree.path),
-      ]);
-      if (installed && hasConfig) {
+      const active = await runPortPoolProgram(
+        PortPool.isActive(args.worktree.path).pipe(
+          Effect.catchAll(() => Effect.succeed(false)),
+        ),
+      );
+      if (active) {
         const { runId, exitCode } = await runStep({
           command: resolveScriptCommand(
             "port-pool-release",
@@ -252,7 +252,7 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
       }
     }
   } finally {
-    clearDeleteInflight(args.worktree.id);
+    await runScriptProgram(Script.clearDeleteInflight(args.worktree.id));
   }
 }
 

@@ -1,7 +1,7 @@
 // Thin wrappers around the git CLI. Each file owns one slice of the
 // surface (worktrees, branches, remotes, diff, sync). Importers should
 // keep using `from "."` — this barrel hides the layout.
-export { isGitRepo } from "./core";
+export { GitCommandError, isGitCommandError, isGitRepo } from "./core";
 export {
   fetchAllRemotes,
   listRemotes,

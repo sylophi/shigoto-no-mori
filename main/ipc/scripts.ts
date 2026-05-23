@@ -7,7 +7,7 @@ import {
 import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
 import { findProjectOrThrow } from "../projects";
 import { resolveScriptCommand } from "../scripts/command";
-import { cancelScript, startScript } from "../scripts";
+import { Script, runScriptProgram } from "../scripts";
 import { readShigomoriConfig } from "../config/project";
 
 export function registerScriptHandlers(): void {
@@ -35,15 +35,17 @@ export function registerScriptHandlers(): void {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 
-      const runId = startScript({
-        command,
-        scriptName: script,
-        worktree,
-        project,
-        projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
-        defaultBranch,
-        webContents: event.sender,
-      });
+      const runId = await runScriptProgram(
+        Script.start({
+          command,
+          scriptName: script,
+          worktree,
+          project,
+          projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
+          defaultBranch,
+          webContents: event.sender,
+        }),
+      );
       return { runId };
     },
   );
@@ -52,7 +54,7 @@ export function registerScriptHandlers(): void {
     CHANNELS.ScriptsCancel,
     async (_event, rawPayload: unknown): Promise<{ cancelled: boolean }> => {
       const { runId } = CancelScriptPayloadSchema.parse(rawPayload);
-      const cancelled = await cancelScript(runId);
+      const cancelled = await runScriptProgram(Script.cancel(runId));
       return { cancelled };
     },
   );

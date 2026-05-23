@@ -1,6 +1,13 @@
 import { type BranchList, isRealBranch } from "@shared/schemas";
-import { run } from "./core";
+import { Effect } from "effect";
+import { Git, type GitService, runGitProgram } from "./core";
 import type { WorktreeIdentity } from "./worktrees";
+
+function runBranch<A>(
+  effect: Effect.Effect<A, unknown, GitService>,
+): Promise<A> {
+  return runGitProgram(effect);
+}
 
 // Rename the branch currently checked out in a worktree.
 // `git branch -m <new>` renames the current HEAD branch.
@@ -8,7 +15,7 @@ export async function renameBranch(
   worktreePath: string,
   newBranch: string,
 ): Promise<void> {
-  await run(worktreePath, ["branch", "-m", newBranch]);
+  return runBranch(Git.runVoid(worktreePath, ["branch", "-m", newBranch]));
 }
 
 // Switch a worktree to a different branch. For remote-tracking refs
@@ -17,7 +24,7 @@ export async function checkoutBranch(
   worktreePath: string,
   branch: string,
 ): Promise<void> {
-  await run(worktreePath, ["checkout", branch]);
+  return runBranch(Git.runVoid(worktreePath, ["checkout", branch]));
 }
 
 // Force-delete a local branch. Used after worktree removal when the
@@ -28,7 +35,7 @@ export async function deleteLocalBranch(
   projectPath: string,
   branch: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-D", branch]);
+  return runBranch(Git.runVoid(projectPath, ["branch", "-D", branch]));
 }
 
 // Centralizes the "delete the local branch after the worktree is gone"
@@ -42,14 +49,16 @@ export async function deleteBranchAfterWorktreeRemoval(
   identity: WorktreeIdentity,
   enabled: boolean,
 ): Promise<void> {
-  if (!enabled) return;
-  if (identity.isExternal) return;
-  if (!isRealBranch(identity.branch)) return;
-  try {
-    await deleteLocalBranch(projectPath, identity.branch);
-  } catch {
-    // see comment above
-  }
+  return runBranch(
+    Effect.gen(function* () {
+      if (!enabled) return;
+      if (identity.isExternal) return;
+      if (!isRealBranch(identity.branch)) return;
+      yield* Git.runVoid(projectPath, ["branch", "-D", identity.branch]).pipe(
+        Effect.catchAll(() => Effect.void),
+      );
+    }),
+  );
 }
 
 // Create a local branch pointing at `base` (or HEAD if omitted). When
@@ -63,7 +72,7 @@ export async function createLocalBranch(
   if (base?.includes("/")) args.push("--track");
   args.push(name);
   if (base) args.push(base);
-  await run(projectPath, args);
+  return runBranch(Git.runVoid(projectPath, args));
 }
 
 // Rename any local branch (not necessarily the current one). `git branch
@@ -74,7 +83,9 @@ export async function renameAnyLocalBranch(
   oldName: string,
   newName: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-m", oldName, newName]);
+  return runBranch(
+    Git.runVoid(projectPath, ["branch", "-m", oldName, newName]),
+  );
 }
 
 // Force-delete a local branch. Git still refuses if the branch is
@@ -83,7 +94,7 @@ export async function deleteAnyLocalBranch(
   projectPath: string,
   name: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-D", name]);
+  return runBranch(Git.runVoid(projectPath, ["branch", "-D", name]));
 }
 
 // `--directory` collapses fully-ignored directories into a single
@@ -91,34 +102,42 @@ export async function deleteAnyLocalBranch(
 // listed individually. The renderer derives membership from this list to
 // decide whether a filesystem entry can be carried over.
 export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
-  const stdout = await run(projectPath, [
-    "ls-files",
-    "--others",
-    "--ignored",
-    "--exclude-standard",
-    "--directory",
-  ]);
-  return stdout.split("\n").filter((line) => line.length > 0);
+  return runBranch(
+    Effect.gen(function* () {
+      const stdout = yield* Git.run(projectPath, [
+        "ls-files",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory",
+      ]);
+      return stdout.split("\n").filter((line) => line.length > 0);
+    }),
+  );
 }
 
 // Lists branches usable as a base ref: local heads and remote-tracking refs.
 // Symbolic refs like `origin/HEAD` are dropped — they alias another remote
 // branch and would show up twice.
 export async function listBranches(projectPath: string): Promise<BranchList> {
-  const stdout = await run(projectPath, [
-    "for-each-ref",
-    "--format=%(refname)\t%(refname:short)\t%(symref)",
-    "refs/heads/",
-    "refs/remotes/",
-  ]);
-  const local: string[] = [];
-  const remote: string[] = [];
-  for (const line of stdout.split("\n")) {
-    if (!line) continue;
-    const [full, short, symref] = line.split("\t");
-    if (!full || !short || symref) continue;
-    if (full.startsWith("refs/heads/")) local.push(short);
-    else if (full.startsWith("refs/remotes/")) remote.push(short);
-  }
-  return { local, remote };
+  return runBranch(
+    Effect.gen(function* () {
+      const stdout = yield* Git.run(projectPath, [
+        "for-each-ref",
+        "--format=%(refname)\t%(refname:short)\t%(symref)",
+        "refs/heads/",
+        "refs/remotes/",
+      ]);
+      const local: string[] = [];
+      const remote: string[] = [];
+      for (const line of stdout.split("\n")) {
+        if (!line) continue;
+        const [full, short, symref] = line.split("\t");
+        if (!full || !short || symref) continue;
+        if (full.startsWith("refs/heads/")) local.push(short);
+        else if (full.startsWith("refs/remotes/")) remote.push(short);
+      }
+      return { local, remote };
+    }),
+  );
 }

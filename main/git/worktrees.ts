@@ -6,6 +6,7 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
+import { Data, Effect } from "effect";
 import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
@@ -14,13 +15,70 @@ import {
   managedPrefixesFor,
   resolveWorktreeBase,
 } from "../worktrees/paths";
-import { run } from "./core";
+import { Git, type GitService, runGitProgram } from "./core";
 import {
   fetchRemoteRef,
   listRemotes,
   remoteRefExists,
   splitRemoteRef,
 } from "./remotes";
+
+class WorktreeNameCollision extends Data.TaggedError("WorktreeNameCollision")<{
+  readonly worktreeName: string;
+}> {
+  override get message(): string {
+    return `A worktree folder named "${this.worktreeName}" already exists in this project.`;
+  }
+}
+
+class CheckoutBaseRequired extends Data.TaggedError(
+  "CheckoutBaseRequired",
+)<{}> {
+  override get message(): string {
+    return "Checkout mode requires a base ref";
+  }
+}
+
+class WorktreeDisappeared extends Data.TaggedError("WorktreeDisappeared")<{}> {
+  override get message(): string {
+    return "Worktree disappeared after creation";
+  }
+}
+
+const mkdirEffect = (path: string) =>
+  Effect.promise(() => mkdir(path, { recursive: true })).pipe(Effect.asVoid);
+
+const rmEffect = (path: string) =>
+  Effect.promise(() => rm(path, { recursive: true, force: true })).pipe(
+    Effect.asVoid,
+  );
+
+const readShigomoriConfigOrNull = (projectId: string) =>
+  Effect.promise(() => readShigomoriConfig(projectId).catch(() => null));
+
+const listRemotesEffect = (projectPath: string) =>
+  Effect.promise(() => listRemotes(projectPath));
+
+const remoteRefExistsEffect = (projectPath: string, ref: string) =>
+  Effect.promise(() => remoteRefExists(projectPath, ref));
+
+const fetchRemoteRefLenient = (
+  projectPath: string,
+  remote: string,
+  branch: string,
+) =>
+  Effect.promise(() =>
+    fetchRemoteRef(projectPath, remote, branch).catch(() => undefined),
+  );
+
+const splitRemoteRefEffect = (projectPath: string, ref: string) =>
+  Effect.promise(() => splitRemoteRef(projectPath, ref));
+
+function runWorktree<A>(
+  effect: Effect.Effect<A, unknown, GitService>,
+): Promise<A> {
+  return runGitProgram(effect);
+}
 
 interface RawWorktreeEntry {
   path: string;
@@ -58,20 +116,11 @@ function deriveBranch(entry: RawWorktreeEntry): string {
   return UNKNOWN_BRANCH;
 }
 
-async function getChangedCount(worktreePath: string): Promise<number> {
-  try {
-    const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
+function getChangedCountEffect(worktreePath: string) {
+  return Effect.gen(function* () {
+    const stdout = yield* Git.run(worktreePath, ["status", "--porcelain=v1"]);
     return stdout.split("\n").filter((line) => line.length > 0).length;
-  } catch {
-    return 0;
-  }
-}
-
-interface RemoteSync {
-  ahead: number;
-  behind: number;
-  hasUpstream: boolean;
-  divergedClean: boolean;
+  }).pipe(Effect.catchAll(() => Effect.succeed(0)));
 }
 
 // Probes how the worktree's HEAD relates to its upstream. Failure of the
@@ -81,39 +130,44 @@ interface RemoteSync {
 // whether a whole-tree merge would land cleanly. The action behind
 // the "Pull and push" button tries `rebase` first and falls back to
 // `merge` on a per-commit conflict, so this probe gates that fallback.
-async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
-  let ahead = 0;
-  let behind = 0;
-  let hasUpstream = false;
-  try {
-    const stdout = await run(worktreePath, [
+function getRemoteSyncEffect(worktreePath: string) {
+  return Effect.gen(function* () {
+    const stdout = yield* Git.run(worktreePath, [
       "rev-list",
       "--left-right",
       "--count",
       "HEAD...@{u}",
     ]);
     const [a, b] = stdout.trim().split(/\s+/);
-    ahead = Number(a) || 0;
-    behind = Number(b) || 0;
-    hasUpstream = true;
-  } catch {
-    return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
-  }
-  if (ahead === 0 || behind === 0) {
-    return { ahead, behind, hasUpstream, divergedClean: false };
-  }
-  // Diverged: ask git whether a merge would land without conflicts.
-  // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
-  // when conflicts would arise (or on git < 2.38, where we treat the
-  // unknown as "not clean" -- safer default).
-  let divergedClean = false;
-  try {
-    await run(worktreePath, ["merge-tree", "--write-tree", "HEAD", "@{u}"]);
-    divergedClean = true;
-  } catch {
-    divergedClean = false;
-  }
-  return { ahead, behind, hasUpstream, divergedClean };
+    const ahead = Number(a) || 0;
+    const behind = Number(b) || 0;
+    if (ahead === 0 || behind === 0) {
+      return { ahead, behind, hasUpstream: true, divergedClean: false };
+    }
+    // Diverged: ask git whether a merge would land without conflicts.
+    // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
+    // when conflicts would arise (or on git < 2.38, where we treat the
+    // unknown as "not clean" -- safer default).
+    const divergedClean = yield* Git.runVoid(worktreePath, [
+      "merge-tree",
+      "--write-tree",
+      "HEAD",
+      "@{u}",
+    ]).pipe(
+      Effect.as(true),
+      Effect.catchAll(() => Effect.succeed(false)),
+    );
+    return { ahead, behind, hasUpstream: true, divergedClean };
+  }).pipe(
+    Effect.catchAll(() =>
+      Effect.succeed({
+        ahead: 0,
+        behind: 0,
+        hasUpstream: false,
+        divergedClean: false,
+      }),
+    ),
+  );
 }
 
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
@@ -155,14 +209,19 @@ export async function listCommits(
   worktreePath: string,
   opts: { skip: number; count: number },
 ): Promise<CommitSummary[]> {
-  try {
+  return runWorktree(listCommitsEffect(worktreePath, opts));
+}
+
+function listCommitsEffect(
+  worktreePath: string,
+  opts: { skip: number; count: number },
+) {
+  return Effect.gen(function* () {
     const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
     args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
-    const stdout = await run(worktreePath, args);
+    const stdout = yield* Git.run(worktreePath, args);
     return parseLog(stdout);
-  } catch {
-    return [];
-  }
+  }).pipe(Effect.catchAll(() => Effect.succeed<CommitSummary[]>([])));
 }
 
 export interface WorktreeIdentity {
@@ -185,39 +244,51 @@ export function worktreeIdFromPath(path: string): string {
   return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
 
+function listWorktreeIdentitiesEffect(
+  projectId: string,
+  projectPath: string,
+): Effect.Effect<WorktreeIdentity[], unknown, GitService> {
+  return Effect.gen(function* () {
+    const [stdout, config] = yield* Effect.all(
+      [
+        Git.run(projectPath, ["worktree", "list", "--porcelain"]),
+        readShigomoriConfigOrNull(projectId),
+      ],
+      { concurrency: "unbounded" },
+    );
+    // A worktree counts as managed if it sits under any layout we know
+    // about (managed root, in-project, or the configured custom path).
+    // This keeps mixed states (some worktrees still in the old layout
+    // after a partial migration) from mislabeling rows as external.
+    const managedPrefixes = managedPrefixesFor(projectPath, config);
+    return parsePorcelain(stdout)
+      .filter((e) => !e.bare)
+      .map((entry, index) => {
+        const branch = deriveBranch(entry);
+        const isPrimary = entry.path === projectPath || index === 0;
+        // Primary checkout sits at the project root, so its "name" is just
+        // the project's directory basename. Managed worktrees use the picked
+        // animal dirname; external ones use whatever the user named them.
+        const name = basename(entry.path);
+        return {
+          id: worktreeIdFromPath(entry.path),
+          projectId,
+          name,
+          branch,
+          path: entry.path,
+          isPrimary,
+          isExternal: !isManagedPath(entry.path, managedPrefixes),
+          detached: entry.detached ?? false,
+        };
+      });
+  });
+}
+
 export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  const [stdout, config] = await Promise.all([
-    run(projectPath, ["worktree", "list", "--porcelain"]),
-    readShigomoriConfig(projectId).catch(() => null),
-  ]);
-  // A worktree counts as managed if it sits under any layout we know
-  // about (managed root, in-project, or the configured custom path).
-  // This keeps mixed states (some worktrees still in the old layout
-  // after a partial migration) from mislabeling rows as external.
-  const managedPrefixes = managedPrefixesFor(projectPath, config);
-  return parsePorcelain(stdout)
-    .filter((e) => !e.bare)
-    .map((entry, index) => {
-      const branch = deriveBranch(entry);
-      const isPrimary = entry.path === projectPath || index === 0;
-      // Primary checkout sits at the project root, so its "name" is just
-      // the project's directory basename. Managed worktrees use the picked
-      // animal dirname; external ones use whatever the user named them.
-      const name = basename(entry.path);
-      return {
-        id: worktreeIdFromPath(entry.path),
-        projectId,
-        name,
-        branch,
-        path: entry.path,
-        isPrimary,
-        isExternal: !isManagedPath(entry.path, managedPrefixes),
-        detached: entry.detached ?? false,
-      };
-    });
+  return runWorktree(listWorktreeIdentitiesEffect(projectId, projectPath));
 }
 
 // How many recent commits to surface on the worktree detail page. The
@@ -226,57 +297,73 @@ export async function listWorktreeIdentities(
 // all" affordance without a second round trip.
 const RECENT_COMMITS_COUNT = 4;
 
-async function buildWorktree(
+function buildWorktreeEffect(
   identity: WorktreeIdentity,
   hasRemote: boolean,
   shelvedSet: ReadonlySet<string>,
-): Promise<Worktree> {
-  const [changedCount, recentCommits, remoteSync] = await Promise.all([
-    getChangedCount(identity.path),
-    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-    getRemoteSync(identity.path),
-  ]);
-  return {
-    id: identity.id,
-    projectId: identity.projectId,
-    name: identity.name,
-    branch: identity.branch,
-    path: identity.path,
-    ahead: remoteSync.ahead,
-    behind: remoteSync.behind,
-    hasUpstream: remoteSync.hasUpstream,
-    hasRemote,
-    divergedClean: remoteSync.divergedClean,
-    changedCount,
-    recentCommits,
-    isPrimary: identity.isPrimary,
-    isExternal: identity.isExternal,
-    detached: identity.detached,
-    shelved:
-      !identity.isPrimary &&
-      !identity.isExternal &&
-      shelvedSet.has(identity.id),
-  };
+) {
+  return Effect.gen(function* () {
+    const [changedCount, recentCommits, remoteSync] = yield* Effect.all(
+      [
+        getChangedCountEffect(identity.path),
+        listCommitsEffect(identity.path, {
+          skip: 0,
+          count: RECENT_COMMITS_COUNT,
+        }),
+        getRemoteSyncEffect(identity.path),
+      ],
+      { concurrency: "unbounded" },
+    );
+    return {
+      id: identity.id,
+      projectId: identity.projectId,
+      name: identity.name,
+      branch: identity.branch,
+      path: identity.path,
+      ahead: remoteSync.ahead,
+      behind: remoteSync.behind,
+      hasUpstream: remoteSync.hasUpstream,
+      hasRemote,
+      divergedClean: remoteSync.divergedClean,
+      changedCount,
+      recentCommits,
+      isPrimary: identity.isPrimary,
+      isExternal: identity.isExternal,
+      detached: identity.detached,
+      shelved:
+        !identity.isPrimary &&
+        !identity.isExternal &&
+        shelvedSet.has(identity.id),
+    };
+  });
 }
 
 export async function listWorktrees(
   projectId: string,
   projectPath: string,
 ): Promise<Worktree[]> {
-  const [identities, remotes] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    listRemotes(projectPath),
-  ]);
-  const hasRemote = remotes.length > 0;
-  // Single sync disk read of state.json, then per-row lookups are O(1)
-  // against the in-memory set. Avoids N readFileSync per list call.
-  const shelvedSet = readShelvedSet();
-  // Primary first so it anchors the sidebar list as the canonical checkout.
-  const ordered = identities.toSorted((a, b) =>
-    a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
-  );
-  return Promise.all(
-    ordered.map((id) => buildWorktree(id, hasRemote, shelvedSet)),
+  return runWorktree(
+    Effect.gen(function* () {
+      const [identities, remotes] = yield* Effect.all(
+        [
+          listWorktreeIdentitiesEffect(projectId, projectPath),
+          listRemotesEffect(projectPath),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const hasRemote = remotes.length > 0;
+      // Single sync disk read of state.json, then per-row lookups are O(1)
+      // against the in-memory set. Avoids N readFileSync per list call.
+      const shelvedSet = readShelvedSet();
+      // Primary first so it anchors the sidebar list as the canonical checkout.
+      const ordered = identities.toSorted((a, b) =>
+        a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
+      );
+      return yield* Effect.all(
+        ordered.map((id) => buildWorktreeEffect(id, hasRemote, shelvedSet)),
+        { concurrency: "unbounded" },
+      );
+    }),
   );
 }
 
@@ -284,8 +371,16 @@ export async function describeWorktree(
   identity: WorktreeIdentity,
   projectPath: string,
 ): Promise<Worktree> {
-  const remotes = await listRemotes(projectPath);
-  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
+  return runWorktree(
+    Effect.gen(function* () {
+      const remotes = yield* listRemotesEffect(projectPath);
+      return yield* buildWorktreeEffect(
+        identity,
+        remotes.length > 0,
+        readShelvedSet(),
+      );
+    }),
+  );
 }
 
 export async function findWorktreeIdentityOrThrow(
@@ -293,7 +388,9 @@ export async function findWorktreeIdentityOrThrow(
   projectPath: string,
   worktreeId: string,
 ): Promise<WorktreeIdentity> {
-  const identities = await listWorktreeIdentities(projectId, projectPath);
+  const identities = await runWorktree(
+    listWorktreeIdentitiesEffect(projectId, projectPath),
+  );
   const identity = identities.find((w) => w.id === worktreeId);
   if (!identity) throw new Error(`Unknown worktree: ${worktreeId}`);
   return identity;
@@ -307,7 +404,9 @@ export async function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
 ): Promise<string> {
-  const existing = await listWorktreeIdentities(projectId, projectPath);
+  const existing = await runWorktree(
+    listWorktreeIdentitiesEffect(projectId, projectPath),
+  );
   const used = new Set(existing.map((w) => w.name));
   return pickWorktreeName(used);
 }
@@ -324,65 +423,80 @@ export async function createWorktree(
   projectPath: string,
   opts: CreateWorktreeOptions,
 ): Promise<Worktree> {
-  const { requestedWorktreeName, branchName, base, checkout } = opts;
-  // Dirname is decoupled from the branch — a random animal that isn't
-  // already used by another worktree in this project. When the caller
-  // supplies a name we treat it as a user-chosen destination and fail
-  // loudly on collision; only the unset case falls back to an animal
-  // pick (the renderer's pre-pick also flows through here).
-  const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name));
-  if (requestedWorktreeName && used.has(requestedWorktreeName)) {
-    throw new Error(
-      `A worktree folder named "${requestedWorktreeName}" already exists in this project.`,
-    );
-  }
-  const worktreeName = requestedWorktreeName || pickWorktreeName(used);
-  const config = await readShigomoriConfig(projectId).catch(() => null);
-  const worktreePath = join(
-    resolveWorktreeBase(projectPath, config),
-    worktreeName,
-  );
-
-  // Refresh the remote-tracking ref the new worktree will sit on.
-  // Without this, refs/remotes/<base> is whatever the last fetch left
-  // behind -- which often matches local main and looks like the
-  // worktree silently used the local branch as its base.
-  if (base && (await remoteRefExists(projectPath, base))) {
-    const split = await splitRemoteRef(projectPath, base);
-    if (split) {
-      await fetchRemoteRef(projectPath, split.remote, split.branch).catch(
-        () => undefined,
+  return runWorktree(
+    Effect.gen(function* () {
+      const { requestedWorktreeName, branchName, base, checkout } = opts;
+      // Dirname is decoupled from the branch — a random animal that isn't
+      // already used by another worktree in this project. When the caller
+      // supplies a name we treat it as a user-chosen destination and fail
+      // loudly on collision; only the unset case falls back to an animal
+      // pick (the renderer's pre-pick also flows through here).
+      const existing = yield* listWorktreeIdentitiesEffect(
+        projectId,
+        projectPath,
       );
-    }
-  }
+      const used = new Set(existing.map((w) => w.name));
+      if (requestedWorktreeName && used.has(requestedWorktreeName)) {
+        return yield* Effect.fail(
+          new WorktreeNameCollision({ worktreeName: requestedWorktreeName }),
+        );
+      }
+      const worktreeName = requestedWorktreeName || pickWorktreeName(used);
+      const config = yield* readShigomoriConfigOrNull(projectId);
+      const worktreePath = join(
+        resolveWorktreeBase(projectPath, config),
+        worktreeName,
+      );
 
-  await mkdir(dirname(worktreePath), { recursive: true });
-  if (checkout) {
-    if (!base) throw new Error("Checkout mode requires a base ref");
-    // No `-b`: reuse the existing branch in this new worktree. git
-    // refuses if the branch is already checked out in another worktree.
-    await run(projectPath, ["worktree", "add", worktreePath, base]);
-  } else {
-    // Quick-create: when the caller doesn't specify a branch, reuse the
-    // animal dirname so the branch and worktree start aligned.
-    const branch = branchName?.trim() || worktreeName;
-    const args = ["worktree", "add", "-b", branch, worktreePath];
-    if (base) args.push(base);
-    await run(projectPath, args);
-  }
-  // Re-read identity from `git worktree list` so the returned worktree's
-  // branch reflects what git actually settled on (e.g. checking out
-  // `origin/main` creates a local `main` tracking branch).
-  const [fresh, remotes] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    listRemotes(projectPath),
-  ]);
-  const identity = fresh.find((w) => w.path === worktreePath);
-  if (!identity) {
-    throw new Error("Worktree disappeared after creation");
-  }
-  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
+      // Refresh remote-tracking refs so the new worktree starts at the actual
+      // upstream tip. Without this, `refs/remotes/origin/main` is whatever the
+      // last fetch left behind -- which often matches local `main` and looks
+      // like the worktree silently used the local branch as its base.
+      if (base && (yield* remoteRefExistsEffect(projectPath, base))) {
+        const split = yield* splitRemoteRefEffect(projectPath, base);
+        if (split) {
+          yield* fetchRemoteRefLenient(projectPath, split.remote, split.branch);
+        }
+      }
+
+      yield* mkdirEffect(dirname(worktreePath));
+      if (checkout) {
+        if (!base) return yield* Effect.fail(new CheckoutBaseRequired());
+        // No `-b`: reuse the existing branch in this new worktree. git
+        // refuses if the branch is already checked out in another worktree.
+        yield* Git.runVoid(projectPath, [
+          "worktree",
+          "add",
+          worktreePath,
+          base,
+        ]);
+      } else {
+        // Quick-create: when the caller doesn't specify a branch, reuse the
+        // animal dirname so the branch and worktree start aligned.
+        const branch = branchName?.trim() || worktreeName;
+        const args = ["worktree", "add", "-b", branch, worktreePath];
+        if (base) args.push(base);
+        yield* Git.runVoid(projectPath, args);
+      }
+      // Re-read identity from `git worktree list` so the returned worktree's
+      // branch reflects what git actually settled on (e.g. checking out
+      // `origin/main` creates a local `main` tracking branch).
+      const [fresh, remotes] = yield* Effect.all(
+        [
+          listWorktreeIdentitiesEffect(projectId, projectPath),
+          listRemotesEffect(projectPath),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const identity = fresh.find((w) => w.path === worktreePath);
+      if (!identity) return yield* Effect.fail(new WorktreeDisappeared());
+      return yield* buildWorktreeEffect(
+        identity,
+        remotes.length > 0,
+        readShelvedSet(),
+      );
+    }),
+  );
 }
 
 export async function removeWorktree(
@@ -392,7 +506,7 @@ export async function removeWorktree(
 ): Promise<void> {
   const args = ["worktree", "remove", worktreePath];
   if (force) args.push("--force");
-  await run(projectPath, args);
+  return runWorktree(Git.runVoid(projectPath, args));
 }
 
 // Force-removes a worktree, falling back to a manual wipe when git's
@@ -415,15 +529,19 @@ export async function removeWorktreeForce(
     }
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
-  await rm(worktreePath, { recursive: true, force: true });
-  await pruneStaleWorktrees(projectPath);
+  return runWorktree(
+    Effect.gen(function* () {
+      yield* rmEffect(worktreePath);
+      yield* Git.runVoid(projectPath, ["worktree", "prune"]);
+    }),
+  );
 }
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
 // gone. Used after a fallback fs.rm and after the nuke-everything root
 // wipe to keep `git worktree list` honest.
 export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
-  await run(projectPath, ["worktree", "prune"]);
+  return runWorktree(Git.runVoid(projectPath, ["worktree", "prune"]));
 }
 
 // Moves a worktree's checkout to a new directory. `git worktree move`
@@ -436,6 +554,10 @@ export async function relocateWorktree(
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await mkdir(dirname(newPath), { recursive: true });
-  await run(projectPath, ["worktree", "move", oldPath, newPath]);
+  return runWorktree(
+    Effect.gen(function* () {
+      yield* mkdirEffect(dirname(newPath));
+      yield* Git.runVoid(projectPath, ["worktree", "move", oldPath, newPath]);
+    }),
+  );
 }

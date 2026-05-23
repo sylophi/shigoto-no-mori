@@ -1,20 +1,41 @@
 // Remote sync mutations. Each operates on a single worktree's checkout
-// and lets `git` surface any failure as a non-zero exit (which `run`
-// turns into a thrown Error -- the IPC layer relays the message verbatim
-// into the renderer's toast).
-import { run, runLenient } from "./core";
+// and lets `git` surface any failure as a typed Effect error. The public
+// API still returns promises so the rest of the app does not need to know
+// about the spike yet.
+import { Data, Effect } from "effect";
+import { Git, type GitService, runGitProgram, runLenient } from "./core";
 import { listRemotes } from "./remotes";
 
+class NoGitRemoteError extends Data.TaggedError("NoGitRemoteError")<{
+  readonly projectPath: string;
+}> {
+  override get message(): string {
+    return "No git remote configured";
+  }
+}
+
+const runGitLenient = (cwd: string, args: string[]) =>
+  Effect.promise(() => runLenient(cwd, args)).pipe(Effect.asVoid);
+
+const listRemotesEffect = (projectPath: string) =>
+  Effect.promise(() => listRemotes(projectPath));
+
+function runSync(
+  effect: Effect.Effect<void, unknown, GitService>,
+): Promise<void> {
+  return runGitProgram(effect);
+}
+
 export async function pushFastForward(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["push"]);
+  return runSync(Git.runVoid(worktreePath, ["push"]));
 }
 
 export async function pullFastForward(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["pull", "--ff-only"]);
+  return runSync(Git.runVoid(worktreePath, ["pull", "--ff-only"]));
 }
 
 export async function pushForceWithLease(worktreePath: string): Promise<void> {
-  await run(worktreePath, ["push", "--force-with-lease"]);
+  return runSync(Git.runVoid(worktreePath, ["push", "--force-with-lease"]));
 }
 
 // "Overwrite": throw away the local divergence and snap to the upstream.
@@ -22,8 +43,12 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
-  await run(worktreePath, ["fetch"]);
-  await run(worktreePath, ["reset", "--hard", "@{u}"]);
+  return runSync(
+    Effect.gen(function* () {
+      yield* Git.runVoid(worktreePath, ["fetch"]);
+      yield* Git.runVoid(worktreePath, ["reset", "--hard", "@{u}"]);
+    }),
+  );
 }
 
 // Publish: push the current branch to the first configured remote with
@@ -34,10 +59,16 @@ export async function publishCurrentBranch(
   worktreePath: string,
   projectPath: string,
 ): Promise<void> {
-  const remotes = await listRemotes(projectPath);
-  const first = remotes[0];
-  if (!first) throw new Error("No git remote configured");
-  await run(worktreePath, ["push", "-u", first, "HEAD"]);
+  return runSync(
+    Effect.gen(function* () {
+      const remotes = yield* listRemotesEffect(projectPath);
+      const first = remotes[0];
+      if (!first) {
+        return yield* Effect.fail(new NoGitRemoteError({ projectPath }));
+      }
+      yield* Git.runVoid(worktreePath, ["push", "-u", first, "HEAD"]);
+    }),
+  );
 }
 
 // Combined resolution for the "diverged but mergeable" state. Tries
@@ -50,19 +81,26 @@ export async function publishCurrentBranch(
 export async function pullRebaseOrMergeAndPush(
   worktreePath: string,
 ): Promise<void> {
-  await run(worktreePath, ["fetch"]);
-  try {
-    await run(worktreePath, ["rebase", "@{u}"]);
-  } catch {
-    // Rebase hit a per-commit conflict. Restore the pre-rebase HEAD and
-    // try a whole-tree merge instead.
-    await runLenient(worktreePath, ["rebase", "--abort"]);
-    try {
-      await run(worktreePath, ["merge", "@{u}"]);
-    } catch (err) {
-      await runLenient(worktreePath, ["merge", "--abort"]);
-      throw err;
-    }
-  }
-  await run(worktreePath, ["push"]);
+  return runSync(
+    Effect.gen(function* () {
+      yield* Git.runVoid(worktreePath, ["fetch"]);
+      yield* Git.runVoid(worktreePath, ["rebase", "@{u}"]).pipe(
+        Effect.catchAll(() =>
+          Effect.gen(function* () {
+            // Rebase hit a per-commit conflict. Restore the pre-rebase HEAD and
+            // try a whole-tree merge instead.
+            yield* runGitLenient(worktreePath, ["rebase", "--abort"]);
+            yield* Git.runVoid(worktreePath, ["merge", "@{u}"]).pipe(
+              Effect.catchAll((err) =>
+                runGitLenient(worktreePath, ["merge", "--abort"]).pipe(
+                  Effect.zipRight(Effect.fail(err)),
+                ),
+              ),
+            );
+          }),
+        ),
+      );
+      yield* Git.runVoid(worktreePath, ["push"]);
+    }),
+  );
 }

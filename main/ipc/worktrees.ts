@@ -47,7 +47,7 @@ import {
 } from "../git";
 import { readGlobalConfig } from "../config/global";
 import { findProjectOrThrow } from "../projects";
-import { killScriptsForWorktree } from "../scripts";
+import { Script, runScriptProgram } from "../scripts";
 import { dropShelved, isShelved, setShelved } from "../worktrees/shelved";
 import {
   deleteWorktreeData,
@@ -129,7 +129,7 @@ export function registerWorktreeHandlers(): void {
         ? branchOrSha
         : sanitizeBranchForPath(branchOrSha);
 
-      await killScriptsForWorktree(worktreeId);
+      await runScriptProgram(Script.killForWorktree(worktreeId));
       await removeWorktreeForce(project.path, target.path);
       dropShelved(worktreeId);
 
@@ -166,7 +166,7 @@ export function registerWorktreeHandlers(): void {
       // while the renderer drops the run state on success, leaving an
       // unmanageable child until app quit. Matches the delete handler.
       const [, carryData] = await Promise.all([
-        killScriptsForWorktree(worktreeId),
+        runScriptProgram(Script.killForWorktree(worktreeId)),
         readWorktreeData(project.id, worktreeId),
       ]);
       // The id is path-derived, so the relocate changes it -- carry the
@@ -269,7 +269,7 @@ export function registerWorktreeHandlers(): void {
       // then remove. Force-delete routes through the wipe fallback so
       // ENOTEMPTY (untracked content git couldn't sweep) doesn't strand
       // the user with a half-removed worktree.
-      await killScriptsForWorktree(worktreeId);
+      await runScriptProgram(Script.killForWorktree(worktreeId));
       if (force) {
         await removeWorktreeForce(project.path, target.path);
       } else {

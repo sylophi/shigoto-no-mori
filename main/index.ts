@@ -9,11 +9,11 @@ import { readThemeSync } from "./config/global";
 import { registerIpcHandlers } from "./ipc";
 import { buildAppMenu } from "./app/menu";
 import {
+  Script,
   getInflightDeleteIds,
-  killAllScripts,
-  killScriptsForWorktree,
   markShuttingDown,
   signalAllScriptsBestEffort,
+  runScriptProgram,
 } from "./scripts";
 import { applyUserShellPath } from "./app/shellPath";
 import { isInstallingUpdate, startUpdater } from "./app/updater";
@@ -125,8 +125,12 @@ app.on("before-quit", (event) => {
   markShuttingDown();
   event.preventDefault();
   const inflight = getInflightDeleteIds();
-  void Promise.all(Array.from(inflight).map((id) => killScriptsForWorktree(id)))
-    .then(() => killAllScripts({ graceMs: 1_500 }))
+  void Promise.all(
+    Array.from(inflight).map((id) =>
+      runScriptProgram(Script.killForWorktree(id)),
+    ),
+  )
+    .then(() => runScriptProgram(Script.killAll({ graceMs: 1_500 })))
     .finally(() => {
       // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
       app.exit(0);

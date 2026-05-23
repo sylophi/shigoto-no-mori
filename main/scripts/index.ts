@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
 import type { WebContents } from "electron";
+import { Context, Data, Effect, Layer } from "effect";
 import { CHANNELS } from "@shared/channels";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
@@ -185,6 +186,101 @@ async function waitWithTimeout(
 interface KillOptions {
   graceMs?: number;
   reason?: string;
+}
+
+export class ScriptStartRejected extends Data.TaggedError(
+  "ScriptStartRejected",
+)<{
+  readonly reason: string;
+}> {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+export class ScriptService extends Context.Tag("ScriptService")<
+  ScriptService,
+  {
+    readonly start: (
+      args: RunArgs,
+    ) => Effect.Effect<string, ScriptStartRejected>;
+    readonly startForLifecycle: (
+      args: RunArgs,
+    ) => Effect.Effect<
+      { runId: string; exit: Promise<number | null> },
+      ScriptStartRejected
+    >;
+    readonly cancel: (
+      runId: string,
+      opts?: KillOptions,
+    ) => Effect.Effect<boolean>;
+    readonly killForWorktree: (
+      worktreeId: string,
+      opts?: KillOptions,
+    ) => Effect.Effect<void>;
+    readonly killAll: (opts?: KillOptions) => Effect.Effect<void>;
+    readonly markDeleteInflight: (worktreeId: string) => Effect.Effect<void>;
+    readonly clearDeleteInflight: (worktreeId: string) => Effect.Effect<void>;
+  }
+>() {}
+
+function startScriptEffect(args: RunArgs) {
+  return Effect.try({
+    try: () => startScript(args),
+    catch: (cause) =>
+      new ScriptStartRejected({
+        reason: cause instanceof Error ? cause.message : String(cause),
+      }),
+  });
+}
+
+export const ScriptServiceLive = Layer.succeed(ScriptService, {
+  start: startScriptEffect,
+  startForLifecycle: (args) =>
+    Effect.try({
+      try: () => startScriptForLifecycle(args),
+      catch: (cause) =>
+        new ScriptStartRejected({
+          reason: cause instanceof Error ? cause.message : String(cause),
+        }),
+    }),
+  cancel: (runId, opts) => Effect.promise(() => cancelScript(runId, opts)),
+  killForWorktree: (worktreeId, opts) =>
+    Effect.promise(() => killScriptsForWorktree(worktreeId, opts)),
+  killAll: (opts) => Effect.promise(() => killAllScripts(opts)),
+  markDeleteInflight: (worktreeId) =>
+    Effect.sync(() => markDeleteInflight(worktreeId)),
+  clearDeleteInflight: (worktreeId) =>
+    Effect.sync(() => clearDeleteInflight(worktreeId)),
+});
+
+export const Script = {
+  start: (args: RunArgs) =>
+    Effect.flatMap(ScriptService, (scripts) => scripts.start(args)),
+  startForLifecycle: (args: RunArgs) =>
+    Effect.flatMap(ScriptService, (scripts) => scripts.startForLifecycle(args)),
+  cancel: (runId: string, opts?: KillOptions) =>
+    Effect.flatMap(ScriptService, (scripts) => scripts.cancel(runId, opts)),
+  killForWorktree: (worktreeId: string, opts?: KillOptions) =>
+    Effect.flatMap(ScriptService, (scripts) =>
+      scripts.killForWorktree(worktreeId, opts),
+    ),
+  killAll: (opts?: KillOptions) =>
+    Effect.flatMap(ScriptService, (scripts) => scripts.killAll(opts)),
+  markDeleteInflight: (worktreeId: string) =>
+    Effect.flatMap(ScriptService, (scripts) =>
+      scripts.markDeleteInflight(worktreeId),
+    ),
+  clearDeleteInflight: (worktreeId: string) =>
+    Effect.flatMap(ScriptService, (scripts) =>
+      scripts.clearDeleteInflight(worktreeId),
+    ),
+};
+
+export function runScriptProgram<A, E>(
+  effect: Effect.Effect<A, E, ScriptService>,
+): Promise<A> {
+  return Effect.runPromise(Effect.provide(effect, ScriptServiceLive));
 }
 
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {

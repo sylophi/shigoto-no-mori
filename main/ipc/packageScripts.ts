@@ -24,7 +24,7 @@ import {
   writeScriptSort,
 } from "../scripts/packageScriptStats";
 import { findProjectOrThrow } from "../projects";
-import { startScript } from "../scripts";
+import { Script, runScriptProgram } from "../scripts";
 import { readShigomoriConfig } from "../config/project";
 
 export function registerPackageScriptHandlers(): void {
@@ -95,15 +95,17 @@ export function registerPackageScriptHandlers(): void {
       }
 
       const command = buildScriptCommand(pkg.packageManager, scriptName);
-      const runId = startScript({
-        command,
-        scriptName,
-        worktree,
-        project,
-        projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
-        defaultBranch,
-        webContents: event.sender,
-      });
+      const runId = await runScriptProgram(
+        Script.start({
+          command,
+          scriptName,
+          worktree,
+          project,
+          projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
+          defaultBranch,
+          webContents: event.sender,
+        }),
+      );
       bumpScriptUseCount(project.id, scriptName);
       return { runId };
     },
