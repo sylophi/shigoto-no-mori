@@ -475,6 +475,32 @@ export async function mergePullRequest(opts: {
   prCache.delete(cwd);
 }
 
+// Flips a PR between draft and ready for review. `gh pr ready` toggles
+// to ready; `--undo` flips back to draft. Both call paths invalidate
+// the sidebar cache because isDraft is part of the slim PullRequest.
+export async function setPullRequestDraft(opts: {
+  cwd: string;
+  number: number;
+  draft: boolean;
+}): Promise<void> {
+  const { cwd, number, draft } = opts;
+  if (!(await ghReady())) {
+    throw new Error("GitHub CLI isn't ready");
+  }
+  const args = ["pr", "ready", String(number)];
+  if (draft) args.push("--undo");
+  try {
+    await execFileP("gh", args, { cwd });
+  } catch (err) {
+    const message =
+      err instanceof Error && err.message
+        ? trimGhError(err.message)
+        : "gh pr ready failed";
+    throw new Error(message, { cause: err });
+  }
+  prCache.delete(cwd);
+}
+
 // gh's stderr tends to be one long line with a `gh:` prefix; the rest
 // is usable as-is. Trim noise so the renderer banner stays compact.
 function trimGhError(raw: string): string {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -7,10 +7,10 @@ import {
   CircleDashed,
   CircleSlash,
   ExternalLink,
-  FileDiff,
   Loader2,
   MinusCircle,
 } from "lucide-react";
+import { useIsFetching } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +24,12 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useMergePullRequest } from "@/hooks/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/useRepoMergeConfig";
+import { useSetPullRequestDraft } from "@/hooks/useSetPullRequestDraft";
 import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
-import { useWorktreePullRequest } from "@/hooks/useWorktreePullRequest";
+import {
+  useWorktreePullRequest,
+  worktreePullRequestKey,
+} from "@/hooks/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { notifyError } from "@/lib/toast";
@@ -48,16 +52,55 @@ import type {
 } from "@shared/schemas";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
-  const { data: pr } = useWorktreePullRequest(
+  const { data: pr, isPending } = useWorktreePullRequest(
     worktree.projectId,
     worktree.branch,
   );
-  if (worktree.detached || !pr) return null;
+  if (worktree.detached) return null;
+  // While the initial query is in flight we still show the heading +
+  // refresh indicator so the page doesn't pop content in late. Once
+  // resolved with no PR, the section drops out entirely.
+  if (!pr && !isPending) return null;
   return (
     <section className="space-y-3">
-      <SectionHeading>Pull request</SectionHeading>
-      <PullRequestBody worktree={worktree} pr={pr} />
+      <div className="flex items-center justify-between gap-2">
+        <SectionHeading>Pull request</SectionHeading>
+        <PullRequestRefreshIndicator worktree={worktree} />
+      </div>
+      {pr && <PullRequestBody worktree={worktree} pr={pr} />}
     </section>
+  );
+}
+
+// Sub-second refetches would otherwise flash on/off too fast to read.
+// We delay showing the indicator until 250ms after work begins; if the
+// work finishes inside that window the user never sees a flicker.
+const REFRESH_INDICATOR_DELAY_MS = 250;
+
+function PullRequestRefreshIndicator({ worktree }: { worktree: Worktree }) {
+  const fetching =
+    useIsFetching({
+      queryKey: worktreePullRequestKey(worktree.projectId, worktree.branch),
+    }) > 0;
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!fetching) {
+      setVisible(false);
+      return;
+    }
+    if (visible) return;
+    const id = window.setTimeout(
+      () => setVisible(true),
+      REFRESH_INDICATOR_DELAY_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [fetching, visible]);
+  if (!visible) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/70 italic">
+      <Loader2 aria-hidden className="size-3 animate-spin" />
+      Refreshing…
+    </span>
   );
 }
 
@@ -71,16 +114,14 @@ function PullRequestBody({
   const { data: repoConfig } = useRepoMergeConfig(worktree.projectId);
   const { data: shigomori } = useShigomoriConfig(worktree.projectId);
   const isOpen = pr.state === "OPEN";
-  const hasStats = pr.changedFiles > 0;
   const hasChecks = pr.checks.total > 0;
 
   return (
     <div className="space-y-4">
-      <PullRequestIdentity pr={pr} />
-      {(hasStats || (isOpen && hasChecks)) && (
-        <div className="-mx-2 space-y-0.5">
-          {hasStats && <ChangesRow worktree={worktree} pr={pr} />}
-          {isOpen && hasChecks && <ChecksRow pr={pr} />}
+      <PullRequestIdentity worktree={worktree} pr={pr} />
+      {isOpen && hasChecks && (
+        <div className="-mx-2">
+          <ChecksRow pr={pr} />
         </div>
       )}
       {isOpen && (
@@ -95,32 +136,130 @@ function PullRequestBody({
   );
 }
 
-// Title row + meta. The left side describes the PR's state and where
-// it's going; the right side carries lifecycle metadata (author + when
-// it was last touched). Splitting them keeps each cluster grammatical.
-function PullRequestIdentity({ pr }: { pr: PullRequestDetail }) {
+// Title row carries the PR's identity: title + #num on the left, state
+// pill on the right where the eye expects a status badge. The meta row
+// below describes who's merging where and when it was last touched,
+// with the diff button as the row's right-hand affordance. A hidden
+// natural-width copy of the row measures whether the "last updated"
+// trailing clause fits; if not, the visible copy drops it.
+function PullRequestIdentity({
+  worktree,
+  pr,
+}: {
+  worktree: Worktree;
+  pr: PullRequestDetail;
+}) {
   const updatedAt = new Date(pr.updatedAt);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measurerRef = useRef<HTMLDivElement>(null);
+  const [showUpdated, setShowUpdated] = useState(true);
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const measurer = measurerRef.current;
+    if (!container || !measurer) return;
+    const check = () => {
+      setShowUpdated(measurer.scrollWidth <= container.clientWidth);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(container);
+    observer.observe(measurer);
+    return () => observer.disconnect();
+  }, []);
+
+  const updatedLabel = `, last updated ${formatRelativeTime(updatedAt.getTime())}`;
+
   return (
     <div className="space-y-1.5">
-      <h3 className="text-lg leading-snug font-medium select-text">
-        <PullRequestTitleLink pr={pr} />{" "}
-        <span className="font-normal text-muted-foreground/60">
-          #{pr.number}
-        </span>
-      </h3>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs text-muted-foreground">
-        <div className="flex flex-wrap items-center gap-2">
-          <PullRequestStatePill pr={pr} />
-          <span>into</span>
-          <BranchChip name={pr.baseRefName} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="min-w-0 flex-1 text-lg leading-snug font-medium select-text">
+          <PullRequestTitleLink pr={pr} />{" "}
+          <span className="font-normal text-muted-foreground/60">
+            #{pr.number}
+          </span>
+        </h3>
+        <PullRequestStatePill pr={pr} />
+      </div>
+      <div
+        ref={containerRef}
+        className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
+      >
+        <MetaSentence
+          authorLogin={pr.authorLogin}
+          baseRefName={pr.baseRefName}
+          updatedTitle={updatedAt.toLocaleString()}
+          trailing={showUpdated ? updatedLabel : null}
+        />
+        {pr.changedFiles > 0 && <DiffButton worktree={worktree} pr={pr} />}
+        <div
+          ref={measurerRef}
+          aria-hidden
+          className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-x-3 whitespace-nowrap"
+        >
+          <MetaSentence
+            authorLogin={pr.authorLogin}
+            baseRefName={pr.baseRefName}
+            updatedTitle={updatedAt.toLocaleString()}
+            trailing={updatedLabel}
+          />
+          {pr.changedFiles > 0 && <DiffButton worktree={worktree} pr={pr} />}
         </div>
-        <span className="select-text" title={updatedAt.toLocaleString()}>
-          Opened by{" "}
-          <span className="text-foreground/80">@{pr.authorLogin}</span>, updated{" "}
-          {formatRelativeTime(updatedAt.getTime())}
-        </span>
       </div>
     </div>
+  );
+}
+
+function MetaSentence({
+  authorLogin,
+  baseRefName,
+  updatedTitle,
+  trailing,
+}: {
+  authorLogin: string;
+  baseRefName: string;
+  updatedTitle: string;
+  trailing: string | null;
+}) {
+  return (
+    <p
+      className="text-xs text-muted-foreground select-text"
+      title={updatedTitle}
+    >
+      <span className="text-foreground/80">@{authorLogin}</span> is merging into{" "}
+      <span className="font-mono text-foreground/80">{baseRefName}</span>
+      {trailing}
+    </p>
+  );
+}
+
+function DiffButton({
+  worktree,
+  pr,
+}: {
+  worktree: Worktree;
+  pr: PullRequestDetail;
+}) {
+  const navigate = useNavigate();
+  const fileNoun = pr.changedFiles === 1 ? "file" : "files";
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        void navigate({
+          to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+          params: { projectId: worktree.projectId, worktreeId: worktree.id },
+        })
+      }
+      title="View pull request diff"
+      className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <span>
+        {pr.changedFiles} {fileNoun} changed,
+      </span>
+      <DiffStats additions={pr.additions} deletions={pr.deletions} />
+      <ChevronRight aria-hidden className="size-3.5 shrink-0 opacity-60" />
+    </button>
   );
 }
 
@@ -145,68 +284,16 @@ function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
   const stateLabel =
     pr.isDraft && pr.state === "OPEN" ? "Draft" : STATE_LABEL[pr.state];
   return (
-    <a
-      href={pr.url}
-      onClick={(e) => {
-        e.preventDefault();
-        openPullRequest(pr.url);
-      }}
-      title={`Open ${label} on GitHub`}
+    <span
+      title={label}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs whitespace-nowrap transition-colors focus-visible:outline-2",
-        STATE_PILL_CLASSES[tone],
+        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
+        TONE_TEXT[tone],
       )}
     >
       <Icon aria-hidden className="size-3.5" />
       {stateLabel}
-    </a>
-  );
-}
-
-// Inline code-style chip for branch names, matching GitHub's PR header
-// chips. Used in the identity meta line and inside the merge box.
-function BranchChip({ name }: { name: string }) {
-  return (
-    <code className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground select-text">
-      {name}
-    </code>
-  );
-}
-
-function ChangesRow({
-  worktree,
-  pr,
-}: {
-  worktree: Worktree;
-  pr: PullRequestDetail;
-}) {
-  const navigate = useNavigate();
-  const fileNoun = pr.changedFiles === 1 ? "file" : "files";
-  return (
-    <button
-      type="button"
-      onClick={() =>
-        void navigate({
-          to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
-          params: { projectId: worktree.projectId, worktreeId: worktree.id },
-        })
-      }
-      title="View pull request diff"
-      className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
-    >
-      <FileDiff
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground"
-      />
-      <span className="flex-1 text-foreground">
-        {pr.changedFiles} {fileNoun} changed
-      </span>
-      <DiffStats additions={pr.additions} deletions={pr.deletions} />
-      <ChevronRight
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground/40"
-      />
-    </button>
+    </span>
   );
 }
 
@@ -331,6 +418,7 @@ function MergeBox({
   lastMergeMethod: MergeMethod | undefined;
 }) {
   const merge = useMergePullRequest();
+  const setDraft = useSetPullRequestDraft();
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { primary, allowed } = resolveMergeMethod(repoConfig, lastMergeMethod);
   const mergeState = describeMergeState(pr.mergeState);
@@ -359,6 +447,15 @@ function MergeBox({
     );
   };
 
+  const toggleDraft = () => {
+    setDraft.mutate({
+      projectId: worktree.projectId,
+      branch: worktree.branch,
+      number: pr.number,
+      draft: !pr.isDraft,
+    });
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -366,57 +463,79 @@ function MergeBox({
           <MergeStateIcon tone={mergeState.tone} />
           <span className={TONE_TEXT[mergeState.tone]}>{mergeState.label}</span>
         </span>
-        <div className="inline-flex items-stretch">
+        <div className="inline-flex items-center gap-2">
           <Button
             type="button"
             size="sm"
-            variant={armed ? "destructive" : "outline"}
-            disabled={disabled}
-            onClick={() => trigger(() => runMerge(primary))}
-            className={cn(others.length > 0 && "rounded-r-none border-r-0")}
+            variant="ghost"
+            disabled={setDraft.isPending || merge.isPending}
+            onClick={toggleDraft}
+            className="text-muted-foreground hover:text-foreground"
           >
-            {merge.isPending ? (
+            {setDraft.isPending ? (
               <>
                 <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                Merging…
+                Updating…
               </>
-            ) : armed ? (
-              "Click again to confirm"
+            ) : pr.isDraft ? (
+              "Mark as ready"
             ) : (
-              MERGE_METHOD_SHORT_LABEL[primary]
+              "Convert to draft"
             )}
           </Button>
-          {others.length > 0 && (
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={disabled}
-                    aria-label="Choose merge method"
-                    className="rounded-l-none px-1.5"
-                  >
-                    <ChevronDown aria-hidden className="size-3.5" />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end" sideOffset={4}>
-                {others.map((method) => (
-                  <DropdownMenuItem
-                    key={method}
-                    onClick={() => runMerge(method)}
-                  >
-                    {MERGE_METHOD_LABEL[method]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+          <div className="inline-flex items-stretch">
+            <Button
+              type="button"
+              size="sm"
+              variant={armed ? "destructive" : "outline"}
+              disabled={disabled}
+              onClick={() => trigger(() => runMerge(primary))}
+              className={cn(others.length > 0 && "rounded-r-none border-r-0")}
+            >
+              {merge.isPending ? (
+                <>
+                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
+                  Merging…
+                </>
+              ) : armed ? (
+                "Click again to confirm"
+              ) : (
+                MERGE_METHOD_SHORT_LABEL[primary]
+              )}
+            </Button>
+            {others.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={disabled}
+                      aria-label="Choose merge method"
+                      className="rounded-l-none px-1.5"
+                    >
+                      <ChevronDown aria-hidden className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end" sideOffset={4}>
+                  {others.map((method) => (
+                    <DropdownMenuItem
+                      key={method}
+                      onClick={() => runMerge(method)}
+                    >
+                      {MERGE_METHOD_LABEL[method]}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
       </div>
       {merge.error && <ErrorBanner>{merge.error.message}</ErrorBanner>}
+      {setDraft.error && <ErrorBanner>{setDraft.error.message}</ErrorBanner>}
     </div>
   );
 }
@@ -431,17 +550,6 @@ const STATE_LABEL: Record<PullRequestDetail["state"], string> = {
   OPEN: "Open",
   MERGED: "Merged",
   CLOSED: "Closed",
-};
-
-const STATE_PILL_CLASSES: Record<PullRequestTone, string> = {
-  emerald:
-    "text-emerald-500 hover:bg-emerald-500/10 focus-visible:outline-emerald-500",
-  violet:
-    "text-violet-500 hover:bg-violet-500/10 focus-visible:outline-violet-500",
-  rose: "text-rose-500 hover:bg-rose-500/10 focus-visible:outline-rose-500",
-  slate:
-    "text-muted-foreground hover:bg-muted focus-visible:outline-muted-foreground",
-  amber: "text-amber-500 hover:bg-amber-500/10 focus-visible:outline-amber-500",
 };
 
 const TONE_TEXT: Record<PullRequestTone, string> = {

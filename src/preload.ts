@@ -327,6 +327,13 @@ const api = {
       number: number;
     }): Promise<string> =>
       ipcRenderer.invoke(CHANNELS.GithubCliPullRequestDiff, input),
+    setPullRequestDraft: (input: {
+      projectId: string;
+      branch: string;
+      number: number;
+      draft: boolean;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliSetPullRequestDraft, input),
     onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GithubCliProjectPullRequestsRefreshed,
     ),

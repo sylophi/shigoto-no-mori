@@ -606,6 +606,13 @@ export const MergePullRequestPayloadSchema = z.object({
   method: MergeMethodSchema,
 });
 
+export const SetPullRequestDraftPayloadSchema = z.object({
+  projectId: z.string(),
+  branch: z.string(),
+  number: z.number().int().positive(),
+  draft: z.boolean(),
+});
+
 export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,
 });

@@ -58,12 +58,13 @@ export function PullRequestDiff() {
       }
       subtitle={
         <>
-          {pr.changedFiles} {fileNoun} into{" "}
+          {pr.changedFiles} {fileNoun} changed into{" "}
           <span className="font-mono text-foreground/80">{pr.baseRefName}</span>
-          <span className="tabular ml-3 font-mono">
-            <span className="text-emerald-500">+{pr.additions}</span>{" "}
-            <span className="text-rose-500">−{pr.deletions}</span>
-          </span>
+          {", "}
+          <span className="font-mono text-emerald-500">
+            +{pr.additions}
+          </span>{" "}
+          <span className="font-mono text-rose-500">−{pr.deletions}</span>
         </>
       }
       emptyMessage="No file changes in this PR."

@@ -7,6 +7,7 @@ import {
   type PullRequest,
   type PullRequestDetail,
   type RepoMergeConfig,
+  SetPullRequestDraftPayloadSchema,
 } from "@shared/schemas";
 import {
   getGithubCliReadiness,
@@ -15,6 +16,7 @@ import {
   getWorktreePullRequest,
   listProjectPullRequests,
   mergePullRequest,
+  setPullRequestDraft,
 } from "../githubCli";
 import { findProjectOrThrow } from "../projects";
 
@@ -95,6 +97,16 @@ export function registerGithubCliHandlers(): void {
         PullRequestDiffPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return getPullRequestDiff({ cwd: project.path, number });
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.GithubCliSetPullRequestDraft,
+    async (_event, rawPayload: unknown): Promise<void> => {
+      const { projectId, number, draft } =
+        SetPullRequestDraftPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      await setPullRequestDraft({ cwd: project.path, number, draft });
     },
   );
 }
