@@ -156,11 +156,8 @@ const api = {
       oldName: string;
       newName: string;
     }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesRename, input),
-    delete: (input: {
-      projectId: string;
-      name: string;
-      force?: boolean;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
+    delete: (input: { projectId: string; name: string }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
   },
   dialog: {
     pickFolder: (options?: {

@@ -64,7 +64,6 @@ export function useRenameAnyBranch() {
 interface DeleteBranchInput {
   projectId: string;
   name: string;
-  force?: boolean;
 }
 
 export function useDeleteBranch() {
@@ -73,8 +72,6 @@ export function useDeleteBranch() {
     mutationFn: (input) => window.api.branches.delete(input),
     onSuccess: (_data, vars) =>
       invalidateBranchState(queryClient, vars.projectId),
-    // The page surfaces an inline force-delete prompt on the first
-    // non-force failure; toast on top would be noise.
-    meta: { silentError: true },
+    meta: { errorTitle: "Couldn't delete branch" },
   });
 }

@@ -77,15 +77,13 @@ export async function renameAnyLocalBranch(
   await run(projectPath, ["branch", "-m", oldName, newName]);
 }
 
-// Delete a local branch. `-d` is the safe variant (rejects unmerged);
-// `-D` force-deletes. Either way git refuses if the branch is checked
-// out in any worktree.
+// Force-delete a local branch. Git still refuses if the branch is
+// checked out in any worktree, which is the safety we care about.
 export async function deleteAnyLocalBranch(
   projectPath: string,
   name: string,
-  force: boolean,
 ): Promise<void> {
-  await run(projectPath, ["branch", force ? "-D" : "-d", name]);
+  await run(projectPath, ["branch", "-D", name]);
 }
 
 // `--directory` collapses fully-ignored directories into a single
