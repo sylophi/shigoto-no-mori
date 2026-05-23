@@ -19,6 +19,13 @@ export function isShelved(worktreeId: string): boolean {
   return readMap()[worktreeId] === true;
 }
 
+// Bulk lookup form: read the file once for callers that need to check
+// many ids in a row (the worktree list build). Mirrors `usageFor` in
+// packageScriptStats.ts. Returned set is owned by the caller.
+export function readShelvedSet(): Set<string> {
+  return new Set(Object.keys(readMap()));
+}
+
 export function setShelved(worktreeId: string, shelved: boolean): void {
   const map = readMap();
   const has = map[worktreeId] === true;
