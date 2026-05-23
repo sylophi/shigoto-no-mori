@@ -5,6 +5,7 @@ import {
   type GithubCliReadiness,
   type PullRequest,
   PullRequestStateSchema,
+  pullRequestsEqual,
 } from "@shared/schemas";
 import { readGlobalConfig } from "./globalConfig";
 
@@ -183,16 +184,7 @@ export function pullRequestMapsEqual(
   if (!a || a.size !== b.size) return false;
   for (const [branch, pa] of a) {
     const pb = b.get(branch);
-    if (!pb) return false;
-    if (
-      pa.number !== pb.number ||
-      pa.state !== pb.state ||
-      pa.isDraft !== pb.isDraft ||
-      pa.title !== pb.title ||
-      pa.url !== pb.url
-    ) {
-      return false;
-    }
+    if (!pb || !pullRequestsEqual(pa, pb)) return false;
   }
   return true;
 }
