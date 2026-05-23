@@ -539,14 +539,21 @@ export const WriteShigomoriPayloadSchema = z.object({
   config: ShigomoriConfigSchema,
 });
 
+// Per-worktree data IPC payloads construct filesystem paths directly from
+// `worktreeId` (unlike other handlers, which route the id through git's
+// worktree list first). Constrain it to the exact 12-hex shape that
+// `worktreeIdFromPath` produces so a malformed id can't escape the
+// projects/<id>/worktrees/ directory.
+const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
+
 export const ReadWorktreeDataPayloadSchema = z.object({
   projectId: z.string(),
-  worktreeId: z.string(),
+  worktreeId: WorktreeIdSchema,
 });
 
 export const WriteWorktreeDataPayloadSchema = z.object({
   projectId: z.string(),
-  worktreeId: z.string(),
+  worktreeId: WorktreeIdSchema,
   data: ShigomoriWorktreeDataSchema,
 });
 

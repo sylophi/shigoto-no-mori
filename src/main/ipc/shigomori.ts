@@ -49,6 +49,9 @@ export function registerShigomoriHandlers(): void {
     ): Promise<ShigomoriWorktreeData | null> => {
       const { projectId, worktreeId } =
         ReadWorktreeDataPayloadSchema.parse(rawPayload);
+      // Validate projectId against the in-memory project list before any
+      // path construction, so a bogus id can't read outside projects/.
+      findProjectOrThrow(projectId);
       return readWorktreeData(projectId, worktreeId);
     },
   );
@@ -61,6 +64,8 @@ export function registerShigomoriHandlers(): void {
       // The renderer doesn't surface a notes UI for external worktrees, so
       // we don't re-verify here -- enforcing the "no external state" rule
       // would mean shelling out to `git worktree list` on every save.
+      // findProjectOrThrow + the WorktreeIdSchema regex keep the path-build
+      // safe against malformed input.
       findProjectOrThrow(projectId);
       await writeWorktreeData(projectId, worktreeId, data);
     },
