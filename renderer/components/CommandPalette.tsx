@@ -7,7 +7,7 @@ import { BrowseView } from "./palette/BrowseView";
 export function CommandPalette() {
   const { open, mode, setOpen, toggle, openIn } = useCommandPalette();
 
-  // Both shortcuts are wired via native menu accelerators in src/main/menu.ts
+  // Both shortcuts are wired via native menu accelerators in main/menu.ts
   // — View → Command palette (⌘⇧P, also ⌘P) and File → Add project… (⌘N).
   useEffect(() => window.api.palette.onToggle(toggle), [toggle]);
   useEffect(

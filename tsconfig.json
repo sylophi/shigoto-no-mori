@@ -27,12 +27,15 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./src/shared/*"]
+      "@/*": ["./renderer/*"],
+      "@main/*": ["./main/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": [
-    "src/**/*",
+    "main/**/*",
+    "renderer/**/*",
+    "shared/**/*",
     "forge.config.ts",
     "forge.env.d.ts",
     "vite.*.config.ts"

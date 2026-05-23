@@ -3,7 +3,7 @@
   "productName": "Shigoto no Mori",
   "version": "0.0.0",
   "description": "Lightweight desktop app for managing git worktrees in parallel.",
-  "main": ".vite/build/main.js",
+  "main": ".vite/build/index.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/sylophi/shigoto-no-mori.git"
