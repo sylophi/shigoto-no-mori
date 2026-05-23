@@ -77,7 +77,12 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
     isError,
     error,
     refetch,
-  } = useBranchCommits(worktree.projectId, worktree.id, true);
+  } = useBranchCommits(
+    worktree.projectId,
+    worktree.id,
+    worktree.recentCommits[0]?.hash,
+    true,
+  );
 
   const commits = data ? data.pages.flat() : [];
 

@@ -8,19 +8,26 @@ export const BRANCH_COMMITS_PAGE_SIZE = 50;
 // `skip`. A short final page (fewer than PAGE_SIZE rows) ends the
 // scroll. Disabled until the drawer opens so closed detail pages don't
 // run the query at all.
+//
+// The worktree id is path-derived, so it doesn't change when the user
+// switches branches, renames, or pulls inside the same worktree. We
+// also fold the current HEAD hash into the key so any HEAD movement
+// (branch switch, pull, rebase, overwrite) drops the stale pages
+// instead of reusing them under a new branch's title.
 export function useBranchCommits(
   projectId: string,
   worktreeId: string,
+  headHash: string | undefined,
   enabled: boolean,
 ) {
   return useInfiniteQuery<
     CommitSummary[],
     Error,
     { pages: CommitSummary[][]; pageParams: number[] },
-    [string, string, string],
+    [string, string, string, string | undefined],
     number
   >({
-    queryKey: ["branch-commits", projectId, worktreeId],
+    queryKey: ["branch-commits", projectId, worktreeId, headHash],
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
