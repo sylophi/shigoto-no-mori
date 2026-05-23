@@ -8,6 +8,7 @@ export const CHANNELS = {
   ProjectsListBranches: "projects:listBranches",
   ProjectsPickWorktreeName: "projects:pickWorktreeName",
   ProjectsListIgnoredPaths: "projects:listIgnoredPaths",
+  ProjectsIcon: "projects:icon",
   WorktreesList: "worktrees:list",
   WorktreesCreate: "worktrees:create",
   WorktreesConvertExternal: "worktrees:convertExternal",
