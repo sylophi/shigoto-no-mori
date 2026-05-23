@@ -7,9 +7,9 @@
 // Crash-safety: we write the new layout first, then unlink the old file.
 // A crash mid-migration leaves both layouts on disk; the next launch
 // picks up where it left off, and the new files (atomically written) win.
-import { readdir, readFile, stat, unlink } from "node:fs/promises";
-import { join } from "node:path";
-import { atomicWriteJson } from "./jsonFile";
+import { readdir, readFile } from "node:fs/promises";
+import { basename, join } from "node:path";
+import { atomicWriteJson, unlinkIfExists } from "./jsonFile";
 import { isENOENT, shigomoriRoot } from "./paths";
 
 // A loose mirror of the legacy ShigomoriConfig: we only need to recognize
@@ -19,12 +19,14 @@ interface LegacyConfig {
   [key: string]: unknown;
 }
 
+const LEGACY_EXT = ".json";
+
 function projectsDir(): string {
   return join(shigomoriRoot(), "projects");
 }
 
 async function migrateOne(projectId: string): Promise<void> {
-  const oldFile = join(projectsDir(), `${projectId}.json`);
+  const oldFile = join(projectsDir(), `${projectId}${LEGACY_EXT}`);
   const newProjectFile = join(projectsDir(), projectId, "project.json");
   const newWorktreesDir = join(projectsDir(), projectId, "worktrees");
 
@@ -51,7 +53,10 @@ async function migrateOne(projectId: string): Promise<void> {
   await atomicWriteJson(newProjectFile, projectFields);
 
   if (notes && typeof notes === "object") {
-    await Promise.all(
+    // `allSettled` so one bad note doesn't strand the rest of the project's
+    // state mid-migration. Failures get logged and the legacy file is kept
+    // (we skip the unlink below), so a future launch can retry.
+    const results = await Promise.allSettled(
       Object.entries(notes)
         .filter(([, text]) => typeof text === "string" && text.length > 0)
         .map(([worktreeId, text]) =>
@@ -60,34 +65,30 @@ async function migrateOne(projectId: string): Promise<void> {
           }),
         ),
     );
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      for (const f of failures) {
+        console.warn(`[shigomori] migration note write failed:`, f.reason);
+      }
+      return;
+    }
   }
 
-  await unlink(oldFile).catch((err) => {
-    if (!isENOENT(err)) throw err;
-  });
+  await unlinkIfExists(oldFile);
 }
 
 export async function migrateProjectConfigsToDirLayout(): Promise<void> {
-  let entries: string[];
+  let entries;
   try {
-    entries = await readdir(projectsDir());
+    entries = await readdir(projectsDir(), { withFileTypes: true });
   } catch (err) {
     if (isENOENT(err)) return;
     throw err;
   }
 
-  const candidates = entries.filter((e) => e.endsWith(".json"));
-  const stats = await Promise.all(
-    candidates.map(async (entry) => {
-      try {
-        const s = await stat(join(projectsDir(), entry));
-        return s.isFile() ? entry.slice(0, -".json".length) : null;
-      } catch (err) {
-        if (isENOENT(err)) return null;
-        throw err;
-      }
-    }),
-  );
+  const legacyIds = entries
+    .filter((e) => e.isFile() && e.name.endsWith(LEGACY_EXT))
+    .map((e) => basename(e.name, LEGACY_EXT));
 
-  await Promise.all(stats.filter((id) => id !== null).map(migrateOne));
+  await Promise.all(legacyIds.map(migrateOne));
 }

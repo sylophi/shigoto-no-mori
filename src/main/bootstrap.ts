@@ -24,6 +24,6 @@ export async function ensureShigomoriRoot(): Promise<void> {
   await Promise.all([
     ensureFile(join(root, "config.json"), EMPTY_JSON),
     ensureFile(join(root, "state.json"), EMPTY_JSON),
+    migrateProjectConfigsToDirLayout(),
   ]);
-  await migrateProjectConfigsToDirLayout();
 }

@@ -4,11 +4,8 @@ import { useWorktreeData, useWorktreeDataWrite } from "@/hooks/useWorktreeData";
 import type { Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
-  // External worktrees deliberately have no on-disk state -- if shigomori
-  // didn't create the worktree it doesn't own metadata for it.
   if (worktree.isExternal) return null;
-
-  return <NotesSectionInner worktree={worktree} />;
+  return <NotesSectionInner key={worktree.id} worktree={worktree} />;
 }
 
 function NotesSectionInner({ worktree }: { worktree: Worktree }) {
@@ -17,14 +14,6 @@ function NotesSectionInner({ worktree }: { worktree: Worktree }) {
 
   const saved = data?.notes ?? "";
   const [draft, setDraft] = useState(saved);
-  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-
-  // Re-sync the draft when switching between worktrees or when the
-  // data first loads. Tracking the worktree id lets us detect both.
-  if (hydratedFor !== worktree.id) {
-    setHydratedFor(worktree.id);
-    setDraft(saved);
-  }
 
   const commit = () => {
     const next = draft;

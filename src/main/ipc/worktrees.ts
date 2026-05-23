@@ -165,12 +165,13 @@ export function registerWorktreeHandlers(): void {
       // move. Otherwise the process keeps running in the moved directory
       // while the renderer drops the run state on success, leaving an
       // unmanageable child until app quit. Matches the delete handler.
-      await killScriptsForWorktree(worktreeId);
-      // The id is path-derived, so the relocate changes it; carry the
-      // shelf flag and per-worktree state forward to the new id and
-      // clear the stale entries.
+      const [, carryData] = await Promise.all([
+        killScriptsForWorktree(worktreeId),
+        readWorktreeData(project.id, worktreeId),
+      ]);
+      // The id is path-derived, so the relocate changes it -- carry the
+      // shelf flag and per-worktree state forward to the new id.
       const carryShelved = isShelved(worktreeId);
-      const carryData = await readWorktreeData(project.id, worktreeId);
       await relocateWorktree(project.path, target.path, destinationPath);
       // Sweep the old parent dir if it's one we own (managed root's
       // per-project subdir, or the in-project .shigomori scaffolding).
@@ -184,8 +185,10 @@ export function registerWorktreeHandlers(): void {
         setShelved(newId, true);
       }
       if (carryData) {
-        await writeWorktreeData(project.id, newId, carryData);
-        await deleteWorktreeData(project.id, worktreeId);
+        await Promise.all([
+          writeWorktreeData(project.id, newId, carryData),
+          deleteWorktreeData(project.id, worktreeId),
+        ]);
       }
       // Everything we need for the moved identity is already known:
       // the id is path-derived, branch/detached survive the move, and we
@@ -281,18 +284,15 @@ export function registerWorktreeHandlers(): void {
 
       // Defaults to true: if you're done with the worktree, you're done
       // with the local branch. (Remote branches are never touched.)
-      await deleteBranchAfterWorktreeRemoval(
-        project.path,
-        target,
-        global.deleteBranchOnRemove ?? true,
-      );
-      // Drop any lingering shelf state for this id so a future
-      // worktree at the same path doesn't inherit it.
       dropShelved(worktreeId);
-      // Same idea for per-worktree state (notes etc.) -- the id is
-      // path-derived, but we still drop the file so a stale entry can't
-      // resurface if the path is ever reused.
-      await deleteWorktreeData(project.id, worktreeId);
+      await Promise.all([
+        deleteBranchAfterWorktreeRemoval(
+          project.path,
+          target,
+          global.deleteBranchOnRemove ?? true,
+        ),
+        deleteWorktreeData(project.id, worktreeId),
+      ]);
       return { ok: true };
     },
   );

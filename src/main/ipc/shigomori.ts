@@ -7,7 +7,6 @@ import {
   WriteWorktreeDataPayloadSchema,
 } from "@shared/schemas";
 import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
-import { findWorktreeIdentityOrThrow } from "../git";
 import { appendExcludes } from "../gitExclude";
 import { findProjectOrThrow } from "../projects";
 import {
@@ -59,17 +58,10 @@ export function registerShigomoriHandlers(): void {
     async (_event, rawPayload: unknown) => {
       const { projectId, worktreeId, data } =
         WriteWorktreeDataPayloadSchema.parse(rawPayload);
-      // External worktrees deliberately have no on-disk state -- if shigomori
-      // didn't create the worktree it shouldn't own metadata for it.
-      const project = findProjectOrThrow(projectId);
-      const identity = await findWorktreeIdentityOrThrow(
-        project.id,
-        project.path,
-        worktreeId,
-      );
-      if (identity.isExternal) {
-        throw new Error("External worktrees can't store shigomori state");
-      }
+      // The renderer doesn't surface a notes UI for external worktrees, so
+      // we don't re-verify here -- enforcing the "no external state" rule
+      // would mean shelling out to `git worktree list` on every save.
+      findProjectOrThrow(projectId);
       await writeWorktreeData(projectId, worktreeId, data);
     },
   );

@@ -4,7 +4,7 @@
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
 // files only exist for managed worktrees -- externals deliberately have no
 // persisted state.
-import { rm, unlink } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ShigomoriConfig,
@@ -12,8 +12,8 @@ import {
   type ShigomoriWorktreeData,
   ShigomoriWorktreeDataSchema,
 } from "@shared/schemas";
-import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
-import { isENOENT, shigomoriRoot } from "./paths";
+import { atomicWriteJson, readJsonOrNull, unlinkIfExists } from "./jsonFile";
+import { shigomoriRoot } from "./paths";
 import { ttlMapCache } from "./ttlCache";
 
 function projectDir(projectId: string): string {
@@ -87,24 +87,22 @@ export async function writeWorktreeData(
   worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
 }
 
-// Best-effort: callers fire this on lifecycle events (delete, relocate-old-id)
-// and shouldn't fail just because the file never existed.
 export async function deleteWorktreeData(
   projectId: string,
   worktreeId: string,
 ): Promise<void> {
+  const key = worktreeKey(projectId, worktreeId);
   try {
-    await unlink(worktreeDataPath(projectId, worktreeId));
-  } catch (err) {
-    if (!isENOENT(err)) throw err;
+    await unlinkIfExists(worktreeDataPath(projectId, worktreeId));
   } finally {
-    worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
+    worktreeCache.invalidate(key);
   }
 }
 
-// Nukes the entire project directory. Called on project removal so we
-// don't leak per-project state across re-adds.
 export async function deleteProjectState(projectId: string): Promise<void> {
   await rm(projectDir(projectId), { recursive: true, force: true });
   configCache.invalidate(projectId);
+  // Drop every worktreeCache entry that belongs to this project so a
+  // re-add can't ever see stale data through the in-memory layer.
+  worktreeCache.invalidateByPrefix(`${projectId}:`);
 }

@@ -10,6 +10,9 @@ interface Entry<V> {
 export interface TtlMapCache<K, V> {
   get(key: K): Promise<V>;
   invalidate(key: K): void;
+  // Drops every entry whose key starts with the given prefix. Only meaningful
+  // for string-keyed caches; throws on other key shapes so misuse stays loud.
+  invalidateByPrefix(prefix: K extends string ? string : never): void;
 }
 
 export function ttlMapCache<K, V>(
@@ -28,6 +31,16 @@ export function ttlMapCache<K, V>(
     },
     invalidate(key) {
       store.delete(key);
+    },
+    invalidateByPrefix(prefix) {
+      for (const key of store.keys()) {
+        if (typeof key !== "string") {
+          throw new Error(
+            "invalidateByPrefix only works on string-keyed caches",
+          );
+        }
+        if (key.startsWith(prefix)) store.delete(key);
+      }
     },
   };
 }

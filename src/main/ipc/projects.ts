@@ -119,12 +119,9 @@ export function registerProjectHandlers(): void {
       const projects = loadProjects();
       const removed = projects.find((p) => p.id === id);
       saveProjects(projects.filter((p) => p.id !== id));
-      // Drop the project's icon-cache entry so the cache doesn't grow
-      // unbounded as projects come and go.
+      // Drop the project's icon-cache entry and on-disk state so neither
+      // leaks across re-adds of the same path.
       if (removed) await forgetProjectIcon(removed.path);
-      // Same idea for the project's on-disk state directory (project.json
-      // + per-worktree files). Best effort -- a stray dir won't break
-      // anything, but we'd rather not leak it across re-adds.
       await deleteProjectState(id);
     },
   );
