@@ -66,7 +66,7 @@ function RootLayout() {
   };
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="flex h-dvh overflow-hidden text-foreground">
       <div style={{ width: sidebarWidth }} className="shrink-0">
         <Sidebar />
       </div>
@@ -80,7 +80,7 @@ function RootLayout() {
       >
         <div className="absolute inset-y-0 -left-1 w-2" />
       </div>
-      <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <div
           aria-hidden
           className="absolute inset-x-0 top-0 z-30 h-7"
