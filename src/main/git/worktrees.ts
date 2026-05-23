@@ -6,6 +6,7 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
+import { isShelved } from "../shelvedWorktrees";
 import { readShigomoriConfig } from "../shigomori";
 import { pickWorktreeName } from "../worktreeNames";
 import {
@@ -250,6 +251,8 @@ async function buildWorktree(
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
     detached: identity.detached,
+    shelved:
+      !identity.isPrimary && !identity.isExternal && isShelved(identity.id),
   };
 }
 

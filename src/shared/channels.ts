@@ -14,6 +14,7 @@ export const CHANNELS = {
   WorktreesRelocate: "worktrees:relocate",
   WorktreesDelete: "worktrees:delete",
   WorktreesRenameBranch: "worktrees:renameBranch",
+  WorktreesSetShelved: "worktrees:setShelved",
   WorktreesCheckoutBranch: "worktrees:checkoutBranch",
   WorktreesDiff: "worktrees:diff",
   WorktreesCommitDiff: "worktrees:commitDiff",

@@ -37,13 +37,21 @@ type SidebarRow =
   | { kind: "project"; key: string; project: Project; expanded: boolean }
   | { kind: "worktree"; key: string; worktree: Worktree }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
-  | { kind: "worktree-error"; key: string; projectId: string };
+  | { kind: "worktree-error"; key: string; projectId: string }
+  | {
+      kind: "shelved-toggle";
+      key: string;
+      projectId: string;
+      count: number;
+      expanded: boolean;
+    };
 
 const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
   worktree: 40,
   "worktree-skeleton": 36,
   "worktree-error": 24,
+  "shelved-toggle": 24,
 };
 
 export function Sidebar() {
@@ -51,11 +59,25 @@ export function Sidebar() {
   const reorderProjects = useReorderProjects();
   // Absence == expanded, so new projects default open.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Per-project "Show shelved" reveal. Transient on purpose -- the
+  // whole point of shelving is to keep the noise down on a fresh window.
+  const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
 
   const toggleExpanded = (projectId: string) => {
     setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  const toggleShelved = (projectId: string) => {
+    setShelvedExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(projectId)) next.delete(projectId);
       else next.add(projectId);
@@ -117,11 +139,34 @@ export function Sidebar() {
             return;
           }
           const trees = (query.data ?? []) as Worktree[];
-          for (const worktree of trees) {
+          const visible = trees.filter((w) => !w.shelved);
+          const shelved = trees.filter((w) => w.shelved);
+          for (const worktree of visible) {
             out.push({
               kind: "worktree",
               key: `w:${worktree.id}`,
               worktree,
+            });
+          }
+          if (shelved.length > 0) {
+            const shelfOpen = shelvedExpanded.has(project.id);
+            if (shelfOpen) {
+              for (const worktree of shelved) {
+                out.push({
+                  kind: "worktree",
+                  key: `w:${worktree.id}`,
+                  worktree,
+                });
+              }
+            }
+            // Always anchored at the bottom of the project's section:
+            // "N shelved" reveals, "Hide shelved" collapses.
+            out.push({
+              kind: "shelved-toggle",
+              key: `shelf:${project.id}`,
+              projectId: project.id,
+              count: shelved.length,
+              expanded: shelfOpen,
             });
           }
         });
@@ -201,6 +246,7 @@ export function Sidebar() {
                       <RowContent
                         row={row}
                         onToggle={toggleExpanded}
+                        onToggleShelved={toggleShelved}
                         arrangeMode={arrangeMode}
                       />
                     </div>
@@ -232,10 +278,12 @@ export function Sidebar() {
 function RowContent({
   row,
   onToggle,
+  onToggleShelved,
   arrangeMode,
 }: {
   row: SidebarRow;
   onToggle: (projectId: string) => void;
+  onToggleShelved: (projectId: string) => void;
   arrangeMode: boolean;
 }) {
   if (row.kind === "project") {
@@ -259,10 +307,40 @@ function RowContent({
       </div>
     );
   }
+  if (row.kind === "shelved-toggle") {
+    return (
+      <ShelvedToggleRow
+        count={row.count}
+        expanded={row.expanded}
+        onToggle={() => onToggleShelved(row.projectId)}
+      />
+    );
+  }
   return (
     <div className="px-2 py-1 text-xs text-muted-foreground">
       Couldn't load worktrees.
     </div>
+  );
+}
+
+function ShelvedToggleRow({
+  count,
+  expanded,
+  onToggle,
+}: {
+  count: number;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      className="w-full px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-foreground"
+    >
+      {expanded ? "Hide shelved" : `${count} shelved`}
+    </button>
   );
 }
 
