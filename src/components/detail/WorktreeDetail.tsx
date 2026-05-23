@@ -380,56 +380,47 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
           </Button>
         ) : (
           <div className="ml-auto flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="xs"
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              disabled={
-                setShelved.isPending ||
-                busy ||
-                worktree.isPrimary ||
-                worktree.isExternal
-              }
-              onClick={() =>
-                setShelved.mutate({
-                  projectId: worktree.projectId,
-                  worktreeId: worktree.id,
-                  shelved: !worktree.shelved,
-                })
-              }
-              title={
-                worktree.isPrimary
-                  ? "Repo root can't be shelved"
-                  : worktree.isExternal
-                    ? "External worktrees can't be shelved"
-                    : worktree.shelved
-                      ? "Unshelve (bring back to the main list)"
-                      : "Shelve (hide from the main list)"
-              }
-            >
-              {worktree.shelved ? <ArchiveRestore /> : <Archive />}
-              {worktree.shelved ? "Unshelve" : "Shelve"}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              className={cn(
-                "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
-                confirmDelete && "bg-destructive/10",
-              )}
-              disabled={busy || worktree.isPrimary}
-              onClick={handleDelete}
-              title={
-                worktree.isPrimary
-                  ? "Repo root cannot be deleted"
-                  : confirmDelete
-                    ? "Click again to confirm"
-                    : "Delete worktree"
-              }
-            >
-              <Trash2 />
-              {deleteButtonLabel(busy, confirmDelete)}
-            </Button>
+            {!worktree.isPrimary && !worktree.isExternal && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+                disabled={setShelved.isPending || busy}
+                onClick={() =>
+                  setShelved.mutate({
+                    projectId: worktree.projectId,
+                    worktreeId: worktree.id,
+                    shelved: !worktree.shelved,
+                  })
+                }
+                title={
+                  worktree.shelved
+                    ? "Unshelve (bring back to the main list)"
+                    : "Shelve (hide from the main list)"
+                }
+              >
+                {worktree.shelved ? <ArchiveRestore /> : <Archive />}
+                {worktree.shelved ? "Unshelve" : "Shelve"}
+              </Button>
+            )}
+            {!worktree.isPrimary && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className={cn(
+                  "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                  confirmDelete && "bg-destructive/10",
+                )}
+                disabled={busy}
+                onClick={handleDelete}
+                title={
+                  confirmDelete ? "Click again to confirm" : "Delete worktree"
+                }
+              >
+                <Trash2 />
+                {deleteButtonLabel(busy, confirmDelete)}
+              </Button>
+            )}
           </div>
         )}
       </footer>

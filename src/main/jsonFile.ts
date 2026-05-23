@@ -5,6 +5,17 @@ import { dirname } from "node:path";
 import type { z } from "zod";
 import { isENOENT } from "./paths";
 
+// Best-effort delete: callers fire this on lifecycle events and shouldn't
+// fail just because the file never existed. Used by both the worktree-state
+// cleanup paths and the atomic-write tmp rollback.
+export async function unlinkIfExists(filePath: string): Promise<void> {
+  try {
+    await unlink(filePath);
+  } catch (err) {
+    if (!isENOENT(err)) throw err;
+  }
+}
+
 export async function readJsonOrNull<T>(
   filePath: string,
   schema: z.ZodType<T>,

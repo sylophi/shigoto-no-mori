@@ -34,7 +34,11 @@ import {
   PROJECTS_KEY,
 } from "../projects";
 import { forgetProjectIcon, readProjectIcon } from "../projectIcon";
-import { readShigomoriConfig, writeShigomoriConfig } from "../shigomori";
+import {
+  deleteProjectState,
+  readShigomoriConfig,
+  writeShigomoriConfig,
+} from "../shigomori";
 import { writeKey } from "../store";
 
 function saveProjects(projects: Project[]): void {
@@ -115,9 +119,10 @@ export function registerProjectHandlers(): void {
       const projects = loadProjects();
       const removed = projects.find((p) => p.id === id);
       saveProjects(projects.filter((p) => p.id !== id));
-      // Drop the project's icon-cache entry so the cache doesn't grow
-      // unbounded as projects come and go.
+      // Drop the project's icon-cache entry and on-disk state so neither
+      // leaks across re-adds of the same path.
       if (removed) await forgetProjectIcon(removed.path);
+      await deleteProjectState(id);
     },
   );
 

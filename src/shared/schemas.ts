@@ -469,12 +469,16 @@ export const ShigomoriConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   portBase: z.number().int().positive().optional(),
   defaultBranch: z.string().min(1),
-  // Free-form per-worktree notes, keyed by Worktree.id (the path hash).
-  notes: z.record(z.string(), z.string()).optional(),
   carryOver: z.array(CarryOverEntrySchema).optional(),
   worktreeLayout: WorktreeLayoutSchema.optional(),
   // Absolute path; only meaningful when worktreeLayout === "custom".
   customWorktreePath: z.string().optional(),
+});
+
+// Per-worktree persistent data. Only kept for shigomori-managed worktrees;
+// external worktrees deliberately have no on-disk state.
+export const ShigomoriWorktreeDataSchema = z.object({
+  notes: z.string().optional(),
 });
 
 export const ThemeSchema = z.enum(["light", "dark", "system"]);
@@ -549,6 +553,24 @@ export const ReadShigomoriPayloadSchema = z.object({
 export const WriteShigomoriPayloadSchema = z.object({
   projectId: z.string(),
   config: ShigomoriConfigSchema,
+});
+
+// Per-worktree data IPC payloads construct filesystem paths directly from
+// `worktreeId` (unlike other handlers, which route the id through git's
+// worktree list first). Constrain it to the exact 12-hex shape that
+// `worktreeIdFromPath` produces so a malformed id can't escape the
+// projects/<id>/worktrees/ directory.
+const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
+
+export const ReadWorktreeDataPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: WorktreeIdSchema,
+});
+
+export const WriteWorktreeDataPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: WorktreeIdSchema,
+  data: ShigomoriWorktreeDataSchema,
 });
 
 export const ShellPathPayloadSchema = z.object({
@@ -715,6 +737,7 @@ export type Project = z.infer<typeof ProjectSchema>;
 export type Worktree = z.infer<typeof WorktreeSchema>;
 export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
+export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 export type PullRequestState = z.infer<typeof PullRequestStateSchema>;

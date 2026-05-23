@@ -1,45 +1,27 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
-import { useShigomoriWrite } from "@/hooks/useShigomoriWrite";
+import { useWorktreeData, useWorktreeDataWrite } from "@/hooks/useWorktreeData";
 import type { Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
-  const { data: config } = useShigomoriConfig(worktree.projectId);
-  const { data: resolvedDefaultBranch } = useDefaultBranch(worktree.projectId);
-  const write = useShigomoriWrite();
+  if (worktree.isExternal) return null;
+  return <NotesSectionInner key={worktree.id} worktree={worktree} />;
+}
 
-  const saved = config?.notes?.[worktree.id] ?? "";
+function NotesSectionInner({ worktree }: { worktree: Worktree }) {
+  const { data } = useWorktreeData(worktree.projectId, worktree.id);
+  const write = useWorktreeDataWrite();
+
+  const saved = data?.notes ?? "";
   const [draft, setDraft] = useState(saved);
-  const [hydratedFor, setHydratedFor] = useState<string | null>(null);
-
-  // Re-sync the draft when switching between worktrees or when the
-  // config first loads. Tracking the worktree id lets us detect both.
-  if (hydratedFor !== worktree.id) {
-    setHydratedFor(worktree.id);
-    setDraft(saved);
-  }
 
   const commit = () => {
     const next = draft;
     if (next === saved) return;
-    if (!resolvedDefaultBranch && !config?.defaultBranch) return;
-    const base = config ?? {
-      defaultBranch: resolvedDefaultBranch ?? "main",
-    };
-    const nextNotes = { ...config?.notes };
-    if (next.trim().length === 0) {
-      delete nextNotes[worktree.id];
-    } else {
-      nextNotes[worktree.id] = next;
-    }
     write.mutate({
       projectId: worktree.projectId,
-      config: {
-        ...base,
-        notes: Object.keys(nextNotes).length > 0 ? nextNotes : undefined,
-      },
+      worktreeId: worktree.id,
+      data: { notes: next.trim().length === 0 ? undefined : next },
     });
   };
 

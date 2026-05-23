@@ -3,6 +3,7 @@
 // when the user has deleted the folder by hand.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { migrateProjectConfigsToDirLayout } from "./projectStateMigration";
 import { shigomoriRoot } from "./paths";
 
 const EMPTY_JSON = "{}\n";
@@ -23,5 +24,6 @@ export async function ensureShigomoriRoot(): Promise<void> {
   await Promise.all([
     ensureFile(join(root, "config.json"), EMPTY_JSON),
     ensureFile(join(root, "state.json"), EMPTY_JSON),
+    migrateProjectConfigsToDirLayout(),
   ]);
 }

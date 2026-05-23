@@ -1,10 +1,19 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
-import { WriteShigomoriPayloadSchema } from "@shared/schemas";
+import {
+  ReadWorktreeDataPayloadSchema,
+  type ShigomoriWorktreeData,
+  WriteShigomoriPayloadSchema,
+  WriteWorktreeDataPayloadSchema,
+} from "@shared/schemas";
 import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
 import { appendExcludes } from "../gitExclude";
 import { findProjectOrThrow } from "../projects";
-import { writeShigomoriConfig } from "../shigomori";
+import {
+  readWorktreeData,
+  writeShigomoriConfig,
+  writeWorktreeData,
+} from "../shigomori";
 
 export function registerShigomoriHandlers(): void {
   ipcMain.handle(
@@ -29,6 +38,36 @@ export function registerShigomoriHandlers(): void {
           );
         }
       }
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreeDataRead,
+    async (
+      _event,
+      rawPayload: unknown,
+    ): Promise<ShigomoriWorktreeData | null> => {
+      const { projectId, worktreeId } =
+        ReadWorktreeDataPayloadSchema.parse(rawPayload);
+      // Validate projectId against the in-memory project list before any
+      // path construction, so a bogus id can't read outside projects/.
+      findProjectOrThrow(projectId);
+      return readWorktreeData(projectId, worktreeId);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreeDataWrite,
+    async (_event, rawPayload: unknown) => {
+      const { projectId, worktreeId, data } =
+        WriteWorktreeDataPayloadSchema.parse(rawPayload);
+      // The renderer doesn't surface a notes UI for external worktrees, so
+      // we don't re-verify here -- enforcing the "no external state" rule
+      // would mean shelling out to `git worktree list` on every save.
+      // findProjectOrThrow + the WorktreeIdSchema regex keep the path-build
+      // safe against malformed input.
+      findProjectOrThrow(projectId);
+      await writeWorktreeData(projectId, worktreeId, data);
     },
   );
 }

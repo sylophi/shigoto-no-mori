@@ -1,25 +1,60 @@
-// Per-project config lives under ~/shigomori[-dev]/projects/<projectId>.json.
-// Shigomori manages these itself; we don't touch the user's repo.
+// Per-project on-disk state lives under ~/shigomori[-dev]/projects/<projectId>/:
+//   project.json                       -- project-wide settings (scripts, layout, ...)
+//   worktrees/<worktreeId>.json        -- per-worktree state (notes, ...)
+// Shigomori manages these itself; we don't touch the user's repo. Per-worktree
+// files only exist for managed worktrees -- externals deliberately have no
+// persisted state.
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { type ShigomoriConfig, ShigomoriConfigSchema } from "@shared/schemas";
-import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
+import {
+  type ShigomoriConfig,
+  ShigomoriConfigSchema,
+  type ShigomoriWorktreeData,
+  ShigomoriWorktreeDataSchema,
+} from "@shared/schemas";
+import { atomicWriteJson, readJsonOrNull, unlinkIfExists } from "./jsonFile";
 import { shigomoriRoot } from "./paths";
 import { ttlMapCache } from "./ttlCache";
 
-function configPathFor(projectId: string): string {
-  return join(shigomoriRoot(), "projects", `${projectId}.json`);
+function projectDir(projectId: string): string {
+  return join(shigomoriRoot(), "projects", projectId);
+}
+
+function projectConfigPath(projectId: string): string {
+  return join(projectDir(projectId), "project.json");
+}
+
+function worktreeDataPath(projectId: string, worktreeId: string): string {
+  return join(projectDir(projectId), "worktrees", `${worktreeId}.json`);
 }
 
 // Failures aren't cached -- a bad config should error every read so the
 // user notices and fixes it.
-const cache = ttlMapCache<string, ShigomoriConfig | null>(5_000, (projectId) =>
-  readJsonOrNull(configPathFor(projectId), ShigomoriConfigSchema),
+const configCache = ttlMapCache<string, ShigomoriConfig | null>(
+  5_000,
+  (projectId) =>
+    readJsonOrNull(projectConfigPath(projectId), ShigomoriConfigSchema),
 );
+
+const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(
+  5_000,
+  (key) => {
+    const [projectId, worktreeId] = key.split(":");
+    return readJsonOrNull(
+      worktreeDataPath(projectId, worktreeId),
+      ShigomoriWorktreeDataSchema,
+    );
+  },
+);
+
+function worktreeKey(projectId: string, worktreeId: string): string {
+  return `${projectId}:${worktreeId}`;
+}
 
 export async function readShigomoriConfig(
   projectId: string,
 ): Promise<ShigomoriConfig | null> {
-  return cache.get(projectId);
+  return configCache.get(projectId);
 }
 
 export async function writeShigomoriConfig(
@@ -27,8 +62,47 @@ export async function writeShigomoriConfig(
   config: ShigomoriConfig,
 ): Promise<void> {
   await atomicWriteJson(
-    configPathFor(projectId),
+    projectConfigPath(projectId),
     ShigomoriConfigSchema.parse(config),
   );
-  cache.invalidate(projectId);
+  configCache.invalidate(projectId);
+}
+
+export async function readWorktreeData(
+  projectId: string,
+  worktreeId: string,
+): Promise<ShigomoriWorktreeData | null> {
+  return worktreeCache.get(worktreeKey(projectId, worktreeId));
+}
+
+export async function writeWorktreeData(
+  projectId: string,
+  worktreeId: string,
+  data: ShigomoriWorktreeData,
+): Promise<void> {
+  await atomicWriteJson(
+    worktreeDataPath(projectId, worktreeId),
+    ShigomoriWorktreeDataSchema.parse(data),
+  );
+  worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
+}
+
+export async function deleteWorktreeData(
+  projectId: string,
+  worktreeId: string,
+): Promise<void> {
+  const key = worktreeKey(projectId, worktreeId);
+  try {
+    await unlinkIfExists(worktreeDataPath(projectId, worktreeId));
+  } finally {
+    worktreeCache.invalidate(key);
+  }
+}
+
+export async function deleteProjectState(projectId: string): Promise<void> {
+  await rm(projectDir(projectId), { recursive: true, force: true });
+  configCache.invalidate(projectId);
+  // Drop every worktreeCache entry that belongs to this project so a
+  // re-add can't ever see stale data through the in-memory layer.
+  worktreeCache.invalidateByPrefix(`${projectId}:`);
 }
