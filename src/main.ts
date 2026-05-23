@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
 import path from "node:path";
 import { CHANNELS } from "@shared/channels";
-import { SetThemePayloadSchema, type Theme } from "@shared/schemas";
+import { SetThemePayloadSchema } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./main/bootstrap";
 import { attachContextMenu } from "./main/contextMenu";
 import { refreshAllProjectGitRefs, startBackgroundFetch } from "./main/fetch";
@@ -20,21 +20,15 @@ import { isInstallingUpdate, startUpdater } from "./main/updater";
 
 registerIpcHandlers();
 
-// Drives the AppKit appearance for the whole app, which is what the
-// NSVisualEffectView under `vibrancy` reads to pick its light/dark
-// material. Without this, the sidebar vibrancy stays glued to the OS
-// appearance regardless of the in-app theme.
-function applyAppearance(theme: Theme): void {
-  nativeTheme.themeSource = theme;
-}
-
-// Set before the BrowserWindow is created so the first paint already
-// has the right vibrancy material.
-applyAppearance(readThemeSync());
-
 let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
+  // Drive AppKit appearance from the saved theme before constructing
+  // the window so the NSVisualEffectView material under `vibrancy`
+  // picks the right light/dark variant on first paint. Without this,
+  // vibrancy stays glued to the OS appearance regardless of the in-app
+  // theme; a value of "system" delegates back to the OS.
+  nativeTheme.themeSource = readThemeSync();
   mainWindow = new BrowserWindow({
     width: 920,
     height: 600,
@@ -85,7 +79,7 @@ const createWindow = () => {
 // and is written by the renderer through the globalConfig IPC.
 ipcMain.handle(CHANNELS.RuntimeSetTheme, (_event, rawPayload: unknown) => {
   const { theme } = SetThemePayloadSchema.parse(rawPayload);
-  applyAppearance(theme);
+  nativeTheme.themeSource = theme;
 });
 
 app.on("ready", async () => {

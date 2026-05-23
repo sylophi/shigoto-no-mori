@@ -103,14 +103,14 @@
   }
 
   /*
-   * Sidebar-scoped token overrides. The aside is the only surface
-   * painted on top of the macOS vibrancy material, so the global
-   * muted/accent shades (tuned for an opaque card surface) read as
-   * washed-out icons and sticker-like selection here. Both themes get
-   * tuned values; the cascade keeps the rest of the app's palette
-   * untouched because these selectors only match inside <aside>.
+   * Token overrides scoped to the vibrancy sidebar surface (marked
+   * with `data-sidebar` on the <aside>). The global muted/accent
+   * shades are tuned for an opaque card surface and read as washed-out
+   * icons + sticker-like selection on top of the NSVisualEffectView
+   * material. Both themes get tuned values; the rest of the app's
+   * palette is untouched because nothing else carries `data-sidebar`.
    */
-  aside {
+  [data-sidebar] {
     /* Push muted labels and icons darker on the lightly-tinted white,
        so footer icons and project headers don't fade into the blur. */
     --muted-foreground: var(--color-neutral-600);
@@ -119,7 +119,7 @@
        looks pasted on. */
     --accent: oklch(0 0 0 / 0.06);
   }
-  .dark aside {
+  .dark [data-sidebar] {
     --muted-foreground: var(--color-neutral-300);
     /* Translucent white mirrors the light-mode pattern: blends with
        the vibrancy instead of stamping a solid neutral-800 rectangle. */
