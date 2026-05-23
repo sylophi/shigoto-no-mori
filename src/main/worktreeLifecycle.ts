@@ -4,12 +4,16 @@
 // can't leave a worktree half-torn-down. Live output keeps flowing
 // to the renderer via "started" events emitted by startScript.
 import type { WebContents } from "electron";
+import { CHANNELS } from "@shared/channels";
 import type {
   CleanupError,
-  ScriptFailure,
   ShigomoriConfig,
+  WorktreeCarryOverComplete,
+  WorktreeLifecyclePhase,
 } from "@shared/schemas";
-import { resolveDefaultBranch } from "./git";
+import { applyCarryOver } from "./carryOver";
+import { listWorktreeIdentities, resolveDefaultBranch } from "./git";
+import { readGlobalConfig } from "./globalConfig";
 import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
 import { resolveScriptCommand } from "./scriptCommand";
 import {
@@ -17,6 +21,7 @@ import {
   markDeleteInflight,
   startScriptForLifecycle,
 } from "./scripts";
+import { readShigomoriConfig } from "./shigomori";
 
 interface LifecycleWorktree {
   id: string;
@@ -34,10 +39,23 @@ interface LifecycleProject {
 interface CreateArgs {
   project: LifecycleProject;
   worktree: LifecycleWorktree;
-  projectBranch: string;
-  config: ShigomoriConfig | null;
-  globalPortPoolEnabled: boolean;
   webContents: WebContents;
+}
+
+function emitPhase(
+  webContents: WebContents,
+  payload: WorktreeLifecyclePhase,
+): void {
+  if (webContents.isDestroyed()) return;
+  webContents.send(CHANNELS.WorktreeLifecyclePhase, payload);
+}
+
+function emitCarryOverComplete(
+  webContents: WebContents,
+  payload: WorktreeCarryOverComplete,
+): void {
+  if (webContents.isDestroyed()) return;
+  webContents.send(CHANNELS.WorktreeCarryOverComplete, payload);
 }
 
 async function runStep(args: {
@@ -70,63 +88,104 @@ async function runStep(args: {
   return { runId, exitCode: await exit };
 }
 
-export async function runCreateLifecycle(
-  args: CreateArgs,
-): Promise<ScriptFailure[]> {
-  const failures: ScriptFailure[] = [];
-  const defaultBranch = await resolveDefaultBranch(
-    args.project.path,
-    args.config?.defaultBranch,
-  ).catch(() => "");
+// Fire-and-forget after the create IPC returns. Progress flows back
+// via WorktreeLifecyclePhase + WorktreeCarryOverComplete + the existing
+// ScriptsEvent channel.
+export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
+  const projectId = args.project.id;
+  const worktreeId = args.worktree.id;
+  try {
+    const config = await readShigomoriConfig(projectId).catch(() => null);
 
-  const setupCommand = resolveScriptCommand(
-    "setup",
-    args.config,
-    args.worktree.path,
-  );
-  if (setupCommand) {
-    const { runId, exitCode } = await runStep({
-      command: setupCommand,
-      scriptName: "setup",
-      slot: { kind: "setup" },
-      worktree: args.worktree,
-      project: args.project,
-      projectBranch: args.projectBranch,
-      defaultBranch,
-      webContents: args.webContents,
-    });
-    if (exitCode !== 0) {
-      failures.push({ phase: "setup", exitCode, runId });
+    const carryOverEntries = config?.carryOver ?? [];
+    if (carryOverEntries.length > 0) {
+      emitPhase(args.webContents, {
+        projectId,
+        worktreeId,
+        phase: "carryOver",
+      });
+      const report = await applyCarryOver(
+        args.project.path,
+        args.worktree.path,
+        carryOverEntries,
+      );
+      emitCarryOverComplete(args.webContents, {
+        projectId,
+        worktreeId,
+        report,
+      });
     }
-  }
 
-  if (args.globalPortPoolEnabled) {
-    const [installed, hasConfig] = await Promise.all([
-      isPortPoolInstalled(),
-      isPortPoolConfigured(args.worktree.path),
+    const setupCommand = resolveScriptCommand(
+      "setup",
+      config,
+      args.worktree.path,
+    );
+    const portPoolNeeded = await willRunPortPoolProvision(args.worktree.path);
+
+    if (!setupCommand && !portPoolNeeded) return;
+
+    // Scripts need projectBranch (for $SHIGOMORI_PROJECT_BRANCH) and the
+    // resolved default branch (for $SHIGOMORI_DEFAULT_BRANCH). Skip both
+    // reads when no script will run.
+    const [identities, defaultBranch] = await Promise.all([
+      listWorktreeIdentities(projectId, args.project.path),
+      resolveDefaultBranch(args.project.path, config?.defaultBranch).catch(
+        () => "",
+      ),
     ]);
-    if (installed && hasConfig) {
-      const { runId, exitCode } = await runStep({
+    const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
+
+    if (setupCommand) {
+      emitPhase(args.webContents, { projectId, worktreeId, phase: "setup" });
+      await runStep({
+        command: setupCommand,
+        scriptName: "setup",
+        slot: { kind: "setup" },
+        worktree: args.worktree,
+        project: args.project,
+        projectBranch,
+        defaultBranch,
+        webContents: args.webContents,
+      });
+    }
+
+    if (portPoolNeeded) {
+      emitPhase(args.webContents, {
+        projectId,
+        worktreeId,
+        phase: "portPoolProvision",
+      });
+      await runStep({
         command: resolveScriptCommand(
           "port-pool-provision",
-          args.config,
+          config,
           args.worktree.path,
         ),
         scriptName: "port-pool-provision",
         slot: { kind: "portPool", phase: "provision" },
         worktree: args.worktree,
         project: args.project,
-        projectBranch: args.projectBranch,
+        projectBranch,
         defaultBranch,
         webContents: args.webContents,
       });
-      if (exitCode !== 0) {
-        failures.push({ phase: "portPoolProvision", exitCode, runId });
-      }
     }
+  } finally {
+    emitPhase(args.webContents, { projectId, worktreeId, phase: "idle" });
   }
+}
 
-  return failures;
+async function willRunPortPoolProvision(
+  worktreePath: string,
+): Promise<boolean> {
+  const global = await readGlobalConfig();
+  if (global.portPool !== true) return false;
+  const [installed, hasConfig] = await Promise.all([
+    isPortPoolInstalled(),
+    isPortPoolConfigured(worktreePath),
+  ]);
+  return installed && hasConfig;
 }
 
 interface DeleteArgs {

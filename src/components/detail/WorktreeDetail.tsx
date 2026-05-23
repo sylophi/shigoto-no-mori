@@ -19,6 +19,8 @@ import {
   useScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
+import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
+import type { CreatePhase } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { ScriptsSection } from "./ScriptsSection";
 import { BranchHeaderRow } from "./worktreeDetail/BranchHeader";
@@ -29,6 +31,26 @@ import type { CleanupError, Project, Worktree } from "@shared/schemas";
 function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";
   return armed ? "Confirm delete?" : "Delete worktree";
+}
+
+const CREATE_PHASE_LABEL = {
+  carryOver: "Carrying over files...",
+  setup: "Setting up...",
+  portPoolProvision: "Provisioning ports...",
+} satisfies Record<CreatePhase, string>;
+
+function LifecycleBanner({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
+      <Loader2
+        aria-hidden
+        className="size-3.5 shrink-0 animate-spin text-muted-foreground"
+      />
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 export function WorktreeDetail() {
@@ -90,6 +112,16 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
     releaseState.status === "starting";
   const busy = deleteMutation.isPending;
   const inLimbo = cleanupRunning || busy;
+
+  // Banner-only for setup / port-pool provision: those are user scripts
+  // (`pnpm install` etc.) that can run alongside the user opening files
+  // or kicking off launches. Carry-over moves real files into the new
+  // worktree, so we lock the page until it finishes. inLimbo wins -- a
+  // delete-during-setup race shows the destructive banner instead.
+  const createPhase = useWorktreeCreatePhase(worktree.id);
+  const createLabel =
+    !inLimbo && createPhase ? CREATE_PHASE_LABEL[createPhase] : null;
+  const locked = inLimbo || createPhase === "carryOver";
 
   // Tracks the flags from the most recent delete attempt so that the
   // retry/skip affordances on a cleanup failure carry the user's
@@ -240,34 +272,18 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
         <BranchHeaderRow worktree={worktree} />
       </header>
 
-      {inLimbo && (
-        <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-6 py-2 text-sm">
-          <Loader2
-            aria-hidden
-            className="size-3.5 shrink-0 animate-spin text-muted-foreground"
-          />
-          <span className="min-w-0 flex-1 truncate text-muted-foreground">
-            {limboLabel}
-          </span>
-          {cleanupRunning && (
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={openCleanupConsole}
-              className="shrink-0"
-            >
-              View output
-            </Button>
-          )}
-        </div>
-      )}
+      {inLimbo ? (
+        <LifecycleBanner label={limboLabel} />
+      ) : createLabel ? (
+        <LifecycleBanner label={createLabel} />
+      ) : null}
 
       <div
         className={cn(
           "min-h-0 flex-1 overflow-y-auto px-6 py-6",
-          inLimbo && "pointer-events-none opacity-50",
+          locked && "pointer-events-none opacity-50",
         )}
-        aria-disabled={inLimbo}
+        aria-disabled={locked}
       >
         <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">

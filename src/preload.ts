@@ -25,6 +25,8 @@ import type {
   ShigomoriConfig,
   Theme,
   Worktree,
+  WorktreeCarryOverComplete,
+  WorktreeLifecyclePhase,
 } from "@shared/schemas";
 
 // Subscribes to a main → renderer broadcast channel and returns the
@@ -88,6 +90,12 @@ const api = {
       skipCleanup?: boolean;
     }): Promise<DeleteWorktreeResult> =>
       ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
+    onLifecyclePhase: subscribe<WorktreeLifecyclePhase>(
+      CHANNELS.WorktreeLifecyclePhase,
+    ),
+    onCarryOverComplete: subscribe<WorktreeCarryOverComplete>(
+      CHANNELS.WorktreeCarryOverComplete,
+    ),
     renameBranch: (input: {
       projectId: string;
       worktreeId: string;

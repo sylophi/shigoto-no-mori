@@ -5,7 +5,6 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
 import type {
   CreateWorktreeResult,
@@ -50,41 +49,14 @@ interface CreateWorktreeInput {
   checkout?: boolean;
 }
 
-// Toasts the carry-over and script-failure summaries returned by both
-// `create` and `convertExternal`. Same shape, same UX intent.
-function notifyCreateLifecycleResult(result: CreateWorktreeResult): void {
-  const { applied, failures } = result.carryOver;
-  if (failures.length > 0) {
-    const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
-    const more = failures.length - lines.length;
-    toast.warning(
-      `Carried over ${applied} of ${applied + failures.length} entries`,
-      {
-        description:
-          lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
-      },
-    );
-  }
-  for (const failure of result.scriptFailures) {
-    const label = failure.phase === "setup" ? "Setup" : "Port-pool provision";
-    toast.warning(`${label} didn't complete cleanly`, {
-      description:
-        failure.exitCode === null
-          ? "See the script console for details."
-          : `Exited with code ${failure.exitCode}.`,
-    });
-  }
-}
-
 export function useCreateWorktree() {
   const queryClient = useQueryClient();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
     mutationFn: (input) => window.api.worktrees.create(input),
-    onSuccess: (result, vars) => {
+    onSuccess: (_result, vars) => {
       void queryClient.invalidateQueries({
         queryKey: ["worktrees", vars.projectId],
       });
-      notifyCreateLifecycleResult(result);
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });
@@ -100,14 +72,13 @@ export function useConvertExternalWorktree() {
   return useMutation<CreateWorktreeResult, Error, ConvertExternalWorktreeInput>(
     {
       mutationFn: (input) => window.api.worktrees.convertExternal(input),
-      onSuccess: (result, vars) => {
+      onSuccess: (_result, vars) => {
         void queryClient.invalidateQueries({
           queryKey: ["worktrees", vars.projectId],
         });
         // The old external worktree's id no longer maps to anything on disk
         // -- drop any cached script runs so they don't linger in the UI.
         clearScriptRunsForWorktree(vars.worktreeId);
-        notifyCreateLifecycleResult(result);
       },
       // The page surfaces per-row errors inline; a toast on top would be noise.
       meta: { silentError: true },

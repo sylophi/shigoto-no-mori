@@ -11,6 +11,7 @@
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import type { ScriptEvent } from "@shared/schemas";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
 
@@ -163,7 +164,32 @@ function applyEvent(key: ScriptKey, event: ScriptEvent): void {
       endedAt: Date.now(),
       cancelling: false,
     }));
+    if (event.code !== 0 && m) toastLifecycleFailure(m.slotKind, event.code);
   }
+}
+
+// Setup and port-pool-provision run in the background after worktree
+// create returns, so the mutation can't surface a failed exit anymore.
+// Teardown / port-pool-release have their own retry UI and don't need
+// a toast on top. Package scripts are user-initiated; their console is
+// already visible.
+function toastLifecycleFailure(
+  slotKind: SlotKind,
+  exitCode: number | null,
+): void {
+  const label =
+    slotKind === "setup"
+      ? "Setup"
+      : slotKind === "portPoolProvision"
+        ? "Port-pool provision"
+        : null;
+  if (!label) return;
+  toast.warning(`${label} didn't complete cleanly`, {
+    description:
+      exitCode === null
+        ? "See the script console for details."
+        : `Exited with code ${exitCode}.`,
+  });
 }
 
 function setMetaWithDeferred(

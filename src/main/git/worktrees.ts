@@ -14,7 +14,12 @@ import {
   resolveWorktreeBase,
 } from "../worktreePaths";
 import { run } from "./core";
-import { fetchAllRemotes, listRemotes, remoteRefExists } from "./remotes";
+import {
+  fetchRemoteRef,
+  listRemotes,
+  remoteRefExists,
+  splitRemoteRef,
+} from "./remotes";
 
 interface RawWorktreeEntry {
   path: string;
@@ -320,12 +325,17 @@ export async function createWorktree(
     worktreeName,
   );
 
-  // Refresh remote-tracking refs so the new worktree starts at the actual
-  // upstream tip. Without this, `refs/remotes/origin/main` is whatever the
-  // last fetch left behind -- which often matches local `main` and looks
-  // like the worktree silently used the local branch as its base.
+  // Refresh the remote-tracking ref the new worktree will sit on.
+  // Without this, refs/remotes/<base> is whatever the last fetch left
+  // behind -- which often matches local main and looks like the
+  // worktree silently used the local branch as its base.
   if (base && (await remoteRefExists(projectPath, base))) {
-    await fetchAllRemotes(projectPath).catch(() => undefined);
+    const split = await splitRemoteRef(projectPath, base);
+    if (split) {
+      await fetchRemoteRef(projectPath, split.remote, split.branch).catch(
+        () => undefined,
+      );
+    }
   }
 
   await mkdir(dirname(worktreePath), { recursive: true });

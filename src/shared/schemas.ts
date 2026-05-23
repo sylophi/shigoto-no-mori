@@ -196,19 +196,39 @@ export const CarryOverReportSchema = z.object({
   failures: z.array(CarryOverFailureSchema),
 });
 
-export const ScriptFailureSchema = z.object({
-  phase: z.enum(["setup", "portPoolProvision"]),
-  exitCode: z.number().nullable(),
-  runId: z.string(),
-});
-
-export type ScriptFailure = z.infer<typeof ScriptFailureSchema>;
-
 export const CreateWorktreeResultSchema = z.object({
   worktree: WorktreeSchema,
-  carryOver: CarryOverReportSchema,
-  scriptFailures: z.array(ScriptFailureSchema),
 });
+
+// Phases the create lifecycle steps through, in order. Skipped if the
+// phase has no work (no carry-over entries, no setup script, port-pool
+// disabled). "idle" is the terminal sentinel emitted from `finally`.
+export const CreatePhaseSchema = z.enum([
+  "carryOver",
+  "setup",
+  "portPoolProvision",
+]);
+export type CreatePhase = z.infer<typeof CreatePhaseSchema>;
+
+export const WorktreeLifecyclePhaseSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  phase: z.union([CreatePhaseSchema, z.literal("idle")]),
+});
+
+export type WorktreeLifecyclePhase = z.infer<
+  typeof WorktreeLifecyclePhaseSchema
+>;
+
+export const WorktreeCarryOverCompleteSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  report: CarryOverReportSchema,
+});
+
+export type WorktreeCarryOverComplete = z.infer<
+  typeof WorktreeCarryOverCompleteSchema
+>;
 
 export const ConvertExternalWorktreePayloadSchema = z.object({
   projectId: z.string(),

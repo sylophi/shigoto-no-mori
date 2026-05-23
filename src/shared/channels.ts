@@ -30,6 +30,8 @@ export const CHANNELS = {
   ScriptsRun: "scripts:run",
   ScriptsCancel: "scripts:cancel",
   ScriptsEvent: "scripts:event",
+  WorktreeLifecyclePhase: "worktrees:lifecyclePhase",
+  WorktreeCarryOverComplete: "worktrees:carryOverComplete",
   PackageScriptsList: "packageScripts:list",
   PackageScriptsRun: "packageScripts:run",
   PackageScriptsGetSort: "packageScripts:getSort",
