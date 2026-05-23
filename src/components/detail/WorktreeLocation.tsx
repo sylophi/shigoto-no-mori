@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FolderOpen, Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { BranchLabel } from "@/components/ui/branch-label";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -476,23 +477,18 @@ function RelocateRow({
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex items-center gap-2">
           <span
-            className={cn(
-              "min-w-0 truncate font-mono select-text",
-              worktree.detached && "text-muted-foreground",
-            )}
+            className="min-w-0 truncate font-mono select-text"
             title={
               worktree.detached
                 ? "Detached HEAD (commit hash)"
                 : worktree.branch
             }
           >
-            {worktree.branch}
+            <BranchLabel
+              branch={worktree.branch}
+              detached={worktree.detached}
+            />
           </span>
-          {worktree.detached && (
-            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              detached
-            </span>
-          )}
         </div>
         <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-2 gap-y-0.5 font-mono text-xs">
           <dt className="text-muted-foreground/60">from</dt>
