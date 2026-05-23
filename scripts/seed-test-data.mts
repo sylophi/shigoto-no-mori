@@ -20,7 +20,6 @@ import { execFile } from "node:child_process";
 import { appendFile, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { deflateSync } from "node:zlib";
 
 const execFileP = promisify(execFile);
 
@@ -133,72 +132,6 @@ const RED_PNG_1X1 = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAFklEQVQI12P8/5+hngEFMDFAAcaCAFqcA0Aq8t5GAAAAAElFTkSuQmCC",
   "base64",
 );
-
-const PNG_SIGNATURE = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-
-// Standard reversed CRC32 polynomial (0xEDB88320) — what PNG chunks use.
-function crc32(buf: Buffer): number {
-  let crc = 0xffffffff;
-  for (const b of buf) {
-    crc ^= b;
-    for (let i = 0; i < 8; i++) {
-      crc = (crc >>> 1) ^ ((crc & 1) === 1 ? 0xedb88320 : 0);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngChunk(type: string, data: Buffer): Buffer {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const typeAndData = Buffer.concat([Buffer.from(type, "ascii"), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(typeAndData), 0);
-  return Buffer.concat([length, typeAndData, crc]);
-}
-
-// Build a tiny solid-colour PNG (truecolour, no alpha) from scratch so
-// the ICNS fixture below can wrap a real PNG of any colour we like
-// without pulling in an image dependency.
-function solidPng(size: number, rgb: [number, number, number]): Buffer {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(size, 0);
-  ihdr.writeUInt32BE(size, 4);
-  ihdr.writeUInt8(8, 8); // bit depth
-  ihdr.writeUInt8(2, 9); // colour type 2 = truecolour RGB
-  ihdr.writeUInt8(0, 10); // compression
-  ihdr.writeUInt8(0, 11); // filter
-  ihdr.writeUInt8(0, 12); // interlace
-  // Each scanline: 1-byte filter (0 = none) + size×3 RGB bytes.
-  const rowBytes = new Uint8Array(1 + size * 3);
-  for (let x = 0; x < size; x++) {
-    rowBytes[1 + x * 3] = rgb[0];
-    rowBytes[1 + x * 3 + 1] = rgb[1];
-    rowBytes[1 + x * 3 + 2] = rgb[2];
-  }
-  const rows: Buffer[] = [];
-  for (let y = 0; y < size; y++) rows.push(Buffer.from(rowBytes));
-  return Buffer.concat([
-    PNG_SIGNATURE,
-    pngChunk("IHDR", ihdr),
-    pngChunk("IDAT", deflateSync(Buffer.concat(rows))),
-    pngChunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-// Wrap a PNG in a one-chunk ICNS container. The icp6 chunk type is
-// nominally 64×64 but the resolver picks chunks by PNG magic only, so
-// the declared size doesn't have to match the payload's actual dims.
-function icnsFromPng(png: Buffer): Buffer {
-  const chunkLength = Buffer.alloc(4);
-  chunkLength.writeUInt32BE(8 + png.length, 0);
-  const chunk = Buffer.concat([Buffer.from("icp6", "ascii"), chunkLength, png]);
-  const fileLength = Buffer.alloc(4);
-  fileLength.writeUInt32BE(8 + chunk.length, 0);
-  return Buffer.concat([Buffer.from("icns", "ascii"), fileLength, chunk]);
-}
 
 // ─── Archetypes ───────────────────────────────────────────────────────────
 
@@ -1276,17 +1209,6 @@ async function seedManyScripts(): Promise<Manifest> {
       ".gitignore": "node_modules/\n",
       "package.json": pkgJson("many-scripts", scripts),
       "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
-      // Icon detection: tests two things at once.
-      //   1) The ICNS decoder — assets/icon.icns wraps an 8×8 cyan PNG
-      //      in an icp6 chunk. The resolver should extract the PNG and
-      //      cache it as image/png so Chromium can render it.
-      //   2) ICNS priority within the assets/ bucket — the same
-      //      directory also holds a red assets/icon.png that would win
-      //      if the candidate ordering weren't ICNS-first. A cyan
-      //      sidebar tile means ICNS won; a red one means the priority
-      //      regressed.
-      "assets/icon.icns": icnsFromPng(solidPng(8, [6, 182, 212])),
-      "assets/icon.png": RED_PNG_1X1,
     },
     "Initial",
   );
@@ -1305,7 +1227,6 @@ async function seedManyScripts(): Promise<Manifest> {
       "The sort preference is persisted: pick a non-default mode, restart, and the same mode is selected.",
       "Open a different project with package scripts — its sort starts on 'Most used'; sort is per-repo.",
       "Search overrides the sort while the query box is non-empty (relevance order); clearing the query restores the chosen sort.",
-      "Icon detection: cyan square in the sidebar (ICNS at assets/icon.icns decoded to PNG). A red square would mean assets/icon.png won the in-bucket race — the ICNS priority would be broken.",
     ],
   };
 }
@@ -1414,9 +1335,7 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
     '| convertible-externals | `src/routes/__root.tsx` → `public/icon.svg` | JSX `{ rel: "icon", href: ... }` parser |',
   );
   lines.push("| プロジェクト | `favicon.svg` | unicode cwd |");
-  lines.push(
-    "| many-scripts | `assets/icon.icns` (+ losing `assets/icon.png`) | ICNS decoder + ICNS-wins-the-bucket priority |",
-  );
+  lines.push();
   lines.push(
     "| no-remote | `static/favicon.svg` | Docusaurus / SvelteKit / Hugo `static/` bucket |",
   );

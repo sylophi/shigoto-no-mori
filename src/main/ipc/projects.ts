@@ -115,8 +115,8 @@ export function registerProjectHandlers(): void {
       const projects = loadProjects();
       const removed = projects.find((p) => p.id === id);
       saveProjects(projects.filter((p) => p.id !== id));
-      // Drop the project's icon-cache entry (and any decoded ICNS bytes)
-      // so the cache doesn't grow unbounded as projects come and go.
+      // Drop the project's icon-cache entry so the cache doesn't grow
+      // unbounded as projects come and go.
       if (removed) await forgetProjectIcon(removed.path);
     },
   );

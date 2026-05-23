@@ -18,12 +18,18 @@ export async function readJsonOrNull<T>(
   }
 }
 
+// Monotonic counter so two parallel callers can't pick the same tmp
+// name. `Date.now()` (ms resolution) alone collides when N writers fan
+// out within a single tick: both writeFile the same path, the first's
+// rename consumes the tmp, and the second's rename fails ENOENT.
+let tempCounter = 0;
+
 export async function atomicWriteJson(
   filePath: string,
   value: unknown,
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
-  const temp = `${filePath}.tmp.${process.pid}.${Date.now()}`;
+  const temp = `${filePath}.tmp.${process.pid}.${Date.now()}.${tempCounter++}`;
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   try {
     await rename(temp, filePath);
