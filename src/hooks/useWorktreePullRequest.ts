@@ -24,7 +24,8 @@ export function invalidateAllWorktreePullRequests(
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
 // opening a worktree feels instant; App.tsx invalidates it explicitly on
 // window focus and on git refs changing, so we opt out of TanStack's
-// stale-gated focus refetch path.
+// stale-gated focus refetch path. Silent on error to match the sweep's
+// swallow behavior -- a transient gh failure shouldn't toast.
 export function useWorktreePullRequest(projectId: string, branch: string) {
   const queryClient = useQueryClient();
   return useQuery<PullRequest | null>({
@@ -36,13 +37,15 @@ export function useWorktreePullRequest(projectId: string, branch: string) {
       });
       // Without this, the sidebar dot waits up to a full sweep tick to
       // catch a PR merging on GitHub even after the user opened the
-      // worktree. Project-wide map already covers branches the user
-      // hasn't visited via the timer sweep in main/fetch.ts.
+      // worktree. The IPC throws on transient gh failure, so we only
+      // reach here with ground truth -- never clobber the project map
+      // on a network hiccup. The sweep in main/fetch.ts still covers
+      // branches the user hasn't visited.
       mirrorIntoProjectMap(queryClient, projectId, branch, pr);
       return pr;
     },
     refetchOnWindowFocus: false,
-    meta: { errorTitle: "Couldn't load pull request" },
+    meta: { silentError: true },
   });
 }
 

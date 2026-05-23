@@ -155,14 +155,19 @@ export async function refreshProjectPullRequests(
 // Single-branch lookup for the currently open worktree page. Uncached --
 // invalidations from focus / refs-changed must actually hit gh. The
 // --head filter is server-side so this stays cheap regardless of repo
-// PR count.
+// PR count. Throws on transient gh / network / parse failure so callers
+// can distinguish "no PR" (null) from "we don't know" -- the renderer
+// uses that to avoid clobbering the sidebar's project-wide PR map.
 export async function getWorktreePullRequest(
   cwd: string,
   branch: string,
 ): Promise<PullRequest | null> {
   if (!(await ghReady())) return null;
   const rows = await runGhPrList(cwd, ["--head", branch, "--limit", "1"]);
-  const first = rows?.[0];
+  if (rows === null) {
+    throw new Error(`Couldn't list PRs for branch ${branch}`);
+  }
+  const first = rows[0];
   return first ? toPullRequest(first) : null;
 }
 
