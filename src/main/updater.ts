@@ -20,7 +20,17 @@ const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
 
 let state: UpdaterState = { kind: "idle" };
 let started = false;
+let installing = false;
 let intervalHandle: NodeJS.Timeout | null = null;
+
+// quitAndInstall() stages Squirrel's ShipIt helper and then calls
+// app.quit(), which still emits before-quit. The app-wide before-quit
+// handler in main.ts intercepts that to reap orphan scripts; if its
+// cleanup ever stalls the update never lands. This flag lets that
+// handler bail out and let the natural quit through.
+export function isInstallingUpdate(): boolean {
+  return installing;
+}
 
 function broadcast<T>(channel: ChannelName, payload: T): void {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -65,9 +75,7 @@ export function checkForUpdates(): void {
 
 export function installUpdate(): void {
   if (state.kind !== "ready") return;
-  // quitAndInstall skips before-quit, which is fine here -- the
-  // worktree-script reaper that lives there is best-effort cleanup,
-  // and an update restart is effectively a fresh launch.
+  installing = true;
   autoUpdater.quitAndInstall();
 }
 

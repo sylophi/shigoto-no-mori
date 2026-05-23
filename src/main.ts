@@ -15,7 +15,7 @@ import {
   markShuttingDown,
 } from "./main/scripts";
 import { applyUserShellPath } from "./main/shellPath";
-import { startUpdater } from "./main/updater";
+import { isInstallingUpdate, startUpdater } from "./main/updater";
 
 registerIpcHandlers();
 
@@ -111,6 +111,12 @@ app.on("window-all-closed", () => {
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
+  // An update-triggered quit needs to flow through naturally so
+  // Squirrel's ShipIt helper sees the parent PID die and can swap
+  // bundles. Skipping cleanup here orphans any running scripts to
+  // launchd for a few seconds until the relaunched app boots; that's
+  // the price of a working update.
+  if (isInstallingUpdate()) return;
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
