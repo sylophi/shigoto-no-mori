@@ -8,6 +8,8 @@ import {
   PickFolderPayloadSchema,
   PickWorktreeNamePayloadSchema,
   type Project,
+  type ProjectIcon,
+  ProjectIconPayloadSchema,
   ProjectsDefaultBranchPayloadSchema,
   ProjectsListBranchesPayloadSchema,
   type ShigomoriConfig,
@@ -31,6 +33,7 @@ import {
   loadProjects,
   PROJECTS_KEY,
 } from "../projects";
+import { forgetProjectIcon, readProjectIcon } from "../projectIcon";
 import { readShigomoriConfig, writeShigomoriConfig } from "../shigomori";
 import { writeKey } from "../store";
 
@@ -105,10 +108,18 @@ export function registerProjectHandlers(): void {
     return project;
   });
 
-  ipcMain.handle(CHANNELS.ProjectsRemove, (_event, rawPayload: unknown) => {
-    const { id } = RemoveProjectPayloadSchema.parse(rawPayload);
-    saveProjects(loadProjects().filter((p) => p.id !== id));
-  });
+  ipcMain.handle(
+    CHANNELS.ProjectsRemove,
+    async (_event, rawPayload: unknown) => {
+      const { id } = RemoveProjectPayloadSchema.parse(rawPayload);
+      const projects = loadProjects();
+      const removed = projects.find((p) => p.id === id);
+      saveProjects(projects.filter((p) => p.id !== id));
+      // Drop the project's icon-cache entry (and any decoded ICNS bytes)
+      // so the cache doesn't grow unbounded as projects come and go.
+      if (removed) await forgetProjectIcon(removed.path);
+    },
+  );
 
   ipcMain.handle(CHANNELS.ProjectsReorder, (_event, rawPayload: unknown) => {
     const { draggedId, targetId, position } =
@@ -152,6 +163,15 @@ export function registerProjectHandlers(): void {
       const { projectId } = ListIgnoredPathsPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return listIgnoredPaths(project.path);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.ProjectsIcon,
+    async (_event, rawPayload: unknown): Promise<ProjectIcon | null> => {
+      const { projectId } = ProjectIconPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return readProjectIcon(project.path);
     },
   );
 

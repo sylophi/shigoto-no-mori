@@ -19,6 +19,7 @@ import type {
   PackageScriptSortMode,
   PackageScriptsResult,
   Project,
+  ProjectIcon,
   PullRequest,
   RuntimeInfo,
   ScriptEvent,
@@ -62,6 +63,8 @@ const api = {
       ipcRenderer.invoke(CHANNELS.ProjectsPickWorktreeName, { projectId }),
     listIgnoredPaths: (projectId: string): Promise<string[]> =>
       ipcRenderer.invoke(CHANNELS.ProjectsListIgnoredPaths, { projectId }),
+    icon: (projectId: string): Promise<ProjectIcon | null> =>
+      ipcRenderer.invoke(CHANNELS.ProjectsIcon, { projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>

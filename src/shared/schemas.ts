@@ -166,6 +166,18 @@ export const ListIgnoredPathsPayloadSchema = z.object({
   projectId: z.string(),
 });
 
+export const ProjectIconPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+// Bytes for a detected project icon, ready to drop into a data URL.
+// `null` from the handler means no candidate file was found.
+export const ProjectIconSchema = z.object({
+  mime: z.string(),
+  base64: z.string(),
+});
+export type ProjectIcon = z.infer<typeof ProjectIconSchema>;
+
 export const BranchListSchema = z.object({
   local: z.array(z.string()),
   remote: z.array(z.string()),

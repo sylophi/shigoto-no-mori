@@ -20,6 +20,7 @@ import { execFile } from "node:child_process";
 import { appendFile, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { deflateSync } from "node:zlib";
 
 const execFileP = promisify(execFile);
 
@@ -58,7 +59,7 @@ async function git(cwd: string, args: string[]): Promise<string> {
 async function writeAt(
   repo: string,
   rel: string,
-  content: string,
+  content: string | Buffer,
 ): Promise<void> {
   const full = join(repo, rel);
   await mkdir(dirname(full), { recursive: true });
@@ -76,7 +77,7 @@ async function initRepo(path: string, defaultBranch = "main"): Promise<void> {
 
 async function commit(
   repo: string,
-  files: Record<string, string>,
+  files: Record<string, string | Buffer>,
   message: string,
 ): Promise<void> {
   await Promise.all(
@@ -112,6 +113,93 @@ function pkgJson(name: string, scripts: Record<string, string>): string {
   );
 }
 
+// Distinct labelled square so seeded projects render a recognisable icon
+// in the sidebar. Each seeder picks its own colour and label so it's
+// obvious at a glance which icon-detection branch produced the rendered
+// icon. Used by the icon-detection seed cases below.
+function iconSvg(fill: string, label: string): string {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+    `<rect width="32" height="32" rx="6" fill="${fill}"/>` +
+    `<text x="16" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="700" fill="white" text-anchor="middle">${label}</text>` +
+    `</svg>\n`
+  );
+}
+
+// 1x1 solid-red PNG. Used to exercise the resolver's PNG mime path with
+// bytes that actually decode in an <img>; the SVG cases test the more
+// common formats.
+const RED_PNG_1X1 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAFklEQVQI12P8/5+hngEFMDFAAcaCAFqcA0Aq8t5GAAAAAElFTkSuQmCC",
+  "base64",
+);
+
+const PNG_SIGNATURE = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+]);
+
+// Standard reversed CRC32 polynomial (0xEDB88320) — what PNG chunks use.
+function crc32(buf: Buffer): number {
+  let crc = 0xffffffff;
+  for (const b of buf) {
+    crc ^= b;
+    for (let i = 0; i < 8; i++) {
+      crc = (crc >>> 1) ^ ((crc & 1) === 1 ? 0xedb88320 : 0);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const typeAndData = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(typeAndData), 0);
+  return Buffer.concat([length, typeAndData, crc]);
+}
+
+// Build a tiny solid-colour PNG (truecolour, no alpha) from scratch so
+// the ICNS fixture below can wrap a real PNG of any colour we like
+// without pulling in an image dependency.
+function solidPng(size: number, rgb: [number, number, number]): Buffer {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr.writeUInt8(8, 8); // bit depth
+  ihdr.writeUInt8(2, 9); // colour type 2 = truecolour RGB
+  ihdr.writeUInt8(0, 10); // compression
+  ihdr.writeUInt8(0, 11); // filter
+  ihdr.writeUInt8(0, 12); // interlace
+  // Each scanline: 1-byte filter (0 = none) + size×3 RGB bytes.
+  const rowBytes = new Uint8Array(1 + size * 3);
+  for (let x = 0; x < size; x++) {
+    rowBytes[1 + x * 3] = rgb[0];
+    rowBytes[1 + x * 3 + 1] = rgb[1];
+    rowBytes[1 + x * 3 + 2] = rgb[2];
+  }
+  const rows: Buffer[] = [];
+  for (let y = 0; y < size; y++) rows.push(Buffer.from(rowBytes));
+  return Buffer.concat([
+    PNG_SIGNATURE,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", deflateSync(Buffer.concat(rows))),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// Wrap a PNG in a one-chunk ICNS container. The icp6 chunk type is
+// nominally 64×64 but the resolver picks chunks by PNG magic only, so
+// the declared size doesn't have to match the payload's actual dims.
+function icnsFromPng(png: Buffer): Buffer {
+  const chunkLength = Buffer.alloc(4);
+  chunkLength.writeUInt32BE(8 + png.length, 0);
+  const chunk = Buffer.concat([Buffer.from("icp6", "ascii"), chunkLength, png]);
+  const fileLength = Buffer.alloc(4);
+  fileLength.writeUInt32BE(8 + chunk.length, 0);
+  return Buffer.concat([Buffer.from("icns", "ascii"), fileLength, chunk]);
+}
+
 // ─── Archetypes ───────────────────────────────────────────────────────────
 
 async function seedBunBasic(): Promise<Manifest> {
@@ -137,6 +225,8 @@ async function seedBunBasic(): Promise<Manifest> {
       // packageScripts.ts treats either bun.lockb or bun.lock as the bun signal.
       "bun.lock": "# bun lockfile placeholder\n",
       "src/index.ts": "export const greet = (n: string) => `Hello ${n}`;\n",
+      // Icon detection: matches the src/favicon.svg candidate.
+      "src/favicon.svg": iconSvg("#f59e0b", "bn"),
     },
     "Initial scaffold",
   );
@@ -166,6 +256,7 @@ async function seedBunBasic(): Promise<Manifest> {
       "Package Scripts row should say 'bun' and list 7 scripts.",
       "Run each script: colors render (colorful), failure surfaces with exit 1 (lint), long-running cancels cleanly (dev), tree-spawn cancel kills all 3 sleeps.",
       "Carry-over picker should list .env, .env.local, .vscode/, node_modules/. Pick a couple in different modes and confirm they show up in a new worktree.",
+      "Icon detection: amber 'bn' tile (src/favicon.svg candidate).",
     ],
   };
 }
@@ -186,6 +277,8 @@ async function seedPnpmWorkspaces(): Promise<Manifest> {
       "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
       "packages/foo/package.json": `${JSON.stringify({ name: "@ws/foo", version: "0.0.0" }, null, 2)}\n`,
       "packages/foo/index.js": "module.exports = 'foo';\n",
+      // Icon detection: matches the public/favicon.svg candidate.
+      "public/favicon.svg": iconSvg("#eab308", "pw"),
     },
     "Initial workspaces",
   );
@@ -193,7 +286,10 @@ async function seedPnpmWorkspaces(): Promise<Manifest> {
     name: "pnpm-workspaces",
     path: repo,
     purpose: "pnpm workspaces — should detect packageManager: pnpm",
-    tests: ["Package Scripts row says 'pnpm' and lists build + clean."],
+    tests: [
+      "Package Scripts row says 'pnpm' and lists build + clean.",
+      "Icon detection: yellow 'pw' tile (public/favicon.svg candidate).",
+    ],
   };
 }
 
@@ -209,6 +305,9 @@ async function seedYarnClassic(): Promise<Manifest> {
       }),
       "yarn.lock":
         "# THIS IS AN AUTOGENERATED FILE. DO NOT EDIT THIS FILE DIRECTLY.\n# yarn lockfile v1\n",
+      // Icon detection: matches the root favicon.svg candidate (the top
+      // of the resolver's priority list).
+      "favicon.svg": iconSvg("#2dd4bf", "yc"),
     },
     "Initial",
   );
@@ -216,7 +315,10 @@ async function seedYarnClassic(): Promise<Manifest> {
     name: "yarn-classic",
     path: repo,
     purpose: "yarn.lock present — should detect packageManager: yarn",
-    tests: ["Package Scripts row says 'yarn'."],
+    tests: [
+      "Package Scripts row says 'yarn'.",
+      "Icon detection: teal 'yc' tile (root favicon.svg, top of the candidate list).",
+    ],
   };
 }
 
@@ -228,6 +330,9 @@ async function seedNpmVanilla(): Promise<Manifest> {
     {
       "README.md": "# npm-vanilla\n",
       "package.json": pkgJson("npm-vanilla", { hello: "echo 'hi from npm'" }),
+      // Icon detection: exercises the PNG mime path with bytes that
+      // actually decode in an <img> tag (1x1 red).
+      "favicon.png": RED_PNG_1X1,
     },
     "Initial",
   );
@@ -235,7 +340,10 @@ async function seedNpmVanilla(): Promise<Manifest> {
     name: "npm-vanilla",
     path: repo,
     purpose: "No lockfile — falls back to packageManager: npm",
-    tests: ["Package Scripts row says 'npm'."],
+    tests: [
+      "Package Scripts row says 'npm'.",
+      "Icon detection: solid red 1x1 PNG dot (exercises the .png mime path with bytes that actually decode).",
+    ],
   };
 }
 
@@ -267,7 +375,12 @@ async function seedWithOrigin(): Promise<Manifest> {
   await initRepo(repo);
   await commit(
     repo,
-    { "README.md": "# with-origin\n", "main.txt": "alpha\n" },
+    {
+      "README.md": "# with-origin\n",
+      "main.txt": "alpha\n",
+      // Icon detection: matches the assets/logo.svg candidate.
+      "assets/logo.svg": iconSvg("#22c55e", "wo"),
+    },
     "Initial",
   );
   await commit(repo, { "main.txt": "alpha\nbeta\n" }, "Second commit");
@@ -281,6 +394,7 @@ async function seedWithOrigin(): Promise<Manifest> {
       "Ahead/behind shows 0/0.",
       "New Worktree from `origin/main` should auto-create a local tracking branch.",
       "Manage Branches lists `origin/main` alongside locals.",
+      "Icon detection: green 'wo' tile (assets/logo.svg candidate).",
     ],
   };
 }
@@ -290,7 +404,12 @@ async function seedNoRemote(): Promise<Manifest> {
   await initRepo(repo);
   await commit(
     repo,
-    { "README.md": "# no-remote\n", "notes.txt": "local only\n" },
+    {
+      "README.md": "# no-remote\n",
+      "notes.txt": "local only\n",
+      // Icon detection: Docusaurus / SvelteKit / Hugo "static/" bucket.
+      "static/favicon.svg": iconSvg("#0d9488", "nr"),
+    },
     "Initial",
   );
   await commit(repo, { "notes.txt": "local only\nupdate\n" }, "More notes");
@@ -301,6 +420,7 @@ async function seedNoRemote(): Promise<Manifest> {
     tests: [
       "Ahead/behind stays 0/0 (no upstream to compare).",
       "resolveDefaultBranch should fall back to local `main`.",
+      "Icon detection: teal 'nr' tile (static/favicon.svg — Docusaurus / SvelteKit / Hugo).",
     ],
   };
 }
@@ -310,7 +430,15 @@ async function seedMultiRemote(): Promise<Manifest> {
   const remoteB = await bareRemote("multi-remote-b");
   const repo = join(REPOS, "multi-remote");
   await initRepo(repo);
-  await commit(repo, { "README.md": "# multi-remote\n" }, "Initial");
+  await commit(
+    repo,
+    {
+      "README.md": "# multi-remote\n",
+      // Icon detection: VitePress convention.
+      "docs/.vitepress/public/logo.svg": iconSvg("#7c3aed", "vp"),
+    },
+    "Initial",
+  );
   await git(repo, ["remote", "add", "alpha", remoteA]);
   await git(repo, ["remote", "add", "beta", remoteB]);
   await git(repo, ["push", "-u", "alpha", "main", "-q"]);
@@ -322,6 +450,7 @@ async function seedMultiRemote(): Promise<Manifest> {
     tests: [
       "Manage Branches lists `alpha/main` and `beta/main`.",
       "resolveDefaultBranch picks the first remote's main per listRemotes order.",
+      "Icon detection: violet 'vp' tile (docs/.vitepress/public/logo.svg).",
     ],
   };
 }
@@ -331,7 +460,11 @@ async function seedNonStandardDefault(): Promise<Manifest> {
   await initRepo(repo, "trunk");
   await commit(
     repo,
-    { "README.md": "# trunk-default\n\nOnly branch is `trunk`.\n" },
+    {
+      "README.md": "# trunk-default\n\nOnly branch is `trunk`.\n",
+      // Icon detection: matches the assets/icon.svg candidate.
+      "assets/icon.svg": iconSvg("#a855f7", "tr"),
+    },
     "Initial",
   );
   return {
@@ -341,6 +474,7 @@ async function seedNonStandardDefault(): Promise<Manifest> {
     tests: [
       "Adding the project should detect `trunk` as the default branch (first local fallback).",
       "Configure → Default branch should show `trunk` selectable.",
+      "Icon detection: purple 'tr' tile (assets/icon.svg candidate).",
     ],
   };
 }
@@ -433,7 +567,12 @@ async function seedAheadOnly(): Promise<Manifest> {
   await initRepo(repo);
   await commit(
     repo,
-    { "README.md": "# ahead-only\n", "log.txt": "line 1\n" },
+    {
+      "README.md": "# ahead-only\n",
+      "log.txt": "line 1\n",
+      // Icon detection: matches the Next.js src/app/icon.svg candidate.
+      "src/app/icon.svg": iconSvg("#06b6d4", "ao"),
+    },
     "Base",
   );
   await git(repo, ["remote", "add", "origin", remote]);
@@ -447,6 +586,7 @@ async function seedAheadOnly(): Promise<Manifest> {
     tests: [
       "Sidebar shows the emerald ↑2 indicator.",
       "Detail header shows 'Push 2 commits' (emerald). Clicking pushes; the pill clears.",
+      "Icon detection: cyan 'ao' tile (Next.js src/app/icon.svg candidate).",
     ],
   };
 }
@@ -457,7 +597,14 @@ async function seedBehindOnly(): Promise<Manifest> {
   await initRepo(repo);
   await commit(
     repo,
-    { "README.md": "# behind-only\n", "log.txt": "line 1\n" },
+    {
+      "README.md": "# behind-only\n",
+      "log.txt": "line 1\n",
+      // Icon detection: Mintlify convention. logo/light.svg is preferred
+      // when both light + dark exist (current resolver isn't theme-aware).
+      "logo/light.svg": iconSvg("#db2777", "mn"),
+      "logo/dark.svg": iconSvg("#1e293b", "no"),
+    },
     "Base",
   );
   await git(repo, ["remote", "add", "origin", remote]);
@@ -488,6 +635,7 @@ async function seedBehindOnly(): Promise<Manifest> {
     tests: [
       "Sidebar shows the sky ↓2 indicator.",
       "Detail header shows 'Pull 2 commits' (sky). Clicking fast-forwards and the pill clears.",
+      "Icon detection: pink 'mn' tile (logo/light.svg — Mintlify). Dark variant exists too at logo/dark.svg with a 'no' label; if you ever see that one in the sidebar the resolver picked the wrong variant.",
     ],
   };
 }
@@ -556,7 +704,18 @@ async function seedDivergedConflicts(): Promise<Manifest> {
 async function seedManyBranches(): Promise<Manifest> {
   const repo = join(REPOS, "many-branches");
   await initRepo(repo);
-  await commit(repo, { "README.md": "# many-branches\n" }, "Initial");
+  await commit(
+    repo,
+    {
+      "README.md": "# many-branches\n",
+      // Icon detection: tests the index.html link-tag parser. The resolver
+      // walks ICON_SOURCE_FILES after the candidates fail, extracts the
+      // href, and resolves it against public/ first.
+      "index.html": `<!doctype html><html><head><link rel="icon" href="/brand/logo.svg"/></head><body></body></html>\n`,
+      "public/brand/logo.svg": iconSvg("#ec4899", "mb"),
+    },
+    "Initial",
+  );
 
   const branches = [
     "feat/auth",
@@ -606,6 +765,7 @@ async function seedManyBranches(): Promise<Manifest> {
       "New Worktree → 'Check out source' hides `feat/auth` (occupied elsewhere).",
       "Long branch name truncates with ellipsis; unicode branch renders.",
       "Manage Branches lets you delete a non-current branch.",
+      'Icon detection: pink \'mb\' tile parsed out of index.html\'s <link rel="icon" href="/brand/logo.svg">, resolved against public/.',
     ],
   };
 }
@@ -613,7 +773,15 @@ async function seedManyBranches(): Promise<Manifest> {
 async function seedDirtyPrimary(): Promise<Manifest> {
   const repo = join(REPOS, "dirty-primary");
   await initRepo(repo);
-  await commit(repo, { "tracked.txt": "v1\n" }, "Initial");
+  await commit(
+    repo,
+    {
+      "tracked.txt": "v1\n",
+      // Icon detection: matches the JetBrains .idea/icon.svg candidate.
+      ".idea/icon.svg": iconSvg("#f97316", "dp"),
+    },
+    "Initial",
+  );
   // One modified tracked + one untracked file → changedCount === 2.
   await writeAt(repo, "tracked.txt", "v1\nlocal edits\n");
   await writeAt(repo, "scratch.txt", "untracked\n");
@@ -624,6 +792,7 @@ async function seedDirtyPrimary(): Promise<Manifest> {
     tests: [
       "Sidebar shows uncommitted-changes indicator on the primary row.",
       "Attempting to delete the primary worktree should be rejected.",
+      "Icon detection: orange 'dp' tile (.idea/icon.svg candidate).",
     ],
   };
 }
@@ -674,6 +843,18 @@ async function seedConvertibleExternals(): Promise<Manifest> {
         dev: "echo 'dev' && sleep 3600",
       }),
       "src/index.ts": "export {};\n",
+      // Icon detection: tests the JSX object parser. The resolver walks
+      // ICON_SOURCE_FILES, finds the { rel: "icon", href: "/icon.svg" }
+      // object, then resolves the href against public/.
+      "src/routes/__root.tsx":
+        `import { createRootRoute, Outlet } from "@tanstack/react-router";\n\n` +
+        `export const Route = createRootRoute({\n` +
+        `  head: () => ({\n` +
+        `    links: [{ rel: "icon", href: "/icon.svg" }],\n` +
+        `  }),\n` +
+        `  component: () => <Outlet />,\n` +
+        `});\n`,
+      "public/icon.svg": iconSvg("#6366f1", "ce"),
     },
     "Initial",
   );
@@ -757,6 +938,7 @@ async function seedConvertibleExternals(): Promise<Manifest> {
       "Convert just the dirty one first: confirm the destructive banner copy, then run. Old directory disappears, new managed worktree at ~/shigomori-dev/worktrees/convertible-externals/<slug> exists, the in-flight edits and scratch.txt are gone.",
       "Convert the remaining four. Each succeeds; detached one stays detached at the same SHA; release/1.0.0 still tracks origin/release/1.0.0 (0/0).",
       "After all five convert, the page shows the empty state and the sidebar no longer marks any worktree as External.",
+      'Icon detection: indigo \'ce\' tile parsed out of src/routes/__root.tsx\'s { rel: "icon", href: "/icon.svg" } object, resolved against public/.',
     ],
   };
 }
@@ -771,6 +953,8 @@ async function seedCarryoverRich(): Promise<Manifest> {
       ".gitignore":
         ".env\n.env.local\n.vscode/\n.idea/\nnode_modules/\n*.log\nsecrets.json\nbuild/\n",
       "src/index.ts": "export {};\n",
+      // Icon detection: matches the Next.js app/icon.svg candidate.
+      "app/icon.svg": iconSvg("#84cc16", "cr"),
     },
     "Initial",
   );
@@ -816,6 +1000,7 @@ async function seedCarryoverRich(): Promise<Manifest> {
       "Carry-over picker lists .env, .env.local, .vscode/, .idea/, node_modules/, secrets.json, build/, debug.log.",
       "Add some in Copy and some in Symlink; create a worktree and verify both modes apply.",
       "Delete .env on disk after configuring → next New Worktree page shows the 'missing' badge.",
+      "Icon detection: lime 'cr' tile (Next.js app/icon.svg candidate).",
     ],
   };
 }
@@ -876,6 +1061,9 @@ async function seedPathSpaces(): Promise<Manifest> {
       "package.json": pkgJson("path-with-spaces", {
         hello: "echo 'spaces ok'",
       }),
+      // Icon detection: confirms the resolver and IPC handle a project
+      // path that contains a space.
+      "public/favicon.svg": iconSvg("#14b8a6", "sp"),
     },
     "Initial",
   );
@@ -886,6 +1074,7 @@ async function seedPathSpaces(): Promise<Manifest> {
     tests: [
       "Add project — the path renders correctly throughout the UI.",
       "Run the `hello` script — confirm the cwd quoting holds end-to-end.",
+      "Icon detection: teal 'sp' tile (public/favicon.svg with a space in the cwd).",
     ],
   };
 }
@@ -900,6 +1089,9 @@ async function seedUnicodePath(): Promise<Manifest> {
       "package.json": pkgJson("unicode-path", {
         hello: "echo 'unicode ok'",
       }),
+      // Icon detection: confirms the unicode project path round-trips
+      // through the resolver and IPC base64 encoding.
+      "favicon.svg": iconSvg("#f43f5e", "プ"),
     },
     "Initial",
   );
@@ -910,6 +1102,7 @@ async function seedUnicodePath(): Promise<Manifest> {
     tests: [
       "The project name renders correctly in the sidebar and headers.",
       "Creating a worktree under it preserves the unicode segment in the worktree path.",
+      "Icon detection: rose 'プ' tile (root favicon.svg under a unicode cwd).",
     ],
   };
 }
@@ -942,6 +1135,8 @@ async function seedPortPoolBasic(): Promise<Manifest> {
         dev: 'echo "web=$PORT api=$API_PORT" && sleep 3600',
       }),
       "bun.lock": "# bun lockfile placeholder\n",
+      // Icon detection: Tauri convention.
+      "src-tauri/icons/icon.svg": iconSvg("#65a30d", "tr"),
       "port-pool.config.json":
         JSON.stringify(
           {
@@ -971,6 +1166,7 @@ async function seedPortPoolBasic(): Promise<Manifest> {
       "Run dev -- the echoed values match the .env.",
       "Delete the worktree -- Port-pool release runs before remove. Allocations dropped from `port-pool list`.",
       "Toggle off in Settings, then add the project again -- no Port-pool rows appear.",
+      "Icon detection: lime 'tr' tile (src-tauri/icons/icon.svg — Tauri).",
     ],
   };
 }
@@ -991,6 +1187,8 @@ async function seedPortPoolMonorepo(): Promise<Manifest> {
       }),
       "apps/web/package.json": `${JSON.stringify({ name: "@ws/web", version: "0.0.0", scripts: { dev: 'echo "web on $PORT api=$API_URL"' } }, null, 2)}\n`,
       "apps/api/package.json": `${JSON.stringify({ name: "@ws/api", version: "0.0.0", scripts: { dev: 'echo "api on $PORT db=$DATABASE_URL"' } }, null, 2)}\n`,
+      // Icon detection: Astro convention (src/assets/).
+      "src/assets/logo.svg": iconSvg("#d97706", "as"),
       "port-pool.config.json":
         JSON.stringify(
           {
@@ -1026,6 +1224,7 @@ async function seedPortPoolMonorepo(): Promise<Manifest> {
       "Verify the same ${api} value appears in apps/web/.env.local API_URL and apps/api/.env PORT.",
       "Lifecycle rows render in order: Setup (if configured), Port-pool provision, Port-pool release, Teardown (if configured).",
       "Delete worktree -- release runs first, then removeWorktree.",
+      "Icon detection: amber 'as' tile (src/assets/logo.svg — Astro).",
     ],
   };
 }
@@ -1077,6 +1276,17 @@ async function seedManyScripts(): Promise<Manifest> {
       ".gitignore": "node_modules/\n",
       "package.json": pkgJson("many-scripts", scripts),
       "pnpm-lock.yaml": "lockfileVersion: '9.0'\n",
+      // Icon detection: tests two things at once.
+      //   1) The ICNS decoder — assets/icon.icns wraps an 8×8 cyan PNG
+      //      in an icp6 chunk. The resolver should extract the PNG and
+      //      cache it as image/png so Chromium can render it.
+      //   2) ICNS priority within the assets/ bucket — the same
+      //      directory also holds a red assets/icon.png that would win
+      //      if the candidate ordering weren't ICNS-first. A cyan
+      //      sidebar tile means ICNS won; a red one means the priority
+      //      regressed.
+      "assets/icon.icns": icnsFromPng(solidPng(8, [6, 182, 212])),
+      "assets/icon.png": RED_PNG_1X1,
     },
     "Initial",
   );
@@ -1095,6 +1305,7 @@ async function seedManyScripts(): Promise<Manifest> {
       "The sort preference is persisted: pick a non-default mode, restart, and the same mode is selected.",
       "Open a different project with package scripts — its sort starts on 'Most used'; sort is per-repo.",
       "Search overrides the sort while the query box is non-empty (relevance order); clearing the query restores the chosen sort.",
+      "Icon detection: cyan square in the sidebar (ICNS at assets/icon.icns decoded to PNG). A red square would mean assets/icon.png won the in-bucket race — the ICNS priority would be broken.",
     ],
   };
 }
@@ -1161,6 +1372,62 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
     "- `external/` — git worktrees pre-created outside the managed dir.",
   );
   lines.push("- `.sidecar/` — internal clones used to push divergent commits.");
+  lines.push("");
+  lines.push("## Icon detection coverage");
+  lines.push("");
+  lines.push(
+    "Each repo below seeds a uniquely-coloured icon so the resolver's branches " +
+      "can be eyeballed in the sidebar. Repos not listed here intentionally have " +
+      "no detectable icon (the 'render nothing' control).",
+  );
+  lines.push("");
+  lines.push("| Repo | Path | Branch tested |");
+  lines.push("| --- | --- | --- |");
+  lines.push(
+    "| yarn-classic | `favicon.svg` | root SVG (top of candidate list) |",
+  );
+  lines.push("| npm-vanilla | `favicon.png` | root PNG mime path |");
+  lines.push(
+    "| pnpm-workspaces | `public/favicon.svg` | `public/` candidate |",
+  );
+  lines.push("| path with spaces | `public/favicon.svg` | space in cwd |");
+  lines.push("| bun-basic | `src/favicon.svg` | `src/` candidate |");
+  lines.push(
+    "| ahead-only | `src/app/icon.svg` | Next.js `src/app/` candidate |",
+  );
+  lines.push(
+    "| carryover-rich | `app/icon.svg` | Next.js root `app/` candidate |",
+  );
+  lines.push(
+    "| with-origin | `assets/logo.svg` | `assets/logo.svg` candidate |",
+  );
+  lines.push(
+    "| non-standard-default | `assets/icon.svg` | `assets/icon.svg` candidate |",
+  );
+  lines.push(
+    "| dirty-primary | `.idea/icon.svg` | JetBrains `.idea/` candidate |",
+  );
+  lines.push(
+    '| many-branches | `index.html` → `public/brand/logo.svg` | HTML `<link rel="icon">` parser |',
+  );
+  lines.push(
+    '| convertible-externals | `src/routes/__root.tsx` → `public/icon.svg` | JSX `{ rel: "icon", href: ... }` parser |',
+  );
+  lines.push("| プロジェクト | `favicon.svg` | unicode cwd |");
+  lines.push(
+    "| many-scripts | `assets/icon.icns` (+ losing `assets/icon.png`) | ICNS decoder + ICNS-wins-the-bucket priority |",
+  );
+  lines.push(
+    "| no-remote | `static/favicon.svg` | Docusaurus / SvelteKit / Hugo `static/` bucket |",
+  );
+  lines.push(
+    "| multi-remote | `docs/.vitepress/public/logo.svg` | VitePress |",
+  );
+  lines.push(
+    "| behind-only | `logo/light.svg` (+ unused `logo/dark.svg`) | Mintlify (light variant wins, no theme awareness yet) |",
+  );
+  lines.push("| port-pool-basic | `src-tauri/icons/icon.svg` | Tauri |");
+  lines.push("| port-pool-monorepo | `src/assets/logo.svg` | Astro |");
   lines.push("");
   await writeFile(join(ROOT, "README.md"), `${lines.join("\n")}\n`);
 }

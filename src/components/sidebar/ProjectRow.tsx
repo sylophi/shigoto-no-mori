@@ -29,6 +29,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
 import { useCreateWorktree } from "@/hooks/useWorktrees";
 import { useIsTruncated } from "@/hooks/useIsTruncated";
 import { useRemoveProject } from "@/hooks/useProjects";
+import { ProjectIcon } from "./ProjectIcon";
 import type { Project } from "@shared/schemas";
 
 interface ProjectRowProps {
@@ -320,8 +321,10 @@ function ProjectHeader({
         missing && "text-muted-foreground/60 hover:text-muted-foreground",
       )}
     >
-      {missing && (
+      {missing ? (
         <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+      ) : (
+        <ProjectIcon projectId={project.id} />
       )}
       <span
         ref={nameRef}
@@ -365,6 +368,7 @@ function ProjectHeader({
           expanded && "rotate-90",
         )}
       />
+      <ProjectIcon projectId={project.id} />
       <span ref={nameRef} className="min-w-0 truncate">
         {project.name}
       </span>
