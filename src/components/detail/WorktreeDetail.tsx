@@ -26,6 +26,7 @@ import {
 import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
 import type { CreatePhase } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
+import { PullRequestSection } from "./PullRequestSection";
 import { ScriptsSection } from "./ScriptsSection";
 import { BranchHeaderRow } from "./worktreeDetail/BranchHeader";
 import { CommitsSection } from "./worktreeDetail/CommitsSection";
@@ -295,6 +296,8 @@ function WorktreeDetailInner({ worktree, project, siblings }: InnerProps) {
             <SectionHeading>Launch</SectionHeading>
             <LauncherRow worktree={worktree} />
           </section>
+
+          <PullRequestSection worktree={worktree} />
 
           <CommitsSection worktree={worktree} />
 

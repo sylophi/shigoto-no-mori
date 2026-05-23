@@ -3,7 +3,11 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { pullRequestsEqual, type PullRequest } from "@shared/schemas";
+import {
+  pullRequestsEqual,
+  type PullRequest,
+  type PullRequestDetail,
+} from "@shared/schemas";
 import { projectPullRequestsKey } from "./useProjectPullRequests";
 
 const WORKTREE_PR_KEY_PREFIX = ["githubCli", "worktreePullRequest"] as const;
@@ -28,7 +32,7 @@ export function invalidateAllWorktreePullRequests(
 // swallow behavior -- a transient gh failure shouldn't toast.
 export function useWorktreePullRequest(projectId: string, branch: string) {
   const queryClient = useQueryClient();
-  return useQuery<PullRequest | null>({
+  return useQuery<PullRequestDetail | null>({
     queryKey: worktreePullRequestKey(projectId, branch),
     queryFn: async () => {
       const pr = await window.api.githubCli.worktreePullRequest({
@@ -53,7 +57,7 @@ function mirrorIntoProjectMap(
   queryClient: QueryClient,
   projectId: string,
   branch: string,
-  pr: PullRequest | null,
+  pr: PullRequestDetail | null,
 ): void {
   queryClient.setQueryData<Record<string, PullRequest>>(
     projectPullRequestsKey(projectId),
@@ -66,8 +70,15 @@ function mirrorIntoProjectMap(
         delete next[branch];
         return next;
       }
-      if (current && pullRequestsEqual(current, pr)) return prev;
-      return { ...prev, [branch]: pr };
+      const slim: PullRequest = {
+        number: pr.number,
+        url: pr.url,
+        title: pr.title,
+        state: pr.state,
+        isDraft: pr.isDraft,
+      };
+      if (current && pullRequestsEqual(current, slim)) return prev;
+      return { ...prev, [branch]: slim };
     },
   );
 }

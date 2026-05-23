@@ -1,11 +1,19 @@
 import { ipcMain } from "electron";
 import { z } from "zod";
 import { CHANNELS } from "@shared/channels";
-import type { GithubCliReadiness, PullRequest } from "@shared/schemas";
+import {
+  type GithubCliReadiness,
+  MergePullRequestPayloadSchema,
+  type PullRequest,
+  type PullRequestDetail,
+  type RepoMergeConfig,
+} from "@shared/schemas";
 import {
   getGithubCliReadiness,
+  getRepoMergeConfig,
   getWorktreePullRequest,
   listProjectPullRequests,
+  mergePullRequest,
 } from "../githubCli";
 import { findProjectOrThrow } from "../projects";
 
@@ -42,11 +50,35 @@ export function registerGithubCliHandlers(): void {
 
   ipcMain.handle(
     CHANNELS.GithubCliWorktreePullRequest,
-    async (_event, rawPayload: unknown): Promise<PullRequest | null> => {
+    async (_event, rawPayload: unknown): Promise<PullRequestDetail | null> => {
       const { projectId, branch } =
         WorktreePullRequestPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return getWorktreePullRequest(project.path, branch);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.GithubCliRepoMergeConfig,
+    async (_event, rawPayload: unknown): Promise<RepoMergeConfig | null> => {
+      const { projectId } = ProjectPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return getRepoMergeConfig(project.path);
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.GithubCliMergePullRequest,
+    async (_event, rawPayload: unknown): Promise<void> => {
+      const { projectId, number, method } =
+        MergePullRequestPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      await mergePullRequest({
+        projectId,
+        cwd: project.path,
+        number,
+        method,
+      });
     },
   );
 }

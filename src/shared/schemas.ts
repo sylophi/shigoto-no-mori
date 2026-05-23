@@ -46,6 +46,74 @@ export function pullRequestsEqual(
   );
 }
 
+// GraphQL's PullRequest.mergeStateStatus, surfaced verbatim so the
+// renderer can pick the right reason text. UNKNOWN covers both "still
+// computing" and "gh didn't report it" -- the UI treats both the same.
+export const PullRequestMergeStateSchema = z.enum([
+  "CLEAN",
+  "BLOCKED",
+  "BEHIND",
+  "DIRTY",
+  "DRAFT",
+  "HAS_HOOKS",
+  "UNKNOWN",
+  "UNSTABLE",
+]);
+export type PullRequestMergeState = z.infer<typeof PullRequestMergeStateSchema>;
+
+export const PullRequestCheckBucketSchema = z.enum([
+  "passed",
+  "failing",
+  "pending",
+  "neutral",
+  "skipped",
+]);
+export type PullRequestCheckBucket = z.infer<
+  typeof PullRequestCheckBucketSchema
+>;
+
+export const PullRequestCheckSchema = z.object({
+  name: z.string(),
+  bucket: PullRequestCheckBucketSchema,
+  url: z.string().url().optional(),
+});
+export type PullRequestCheck = z.infer<typeof PullRequestCheckSchema>;
+
+export const PullRequestChecksSummarySchema = z.object({
+  total: z.number().int().nonnegative(),
+  passed: z.number().int().nonnegative(),
+  failing: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+  neutral: z.number().int().nonnegative(),
+  skipped: z.number().int().nonnegative(),
+});
+export type PullRequestChecksSummary = z.infer<
+  typeof PullRequestChecksSummarySchema
+>;
+
+// Rich projection of the open worktree's PR. Slim PullRequest is kept
+// for the project-wide sweep that feeds the sidebar dots, since the
+// extra fields make `gh pr list` materially slower.
+export const PullRequestDetailSchema = PullRequestSchema.extend({
+  mergeState: PullRequestMergeStateSchema,
+  checks: PullRequestChecksSummarySchema,
+  checkList: z.array(PullRequestCheckSchema),
+});
+export type PullRequestDetail = z.infer<typeof PullRequestDetailSchema>;
+
+export const MergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
+export type MergeMethod = z.infer<typeof MergeMethodSchema>;
+
+// Per-repo merge button settings from `gh repo view`. All three may be
+// allowed, or only a subset (some teams squash-only). UI hides disabled
+// methods rather than disabling them.
+export const RepoMergeConfigSchema = z.object({
+  merge: z.boolean(),
+  squash: z.boolean(),
+  rebase: z.boolean(),
+});
+export type RepoMergeConfig = z.infer<typeof RepoMergeConfigSchema>;
+
 export const WorktreeSchema = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -473,6 +541,11 @@ export const ShigomoriConfigSchema = z.object({
   worktreeLayout: WorktreeLayoutSchema.optional(),
   // Absolute path; only meaningful when worktreeLayout === "custom".
   customWorktreePath: z.string().optional(),
+  // Last merge method picked for this project's PRs. Drives the split-
+  // button's primary action so each repo remembers its house style.
+  // Falls back to whatever the repo allows when the saved value is
+  // disabled at GitHub.
+  lastMergeMethod: MergeMethodSchema.optional(),
 });
 
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
@@ -513,6 +586,13 @@ export const GlobalConfigSchema = z.object({
 export const GithubCliReadinessSchema = z.object({
   installed: z.boolean(),
   authed: z.boolean(),
+});
+
+export const MergePullRequestPayloadSchema = z.object({
+  projectId: z.string(),
+  branch: z.string(),
+  number: z.number().int().positive(),
+  method: MergeMethodSchema,
 });
 
 export const WriteGlobalConfigPayloadSchema = z.object({
@@ -742,6 +822,9 @@ export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 export type PullRequestState = z.infer<typeof PullRequestStateSchema>;
 export type PullRequest = z.infer<typeof PullRequestSchema>;
+export type MergePullRequestPayload = z.infer<
+  typeof MergePullRequestPayloadSchema
+>;
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;

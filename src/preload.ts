@@ -16,11 +16,14 @@ import type {
   GlobalConfig,
   LauncherEntry,
   LaunchToolMenuEntry,
+  MergeMethod,
   PackageScriptSortMode,
   PackageScriptsResult,
   Project,
   ProjectIcon,
   PullRequest,
+  PullRequestDetail,
+  RepoMergeConfig,
   RuntimeInfo,
   ScriptEvent,
   ScriptName,
@@ -303,8 +306,19 @@ const api = {
     worktreePullRequest: (input: {
       projectId: string;
       branch: string;
-    }): Promise<PullRequest | null> =>
+    }): Promise<PullRequestDetail | null> =>
       ipcRenderer.invoke(CHANNELS.GithubCliWorktreePullRequest, input),
+    repoMergeConfig: (input: {
+      projectId: string;
+    }): Promise<RepoMergeConfig | null> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliRepoMergeConfig, input),
+    mergePullRequest: (input: {
+      projectId: string;
+      branch: string;
+      number: number;
+      method: MergeMethod;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliMergePullRequest, input),
     onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GithubCliProjectPullRequestsRefreshed,
     ),
