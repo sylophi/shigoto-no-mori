@@ -4,8 +4,10 @@ import {
   ExternalLink,
   FolderOpen,
   Flame,
+  Loader2,
   Moon,
   Plus,
+  RefreshCw,
   Sun,
   SunMoon,
 } from "lucide-react";
@@ -28,11 +30,17 @@ import { usePortPoolInstalled } from "@/hooks/usePortPoolInstalled";
 import { cn } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
 import { THEME_STORAGE_KEY, useTheme } from "@/hooks/useTheme";
+import { useUpdater } from "@/hooks/useUpdater";
 import { useNavigate } from "@tanstack/react-router";
 import { PathSpan } from "@/components/ui/path-span";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
-import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
+import type {
+  GlobalConfig,
+  LauncherCommand,
+  Theme,
+  UpdaterState,
+} from "@shared/schemas";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
@@ -478,15 +486,72 @@ function ToggleRow({
 }
 
 function VersionSection() {
+  const { state, check, install } = useUpdater();
+  const kind = state?.kind ?? "idle";
+  const ready = state?.kind === "ready" ? state : null;
+
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">Version</SectionHeading>
-      <div className="font-mono text-sm select-text">
-        {__APP_VERSION__}{" "}
-        <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="font-mono text-sm select-text">
+          {__APP_VERSION__}{" "}
+          <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+        </div>
+        {ready ? (
+          <Button
+            size="sm"
+            onClick={() => install.mutate()}
+            disabled={install.isPending}
+          >
+            <RefreshCw />
+            Restart to update to v{ready.version}
+          </Button>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => check.mutate()}
+            disabled={kind === "checking" || kind === "downloading"}
+          >
+            {kind === "checking" || kind === "downloading" ? (
+              <Loader2 className="animate-spin" />
+            ) : (
+              <RefreshCw />
+            )}
+            {kind === "checking" ? "Checking…" : "Check for updates"}
+          </Button>
+        )}
       </div>
+      <UpdaterStatusLine state={state} />
     </section>
   );
+}
+
+// The button already speaks for itself when an update is ready, so we
+// only surface a status line for the states where the button alone is
+// ambiguous: idle ("you already checked, nothing to do"), downloading
+// ("we're working on it"), and error.
+function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
+  if (!state) return null;
+  if (state.kind === "idle") {
+    return (
+      <span className="text-xs text-muted-foreground">You're up to date.</span>
+    );
+  }
+  if (state.kind === "downloading") {
+    return (
+      <span className="text-xs text-muted-foreground">Downloading update…</span>
+    );
+  }
+  if (state.kind === "error") {
+    return (
+      <span className="text-xs text-destructive" title={state.message}>
+        Update check failed.
+      </span>
+    );
+  }
+  return null;
 }
 
 function DangerZone() {

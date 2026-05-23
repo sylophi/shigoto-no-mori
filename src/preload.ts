@@ -24,6 +24,7 @@ import type {
   ScriptName,
   ShigomoriConfig,
   Theme,
+  UpdaterState,
   Worktree,
   WorktreeCarryOverComplete,
   WorktreeLifecyclePhase,
@@ -283,6 +284,12 @@ const api = {
     cancel: (runId: string): Promise<{ cancelled: boolean }> =>
       ipcRenderer.invoke(CHANNELS.ScriptsCancel, { runId }),
     onEvent: subscribe<ScriptEvent>(CHANNELS.ScriptsEvent),
+  },
+  updater: {
+    get: (): Promise<UpdaterState> => ipcRenderer.invoke(CHANNELS.UpdaterGet),
+    check: (): Promise<void> => ipcRenderer.invoke(CHANNELS.UpdaterCheck),
+    install: (): Promise<void> => ipcRenderer.invoke(CHANNELS.UpdaterInstall),
+    onState: subscribe<UpdaterState>(CHANNELS.UpdaterState),
   },
   launchers: {
     detected: (): Promise<DetectedLauncher[]> =>

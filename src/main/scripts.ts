@@ -385,6 +385,20 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   );
 }
 
+// Synchronous best-effort SIGTERM to every running script's process
+// group. Used by the update-install quit path, where we can't await
+// the full kill chain (that would block Squirrel's ShipIt handoff) but
+// still want well-behaved scripts to clean up gracefully before
+// Electron tears the main process down. Descendants that escaped the
+// group via setsid() get reparented to launchd, same as if we hadn't
+// signaled at all.
+export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
+  for (const record of runningScripts.values()) {
+    if (record.exited) continue;
+    safeKill(-record.pid, signal);
+  }
+}
+
 export function startScriptForLifecycle(args: RunArgs): {
   runId: string;
   exit: Promise<number | null>;

@@ -24,6 +24,7 @@ import { cn, dragRegion } from "@/lib/utils";
 import { useCommandPalette } from "@/hooks/useCommandPalette";
 import { useProjects, useReorderProjects } from "@/hooks/useProjects";
 import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useUpdater } from "@/hooks/useUpdater";
 import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -317,6 +318,8 @@ function SidebarFooter({
   const navigate = useNavigate();
   const location = useLocation();
   const { openIn } = useCommandPalette();
+  const { state: updaterState } = useUpdater();
+  const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
   if (arrangeMode) {
     return (
@@ -336,17 +339,23 @@ function SidebarFooter({
       <button
         type="button"
         onClick={() => void navigate({ to: "/settings" })}
-        aria-label="Settings"
+        aria-label={updateReady ? "Settings (update available)" : "Settings"}
         aria-current={settingsActive ? "page" : undefined}
-        title="Settings"
+        title={updateReady ? "Settings — update available" : "Settings"}
         className={cn(
-          "rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
+          "relative rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
           settingsActive
             ? "bg-accent text-foreground"
             : "text-muted-foreground",
         )}
       >
         <SettingsIcon className="size-3.5" />
+        {updateReady && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
+          />
+        )}
       </button>
       <button
         type="button"
