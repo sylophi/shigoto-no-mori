@@ -9,8 +9,8 @@ import {
   X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
-import { cn } from "@/lib/utils";
 import { useBranches } from "@/hooks/useBranches";
 import {
   useCheckoutBranch,
@@ -169,19 +169,15 @@ function BranchTitle({ worktree }: { worktree: Worktree }) {
     <div className="group/copy flex min-w-0 items-center gap-1.5">
       <h1
         ref={titleRef}
-        className={cn(
-          "min-w-0 truncate font-mono text-2xl font-medium tracking-tight",
-          worktree.detached && "text-muted-foreground",
-        )}
+        className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
         title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
       >
-        {worktree.branch}
+        <BranchLabel
+          branch={worktree.branch}
+          detached={worktree.detached}
+          suffixClassName="text-base tracking-normal"
+        />
       </h1>
-      {worktree.detached && (
-        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-          detached
-        </span>
-      )}
       {!worktree.detached && (
         <button
           type="button"

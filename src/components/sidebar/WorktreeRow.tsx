@@ -12,6 +12,7 @@ import {
 import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { useIsDeletingWorktree } from "@/hooks/useWorktrees";
 import { useProjectPullRequests } from "@/hooks/useProjectPullRequests";
@@ -64,14 +65,10 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         )}
       >
         <span
-          className={cn(
-            "truncate font-mono",
-            isSelected && "font-medium",
-            worktree.detached && "text-muted-foreground",
-          )}
+          className={cn("truncate font-mono", isSelected && "font-medium")}
           title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
         >
-          {worktree.branch}
+          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
         </span>
         <span className="truncate text-[10px] text-muted-foreground">
           {worktree.name}
