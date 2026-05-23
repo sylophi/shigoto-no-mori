@@ -107,6 +107,12 @@ const api = {
       newBranch: string;
     }): Promise<Worktree> =>
       ipcRenderer.invoke(CHANNELS.WorktreesRenameBranch, input),
+    setShelved: (input: {
+      projectId: string;
+      worktreeId: string;
+      shelved: boolean;
+    }): Promise<Worktree> =>
+      ipcRenderer.invoke(CHANNELS.WorktreesSetShelved, input),
     checkoutBranch: (input: {
       projectId: string;
       worktreeId: string;

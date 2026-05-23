@@ -159,6 +159,49 @@ export function useIsDeletingWorktree(worktreeId: string): boolean {
   );
 }
 
+interface SetShelvedInput {
+  projectId: string;
+  worktreeId: string;
+  shelved: boolean;
+}
+
+export function useSetShelved() {
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, SetShelvedInput>({
+    mutationFn: (input) => window.api.worktrees.setShelved(input),
+    onMutate: (vars) => {
+      // Optimistic flip so the row's appearance and the sidebar group
+      // both update before the IPC round-trip lands.
+      queryClient.setQueryData<Worktree[]>(
+        ["worktrees", vars.projectId],
+        (current) =>
+          current
+            ? current.map((w) =>
+                w.id === vars.worktreeId ? { ...w, shelved: vars.shelved } : w,
+              )
+            : current,
+      );
+    },
+    onSuccess: (data, vars) => {
+      // Splice in the server's row instead of refetching the whole
+      // project's list. The handler already returns the refreshed
+      // Worktree so cache state stays accurate without an N-git-call
+      // round trip.
+      queryClient.setQueryData<Worktree[]>(
+        ["worktrees", vars.projectId],
+        (current) => current?.map((w) => (w.id === data.id ? data : w)),
+      );
+    },
+    onError: (_err, vars) => {
+      // Roll the stuck-optimistic row back to truth.
+      void queryClient.invalidateQueries({
+        queryKey: ["worktrees", vars.projectId],
+      });
+    },
+    meta: { errorTitle: "Couldn't update shelved state" },
+  });
+}
+
 interface RenameBranchInput {
   projectId: string;
   worktreeId: string;

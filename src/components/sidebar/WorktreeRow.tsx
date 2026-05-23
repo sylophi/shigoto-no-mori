@@ -49,7 +49,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
           },
         })
       }
-      title={describeRow(activity, isDeleting)}
+      title={describeRow(activity, isDeleting, worktree.shelved)}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
@@ -57,7 +57,12 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         isDeleting && "opacity-50",
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col",
+          worktree.shelved && "opacity-60",
+        )}
+      >
         <span
           className={cn(
             "truncate font-mono",
@@ -112,11 +117,13 @@ function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
 function describeRow(
   activity: ScriptActivityKind | null,
   isDeleting: boolean,
+  shelved: boolean,
 ): string | undefined {
   if (isDeleting) return "Deleting worktree";
   if (activity === "setup") return "Running setup";
   if (activity === "teardown") return "Running teardown";
   if (activity === "package") return "Running a script";
+  if (shelved) return "Shelved";
   return undefined;
 }
 

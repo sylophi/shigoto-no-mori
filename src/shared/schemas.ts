@@ -76,6 +76,10 @@ export const WorktreeSchema = z.object({
   // `branch` holds the short commit hash, not a real branch name — so
   // rename is impossible and the UI styles it as a hash, not a branch.
   detached: z.boolean(),
+  // User-driven "out of focus" flag. Filtered out of the sidebar's main
+  // list by default but recoverable via the per-project "Show shelved"
+  // toggle. The worktree itself is untouched on disk.
+  shelved: z.boolean(),
 });
 
 // A worktree's relationship to its upstream, derived from the raw counts
@@ -267,6 +271,12 @@ export const RenameBranchPayloadSchema = z.object({
   projectId: z.string(),
   worktreeId: z.string(),
   newBranch: z.string().min(1),
+});
+
+export const SetShelvedPayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
+  shelved: z.boolean(),
 });
 
 export const CheckoutBranchPayloadSchema = z.object({

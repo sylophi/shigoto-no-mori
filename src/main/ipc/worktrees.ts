@@ -17,6 +17,7 @@ import {
   type Project,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
+  SetShelvedPayloadSchema,
   SyncWorktreePayloadSchema,
   type Worktree,
   WorktreeDiffPayloadSchema,
@@ -47,6 +48,7 @@ import {
 import { readGlobalConfig } from "../globalConfig";
 import { findProjectOrThrow } from "../projects";
 import { killScriptsForWorktree } from "../scripts";
+import { dropShelved, isShelved, setShelved } from "../shelvedWorktrees";
 import { readShigomoriConfig } from "../shigomori";
 import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
 import { pruneEmptyManagedParents } from "../worktreePaths";
@@ -124,6 +126,7 @@ export function registerWorktreeHandlers(): void {
 
       await killScriptsForWorktree(worktreeId);
       await removeWorktreeForce(project.path, target.path);
+      dropShelved(worktreeId);
 
       const worktree = await createWorktree(project.id, project.path, {
         requestedWorktreeName: worktreeName,
@@ -158,6 +161,9 @@ export function registerWorktreeHandlers(): void {
       // while the renderer drops the run state on success, leaving an
       // unmanageable child until app quit. Matches the delete handler.
       await killScriptsForWorktree(worktreeId);
+      // The id is path-derived, so the relocate changes it; carry the
+      // shelf flag forward to the new id and clear the stale entry.
+      const carryShelved = isShelved(worktreeId);
       await relocateWorktree(project.path, target.path, destinationPath);
       // Sweep the old parent dir if it's one we own (managed root's
       // per-project subdir, or the in-project .shigomori scaffolding).
@@ -165,6 +171,11 @@ export function registerWorktreeHandlers(): void {
       // is user-chosen and could sit next to unrelated files. Best
       // effort: failures are swallowed so concurrent moves don't race.
       await pruneEmptyManagedParents(target.path, project.path);
+      const newId = worktreeIdFromPath(destinationPath);
+      if (carryShelved) {
+        dropShelved(worktreeId);
+        setShelved(newId, true);
+      }
       // Everything we need for the moved identity is already known:
       // the id is path-derived, branch/detached survive the move, and we
       // just moved it into a managed prefix the user picked. Skipping
@@ -172,7 +183,7 @@ export function registerWorktreeHandlers(): void {
       return describeWorktree(
         {
           ...target,
-          id: worktreeIdFromPath(destinationPath),
+          id: newId,
           name: basename(destinationPath),
           path: destinationPath,
           isExternal: false,
@@ -264,7 +275,33 @@ export function registerWorktreeHandlers(): void {
         target,
         global.deleteBranchOnRemove ?? true,
       );
+      // Drop any lingering shelf state for this id so a future
+      // worktree at the same path doesn't inherit it.
+      dropShelved(worktreeId);
       return { ok: true };
+    },
+  );
+
+  ipcMain.handle(
+    CHANNELS.WorktreesSetShelved,
+    async (_event, rawPayload: unknown): Promise<Worktree> => {
+      const { projectId, worktreeId, shelved } =
+        SetShelvedPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      const target = await findWorktreeIdentityOrThrow(
+        project.id,
+        project.path,
+        worktreeId,
+      );
+      if (shelved && (target.isPrimary || target.isExternal)) {
+        throw new Error(
+          target.isPrimary
+            ? "The primary checkout can't be shelved"
+            : "External worktrees can't be shelved",
+        );
+      }
+      setShelved(worktreeId, shelved);
+      return describeWorktree(target, project.path);
     },
   );
 

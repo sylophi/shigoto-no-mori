@@ -6,6 +6,7 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
+import { readShelvedSet } from "../shelvedWorktrees";
 import { readShigomoriConfig } from "../shigomori";
 import { pickWorktreeName } from "../worktreeNames";
 import {
@@ -228,6 +229,7 @@ const RECENT_COMMITS_COUNT = 4;
 async function buildWorktree(
   identity: WorktreeIdentity,
   hasRemote: boolean,
+  shelvedSet: ReadonlySet<string>,
 ): Promise<Worktree> {
   const [changedCount, recentCommits, remoteSync] = await Promise.all([
     getChangedCount(identity.path),
@@ -250,6 +252,10 @@ async function buildWorktree(
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
     detached: identity.detached,
+    shelved:
+      !identity.isPrimary &&
+      !identity.isExternal &&
+      shelvedSet.has(identity.id),
   };
 }
 
@@ -262,11 +268,16 @@ export async function listWorktrees(
     listRemotes(projectPath),
   ]);
   const hasRemote = remotes.length > 0;
+  // Single sync disk read of state.json, then per-row lookups are O(1)
+  // against the in-memory set. Avoids N readFileSync per list call.
+  const shelvedSet = readShelvedSet();
   // Primary first so it anchors the sidebar list as the canonical checkout.
   const ordered = identities.toSorted((a, b) =>
     a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
   );
-  return Promise.all(ordered.map((id) => buildWorktree(id, hasRemote)));
+  return Promise.all(
+    ordered.map((id) => buildWorktree(id, hasRemote, shelvedSet)),
+  );
 }
 
 export async function describeWorktree(
@@ -274,7 +285,7 @@ export async function describeWorktree(
   projectPath: string,
 ): Promise<Worktree> {
   const remotes = await listRemotes(projectPath);
-  return buildWorktree(identity, remotes.length > 0);
+  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
 }
 
 export async function findWorktreeIdentityOrThrow(
@@ -371,7 +382,7 @@ export async function createWorktree(
   if (!identity) {
     throw new Error("Worktree disappeared after creation");
   }
-  return buildWorktree(identity, remotes.length > 0);
+  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
 }
 
 export async function removeWorktree(

@@ -1,4 +1,4 @@
-import { FolderTree, House } from "lucide-react";
+import { Archive, FolderTree, House } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -9,11 +9,13 @@ import type { Worktree } from "@shared/schemas";
 const KINDS = {
   primary: { Icon: House, label: "Repo root" },
   external: { Icon: FolderTree, label: "External worktree" },
+  shelved: { Icon: Archive, label: "Shelved" },
 } as const;
 
 function kindOf(worktree: Worktree): keyof typeof KINDS | null {
   if (worktree.isPrimary) return "primary";
   if (worktree.isExternal) return "external";
+  if (worktree.shelved) return "shelved";
   return null;
 }
 
