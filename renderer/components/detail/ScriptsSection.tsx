@@ -19,11 +19,7 @@ import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { cn } from "@/lib/utils";
-import {
-  slotToParam,
-  useWorktreeHasPackageActivity,
-  type ScriptSlot,
-} from "@/store/scriptRuns";
+import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
 import type {
   PackageScriptSortMode,
   PackageScriptsResult,
@@ -112,6 +108,8 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
 
   return (
     <div className="space-y-4">
+      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
+
       {lifecycleRows.length > 0 && (
         <ScriptList>
           {lifecycleRows.map((row, idx) => (
@@ -136,8 +134,6 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
           Configure setup or teardown →
         </button>
       )}
-
-      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
     </div>
   );
 }
@@ -156,13 +152,7 @@ interface PackageScriptsProps {
 }
 
 function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
-  const hasActivity = useWorktreeHasPackageActivity(worktree.id);
-  // `null` means the user hasn't overridden the default; the section
-  // follows hasActivity in that case. A manual toggle sticks until
-  // the component unmounts (navigation), at which point a fresh
-  // mount falls back to hasActivity again.
-  const [manualExpanded, setManualExpanded] = useState<boolean | null>(null);
-  const expanded = manualExpanded ?? hasActivity;
+  const [expanded, setExpanded] = useState(true);
   const [query, setQuery] = useState("");
   const { data: sortMode = "frequent" } = usePackageScriptSort(
     worktree.projectId,
@@ -188,7 +178,7 @@ function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
       <div className="flex items-center gap-1.5 text-xs">
         <button
           type="button"
-          onClick={() => setManualExpanded(!expanded)}
+          onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
           className="group flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors"
         >
