@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -13,6 +13,7 @@ import {
 import { useIsFetching } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { DiffStats } from "@/components/ui/diff-stats";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ import {
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
+import { useDelayedFlag } from "@/hooks/useDelayedFlag";
 import { useMergePullRequest } from "@/hooks/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/useRepoMergeConfig";
 import { useSetPullRequestDraft } from "@/hooks/useSetPullRequestDraft";
@@ -51,12 +53,24 @@ import type {
   Worktree,
 } from "@shared/schemas";
 
+// Sub-second refetches would otherwise flash on/off too fast to read.
+const REFRESH_INDICATOR_DELAY_MS = 250;
+
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
+  // Skip the PR query on detached HEAD — there's no branch to ask gh
+  // about, and the eager enabled-flag spares the wasted IPC.
+  const enabled = !worktree.detached;
   const { data: pr, isPending } = useWorktreePullRequest(
     worktree.projectId,
     worktree.branch,
+    { enabled },
   );
-  if (worktree.detached) return null;
+  // Fire repo + shigomori queries in parallel with the PR query so the
+  // merge box has its inputs ready as soon as the PR resolves.
+  const { data: repoConfig } = useRepoMergeConfig(worktree.projectId);
+  const { data: shigomori } = useShigomoriConfig(worktree.projectId);
+
+  if (!enabled) return null;
   // While the initial query is in flight we still show the heading +
   // refresh indicator so the page doesn't pop content in late. Once
   // resolved with no PR, the section drops out entirely.
@@ -67,34 +81,24 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
         <SectionHeading>Pull request</SectionHeading>
         <PullRequestRefreshIndicator worktree={worktree} />
       </div>
-      {pr && <PullRequestBody worktree={worktree} pr={pr} />}
+      {pr && (
+        <PullRequestBody
+          worktree={worktree}
+          pr={pr}
+          repoConfig={repoConfig ?? null}
+          lastMergeMethod={shigomori?.lastMergeMethod}
+        />
+      )}
     </section>
   );
 }
-
-// Sub-second refetches would otherwise flash on/off too fast to read.
-// We delay showing the indicator until 250ms after work begins; if the
-// work finishes inside that window the user never sees a flicker.
-const REFRESH_INDICATOR_DELAY_MS = 250;
 
 function PullRequestRefreshIndicator({ worktree }: { worktree: Worktree }) {
   const fetching =
     useIsFetching({
       queryKey: worktreePullRequestKey(worktree.projectId, worktree.branch),
     }) > 0;
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    if (!fetching) {
-      setVisible(false);
-      return;
-    }
-    if (visible) return;
-    const id = window.setTimeout(
-      () => setVisible(true),
-      REFRESH_INDICATOR_DELAY_MS,
-    );
-    return () => window.clearTimeout(id);
-  }, [fetching, visible]);
+  const visible = useDelayedFlag(fetching, REFRESH_INDICATOR_DELAY_MS);
   if (!visible) return null;
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/70 italic">
@@ -107,12 +111,14 @@ function PullRequestRefreshIndicator({ worktree }: { worktree: Worktree }) {
 function PullRequestBody({
   worktree,
   pr,
+  repoConfig,
+  lastMergeMethod,
 }: {
   worktree: Worktree;
   pr: PullRequestDetail;
+  repoConfig: RepoMergeConfig | null;
+  lastMergeMethod: MergeMethod | undefined;
 }) {
-  const { data: repoConfig } = useRepoMergeConfig(worktree.projectId);
-  const { data: shigomori } = useShigomoriConfig(worktree.projectId);
   const isOpen = pr.state === "OPEN";
   const hasChecks = pr.checks.total > 0;
 
@@ -128,8 +134,8 @@ function PullRequestBody({
         <MergeBox
           worktree={worktree}
           pr={pr}
-          repoConfig={repoConfig ?? null}
-          lastMergeMethod={shigomori?.lastMergeMethod}
+          repoConfig={repoConfig}
+          lastMergeMethod={lastMergeMethod}
         />
       )}
     </div>
@@ -149,7 +155,7 @@ function PullRequestIdentity({
   worktree: Worktree;
   pr: PullRequestDetail;
 }) {
-  const updatedAt = new Date(pr.updatedAt);
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const measurerRef = useRef<HTMLDivElement>(null);
   const [showUpdated, setShowUpdated] = useState(true);
@@ -159,7 +165,8 @@ function PullRequestIdentity({
     const measurer = measurerRef.current;
     if (!container || !measurer) return;
     const check = () => {
-      setShowUpdated(measurer.scrollWidth <= container.clientWidth);
+      const fits = measurer.scrollWidth <= container.clientWidth;
+      setShowUpdated((prev) => (prev === fits ? prev : fits));
     };
     check();
     const observer = new ResizeObserver(check);
@@ -168,7 +175,16 @@ function PullRequestIdentity({
     return () => observer.disconnect();
   }, []);
 
-  const updatedLabel = `, last updated ${formatRelativeTime(updatedAt.getTime())}`;
+  const updatedDate = new Date(pr.updatedAt);
+  const updatedTitle = updatedDate.toLocaleString();
+  const updatedLabel = `, last updated ${formatRelativeTime(updatedDate.getTime())}`;
+
+  const openDiff = () => {
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+      params: { projectId: worktree.projectId, worktreeId: worktree.id },
+    });
+  };
 
   return (
     <div className="space-y-1.5">
@@ -188,22 +204,40 @@ function PullRequestIdentity({
         <MetaSentence
           authorLogin={pr.authorLogin}
           baseRefName={pr.baseRefName}
-          updatedTitle={updatedAt.toLocaleString()}
+          updatedTitle={updatedTitle}
           trailing={showUpdated ? updatedLabel : null}
         />
-        {pr.changedFiles > 0 && <DiffButton worktree={worktree} pr={pr} />}
+        {pr.changedFiles > 0 && (
+          <DiffButton
+            changedFiles={pr.changedFiles}
+            additions={pr.additions}
+            deletions={pr.deletions}
+            onClick={openDiff}
+          />
+        )}
+        {/* inert keeps the natural-width measurer out of the tab order
+            and the accessibility tree; pointer-events-none alone leaves
+            the duplicated button focusable. */}
         <div
           ref={measurerRef}
           aria-hidden
+          inert
           className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-x-3 whitespace-nowrap"
         >
           <MetaSentence
             authorLogin={pr.authorLogin}
             baseRefName={pr.baseRefName}
-            updatedTitle={updatedAt.toLocaleString()}
+            updatedTitle={updatedTitle}
             trailing={updatedLabel}
           />
-          {pr.changedFiles > 0 && <DiffButton worktree={worktree} pr={pr} />}
+          {pr.changedFiles > 0 && (
+            <DiffButton
+              changedFiles={pr.changedFiles}
+              additions={pr.additions}
+              deletions={pr.deletions}
+              onClick={openDiff}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -234,30 +268,28 @@ function MetaSentence({
 }
 
 function DiffButton({
-  worktree,
-  pr,
+  changedFiles,
+  additions,
+  deletions,
+  onClick,
 }: {
-  worktree: Worktree;
-  pr: PullRequestDetail;
+  changedFiles: number;
+  additions: number;
+  deletions: number;
+  onClick: () => void;
 }) {
-  const navigate = useNavigate();
-  const fileNoun = pr.changedFiles === 1 ? "file" : "files";
+  const fileNoun = changedFiles === 1 ? "file" : "files";
   return (
     <button
       type="button"
-      onClick={() =>
-        void navigate({
-          to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
-          params: { projectId: worktree.projectId, worktreeId: worktree.id },
-        })
-      }
+      onClick={onClick}
       title="View pull request diff"
       className="tabular inline-flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span>
-        {pr.changedFiles} {fileNoun} changed,
+        {changedFiles} {fileNoun} changed,
       </span>
-      <DiffStats additions={pr.additions} deletions={pr.deletions} />
+      <DiffStats additions={additions} deletions={deletions} />
       <ChevronRight aria-hidden className="size-3.5 shrink-0 opacity-60" />
     </button>
   );
@@ -293,24 +325,6 @@ function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
     >
       <Icon aria-hidden className="size-3.5" />
       {stateLabel}
-    </span>
-  );
-}
-
-function DiffStats({
-  additions,
-  deletions,
-}: {
-  additions: number;
-  deletions: number;
-}) {
-  return (
-    <span
-      aria-label={`${additions} additions, ${deletions} deletions`}
-      className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
-    >
-      <span className="text-emerald-500">+{additions}</span>
-      <span className="text-rose-500">−{deletions}</span>
     </span>
   );
 }

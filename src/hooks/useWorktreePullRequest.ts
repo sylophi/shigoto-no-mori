@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import {
   pullRequestsEqual,
+  toSlimPullRequest,
   type PullRequest,
   type PullRequestDetail,
 } from "@shared/schemas";
@@ -30,7 +31,11 @@ export function invalidateAllWorktreePullRequests(
 // window focus and on git refs changing, so we opt out of TanStack's
 // stale-gated focus refetch path. Silent on error to match the sweep's
 // swallow behavior -- a transient gh failure shouldn't toast.
-export function useWorktreePullRequest(projectId: string, branch: string) {
+export function useWorktreePullRequest(
+  projectId: string,
+  branch: string,
+  options: { enabled?: boolean } = {},
+) {
   const queryClient = useQueryClient();
   return useQuery<PullRequestDetail | null>({
     queryKey: worktreePullRequestKey(projectId, branch),
@@ -48,6 +53,7 @@ export function useWorktreePullRequest(projectId: string, branch: string) {
       mirrorIntoProjectMap(queryClient, projectId, branch, pr);
       return pr;
     },
+    enabled: options.enabled ?? true,
     refetchOnWindowFocus: false,
     meta: { silentError: true },
   });
@@ -59,26 +65,25 @@ function mirrorIntoProjectMap(
   branch: string,
   pr: PullRequestDetail | null,
 ): void {
-  queryClient.setQueryData<Record<string, PullRequest>>(
-    projectPullRequestsKey(projectId),
-    (prev) => {
-      if (!prev) return prev;
-      const current = prev[branch];
-      if (pr === null) {
-        if (current === undefined) return prev;
-        const next = { ...prev };
-        delete next[branch];
-        return next;
-      }
-      const slim: PullRequest = {
-        number: pr.number,
-        url: pr.url,
-        title: pr.title,
-        state: pr.state,
-        isDraft: pr.isDraft,
-      };
-      if (current && pullRequestsEqual(current, slim)) return prev;
-      return { ...prev, [branch]: slim };
-    },
-  );
+  // Read-then-maybe-write so we skip setQueryData entirely when nothing
+  // changed; even an updater that returns `prev` still bumps
+  // dataUpdatedAt and notifies every sidebar row observing the project
+  // map.
+  const key = projectPullRequestsKey(projectId);
+  const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
+  if (!prev) return;
+  const current = prev[branch];
+  if (pr === null) {
+    if (current === undefined) return;
+    const next = { ...prev };
+    delete next[branch];
+    queryClient.setQueryData<Record<string, PullRequest>>(key, next);
+    return;
+  }
+  const slim = toSlimPullRequest(pr);
+  if (current && pullRequestsEqual(current, slim)) return;
+  queryClient.setQueryData<Record<string, PullRequest>>(key, {
+    ...prev,
+    [branch]: slim,
+  });
 }

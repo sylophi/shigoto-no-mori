@@ -317,7 +317,6 @@ const api = {
       ipcRenderer.invoke(CHANNELS.GithubCliRepoMergeConfig, input),
     mergePullRequest: (input: {
       projectId: string;
-      branch: string;
       number: number;
       method: MergeMethod;
     }): Promise<void> =>
@@ -329,7 +328,6 @@ const api = {
       ipcRenderer.invoke(CHANNELS.GithubCliPullRequestDiff, input),
     setPullRequestDraft: (input: {
       projectId: string;
-      branch: string;
       number: number;
       draft: boolean;
     }): Promise<void> =>

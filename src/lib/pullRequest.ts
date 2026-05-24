@@ -5,12 +5,13 @@ import {
   GitPullRequestDraft,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import type {
-  MergeMethod,
-  PullRequest,
-  PullRequestChecksSummary,
-  PullRequestMergeState,
-  RepoMergeConfig,
+import {
+  MergeMethodSchema,
+  type MergeMethod,
+  type PullRequest,
+  type PullRequestChecksSummary,
+  type PullRequestMergeState,
+  type RepoMergeConfig,
 } from "@shared/schemas";
 
 export type PullRequestTone = "emerald" | "violet" | "rose" | "slate" | "amber";
@@ -49,7 +50,6 @@ export function describeMergeState(
 ): MergeStateDescriptor {
   switch (state) {
     case "CLEAN":
-      return { label: "Ready to merge", tone: "emerald", canMerge: true };
     case "HAS_HOOKS":
       return { label: "Ready to merge", tone: "emerald", canMerge: true };
     case "UNSTABLE":
@@ -119,17 +119,13 @@ export const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
   rebase: "Rebase and merge",
 };
 
+// Short label is only different from the long one when it actually
+// shortens; squash and rebase already read naturally as the button.
 export const MERGE_METHOD_SHORT_LABEL: Record<MergeMethod, string> = {
   merge: "Merge",
-  squash: "Squash and merge",
-  rebase: "Rebase and merge",
+  squash: MERGE_METHOD_LABEL.squash,
+  rebase: MERGE_METHOD_LABEL.rebase,
 };
-
-const MERGE_METHOD_FALLBACK: readonly MergeMethod[] = [
-  "merge",
-  "squash",
-  "rebase",
-];
 
 // Picks the user's saved method when it's still allowed by the repo;
 // otherwise falls back to the first allowed method in the canonical
@@ -146,7 +142,7 @@ export function resolveMergeMethod(
     squash: true,
     rebase: true,
   };
-  const allowed = MERGE_METHOD_FALLBACK.filter((m) => allowedMap[m]);
+  const allowed = MergeMethodSchema.options.filter((m) => allowedMap[m]);
   if (allowed.length === 0) return { primary: null, allowed: [] };
   const primary =
     lastPicked && allowed.includes(lastPicked) ? lastPicked : allowed[0];

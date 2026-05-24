@@ -30,6 +30,21 @@ export const PullRequestSchema = z.object({
   isDraft: z.boolean(),
 });
 
+// Strip a PullRequestDetail to the slim PullRequest fields used by the
+// sidebar's project-wide map. Keep this in lockstep with
+// PullRequestSchema -- adding a field there means adding it here too.
+export function toSlimPullRequest(
+  pr: z.infer<typeof PullRequestSchema>,
+): z.infer<typeof PullRequestSchema> {
+  return {
+    number: pr.number,
+    url: pr.url,
+    title: pr.title,
+    state: pr.state,
+    isDraft: pr.isDraft,
+  };
+}
+
 // Field-by-field equality. Used to gate cache write-throughs and sweep
 // broadcasts so unchanged PRs don't notify observers. Update if
 // PullRequestSchema gains a field that affects the UI.
@@ -601,14 +616,12 @@ export const GithubCliReadinessSchema = z.object({
 
 export const MergePullRequestPayloadSchema = z.object({
   projectId: z.string(),
-  branch: z.string(),
   number: z.number().int().positive(),
   method: MergeMethodSchema,
 });
 
 export const SetPullRequestDraftPayloadSchema = z.object({
   projectId: z.string(),
-  branch: z.string(),
   number: z.number().int().positive(),
   draft: z.boolean(),
 });
