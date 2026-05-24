@@ -134,7 +134,7 @@ export function describeChecks(
 }
 
 export const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
-  merge: "Create a merge commit",
+  merge: "Merge",
   squash: "Squash and merge",
   rebase: "Rebase and merge",
 };

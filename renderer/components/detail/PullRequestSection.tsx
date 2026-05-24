@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Loader2,
   MinusCircle,
+  Trash2,
 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -28,6 +29,10 @@ import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/git/useRepoMergeConfig";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import {
+  useDeleteWorktree,
+  useWorktrees,
+} from "@/hooks/worktrees/useWorktrees";
 import {
   useWorktreePullRequest,
   worktreePullRequestKey,
@@ -138,6 +143,9 @@ function PullRequestBody({
           lastMergeMethod={lastMergeMethod}
         />
       )}
+      {!isOpen && !worktree.isPrimary && (
+        <ClosedPullRequestBox worktree={worktree} />
+      )}
     </div>
   );
 }
@@ -195,7 +203,7 @@ function PullRequestIdentity({
             #{pr.number}
           </span>
         </h3>
-        <PullRequestStatePill pr={pr} />
+        <PullRequestStateLabel pr={pr} />
       </div>
       <div
         ref={containerRef}
@@ -311,7 +319,7 @@ function PullRequestTitleLink({ pr }: { pr: PullRequestDetail }) {
   );
 }
 
-function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
+function PullRequestStateLabel({ pr }: { pr: PullRequestDetail }) {
   const { Icon, tone, label } = describePullRequest(pr);
   const stateLabel =
     pr.isDraft && pr.state === "OPEN" ? "Draft" : STATE_LABEL[pr.state];
@@ -319,11 +327,11 @@ function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
     <span
       title={label}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
+        "inline-flex shrink-0 items-center gap-2 text-sm leading-snug whitespace-nowrap",
         TONE_TEXT[tone],
       )}
     >
-      <Icon aria-hidden className="size-3.5" />
+      <Icon aria-hidden className="size-3.5 shrink-0" />
       {stateLabel}
     </span>
   );
@@ -564,6 +572,78 @@ function MergeBox({
       </div>
       {merge.error && <ErrorBanner>{merge.error.message}</ErrorBanner>}
       {setDraft.error && <ErrorBanner>{setDraft.error.message}</ErrorBanner>}
+    </div>
+  );
+}
+
+function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
+  const navigate = useNavigate();
+  const { data: siblings = [] } = useWorktrees(worktree.projectId);
+  const deleteMutation = useDeleteWorktree();
+  const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
+  const busy = deleteMutation.isPending;
+
+  const runDelete = () => {
+    deleteMutation.mutate(
+      { projectId: worktree.projectId, worktreeId: worktree.id },
+      {
+        onSuccess: (data) => {
+          if (!data.ok) return;
+          // Prefer the sibling above so the user's eye stays in place.
+          const index = siblings.findIndex((w) => w.id === worktree.id);
+          const next =
+            index >= 0
+              ? (siblings[index - 1] ?? siblings[index + 1])
+              : undefined;
+          if (next) {
+            void navigate({
+              to: "/projects/$projectId/worktrees/$worktreeId",
+              params: {
+                projectId: worktree.projectId,
+                worktreeId: next.id,
+              },
+              replace: true,
+            });
+          } else {
+            void navigate({ to: "/", replace: true });
+          }
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => trigger(runDelete)}
+          className={cn(
+            "text-destructive hover:bg-destructive/10 hover:text-destructive",
+            armed && "bg-destructive/10",
+          )}
+        >
+          {busy ? (
+            <>
+              <Loader2 aria-hidden className="size-3.5 animate-spin" />
+              Deleting…
+            </>
+          ) : armed ? (
+            "Click again to confirm"
+          ) : (
+            <>
+              <Trash2 aria-hidden className="size-3.5" />
+              Delete worktree
+            </>
+          )}
+        </Button>
+      </div>
+      {deleteMutation.error && (
+        <ErrorBanner>{deleteMutation.error.message}</ErrorBanner>
+      )}
     </div>
   );
 }
