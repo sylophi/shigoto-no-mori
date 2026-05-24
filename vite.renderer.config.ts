@@ -32,8 +32,8 @@ export default defineConfig(({ mode }) => {
   return {
     resolve: {
       alias: {
-        "@": resolve(__dirname, "src"),
-        "@shared": resolve(__dirname, "src/shared"),
+        "@": resolve(__dirname, "renderer"),
+        "@shared": resolve(__dirname, "shared"),
       },
     },
     server: port ? { port, strictPort: true } : undefined,

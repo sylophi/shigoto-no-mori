@@ -25,7 +25,7 @@ let intervalHandle: NodeJS.Timeout | null = null;
 
 // quitAndInstall() stages Squirrel's ShipIt helper and then calls
 // app.quit(), which still emits before-quit. The app-wide before-quit
-// handler in main.ts intercepts that to reap orphan scripts; if its
+// handler in index.ts intercepts that to reap orphan scripts; if its
 // cleanup ever stalls the update never lands. This flag lets that
 // handler bail out and let the natural quit through.
 export function isInstallingUpdate(): boolean {

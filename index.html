@@ -7,7 +7,7 @@
     <script>
       // Apply persisted theme synchronously before any CSS or React runs, so
       // the first paint matches the user's choice. The window itself is
-      // transparent (vibrancy: "sidebar" in src/main.ts); the opaque
+      // transparent (vibrancy: "sidebar" in main/index.ts); the opaque
       // background is painted by the main detail pane only.
       (function () {
         try {
@@ -35,6 +35,6 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/renderer.tsx"></script>
+    <script type="module" src="/renderer/index.tsx"></script>
   </body>
 </html>

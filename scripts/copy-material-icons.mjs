@@ -2,7 +2,7 @@
 // Copies material-icon-theme's SVG icons into public/material-icons/ so
 // Vite serves them as plain static assets (one HTTP request per icon that's
 // actually displayed) instead of generating ~1238 dev-server module wrappers
-// from an eager `import.meta.glob`. See src/lib/materialIcons.ts.
+// from an eager `import.meta.glob`. See renderer/lib/materialIcons.ts.
 //
 // Idempotent: skips copying when the destination is already in sync with the
 // source by mtime + size. Runs as a postinstall hook so the icons are in
