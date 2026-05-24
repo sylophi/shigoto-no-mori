@@ -42,12 +42,18 @@ export interface MergeStateDescriptor {
 }
 
 // Human-friendly reason text + a single "is the merge button live?" flag
-// per mergeStateStatus. We let gh tell us off if the user pushes
-// through, but the obvious blockers (conflicts, draft, blocked) are
-// reflected in the disabled state.
+// per mergeStateStatus. `isDraft` overrides gh's mergeStateStatus
+// because gh often reports CLEAN for draft PRs (branches don't
+// conflict, even if the PR isn't ready for review). We let gh tell us
+// off if the user pushes through, but the obvious blockers (draft,
+// conflicts, blocked) are reflected in the disabled state.
 export function describeMergeState(
   state: PullRequestMergeState,
+  isDraft: boolean,
 ): MergeStateDescriptor {
+  if (isDraft) {
+    return { label: "Draft", tone: "slate", canMerge: false };
+  }
   switch (state) {
     case "CLEAN":
     case "HAS_HOOKS":

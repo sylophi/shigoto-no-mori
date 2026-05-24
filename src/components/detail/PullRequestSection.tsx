@@ -435,7 +435,7 @@ function MergeBox({
   const setDraft = useSetPullRequestDraft();
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { primary, allowed } = resolveMergeMethod(repoConfig, lastMergeMethod);
-  const mergeState = describeMergeState(pr.mergeState);
+  const mergeState = describeMergeState(pr.mergeState, pr.isDraft);
 
   if (!primary) {
     return (
