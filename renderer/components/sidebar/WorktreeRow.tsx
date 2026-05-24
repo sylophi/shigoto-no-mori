@@ -89,9 +89,10 @@ interface RowTrailingProps {
   isDeleting: boolean;
 }
 
-// The right-edge cluster: a single spinner / activity icon / location +
-// status combo, chosen by priority. Pulled out so each case is a clean
-// early return instead of a triple ternary.
+// The right-edge cluster. Deletion takes the whole row (the worktree is
+// going away, so the trash standing alone reads as "destroying"); a
+// running script just adds a leading activity icon to the normal cluster
+// so status / PR / kind stay visible.
 function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
   // Deletion spans cleanup scripts + the final git remove; the script
   // activity covers only cleanup, so keep the trash pulsing for the
@@ -99,11 +100,9 @@ function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
   if (isDeleting) {
     return <ActivityIcon kind="teardown" />;
   }
-  if (activity) {
-    return <ActivityIcon kind={activity} />;
-  }
   return (
     <>
+      {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
       <PullRequestIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
