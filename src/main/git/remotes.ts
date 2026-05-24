@@ -48,6 +48,23 @@ export async function listRemotes(projectPath: string): Promise<string[]> {
   }
 }
 
+// Distinct URLs across all configured remotes. `git remote -v` emits two
+// rows per remote (fetch + push) so we de-dupe; the host classification
+// downstream doesn't care which side a URL came from.
+export async function listRemoteUrls(projectPath: string): Promise<string[]> {
+  try {
+    const stdout = await run(projectPath, ["remote", "-v"]);
+    const urls = new Set<string>();
+    for (const line of stdout.split("\n")) {
+      const match = line.match(/^\S+\s+(\S+)\s+\(/);
+      if (match?.[1]) urls.add(match[1]);
+    }
+    return [...urls];
+  } catch {
+    return [];
+  }
+}
+
 async function firstLocalBranch(projectPath: string): Promise<string | null> {
   try {
     const stdout = await run(projectPath, [

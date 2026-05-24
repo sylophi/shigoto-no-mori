@@ -55,6 +55,11 @@ export function useWorktreePullRequest(
     },
     enabled: options.enabled ?? true,
     refetchOnWindowFocus: false,
+    // gh failures here are stable (not in a github repo, gh not authed,
+    // network down) -- the default 3-retry exponential backoff just
+    // turns a fast error into a 7s wait. The focus + refs-changed
+    // invalidations bring us back from a true transient.
+    retry: false,
     meta: { silentError: true },
   });
 }

@@ -5,6 +5,7 @@ export { isGitRepo } from "./core";
 export {
   fetchAllRemotes,
   listRemotes,
+  listRemoteUrls,
   resolveDefaultBranch,
   snapshotRemoteRefs,
 } from "./remotes";
