@@ -4,7 +4,7 @@
 import { cp, mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CarryOverEntry, CarryOverFailure } from "@shared/schemas";
-import { appendExcludes } from "./gitExclude";
+import { appendExcludes } from "../git/exclude";
 
 export interface CarryOverResult {
   applied: number;

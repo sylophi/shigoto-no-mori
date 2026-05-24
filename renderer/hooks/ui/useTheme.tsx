@@ -1,6 +1,6 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import type { Theme } from "@shared/schemas";
-import { useGlobalConfig } from "./useGlobalConfig";
+import { useGlobalConfig } from "../config/useGlobalConfig";
 
 interface ThemeState {
   // Persisted value from config.json — what the settings UI considers "saved".

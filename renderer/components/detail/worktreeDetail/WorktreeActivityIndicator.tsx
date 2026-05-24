@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
-import { useDelayedFlag } from "@/hooks/useDelayedFlag";
-import { useProjectGitFetching } from "@/hooks/useProjectGitFetching";
+import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
+import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import type { Worktree } from "@shared/schemas";
 
 // Sub-second refetches would otherwise flash on/off too fast to read.

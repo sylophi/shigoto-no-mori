@@ -11,7 +11,7 @@ import {
   type ShigomoriConfig,
 } from "@shared/schemas";
 import { findWorktreeIdentityOrThrow } from "../git";
-import { readGlobalConfig } from "../globalConfig";
+import { readGlobalConfig } from "../config/global";
 import {
   type DetectedApp,
   detectApps,
@@ -20,9 +20,9 @@ import {
   launchDetected,
 } from "../launchers";
 import { findProjectOrThrow } from "../projects";
-import { readShigomoriConfig } from "../shigomori";
-import { readKey, writeKey } from "../store";
-import { countWithin, pruneAndPush } from "../useLog";
+import { readShigomoriConfig } from "../config/project";
+import { readKey, writeKey } from "../config/store";
+import { countWithin, pruneAndPush } from "../util/useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the

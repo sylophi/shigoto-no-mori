@@ -9,7 +9,7 @@ import {
   type PullRequest,
   type PullRequestDetail,
 } from "@shared/schemas";
-import { projectPullRequestsKey } from "./useProjectPullRequests";
+import { projectPullRequestsKey } from "../projects/useProjectPullRequests";
 
 const WORKTREE_PR_KEY_PREFIX = ["githubCli", "worktreePullRequest"] as const;
 

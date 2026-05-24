@@ -7,8 +7,8 @@ import type {
   PackageScriptSortMode,
   PackageScriptUsage,
 } from "@shared/schemas";
-import { readKey, writeKey } from "./store";
-import { countWithin, maxTimestamp, pruneAndPush } from "./useLog";
+import { readKey, writeKey } from "../config/store";
+import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";

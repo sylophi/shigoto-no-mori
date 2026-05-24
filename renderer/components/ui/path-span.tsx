@@ -1,6 +1,6 @@
 import type { ClipboardEvent, CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import { useShortPath } from "@/hooks/useShortPath";
+import { useShortPath } from "@/hooks/fs/useShortPath";
 
 interface PathSpanProps {
   path: string;

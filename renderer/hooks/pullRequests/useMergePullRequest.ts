@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeMethod, PullRequestDetail } from "@shared/schemas";
-import { invalidateBranchState } from "./useBranches";
+import { invalidateBranchState } from "../git/useBranches";
 import {
   invalidateAllWorktreePullRequests,
   worktreePullRequestKey,
-} from "./useWorktreePullRequest";
+} from "../worktrees/useWorktreePullRequest";
 
 interface MergeVariables {
   projectId: string;

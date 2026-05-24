@@ -3,8 +3,8 @@
 // when the user has deleted the folder by hand.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { migrateProjectConfigsToDirLayout } from "./projectStateMigration";
-import { shigomoriRoot } from "./paths";
+import { migrateProjectConfigsToDirLayout } from "../projects/stateMigration";
+import { shigomoriRoot } from "../util/paths";
 
 const EMPTY_JSON = "{}\n";
 

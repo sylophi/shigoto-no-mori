@@ -11,7 +11,7 @@ import finderIconUrl from "@/assets/app-icons/finder.png";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { useFsListDirectory } from "@/hooks/useFsListDirectory";
+import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import {
   appendBrowsePathSegment,
   canNavigateUp,

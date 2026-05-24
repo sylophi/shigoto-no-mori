@@ -3,7 +3,7 @@ import type { PullRequestDetail } from "@shared/schemas";
 import {
   invalidateAllWorktreePullRequests,
   worktreePullRequestKey,
-} from "./useWorktreePullRequest";
+} from "../worktrees/useWorktreePullRequest";
 
 interface SetDraftVariables {
   projectId: string;

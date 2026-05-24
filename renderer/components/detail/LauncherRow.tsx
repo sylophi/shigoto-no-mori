@@ -3,7 +3,10 @@ import { Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useLaunch, useLauncherForProject } from "@/hooks/useLaunchers";
+import {
+  useLaunch,
+  useLauncherForProject,
+} from "@/hooks/launchers/useLaunchers";
 import { LauncherIcon } from "@/lib/launcherIcon";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 

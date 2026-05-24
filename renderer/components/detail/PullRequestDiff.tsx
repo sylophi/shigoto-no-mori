@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
-import { usePullRequestDiff } from "@/hooks/usePullRequestDiff";
-import { useWorktreePullRequest } from "@/hooks/useWorktreePullRequest";
-import { useWorktrees } from "@/hooks/useWorktrees";
+import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
+import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { pullRequestDiffRoute } from "@/router";
 import { DiffNotFound, DiffView } from "./DiffView";
 

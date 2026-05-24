@@ -45,18 +45,18 @@ import {
   renameBranch,
   worktreeIdFromPath,
 } from "../git";
-import { readGlobalConfig } from "../globalConfig";
+import { readGlobalConfig } from "../config/global";
 import { findProjectOrThrow } from "../projects";
 import { killScriptsForWorktree } from "../scripts";
-import { dropShelved, isShelved, setShelved } from "../shelvedWorktrees";
+import { dropShelved, isShelved, setShelved } from "../worktrees/shelved";
 import {
   deleteWorktreeData,
   readShigomoriConfig,
   readWorktreeData,
   writeWorktreeData,
-} from "../shigomori";
-import { runCreateLifecycle, runDeleteCleanup } from "../worktreeLifecycle";
-import { pruneEmptyManagedParents } from "../worktreePaths";
+} from "../config/project";
+import { runCreateLifecycle, runDeleteCleanup } from "../worktrees/lifecycle";
+import { pruneEmptyManagedParents } from "../worktrees/paths";
 
 function spawnCreateLifecycle(
   label: string,

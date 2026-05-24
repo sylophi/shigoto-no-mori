@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { useCommandPalette } from "@/hooks/useCommandPalette";
+import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
 import { AddProjectView } from "./palette/AddProjectView";
 import { BrowseView } from "./palette/BrowseView";
 

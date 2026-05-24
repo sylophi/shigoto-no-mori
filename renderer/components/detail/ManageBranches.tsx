@@ -19,10 +19,10 @@ import {
   useCreateBranch,
   useDeleteBranch,
   useRenameAnyBranch,
-} from "@/hooks/useBranches";
-import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { useProjects } from "@/hooks/useProjects";
-import { useWorktrees } from "@/hooks/useWorktrees";
+} from "@/hooks/git/useBranches";
+import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { manageBranchesRoute } from "@/router";
 import { sanitizeBranchName } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";

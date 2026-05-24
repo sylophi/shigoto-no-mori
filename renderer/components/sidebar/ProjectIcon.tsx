@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useProjectIcon } from "@/hooks/useProjectIcon";
+import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 
 // No placeholder slot during the initial fetch — the row simply
 // tightens. Avoids the layout shift of a temporary fallback icon at the

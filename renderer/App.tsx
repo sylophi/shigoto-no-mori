@@ -5,11 +5,11 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommandPalette } from "@/components/CommandPalette";
-import { CommandPaletteProvider } from "@/hooks/useCommandPalette";
-import { ThemeProvider } from "@/hooks/useTheme";
-import { invalidateBranchState } from "@/hooks/useBranches";
-import { invalidateProjectPullRequests } from "@/hooks/useProjectPullRequests";
-import { invalidateAllWorktreePullRequests } from "@/hooks/useWorktreePullRequest";
+import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
+import { ThemeProvider } from "@/hooks/ui/useTheme";
+import { invalidateBranchState } from "@/hooks/git/useBranches";
+import { invalidateProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
+import { invalidateAllWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import { router } from "./router";
 
 function AppErrorFallback({ error }: FallbackProps) {

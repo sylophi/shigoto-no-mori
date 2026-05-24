@@ -10,9 +10,9 @@ import {
   type Theme,
   ThemeSchema,
 } from "@shared/schemas";
-import { atomicWriteJson, readJsonOrNull } from "./jsonFile";
-import { shigomoriRoot } from "./paths";
-import { ttlValueCache } from "./ttlCache";
+import { atomicWriteJson, readJsonOrNull } from "../util/jsonFile";
+import { shigomoriRoot } from "../util/paths";
+import { ttlValueCache } from "../util/ttlCache";
 
 function configPath(): string {
   return join(shigomoriRoot(), "config.json");

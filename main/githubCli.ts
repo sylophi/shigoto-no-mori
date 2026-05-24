@@ -19,8 +19,8 @@ import {
   type RepoMergeConfig,
 } from "@shared/schemas";
 import { listRemoteUrls } from "./git";
-import { readGlobalConfig } from "./globalConfig";
-import { readShigomoriConfig, writeShigomoriConfig } from "./shigomori";
+import { readGlobalConfig } from "./config/global";
+import { readShigomoriConfig, writeShigomoriConfig } from "./config/project";
 
 const execFileP = promisify(execFile);
 

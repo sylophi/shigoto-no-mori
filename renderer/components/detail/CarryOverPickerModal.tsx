@@ -16,9 +16,9 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { cn } from "@/lib/utils";
-import { useFsListEntries } from "@/hooks/useFsListEntries";
-import { useIgnoredPaths } from "@/hooks/useIgnoredPaths";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useFsListEntries } from "@/hooks/fs/useFsListEntries";
+import { useIgnoredPaths } from "@/hooks/fs/useIgnoredPaths";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
 import type { CarryOverEntry, FsEntry } from "@shared/schemas";
 

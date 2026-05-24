@@ -2,12 +2,12 @@ import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
 import path from "node:path";
 import { CHANNELS } from "@shared/channels";
 import { SetThemePayloadSchema } from "@shared/schemas";
-import { ensureShigomoriRoot } from "./bootstrap";
-import { attachContextMenu } from "./contextMenu";
-import { refreshAllProjectGitRefs, startBackgroundFetch } from "./fetch";
-import { readThemeSync } from "./globalConfig";
+import { ensureShigomoriRoot } from "./app/bootstrap";
+import { attachContextMenu } from "./app/contextMenu";
+import { refreshAllProjectGitRefs, startBackgroundFetch } from "./app/fetch";
+import { readThemeSync } from "./config/global";
 import { registerIpcHandlers } from "./ipc";
-import { buildAppMenu } from "./menu";
+import { buildAppMenu } from "./app/menu";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -15,8 +15,8 @@ import {
   markShuttingDown,
   signalAllScriptsBestEffort,
 } from "./scripts";
-import { applyUserShellPath } from "./shellPath";
-import { isInstallingUpdate, startUpdater } from "./updater";
+import { applyUserShellPath } from "./app/shellPath";
+import { isInstallingUpdate, startUpdater } from "./app/updater";
 
 registerIpcHandlers();
 

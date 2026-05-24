@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { useWorktreeData, useWorktreeDataWrite } from "@/hooks/useWorktreeData";
+import {
+  useWorktreeData,
+  useWorktreeDataWrite,
+} from "@/hooks/worktrees/useWorktreeData";
 import type { Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {

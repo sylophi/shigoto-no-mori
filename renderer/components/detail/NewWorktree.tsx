@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "@/lib/utils";
-import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { usePickedWorktreeName } from "@/hooks/usePickedWorktreeName";
-import { useProjects } from "@/hooks/useProjects";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useBranches } from "@/hooks/useBranches";
-import { useCreateWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useBranches } from "@/hooks/git/useBranches";
+import {
+  useCreateWorktree,
+  useWorktrees,
+} from "@/hooks/worktrees/useWorktrees";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
 import {

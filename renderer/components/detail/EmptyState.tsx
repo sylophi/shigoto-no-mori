@@ -3,9 +3,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { useCommandPalette } from "@/hooks/useCommandPalette";
-import { useProjects } from "@/hooks/useProjects";
-import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
+import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();

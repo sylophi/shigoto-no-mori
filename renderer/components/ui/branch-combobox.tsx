@@ -3,7 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useBranches } from "@/hooks/useBranches";
+import { useBranches } from "@/hooks/git/useBranches";
 import type { BranchList } from "@shared/schemas";
 
 interface BranchComboboxProps {

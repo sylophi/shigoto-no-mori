@@ -7,14 +7,14 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
-import { useProjects } from "@/hooks/useProjects";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import {
   useDeleteWorktree,
   useSetShelved,
   useWorktrees,
-} from "@/hooks/useWorktrees";
+} from "@/hooks/worktrees/useWorktrees";
 import { worktreeRoute } from "@/router";
 import {
   scriptKey,

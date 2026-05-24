@@ -24,22 +24,22 @@ import {
   pickAvailableWorktreeName,
   resolveDefaultBranch,
 } from "../git";
-import { readGlobalConfig } from "../globalConfig";
-import { readPackageScripts } from "../packageScripts";
-import { expandHome } from "../paths";
+import { readGlobalConfig } from "../config/global";
+import { readPackageScripts } from "../scripts/packageScripts";
+import { expandHome } from "../util/paths";
 import {
   findProjectOrThrow,
   listProjectsWithStatus,
   loadProjects,
   PROJECTS_KEY,
 } from "../projects";
-import { forgetProjectIcon, readProjectIcon } from "../projectIcon";
+import { forgetProjectIcon, readProjectIcon } from "../projects/icon";
 import {
   deleteProjectState,
   readShigomoriConfig,
   writeShigomoriConfig,
-} from "../shigomori";
-import { writeKey } from "../store";
+} from "../config/project";
+import { writeKey } from "../config/store";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);

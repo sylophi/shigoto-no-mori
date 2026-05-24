@@ -10,12 +10,15 @@ import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
-import { useDefaultBranch } from "@/hooks/useDefaultBranch";
-import { useProjects } from "@/hooks/useProjects";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
-import { useShigomoriWrite } from "@/hooks/useShigomoriWrite";
-import { useRelocateWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import {
+  useRelocateWorktree,
+  useWorktrees,
+} from "@/hooks/worktrees/useWorktrees";
 import { worktreeLocationRoute } from "@/router";
 import type {
   ShigomoriConfig,

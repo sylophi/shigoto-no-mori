@@ -6,14 +6,14 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
-import { readShelvedSet } from "../shelvedWorktrees";
-import { readShigomoriConfig } from "../shigomori";
-import { pickWorktreeName } from "../worktreeNames";
+import { readShelvedSet } from "../worktrees/shelved";
+import { readShigomoriConfig } from "../config/project";
+import { pickWorktreeName } from "../worktrees/names";
 import {
   isManagedPath,
   managedPrefixesFor,
   resolveWorktreeBase,
-} from "../worktreePaths";
+} from "../worktrees/paths";
 import { run } from "./core";
 import {
   fetchRemoteRef,

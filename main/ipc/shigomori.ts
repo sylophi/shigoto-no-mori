@@ -7,13 +7,13 @@ import {
   WriteWorktreeDataPayloadSchema,
 } from "@shared/schemas";
 import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
-import { appendExcludes } from "../gitExclude";
+import { appendExcludes } from "../git/exclude";
 import { findProjectOrThrow } from "../projects";
 import {
   readWorktreeData,
   writeShigomoriConfig,
   writeWorktreeData,
-} from "../shigomori";
+} from "../config/project";
 
 export function registerShigomoriHandlers(): void {
   ipcMain.handle(
