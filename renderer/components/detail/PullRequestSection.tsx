@@ -7,8 +7,10 @@ import {
   CircleDashed,
   CircleSlash,
   ExternalLink,
+  GitMerge,
   Loader2,
   MinusCircle,
+  Trash2,
 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -28,6 +30,10 @@ import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/git/useRepoMergeConfig";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import {
+  useDeleteWorktree,
+  useWorktrees,
+} from "@/hooks/worktrees/useWorktrees";
 import {
   useWorktreePullRequest,
   worktreePullRequestKey,
@@ -137,6 +143,9 @@ function PullRequestBody({
           repoConfig={repoConfig}
           lastMergeMethod={lastMergeMethod}
         />
+      )}
+      {pr.state === "MERGED" && !worktree.isPrimary && (
+        <MergedBox worktree={worktree} />
       )}
     </div>
   );
@@ -564,6 +573,85 @@ function MergeBox({
       </div>
       {merge.error && <ErrorBanner>{merge.error.message}</ErrorBanner>}
       {setDraft.error && <ErrorBanner>{setDraft.error.message}</ErrorBanner>}
+    </div>
+  );
+}
+
+function MergedBox({ worktree }: { worktree: Worktree }) {
+  const navigate = useNavigate();
+  const { data: siblings = [] } = useWorktrees(worktree.projectId);
+  const deleteMutation = useDeleteWorktree();
+  const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
+  const busy = deleteMutation.isPending;
+
+  const runDelete = () => {
+    deleteMutation.mutate(
+      { projectId: worktree.projectId, worktreeId: worktree.id },
+      {
+        onSuccess: (data) => {
+          if (!data.ok) return;
+          // Prefer the sibling above so the user's eye stays in place.
+          const index = siblings.findIndex((w) => w.id === worktree.id);
+          const next =
+            index >= 0
+              ? (siblings[index - 1] ?? siblings[index + 1])
+              : undefined;
+          if (next) {
+            void navigate({
+              to: "/projects/$projectId/worktrees/$worktreeId",
+              params: {
+                projectId: worktree.projectId,
+                worktreeId: next.id,
+              },
+              replace: true,
+            });
+          } else {
+            void navigate({ to: "/", replace: true });
+          }
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-2 text-sm">
+          <GitMerge
+            aria-hidden
+            className={cn("size-3.5 shrink-0", TONE_TEXT.violet)}
+          />
+          <span className={TONE_TEXT.violet}>Merged</span>
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant={armed ? "default" : "outline"}
+          disabled={busy}
+          onClick={() => trigger(runDelete)}
+          className={cn(
+            !armed &&
+              "text-destructive hover:bg-destructive/10 hover:text-destructive",
+          )}
+        >
+          {busy ? (
+            <>
+              <Loader2 aria-hidden className="size-3.5 animate-spin" />
+              Deleting…
+            </>
+          ) : armed ? (
+            "Click again to confirm"
+          ) : (
+            <>
+              <Trash2 aria-hidden className="size-3.5" />
+              Delete worktree
+            </>
+          )}
+        </Button>
+      </div>
+      {deleteMutation.error && (
+        <ErrorBanner>{deleteMutation.error.message}</ErrorBanner>
+      )}
     </div>
   );
 }
