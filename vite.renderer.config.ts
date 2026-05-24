@@ -33,7 +33,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         "@": resolve(__dirname, "renderer"),
-        "@main": resolve(__dirname, "main"),
         "@shared": resolve(__dirname, "shared"),
       },
     },

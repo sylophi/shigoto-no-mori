@@ -28,7 +28,6 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./renderer/*"],
-      "@main/*": ["./main/*"],
       "@shared/*": ["./shared/*"]
     }
   },

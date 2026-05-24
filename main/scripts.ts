@@ -10,7 +10,7 @@
 //      double-forked daemons) and SIGTERM those too.
 //   3. After a grace period, SIGKILL anything still alive in either set.
 //
-// On app quit (see main.ts) we kill every running script the same way
+// On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
