@@ -144,7 +144,7 @@ function PullRequestBody({
         />
       )}
       {!isOpen && !worktree.isPrimary && (
-        <ClosedPullRequestBox worktree={worktree} pr={pr} />
+        <ClosedPullRequestBox worktree={worktree} />
       )}
     </div>
   );
@@ -576,20 +576,12 @@ function MergeBox({
   );
 }
 
-function ClosedPullRequestBox({
-  worktree,
-  pr,
-}: {
-  worktree: Worktree;
-  pr: PullRequestDetail;
-}) {
+function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
   const navigate = useNavigate();
   const { data: siblings = [] } = useWorktrees(worktree.projectId);
   const deleteMutation = useDeleteWorktree();
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const busy = deleteMutation.isPending;
-  const { Icon, tone } = describePullRequest(pr);
-  const label = STATE_LABEL[pr.state];
 
   const runDelete = () => {
     deleteMutation.mutate(
@@ -622,14 +614,7 @@ function ClosedPullRequestBox({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 text-sm">
-          <Icon
-            aria-hidden
-            className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
-          />
-          <span className={TONE_TEXT[tone]}>{label}</span>
-        </span>
+      <div className="flex justify-end">
         <Button
           type="button"
           size="sm"
