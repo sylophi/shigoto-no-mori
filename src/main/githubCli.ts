@@ -156,6 +156,15 @@ function extractHost(url: string): string | null {
   return null;
 }
 
+// GitHub publishes ssh.github.com as an SSH-over-443 alias for users
+// behind firewalls that block port 22. gh itself resolves it to
+// github.com, so we'd hide PR data for valid repos if we matched the
+// raw host. The same `ssh.<host>` shape works for GHE setups that
+// expose 443 the same way, so the normalization isn't github.com-specific.
+function normalizeHost(host: string): string {
+  return host.startsWith("ssh.") ? host.slice(4) : host;
+}
+
 async function hasGithubRemote(cwd: string): Promise<boolean> {
   const now = Date.now();
   const cached = hasGithubRemoteCache.get(cwd);
@@ -166,7 +175,7 @@ async function hasGithubRemote(cwd: string): Promise<boolean> {
   ]);
   const value = urls.some((url) => {
     const host = extractHost(url);
-    return host !== null && hosts.has(host);
+    return host !== null && hosts.has(normalizeHost(host));
   });
   hasGithubRemoteCache.set(cwd, {
     value,
