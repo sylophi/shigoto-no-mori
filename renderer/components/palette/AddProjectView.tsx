@@ -24,11 +24,11 @@ import {
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
-import { useAddProject, useProjects } from "@/hooks/useProjects";
-import { useFsIsGitRepo } from "@/hooks/useFsIsGitRepo";
-import { useFsListDirectory } from "@/hooks/useFsListDirectory";
+import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
+import { useFsIsGitRepo } from "@/hooks/fs/useFsIsGitRepo";
+import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { notifyError } from "@/lib/toast";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 
 interface AddProjectViewProps {

@@ -1,7 +1,7 @@
 // Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { shigomoriRoot } from "./paths";
+import { shigomoriRoot } from "../util/paths";
 
 const FILE = "state.json";
 

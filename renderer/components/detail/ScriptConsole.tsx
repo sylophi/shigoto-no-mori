@@ -3,10 +3,10 @@ import Anser, { type AnserJsonEntry } from "anser";
 import { ArrowLeft, Play, Square, Trash2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { usePackageScripts } from "@/hooks/usePackageScripts";
-import { useScriptRunner } from "@/hooks/useScriptRunner";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
-import { useWorktrees } from "@/hooks/useWorktrees";
+import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
+import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { cn } from "@/lib/utils";
 import {
   paramToSlot,

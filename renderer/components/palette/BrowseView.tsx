@@ -8,9 +8,9 @@ import {
   TreeDeciduous,
 } from "lucide-react";
 import { router } from "@/router";
-import { useCommandPalette } from "@/hooks/useCommandPalette";
-import { useProjects } from "@/hooks/useProjects";
-import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
+import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { GROUP_HEADING_CLASS } from "./groupHeading";
 

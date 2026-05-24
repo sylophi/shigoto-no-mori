@@ -7,13 +7,13 @@
 // fresher per-branch PR query.
 import { BrowserWindow } from "electron";
 import { CHANNELS, type ChannelName } from "@shared/channels";
-import { fetchAllRemotes, snapshotRemoteRefs } from "./git";
+import { fetchAllRemotes, snapshotRemoteRefs } from "../git";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
   refreshProjectPullRequests,
-} from "./githubCli";
-import { loadProjects } from "./projects";
+} from "../githubCli";
+import { loadProjects } from "../projects";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus + sweep +

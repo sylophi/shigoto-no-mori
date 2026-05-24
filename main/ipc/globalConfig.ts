@@ -4,7 +4,7 @@ import {
   type GlobalConfig,
   WriteGlobalConfigPayloadSchema,
 } from "@shared/schemas";
-import { readGlobalConfig, writeGlobalConfig } from "../globalConfig";
+import { readGlobalConfig, writeGlobalConfig } from "../config/global";
 
 export function registerGlobalConfigHandlers(): void {
   ipcMain.handle(

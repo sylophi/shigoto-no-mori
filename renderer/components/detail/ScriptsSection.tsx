@@ -10,14 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usePackageScripts } from "@/hooks/usePackageScripts";
+import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import {
   usePackageScriptSort,
   useSetPackageScriptSort,
-} from "@/hooks/usePackageScriptSort";
-import { usePortPoolActive } from "@/hooks/usePortPoolActive";
-import { useScriptRunner } from "@/hooks/useScriptRunner";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
+} from "@/hooks/scripts/usePackageScriptSort";
+import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
+import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { cn } from "@/lib/utils";
 import {
   slotToParam,

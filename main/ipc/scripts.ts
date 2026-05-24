@@ -6,9 +6,9 @@ import {
 } from "@shared/schemas";
 import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
 import { findProjectOrThrow } from "../projects";
-import { resolveScriptCommand } from "../scriptCommand";
+import { resolveScriptCommand } from "../scripts/command";
 import { cancelScript, startScript } from "../scripts";
-import { readShigomoriConfig } from "../shigomori";
+import { readShigomoriConfig } from "../config/project";
 
 export function registerScriptHandlers(): void {
   ipcMain.handle(

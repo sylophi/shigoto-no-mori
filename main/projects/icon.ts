@@ -6,8 +6,8 @@ import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import type { ProjectIcon } from "@shared/schemas";
-import { atomicWriteJson } from "./jsonFile";
-import { isENOENT, shigomoriRoot } from "./paths";
+import { atomicWriteJson } from "../util/jsonFile";
+import { isENOENT, shigomoriRoot } from "../util/paths";
 
 // Icon candidates per location bucket. Bucket priority roughly tracks
 // how canonical each location is for "the project's primary icon":

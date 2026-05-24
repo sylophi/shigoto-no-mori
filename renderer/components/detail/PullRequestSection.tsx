@@ -22,16 +22,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
-import { useDelayedFlag } from "@/hooks/useDelayedFlag";
-import { useMergePullRequest } from "@/hooks/useMergePullRequest";
-import { useRepoMergeConfig } from "@/hooks/useRepoMergeConfig";
-import { useSetPullRequestDraft } from "@/hooks/useSetPullRequestDraft";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
+import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
+import { useRepoMergeConfig } from "@/hooks/git/useRepoMergeConfig";
+import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import {
   useWorktreePullRequest,
   worktreePullRequestKey,
-} from "@/hooks/useWorktreePullRequest";
+} from "@/hooks/worktrees/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { notifyError } from "@/lib/toast";

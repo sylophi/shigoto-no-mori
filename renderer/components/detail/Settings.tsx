@@ -20,17 +20,20 @@ import { Switch } from "@/components/ui/switch";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
-} from "@/hooks/useConfirmTwice";
-import { useDirtyForm } from "@/hooks/useDirtyForm";
-import { useLauncherListEditor } from "@/hooks/useLauncherListEditor";
-import { useDetectedLaunchers } from "@/hooks/useLaunchers";
-import { useGlobalConfig, useGlobalConfigWrite } from "@/hooks/useGlobalConfig";
-import { useGithubCliReadiness } from "@/hooks/useGithubCliReadiness";
-import { usePortPoolInstalled } from "@/hooks/usePortPoolInstalled";
+} from "@/hooks/ui/useConfirmTwice";
+import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
+import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
+import {
+  useGlobalConfig,
+  useGlobalConfigWrite,
+} from "@/hooks/config/useGlobalConfig";
+import { useGithubCliReadiness } from "@/hooks/system/useGithubCliReadiness";
+import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { cn } from "@/lib/utils";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { THEME_STORAGE_KEY, useTheme } from "@/hooks/useTheme";
-import { useUpdater } from "@/hooks/useUpdater";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { THEME_STORAGE_KEY, useTheme } from "@/hooks/ui/useTheme";
+import { useUpdater } from "@/hooks/system/useUpdater";
 import { useNavigate } from "@tanstack/react-router";
 import { PathSpan } from "@/components/ui/path-span";
 import { tildify } from "@/lib/projectPaths";

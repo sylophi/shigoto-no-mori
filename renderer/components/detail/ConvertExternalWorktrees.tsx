@@ -8,10 +8,13 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
-import { useProjects } from "@/hooks/useProjects";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useShigomoriConfig } from "@/hooks/useShigomoriConfig";
-import { useConvertExternalWorktree, useWorktrees } from "@/hooks/useWorktrees";
+import { useProjects } from "@/hooks/projects/useProjects";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import {
+  useConvertExternalWorktree,
+  useWorktrees,
+} from "@/hooks/worktrees/useWorktrees";
 import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";

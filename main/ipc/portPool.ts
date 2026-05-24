@@ -2,7 +2,7 @@ import { ipcMain } from "electron";
 import { z } from "zod";
 import { CHANNELS } from "@shared/channels";
 import { findWorktreeIdentityOrThrow } from "../git";
-import { readGlobalConfig } from "../globalConfig";
+import { readGlobalConfig } from "../config/global";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
 import { findProjectOrThrow } from "../projects";
 

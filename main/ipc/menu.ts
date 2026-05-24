@@ -1,7 +1,7 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { SetLaunchToolsEnabledPayloadSchema } from "@shared/schemas";
-import { setLaunchToolsEnabled } from "../menu";
+import { setLaunchToolsEnabled } from "../app/menu";
 
 export function registerMenuHandlers(): void {
   ipcMain.handle(

@@ -21,11 +21,11 @@ import {
 } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { cn, dragRegion } from "@/lib/utils";
-import { useCommandPalette } from "@/hooks/useCommandPalette";
-import { useProjects, useReorderProjects } from "@/hooks/useProjects";
-import { useRuntimeInfo } from "@/hooks/useRuntimeInfo";
-import { useUpdater } from "@/hooks/useUpdater";
-import { useAllProjectWorktrees } from "@/hooks/useWorktrees";
+import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useUpdater } from "@/hooks/system/useUpdater";
+import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/lib/toast";

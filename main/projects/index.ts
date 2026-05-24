@@ -1,7 +1,7 @@
 // Shared helpers for reading projects from the store.
 import { existsSync } from "node:fs";
 import type { Project } from "@shared/schemas";
-import { readKey } from "./store";
+import { readKey } from "../config/store";
 
 export const PROJECTS_KEY = "projects";
 

@@ -5,7 +5,7 @@
 // so it survives across sessions; not in the per-project shigomori
 // config since "what's currently in focus" is a per-user, per-machine
 // thing rather than a property of the repo.
-import { readKey, writeKey } from "./store";
+import { readKey, writeKey } from "../config/store";
 
 const KEY = "shelvedWorktrees";
 

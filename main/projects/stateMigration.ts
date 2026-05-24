@@ -9,8 +9,8 @@
 // picks up where it left off, and the new files (atomically written) win.
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { atomicWriteJson, unlinkIfExists } from "./jsonFile";
-import { isENOENT, shigomoriRoot } from "./paths";
+import { atomicWriteJson, unlinkIfExists } from "../util/jsonFile";
+import { isENOENT, shigomoriRoot } from "../util/paths";
 
 // A loose mirror of the legacy ShigomoriConfig: we only need to recognize
 // the fields we're moving. Anything else is preserved by pass-through.

@@ -25,10 +25,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/useConfirmTwice";
-import { useCreateWorktree } from "@/hooks/useWorktrees";
-import { useIsTruncated } from "@/hooks/useIsTruncated";
-import { useRemoveProject } from "@/hooks/useProjects";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useCreateWorktree } from "@/hooks/worktrees/useWorktrees";
+import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
+import { useRemoveProject } from "@/hooks/projects/useProjects";
 import { ProjectIcon } from "./ProjectIcon";
 import type { Project } from "@shared/schemas";
 

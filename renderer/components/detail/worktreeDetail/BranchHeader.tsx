@@ -11,12 +11,12 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
-import { useBranches } from "@/hooks/useBranches";
+import { useBranches } from "@/hooks/git/useBranches";
 import {
   useCheckoutBranch,
   useRenameBranch,
   useWorktrees,
-} from "@/hooks/useWorktrees";
+} from "@/hooks/worktrees/useWorktrees";
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import { sanitizeBranchName } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";

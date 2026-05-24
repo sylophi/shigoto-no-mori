@@ -12,16 +12,16 @@ import type {
   WorktreeLifecyclePhase,
 } from "@shared/schemas";
 import { applyCarryOver } from "./carryOver";
-import { listWorktreeIdentities, resolveDefaultBranch } from "./git";
-import { readGlobalConfig } from "./globalConfig";
-import { isPortPoolConfigured, isPortPoolInstalled } from "./portPool";
-import { resolveScriptCommand } from "./scriptCommand";
+import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
+import { readGlobalConfig } from "../config/global";
+import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
+import { resolveScriptCommand } from "../scripts/command";
 import {
   clearDeleteInflight,
   markDeleteInflight,
   startScriptForLifecycle,
-} from "./scripts";
-import { readShigomoriConfig } from "./shigomori";
+} from "../scripts";
+import { readShigomoriConfig } from "../config/project";
 
 interface LifecycleWorktree {
   id: string;

@@ -8,7 +8,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useBranchCommits } from "@/hooks/useBranchCommits";
+import { useBranchCommits } from "@/hooks/git/useBranchCommits";
 import type { Worktree } from "@shared/schemas";
 import { CommitRow } from "./CommitRow";
 

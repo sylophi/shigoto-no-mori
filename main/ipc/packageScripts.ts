@@ -13,16 +13,19 @@ import {
   listWorktreeIdentities,
   resolveDefaultBranch,
 } from "../git";
-import { buildScriptCommand, readPackageScripts } from "../packageScripts";
+import {
+  buildScriptCommand,
+  readPackageScripts,
+} from "../scripts/packageScripts";
 import {
   bumpScriptUseCount,
   readScriptSort,
   usageFor,
   writeScriptSort,
-} from "../packageScriptStats";
+} from "../scripts/packageScriptStats";
 import { findProjectOrThrow } from "../projects";
 import { startScript } from "../scripts";
-import { readShigomoriConfig } from "../shigomori";
+import { readShigomoriConfig } from "../config/project";
 
 export function registerPackageScriptHandlers(): void {
   ipcMain.handle(

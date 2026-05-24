@@ -3,7 +3,7 @@
 // what corepack / pnpm / bun themselves use to decide).
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathExists } from "./paths";
+import { pathExists } from "../util/paths";
 
 export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
