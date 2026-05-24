@@ -626,12 +626,12 @@ function MergedBox({ worktree }: { worktree: Worktree }) {
         <Button
           type="button"
           size="sm"
-          variant={armed ? "default" : "outline"}
+          variant="outline"
           disabled={busy}
           onClick={() => trigger(runDelete)}
           className={cn(
-            !armed &&
-              "text-destructive hover:bg-destructive/10 hover:text-destructive",
+            "text-destructive hover:bg-destructive/10 hover:text-destructive",
+            armed && "bg-destructive/10",
           )}
         >
           {busy ? (
