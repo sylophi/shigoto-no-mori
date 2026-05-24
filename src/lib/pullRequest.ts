@@ -113,8 +113,22 @@ export function describeChecks(
       tone: "amber",
     };
   }
+  // Only neutral / skipped runs in the rollup -- they didn't pass, they
+  // just didn't fail. Calling that "passed" would be misleading.
+  if (summary.passed === 0) {
+    return {
+      label: `${summary.total} ${checks} skipped`,
+      tone: "slate",
+    };
+  }
+  if (summary.passed === summary.total) {
+    return {
+      label: `${summary.total} ${checks} passed`,
+      tone: "emerald",
+    };
+  }
   return {
-    label: `${summary.total} ${checks} passed`,
+    label: `${summary.passed} of ${summary.total} ${checks} passed`,
     tone: "emerald",
   };
 }

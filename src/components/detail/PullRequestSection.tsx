@@ -436,6 +436,10 @@ function MergeBox({
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { primary, allowed } = resolveMergeMethod(repoConfig, lastMergeMethod);
   const mergeState = describeMergeState(pr.mergeState, pr.isDraft);
+  // The dropdown swaps the active method; null means "stick with whatever
+  // the repo + saved preference resolve to". Kept local so picking a
+  // method on one worktree doesn't bleed into another.
+  const [pickedMethod, setPickedMethod] = useState<MergeMethod | null>(null);
 
   if (!primary) {
     return (
@@ -446,8 +450,10 @@ function MergeBox({
     );
   }
 
+  const activeMethod =
+    pickedMethod && allowed.includes(pickedMethod) ? pickedMethod : primary;
   const disabled = !mergeState.canMerge || merge.isPending;
-  const others = allowed.filter((m) => m !== primary);
+  const others = allowed.filter((m) => m !== activeMethod);
 
   const runMerge = (method: MergeMethod) => {
     merge.mutate(
@@ -459,6 +465,14 @@ function MergeBox({
       },
       { onSuccess: () => reset() },
     );
+  };
+
+  // Picking from the dropdown only swaps which method the main button
+  // would run; it must NOT merge directly, or the two-step confirm guard
+  // would only apply to one of the three methods.
+  const pickMethod = (method: MergeMethod) => {
+    if (armed) reset();
+    setPickedMethod(method);
   };
 
   const toggleDraft = () => {
@@ -503,7 +517,7 @@ function MergeBox({
               size="sm"
               variant={armed ? "destructive" : "outline"}
               disabled={disabled}
-              onClick={() => trigger(() => runMerge(primary))}
+              onClick={() => trigger(() => runMerge(activeMethod))}
               className={cn(others.length > 0 && "rounded-r-none border-r-0")}
             >
               {merge.isPending ? (
@@ -514,7 +528,7 @@ function MergeBox({
               ) : armed ? (
                 "Click again to confirm"
               ) : (
-                MERGE_METHOD_SHORT_LABEL[primary]
+                MERGE_METHOD_SHORT_LABEL[activeMethod]
               )}
             </Button>
             {others.length > 0 && (
@@ -537,7 +551,7 @@ function MergeBox({
                   {others.map((method) => (
                     <DropdownMenuItem
                       key={method}
-                      onClick={() => runMerge(method)}
+                      onClick={() => pickMethod(method)}
                     >
                       {MERGE_METHOD_LABEL[method]}
                     </DropdownMenuItem>
@@ -576,7 +590,13 @@ const TONE_TEXT: Record<PullRequestTone, string> = {
 
 function ChecksSummaryIcon({ tone }: { tone: PullRequestTone }) {
   const Icon =
-    tone === "rose" ? CircleAlert : tone === "amber" ? Loader2 : CircleCheck;
+    tone === "rose"
+      ? CircleAlert
+      : tone === "amber"
+        ? Loader2
+        : tone === "slate"
+          ? CircleSlash
+          : CircleCheck;
   return (
     <Icon
       aria-hidden
