@@ -111,18 +111,23 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
       {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
 
       {lifecycleRows.length > 0 && (
-        <ScriptList>
-          {lifecycleRows.map((row, idx) => (
-            <ScriptRow
-              key={slotToParam(row.slot)}
-              worktree={worktree}
-              slot={row.slot}
-              label={row.label}
-              command={row.command}
-              isLast={idx === lifecycleRows.length - 1}
-            />
-          ))}
-        </ScriptList>
+        <div className="space-y-2">
+          <div className="flex items-center gap-1.5 pl-[18px] text-xs">
+            <span className="font-mono text-muted-foreground">Lifecycle</span>
+          </div>
+          <ScriptList>
+            {lifecycleRows.map((row, idx) => (
+              <ScriptRow
+                key={slotToParam(row.slot)}
+                worktree={worktree}
+                slot={row.slot}
+                label={row.label}
+                command={row.command}
+                isLast={idx === lifecycleRows.length - 1}
+              />
+            ))}
+          </ScriptList>
+        </div>
       )}
 
       {!hasLifecycle && (
@@ -131,7 +136,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
           onClick={goConfigure}
           className="text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          Configure setup or teardown →
+          Configure setup or teardown scripts →
         </button>
       )}
     </div>
