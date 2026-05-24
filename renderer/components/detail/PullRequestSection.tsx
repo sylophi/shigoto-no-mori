@@ -203,7 +203,7 @@ function PullRequestIdentity({
             #{pr.number}
           </span>
         </h3>
-        <PullRequestStatePill pr={pr} />
+        <PullRequestStateLabel pr={pr} />
       </div>
       <div
         ref={containerRef}
@@ -319,7 +319,7 @@ function PullRequestTitleLink({ pr }: { pr: PullRequestDetail }) {
   );
 }
 
-function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
+function PullRequestStateLabel({ pr }: { pr: PullRequestDetail }) {
   const { Icon, tone, label } = describePullRequest(pr);
   const stateLabel =
     pr.isDraft && pr.state === "OPEN" ? "Draft" : STATE_LABEL[pr.state];
@@ -327,11 +327,11 @@ function PullRequestStatePill({ pr }: { pr: PullRequestDetail }) {
     <span
       title={label}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 text-xs whitespace-nowrap",
+        "inline-flex shrink-0 items-center gap-2 text-sm leading-snug whitespace-nowrap",
         TONE_TEXT[tone],
       )}
     >
-      <Icon aria-hidden className="size-3.5" />
+      <Icon aria-hidden className="size-3.5 shrink-0" />
       {stateLabel}
     </span>
   );
