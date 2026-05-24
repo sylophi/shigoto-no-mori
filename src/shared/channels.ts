@@ -46,6 +46,10 @@ export const CHANNELS = {
   GithubCliReadiness: "githubCli:readiness",
   GithubCliProjectPullRequests: "githubCli:projectPullRequests",
   GithubCliWorktreePullRequest: "githubCli:worktreePullRequest",
+  GithubCliRepoMergeConfig: "githubCli:repoMergeConfig",
+  GithubCliMergePullRequest: "githubCli:mergePullRequest",
+  GithubCliPullRequestDiff: "githubCli:pullRequestDiff",
+  GithubCliSetPullRequestDraft: "githubCli:setPullRequestDraft",
   GithubCliProjectPullRequestsRefreshed:
     "githubCli:projectPullRequestsRefreshed",
   LaunchersDetect: "launchers:detect",
@@ -74,6 +78,7 @@ export const CHANNELS = {
   WindowFocused: "window:focused",
   WindowBlurred: "window:blurred",
   GitRefsRefreshed: "git:refsRefreshed",
+  GitFetchActive: "git:fetchActive",
   UpdaterGet: "updater:get",
   UpdaterCheck: "updater:check",
   UpdaterInstall: "updater:install",

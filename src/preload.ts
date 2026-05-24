@@ -16,11 +16,14 @@ import type {
   GlobalConfig,
   LauncherEntry,
   LaunchToolMenuEntry,
+  MergeMethod,
   PackageScriptSortMode,
   PackageScriptsResult,
   Project,
   ProjectIcon,
   PullRequest,
+  PullRequestDetail,
+  RepoMergeConfig,
   RuntimeInfo,
   ScriptEvent,
   ScriptName,
@@ -266,6 +269,9 @@ const api = {
     onRefsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GitRefsRefreshed,
     ),
+    onFetchActive: subscribe<{ projectId: string; active: boolean }>(
+      CHANNELS.GitFetchActive,
+    ),
   },
   packageScripts: {
     list: (input: {
@@ -303,8 +309,29 @@ const api = {
     worktreePullRequest: (input: {
       projectId: string;
       branch: string;
-    }): Promise<PullRequest | null> =>
+    }): Promise<PullRequestDetail | null> =>
       ipcRenderer.invoke(CHANNELS.GithubCliWorktreePullRequest, input),
+    repoMergeConfig: (input: {
+      projectId: string;
+    }): Promise<RepoMergeConfig | null> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliRepoMergeConfig, input),
+    mergePullRequest: (input: {
+      projectId: string;
+      number: number;
+      method: MergeMethod;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliMergePullRequest, input),
+    pullRequestDiff: (input: {
+      projectId: string;
+      number: number;
+    }): Promise<string> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliPullRequestDiff, input),
+    setPullRequestDraft: (input: {
+      projectId: string;
+      number: number;
+      draft: boolean;
+    }): Promise<void> =>
+      ipcRenderer.invoke(CHANNELS.GithubCliSetPullRequestDraft, input),
     onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
       CHANNELS.GithubCliProjectPullRequestsRefreshed,
     ),

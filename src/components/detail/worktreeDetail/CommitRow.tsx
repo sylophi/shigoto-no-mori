@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { DiffStats } from "@/components/ui/diff-stats";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 
@@ -44,37 +45,13 @@ export function CommitRow({ worktree, commit, onNavigate }: CommitRowProps) {
         </div>
       </div>
       {(commit.additions > 0 || commit.deletions > 0) && (
-        <CommitStats
-          additions={commit.additions}
-          deletions={commit.deletions}
-        />
+        <DiffStats additions={commit.additions} deletions={commit.deletions} />
       )}
       <ChevronRight
         aria-hidden
         className="size-3.5 shrink-0 text-muted-foreground/40"
       />
     </button>
-  );
-}
-
-function CommitStats({
-  additions,
-  deletions,
-}: {
-  additions: number;
-  deletions: number;
-}) {
-  // emerald-500 / rose-500 read close to Pierre's dark/light addition
-  // and deletion hues without requiring shadow-DOM theme variables.
-  return (
-    <span
-      aria-label={`${additions} additions, ${deletions} deletions`}
-      title={`${additions} additions, ${deletions} deletions`}
-      className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
-    >
-      <span className="text-emerald-500">+{additions}</span>
-      <span className="text-rose-500">−{deletions}</span>
-    </span>
   );
 }
 

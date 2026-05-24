@@ -18,6 +18,7 @@ import { NewWorktree } from "@/components/detail/NewWorktree";
 import { ScriptConsole } from "@/components/detail/ScriptConsole";
 import { Settings } from "@/components/detail/Settings";
 import { CommitDiff } from "@/components/detail/CommitDiff";
+import { PullRequestDiff } from "@/components/detail/PullRequestDiff";
 import { WorktreeDetail } from "@/components/detail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/detail/WorktreeDiff";
 import { dragRegion } from "@/lib/utils";
@@ -186,6 +187,12 @@ const worktreeDiffRoute = createRoute({
   component: WorktreeDiff,
 });
 
+const pullRequestDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  component: PullRequestDiff,
+});
+
 const commitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
@@ -203,6 +210,7 @@ const routeTree = rootRoute.addChildren([
   worktreeRoute,
   scriptConsoleRoute,
   worktreeDiffRoute,
+  pullRequestDiffRoute,
   commitDiffRoute,
 ]);
 
@@ -246,6 +254,7 @@ export {
   convertExternalRoute,
   manageBranchesRoute,
   newWorktreeRoute,
+  pullRequestDiffRoute,
   scriptConsoleRoute,
   settingsRoute,
   worktreeDiffRoute,

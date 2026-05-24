@@ -3,7 +3,12 @@ import {
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
-import { pullRequestsEqual, type PullRequest } from "@shared/schemas";
+import {
+  pullRequestsEqual,
+  toSlimPullRequest,
+  type PullRequest,
+  type PullRequestDetail,
+} from "@shared/schemas";
 import { projectPullRequestsKey } from "./useProjectPullRequests";
 
 const WORKTREE_PR_KEY_PREFIX = ["githubCli", "worktreePullRequest"] as const;
@@ -26,9 +31,13 @@ export function invalidateAllWorktreePullRequests(
 // window focus and on git refs changing, so we opt out of TanStack's
 // stale-gated focus refetch path. Silent on error to match the sweep's
 // swallow behavior -- a transient gh failure shouldn't toast.
-export function useWorktreePullRequest(projectId: string, branch: string) {
+export function useWorktreePullRequest(
+  projectId: string,
+  branch: string,
+  options: { enabled?: boolean } = {},
+) {
   const queryClient = useQueryClient();
-  return useQuery<PullRequest | null>({
+  return useQuery<PullRequestDetail | null>({
     queryKey: worktreePullRequestKey(projectId, branch),
     queryFn: async () => {
       const pr = await window.api.githubCli.worktreePullRequest({
@@ -44,7 +53,13 @@ export function useWorktreePullRequest(projectId: string, branch: string) {
       mirrorIntoProjectMap(queryClient, projectId, branch, pr);
       return pr;
     },
+    enabled: options.enabled ?? true,
     refetchOnWindowFocus: false,
+    // gh failures here are stable (not in a github repo, gh not authed,
+    // network down) -- the default 3-retry exponential backoff just
+    // turns a fast error into a 7s wait. The focus + refs-changed
+    // invalidations bring us back from a true transient.
+    retry: false,
     meta: { silentError: true },
   });
 }
@@ -53,21 +68,27 @@ function mirrorIntoProjectMap(
   queryClient: QueryClient,
   projectId: string,
   branch: string,
-  pr: PullRequest | null,
+  pr: PullRequestDetail | null,
 ): void {
-  queryClient.setQueryData<Record<string, PullRequest>>(
-    projectPullRequestsKey(projectId),
-    (prev) => {
-      if (!prev) return prev;
-      const current = prev[branch];
-      if (pr === null) {
-        if (current === undefined) return prev;
-        const next = { ...prev };
-        delete next[branch];
-        return next;
-      }
-      if (current && pullRequestsEqual(current, pr)) return prev;
-      return { ...prev, [branch]: pr };
-    },
-  );
+  // Read-then-maybe-write so we skip setQueryData entirely when nothing
+  // changed; even an updater that returns `prev` still bumps
+  // dataUpdatedAt and notifies every sidebar row observing the project
+  // map.
+  const key = projectPullRequestsKey(projectId);
+  const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
+  if (!prev) return;
+  const current = prev[branch];
+  if (pr === null) {
+    if (current === undefined) return;
+    const next = { ...prev };
+    delete next[branch];
+    queryClient.setQueryData<Record<string, PullRequest>>(key, next);
+    return;
+  }
+  const slim = toSlimPullRequest(pr);
+  if (current && pullRequestsEqual(current, slim)) return;
+  queryClient.setQueryData<Record<string, PullRequest>>(key, {
+    ...prev,
+    [branch]: slim,
+  });
 }

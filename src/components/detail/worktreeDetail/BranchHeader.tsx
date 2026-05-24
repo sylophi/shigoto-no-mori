@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import {
   Check,
@@ -20,65 +20,15 @@ import {
 import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
 import { sanitizeBranchName } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
-import { PullRequestBadge } from "../PullRequestBadge";
+import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 
-// A hidden natural-width duplicate of the row decides whether the PR
-// title fits without clipping the branch. The measurer is independent
-// of the visible `showTitle` state, so the decision can't oscillate as
-// the layout flips.
 export function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
-  const rowRef = useRef<HTMLDivElement>(null);
-  const measurerRef = useRef<HTMLDivElement>(null);
-  const [showTitle, setShowTitle] = useState(false);
-
-  useLayoutEffect(() => {
-    const row = rowRef.current;
-    const measurer = measurerRef.current;
-    if (!row || !measurer) return;
-    const check = () => {
-      setShowTitle(measurer.scrollWidth <= row.clientWidth);
-    };
-    check();
-    const observer = new ResizeObserver(check);
-    observer.observe(row);
-    observer.observe(measurer);
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <div
-      ref={rowRef}
-      className="relative flex items-start justify-between gap-3"
-    >
+    <div className="flex min-w-0 items-start gap-3">
       <div className="min-w-0 flex-1">
         <BranchTitle worktree={worktree} />
       </div>
-      <PullRequestBadge worktree={worktree} showTitle={showTitle} />
-      <div
-        ref={measurerRef}
-        aria-hidden
-        className="pointer-events-none invisible absolute top-0 left-0 flex items-start gap-3 whitespace-nowrap"
-      >
-        <BranchTitleMeasurer branch={worktree.branch} />
-        <PullRequestBadge worktree={worktree} showTitle />
-      </div>
-    </div>
-  );
-}
-
-// Mimics BranchTitle's outer flex container width without re-mounting
-// BranchSwitcher's combobox/portal. The three boxes stand in for the
-// pencil/switcher/copy buttons (each is p-1 around a size-3.5 icon, so
-// 22px wide). Drift these if BranchTitle's button cluster changes.
-function BranchTitleMeasurer({ branch }: { branch: string }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className="font-mono text-2xl font-medium tracking-tight">
-        {branch}
-      </span>
-      <span className="block size-[22px]" />
-      <span className="block size-[22px]" />
-      <span className="block size-[22px]" />
+      <WorktreeActivityIndicator worktree={worktree} />
     </div>
   );
 }
