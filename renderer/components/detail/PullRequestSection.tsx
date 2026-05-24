@@ -515,7 +515,7 @@ function MergeBox({
             <Button
               type="button"
               size="sm"
-              variant={armed ? "destructive" : "outline"}
+              variant={armed ? "default" : "outline"}
               disabled={disabled}
               onClick={() => trigger(() => runMerge(activeMethod))}
               className={cn(others.length > 0 && "rounded-r-none border-r-0")}
