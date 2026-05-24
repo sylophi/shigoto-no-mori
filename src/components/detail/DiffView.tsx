@@ -6,6 +6,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/hooks/useTheme";
 
 type DiffStyle = "unified" | "split";
 
@@ -14,6 +15,14 @@ const DIFF_THEME = {
   // 'simple' is the shortest built-in separator (vs 'line-info' default
   // which renders rounded corners and an expansion-control row).
   hunkSeparators: "simple" as const,
+  // Pin the diff's base bg to the app's `--background` token. All the
+  // per-row backgrounds (buffer, context, separator) derive from
+  // `--diffs-bg` via color-mix, so overriding the one variable
+  // cascades through the whole diff surface. Without this the diff
+  // reads as a pitch-black slab against the lifted neutral-900 main
+  // pane that PR #59 introduced. `unsafeCSS` is the documented path
+  // for CSS overrides — see https://diffs.com/docs (Hunk Separators).
+  unsafeCSS: `:host { --diffs-bg: var(--background); }`,
 };
 
 // CSS custom properties inherit through the library's shadow DOM, so
@@ -45,6 +54,10 @@ export function DiffView({
   emptyMessage: ReactNode;
 }) {
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
+  // Pierre's library picks between the `dark`/`light` entries off the
+  // shadow root's `color-scheme`, which defaults to the OS preference.
+  // Force it to follow the in-app theme instead.
+  const { resolved } = useTheme();
 
   const parsedPatches = patch ? parsePatchFiles(patch) : [];
   const allFiles = parsedPatches.flatMap((p) => p.files);
@@ -93,7 +106,7 @@ export function DiffView({
               <FileDiff
                 key={`${fileDiff.prevName ?? ""} ${fileDiff.name}`}
                 fileDiff={fileDiff}
-                options={{ ...DIFF_THEME, diffStyle }}
+                options={{ ...DIFF_THEME, diffStyle, themeType: resolved }}
               />
             ))}
           </div>
