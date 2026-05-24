@@ -7,7 +7,6 @@ import {
   CircleDashed,
   CircleSlash,
   ExternalLink,
-  GitMerge,
   Loader2,
   MinusCircle,
   Trash2,
@@ -144,8 +143,8 @@ function PullRequestBody({
           lastMergeMethod={lastMergeMethod}
         />
       )}
-      {pr.state === "MERGED" && !worktree.isPrimary && (
-        <MergedBox worktree={worktree} />
+      {!isOpen && !worktree.isPrimary && (
+        <ClosedPullRequestBox worktree={worktree} pr={pr} />
       )}
     </div>
   );
@@ -577,12 +576,20 @@ function MergeBox({
   );
 }
 
-function MergedBox({ worktree }: { worktree: Worktree }) {
+function ClosedPullRequestBox({
+  worktree,
+  pr,
+}: {
+  worktree: Worktree;
+  pr: PullRequestDetail;
+}) {
   const navigate = useNavigate();
   const { data: siblings = [] } = useWorktrees(worktree.projectId);
   const deleteMutation = useDeleteWorktree();
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const busy = deleteMutation.isPending;
+  const { Icon, tone } = describePullRequest(pr);
+  const label = STATE_LABEL[pr.state];
 
   const runDelete = () => {
     deleteMutation.mutate(
@@ -617,11 +624,11 @@ function MergedBox({ worktree }: { worktree: Worktree }) {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="inline-flex items-center gap-2 text-sm">
-          <GitMerge
+          <Icon
             aria-hidden
-            className={cn("size-3.5 shrink-0", TONE_TEXT.violet)}
+            className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
           />
-          <span className={TONE_TEXT.violet}>Merged</span>
+          <span className={TONE_TEXT[tone]}>{label}</span>
         </span>
         <Button
           type="button"
