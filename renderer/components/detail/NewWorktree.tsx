@@ -10,10 +10,8 @@ import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
-import {
-  useCreateWorktree,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { tildify } from "@/lib/projectPaths";
 import { newWorktreeRoute } from "@/router";
 import {

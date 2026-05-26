@@ -15,10 +15,8 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
-import {
-  useRelocateWorktree,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { worktreeLocationRoute } from "@/router";
 import type {
   ShigomoriConfig,

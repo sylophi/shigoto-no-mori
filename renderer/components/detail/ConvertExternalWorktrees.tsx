@@ -11,10 +11,8 @@ import { tildify } from "@/lib/projectPaths";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import {
-  useConvertExternalWorktree,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";

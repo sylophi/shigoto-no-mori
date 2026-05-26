@@ -8,7 +8,7 @@ import {
   usePullWorktree,
   usePushForceWorktree,
   usePushWorktree,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/worktrees/useWorktreeSync";
 import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
 
 interface WorktreeSyncPillProps {

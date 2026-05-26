@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useCommitDiff, useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { commitDiffRoute } from "@/router";
 import { DiffNotFound, DiffView } from "./DiffView";
 

@@ -29,10 +29,8 @@ import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
 import { useRepoMergeConfig } from "@/hooks/githubCli/useRepoMergeConfig";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import {
-  useDeleteWorktree,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
 import { queryKeys } from "@/lib/queryKeys";

@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useWorktreeDiff, useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useWorktreeDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { worktreeDiffRoute } from "@/router";
 import { DiffNotFound, DiffView } from "./DiffView";
 
