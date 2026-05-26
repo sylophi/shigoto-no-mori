@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   useQuery,
   useQueryClient,
@@ -20,11 +21,32 @@ export function invalidateAllWorktreePullRequests(
   void qc.invalidateQueries({ queryKey: queryKeys.worktreePullRequests() });
 }
 
+// Refresh the open worktree's PR on the two events most likely to move
+// PR state: refs landing locally (merge or push) and the window regaining
+// focus (PR updated on github.com while the app was backgrounded). The
+// per-branch query opts out of React Query's focus refetch so this
+// listener owns the focus path.
+export function useWatchWorktreePullRequests(): void {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    const offRefs = window.api.git.onRefsRefreshed(() => {
+      invalidateAllWorktreePullRequests(queryClient);
+    });
+    const offFocus = window.api.window.onFocused(() => {
+      invalidateAllWorktreePullRequests(queryClient);
+    });
+    return () => {
+      offRefs();
+      offFocus();
+    };
+  }, [queryClient]);
+}
+
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
-// opening a worktree feels instant; App.tsx invalidates it explicitly on
-// window focus and on git refs changing, so we opt out of TanStack's
-// stale-gated focus refetch path. Silent on error to match the sweep's
-// swallow behavior -- a transient gh failure shouldn't toast.
+// opening a worktree feels instant; useWatchWorktreePullRequests invalidates
+// it explicitly on window focus and on git refs changing, so we opt out
+// of TanStack's stale-gated focus refetch path. Silent on error to match
+// the sweep's swallow behavior -- a transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
   branch: string,

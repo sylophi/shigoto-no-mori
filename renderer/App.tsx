@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,9 +6,9 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
-import { invalidateBranchState } from "@/hooks/git/useBranches";
-import { invalidateProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { invalidateAllWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
+import { useWatchGitRefs } from "@/hooks/git/useBranches";
+import { useWatchProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
+import { useWatchWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import { router } from "./router";
 
 function AppErrorFallback({ error }: FallbackProps) {
@@ -26,8 +25,15 @@ function AppErrorFallback({ error }: FallbackProps) {
   );
 }
 
+// Convention: IPC broadcasts that drive query invalidations live in
+// useWatch* hooks next to the queries they affect. App.tsx is the single
+// place they get called -- adding a new watcher is one import + one hook
+// call here, with the actual subscribe/invalidate logic co-located with
+// the query it owns.
 export function App() {
-  const queryClient = useQueryClient();
+  useWatchGitRefs();
+  useWatchWorktreePullRequests();
+  useWatchProjectPullRequests();
 
   useEffect(
     () =>
@@ -35,33 +41,6 @@ export function App() {
         void router.navigate({ to: "/settings" });
       }),
     [],
-  );
-
-  useEffect(
-    () =>
-      window.api.git.onRefsRefreshed(({ projectId }) => {
-        invalidateBranchState(queryClient, projectId);
-        // Refs moving usually means PR state moved too (merge landed,
-        // head pushed). Sidebar dots wait for the sweep instead.
-        invalidateAllWorktreePullRequests(queryClient);
-      }),
-    [queryClient],
-  );
-
-  useEffect(
-    () =>
-      window.api.window.onFocused(() => {
-        invalidateAllWorktreePullRequests(queryClient);
-      }),
-    [queryClient],
-  );
-
-  useEffect(
-    () =>
-      window.api.githubCli.onProjectPullRequestsRefreshed(({ projectId }) => {
-        invalidateProjectPullRequests(queryClient, projectId);
-      }),
-    [queryClient],
   );
 
   return (

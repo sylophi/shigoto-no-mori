@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
@@ -17,7 +18,7 @@ export function useBranches(projectId: string | null) {
 // Anything derived from refs/heads or refs/remotes for a project: branches,
 // worktrees (each carries ahead/behind + recent commits), and the resolved
 // default branch (which depends on which refs exist). Branch and worktree
-// mutations call this; the renderer also calls it when main broadcasts a
+// mutations call this; useWatchGitRefs calls it when main broadcasts a
 // background-fetch update.
 export function invalidateBranchState(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -32,6 +33,20 @@ export function invalidateBranchState(
   void queryClient.invalidateQueries({
     queryKey: queryKeys.defaultBranch(projectId),
   });
+}
+
+// Re-run invalidateBranchState whenever main fetched refs for a project.
+// Call once at the App root so a single subscription drives the whole
+// renderer; the subscriber owns the lifecycle (unsubscribes on unmount).
+export function useWatchGitRefs(): void {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      window.api.git.onRefsRefreshed(({ projectId }) => {
+        invalidateBranchState(queryClient, projectId);
+      }),
+    [queryClient],
+  );
 }
 
 interface CreateBranchInput {
