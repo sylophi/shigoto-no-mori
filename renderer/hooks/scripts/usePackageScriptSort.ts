@@ -32,10 +32,9 @@ export function useSetPackageScriptSort(projectId: string | null) {
       await queryClient.cancelQueries({
         queryKey: queryKeys.packageScriptSort(projectId),
       });
-      const previous = queryClient.getQueryData<PackageScriptSortMode>([
-        "packageScriptSort",
-        projectId,
-      ]);
+      const previous = queryClient.getQueryData<PackageScriptSortMode>(
+        queryKeys.packageScriptSort(projectId),
+      );
       queryClient.setQueryData(queryKeys.packageScriptSort(projectId), mode);
       return { previous };
     },
