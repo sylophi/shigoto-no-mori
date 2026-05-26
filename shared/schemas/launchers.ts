@@ -25,9 +25,9 @@ export const LauncherEntrySchema = z.discriminatedUnion("kind", [
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 
 export const LaunchPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
-  launcherId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
+  launcherId: z.string().min(1),
 });
 
 export const LaunchToolMenuEntrySchema = z.object({

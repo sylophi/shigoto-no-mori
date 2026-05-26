@@ -19,37 +19,37 @@ export const ProjectSchema = z.object({
 export type Project = z.infer<typeof ProjectSchema>;
 
 export const AddProjectPayloadSchema = z.object({
-  path: z.string(),
+  path: z.string().min(1),
 });
 
 export const RemoveProjectPayloadSchema = z.object({
-  id: z.string(),
+  id: z.string().min(1),
 });
 
 export const ReorderProjectsPayloadSchema = z.object({
-  draggedId: z.string(),
-  targetId: z.string(),
+  draggedId: z.string().min(1),
+  targetId: z.string().min(1),
   position: z.enum(["before", "after"]),
 });
 
 export const ProjectsDefaultBranchPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const ProjectsListBranchesPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const PickWorktreeNamePayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const ListIgnoredPathsPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const ProjectIconPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 // Bytes for a detected project icon, ready to drop into a data URL.
@@ -69,18 +69,18 @@ export type BranchList = z.infer<typeof BranchListSchema>;
 // Branch operations against the project's primary repo (not tied to any
 // specific worktree). Used by the Manage Branches page.
 export const CreateBranchPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   name: z.string().min(1),
   base: z.string().min(1).optional(),
 });
 
 export const RenameAnyBranchPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   oldName: z.string().min(1),
   newName: z.string().min(1),
 });
 
 export const DeleteBranchPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   name: z.string().min(1),
 });

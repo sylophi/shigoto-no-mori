@@ -9,8 +9,8 @@ export const ScriptNameSchema = z.enum([
 export type ScriptName = z.infer<typeof ScriptNameSchema>;
 
 export const RunScriptPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   script: ScriptNameSchema,
 });
 
@@ -43,32 +43,32 @@ export const PackageScriptSortModeSchema = z.enum([
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
 export const ListPackageScriptsPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
 });
 
 export const RunPackageScriptPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   scriptName: z.string().min(1),
 });
 
 export const GetPackageScriptSortPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const SetPackageScriptSortPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   mode: PackageScriptSortModeSchema,
 });
 
 export const PortPoolIsActivePayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
 });
 
 export const CancelScriptPayloadSchema = z.object({
-  runId: z.string(),
+  runId: z.string().min(1),
 });
 
 // stdout and stderr are merged into one "data" event so xterm renders
