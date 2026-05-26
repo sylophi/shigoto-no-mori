@@ -14,7 +14,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
-import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktrees";
+import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
 import {

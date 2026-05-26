@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import {
   useDeleteWorktree,
   useSetShelved,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/worktrees/useWorktreeMutations";
 import { worktreeRoute } from "@/router";
 import {
   scriptKey,

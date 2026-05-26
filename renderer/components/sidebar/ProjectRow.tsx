@@ -26,7 +26,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { useCreateWorktree } from "@/hooks/worktrees/useWorktrees";
+import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
 import { ProjectIcon } from "./ProjectIcon";

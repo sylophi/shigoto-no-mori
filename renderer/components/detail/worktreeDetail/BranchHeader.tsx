@@ -13,11 +13,11 @@ import { queryKeys } from "@/lib/queryKeys";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useBranches } from "@/hooks/git/useBranches";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import {
   useCheckoutBranch,
   useRenameBranch,
-  useWorktrees,
-} from "@/hooks/worktrees/useWorktrees";
+} from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/ui/branch-combobox";
 import { scoreMatch } from "@/lib/fuzzyMatch";
 import { sanitizeBranchName } from "@shared/branches";
