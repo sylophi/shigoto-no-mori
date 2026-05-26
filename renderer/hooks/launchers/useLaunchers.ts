@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { DetectedLauncher, LauncherEntry } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useDetectedLaunchers() {
   return useQuery<DetectedLauncher[]>({
-    queryKey: ["launchers", "detected"],
+    queryKey: queryKeys.detectedLaunchers(),
     queryFn: () => window.api.launchers.detected(),
     // Detection spawns ~15 `which` calls; cache for the session. The
     // answer only changes when the user installs/removes an app.
@@ -18,7 +19,7 @@ interface LauncherForProjectResult {
 
 export function useLauncherForProject(projectId: string | null) {
   return useQuery<LauncherForProjectResult>({
-    queryKey: ["launchers", projectId],
+    queryKey: queryKeys.projectLaunchers(projectId),
     queryFn: () => {
       if (!projectId) return { entries: [] };
       return window.api.launchers.forProject(projectId);

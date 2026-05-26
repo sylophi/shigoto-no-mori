@@ -17,7 +17,7 @@ import { MaterialIcon } from "@/components/ui/material-icon";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { cn } from "@/lib/utils";
 import { useFsListEntries } from "@/hooks/fs/useFsListEntries";
-import { useIgnoredPaths } from "@/hooks/fs/useIgnoredPaths";
+import { useIgnoredPaths } from "@/hooks/projects/useIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
 import type { CarryOverEntry, FsEntry } from "@shared/schemas";

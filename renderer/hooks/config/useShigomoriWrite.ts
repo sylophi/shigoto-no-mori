@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ShigomoriConfig } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 interface WriteVariables {
   projectId: string;
@@ -14,8 +15,12 @@ export function useShigomoriWrite() {
       return { projectId };
     },
     onSuccess: ({ projectId }) => {
-      queryClient.invalidateQueries({ queryKey: ["shigomori", projectId] });
-      queryClient.invalidateQueries({ queryKey: ["launchers", projectId] });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.shigomoriConfig(projectId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.projectLaunchers(projectId),
+      });
     },
     meta: { errorTitle: "Couldn't save project config" },
   });

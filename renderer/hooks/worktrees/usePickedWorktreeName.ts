@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function usePickedWorktreeName(projectId: string | null) {
   return useQuery<string>({
-    queryKey: ["picked-worktree-name", projectId],
+    queryKey: queryKeys.pickedWorktreeName(projectId),
     queryFn: () => {
       if (!projectId) return "";
       return window.api.projects.pickWorktreeName(projectId);

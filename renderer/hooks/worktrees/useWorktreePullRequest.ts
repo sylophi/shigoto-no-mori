@@ -9,13 +9,7 @@ import {
   type PullRequest,
   type PullRequestDetail,
 } from "@shared/schemas";
-import { projectPullRequestsKey } from "../projects/useProjectPullRequests";
-
-const WORKTREE_PR_KEY_PREFIX = ["githubCli", "worktreePullRequest"] as const;
-
-export function worktreePullRequestKey(projectId: string, branch: string) {
-  return [...WORKTREE_PR_KEY_PREFIX, projectId, branch] as const;
-}
+import { queryKeys } from "@/lib/queryKeys";
 
 // Invalidates every active worktree PR query. The detail pane only
 // mounts one at a time, but the IPC events that drive this are
@@ -23,7 +17,7 @@ export function worktreePullRequestKey(projectId: string, branch: string) {
 export function invalidateAllWorktreePullRequests(
   qc: ReturnType<typeof useQueryClient>,
 ) {
-  void qc.invalidateQueries({ queryKey: WORKTREE_PR_KEY_PREFIX });
+  void qc.invalidateQueries({ queryKey: queryKeys.worktreePullRequests() });
 }
 
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
@@ -38,7 +32,7 @@ export function useWorktreePullRequest(
 ) {
   const queryClient = useQueryClient();
   return useQuery<PullRequestDetail | null>({
-    queryKey: worktreePullRequestKey(projectId, branch),
+    queryKey: queryKeys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
       const pr = await window.api.githubCli.worktreePullRequest({
         projectId,
@@ -74,7 +68,7 @@ function mirrorIntoProjectMap(
   // changed; even an updater that returns `prev` still bumps
   // dataUpdatedAt and notifies every sidebar row observing the project
   // map.
-  const key = projectPullRequestsKey(projectId);
+  const key = queryKeys.projectPullRequests(projectId);
   const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
   if (!prev) return;
   const current = prev[branch];

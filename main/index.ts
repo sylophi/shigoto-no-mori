@@ -1,7 +1,6 @@
-import { app, BrowserWindow, ipcMain, nativeTheme } from "electron";
+import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
 import { CHANNELS } from "@shared/channels";
-import { SetThemePayloadSchema } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./app/bootstrap";
 import { attachContextMenu } from "./app/contextMenu";
 import { refreshAllProjectGitRefs, startBackgroundFetch } from "./app/fetch";
@@ -72,15 +71,6 @@ const createWindow = () => {
 
   attachContextMenu(mainWindow);
 };
-
-// Track the renderer's applied theme (including unsaved previews) so
-// the vibrancy material follows the in-app appearance rather than the
-// OS one. The persistent value lives in ~/shigomori[-dev]/config.json
-// and is written by the renderer through the globalConfig IPC.
-ipcMain.handle(CHANNELS.RuntimeSetTheme, (_event, rawPayload: unknown) => {
-  const { theme } = SetThemePayloadSchema.parse(rawPayload);
-  nativeTheme.themeSource = theme;
-});
 
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start

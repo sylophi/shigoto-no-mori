@@ -1,21 +1,17 @@
 import { ipcMain } from "electron";
-import { z } from "zod";
 import { CHANNELS } from "@shared/channels";
+import { PortPoolIsActivePayloadSchema } from "@shared/schemas";
 import { findWorktreeIdentityOrThrow } from "../git";
 import { readGlobalConfig } from "../config/global";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
 import { findProjectOrThrow } from "../projects";
 
-const PayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
-});
-
 export function registerPortPoolHandlers(): void {
   ipcMain.handle(
     CHANNELS.PortPoolIsActive,
     async (_event, rawPayload: unknown): Promise<boolean> => {
-      const { projectId, worktreeId } = PayloadSchema.parse(rawPayload);
+      const { projectId, worktreeId } =
+        PortPoolIsActivePayloadSchema.parse(rawPayload);
       const global = await readGlobalConfig();
       if (!global.portPool) return false;
       const project = findProjectOrThrow(projectId);

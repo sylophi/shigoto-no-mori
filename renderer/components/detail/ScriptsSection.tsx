@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowDownUp, ChevronRight, Play, Search, Square } from "lucide-react";
-import { scoreMatch } from "@/components/ui/branch-combobox";
+import { scoreMatch } from "@/lib/fuzzyMatch";
 import {
   DropdownMenu,
   DropdownMenuContent,

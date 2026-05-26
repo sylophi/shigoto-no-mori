@@ -3,9 +3,8 @@
 // what corepack / pnpm / bun themselves use to decide).
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { PackageManager } from "@shared/schemas";
 import { pathExists } from "../util/paths";
-
-export type PackageManager = "bun" | "pnpm" | "yarn" | "npm";
 
 // Raw read of `package.json` + the package manager we'd use to run a
 // script. The IPC layer enriches this with per-script usage stats before

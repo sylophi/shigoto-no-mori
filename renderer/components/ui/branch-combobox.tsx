@@ -3,6 +3,8 @@ import { Combobox } from "@base-ui/react/combobox";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { scoreMatch } from "@/lib/fuzzyMatch";
+import { queryKeys } from "@/lib/queryKeys";
 import { useBranches } from "@/hooks/git/useBranches";
 import type { BranchList } from "@shared/schemas";
 
@@ -35,27 +37,6 @@ export function toBranchEntries(
       .filter((name) => !exclude.has(name))
       .map((name) => ({ name, kind: "remote" as const })),
   ];
-}
-
-// Higher score = better match. 0 = no match.
-export function scoreMatch(query: string, target: string): number {
-  if (!query) return 1;
-  const q = query.toLowerCase();
-  const t = target.toLowerCase();
-  if (t === q) return 1000;
-  const idx = t.indexOf(q);
-  if (idx >= 0) {
-    return 200 - idx * 2 + Math.round((q.length / t.length) * 50);
-  }
-  let pos = 0;
-  let gaps = 0;
-  for (const c of q) {
-    const next = t.indexOf(c, pos);
-    if (next < 0) return 0;
-    gaps += next - pos;
-    pos = next + 1;
-  }
-  return Math.max(1, 80 - gaps);
 }
 
 export function BranchCombobox({
@@ -96,7 +77,7 @@ export function BranchCombobox({
           setQuery("");
           if (projectId) {
             void queryClient.invalidateQueries({
-              queryKey: ["branches", projectId],
+              queryKey: queryKeys.branches(projectId),
             });
           }
         }

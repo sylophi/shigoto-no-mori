@@ -1,9 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PullRequestDetail } from "@shared/schemas";
-import {
-  invalidateAllWorktreePullRequests,
-  worktreePullRequestKey,
-} from "../worktrees/useWorktreePullRequest";
+import { queryKeys } from "@/lib/queryKeys";
+import { invalidateAllWorktreePullRequests } from "../worktrees/useWorktreePullRequest";
 
 interface SetDraftVariables {
   projectId: string;
@@ -15,7 +13,7 @@ interface SetDraftVariables {
 }
 
 type Context = {
-  key: ReturnType<typeof worktreePullRequestKey>;
+  key: ReturnType<typeof queryKeys.worktreePullRequest>;
   prev: PullRequestDetail | null | undefined;
 };
 
@@ -25,7 +23,7 @@ export function useSetPullRequestDraft() {
     mutationFn: ({ projectId, number, draft }) =>
       window.api.githubCli.setPullRequestDraft({ projectId, number, draft }),
     onMutate: async ({ projectId, branch, draft }) => {
-      const key = worktreePullRequestKey(projectId, branch);
+      const key = queryKeys.worktreePullRequest(projectId, branch);
       await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData<PullRequestDetail | null>(key);
       if (prev) {

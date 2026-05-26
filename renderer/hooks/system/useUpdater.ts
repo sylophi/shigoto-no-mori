@@ -1,8 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UpdaterState } from "@shared/schemas";
-
-const QUERY_KEY = ["updater", "state"] as const;
+import { queryKeys } from "@/lib/queryKeys";
 
 // Seeded from `updater:get` once on mount and then driven entirely by
 // the `updater:state` broadcast -- no polling. The main process is the
@@ -10,7 +9,7 @@ const QUERY_KEY = ["updater", "state"] as const;
 export function useUpdater() {
   const queryClient = useQueryClient();
   const query = useQuery<UpdaterState>({
-    queryKey: QUERY_KEY,
+    queryKey: queryKeys.updaterState(),
     queryFn: () => window.api.updater.get(),
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -18,7 +17,7 @@ export function useUpdater() {
   useEffect(
     () =>
       window.api.updater.onState((next) => {
-        queryClient.setQueryData(QUERY_KEY, next);
+        queryClient.setQueryData(queryKeys.updaterState(), next);
       }),
     [queryClient],
   );

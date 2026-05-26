@@ -1,7 +1,9 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import {
+  ReadShigomoriPayloadSchema,
   ReadWorktreeDataPayloadSchema,
+  type ShigomoriConfig,
   type ShigomoriWorktreeData,
   WriteShigomoriPayloadSchema,
   WriteWorktreeDataPayloadSchema,
@@ -10,12 +12,22 @@ import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
 import { appendExcludes } from "../git/exclude";
 import { findProjectOrThrow } from "../projects";
 import {
+  readShigomoriConfig,
   readWorktreeData,
   writeShigomoriConfig,
   writeWorktreeData,
 } from "../config/project";
 
 export function registerShigomoriHandlers(): void {
+  ipcMain.handle(
+    CHANNELS.ShigomoriRead,
+    async (_event, rawPayload: unknown): Promise<ShigomoriConfig | null> => {
+      const { projectId } = ReadShigomoriPayloadSchema.parse(rawPayload);
+      const project = findProjectOrThrow(projectId);
+      return readShigomoriConfig(project.id);
+    },
+  );
+
   ipcMain.handle(
     CHANNELS.ShigomoriWrite,
     async (_event, rawPayload: unknown) => {

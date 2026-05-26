@@ -3,12 +3,9 @@
 // added here apply everywhere -- but they're anchored with a leading `/`
 // to the worktree root, which means they only match at the top level.
 
-import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import { promisify } from "node:util";
-
-const execFileP = promisify(execFile);
+import { run } from "./core";
 
 // Backslash-escape gitignore metacharacters so a literal path like
 // `cache[dev]` or `build*` survives intact -- otherwise the glob would
@@ -33,11 +30,7 @@ export async function appendExcludes(
   paths: string[],
 ): Promise<void> {
   if (paths.length === 0) return;
-  const { stdout } = await execFileP(
-    "git",
-    ["rev-parse", "--git-path", "info/exclude"],
-    { cwd: gitCwd },
-  );
+  const stdout = await run(gitCwd, ["rev-parse", "--git-path", "info/exclude"]);
   const raw = stdout.trim();
   const excludeFile = isAbsolute(raw) ? raw : join(gitCwd, raw);
   let existing = "";

@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ShigomoriConfig } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useShigomoriConfig(projectId: string | null) {
   return useQuery<ShigomoriConfig | null>({
-    queryKey: ["shigomori", projectId],
+    queryKey: queryKeys.shigomoriConfig(projectId),
     queryFn: () => {
       if (!projectId) return null;
       return window.api.shigomori.read(projectId);

@@ -4,14 +4,14 @@
 // the IPC has already returned. Main is the source of truth; this
 // store only reflects events it broadcasts.
 import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import type { CreatePhase } from "@shared/schemas";
+import { singletonInit } from "@/lib/singletonInit";
+import { toast } from "@/lib/toast";
 
 export type { CreatePhase } from "@shared/schemas";
 
 const phases = new Map<string, CreatePhase>();
 const subs = new Map<string, Set<() => void>>();
-let subscribed = false;
 
 function notify(worktreeId: string): void {
   const bucket = subs.get(worktreeId);
@@ -29,9 +29,7 @@ function setPhase(worktreeId: string, phase: CreatePhase | null): void {
   notify(worktreeId);
 }
 
-export function ensureLifecycleSubscription(): void {
-  if (subscribed) return;
-  subscribed = true;
+export const ensureLifecycleSubscription = singletonInit(() => {
   window.api.worktrees.onLifecyclePhase((evt) => {
     setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
   });
@@ -48,7 +46,7 @@ export function ensureLifecycleSubscription(): void {
       },
     );
   });
-}
+});
 
 function subscribe(worktreeId: string, cb: () => void): () => void {
   let bucket = subs.get(worktreeId);

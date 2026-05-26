@@ -1,5 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CommitSummary } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 export const BRANCH_COMMITS_PAGE_SIZE = 50;
 
@@ -24,10 +25,10 @@ export function useBranchCommits(
     CommitSummary[],
     Error,
     { pages: CommitSummary[][]; pageParams: number[] },
-    [string, string, string, string | undefined],
+    readonly ["branchCommits", string, string, string | undefined],
     number
   >({
-    queryKey: ["branch-commits", projectId, worktreeId, headHash],
+    queryKey: queryKeys.branchCommits(projectId, worktreeId, headHash),
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
