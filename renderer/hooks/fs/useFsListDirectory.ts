@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { DirectoryListing } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useFsListDirectory(path: string, enabled = true) {
   return useQuery<DirectoryListing>({
-    queryKey: ["fs", "listDirectory", path],
+    queryKey: queryKeys.fsListDirectory(path),
     queryFn: () => window.api.fs.listDirectory(path),
     enabled,
     meta: { errorTitle: "Couldn't read folder" },

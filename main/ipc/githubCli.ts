@@ -1,8 +1,10 @@
 import { ipcMain } from "electron";
-import { z } from "zod";
 import { CHANNELS } from "@shared/channels";
 import {
+  GithubCliProjectPayloadSchema,
+  GithubCliPullRequestDiffPayloadSchema,
   type GithubCliReadiness,
+  GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
   type PullRequest,
   type PullRequestDetail,
@@ -20,20 +22,6 @@ import {
 } from "../githubCli";
 import { findProjectOrThrow } from "../projects";
 
-const ProjectPayloadSchema = z.object({
-  projectId: z.string(),
-});
-
-const WorktreePullRequestPayloadSchema = z.object({
-  projectId: z.string(),
-  branch: z.string(),
-});
-
-const PullRequestDiffPayloadSchema = z.object({
-  projectId: z.string(),
-  number: z.number().int().positive(),
-});
-
 export function registerGithubCliHandlers(): void {
   ipcMain.handle(
     CHANNELS.GithubCliReadiness,
@@ -48,7 +36,7 @@ export function registerGithubCliHandlers(): void {
       _event,
       rawPayload: unknown,
     ): Promise<Record<string, PullRequest>> => {
-      const { projectId } = ProjectPayloadSchema.parse(rawPayload);
+      const { projectId } = GithubCliProjectPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       const map = await listProjectPullRequests(project.path);
       // Maps don't survive structured clone across IPC -- ship as a record.
@@ -60,7 +48,7 @@ export function registerGithubCliHandlers(): void {
     CHANNELS.GithubCliWorktreePullRequest,
     async (_event, rawPayload: unknown): Promise<PullRequestDetail | null> => {
       const { projectId, branch } =
-        WorktreePullRequestPayloadSchema.parse(rawPayload);
+        GithubCliWorktreePullRequestPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return getWorktreePullRequest(project.path, branch);
     },
@@ -69,7 +57,7 @@ export function registerGithubCliHandlers(): void {
   ipcMain.handle(
     CHANNELS.GithubCliRepoMergeConfig,
     async (_event, rawPayload: unknown): Promise<RepoMergeConfig | null> => {
-      const { projectId } = ProjectPayloadSchema.parse(rawPayload);
+      const { projectId } = GithubCliProjectPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return getRepoMergeConfig(project.path);
     },
@@ -94,7 +82,7 @@ export function registerGithubCliHandlers(): void {
     CHANNELS.GithubCliPullRequestDiff,
     async (_event, rawPayload: unknown): Promise<string> => {
       const { projectId, number } =
-        PullRequestDiffPayloadSchema.parse(rawPayload);
+        GithubCliPullRequestDiffPayloadSchema.parse(rawPayload);
       const project = findProjectOrThrow(projectId);
       return getPullRequestDiff({ cwd: project.path, number });
     },

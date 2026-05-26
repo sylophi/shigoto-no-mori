@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { RepoMergeConfig } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 // Per-repo "which merge methods are allowed" settings. Cached
 // aggressively (it almost never changes) and gated on gh readiness; a
@@ -7,7 +8,7 @@ import type { RepoMergeConfig } from "@shared/schemas";
 // allowing every method.
 export function useRepoMergeConfig(projectId: string) {
   return useQuery<RepoMergeConfig | null>({
-    queryKey: ["githubCli", "repoMergeConfig", projectId],
+    queryKey: queryKeys.repoMergeConfig(projectId),
     queryFn: () => window.api.githubCli.repoMergeConfig({ projectId }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,

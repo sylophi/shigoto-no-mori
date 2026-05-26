@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useBranches(projectId: string | null) {
   return useQuery<BranchList>({
-    queryKey: ["branches", projectId],
+    queryKey: queryKeys.branches(projectId),
     queryFn: () => {
       if (!projectId) return { local: [], remote: [] };
       return window.api.projects.listBranches(projectId);
@@ -22,10 +23,14 @@ export function invalidateBranchState(
   queryClient: ReturnType<typeof useQueryClient>,
   projectId: string,
 ) {
-  void queryClient.invalidateQueries({ queryKey: ["branches", projectId] });
-  void queryClient.invalidateQueries({ queryKey: ["worktrees", projectId] });
   void queryClient.invalidateQueries({
-    queryKey: ["defaultBranch", projectId],
+    queryKey: queryKeys.branches(projectId),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.worktrees(projectId),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.defaultBranch(projectId),
   });
 }
 

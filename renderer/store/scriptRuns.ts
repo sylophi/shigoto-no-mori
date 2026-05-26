@@ -11,8 +11,9 @@
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
 import { useSyncExternalStore } from "react";
-import { toast } from "sonner";
 import type { ScriptEvent } from "@shared/schemas";
+import { singletonInit } from "@/lib/singletonInit";
+import { toast } from "@/lib/toast";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
 
 // Re-export the slot codec so existing importers from "@/store/scriptRuns"
@@ -26,7 +27,7 @@ export {
   type ScriptSlot,
 } from "./scriptSlot";
 
-// Max number of pty chunks kept for replay. Chunks vary in size (one
+// Max number of output chunks kept for replay. Chunks vary in size (one
 // "data" event may carry a single byte or a 4 KB burst), so this is a
 // rough ceiling. The console replays the buffer on mount.
 const MAX_CHUNKS = 5_000;
@@ -36,8 +37,8 @@ export type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 export interface ScriptRunState {
   runId: string | null;
   status: RunStatus;
-  // Raw pty output chunks (already utf8-decoded). The console writes
-  // them straight into xterm; we don't try to interpret ANSI here.
+  // Raw output chunks (already utf8-decoded). The console writes them
+  // straight into xterm; we don't try to interpret ANSI here.
   output: string[];
   exitCode: number | null;
   startedAt: number | null;
@@ -74,13 +75,12 @@ const states = new Map<ScriptKey, ScriptRunState>();
 const meta = new Map<ScriptKey, RunMeta>();
 const runIdToKey = new Map<string, ScriptKey>();
 // Events that arrived before the `scripts.run` invoke resolved and let
-// us bind the runId to a key. With a real pty the shell can emit its
-// first bytes before the IPC return reaches the renderer, so buffer
-// here and flush in start() once we know the runId.
+// us bind the runId to a key. A spawned child can emit its first bytes
+// before the IPC return reaches the renderer, so buffer here and flush
+// in start() once we know the runId.
 const pendingByRunId = new Map<string, ScriptEvent[]>();
 const perKeySubs = new Map<ScriptKey, Set<() => void>>();
 const worktreeSubs = new Map<string, Set<() => void>>();
-let subscribed = false;
 
 const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
@@ -251,11 +251,9 @@ function handleEvent(event: ScriptEvent): void {
   pendingByRunId.set(event.runId, bucket);
 }
 
-export function ensureScriptEventSubscription(): void {
-  if (subscribed) return;
-  subscribed = true;
+export const ensureScriptEventSubscription = singletonInit(() => {
   window.api.scripts.onEvent(handleEvent);
-}
+});
 
 interface StartInput {
   key: ScriptKey;
@@ -296,7 +294,7 @@ async function start(input: StartInput): Promise<void> {
 
   setStateWithActivity(input.key, (s) => ({ ...s, runId, status: "running" }));
 
-  // Drain any events the pty produced before we knew the runId. Order
+  // Drain any events the child produced before we knew the runId. Order
   // is preserved (push/iterate FIFO) so xterm replay stays coherent.
   bindRunIdAndDrain(input.key, runId);
 }

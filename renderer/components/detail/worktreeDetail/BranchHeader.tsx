@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/queryKeys";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
 import { useBranches } from "@/hooks/git/useBranches";
@@ -17,7 +18,8 @@ import {
   useRenameBranch,
   useWorktrees,
 } from "@/hooks/worktrees/useWorktrees";
-import { type BranchEntry, scoreMatch } from "@/components/ui/branch-combobox";
+import { type BranchEntry } from "@/components/ui/branch-combobox";
+import { scoreMatch } from "@/lib/fuzzyMatch";
 import { sanitizeBranchName } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
@@ -216,10 +218,10 @@ function BranchSwitcher({
           setQuery("");
           checkout.reset();
           void queryClient.invalidateQueries({
-            queryKey: ["branches", worktree.projectId],
+            queryKey: queryKeys.branches(worktree.projectId),
           });
           void queryClient.invalidateQueries({
-            queryKey: ["worktrees", worktree.projectId],
+            queryKey: queryKeys.worktrees(worktree.projectId),
           });
         }
       }}

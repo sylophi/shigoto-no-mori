@@ -614,6 +614,20 @@ export const GithubCliReadinessSchema = z.object({
   authed: z.boolean(),
 });
 
+export const GithubCliProjectPayloadSchema = z.object({
+  projectId: z.string(),
+});
+
+export const GithubCliWorktreePullRequestPayloadSchema = z.object({
+  projectId: z.string(),
+  branch: z.string(),
+});
+
+export const GithubCliPullRequestDiffPayloadSchema = z.object({
+  projectId: z.string(),
+  number: z.number().int().positive(),
+});
+
 export const MergePullRequestPayloadSchema = z.object({
   projectId: z.string(),
   number: z.number().int().positive(),
@@ -779,6 +793,11 @@ export const GetPackageScriptSortPayloadSchema = z.object({
 export const SetPackageScriptSortPayloadSchema = z.object({
   projectId: z.string(),
   mode: PackageScriptSortModeSchema,
+});
+
+export const PortPoolIsActivePayloadSchema = z.object({
+  projectId: z.string(),
+  worktreeId: z.string(),
 });
 
 export const LaunchToolMenuEntrySchema = z.object({

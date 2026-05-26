@@ -10,6 +10,9 @@ import {
   ReadShigomoriPayloadSchema,
   type ShigomoriConfig,
 } from "@shared/schemas";
+// ReadShigomoriPayloadSchema is reused here because LaunchersForProject
+// has the same `{ projectId }` shape as ShigomoriRead; the read handler
+// itself lives in main/ipc/shigomori.ts.
 import { findWorktreeIdentityOrThrow } from "../git";
 import { readGlobalConfig } from "../config/global";
 import {
@@ -100,15 +103,6 @@ export async function getLaunchersForProject(
 }
 
 export function registerLauncherHandlers(): void {
-  ipcMain.handle(
-    CHANNELS.ShigomoriRead,
-    async (_event, rawPayload: unknown): Promise<ShigomoriConfig | null> => {
-      const { projectId } = ReadShigomoriPayloadSchema.parse(rawPayload);
-      const project = findProjectOrThrow(projectId);
-      return readShigomoriConfig(project.id);
-    },
-  );
-
   ipcMain.handle(
     CHANNELS.LaunchersDetect,
     async (): Promise<DetectedLauncher[]> =>

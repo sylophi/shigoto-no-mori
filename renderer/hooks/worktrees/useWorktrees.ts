@@ -5,17 +5,18 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
 import type {
   CreateWorktreeResult,
   DeleteWorktreeResult,
   Project,
   Worktree,
 } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
+import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
 
 export function useWorktrees(projectId: string | null) {
   return useQuery<Worktree[]>({
-    queryKey: ["worktrees", projectId],
+    queryKey: queryKeys.worktrees(projectId),
     queryFn: () => {
       if (!projectId) return [];
       return window.api.worktrees.list(projectId);
@@ -33,7 +34,7 @@ export function useWorktrees(projectId: string | null) {
 export function useAllProjectWorktrees(projects: Project[], enabled = true) {
   return useQueries({
     queries: projects.map((project) => ({
-      queryKey: ["worktrees", project.id],
+      queryKey: queryKeys.worktrees(project.id),
       queryFn: () => window.api.worktrees.list(project.id),
       enabled: enabled && project.pathExists !== false,
       meta: { silentError: true },
@@ -55,7 +56,7 @@ export function useCreateWorktree() {
     mutationFn: (input) => window.api.worktrees.create(input),
     onSuccess: (_result, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
     },
     meta: { errorTitle: "Couldn't create worktree" },
@@ -74,7 +75,7 @@ export function useConvertExternalWorktree() {
       mutationFn: (input) => window.api.worktrees.convertExternal(input),
       onSuccess: (_result, vars) => {
         void queryClient.invalidateQueries({
-          queryKey: ["worktrees", vars.projectId],
+          queryKey: queryKeys.worktrees(vars.projectId),
         });
         // The old external worktree's id no longer maps to anything on disk
         // -- drop any cached script runs so they don't linger in the UI.
@@ -98,7 +99,7 @@ export function useRelocateWorktree() {
     mutationFn: (input) => window.api.worktrees.relocate(input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
       // The relocated worktree's id changes (it's derived from path), so
       // any cached script runs keyed by the pre-move id are stranded.
@@ -132,12 +133,12 @@ export function useDeleteWorktree() {
         // first-worktree resolver) don't read the stale list during the
         // invalidate's background refetch.
         queryClient.setQueryData<Worktree[]>(
-          ["worktrees", vars.projectId],
+          queryKeys.worktrees(vars.projectId),
           (current) =>
             current ? current.filter((w) => w.id !== vars.worktreeId) : current,
         );
         void queryClient.invalidateQueries({
-          queryKey: ["worktrees", vars.projectId],
+          queryKey: queryKeys.worktrees(vars.projectId),
         });
         clearScriptRunsForWorktree(vars.worktreeId);
       }
@@ -173,7 +174,7 @@ export function useSetShelved() {
       // Optimistic flip so the row's appearance and the sidebar group
       // both update before the IPC round-trip lands.
       queryClient.setQueryData<Worktree[]>(
-        ["worktrees", vars.projectId],
+        queryKeys.worktrees(vars.projectId),
         (current) =>
           current
             ? current.map((w) =>
@@ -188,14 +189,14 @@ export function useSetShelved() {
       // Worktree so cache state stays accurate without an N-git-call
       // round trip.
       queryClient.setQueryData<Worktree[]>(
-        ["worktrees", vars.projectId],
+        queryKeys.worktrees(vars.projectId),
         (current) => current?.map((w) => (w.id === data.id ? data : w)),
       );
     },
     onError: (_err, vars) => {
       // Roll the stuck-optimistic row back to truth.
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
     },
     meta: { errorTitle: "Couldn't update shelved state" },
@@ -214,10 +215,10 @@ export function useRenameBranch() {
     mutationFn: (input) => window.api.worktrees.renameBranch(input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
       void queryClient.invalidateQueries({
-        queryKey: ["branches", vars.projectId],
+        queryKey: queryKeys.branches(vars.projectId),
       });
     },
     // The inline rename input surfaces the error next to the field; a
@@ -237,7 +238,7 @@ export function useWorktreeDiff(
   worktreeId: string | undefined,
 ) {
   return useQuery<string>({
-    queryKey: ["worktree-diff", projectId, worktreeId],
+    queryKey: queryKeys.worktreeDiff(projectId, worktreeId),
     queryFn: () => {
       if (!worktreeId) return "";
       return window.api.worktrees.diff({ projectId, worktreeId });
@@ -258,7 +259,7 @@ export function useCommitDiff(
   hash: string,
 ) {
   return useQuery<string>({
-    queryKey: ["commit-diff", projectId, worktreeId, hash],
+    queryKey: queryKeys.commitDiff(projectId, worktreeId, hash),
     queryFn: () => {
       if (!worktreeId) return "";
       return window.api.worktrees.commitDiff({ projectId, worktreeId, hash });
@@ -275,10 +276,10 @@ export function useCheckoutBranch() {
     mutationFn: (input) => window.api.worktrees.checkoutBranch(input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
       void queryClient.invalidateQueries({
-        queryKey: ["branches", vars.projectId],
+        queryKey: queryKeys.branches(vars.projectId),
       });
     },
     // The branch combobox surfaces the error inline so the user can pick a
@@ -304,7 +305,7 @@ function useSyncMutation(
     mutationFn: apiMethod,
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: ["worktrees", vars.projectId],
+        queryKey: queryKeys.worktrees(vars.projectId),
       });
     },
     meta: { errorTitle },

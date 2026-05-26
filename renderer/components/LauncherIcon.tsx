@@ -3,7 +3,7 @@
 // each app's bundle; the rest fall back to svgl SVGs.
 import { Sparkles } from "lucide-react";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
-import { JetbrainsSolid } from "@/components/ui/svgs/jetbrainsSolid";
+import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
 import { Phpstorm } from "@/components/ui/svgs/phpstorm";
 import { Pycharm } from "@/components/ui/svgs/pycharm";
 import { Rider } from "@/components/ui/svgs/rider";

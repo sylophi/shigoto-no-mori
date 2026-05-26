@@ -1,16 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ShigomoriWorktreeData } from "@shared/schemas";
-
-function queryKey(projectId: string | null, worktreeId: string | null) {
-  return ["worktreeData", projectId, worktreeId] as const;
-}
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useWorktreeData(
   projectId: string | null,
   worktreeId: string | null,
 ) {
   return useQuery<ShigomoriWorktreeData | null>({
-    queryKey: queryKey(projectId, worktreeId),
+    queryKey: queryKeys.worktreeData(projectId, worktreeId),
     queryFn: () => {
       if (!projectId || !worktreeId) return null;
       return window.api.worktreeData.read(projectId, worktreeId);
@@ -35,7 +32,7 @@ export function useWorktreeDataWrite() {
     },
     onSuccess: ({ projectId, worktreeId }) => {
       queryClient.invalidateQueries({
-        queryKey: queryKey(projectId, worktreeId),
+        queryKey: queryKeys.worktreeData(projectId, worktreeId),
       });
     },
     meta: { errorTitle: "Couldn't save worktree state" },

@@ -26,18 +26,16 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
-import { useRepoMergeConfig } from "@/hooks/git/useRepoMergeConfig";
+import { useRepoMergeConfig } from "@/hooks/githubCli/useRepoMergeConfig";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import {
   useDeleteWorktree,
   useWorktrees,
 } from "@/hooks/worktrees/useWorktrees";
-import {
-  useWorktreePullRequest,
-  worktreePullRequestKey,
-} from "@/hooks/worktrees/useWorktreePullRequest";
+import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { cn } from "@/lib/utils";
+import { queryKeys } from "@/lib/queryKeys";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { notifyError } from "@/lib/toast";
 import {
@@ -101,7 +99,10 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
 function PullRequestRefreshIndicator({ worktree }: { worktree: Worktree }) {
   const fetching =
     useIsFetching({
-      queryKey: worktreePullRequestKey(worktree.projectId, worktree.branch),
+      queryKey: queryKeys.worktreePullRequest(
+        worktree.projectId,
+        worktree.branch,
+      ),
     }) > 0;
   const visible = useDelayedFlag(fetching, REFRESH_INDICATOR_DELAY_MS);
   if (!visible) return null;

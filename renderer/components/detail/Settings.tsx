@@ -28,7 +28,7 @@ import {
   useGlobalConfig,
   useGlobalConfigWrite,
 } from "@/hooks/config/useGlobalConfig";
-import { useGithubCliReadiness } from "@/hooks/system/useGithubCliReadiness";
+import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { cn } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -44,7 +44,7 @@ import type {
   Theme,
   UpdaterState,
 } from "@shared/schemas";
-import { LauncherIcon } from "@/lib/launcherIcon";
+import { LauncherIcon } from "@/components/LauncherIcon";
 import { CustomLauncherInput } from "./CustomLauncherInput";
 
 export function Settings() {

@@ -1,11 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { GlobalConfig } from "@shared/schemas";
-
-const QUERY_KEY = ["globalConfig"] as const;
+import { queryKeys } from "@/lib/queryKeys";
 
 export function useGlobalConfig() {
   return useQuery<GlobalConfig>({
-    queryKey: QUERY_KEY,
+    queryKey: queryKeys.globalConfig(),
     queryFn: () => window.api.globalConfig.read(),
     meta: { errorTitle: "Couldn't load settings" },
   });
@@ -18,13 +17,13 @@ export function useGlobalConfigWrite() {
       await window.api.globalConfig.write(config);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: queryKeys.globalConfig() });
       // Launcher catalogs for every project depend on global custom launchers.
-      queryClient.invalidateQueries({ queryKey: ["launchers"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.launchersAll() });
       // Toggling the GitHub CLI integration flips both readiness gating
       // and the project PR list -- refetch immediately rather than wait
       // for the next focus/mount.
-      queryClient.invalidateQueries({ queryKey: ["githubCli"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.githubCliAll() });
     },
     meta: { errorTitle: "Couldn't save settings" },
   });

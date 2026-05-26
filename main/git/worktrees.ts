@@ -165,17 +165,20 @@ export async function listCommits(
   }
 }
 
-export interface WorktreeIdentity {
-  id: string;
-  projectId: string;
-  // Directory basename — stable identity, separate from the branch.
-  name: string;
-  branch: string;
-  path: string;
-  isPrimary: boolean;
-  isExternal: boolean;
-  detached: boolean;
-}
+// Worktree identity: the subset of fields the main process needs to
+// route operations (path, ids, layout flags) without doing the extra
+// git work to populate ahead/behind/recentCommits/etc.
+export type WorktreeIdentity = Pick<
+  Worktree,
+  | "id"
+  | "projectId"
+  | "name"
+  | "branch"
+  | "path"
+  | "isPrimary"
+  | "isExternal"
+  | "detached"
+>;
 
 // Derived purely from the absolute worktree path so the same path always
 // produces the same id, anywhere. Paths are globally unique on a

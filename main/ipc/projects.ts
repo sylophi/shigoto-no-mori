@@ -1,6 +1,7 @@
 import { dialog, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import { CHANNELS } from "@shared/channels";
+import { reorderProjects } from "@shared/reorder";
 import {
   AddProjectPayloadSchema,
   type BranchList,
@@ -43,29 +44,6 @@ import { writeKey } from "../config/store";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);
-}
-
-function reorderProjects(
-  projects: Project[],
-  draggedId: string,
-  targetId: string,
-  position: "before" | "after",
-): Project[] {
-  if (draggedId === targetId) return projects;
-
-  const draggedIndex = projects.findIndex((p) => p.id === draggedId);
-  if (draggedIndex < 0) return projects;
-
-  const next = [...projects];
-  const [dragged] = next.splice(draggedIndex, 1);
-  if (!dragged) return projects;
-
-  const targetIndex = next.findIndex((p) => p.id === targetId);
-  if (targetIndex < 0) return projects;
-
-  const insertIndex = position === "after" ? targetIndex + 1 : targetIndex;
-  next.splice(insertIndex, 0, dragged);
-  return next;
 }
 
 export function registerProjectHandlers(): void {

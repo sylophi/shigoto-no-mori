@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PackageScriptSortMode } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 
 const DEFAULT_MODE: PackageScriptSortMode = "frequent";
 
 export function usePackageScriptSort(projectId: string | null) {
   return useQuery<PackageScriptSortMode>({
-    queryKey: ["packageScriptSort", projectId],
+    queryKey: queryKeys.packageScriptSort(projectId),
     queryFn: () => {
       if (!projectId) return DEFAULT_MODE;
       return window.api.packageScripts.getSort(projectId);
@@ -29,19 +30,18 @@ export function useSetPackageScriptSort(projectId: string | null) {
     },
     onMutate: async (mode) => {
       await queryClient.cancelQueries({
-        queryKey: ["packageScriptSort", projectId],
+        queryKey: queryKeys.packageScriptSort(projectId),
       });
-      const previous = queryClient.getQueryData<PackageScriptSortMode>([
-        "packageScriptSort",
-        projectId,
-      ]);
-      queryClient.setQueryData(["packageScriptSort", projectId], mode);
+      const previous = queryClient.getQueryData<PackageScriptSortMode>(
+        queryKeys.packageScriptSort(projectId),
+      );
+      queryClient.setQueryData(queryKeys.packageScriptSort(projectId), mode);
       return { previous };
     },
     onError: (_err, _mode, ctx) => {
       if (ctx?.previous !== undefined) {
         queryClient.setQueryData(
-          ["packageScriptSort", projectId],
+          queryKeys.packageScriptSort(projectId),
           ctx.previous,
         );
       }

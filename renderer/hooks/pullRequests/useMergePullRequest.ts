@@ -1,10 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeMethod, PullRequestDetail } from "@shared/schemas";
+import { queryKeys } from "@/lib/queryKeys";
 import { invalidateBranchState } from "../git/useBranches";
-import {
-  invalidateAllWorktreePullRequests,
-  worktreePullRequestKey,
-} from "../worktrees/useWorktreePullRequest";
+import { invalidateAllWorktreePullRequests } from "../worktrees/useWorktreePullRequest";
 
 interface MergeVariables {
   projectId: string;
@@ -17,7 +15,7 @@ interface MergeVariables {
 }
 
 type Context = {
-  key: ReturnType<typeof worktreePullRequestKey>;
+  key: ReturnType<typeof queryKeys.worktreePullRequest>;
   prev: PullRequestDetail | null | undefined;
 };
 
@@ -27,7 +25,7 @@ export function useMergePullRequest() {
     mutationFn: ({ projectId, number, method }) =>
       window.api.githubCli.mergePullRequest({ projectId, number, method }),
     onMutate: async ({ projectId, branch }) => {
-      const key = worktreePullRequestKey(projectId, branch);
+      const key = queryKeys.worktreePullRequest(projectId, branch);
       // Cancel in-flight refetches so they don't clobber the
       // optimistic value before the mutation lands.
       await qc.cancelQueries({ queryKey: key });
@@ -52,7 +50,7 @@ export function useMergePullRequest() {
       invalidateAllWorktreePullRequests(qc);
       invalidateBranchState(qc, vars.projectId);
       void qc.invalidateQueries({
-        queryKey: ["shigomori", vars.projectId],
+        queryKey: queryKeys.shigomoriConfig(vars.projectId),
       });
     },
     // The section surfaces failures inline; a toast on top would be noise.

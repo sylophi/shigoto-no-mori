@@ -1,15 +1,14 @@
 import { useQuery, type useQueryClient } from "@tanstack/react-query";
 import type { PullRequest } from "@shared/schemas";
-
-export function projectPullRequestsKey(projectId: string) {
-  return ["githubCli", "projectPullRequests", projectId] as const;
-}
+import { queryKeys } from "@/lib/queryKeys";
 
 export function invalidateProjectPullRequests(
   qc: ReturnType<typeof useQueryClient>,
   projectId: string,
 ) {
-  void qc.invalidateQueries({ queryKey: projectPullRequestsKey(projectId) });
+  void qc.invalidateQueries({
+    queryKey: queryKeys.projectPullRequests(projectId),
+  });
 }
 
 // Branch -> PR for a project, feeding the sidebar dots. The background
@@ -19,7 +18,7 @@ export function invalidateProjectPullRequests(
 // worktree page reads its PR through useWorktreePullRequest instead.
 export function useProjectPullRequests(projectId: string) {
   return useQuery<Record<string, PullRequest>>({
-    queryKey: projectPullRequestsKey(projectId),
+    queryKey: queryKeys.projectPullRequests(projectId),
     queryFn: () => window.api.githubCli.projectPullRequests({ projectId }),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
