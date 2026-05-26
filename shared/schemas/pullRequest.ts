@@ -124,21 +124,21 @@ export const GithubCliReadinessSchema = z.object({
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 
 export const GithubCliProjectPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const GithubCliWorktreePullRequestPayloadSchema = z.object({
-  projectId: z.string(),
-  branch: z.string(),
+  projectId: z.string().min(1),
+  branch: z.string().min(1),
 });
 
 export const GithubCliPullRequestDiffPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   number: z.number().int().positive(),
 });
 
 export const MergePullRequestPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   number: z.number().int().positive(),
   method: MergeMethodSchema,
 });
@@ -147,7 +147,7 @@ export type MergePullRequestPayload = z.infer<
 >;
 
 export const SetPullRequestDraftPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   number: z.number().int().positive(),
   draft: z.boolean(),
 });

@@ -109,11 +109,11 @@ export const WriteGlobalConfigPayloadSchema = z.object({
 });
 
 export const ReadShigomoriPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const WriteShigomoriPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   config: ShigomoriConfigSchema,
 });
 
@@ -125,12 +125,12 @@ export const WriteShigomoriPayloadSchema = z.object({
 const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 
 export const ReadWorktreeDataPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
 });
 
 export const WriteWorktreeDataPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
   data: ShigomoriWorktreeDataSchema,
 });

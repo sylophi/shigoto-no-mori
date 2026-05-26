@@ -15,7 +15,7 @@ export type CommitSummary = z.infer<typeof CommitSummarySchema>;
 
 export const WorktreeSchema = z.object({
   id: z.string(),
-  projectId: z.string(),
+  projectId: z.string().min(1),
   // The worktree's identity — directory basename. Stable across branch
   // checkouts/renames; for shigomori-created worktrees it's a randomly
   // picked animal name.
@@ -112,11 +112,11 @@ export function deriveRemoteSyncState(
 }
 
 export const ListWorktreesPayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
 });
 
 export const CreateWorktreePayloadSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().min(1),
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
   worktreeName: z.string().min(1).optional(),
@@ -158,8 +158,8 @@ export const CreatePhaseSchema = z.enum([
 export type CreatePhase = z.infer<typeof CreatePhaseSchema>;
 
 export const WorktreeLifecyclePhaseSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   phase: z.union([CreatePhaseSchema, z.literal("idle")]),
 });
 export type WorktreeLifecyclePhase = z.infer<
@@ -167,8 +167,8 @@ export type WorktreeLifecyclePhase = z.infer<
 >;
 
 export const WorktreeCarryOverCompleteSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   report: CarryOverReportSchema,
 });
 export type WorktreeCarryOverComplete = z.infer<
@@ -176,40 +176,40 @@ export type WorktreeCarryOverComplete = z.infer<
 >;
 
 export const ConvertExternalWorktreePayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
 });
 
 export const RelocateWorktreePayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   // Absolute target directory for the moved worktree (parent is
   // created if it doesn't exist).
   destinationPath: z.string().min(1),
 });
 
 export const DeleteWorktreePayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   force: z.boolean().optional(),
   skipCleanup: z.boolean().optional(),
 });
 
 export const RenameBranchPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   newBranch: z.string().min(1),
 });
 
 export const SetShelvedPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   shelved: z.boolean(),
 });
 
 export const CheckoutBranchPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   branch: z.string().min(1),
 });
 
@@ -218,24 +218,24 @@ export const CheckoutBranchPayloadSchema = z.object({
 // /pull-and-push. The result is the refreshed Worktree so the renderer
 // can update its UI without an extra round trip.
 export const SyncWorktreePayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
 });
 
 export const WorktreeDiffPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
 });
 
 export const CommitDiffPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   hash: z.string().min(1),
 });
 
 export const ListCommitsPayloadSchema = z.object({
-  projectId: z.string(),
-  worktreeId: z.string(),
+  projectId: z.string().min(1),
+  worktreeId: z.string().min(1),
   // `git log --skip=N -n COUNT`; the renderer pages through with skip
   // = pageIndex * count and stops when fewer than `count` come back.
   skip: z.number().int().nonnegative(),
@@ -245,7 +245,7 @@ export const ListCommitsPayloadSchema = z.object({
 export const CleanupErrorSchema = z.object({
   phase: z.enum(["teardown", "portPoolRelease"]),
   exitCode: z.number().nullable(),
-  runId: z.string(),
+  runId: z.string().min(1),
 });
 export type CleanupError = z.infer<typeof CleanupErrorSchema>;
 
