@@ -88,6 +88,21 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
   return inflightDeleteIds;
 }
 
+export interface BusyOperations {
+  runningScripts: number;
+  inflightDeletes: number;
+}
+
+// Lifecycle scripts (setup, teardown, port-pool) all spawn through
+// startScript, so runningScripts covers package scripts plus the
+// create/delete lifecycles in a single count.
+export function getBusyOperations(): BusyOperations {
+  return {
+    runningScripts: runningScripts.size,
+    inflightDeletes: inflightDeleteIds.size,
+  };
+}
+
 export function markShuttingDown(): void {
   shuttingDown = true;
 }
