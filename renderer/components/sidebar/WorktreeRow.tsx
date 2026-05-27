@@ -1,27 +1,18 @@
-import {
-  ArrowDown,
-  ArrowDownUp,
-  ArrowUp,
-  CloudUpload,
-  FileDiff,
-  GitCompareArrows,
-  Rocket,
-  Terminal,
-  Trash2,
-} from "lucide-react";
-import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { describePullRequest, type PullRequestTone } from "@/lib/pullRequest";
+import { describePullRequest } from "@/lib/pullRequest";
 import {
   useWorktreeScriptActivity,
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
-import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
+import type { Worktree } from "@shared/schemas";
+import { ActivityIcon } from "./ActivityIcon";
+import { StatusIndicator } from "./StatusIndicator";
+import { StatusPill } from "./StatusPill";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -123,31 +114,6 @@ function describeRow(
   return undefined;
 }
 
-function ActivityIcon({ kind }: { kind: ScriptActivityKind }) {
-  if (kind === "setup") {
-    return (
-      <Rocket
-        aria-label="Setup running"
-        className="size-3 shrink-0 animate-pulse text-emerald-500"
-      />
-    );
-  }
-  if (kind === "teardown") {
-    return (
-      <Trash2
-        aria-label="Teardown running"
-        className="size-3 shrink-0 animate-pulse text-destructive"
-      />
-    );
-  }
-  return (
-    <Terminal
-      aria-label="Script running"
-      className="size-3 shrink-0 animate-pulse text-violet-500"
-    />
-  );
-}
-
 function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
   const { data: prs } = useProjectPullRequests(worktree.projectId);
   const pr = prs?.[worktree.branch];
@@ -160,130 +126,5 @@ function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
       title={`${label} #${pr.number}`}
       aria-label={`${label} #${pr.number}`}
     />
-  );
-}
-
-const TONE_CLASSES: Record<PillTone, string> = {
-  emerald: "text-emerald-500",
-  violet: "text-violet-500",
-  rose: "text-rose-500",
-  slate: "text-muted-foreground",
-  amber: "text-amber-500",
-  sky: "text-sky-500",
-  indigo: "text-indigo-500",
-};
-
-// Superset of PullRequestTone so the PR badge and sync-state badges
-// share one pill primitive. Add new tones as new states show up.
-type PillTone = PullRequestTone | "amber" | "sky" | "indigo";
-
-interface StatusPillProps {
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  tone: PillTone;
-  title: string;
-  "aria-label": string;
-  children?: ReactNode;
-}
-
-// Compact icon-and-optional-count badge. Numeric children get tabular
-// figures so adjacent pills don't shift width as counts change.
-function StatusPill({
-  icon: Icon,
-  tone,
-  title,
-  "aria-label": ariaLabel,
-  children,
-}: StatusPillProps) {
-  return (
-    <span
-      title={title}
-      aria-label={ariaLabel}
-      className={cn(
-        "inline-flex shrink-0 items-center text-[10px]",
-        children != null && "tabular gap-0.5",
-        TONE_CLASSES[tone],
-      )}
-    >
-      <Icon aria-hidden className="size-3" />
-      {children}
-    </span>
-  );
-}
-
-function StatusIndicator({ worktree }: { worktree: Worktree }) {
-  if (worktree.changedCount > 0) {
-    const noun = worktree.changedCount === 1 ? "file" : "files";
-    const label = `${worktree.changedCount} ${noun} changed`;
-    return (
-      <StatusPill icon={FileDiff} tone="amber" title={label} aria-label={label}>
-        {worktree.changedCount}
-      </StatusPill>
-    );
-  }
-  const state = deriveRemoteSyncState(worktree);
-  if (state.kind === "detached" || state.kind === "synced") return null;
-
-  // Each remote-sync state has the same compact shape: icon + (optional)
-  // count, tone-colored. The detail header carries the actions and full
-  // labels; this is just a "needs attention" signal for the sidebar.
-  if (state.kind === "publish") {
-    // Without a remote there's no action to take, so the icon would just be
-    // noise on every "personal" repo without an origin. Detail header still
-    // shows the disabled Publish button for discoverability.
-    if (!state.canPublish) return null;
-    return (
-      <StatusPill
-        icon={CloudUpload}
-        tone="violet"
-        title="Branch not yet published"
-        aria-label="Unpublished branch"
-      />
-    );
-  }
-  if (state.kind === "ahead") {
-    return (
-      <StatusPill
-        icon={ArrowUp}
-        tone="emerald"
-        title={`${state.ahead} commit${state.ahead === 1 ? "" : "s"} to push`}
-        aria-label={`${state.ahead} ahead`}
-      >
-        {state.ahead}
-      </StatusPill>
-    );
-  }
-  if (state.kind === "behind") {
-    return (
-      <StatusPill
-        icon={ArrowDown}
-        tone="sky"
-        title={`${state.behind} commit${state.behind === 1 ? "" : "s"} to pull`}
-        aria-label={`${state.behind} behind`}
-      >
-        {state.behind}
-      </StatusPill>
-    );
-  }
-  if (state.kind === "pullAndPush") {
-    return (
-      <StatusPill
-        icon={ArrowDownUp}
-        tone="indigo"
-        title={`${state.ahead} ahead, ${state.behind} behind -- mergeable`}
-        aria-label={`${state.ahead} ahead, ${state.behind} behind`}
-      >
-        {state.ahead}/{state.behind}
-      </StatusPill>
-    );
-  }
-  return (
-    <StatusPill
-      icon={GitCompareArrows}
-      tone="rose"
-      title={`Diverged: ${state.ahead} ahead, ${state.behind} behind`}
-      aria-label={`Diverged ${state.ahead}/${state.behind}`}
-    >
-      {state.ahead}/{state.behind}
-    </StatusPill>
   );
 }

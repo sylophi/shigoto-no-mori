@@ -3,7 +3,8 @@ import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { pullRequestDiffRoute } from "@/router";
-import { DiffNotFound, DiffView } from "./DiffView";
+import { DiffNotFound } from "./DiffNotFound";
+import { DiffView } from "./DiffView";
 
 export function PullRequestDiff() {
   const { projectId, worktreeId } = pullRequestDiffRoute.useParams();

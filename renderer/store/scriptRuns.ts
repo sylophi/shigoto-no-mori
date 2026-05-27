@@ -14,6 +14,7 @@ import { useSyncExternalStore } from "react";
 import type { ScriptEvent } from "@shared/schemas";
 import { singletonInit } from "@/lib/singletonInit";
 import { toast } from "@/lib/toast";
+import { assertNever } from "@/lib/utils";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
 
 // Re-export the slot codec so existing importers from "@/store/scriptRuns"
@@ -31,6 +32,11 @@ export {
 // "data" event may carry a single byte or a 4 KB burst), so this is a
 // rough ceiling. The console replays the buffer on mount.
 const MAX_CHUNKS = 5_000;
+
+// "started" is handled separately by handleEvent (which binds the runId
+// before delegating to applyEvent). Narrowing the post-start union lets
+// applyEvent's switch stay exhaustive with assertNever as the safety net.
+type PostStartEvent = Exclude<ScriptEvent, { kind: "started" }>;
 
 export type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 
@@ -77,8 +83,9 @@ const runIdToKey = new Map<string, ScriptKey>();
 // Events that arrived before the `scripts.run` invoke resolved and let
 // us bind the runId to a key. A spawned child can emit its first bytes
 // before the IPC return reaches the renderer, so buffer here and flush
-// in start() once we know the runId.
-const pendingByRunId = new Map<string, ScriptEvent[]>();
+// in start() once we know the runId. "started" events are dispatched
+// directly by handleEvent, so they never reach this buffer.
+const pendingByRunId = new Map<string, PostStartEvent[]>();
 const perKeySubs = new Map<ScriptKey, Set<() => void>>();
 const worktreeSubs = new Map<string, Set<() => void>>();
 
@@ -140,31 +147,34 @@ function exitSentinel(code: number | null): string {
   return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
 }
 
-function applyEvent(key: ScriptKey, event: ScriptEvent): void {
-  if (event.kind === "data") {
-    setStateWithActivity(key, (s) => appendChunk(s, event.data));
-    return;
-  }
-  if (event.kind === "error") {
-    setStateWithActivity(key, (s) => ({
-      ...appendChunk(s, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`),
-      status: "errored",
-    }));
-    return;
-  }
-  if (event.kind === "exit") {
-    const m = meta.get(key);
-    m?.exitDeferred?.resolve(event.code);
-    if (m) meta.set(key, { ...m, exitDeferred: null });
-    runIdToKey.delete(event.runId);
-    setStateWithActivity(key, (s) => ({
-      ...appendChunk(s, exitSentinel(event.code)),
-      exitCode: event.code,
-      status: "exited",
-      endedAt: Date.now(),
-      cancelling: false,
-    }));
-    if (event.code !== 0 && m) toastLifecycleFailure(m.slotKind, event.code);
+function applyEvent(key: ScriptKey, event: PostStartEvent): void {
+  switch (event.kind) {
+    case "data":
+      setStateWithActivity(key, (s) => appendChunk(s, event.data));
+      return;
+    case "error":
+      setStateWithActivity(key, (s) => ({
+        ...appendChunk(s, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`),
+        status: "errored",
+      }));
+      return;
+    case "exit": {
+      const m = meta.get(key);
+      m?.exitDeferred?.resolve(event.code);
+      if (m) meta.set(key, { ...m, exitDeferred: null });
+      runIdToKey.delete(event.runId);
+      setStateWithActivity(key, (s) => ({
+        ...appendChunk(s, exitSentinel(event.code)),
+        exitCode: event.code,
+        status: "exited",
+        endedAt: Date.now(),
+        cancelling: false,
+      }));
+      if (event.code !== 0 && m) toastLifecycleFailure(m.slotKind, event.code);
+      return;
+    }
+    default:
+      assertNever(event);
   }
 }
 
