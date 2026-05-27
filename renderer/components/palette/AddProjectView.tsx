@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Command } from "cmdk";
-import finderIconUrl from "@/assets/app-icons/finder.png";
+import finderIconUrl from "@/app-icons/finder.png";
 import {
   ArrowDown,
   ArrowLeft,
