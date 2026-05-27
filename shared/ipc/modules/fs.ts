@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { invoke } from "@shared/ipc/contract";
 import {
   DirectoryListingSchema,
@@ -32,3 +33,13 @@ export const fsContract = {
 } as const;
 
 export type FsContract = typeof fsContract;
+
+const client = buildClient(fsContract);
+
+export const fs = {
+  listDirectory: (path: string) => client.listDirectory({ path }),
+  scanForGitRepos: (path: string) => client.scanForGitRepos({ path }),
+  isGitRepo: (path: string) => client.isGitRepo({ path }),
+  stat: (path: string) => client.stat({ path }),
+  listEntries: (path: string) => client.listEntries({ path }),
+} as const;

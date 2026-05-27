@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { broadcast } from "@shared/ipc/contract";
 
 export const paletteContract = {
@@ -7,3 +8,10 @@ export const paletteContract = {
 } as const;
 
 export type PaletteContract = typeof paletteContract;
+
+const client = buildClient(paletteContract);
+
+export const palette = {
+  onToggle: client.toggle,
+  onAddProject: client.addProject,
+} as const;
