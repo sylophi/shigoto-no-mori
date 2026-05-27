@@ -1,3 +1,7 @@
+// This module owns the only sanctioned calls to `webContents.send` in
+// main/. Anything else that needs to push to the renderer should go
+// through `broadcast` / `broadcastAll` below so the payload runs through
+// the contract's payload schema before it crosses the bridge.
 import {
   app,
   BrowserWindow,

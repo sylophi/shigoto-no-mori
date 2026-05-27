@@ -20,9 +20,6 @@
     "lint": "oxlint .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "check-layering": "node scripts/check-layering.mjs",
-    "check-layering:strict": "node scripts/check-layering.mjs --strict",
-    "check-layering:fixtures": "node scripts/check-layering.mjs --fixtures",
     "extract-icon": "scripts/extract-app-icon.sh",
     "seed": "node scripts/seed-test-data.mts",
     "postinstall": "node scripts/copy-material-icons.mjs"
@@ -75,7 +72,6 @@
     "oxlint": "1.63.0",
     "react-grab": "^0.1.33",
     "tailwindcss": "^4.2.1",
-    "tinyglobby": "^0.2.16",
     "typescript": "~5.9.3",
     "vite": "^8.0.0"
   }
