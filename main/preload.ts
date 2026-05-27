@@ -3,8 +3,8 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
+import { projectsContract } from "@shared/modules/projects/contract";
 import type {
-  BranchList,
   CommitSummary,
   CreateWorktreeResult,
   DeleteWorktreeResult,
@@ -19,8 +19,6 @@ import type {
   MergeMethod,
   PackageScriptSortMode,
   PackageScriptsResult,
-  Project,
-  ProjectIcon,
   PullRequest,
   PullRequestDetail,
   RepoMergeConfig,
@@ -35,6 +33,11 @@ import type {
   WorktreeCarryOverComplete,
   WorktreeLifecyclePhase,
 } from "@shared/schemas";
+import { buildClient } from "./preload/buildClient";
+
+// Preserves the historical scalar-arg renderer API (e.g. `add(path)`)
+// while routing through the contract; renderer hooks keep their signatures.
+const projectsClient = buildClient(projectsContract);
 
 // Subscribes to a main → renderer broadcast channel and returns the
 // unsubscribe. `T = void` covers no-payload channels without a separate
@@ -49,26 +52,23 @@ function subscribe<T = void>(channel: string) {
 
 const api = {
   projects: {
-    list: (): Promise<Project[]> => ipcRenderer.invoke(CHANNELS.ProjectsList),
-    add: (path: string): Promise<Project> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsAdd, { path }),
-    remove: (id: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsRemove, { id }),
+    list: () => projectsClient.list(),
+    add: (path: string) => projectsClient.add({ path }),
+    remove: (id: string) => projectsClient.remove({ id }),
     reorder: (input: {
       draggedId: string;
       targetId: string;
       position: "before" | "after";
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.ProjectsReorder, input),
-    defaultBranch: (projectId: string): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsDefaultBranch, { projectId }),
-    listBranches: (projectId: string): Promise<BranchList> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsListBranches, { projectId }),
-    pickWorktreeName: (projectId: string): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsPickWorktreeName, { projectId }),
-    listIgnoredPaths: (projectId: string): Promise<string[]> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsListIgnoredPaths, { projectId }),
-    icon: (projectId: string): Promise<ProjectIcon | null> =>
-      ipcRenderer.invoke(CHANNELS.ProjectsIcon, { projectId }),
+    }) => projectsClient.reorder(input),
+    defaultBranch: (projectId: string) =>
+      projectsClient.defaultBranch({ projectId }),
+    listBranches: (projectId: string) =>
+      projectsClient.listBranches({ projectId }),
+    pickWorktreeName: (projectId: string) =>
+      projectsClient.pickWorktreeName({ projectId }),
+    listIgnoredPaths: (projectId: string) =>
+      projectsClient.listIgnoredPaths({ projectId }),
+    icon: (projectId: string) => projectsClient.icon({ projectId }),
   },
   worktrees: {
     list: (projectId: string): Promise<Worktree[]> =>
