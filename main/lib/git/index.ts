@@ -23,6 +23,7 @@ export {
   removeWorktree,
   removeWorktreeForce,
   worktreeIdFromPath,
+  type WorktreeIdentity,
 } from "./worktrees";
 export {
   checkoutBranch,

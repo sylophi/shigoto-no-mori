@@ -43,6 +43,7 @@ import {
   resolveDefaultBranch,
   syncWithPrimary,
   worktreeIdFromPath,
+  type WorktreeIdentity,
 } from "../../../lib/git";
 import { findProjectOrThrow } from "../../../lib/projects";
 import { killScriptsForWorktree } from "../../../lib/scripts";
@@ -395,12 +396,12 @@ export const worktreesHandlers: Handlers<
   syncWithPrimary: (input) =>
     syncWorktree(input, async (wt, pp, target) => {
       if (target.isPrimary) {
-        throw new Error(
-          "The primary worktree is already on the primary branch",
-        );
+        throw new Error("The primary checkout can't be synced from itself");
       }
       if (target.detached) {
-        throw new Error("Can't sync a detached HEAD with the primary branch");
+        throw new Error(
+          "Detached worktrees can't be synced with the primary branch",
+        );
       }
       const config = await readShigomoriConfig(target.projectId).catch(
         () => null,
@@ -412,15 +413,13 @@ export const worktreesHandlers: Handlers<
 
 // Remote-sync mutations all share the same shape: resolve the worktree,
 // run a git action, return the freshly-described worktree so the
-// renderer can replace its cached row in one round trip. The target
-// identity is passed to the action so callers that need primary/
-// detached/projectId context don't have to re-resolve it.
+// renderer can replace its cached row in one round trip.
 async function syncWorktree(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   action: (
     worktreePath: string,
     projectPath: string,
-    target: Awaited<ReturnType<typeof findWorktreeIdentityOrThrow>>,
+    target: WorktreeIdentity,
   ) => Promise<void>,
 ): Promise<Worktree> {
   const project = findProjectOrThrow(projectId);
