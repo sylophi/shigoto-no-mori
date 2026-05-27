@@ -3,8 +3,6 @@
 // port-pool release -> teardown (on delete), so a closed renderer
 // can't leave a worktree half-torn-down. Live output keeps flowing
 // to the renderer via "started" events emitted by startScript.
-import type { WebContents } from "electron";
-import { CHANNELS } from "@shared/channels";
 import type {
   CleanupError,
   ShigomoriConfig,
@@ -19,9 +17,18 @@ import { resolveScriptCommand } from "../scripts/command";
 import {
   clearDeleteInflight,
   markDeleteInflight,
+  type NotifyScriptEvent,
   startScriptForLifecycle,
 } from "../scripts";
 import { readShigomoriConfig } from "../config/project";
+
+// Renderer-bound emit callbacks supplied by the IPC handler. Keeps the
+// lifecycle module Electron-free while still letting create/delete
+// progress flow back to the originating window.
+export type NotifyLifecyclePhase = (payload: WorktreeLifecyclePhase) => void;
+export type NotifyCarryOverComplete = (
+  payload: WorktreeCarryOverComplete,
+) => void;
 
 interface LifecycleWorktree {
   id: string;
@@ -39,23 +46,9 @@ interface LifecycleProject {
 interface CreateArgs {
   project: LifecycleProject;
   worktree: LifecycleWorktree;
-  webContents: WebContents;
-}
-
-function emitPhase(
-  webContents: WebContents,
-  payload: WorktreeLifecyclePhase,
-): void {
-  if (webContents.isDestroyed()) return;
-  webContents.send(CHANNELS.WorktreeLifecyclePhase, payload);
-}
-
-function emitCarryOverComplete(
-  webContents: WebContents,
-  payload: WorktreeCarryOverComplete,
-): void {
-  if (webContents.isDestroyed()) return;
-  webContents.send(CHANNELS.WorktreeCarryOverComplete, payload);
+  notifyPhase: NotifyLifecyclePhase;
+  notifyCarryOverComplete: NotifyCarryOverComplete;
+  notifyScript: NotifyScriptEvent;
 }
 
 async function runStep(args: {
@@ -69,7 +62,7 @@ async function runStep(args: {
   project: LifecycleProject;
   projectBranch: string;
   defaultBranch: string;
-  webContents: WebContents;
+  notify: NotifyScriptEvent;
 }): Promise<{ runId: string; exitCode: number | null }> {
   const { runId, exit } = startScriptForLifecycle({
     command: args.command,
@@ -78,7 +71,7 @@ async function runStep(args: {
     project: args.project,
     projectBranch: args.projectBranch,
     defaultBranch: args.defaultBranch,
-    webContents: args.webContents,
+    notify: args.notify,
     started: {
       slot: args.slot,
       projectId: args.project.id,
@@ -99,7 +92,7 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
 
     const carryOverEntries = config?.carryOver ?? [];
     if (carryOverEntries.length > 0) {
-      emitPhase(args.webContents, {
+      args.notifyPhase({
         projectId,
         worktreeId,
         phase: "carryOver",
@@ -109,7 +102,7 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         args.worktree.path,
         carryOverEntries,
       );
-      emitCarryOverComplete(args.webContents, {
+      args.notifyCarryOverComplete({
         projectId,
         worktreeId,
         report,
@@ -137,7 +130,7 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
     const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
 
     if (setupCommand) {
-      emitPhase(args.webContents, { projectId, worktreeId, phase: "setup" });
+      args.notifyPhase({ projectId, worktreeId, phase: "setup" });
       await runStep({
         command: setupCommand,
         scriptName: "setup",
@@ -146,12 +139,12 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         project: args.project,
         projectBranch,
         defaultBranch,
-        webContents: args.webContents,
+        notify: args.notifyScript,
       });
     }
 
     if (portPoolNeeded) {
-      emitPhase(args.webContents, {
+      args.notifyPhase({
         projectId,
         worktreeId,
         phase: "portPoolProvision",
@@ -168,11 +161,11 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         project: args.project,
         projectBranch,
         defaultBranch,
-        webContents: args.webContents,
+        notify: args.notifyScript,
       });
     }
   } finally {
-    emitPhase(args.webContents, { projectId, worktreeId, phase: "idle" });
+    args.notifyPhase({ projectId, worktreeId, phase: "idle" });
   }
 }
 
@@ -194,7 +187,7 @@ interface DeleteArgs {
   projectBranch: string;
   config: ShigomoriConfig | null;
   globalPortPoolEnabled: boolean;
-  webContents: WebContents;
+  notifyScript: NotifyScriptEvent;
 }
 
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
@@ -223,7 +216,7 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
           project: args.project,
           projectBranch: args.projectBranch,
           defaultBranch,
-          webContents: args.webContents,
+          notify: args.notifyScript,
         });
         if (exitCode !== 0) {
           throw cleanupError("portPoolRelease", exitCode, runId);
@@ -245,7 +238,7 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
         project: args.project,
         projectBranch: args.projectBranch,
         defaultBranch,
-        webContents: args.webContents,
+        notify: args.notifyScript,
       });
       if (exitCode !== 0) {
         throw cleanupError("teardown", exitCode, runId);

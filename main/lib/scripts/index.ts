@@ -16,10 +16,13 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
-import type { WebContents } from "electron";
-import { CHANNELS } from "@shared/channels";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
+
+// Renderer-facing emit callback supplied by the IPC handler. Lets the
+// scripts layer stay Electron-free while still streaming events to the
+// caller's window.
+export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
 const execFileP = promisify(execFile);
 
@@ -39,7 +42,7 @@ interface RunArgs {
   project: Pick<Project, "id" | "path" | "name">;
   projectBranch: string;
   defaultBranch: string;
-  webContents: WebContents;
+  notify: NotifyScriptEvent;
   // When set, main is the initiator (lifecycle orchestration) and
   // we emit a "started" event so the renderer binds runId to slot.
   // Omit for renderer-driven runs -- the renderer already knows the
@@ -65,7 +68,7 @@ interface RunRecord {
   exited: boolean;
   cancelling: boolean;
   done: Promise<void>;
-  webContents: WebContents;
+  notify: NotifyScriptEvent;
 }
 
 const runningScripts = new Map<string, RunRecord>();
@@ -87,11 +90,6 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
 
 export function markShuttingDown(): void {
   shuttingDown = true;
-}
-
-function emit(webContents: WebContents, payload: ScriptEvent): void {
-  if (webContents.isDestroyed()) return;
-  webContents.send(CHANNELS.ScriptsEvent, payload);
 }
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
@@ -196,7 +194,7 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   record.cancelling = true;
 
   if (opts.reason) {
-    emit(record.webContents, {
+    record.notify({
       runId: record.runId,
       kind: "data",
       data: `\r\n\x1b[2m[${opts.reason}]\x1b[0m\r\n`,
@@ -220,7 +218,7 @@ export function startScript(args: RunArgs): string {
   const runId = randomUUID();
 
   if (args.started) {
-    emit(args.webContents, {
+    args.notify({
       runId,
       kind: "started",
       projectId: args.started.projectId,
@@ -266,12 +264,12 @@ export function startScript(args: RunArgs): string {
 
   if (!child.pid) {
     queueMicrotask(() => {
-      emit(args.webContents, {
+      args.notify({
         runId,
         kind: "error",
         data: "Failed to start script process",
       });
-      emit(args.webContents, { runId, kind: "exit", code: null });
+      args.notify({ runId, kind: "exit", code: null });
       const observer = exitObservers.get(runId);
       if (observer) {
         exitObservers.delete(runId);
@@ -297,14 +295,14 @@ export function startScript(args: RunArgs): string {
     exited: false,
     cancelling: false,
     done,
-    webContents: args.webContents,
+    notify: args.notify,
   };
   runningScripts.set(runId, record);
 
   // Both streams flow into a single "data" event so xterm sees one
   // ordered byte stream (matches how a real terminal would render it).
   child.stdout?.on("data", (chunk: Buffer) => {
-    emit(args.webContents, {
+    args.notify({
       runId,
       kind: "data",
       data: chunk.toString("utf8"),
@@ -312,7 +310,7 @@ export function startScript(args: RunArgs): string {
   });
 
   child.stderr?.on("data", (chunk: Buffer) => {
-    emit(args.webContents, {
+    args.notify({
       runId,
       kind: "data",
       data: chunk.toString("utf8"),
@@ -320,7 +318,7 @@ export function startScript(args: RunArgs): string {
   });
 
   child.on("error", (error) => {
-    emit(args.webContents, { runId, kind: "error", data: error.message });
+    args.notify({ runId, kind: "error", data: error.message });
     const observer = exitObservers.get(runId);
     if (observer) {
       exitObservers.delete(runId);
@@ -340,7 +338,7 @@ export function startScript(args: RunArgs): string {
     // null code so the UI shows "stopped" not "failed".
     const wasSignal = signal !== null;
     const reported = record.cancelling || wasSignal ? null : code;
-    emit(args.webContents, { runId, kind: "exit", code: reported });
+    args.notify({ runId, kind: "exit", code: reported });
     const observer = exitObservers.get(runId);
     if (observer) {
       exitObservers.delete(runId);

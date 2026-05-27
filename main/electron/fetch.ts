@@ -5,8 +5,8 @@
 // The periodic sweep also refreshes the project-wide PR cache (sidebar
 // dots); focus does not, since the open worktree page has its own
 // fresher per-branch PR query.
-import { BrowserWindow } from "electron";
-import { CHANNELS, type ChannelName } from "@shared/channels";
+import { gitContract } from "@shared/ipc/modules/git/contract";
+import { githubCliContract } from "@shared/ipc/modules/githubCli/contract";
 import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git";
 import {
   pullRequestMapsEqual,
@@ -14,6 +14,7 @@ import {
   refreshProjectPullRequests,
 } from "../lib/githubCli";
 import { loadProjects } from "../lib/projects";
+import { broadcastAll } from "../ipc/register";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus + sweep +
@@ -26,31 +27,25 @@ const SWEEP_INTERVAL_MS = 60_000;
 const lastFetchedAt = new Map<string, number>();
 let sweepHandle: NodeJS.Timeout | null = null;
 
-function broadcast<T>(channel: ChannelName, payload: T): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(channel, payload);
-  }
-}
-
 async function maybeFetchProject(
   projectId: string,
   projectPath: string,
 ): Promise<void> {
   const ts = lastFetchedAt.get(projectId) ?? 0;
   if (Date.now() - ts < FRESHNESS_MS) return;
-  broadcast(CHANNELS.GitFetchActive, { projectId, active: true });
+  broadcastAll(gitContract, "fetchActive", { projectId, active: true });
   try {
     const before = await snapshotRemoteRefs(projectPath);
     await fetchAllRemotes(projectPath);
     lastFetchedAt.set(projectId, Date.now());
     const after = await snapshotRemoteRefs(projectPath);
     if (before !== after) {
-      broadcast(CHANNELS.GitRefsRefreshed, { projectId });
+      broadcastAll(gitContract, "refsRefreshed", { projectId });
     }
   } catch {
     // Network/auth failure -- leave refs stale, surface elsewhere if it matters.
   } finally {
-    broadcast(CHANNELS.GitFetchActive, { projectId, active: false });
+    broadcastAll(gitContract, "fetchActive", { projectId, active: false });
   }
 }
 
@@ -62,7 +57,9 @@ async function sweepProjectPullRequests(
     const before = readCachedProjectPullRequests(projectPath);
     const after = await refreshProjectPullRequests(projectPath);
     if (!pullRequestMapsEqual(before, after)) {
-      broadcast(CHANNELS.GithubCliProjectPullRequestsRefreshed, { projectId });
+      broadcastAll(githubCliContract, "projectPullRequestsRefreshed", {
+        projectId,
+      });
     }
   } catch {
     // PR data is decorative; swallow.

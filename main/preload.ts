@@ -1,54 +1,59 @@
 // Preload script — runs in an isolated context with access to Node + Electron APIs.
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
-import { contextBridge, ipcRenderer } from "electron";
-import { CHANNELS } from "@shared/channels";
+import { contextBridge } from "electron";
+import { branchesContract } from "@shared/ipc/modules/branches/contract";
+import { dialogContract } from "@shared/ipc/modules/dialog/contract";
+import { fsContract } from "@shared/ipc/modules/fs/contract";
+import { gitContract } from "@shared/ipc/modules/git/contract";
+import { githubCliContract } from "@shared/ipc/modules/githubCli/contract";
+import { globalConfigContract } from "@shared/ipc/modules/globalConfig/contract";
+import { launchersContract } from "@shared/ipc/modules/launchers/contract";
+import { menuContract } from "@shared/ipc/modules/menu/contract";
+import { navContract } from "@shared/ipc/modules/nav/contract";
+import { packageScriptsContract } from "@shared/ipc/modules/packageScripts/contract";
+import { paletteContract } from "@shared/ipc/modules/palette/contract";
+import { portPoolContract } from "@shared/ipc/modules/portPool/contract";
 import { projectsContract } from "@shared/ipc/modules/projects/contract";
+import { runtimeContract } from "@shared/ipc/modules/runtime/contract";
+import { scriptsContract } from "@shared/ipc/modules/scripts/contract";
+import { shellContract } from "@shared/ipc/modules/shell/contract";
+import { shigomoriContract } from "@shared/ipc/modules/shigomori/contract";
+import { updaterContract } from "@shared/ipc/modules/updater/contract";
+import { windowContract } from "@shared/ipc/modules/window/contract";
+import { worktreesContract } from "@shared/ipc/modules/worktrees/contract";
 import type {
-  CommitSummary,
-  CreateWorktreeResult,
-  DeleteWorktreeResult,
-  DetectedLauncher,
-  DirectoryListing,
-  FsListing,
-  FsStat,
-  GithubCliReadiness,
   GlobalConfig,
-  LauncherEntry,
   LaunchToolMenuEntry,
-  MergeMethod,
   PackageScriptSortMode,
-  PackageScriptsResult,
-  PullRequest,
-  PullRequestDetail,
-  RepoMergeConfig,
-  RuntimeInfo,
-  ScriptEvent,
-  ScriptName,
   ShigomoriConfig,
   ShigomoriWorktreeData,
   Theme,
-  UpdaterState,
-  Worktree,
-  WorktreeCarryOverComplete,
-  WorktreeLifecyclePhase,
 } from "@shared/schemas";
 import { buildClient } from "./preload/buildClient";
 
 // Preserves the historical scalar-arg renderer API (e.g. `add(path)`)
 // while routing through the contract; renderer hooks keep their signatures.
 const projectsClient = buildClient(projectsContract);
-
-// Subscribes to a main → renderer broadcast channel and returns the
-// unsubscribe. `T = void` covers no-payload channels without a separate
-// helper; pass `T` explicitly to type the payload.
-function subscribe<T = void>(channel: string) {
-  return (handler: (payload: T) => void): (() => void) => {
-    const listener = (_e: unknown, payload: T) => handler(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.off(channel, listener);
-  };
-}
+const dialogClient = buildClient(dialogContract);
+const runtimeClient = buildClient(runtimeContract);
+const shellClient = buildClient(shellContract);
+const branchesClient = buildClient(branchesContract);
+const fsClient = buildClient(fsContract);
+const gitClient = buildClient(gitContract);
+const githubCliClient = buildClient(githubCliContract);
+const globalConfigClient = buildClient(globalConfigContract);
+const launchersClient = buildClient(launchersContract);
+const menuClient = buildClient(menuContract);
+const navClient = buildClient(navContract);
+const packageScriptsClient = buildClient(packageScriptsContract);
+const paletteClient = buildClient(paletteContract);
+const portPoolClient = buildClient(portPoolContract);
+const scriptsClient = buildClient(scriptsContract);
+const shigomoriClient = buildClient(shigomoriContract);
+const updaterClient = buildClient(updaterContract);
+const windowClient = buildClient(windowContract);
+const worktreesClient = buildClient(worktreesContract);
 
 const api = {
   projects: {
@@ -71,298 +76,130 @@ const api = {
     icon: (projectId: string) => projectsClient.icon({ projectId }),
   },
   worktrees: {
-    list: (projectId: string): Promise<Worktree[]> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesList, { projectId }),
-    create: (input: {
-      projectId: string;
-      worktreeName?: string;
-      branchName?: string;
-      base?: string;
-      checkout?: boolean;
-    }): Promise<CreateWorktreeResult> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesCreate, input),
-    convertExternal: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<CreateWorktreeResult> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesConvertExternal, input),
-    relocate: (input: {
-      projectId: string;
-      worktreeId: string;
-      destinationPath: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesRelocate, input),
-    delete: (input: {
-      projectId: string;
-      worktreeId: string;
-      force?: boolean;
-      skipCleanup?: boolean;
-    }): Promise<DeleteWorktreeResult> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesDelete, input),
-    onLifecyclePhase: subscribe<WorktreeLifecyclePhase>(
-      CHANNELS.WorktreeLifecyclePhase,
-    ),
-    onCarryOverComplete: subscribe<WorktreeCarryOverComplete>(
-      CHANNELS.WorktreeCarryOverComplete,
-    ),
-    renameBranch: (input: {
-      projectId: string;
-      worktreeId: string;
-      newBranch: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesRenameBranch, input),
-    setShelved: (input: {
-      projectId: string;
-      worktreeId: string;
-      shelved: boolean;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesSetShelved, input),
-    checkoutBranch: (input: {
-      projectId: string;
-      worktreeId: string;
-      branch: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesCheckoutBranch, input),
-    diff: (input: { projectId: string; worktreeId: string }): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesDiff, input),
-    commitDiff: (input: {
-      projectId: string;
-      worktreeId: string;
-      hash: string;
-    }): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesCommitDiff, input),
-    listCommits: (input: {
-      projectId: string;
-      worktreeId: string;
-      skip: number;
-      count: number;
-    }): Promise<CommitSummary[]> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesListCommits, input),
-    push: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> => ipcRenderer.invoke(CHANNELS.WorktreesPush, input),
-    pull: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> => ipcRenderer.invoke(CHANNELS.WorktreesPull, input),
-    pushForce: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesPushForce, input),
-    overwrite: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesOverwrite, input),
-    publish: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesPublish, input),
-    pullAndPush: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<Worktree> =>
-      ipcRenderer.invoke(CHANNELS.WorktreesPullAndPush, input),
+    list: (projectId: string) => worktreesClient.list({ projectId }),
+    create: worktreesClient.create,
+    convertExternal: worktreesClient.convertExternal,
+    relocate: worktreesClient.relocate,
+    delete: worktreesClient.delete,
+    onLifecyclePhase: worktreesClient.lifecyclePhase,
+    onCarryOverComplete: worktreesClient.carryOverComplete,
+    renameBranch: worktreesClient.renameBranch,
+    setShelved: worktreesClient.setShelved,
+    checkoutBranch: worktreesClient.checkoutBranch,
+    diff: worktreesClient.diff,
+    commitDiff: worktreesClient.commitDiff,
+    listCommits: worktreesClient.listCommits,
+    push: worktreesClient.push,
+    pull: worktreesClient.pull,
+    pushForce: worktreesClient.pushForce,
+    overwrite: worktreesClient.overwrite,
+    publish: worktreesClient.publish,
+    pullAndPush: worktreesClient.pullAndPush,
   },
   branches: {
-    create: (input: {
-      projectId: string;
-      name: string;
-      base?: string;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesCreate, input),
-    rename: (input: {
-      projectId: string;
-      oldName: string;
-      newName: string;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.BranchesRename, input),
-    delete: (input: { projectId: string; name: string }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
+    create: branchesClient.create,
+    rename: branchesClient.rename,
+    delete: branchesClient.delete,
   },
   dialog: {
-    pickFolder: (options?: {
-      title?: string;
-      buttonLabel?: string;
-    }): Promise<string | null> =>
-      ipcRenderer.invoke(CHANNELS.DialogPickFolder, options),
+    pickFolder: (options?: { title?: string; buttonLabel?: string }) =>
+      dialogClient.pickFolder(options),
   },
   runtime: {
-    info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
-    setTheme: (theme: Theme): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.RuntimeSetTheme, { theme }),
-    nuke: (): Promise<void> => ipcRenderer.invoke(CHANNELS.RuntimeNuke),
+    info: () => runtimeClient.info(),
+    setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
+    nuke: () => runtimeClient.nuke(),
   },
   fs: {
-    listDirectory: (path: string): Promise<DirectoryListing> =>
-      ipcRenderer.invoke(CHANNELS.FsListDirectory, { path }),
-    scanForGitRepos: (path: string): Promise<string[]> =>
-      ipcRenderer.invoke(CHANNELS.FsScanForGitRepos, { path }),
-    isGitRepo: (path: string): Promise<boolean> =>
-      ipcRenderer.invoke(CHANNELS.FsIsGitRepo, { path }),
-    stat: (path: string): Promise<FsStat> =>
-      ipcRenderer.invoke(CHANNELS.FsStat, { path }),
-    listEntries: (path: string): Promise<FsListing> =>
-      ipcRenderer.invoke(CHANNELS.FsListEntries, { path }),
+    listDirectory: (path: string) => fsClient.listDirectory({ path }),
+    scanForGitRepos: (path: string) => fsClient.scanForGitRepos({ path }),
+    isGitRepo: (path: string) => fsClient.isGitRepo({ path }),
+    stat: (path: string) => fsClient.stat({ path }),
+    listEntries: (path: string) => fsClient.listEntries({ path }),
   },
   shigomori: {
-    read: (projectId: string): Promise<ShigomoriConfig | null> =>
-      ipcRenderer.invoke(CHANNELS.ShigomoriRead, { projectId }),
-    write: (projectId: string, config: ShigomoriConfig): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShigomoriWrite, { projectId, config }),
+    read: (projectId: string) => shigomoriClient.read({ projectId }),
+    write: (projectId: string, config: ShigomoriConfig) =>
+      shigomoriClient.write({ projectId, config }),
   },
   worktreeData: {
-    read: (
-      projectId: string,
-      worktreeId: string,
-    ): Promise<ShigomoriWorktreeData | null> =>
-      ipcRenderer.invoke(CHANNELS.WorktreeDataRead, { projectId, worktreeId }),
+    read: (projectId: string, worktreeId: string) =>
+      shigomoriClient.worktreeDataRead({ projectId, worktreeId }),
     write: (
       projectId: string,
       worktreeId: string,
       data: ShigomoriWorktreeData,
-    ): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.WorktreeDataWrite, {
-        projectId,
-        worktreeId,
-        data,
-      }),
+    ) => shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
   },
   globalConfig: {
-    read: (): Promise<GlobalConfig> =>
-      ipcRenderer.invoke(CHANNELS.GlobalConfigRead),
-    write: (config: GlobalConfig): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.GlobalConfigWrite, { config }),
+    read: () => globalConfigClient.read(),
+    write: (config: GlobalConfig) => globalConfigClient.write({ config }),
   },
   shell: {
-    openPath: (path: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
-    openExternal: (url: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellOpenExternal, { url }),
-    showItemInFolder: (path: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
+    openPath: (path: string) => shellClient.openPath({ path }),
+    openExternal: (url: string) => shellClient.openExternal({ url }),
+    showItemInFolder: (path: string) => shellClient.showItemInFolder({ path }),
   },
   palette: {
-    onToggle: subscribe(CHANNELS.PaletteToggle),
-    onAddProject: subscribe(CHANNELS.PaletteAddProject),
+    onToggle: paletteClient.toggle,
+    onAddProject: paletteClient.addProject,
   },
   nav: {
-    onOpenSettings: subscribe(CHANNELS.NavOpenSettings),
-    onLaunchById: subscribe<string>(CHANNELS.LaunchById),
+    onOpenSettings: navClient.openSettings,
+    onLaunchById: navClient.launchById,
   },
   menu: {
     setLaunchToolsEnabled: (
       enabled: boolean,
       entries?: LaunchToolMenuEntry[],
-    ): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.MenuSetLaunchToolsEnabled, {
-        enabled,
-        entries,
-      }),
+    ) => menuClient.setLaunchToolsEnabled({ enabled, entries }),
   },
   window: {
-    onFocused: subscribe(CHANNELS.WindowFocused),
-    onBlurred: subscribe(CHANNELS.WindowBlurred),
+    onFocused: windowClient.focused,
+    onBlurred: windowClient.blurred,
   },
   git: {
-    onRefsRefreshed: subscribe<{ projectId: string }>(
-      CHANNELS.GitRefsRefreshed,
-    ),
-    onFetchActive: subscribe<{ projectId: string; active: boolean }>(
-      CHANNELS.GitFetchActive,
-    ),
+    onRefsRefreshed: gitClient.refsRefreshed,
+    onFetchActive: gitClient.fetchActive,
   },
   packageScripts: {
-    list: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<PackageScriptsResult | null> =>
-      ipcRenderer.invoke(CHANNELS.PackageScriptsList, input),
-    run: (input: {
-      projectId: string;
-      worktreeId: string;
-      scriptName: string;
-    }): Promise<{ runId: string }> =>
-      ipcRenderer.invoke(CHANNELS.PackageScriptsRun, input),
-    getSort: (projectId: string): Promise<PackageScriptSortMode> =>
-      ipcRenderer.invoke(CHANNELS.PackageScriptsGetSort, { projectId }),
-    setSort: (projectId: string, mode: PackageScriptSortMode): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.PackageScriptsSetSort, { projectId, mode }),
+    list: packageScriptsClient.list,
+    run: packageScriptsClient.run,
+    getSort: (projectId: string) => packageScriptsClient.getSort({ projectId }),
+    setSort: (projectId: string, mode: PackageScriptSortMode) =>
+      packageScriptsClient.setSort({ projectId, mode }),
   },
   portPool: {
-    isActive: (input: {
-      projectId: string;
-      worktreeId: string;
-    }): Promise<boolean> =>
-      ipcRenderer.invoke(CHANNELS.PortPoolIsActive, input),
-    isInstalled: (): Promise<boolean> =>
-      ipcRenderer.invoke(CHANNELS.PortPoolIsInstalled),
+    isActive: portPoolClient.isActive,
+    isInstalled: () => portPoolClient.isInstalled(),
   },
   githubCli: {
-    readiness: (): Promise<GithubCliReadiness> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliReadiness),
-    projectPullRequests: (input: {
-      projectId: string;
-    }): Promise<Record<string, PullRequest>> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliProjectPullRequests, input),
-    worktreePullRequest: (input: {
-      projectId: string;
-      branch: string;
-    }): Promise<PullRequestDetail | null> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliWorktreePullRequest, input),
-    repoMergeConfig: (input: {
-      projectId: string;
-    }): Promise<RepoMergeConfig | null> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliRepoMergeConfig, input),
-    mergePullRequest: (input: {
-      projectId: string;
-      number: number;
-      method: MergeMethod;
-    }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliMergePullRequest, input),
-    pullRequestDiff: (input: {
-      projectId: string;
-      number: number;
-    }): Promise<string> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliPullRequestDiff, input),
-    setPullRequestDraft: (input: {
-      projectId: string;
-      number: number;
-      draft: boolean;
-    }): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.GithubCliSetPullRequestDraft, input),
-    onProjectPullRequestsRefreshed: subscribe<{ projectId: string }>(
-      CHANNELS.GithubCliProjectPullRequestsRefreshed,
-    ),
+    readiness: () => githubCliClient.readiness(),
+    projectPullRequests: githubCliClient.projectPullRequests,
+    worktreePullRequest: githubCliClient.worktreePullRequest,
+    repoMergeConfig: githubCliClient.repoMergeConfig,
+    mergePullRequest: githubCliClient.mergePullRequest,
+    pullRequestDiff: githubCliClient.pullRequestDiff,
+    setPullRequestDraft: githubCliClient.setPullRequestDraft,
+    onProjectPullRequestsRefreshed:
+      githubCliClient.projectPullRequestsRefreshed,
   },
   scripts: {
-    run: (input: {
-      projectId: string;
-      worktreeId: string;
-      script: ScriptName;
-    }): Promise<{ runId: string }> =>
-      ipcRenderer.invoke(CHANNELS.ScriptsRun, input),
-    cancel: (runId: string): Promise<{ cancelled: boolean }> =>
-      ipcRenderer.invoke(CHANNELS.ScriptsCancel, { runId }),
-    onEvent: subscribe<ScriptEvent>(CHANNELS.ScriptsEvent),
+    run: scriptsClient.run,
+    cancel: (runId: string) => scriptsClient.cancel({ runId }),
+    onEvent: scriptsClient.event,
   },
   updater: {
-    get: (): Promise<UpdaterState> => ipcRenderer.invoke(CHANNELS.UpdaterGet),
-    check: (): Promise<void> => ipcRenderer.invoke(CHANNELS.UpdaterCheck),
-    install: (): Promise<void> => ipcRenderer.invoke(CHANNELS.UpdaterInstall),
-    onState: subscribe<UpdaterState>(CHANNELS.UpdaterState),
+    get: () => updaterClient.get(),
+    check: () => updaterClient.check(),
+    install: () => updaterClient.install(),
+    onState: updaterClient.state,
   },
   launchers: {
-    detected: (): Promise<DetectedLauncher[]> =>
-      ipcRenderer.invoke(CHANNELS.LaunchersDetect),
-    forProject: (projectId: string): Promise<{ entries: LauncherEntry[] }> =>
-      ipcRenderer.invoke(CHANNELS.LaunchersForProject, { projectId }),
-    launch: (input: {
-      projectId: string;
-      worktreeId: string;
-      launcherId: string;
-    }): Promise<void> => ipcRenderer.invoke(CHANNELS.LaunchersLaunch, input),
+    detected: () => launchersClient.detect(),
+    forProject: (projectId: string) =>
+      launchersClient.forProject({ projectId }),
+    launch: launchersClient.launch,
   },
 } as const;
 

@@ -48,28 +48,14 @@ const allowlist = {
   // Pure types are normally allowed, but the layering rule is "no
   // electron coupling in lib"; once the broadcast helper owns sends,
   // these imports go away with their callers.
-  electronTypeImports: new Set([
-    "main/lib/worktrees/lifecycle.ts", // Phase 3 (worktrees broadcasts): WebContents for `send`
-    "main/lib/scripts/index.ts", // Phase 3 (scripts broadcasts): WebContents for `send`
-  ]),
+  electronTypeImports: new Set(),
   // Files that still call `webContents.send` directly. The contract's
   // broadcast helper is the only sanctioned source post-migration.
-  webContentsSend: new Set([
-    "main/lib/worktrees/lifecycle.ts", // Phase 3 (worktrees broadcasts)
-    "main/lib/scripts/index.ts", // Phase 3 (scripts broadcasts)
-    "main/electron/updater.ts", // Phase 3 (updater broadcasts)
-    "main/electron/menu.ts", // Phase 3 (palette / nav / menu broadcasts)
-    "main/electron/fetch.ts", // Phase 3 (git fetch broadcasts; may earn its own feature surface)
-    "main/index.ts", // Phase 3 (window focus / blur broadcasts)
-  ]),
+  webContentsSend: new Set(),
   // main/ipc/** files that still import from main/electron/**. Phase 3
   // moves each feature's wiring into its own module so the menu/updater
   // adapters compose lib functions directly.
-  ipcImportingElectron: new Set([
-    "main/ipc/menu.ts", // Phase 3 (menu migration)
-    "main/ipc/updater.ts", // Phase 3 (updater migration)
-    "main/ipc/runtime.ts", // Phase 3 (runtime migration): nukeEverything currently composes window-aware logic
-  ]),
+  ipcImportingElectron: new Set(),
 };
 
 // Tracks which allowlist entries actually fired during this scan. Any
