@@ -634,6 +634,112 @@ async function seedDivergedConflicts(): Promise<Manifest> {
   };
 }
 
+// Exercises the "Sync from primary" pill. Three feature-branch worktrees
+// hang off `main`: one that rebases cleanly, one whose per-commit replay
+// conflicts but whose final tree is mergeable (drives the merge
+// fallback), and one already at the primary tip (control case -- pill
+// must stay hidden). The primary itself is in sync with origin so its
+// row stays quiet.
+async function seedBehindPrimary(): Promise<Manifest> {
+  const remote = await bareRemote("behind-primary");
+  const repo = join(REPOS, "behind-primary");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md": "# behind-primary\n",
+      "foo.txt": "foo v1\n",
+      "bar.txt": "bar line1\nbar line2\nbar line3\n",
+      "shared.txt": "shared base\n",
+    },
+    "Base commit",
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+  const baseSha = (await git(repo, ["rev-parse", "HEAD"])).trim();
+
+  // Branches off the base. We add the worktrees first (so the dirty
+  // worktree-clone step happens before main moves), then advance main.
+  await git(repo, ["branch", "feat/clean-sync", baseSha]);
+  await git(repo, ["branch", "feat/merge-fallback", baseSha]);
+  await git(repo, ["branch", "feat/up-to-date", baseSha]);
+
+  await mkdir(EXTERNAL, { recursive: true });
+
+  // 1. Clean rebase: own commit touches a file main never edits, so
+  //    replaying it on top of the upstream commits lands without
+  //    conflict.
+  const cleanWt = join(EXTERNAL, "behind-primary-clean");
+  await git(repo, ["worktree", "add", cleanWt, "feat/clean-sync"]);
+  await commit(
+    cleanWt,
+    { "feat-only.txt": "feature-only work\n" },
+    "Feature commit on its own file",
+  );
+
+  // 2. Merge fallback: commit B sets shared.txt to a local value; commit
+  //    C lands on the same content main will later set. Per-commit
+  //    rebase of B onto main's tip conflicts (expected "shared base"
+  //    not present), but a whole-tree merge succeeds because HEAD and
+  //    main agree on shared.txt's final content.
+  const mergeWt = join(EXTERNAL, "behind-primary-merge-fallback");
+  await git(repo, ["worktree", "add", mergeWt, "feat/merge-fallback"]);
+  await commit(
+    mergeWt,
+    { "shared.txt": "shared local-B\n" },
+    "Feature B sets shared to local-B",
+  );
+  await commit(
+    mergeWt,
+    { "shared.txt": "shared REMOTE\n" },
+    "Feature C lands on REMOTE",
+  );
+
+  // 3. Up to date: branch stays at the base for now; once main moves
+  //    we fast-forward it so behindPrimary stays 0.
+  const upWt = join(EXTERNAL, "behind-primary-up-to-date");
+  await git(repo, ["worktree", "add", upWt, "feat/up-to-date"]);
+
+  // Advance main: three non-overlapping commits + the shared.txt rewrite
+  // that powers the merge-fallback scenario. Pushed last so origin/main
+  // matches the new local tip.
+  await commit(
+    repo,
+    { "bar.txt": "bar line1\nbar UPSTREAM\nbar line3\n" },
+    "Upstream rewrites bar line 2",
+  );
+  await commit(repo, { "foo.txt": "foo v2\n" }, "Upstream bumps foo");
+  await commit(
+    repo,
+    { "shared.txt": "shared REMOTE\n" },
+    "Upstream sets shared to REMOTE",
+  );
+  await git(repo, ["push", "origin", "main", "-q"]);
+
+  // Fast-forward feat/up-to-date to main's tip. Done in the primary
+  // checkout (it doesn't own the branch ref). Use `update-ref` so we
+  // don't need a separate worktree just to move a branch pointer.
+  const newTip = (await git(repo, ["rev-parse", "main"])).trim();
+  await git(repo, ["update-ref", "refs/heads/feat/up-to-date", newTip]);
+
+  // Refresh remote-tracking ref so HEAD..origin/main reflects the
+  // post-push tip in each worktree's view.
+  await git(repo, ["fetch", "origin", "-q"]);
+  return {
+    name: "behind-primary",
+    path: repo,
+    purpose:
+      "Three feature worktrees exercising the 'Sync from primary' pill: clean rebase, merge fallback, and the already-up-to-date control",
+    tests: [
+      "Sidebar lists primary `main` plus 3 externals on feat/clean-sync, feat/merge-fallback, feat/up-to-date.",
+      "feat/clean-sync detail header shows a sky 'Sync 3 from main' pill. Click it: rebase replays the feature commit on top of main and the pill clears. `git log --oneline` stays linear.",
+      "feat/merge-fallback shows 'Sync 3 from main'. Click it: rebase conflicts on commit B, aborts, then merges cleanly. `git log --oneline` shows a merge commit afterward.",
+      "feat/up-to-date does NOT show the pill (behindPrimary === 0).",
+      "Primary worktree does NOT show the pill regardless of its upstream state -- the handler also rejects with 'The primary worktree is already on the primary branch' if invoked directly.",
+    ],
+  };
+}
+
 async function seedManyBranches(): Promise<Manifest> {
   const repo = join(REPOS, "many-branches");
   await initRepo(repo);
@@ -1423,6 +1529,7 @@ async function main(): Promise<void> {
     { name: "behind-only", run: seedBehindOnly },
     { name: "unpublished-branch", run: seedUnpublishedBranch },
     { name: "diverged-conflicts", run: seedDivergedConflicts },
+    { name: "behind-primary", run: seedBehindPrimary },
     { name: "many-branches", run: seedManyBranches },
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
