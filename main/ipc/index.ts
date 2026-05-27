@@ -1,7 +1,12 @@
+import { dialogContract } from "@shared/ipc/modules/dialog/contract";
 import { projectsContract } from "@shared/ipc/modules/projects/contract";
+import { runtimeContract } from "@shared/ipc/modules/runtime/contract";
+import { shellContract } from "@shared/ipc/modules/shell/contract";
+import { dialogHandlers } from "./modules/dialog/handlers";
 import { projectsHandlers } from "./modules/projects/handlers";
+import { runtimeHandlers } from "./modules/runtime/handlers";
+import { shellHandlers } from "./modules/shell/handlers";
 import { registerBranchHandlers } from "./branches";
-import { registerDialogHandlers } from "./dialog";
 import { registerFsHandlers } from "./fs";
 import { registerGithubCliHandlers } from "./githubCli";
 import { registerGlobalConfigHandlers } from "./globalConfig";
@@ -10,16 +15,16 @@ import { registerMenuHandlers } from "./menu";
 import { registerPackageScriptHandlers } from "./packageScripts";
 import { registerPortPoolHandlers } from "./portPool";
 import { registerContract } from "./register";
-import { registerRuntimeHandlers } from "./runtime";
 import { registerScriptHandlers } from "./scripts";
-import { registerShellHandlers } from "./shell";
 import { registerShigomoriHandlers } from "./shigomori";
 import { registerUpdaterHandlers } from "./updater";
 import { registerWorktreeHandlers } from "./worktrees";
 
 export function registerIpcHandlers(): void {
   registerContract(projectsContract, projectsHandlers);
-  registerDialogHandlers();
+  registerContract(dialogContract, dialogHandlers);
+  registerContract(runtimeContract, runtimeHandlers);
+  registerContract(shellContract, shellHandlers);
   registerWorktreeHandlers();
   registerBranchHandlers();
   registerLauncherHandlers();
@@ -27,9 +32,7 @@ export function registerIpcHandlers(): void {
   registerPackageScriptHandlers();
   registerPortPoolHandlers();
   registerGithubCliHandlers();
-  registerRuntimeHandlers();
   registerFsHandlers();
-  registerShellHandlers();
   registerShigomoriHandlers();
   registerGlobalConfigHandlers();
   registerMenuHandlers();

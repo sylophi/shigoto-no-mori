@@ -3,7 +3,10 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
+import { dialogContract } from "@shared/ipc/modules/dialog/contract";
 import { projectsContract } from "@shared/ipc/modules/projects/contract";
+import { runtimeContract } from "@shared/ipc/modules/runtime/contract";
+import { shellContract } from "@shared/ipc/modules/shell/contract";
 import type {
   CommitSummary,
   CreateWorktreeResult,
@@ -22,7 +25,6 @@ import type {
   PullRequest,
   PullRequestDetail,
   RepoMergeConfig,
-  RuntimeInfo,
   ScriptEvent,
   ScriptName,
   ShigomoriConfig,
@@ -38,6 +40,9 @@ import { buildClient } from "./preload/buildClient";
 // Preserves the historical scalar-arg renderer API (e.g. `add(path)`)
 // while routing through the contract; renderer hooks keep their signatures.
 const projectsClient = buildClient(projectsContract);
+const dialogClient = buildClient(dialogContract);
+const runtimeClient = buildClient(runtimeContract);
+const shellClient = buildClient(shellContract);
 
 // Subscribes to a main → renderer broadcast channel and returns the
 // unsubscribe. `T = void` covers no-payload channels without a separate
@@ -182,17 +187,13 @@ const api = {
       ipcRenderer.invoke(CHANNELS.BranchesDelete, input),
   },
   dialog: {
-    pickFolder: (options?: {
-      title?: string;
-      buttonLabel?: string;
-    }): Promise<string | null> =>
-      ipcRenderer.invoke(CHANNELS.DialogPickFolder, options),
+    pickFolder: (options?: { title?: string; buttonLabel?: string }) =>
+      dialogClient.pickFolder(options),
   },
   runtime: {
-    info: (): Promise<RuntimeInfo> => ipcRenderer.invoke(CHANNELS.RuntimeInfo),
-    setTheme: (theme: Theme): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.RuntimeSetTheme, { theme }),
-    nuke: (): Promise<void> => ipcRenderer.invoke(CHANNELS.RuntimeNuke),
+    info: () => runtimeClient.info(),
+    setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
+    nuke: () => runtimeClient.nuke(),
   },
   fs: {
     listDirectory: (path: string): Promise<DirectoryListing> =>
@@ -236,12 +237,9 @@ const api = {
       ipcRenderer.invoke(CHANNELS.GlobalConfigWrite, { config }),
   },
   shell: {
-    openPath: (path: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellOpenPath, { path }),
-    openExternal: (url: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellOpenExternal, { url }),
-    showItemInFolder: (path: string): Promise<void> =>
-      ipcRenderer.invoke(CHANNELS.ShellShowItemInFolder, { path }),
+    openPath: (path: string) => shellClient.openPath({ path }),
+    openExternal: (url: string) => shellClient.openExternal({ url }),
+    showItemInFolder: (path: string) => shellClient.showItemInFolder({ path }),
   },
   palette: {
     onToggle: subscribe(CHANNELS.PaletteToggle),

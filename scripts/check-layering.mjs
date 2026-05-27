@@ -68,7 +68,6 @@ const allowlist = {
   ipcImportingElectron: new Set([
     "main/ipc/menu.ts", // Phase 3 (menu migration)
     "main/ipc/updater.ts", // Phase 3 (updater migration)
-    "main/ipc/runtime.ts", // Phase 3 (runtime migration): nukeEverything currently composes window-aware logic
   ]),
 };
 

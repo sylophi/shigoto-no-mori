@@ -5,15 +5,15 @@
 // The original project repos on disk are untouched — we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
+import { readGlobalConfig } from "./config/global";
 import {
   deleteBranchAfterWorktreeRemoval,
   listWorktreeIdentities,
   pruneStaleWorktrees,
   removeWorktreeForce,
-} from "../lib/git";
-import { readGlobalConfig } from "../lib/config/global";
-import { shigomoriRoot } from "../lib/util/paths";
-import { loadProjects } from "../lib/projects";
+} from "./git";
+import { loadProjects } from "./projects";
+import { shigomoriRoot } from "./util/paths";
 
 export async function nukeEverything(): Promise<void> {
   const projects = loadProjects();
