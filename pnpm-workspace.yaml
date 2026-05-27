@@ -25,3 +25,6 @@ allowBuilds:
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
 overrides:
   "tar@<7.5.10": "^7.5.10"
+  "tmp@<0.2.6": "0.2.6"
+minimumReleaseAgeExclude:
+  - tmp
