@@ -20,6 +20,7 @@ import {
 } from "./lib/scripts";
 import { initShigomoriRoot } from "./lib/util/paths";
 import { applyUserShellPath } from "./electron/shellPath";
+import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
   installUpdaterImpl,
   isInstallingUpdate,
@@ -128,6 +129,12 @@ app.on("before-quit", (event) => {
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
+    return;
+  }
+  // The install branch above has already gated its own restart via the
+  // renderer-initiated installUpdate dialog, so it skips this prompt.
+  if (!confirmBusyActionSync("quit")) {
+    event.preventDefault();
     return;
   }
   isQuitting = true;

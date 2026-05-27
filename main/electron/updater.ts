@@ -16,6 +16,7 @@ import { updaterContract } from "@shared/ipc/modules/updater/contract";
 import type { UpdaterState } from "@shared/schemas";
 import { setUpdaterImpl } from "../ipc/modules/updater/handlers";
 import { broadcastAll } from "../ipc/register";
+import { confirmBusyAction } from "./busyPrompt";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
@@ -71,10 +72,22 @@ export function checkForUpdates(): void {
   }
 }
 
-export function installUpdate(): void {
+export async function installUpdate(): Promise<void> {
+  if (state.kind !== "ready") return;
+  if (!(await confirmBusyAction("restart"))) return;
+  // The dialog can sit open arbitrarily long; an autoUpdater error event
+  // during that window flips state away from "ready" unconditionally.
   if (state.kind !== "ready") return;
   installing = true;
-  autoUpdater.quitAndInstall();
+  try {
+    autoUpdater.quitAndInstall();
+  } catch (err) {
+    installing = false;
+    setState({
+      kind: "error",
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 export function installUpdaterImpl(): void {

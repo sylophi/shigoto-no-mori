@@ -8,7 +8,7 @@ import type { UpdaterState } from "@shared/schemas";
 type UpdaterImpl = {
   getState: () => UpdaterState;
   check: () => void;
-  install: () => void;
+  install: () => void | Promise<void>;
 };
 
 let impl: UpdaterImpl = {
