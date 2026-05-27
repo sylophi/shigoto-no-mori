@@ -1,24 +1,17 @@
-import { ipcMain } from "electron";
-import { CHANNELS } from "@shared/channels";
-import {
-  CancelScriptPayloadSchema,
-  RunScriptPayloadSchema,
-} from "@shared/schemas";
-import { listWorktreeIdentities, resolveDefaultBranch } from "../lib/git";
-import { findProjectOrThrow } from "../lib/projects";
-import { resolveScriptCommand } from "../lib/scripts/command";
-import { cancelScript, startScript } from "../lib/scripts";
-import { readShigomoriConfig } from "../lib/config/project";
+import { scriptsContract } from "@shared/ipc/modules/scripts/contract";
+import type { Handlers } from "@shared/ipc/types";
+import type { ScriptEvent } from "@shared/schemas";
+import { readShigomoriConfig } from "../../../lib/config/project";
+import { listWorktreeIdentities, resolveDefaultBranch } from "../../../lib/git";
+import { findProjectOrThrow } from "../../../lib/projects";
+import { cancelScript, startScript } from "../../../lib/scripts";
+import { resolveScriptCommand } from "../../../lib/scripts/command";
+import { broadcast, type HandlerContext } from "../../register";
 
-export function registerScriptHandlers(): void {
-  ipcMain.handle(
-    CHANNELS.ScriptsRun,
-    async (event, rawPayload: unknown): Promise<{ runId: string }> => {
-      const { projectId, worktreeId, script } =
-        RunScriptPayloadSchema.parse(rawPayload);
-
+export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
+  {
+    run: async ({ projectId, worktreeId, script }, { event }) => {
       const project = findProjectOrThrow(projectId);
-
       const config = await readShigomoriConfig(project.id);
 
       const [identities, defaultBranch] = await Promise.all([
@@ -35,6 +28,12 @@ export function registerScriptHandlers(): void {
         throw new Error(`No "${script}" script configured for ${project.name}`);
       }
 
+      const sender = event.sender;
+      const notify = (payload: ScriptEvent) => {
+        if (sender.isDestroyed()) return;
+        broadcast(scriptsContract, "event", payload, sender);
+      };
+
       const runId = startScript({
         command,
         scriptName: script,
@@ -42,18 +41,13 @@ export function registerScriptHandlers(): void {
         project,
         projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
         defaultBranch,
-        webContents: event.sender,
+        notify,
       });
       return { runId };
     },
-  );
 
-  ipcMain.handle(
-    CHANNELS.ScriptsCancel,
-    async (_event, rawPayload: unknown): Promise<{ cancelled: boolean }> => {
-      const { runId } = CancelScriptPayloadSchema.parse(rawPayload);
+    cancel: async ({ runId }) => {
       const cancelled = await cancelScript(runId);
       return { cancelled };
     },
-  );
-}
+  };

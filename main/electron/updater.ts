@@ -11,9 +11,11 @@
 // Override `SHIGOMORI_UPDATE_FEED_URL` to point the autoUpdater at a
 // local server or alternate repo for end-to-end testing of a signed
 // build. Ignored in dev mode (autoUpdater refuses dev builds anyway).
-import { app, autoUpdater, BrowserWindow } from "electron";
-import { CHANNELS, type ChannelName } from "@shared/channels";
+import { app, autoUpdater } from "electron";
+import { updaterContract } from "@shared/ipc/modules/updater/contract";
 import type { UpdaterState } from "@shared/schemas";
+import { setUpdaterImpl } from "../ipc/modules/updater/handlers";
+import { broadcastAll } from "../ipc/register";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
@@ -32,15 +34,9 @@ export function isInstallingUpdate(): boolean {
   return installing;
 }
 
-function broadcast<T>(channel: ChannelName, payload: T): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    win.webContents.send(channel, payload);
-  }
-}
-
 function setState(next: UpdaterState): void {
   state = next;
-  broadcast(CHANNELS.UpdaterState, state);
+  broadcastAll(updaterContract, "state", state);
 }
 
 export function getUpdaterState(): UpdaterState {
@@ -79,6 +75,14 @@ export function installUpdate(): void {
   if (state.kind !== "ready") return;
   installing = true;
   autoUpdater.quitAndInstall();
+}
+
+export function installUpdaterImpl(): void {
+  setUpdaterImpl({
+    getState: getUpdaterState,
+    check: checkForUpdates,
+    install: installUpdate,
+  });
 }
 
 export function startUpdater(): void {

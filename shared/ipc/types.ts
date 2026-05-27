@@ -31,9 +31,16 @@ export type BroadcastProducerPayload<
 // no-input calls don't force callers to pass `undefined`.
 type Args<I> = [I] extends [void] ? [] : [input: I];
 
-export type Handlers<C extends Contract> = {
+// Handlers receive an opaque context as a trailing argument so a handler
+// can reach the underlying IPC event (e.g. to broadcast back to the
+// sender) without the shared/ipc layer importing Electron. Main provides
+// the concrete shape via the `Ctx` type parameter; renderer code never
+// touches it. Handlers that ignore the context just omit the parameter,
+// which is fine because TypeScript accepts callbacks with fewer params
+// than the call signature requires.
+export type Handlers<C extends Contract, Ctx = unknown> = {
   [K in InvokeKeys<C>]: (
-    ...args: Args<HandlerIn<C[K]>>
+    ...args: [...Args<HandlerIn<C[K]>>, context: Ctx]
   ) => Promise<Out<C[K]>> | Out<C[K]>;
 };
 
