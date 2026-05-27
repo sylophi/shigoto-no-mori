@@ -40,7 +40,10 @@ import {
   removeWorktree,
   removeWorktreeForce,
   renameBranch,
+  resolveDefaultBranch,
+  syncWithPrimary,
   worktreeIdFromPath,
+  type WorktreeIdentity,
 } from "../../../lib/git";
 import { findProjectOrThrow } from "../../../lib/projects";
 import { killScriptsForWorktree } from "../../../lib/scripts";
@@ -390,6 +393,22 @@ export const worktreesHandlers: Handlers<
     syncWorktree(input, (wt, pp) => publishCurrentBranch(wt, pp)),
   pullAndPush: (input) =>
     syncWorktree(input, (wt) => pullRebaseOrMergeAndPush(wt)),
+  syncWithPrimary: (input) =>
+    syncWorktree(input, async (wt, pp, target) => {
+      if (target.isPrimary) {
+        throw new Error("The primary checkout can't be synced from itself");
+      }
+      if (target.detached) {
+        throw new Error(
+          "Detached worktrees can't be synced with the primary branch",
+        );
+      }
+      const config = await readShigomoriConfig(target.projectId).catch(
+        () => null,
+      );
+      const primaryRef = await resolveDefaultBranch(pp, config?.defaultBranch);
+      await syncWithPrimary(wt, pp, primaryRef);
+    }),
 };
 
 // Remote-sync mutations all share the same shape: resolve the worktree,
@@ -397,7 +416,11 @@ export const worktreesHandlers: Handlers<
 // renderer can replace its cached row in one round trip.
 async function syncWorktree(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
-  action: (worktreePath: string, projectPath: string) => Promise<void>,
+  action: (
+    worktreePath: string,
+    projectPath: string,
+    target: WorktreeIdentity,
+  ) => Promise<void>,
 ): Promise<Worktree> {
   const project = findProjectOrThrow(projectId);
   const target = await findWorktreeIdentityOrThrow(
@@ -405,7 +428,7 @@ async function syncWorktree(
     project.path,
     worktreeId,
   );
-  await action(target.path, project.path);
+  await action(target.path, project.path, target);
   const refreshed = await findWorktreeIdentityOrThrow(
     project.id,
     project.path,

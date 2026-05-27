@@ -23,6 +23,7 @@ export {
   removeWorktree,
   removeWorktreeForce,
   worktreeIdFromPath,
+  type WorktreeIdentity,
 } from "./worktrees";
 export {
   checkoutBranch,
@@ -43,4 +44,5 @@ export {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
+  syncWithPrimary,
 } from "./sync";

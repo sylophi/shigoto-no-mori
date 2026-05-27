@@ -19,7 +19,9 @@ import {
   fetchRemoteRef,
   listRemotes,
   remoteRefExists,
+  resolveDefaultBranch,
   splitRemoteRef,
+  splitRemoteRefSync,
 } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -229,16 +231,69 @@ export async function listWorktreeIdentities(
 // all" affordance without a second round trip.
 const RECENT_COMMITS_COUNT = 4;
 
+// Per-worktree count of commits the primary has but HEAD doesn't.
+// Returns 0 for cases where the question doesn't apply (no primary,
+// primary worktree itself, detached HEAD) so the UI can branch on > 0.
+async function getBehindPrimary(
+  identity: WorktreeIdentity,
+  primaryRef: string | null,
+): Promise<number> {
+  if (!primaryRef || identity.isPrimary || identity.detached) return 0;
+  try {
+    const stdout = await run(identity.path, [
+      "rev-list",
+      "--count",
+      `HEAD..${primaryRef}`,
+    ]);
+    return Number(stdout.trim()) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Project-level inputs every row in a list/describe/create call needs.
+// Resolved once, passed by reference, so per-row work stays O(git probes
+// per row) instead of O(git probes per row + project-level reads).
+interface BuildContext {
+  hasRemote: boolean;
+  primaryRef: string | null;
+  primaryBranch: string | undefined;
+  shelvedSet: ReadonlySet<string>;
+}
+
+export async function loadBuildContext(
+  projectId: string,
+  projectPath: string,
+): Promise<BuildContext> {
+  const [remotes, config] = await Promise.all([
+    listRemotes(projectPath),
+    readShigomoriConfig(projectId).catch(() => null),
+  ]);
+  const primaryRef = await resolveDefaultBranch(
+    projectPath,
+    config?.defaultBranch,
+  ).catch(() => null);
+  return {
+    hasRemote: remotes.length > 0,
+    primaryRef,
+    primaryBranch: primaryRef
+      ? (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef)
+      : undefined,
+    shelvedSet: readShelvedSet(),
+  };
+}
+
 async function buildWorktree(
   identity: WorktreeIdentity,
-  hasRemote: boolean,
-  shelvedSet: ReadonlySet<string>,
+  ctx: BuildContext,
 ): Promise<Worktree> {
-  const [changedCount, recentCommits, remoteSync] = await Promise.all([
-    getChangedCount(identity.path),
-    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-    getRemoteSync(identity.path),
-  ]);
+  const [changedCount, recentCommits, remoteSync, behindPrimary] =
+    await Promise.all([
+      getChangedCount(identity.path),
+      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
+      getRemoteSync(identity.path),
+      getBehindPrimary(identity, ctx.primaryRef),
+    ]);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -248,8 +303,10 @@ async function buildWorktree(
     ahead: remoteSync.ahead,
     behind: remoteSync.behind,
     hasUpstream: remoteSync.hasUpstream,
-    hasRemote,
+    hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
+    behindPrimary,
+    primaryBranch: ctx.primaryBranch,
     changedCount,
     recentCommits,
     isPrimary: identity.isPrimary,
@@ -258,7 +315,7 @@ async function buildWorktree(
     shelved:
       !identity.isPrimary &&
       !identity.isExternal &&
-      shelvedSet.has(identity.id),
+      ctx.shelvedSet.has(identity.id),
   };
 }
 
@@ -266,29 +323,23 @@ export async function listWorktrees(
   projectId: string,
   projectPath: string,
 ): Promise<Worktree[]> {
-  const [identities, remotes] = await Promise.all([
+  const [identities, ctx] = await Promise.all([
     listWorktreeIdentities(projectId, projectPath),
-    listRemotes(projectPath),
+    loadBuildContext(projectId, projectPath),
   ]);
-  const hasRemote = remotes.length > 0;
-  // Single sync disk read of state.json, then per-row lookups are O(1)
-  // against the in-memory set. Avoids N readFileSync per list call.
-  const shelvedSet = readShelvedSet();
   // Primary first so it anchors the sidebar list as the canonical checkout.
   const ordered = identities.toSorted((a, b) =>
     a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
   );
-  return Promise.all(
-    ordered.map((id) => buildWorktree(id, hasRemote, shelvedSet)),
-  );
+  return Promise.all(ordered.map((id) => buildWorktree(id, ctx)));
 }
 
 export async function describeWorktree(
   identity: WorktreeIdentity,
   projectPath: string,
 ): Promise<Worktree> {
-  const remotes = await listRemotes(projectPath);
-  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
+  const ctx = await loadBuildContext(identity.projectId, projectPath);
+  return buildWorktree(identity, ctx);
 }
 
 export async function findWorktreeIdentityOrThrow(
@@ -377,15 +428,15 @@ export async function createWorktree(
   // Re-read identity from `git worktree list` so the returned worktree's
   // branch reflects what git actually settled on (e.g. checking out
   // `origin/main` creates a local `main` tracking branch).
-  const [fresh, remotes] = await Promise.all([
+  const [fresh, ctx] = await Promise.all([
     listWorktreeIdentities(projectId, projectPath),
-    listRemotes(projectPath),
+    loadBuildContext(projectId, projectPath),
   ]);
   const identity = fresh.find((w) => w.path === worktreePath);
   if (!identity) {
     throw new Error("Worktree disappeared after creation");
   }
-  return buildWorktree(identity, remotes.length > 0, readShelvedSet());
+  return buildWorktree(identity, ctx);
 }
 
 export async function removeWorktree(

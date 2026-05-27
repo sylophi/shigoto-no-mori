@@ -42,6 +42,16 @@ export const WorktreeSchema = z.object({
   // and falls back to `git merge @{u}` if a per-commit replay would
   // conflict -- the probe guarantees the merge will land.
   divergedClean: z.boolean(),
+  // Commits the project's primary branch (resolved via the same logic
+  // as the "default branch" picker) has that this worktree's HEAD does
+  // not. 0 for the primary worktree, detached HEAD, or when the primary
+  // ref can't be resolved -- the UI uses > 0 as the gate for offering
+  // the "Sync from primary" action.
+  behindPrimary: z.number().int().nonnegative(),
+  // Display name of the project's primary branch (e.g. "main"), with
+  // any matching remote prefix stripped using the project's configured
+  // remotes -- the renderer shows it on the sync pill.
+  primaryBranch: z.string().optional(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 4) so the IPC payload stays

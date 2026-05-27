@@ -50,3 +50,8 @@ export const usePullAndPushWorktree = () =>
     (i) => window.api.worktrees.pullAndPush(i),
     "Couldn't pull and push",
   );
+export const useSyncWithPrimaryWorktree = () =>
+  useSyncMutation(
+    (i) => window.api.worktrees.syncWithPrimary(i),
+    "Couldn't sync from primary",
+  );

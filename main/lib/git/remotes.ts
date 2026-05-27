@@ -131,11 +131,10 @@ export async function fetchAllRemotes(projectPath: string): Promise<void> {
 // (remote, branch). Returns null if no configured remote matches.
 // Picks the longest matching prefix so a remote named "origin/foo" wins
 // over "origin" for "origin/foo/bar".
-export async function splitRemoteRef(
-  projectPath: string,
+export function splitRemoteRefSync(
   ref: string,
-): Promise<{ remote: string; branch: string } | null> {
-  const remotes = await listRemotes(projectPath);
+  remotes: readonly string[],
+): { remote: string; branch: string } | null {
   let best: { remote: string; branch: string } | null = null;
   for (const remote of remotes) {
     const prefix = `${remote}/`;
@@ -145,6 +144,13 @@ export async function splitRemoteRef(
     }
   }
   return best;
+}
+
+export async function splitRemoteRef(
+  projectPath: string,
+  ref: string,
+): Promise<{ remote: string; branch: string } | null> {
+  return splitRemoteRefSync(ref, await listRemotes(projectPath));
 }
 
 // One branch from one remote -- cheaper than `fetch --all` when only

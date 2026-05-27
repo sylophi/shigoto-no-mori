@@ -95,6 +95,7 @@ const api = {
     overwrite: worktreesClient.overwrite,
     publish: worktreesClient.publish,
     pullAndPush: worktreesClient.pullAndPush,
+    syncWithPrimary: worktreesClient.syncWithPrimary,
   },
   branches: {
     create: branchesClient.create,

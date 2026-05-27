@@ -3,7 +3,7 @@
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
 import { run, runLenient } from "./core";
-import { listRemotes } from "./remotes";
+import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -40,29 +40,49 @@ export async function publishCurrentBranch(
   await run(worktreePath, ["push", "-u", first, "HEAD"]);
 }
 
-// Combined resolution for the "diverged but mergeable" state. Tries
-// rebase first for linear history; if a per-commit conflict strands the
-// rebase, aborts and falls back to a whole-tree merge -- which the
-// `merge-tree --write-tree` probe (gating this state) already validated
-// as clean. If the fallback merge unexpectedly conflicts too (probe was
-// wrong), aborts the merge before propagating so the worktree isn't
-// left in a half-merged state.
-export async function pullRebaseOrMergeAndPush(
+// Try rebase first for linear history; on a per-commit conflict abort
+// and fall back to a whole-tree merge. Both abort paths swallow the
+// abort failure so the worktree isn't left half-rebased or half-merged
+// when the action propagates an error.
+async function rebaseOrMergeAgainst(
   worktreePath: string,
+  ref: string,
 ): Promise<void> {
-  await run(worktreePath, ["fetch"]);
   try {
-    await run(worktreePath, ["rebase", "@{u}"]);
+    await run(worktreePath, ["rebase", ref]);
   } catch {
-    // Rebase hit a per-commit conflict. Restore the pre-rebase HEAD and
-    // try a whole-tree merge instead.
     await runLenient(worktreePath, ["rebase", "--abort"]);
     try {
-      await run(worktreePath, ["merge", "@{u}"]);
+      await run(worktreePath, ["merge", ref]);
     } catch (err) {
       await runLenient(worktreePath, ["merge", "--abort"]);
       throw err;
     }
   }
+}
+
+// Combined resolution for the "diverged but mergeable" state. The
+// `merge-tree --write-tree` probe (gating this state) already validated
+// the whole-tree merge as clean, which is what makes the merge fallback
+// safe.
+export async function pullRebaseOrMergeAndPush(
+  worktreePath: string,
+): Promise<void> {
+  await run(worktreePath, ["fetch"]);
+  await rebaseOrMergeAgainst(worktreePath, "@{u}");
   await run(worktreePath, ["push"]);
+}
+
+// Fetch *all* remotes from the project root, not the worktree's tracked
+// upstream: primaryRef can live on a different remote than the branch
+// tracks (e.g. branch tracks fork/feat while primary is origin/main), so
+// `git fetch` from the worktree would leave the rebase target stale.
+// The coalescing helper also dedupes against the focus-driven sweep.
+export async function syncWithPrimary(
+  worktreePath: string,
+  projectPath: string,
+  primaryRef: string,
+): Promise<void> {
+  await fetchAllRemotes(projectPath);
+  await rebaseOrMergeAgainst(worktreePath, primaryRef);
 }

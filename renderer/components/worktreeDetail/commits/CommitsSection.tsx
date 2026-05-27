@@ -3,6 +3,7 @@ import { ChevronRight, FileDiff, History } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Worktree } from "@shared/schemas";
+import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
@@ -14,6 +15,14 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
   // teaser's visible shape decoupled from that probe.
   const commits = worktree.recentCommits.slice(0, 3);
   const showAll = worktree.recentCommits.length > 3;
+  // Mirror the upstream-sync pill's dirty-state gate: rebase/merge
+  // needs a clean tree, so hide the affordance instead of surfacing a
+  // git failure after the click.
+  const showPrimarySync =
+    !worktree.isPrimary &&
+    !worktree.detached &&
+    worktree.changedCount === 0 &&
+    worktree.behindPrimary > 0;
   const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <section className="space-y-3">
@@ -54,18 +63,21 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           ))}
         </ul>
       )}
-      {showAll && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen(true)}
-            title="Browse full branch history"
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <History aria-hidden className="size-3.5" />
-            Show all
-            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-          </button>
+      {(showPrimarySync || showAll) && (
+        <div className="flex items-center gap-2">
+          {showPrimarySync && <WorktreePrimarySyncPill worktree={worktree} />}
+          {showAll && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              title="Browse full branch history"
+              className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <History aria-hidden className="size-3.5" />
+              Show all
+              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
+            </button>
+          )}
         </div>
       )}
       <BranchHistoryDrawer
