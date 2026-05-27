@@ -2,6 +2,8 @@
 // keys agree on one shape: parsing `/scripts/:scriptKey` (paramToSlot)
 // and minting a sidebar/store key (scriptKey) both go through this file.
 
+import { assertNever } from "@/lib/utils";
+
 export type ScriptSlot =
   | { kind: "setup" }
   | { kind: "teardown" }
@@ -56,12 +58,18 @@ export function paramToSlot(param: string): ScriptSlot | null {
 }
 
 export function slotLabel(slot: ScriptSlot): string {
-  if (slot.kind === "setup") return "Setup";
-  if (slot.kind === "teardown") return "Teardown";
-  if (slot.kind === "portPool") {
-    return slot.phase === "provision"
-      ? "Port-pool provision"
-      : "Port-pool release";
+  switch (slot.kind) {
+    case "setup":
+      return "Setup";
+    case "teardown":
+      return "Teardown";
+    case "portPool":
+      return slot.phase === "provision"
+        ? "Port-pool provision"
+        : "Port-pool release";
+    case "package":
+      return slot.name;
+    default:
+      return assertNever(slot);
   }
-  return slot.name;
 }
