@@ -288,14 +288,17 @@ export async function launchDetected(
     return;
   }
 
-  // Prefer the editor's CLI shim when it's on PATH: shims honor in-app
-  // window-behavior preferences (Zed's "CLI Default Open Behavior",
-  // VS Code/Cursor's `window.openFoldersInNewWindow`, JetBrains' open-project
-  // mode, etc.) that `open -a` routes through Launch Services and ignores.
-  // Fall back to the bundle if the shim isn't installed.
-  if (app.cli && (await cliExists(app.cli))) {
-    await openWithCli(app.cli, worktreePath);
-    return;
+  // `open -a` routes through Launch Services, which ignores in-app window
+  // preferences like Zed's "CLI Default Open Behavior" or VS Code's
+  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those settings
+  // are honored; fall back to the bundle if the shim is missing or broken.
+  if (app.cli) {
+    try {
+      await openWithCli(app.cli, worktreePath);
+      return;
+    } catch {
+      // Fall through.
+    }
   }
   await openWithBundle(app.bundleNames, worktreePath);
 }
