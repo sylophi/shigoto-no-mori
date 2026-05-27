@@ -24,7 +24,7 @@ import type {
 } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
-import { PullRequestSection } from "./pullRequest/PullRequestSection";
+import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
 import { BranchHeaderRow } from "./branch/BranchHeader";

@@ -7,7 +7,7 @@ import { assertNever } from "@/lib/utils";
 import { scriptRuns, slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ConsoleBody } from "./ConsoleBody";
-import { ScriptStatusBadge } from "../shared/ScriptStatusBadge";
+import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
 
 interface InnerProps {
   worktree: Worktree;

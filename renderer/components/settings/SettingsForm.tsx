@@ -17,7 +17,7 @@ import { useTheme } from "@/hooks/ui/useTheme";
 import { notifyError } from "@/lib/toast";
 import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
-import { CustomLauncherInput } from "../shared/CustomLauncherInput";
+import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
 import { PortPoolLink } from "./PortPoolLink";
 import { ToggleRow } from "./ToggleRow";

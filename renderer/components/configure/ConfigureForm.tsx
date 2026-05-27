@@ -18,7 +18,7 @@ import type {
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { CarryOverSection } from "./CarryOverSection";
-import { CustomLauncherInput } from "../shared/CustomLauncherInput";
+import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
 
 interface FormState {
