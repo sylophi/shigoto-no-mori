@@ -1,6 +1,6 @@
 import type { Worktree } from "@shared/schemas";
 import { BranchTitle } from "./BranchTitle";
-import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
+import { WorktreeActivityIndicator } from "../WorktreeActivityIndicator";
 
 export function BranchHeaderRow({ worktree }: { worktree: Worktree }) {
   return (

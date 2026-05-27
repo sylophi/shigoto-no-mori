@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Worktree } from "@shared/schemas";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
-import { BranchHistoryDrawer } from "./BranchHistoryDrawer";
+import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
 
 export function CommitsSection({ worktree }: { worktree: Worktree }) {

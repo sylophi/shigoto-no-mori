@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import type { PackageScriptsResult, Worktree } from "@shared/schemas";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
-import { SortMenu } from "./SortMenu";
+import { SortMenu } from "../SortMenu";
 import { sortEntries, type SortableEntry } from "./sortPackageScripts";
 
 interface PackageScriptsProps {

@@ -24,12 +24,12 @@ import type {
 } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
-import { PullRequestSection } from "./PullRequestSection";
-import { ScriptsSection } from "./ScriptsSection";
+import { PullRequestSection } from "./pullRequests/PullRequestSection";
+import { ScriptsSection } from "./scripts/ScriptsSection";
 import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
-import { BranchHeaderRow } from "./worktreeDetail/BranchHeader";
-import { CommitsSection } from "./worktreeDetail/CommitsSection";
-import { NotesSection } from "./worktreeDetail/NotesSection";
+import { BranchHeaderRow } from "./branch/BranchHeader";
+import { CommitsSection } from "./commits/CommitsSection";
+import { NotesSection } from "./NotesSection";
 
 const CREATE_PHASE_LABEL = {
   carryOver: "Carrying over files...",
