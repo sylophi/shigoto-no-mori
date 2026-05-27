@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { useBranchCommits } from "@/hooks/git/useBranchCommits";
 import type { Worktree } from "@shared/schemas";
-import { CommitRow } from "./CommitRow";
+import { CommitRow } from "../commits/CommitRow";
 
 interface BranchHistoryDrawerProps {
   worktree: Worktree;

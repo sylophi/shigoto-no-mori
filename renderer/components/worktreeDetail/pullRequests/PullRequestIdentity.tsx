@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { PullRequestDetail, Worktree } from "@shared/schemas";
-import { DiffButton } from "./DiffButton";
+import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
 import { openPullRequest } from "./pullRequestShared";
 

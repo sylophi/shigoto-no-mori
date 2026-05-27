@@ -288,14 +288,19 @@ export async function launchDetected(
     return;
   }
 
-  // Prefer the bundle (more reliable, no PATH issues) when present.
-  try {
-    await openWithBundle(app.bundleNames, worktreePath);
-    return;
-  } catch (bundleError) {
-    if (!app.cli) throw bundleError;
+  // `open -a` routes through Launch Services, which ignores in-app window
+  // preferences like Zed's "CLI Default Open Behavior" or VS Code's
+  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those settings
+  // are honored; fall back to the bundle if the shim is missing or broken.
+  if (app.cli) {
+    try {
+      await openWithCli(app.cli, worktreePath);
+      return;
+    } catch {
+      // Fall through.
+    }
   }
-  await openWithCli(app.cli, worktreePath);
+  await openWithBundle(app.bundleNames, worktreePath);
 }
 
 export function launchCustom(

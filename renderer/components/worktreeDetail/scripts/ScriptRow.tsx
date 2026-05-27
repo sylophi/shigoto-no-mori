@@ -4,7 +4,7 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
-import { ScriptStatusBadge } from "./ScriptStatusBadge";
+import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
 
 interface ScriptRowProps {
   worktree: Worktree;
