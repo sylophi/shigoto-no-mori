@@ -1,4 +1,4 @@
-import { githubCliContract } from "@shared/ipc/modules/githubCli/contract";
+import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Handlers } from "@shared/ipc/types";
 import {
   getGithubCliReadiness,
@@ -8,8 +8,8 @@ import {
   listProjectPullRequests,
   mergePullRequest,
   setPullRequestDraft,
-} from "../../../lib/githubCli";
-import { findProjectOrThrow } from "../../../lib/projects";
+} from "../../lib/githubCli";
+import { findProjectOrThrow } from "../../lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),

@@ -1,5 +1,5 @@
 import { dialog } from "electron";
-import { dialogContract } from "@shared/ipc/modules/dialog/contract";
+import { dialogContract } from "@shared/ipc/modules/dialog";
 import type { Handlers } from "@shared/ipc/types";
 
 export const dialogHandlers: Handlers<typeof dialogContract> = {

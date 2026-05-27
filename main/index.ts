@@ -1,6 +1,6 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
-import { windowContract } from "@shared/ipc/modules/window/contract";
+import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./electron/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
 import {

@@ -1,4 +1,4 @@
-import { launchersContract } from "@shared/ipc/modules/launchers/contract";
+import { launchersContract } from "@shared/ipc/modules/launchers";
 import type { Handlers } from "@shared/ipc/types";
 import type {
   CustomLauncher,
@@ -8,19 +8,19 @@ import type {
   LauncherEntry,
   ShigomoriConfig,
 } from "@shared/schemas";
-import { readGlobalConfig } from "../../../lib/config/global";
-import { readShigomoriConfig } from "../../../lib/config/project";
-import { readKey, writeKey } from "../../../lib/config/store";
-import { findWorktreeIdentityOrThrow } from "../../../lib/git";
+import { readGlobalConfig } from "../../lib/config/global";
+import { readShigomoriConfig } from "../../lib/config/project";
+import { readKey, writeKey } from "../../lib/config/store";
+import { findWorktreeIdentityOrThrow } from "../../lib/git";
 import {
   type DetectedApp,
   detectApps,
   findDetected,
   launchCustom,
   launchDetected,
-} from "../../../lib/launchers";
-import { findProjectOrThrow } from "../../../lib/projects";
-import { countWithin, pruneAndPush } from "../../../lib/util/useLog";
+} from "../../lib/launchers";
+import { findProjectOrThrow } from "../../lib/projects";
+import { countWithin, pruneAndPush } from "../../lib/util/useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the

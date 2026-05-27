@@ -8,10 +8,10 @@ import {
   type MenuItemConstructorOptions,
   type BrowserWindow,
 } from "electron";
-import { navContract } from "@shared/ipc/modules/nav/contract";
-import { paletteContract } from "@shared/ipc/modules/palette/contract";
+import { navContract } from "@shared/ipc/modules/nav";
+import { paletteContract } from "@shared/ipc/modules/palette";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
-import { setMenuImpl } from "../ipc/modules/menu/handlers";
+import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
 
 const isMac = process.platform === "darwin";

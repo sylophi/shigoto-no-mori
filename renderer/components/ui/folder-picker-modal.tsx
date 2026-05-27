@@ -7,7 +7,7 @@ import {
   CornerLeftUp,
   Folder,
 } from "lucide-react";
-import finderIconUrl from "@/assets/app-icons/finder.png";
+import finderIconUrl from "@/app-icons/finder.png";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";

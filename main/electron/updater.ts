@@ -12,9 +12,9 @@
 // local server or alternate repo for end-to-end testing of a signed
 // build. Ignored in dev mode (autoUpdater refuses dev builds anyway).
 import { app, autoUpdater } from "electron";
-import { updaterContract } from "@shared/ipc/modules/updater/contract";
+import { updaterContract } from "@shared/ipc/modules/updater";
 import type { UpdaterState } from "@shared/schemas";
-import { setUpdaterImpl } from "../ipc/modules/updater/handlers";
+import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { confirmBusyAction } from "./busyPrompt";
 

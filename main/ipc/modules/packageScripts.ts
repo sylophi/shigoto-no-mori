@@ -1,26 +1,26 @@
-import { packageScriptsContract } from "@shared/ipc/modules/packageScripts/contract";
-import { scriptsContract } from "@shared/ipc/modules/scripts/contract";
+import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import type { ScriptEvent } from "@shared/schemas";
-import { readShigomoriConfig } from "../../../lib/config/project";
+import { readShigomoriConfig } from "../../lib/config/project";
 import {
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
   resolveDefaultBranch,
-} from "../../../lib/git";
-import { findProjectOrThrow } from "../../../lib/projects";
-import { startScript } from "../../../lib/scripts";
+} from "../../lib/git";
+import { findProjectOrThrow } from "../../lib/projects";
+import { startScript } from "../../lib/scripts";
 import {
   bumpScriptUseCount,
   readScriptSort,
   usageFor,
   writeScriptSort,
-} from "../../../lib/scripts/packageScriptStats";
+} from "../../lib/scripts/packageScriptStats";
 import {
   buildScriptCommand,
   readPackageScripts,
-} from "../../../lib/scripts/packageScripts";
-import { broadcast, type HandlerContext } from "../../register";
+} from "../../lib/scripts/packageScripts";
+import { broadcast, type HandlerContext } from "../register";
 
 export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,

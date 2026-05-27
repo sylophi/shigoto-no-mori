@@ -1,4 +1,4 @@
-import { updaterContract } from "@shared/ipc/modules/updater/contract";
+import { updaterContract } from "@shared/ipc/modules/updater";
 import type { Handlers } from "@shared/ipc/types";
 import type { UpdaterState } from "@shared/schemas";
 

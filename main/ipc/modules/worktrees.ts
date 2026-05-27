@@ -1,8 +1,8 @@
 import { basename } from "node:path";
 import type { WebContents } from "electron";
 import { sanitizeBranchForPath } from "@shared/branches";
-import { worktreesContract } from "@shared/ipc/modules/worktrees/contract";
-import { scriptsContract } from "@shared/ipc/modules/scripts/contract";
+import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import {
   CleanupErrorSchema,
@@ -12,13 +12,13 @@ import {
   type WorktreeCarryOverComplete,
   type WorktreeLifecyclePhase,
 } from "@shared/schemas";
-import { readGlobalConfig } from "../../../lib/config/global";
+import { readGlobalConfig } from "../../lib/config/global";
 import {
   deleteWorktreeData,
   readShigomoriConfig,
   readWorktreeData,
   writeWorktreeData,
-} from "../../../lib/config/project";
+} from "../../lib/config/project";
 import {
   checkoutBranch,
   createWorktree,
@@ -44,20 +44,20 @@ import {
   syncWithPrimary,
   worktreeIdFromPath,
   type WorktreeIdentity,
-} from "../../../lib/git";
-import { findProjectOrThrow } from "../../../lib/projects";
-import { killScriptsForWorktree } from "../../../lib/scripts";
+} from "../../lib/git";
+import { findProjectOrThrow } from "../../lib/projects";
+import { killScriptsForWorktree } from "../../lib/scripts";
 import {
   runCreateLifecycle,
   runDeleteCleanup,
-} from "../../../lib/worktrees/lifecycle";
-import { pruneEmptyManagedParents } from "../../../lib/worktrees/paths";
+} from "../../lib/worktrees/lifecycle";
+import { pruneEmptyManagedParents } from "../../lib/worktrees/paths";
 import {
   dropShelved,
   isShelved,
   setShelved,
-} from "../../../lib/worktrees/shelved";
-import { broadcast, type HandlerContext } from "../../register";
+} from "../../lib/worktrees/shelved";
+import { broadcast, type HandlerContext } from "../register";
 
 function notifierFor(sender: WebContents) {
   const notifyPhase = (payload: WorktreeLifecyclePhase) => {
