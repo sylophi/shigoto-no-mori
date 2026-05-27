@@ -4,7 +4,6 @@ import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { cn } from "@/lib/utils";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -20,8 +19,7 @@ import {
   sanitizeWorktreeNameInput,
 } from "@shared/branches";
 import { isRealBranch } from "@shared/schemas";
-
-type Mode = "branch-from" | "checkout";
+import { ModeToggle, type Mode } from "./ModeToggle";
 
 const TEXT_INPUT_CLASS =
   "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
@@ -282,42 +280,6 @@ export function NewWorktree() {
           </Button>
         </div>
       </form>
-    </div>
-  );
-}
-
-function ModeToggle({
-  mode,
-  onChange,
-  disabled,
-}: {
-  mode: Mode;
-  onChange: (m: Mode) => void;
-  disabled?: boolean;
-}) {
-  const options: { value: Mode; label: string }[] = [
-    { value: "branch-from", label: "Branch from source" },
-    { value: "checkout", label: "Check out source" },
-  ];
-  return (
-    <div className="inline-flex rounded-md border border-input p-0.5">
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          onClick={() => onChange(opt.value)}
-          disabled={disabled}
-          className={cn(
-            "rounded-[5px] px-3 py-1 text-xs transition-colors",
-            mode === opt.value
-              ? "bg-accent text-accent-foreground"
-              : "text-muted-foreground hover:text-foreground",
-            disabled && "cursor-not-allowed opacity-50",
-          )}
-        >
-          {opt.label}
-        </button>
-      ))}
     </div>
   );
 }
