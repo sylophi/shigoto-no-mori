@@ -49,7 +49,11 @@ export function WorktreePrimarySyncPill({
         "tabular inline-flex shrink-0 items-center gap-1 self-center rounded-md px-1.5 py-1 text-xs text-sky-500 transition-colors hover:bg-sky-500/10 focus-visible:outline-2 focus-visible:outline-sky-500 disabled:cursor-not-allowed disabled:opacity-50",
       )}
     >
-      Sync {worktree.behindPrimary} from {display}
+      Sync{" "}
+      {worktree.behindPrimary === 1
+        ? "1 commit"
+        : `${worktree.behindPrimary} commits`}{" "}
+      from {display}
       <Icon
         aria-hidden
         className={cn("size-3.5", sync.isPending && "animate-spin")}
