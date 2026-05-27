@@ -1,7 +1,8 @@
 // Preload script — runs in an isolated context with access to Node + Electron APIs.
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
-import { contextBridge } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
+import type { Contract } from "@shared/ipc/contract";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
@@ -22,6 +23,7 @@ import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import type { Client } from "@shared/ipc/types";
 import type {
   GlobalConfig,
   LaunchToolMenuEntry,
@@ -30,7 +32,22 @@ import type {
   ShigomoriWorktreeData,
   Theme,
 } from "@shared/schemas";
-import { buildClient } from "./preload/buildClient";
+
+function buildClient<C extends Contract>(contract: C): Client<C> {
+  const out: Record<string, unknown> = {};
+  for (const [key, def] of Object.entries(contract)) {
+    if (def.kind === "invoke") {
+      out[key] = (input: unknown) => ipcRenderer.invoke(def.channel, input);
+    } else {
+      out[key] = (handler: (p: unknown) => void) => {
+        const listener = (_e: unknown, payload: unknown) => handler(payload);
+        ipcRenderer.on(def.channel, listener);
+        return () => ipcRenderer.off(def.channel, listener);
+      };
+    }
+  }
+  return out as Client<C>;
+}
 
 // Preserves the historical scalar-arg renderer API (e.g. `add(path)`)
 // while routing through the contract; renderer hooks keep their signatures.
