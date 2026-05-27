@@ -5,31 +5,24 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
-  Check,
   CornerLeftUp,
   Folder,
   FolderGit2,
   FolderSearch,
-  Loader2,
-  Square,
 } from "lucide-react";
 import {
-  appendBrowsePathSegment,
   canNavigateUp,
-  getBrowseDirectoryPath,
-  getBrowseLeafSegment,
-  getBrowseParentPath,
   hasTrailingSlash,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
-import { PathSpan } from "@/components/ui/path-span";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
-import { useFsIsGitRepo } from "@/hooks/fs/useFsIsGitRepo";
-import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { ScanningPanel } from "./ScanningPanel";
+import { ResultsPanel } from "./ResultsPanel";
+import { useBrowseState } from "./useBrowseState";
 
 interface AddProjectViewProps {
   onClose: () => void;
@@ -55,42 +48,24 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
 
   // ---------- Browse mode ----------
 
-  const browseDir = getBrowseDirectoryPath(query);
-  const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
-
-  const listingEnabled =
-    stage === "browse" && browseDir.length > 0 && hasTrailingSlash(browseDir);
+  const browse = useBrowseState({
+    query,
+    setQuery,
+    setHighlighted,
+    enabled: stage === "browse",
+  });
   const {
-    data: listing,
+    browseDir,
+    leafFilter,
+    listing,
     isLoading,
     error,
-  } = useFsListDirectory(browseDir, listingEnabled);
-
-  const filtered = (listing?.entries ?? []).filter((e) =>
-    e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
-  );
-
-  // What the user is about to submit. When the query points at an
-  // existing git repo we offer "Add"; otherwise we offer "Scan for git
-  // repos" so the same primary slot doubles as the discovery path.
-  const submitTarget = normalizeForSubmit(query);
-  const { data: targetIsGitRepo = false } = useFsIsGitRepo(
+    filtered,
     submitTarget,
-    stage === "browse",
-  );
-
-  const browseTo = (name: string) => {
-    setQuery(appendBrowsePathSegment(query, name));
-    setHighlighted("");
-  };
-
-  const browseUp = () => {
-    const parent = getBrowseParentPath(query);
-    if (parent) {
-      setQuery(parent);
-      setHighlighted("");
-    }
-  };
+    targetIsGitRepo,
+    browseTo,
+    browseUp,
+  } = browse;
 
   const submit = async (raw?: string) => {
     const target = normalizeForSubmit(raw ?? query);
@@ -404,204 +379,5 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
         </button>
       </div>
     </Command>
-  );
-}
-
-function ScanningPanel({
-  scanRoot,
-  home,
-  onCancel,
-}: {
-  scanRoot: string;
-  home: string | null;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label="Cancel"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-        </button>
-        <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
-        <PathSpan
-          path={scanRoot}
-          home={home}
-          className="min-w-0 flex-1 truncate font-mono text-sm"
-        />
-      </div>
-      <div className="flex flex-col items-center gap-3 px-4 py-16 text-sm text-muted-foreground">
-        <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
-        <span>Looking for git repos…</span>
-      </div>
-      <div className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-        <KbdGroup>
-          <Kbd>Esc</Kbd>
-          <span className="text-muted-foreground/80">Cancel</span>
-        </KbdGroup>
-      </div>
-    </div>
-  );
-}
-
-interface ResultsPanelProps {
-  scanRoot: string;
-  home: string | null;
-  results: string[];
-  selected: Set<string>;
-  highlighted: string;
-  onHighlightChange: (v: string) => void;
-  onToggle: (path: string) => void;
-  onSelectAll: () => void;
-  onSelectNone: () => void;
-  onBack: () => void;
-  onAdd: () => Promise<void>;
-  bulkAdding: boolean;
-  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
-}
-
-function ResultsPanel(props: ResultsPanelProps) {
-  const allSelected =
-    props.results.length > 0 && props.selected.size === props.results.length;
-
-  return (
-    <div onKeyDown={props.onKeyDown} role="group" aria-label="Scan results">
-      <Command
-        label="Scan results"
-        loop
-        shouldFilter={false}
-        value={props.highlighted}
-        onValueChange={props.onHighlightChange}
-      >
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <button
-            type="button"
-            onClick={props.onBack}
-            aria-label="Back"
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-          <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <span className="text-sm text-foreground">
-              {props.results.length === 0
-                ? "No new git repos found"
-                : `${props.results.length} new git repo${props.results.length === 1 ? "" : "s"}`}
-            </span>
-            <span className="flex font-mono text-xs text-muted-foreground/70">
-              <span className="shrink-0">in&nbsp;</span>
-              <PathSpan
-                path={props.scanRoot}
-                home={props.home}
-                className="min-w-0 flex-1 truncate"
-              />
-            </span>
-          </div>
-          {props.results.length > 0 && (
-            <button
-              type="button"
-              onClick={allSelected ? props.onSelectNone : props.onSelectAll}
-              className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              {allSelected ? "Deselect all" : "Select all"}
-            </button>
-          )}
-        </div>
-
-        <Command.List className="max-h-96 overflow-y-auto p-2">
-          {props.results.length === 0 ? (
-            <div className="px-3 py-10 text-center text-sm text-muted-foreground">
-              All git repos in this folder are already added.
-            </div>
-          ) : (
-            props.results.map((path) => (
-              <ResultRow
-                key={path}
-                path={path}
-                scanRoot={props.scanRoot}
-                home={props.home}
-                isSelected={props.selected.has(path)}
-                onToggle={() => props.onToggle(path)}
-              />
-            ))
-          )}
-        </Command.List>
-
-        <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => void props.onAdd()}
-            disabled={props.selected.size === 0 || props.bulkAdding}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <span>
-              {props.bulkAdding
-                ? "Adding…"
-                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`}
-            </span>
-            <KbdGroup className="pointer-events-none">
-              <Kbd>⌘↩</Kbd>
-            </KbdGroup>
-          </button>
-        </div>
-      </Command>
-    </div>
-  );
-}
-
-function relativeFromRoot(absolute: string, root: string): string {
-  const trimmedRoot = root.endsWith("/") ? root : `${root}/`;
-  return absolute.startsWith(trimmedRoot)
-    ? absolute.slice(trimmedRoot.length)
-    : absolute;
-}
-
-function ResultRow({
-  path,
-  scanRoot,
-  home,
-  isSelected,
-  onToggle,
-}: {
-  path: string;
-  scanRoot: string;
-  home: string | null;
-  isSelected: boolean;
-  onToggle: () => void;
-}) {
-  const relative = relativeFromRoot(path, scanRoot);
-  // Result == scanRoot leaves `relative` equal to the absolute path; let
-  // PathSpan tildify+shorten it. Nested results are already short.
-  const showAbsolute = relative === path;
-  return (
-    <Command.Item
-      value={`result:${path}`}
-      keywords={[relative]}
-      onSelect={onToggle}
-      className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
-    >
-      {isSelected ? (
-        <Check className="size-4 text-foreground" />
-      ) : (
-        <Square className="size-4 text-muted-foreground/60" />
-      )}
-      <FolderGit2 className="size-4 text-muted-foreground/80" />
-      {showAbsolute ? (
-        <PathSpan
-          path={path}
-          home={home}
-          className="min-w-0 flex-1 truncate font-mono"
-        />
-      ) : (
-        <span className="min-w-0 flex-1 truncate font-mono" title={path}>
-          {relative}
-        </span>
-      )}
-    </Command.Item>
   );
 }
