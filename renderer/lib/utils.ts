@@ -12,3 +12,10 @@ export function cn(...inputs: ClassValue[]) {
 export function dragRegion(value: "drag" | "no-drag"): CSSProperties {
   return { ["-webkit-app-region" as never]: value };
 }
+
+// Exhaustiveness guard. In a `switch` over a discriminated union, putting
+// `default: return assertNever(value)` makes adding a new variant a compile
+// error until every switch is updated.
+export function assertNever(value: never): never {
+  throw new Error(`Unreachable: ${JSON.stringify(value)}`);
+}
