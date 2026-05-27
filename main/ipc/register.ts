@@ -32,5 +32,8 @@ export function broadcast<C extends Contract, K extends keyof C>(
   if (def.kind !== "broadcast") {
     throw new Error(`broadcast called on non-broadcast key: ${String(key)}`);
   }
-  webContents.send(def.channel, payload);
+  // Parse at source: a producer bug surfaces here rather than as a
+  // confusing shape mismatch in the renderer. Symmetric with input
+  // parsing at the registrar boundary for invoke calls.
+  webContents.send(def.channel, def.payload.parse(payload));
 }
