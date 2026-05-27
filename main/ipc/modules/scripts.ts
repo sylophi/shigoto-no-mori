@@ -1,12 +1,12 @@
-import { scriptsContract } from "@shared/ipc/modules/scripts/contract";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import type { ScriptEvent } from "@shared/schemas";
-import { readShigomoriConfig } from "../../../lib/config/project";
-import { listWorktreeIdentities, resolveDefaultBranch } from "../../../lib/git";
-import { findProjectOrThrow } from "../../../lib/projects";
-import { cancelScript, startScript } from "../../../lib/scripts";
-import { resolveScriptCommand } from "../../../lib/scripts/command";
-import { broadcast, type HandlerContext } from "../../register";
+import { readShigomoriConfig } from "../../lib/config/project";
+import { listWorktreeIdentities, resolveDefaultBranch } from "../../lib/git";
+import { findProjectOrThrow } from "../../lib/projects";
+import { cancelScript, startScript } from "../../lib/scripts";
+import { resolveScriptCommand } from "../../lib/scripts/command";
+import { broadcast, type HandlerContext } from "../register";
 
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {

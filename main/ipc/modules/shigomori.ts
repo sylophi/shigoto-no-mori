@@ -1,4 +1,4 @@
-import { shigomoriContract } from "@shared/ipc/modules/shigomori/contract";
+import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import type { Handlers } from "@shared/ipc/types";
 import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
 import {
@@ -6,9 +6,9 @@ import {
   readWorktreeData,
   writeShigomoriConfig,
   writeWorktreeData,
-} from "../../../lib/config/project";
-import { appendExcludes } from "../../../lib/git/exclude";
-import { findProjectOrThrow } from "../../../lib/projects";
+} from "../../lib/config/project";
+import { appendExcludes } from "../../lib/git/exclude";
+import { findProjectOrThrow } from "../../lib/projects";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   read: async ({ projectId }) => {

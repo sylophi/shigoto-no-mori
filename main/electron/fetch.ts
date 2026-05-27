@@ -5,8 +5,8 @@
 // The periodic sweep also refreshes the project-wide PR cache (sidebar
 // dots); focus does not, since the open worktree page has its own
 // fresher per-branch PR query.
-import { gitContract } from "@shared/ipc/modules/git/contract";
-import { githubCliContract } from "@shared/ipc/modules/githubCli/contract";
+import { gitContract } from "@shared/ipc/modules/git";
+import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git";
 import {
   pullRequestMapsEqual,

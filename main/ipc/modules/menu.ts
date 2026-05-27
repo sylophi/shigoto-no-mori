@@ -1,4 +1,4 @@
-import { menuContract } from "@shared/ipc/modules/menu/contract";
+import { menuContract } from "@shared/ipc/modules/menu";
 import type { Handlers } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 
