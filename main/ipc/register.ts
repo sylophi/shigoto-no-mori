@@ -1,4 +1,5 @@
 import {
+  app,
   BrowserWindow,
   ipcMain,
   type IpcMainInvokeEvent,
@@ -8,6 +9,13 @@ import type { Contract } from "@shared/ipc/contract";
 import type { BroadcastProducerPayload, Handlers } from "@shared/ipc/types";
 
 export type HandlerContext = { event: IpcMainInvokeEvent };
+
+// In dev we re-run handler results through the contract's output schema
+// so handler drift (or schemas with .transform / .default / .coerce that
+// turn z.input into something subtly different from z.output) surfaces
+// here instead of as a confusing failure in the renderer. Packaged builds
+// skip the extra parse to keep IPC latency at the per-handler return cost.
+const VALIDATE_OUTPUTS = !app.isPackaged;
 
 export function registerContract<C extends Contract>(
   contract: C,
@@ -24,7 +32,8 @@ export function registerContract<C extends Contract>(
     )[key];
     ipcMain.handle(def.channel, async (event, raw) => {
       const input = def.input.parse(raw);
-      return handler(input, { event });
+      const result = await handler(input, { event });
+      return VALIDATE_OUTPUTS ? def.output.parse(result) : result;
     });
   }
 }

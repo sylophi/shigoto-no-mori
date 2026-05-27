@@ -28,19 +28,20 @@ export type BroadcastProducerPayload<
 > = C[K] extends BroadcastDef ? z.input<C[K]["payload"]> : never;
 
 // `z.void()` infers as `void`. Map void inputs to a zero-arg call so
-// no-input calls don't force callers to pass `undefined`.
+// no-input clients don't force callers to pass `undefined`.
 type Args<I> = [I] extends [void] ? [] : [input: I];
 
-// Handlers receive an opaque context as a trailing argument so a handler
-// can reach the underlying IPC event (e.g. to broadcast back to the
-// sender) without the shared/ipc layer importing Electron. Main provides
-// the concrete shape via the `Ctx` type parameter; renderer code never
-// touches it. Handlers that ignore the context just omit the parameter,
-// which is fine because TypeScript accepts callbacks with fewer params
-// than the call signature requires.
+// Handlers are always called positionally as `(input, context)`. Even
+// when the input schema is `z.void()`, the registrar still passes
+// `undefined` in slot 0 so the `context` slot stays at index 1; using
+// `Args<I>` here would let a void-input handler typecheck as
+// `({ event }) => ...` and silently receive `undefined` at runtime.
+// Handlers that don't need either argument can drop them via TypeScript
+// variance (callbacks with fewer params are assignable).
 export type Handlers<C extends Contract, Ctx = unknown> = {
   [K in InvokeKeys<C>]: (
-    ...args: [...Args<HandlerIn<C[K]>>, context: Ctx]
+    input: HandlerIn<C[K]>,
+    context: Ctx,
   ) => Promise<Out<C[K]>> | Out<C[K]>;
 };
 
