@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { invoke } from "@shared/ipc/contract";
 import {
   CreateBranchPayloadSchema,
@@ -13,3 +14,11 @@ export const branchesContract = {
 } as const;
 
 export type BranchesContract = typeof branchesContract;
+
+const client = buildClient(branchesContract);
+
+export const branches = {
+  create: client.create,
+  rename: client.rename,
+  delete: client.delete,
+} as const;

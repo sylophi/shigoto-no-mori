@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   CheckoutBranchPayloadSchema,
@@ -111,3 +112,28 @@ export const worktreesContract = {
 } as const;
 
 export type WorktreesContract = typeof worktreesContract;
+
+const client = buildClient(worktreesContract);
+
+export const worktrees = {
+  list: (projectId: string) => client.list({ projectId }),
+  create: client.create,
+  convertExternal: client.convertExternal,
+  relocate: client.relocate,
+  delete: client.delete,
+  onLifecyclePhase: client.lifecyclePhase,
+  onCarryOverComplete: client.carryOverComplete,
+  renameBranch: client.renameBranch,
+  setShelved: client.setShelved,
+  checkoutBranch: client.checkoutBranch,
+  diff: client.diff,
+  commitDiff: client.commitDiff,
+  listCommits: client.listCommits,
+  push: client.push,
+  pull: client.pull,
+  pushForce: client.pushForce,
+  overwrite: client.overwrite,
+  publish: client.publish,
+  pullAndPush: client.pullAndPush,
+  syncWithPrimary: client.syncWithPrimary,
+} as const;

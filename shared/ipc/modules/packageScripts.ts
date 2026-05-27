@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { invoke } from "@shared/ipc/contract";
 import {
   GetPackageScriptSortPayloadSchema,
@@ -8,6 +9,7 @@ import {
   RunPackageScriptPayloadSchema,
   SetPackageScriptSortPayloadSchema,
 } from "@shared/schemas";
+import type { PackageScriptSortMode } from "@shared/schemas";
 
 export const packageScriptsContract = {
   list: invoke(
@@ -33,3 +35,13 @@ export const packageScriptsContract = {
 } as const;
 
 export type PackageScriptsContract = typeof packageScriptsContract;
+
+const client = buildClient(packageScriptsContract);
+
+export const packageScripts = {
+  list: client.list,
+  run: client.run,
+  getSort: (projectId: string) => client.getSort({ projectId }),
+  setSort: (projectId: string, mode: PackageScriptSortMode) =>
+    client.setSort({ projectId, mode }),
+} as const;

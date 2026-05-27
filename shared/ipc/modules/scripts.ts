@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { buildClient } from "@shared/ipc/buildClient";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
@@ -21,3 +22,11 @@ export const scriptsContract = {
 } as const;
 
 export type ScriptsContract = typeof scriptsContract;
+
+const client = buildClient(scriptsContract);
+
+export const scripts = {
+  run: client.run,
+  cancel: (runId: string) => client.cancel({ runId }),
+  onEvent: client.event,
+} as const;
