@@ -40,6 +40,8 @@ import {
   removeWorktree,
   removeWorktreeForce,
   renameBranch,
+  resolveDefaultBranch,
+  syncWithPrimary,
   worktreeIdFromPath,
 } from "../../../lib/git";
 import { findProjectOrThrow } from "../../../lib/projects";
@@ -390,14 +392,36 @@ export const worktreesHandlers: Handlers<
     syncWorktree(input, (wt, pp) => publishCurrentBranch(wt, pp)),
   pullAndPush: (input) =>
     syncWorktree(input, (wt) => pullRebaseOrMergeAndPush(wt)),
+  syncWithPrimary: (input) =>
+    syncWorktree(input, async (wt, pp, target) => {
+      if (target.isPrimary) {
+        throw new Error(
+          "The primary worktree is already on the primary branch",
+        );
+      }
+      if (target.detached) {
+        throw new Error("Can't sync a detached HEAD with the primary branch");
+      }
+      const config = await readShigomoriConfig(target.projectId).catch(
+        () => null,
+      );
+      const primaryRef = await resolveDefaultBranch(pp, config?.defaultBranch);
+      await syncWithPrimary(wt, primaryRef);
+    }),
 };
 
 // Remote-sync mutations all share the same shape: resolve the worktree,
 // run a git action, return the freshly-described worktree so the
-// renderer can replace its cached row in one round trip.
+// renderer can replace its cached row in one round trip. The target
+// identity is passed to the action so callers that need primary/
+// detached/projectId context don't have to re-resolve it.
 async function syncWorktree(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
-  action: (worktreePath: string, projectPath: string) => Promise<void>,
+  action: (
+    worktreePath: string,
+    projectPath: string,
+    target: Awaited<ReturnType<typeof findWorktreeIdentityOrThrow>>,
+  ) => Promise<void>,
 ): Promise<Worktree> {
   const project = findProjectOrThrow(projectId);
   const target = await findWorktreeIdentityOrThrow(
@@ -405,7 +429,7 @@ async function syncWorktree(
     project.path,
     worktreeId,
   );
-  await action(target.path, project.path);
+  await action(target.path, project.path, target);
   const refreshed = await findWorktreeIdentityOrThrow(
     project.id,
     project.path,

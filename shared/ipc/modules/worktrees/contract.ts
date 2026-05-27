@@ -95,6 +95,11 @@ export const worktreesContract = {
     SyncWorktreePayloadSchema,
     WorktreeSchema,
   ),
+  syncWithPrimary: invoke(
+    "worktrees:syncWithPrimary",
+    SyncWorktreePayloadSchema,
+    WorktreeSchema,
+  ),
   lifecyclePhase: broadcast(
     "worktrees:lifecyclePhase",
     WorktreeLifecyclePhaseSchema,

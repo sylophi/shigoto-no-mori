@@ -66,3 +66,27 @@ export async function pullRebaseOrMergeAndPush(
   }
   await run(worktreePath, ["push"]);
 }
+
+// Bring this worktree's branch up to date with the project's primary
+// ref (typically `origin/main`). Fetch first so the comparison is
+// against the current remote tip, then rebase; on a per-commit
+// conflict fall back to a whole-tree merge. Same abort-on-failure
+// shape as `pullRebaseOrMergeAndPush` so a conflict at either step
+// leaves the worktree clean instead of mid-rebase/mid-merge.
+export async function syncWithPrimary(
+  worktreePath: string,
+  primaryRef: string,
+): Promise<void> {
+  await run(worktreePath, ["fetch"]);
+  try {
+    await run(worktreePath, ["rebase", primaryRef]);
+  } catch {
+    await runLenient(worktreePath, ["rebase", "--abort"]);
+    try {
+      await run(worktreePath, ["merge", primaryRef]);
+    } catch (err) {
+      await runLenient(worktreePath, ["merge", "--abort"]);
+      throw err;
+    }
+  }
+}

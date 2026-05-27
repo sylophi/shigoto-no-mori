@@ -43,4 +43,5 @@ export {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
+  syncWithPrimary,
 } from "./sync";

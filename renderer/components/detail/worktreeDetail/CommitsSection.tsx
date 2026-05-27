@@ -3,6 +3,7 @@ import { ChevronRight, FileDiff, History } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Worktree } from "@shared/schemas";
+import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "./BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
@@ -40,7 +41,10 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
             <ChevronRight aria-hidden className="size-3.5 opacity-60" />
           </button>
         ) : (
-          <WorktreeSyncPill worktree={worktree} />
+          <div className="flex items-center gap-1">
+            <WorktreePrimarySyncPill worktree={worktree} />
+            <WorktreeSyncPill worktree={worktree} />
+          </div>
         )}
       </div>
       {commits.length === 0 ? (
