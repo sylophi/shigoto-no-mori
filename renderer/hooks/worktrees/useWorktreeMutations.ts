@@ -9,7 +9,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
-import { clearScriptRunsForWorktree } from "@/store/scriptRuns";
+import { scriptRuns } from "@/store/scriptRuns";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -48,7 +48,7 @@ export function useConvertExternalWorktree() {
         });
         // The old external worktree's id no longer maps to anything on disk
         // -- drop any cached script runs so they don't linger in the UI.
-        clearScriptRunsForWorktree(vars.worktreeId);
+        scriptRuns.clearForWorktree(vars.worktreeId);
       },
       // The page surfaces per-row errors inline; a toast on top would be noise.
       meta: { silentError: true },
@@ -72,7 +72,7 @@ export function useRelocateWorktree() {
       });
       // The relocated worktree's id changes (it's derived from path), so
       // any cached script runs keyed by the pre-move id are stranded.
-      clearScriptRunsForWorktree(vars.worktreeId);
+      scriptRuns.clearForWorktree(vars.worktreeId);
     },
     // The page surfaces per-row errors inline; a toast on top would be noise.
     meta: { silentError: true },
@@ -109,7 +109,7 @@ export function useDeleteWorktree() {
         void queryClient.invalidateQueries({
           queryKey: queryKeys.worktrees(vars.projectId),
         });
-        clearScriptRunsForWorktree(vars.worktreeId);
+        scriptRuns.clearForWorktree(vars.worktreeId);
       }
     },
     // The detail page swaps into a force-delete prompt on failure -- a

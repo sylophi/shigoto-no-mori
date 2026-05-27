@@ -42,7 +42,7 @@ export function useScriptRunner(
 
   const start = () => {
     void scriptRuns
-      .start({
+      .run({
         key,
         worktreeId: worktree.id,
         slot,
