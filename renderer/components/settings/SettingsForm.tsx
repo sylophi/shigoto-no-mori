@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { ExternalLink, FolderOpen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EditorFooter } from "@/components/detail/EditorFooter";
+import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { LauncherIcon } from "@/components/LauncherIcon";
 import { PathSpan } from "@/components/ui/path-span";
@@ -17,7 +17,7 @@ import { useTheme } from "@/hooks/ui/useTheme";
 import { notifyError } from "@/lib/toast";
 import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
-import { CustomLauncherInput } from "./CustomLauncherInput";
+import { CustomLauncherInput } from "../shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
 import { PortPoolLink } from "./PortPoolLink";
 import { ToggleRow } from "./ToggleRow";

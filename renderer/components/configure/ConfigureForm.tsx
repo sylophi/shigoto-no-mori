@@ -2,7 +2,7 @@ import { FolderOpen, Plus } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
-import { EditorFooter } from "@/components/detail/EditorFooter";
+import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -18,7 +18,7 @@ import type {
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { CarryOverSection } from "./CarryOverSection";
-import { CustomLauncherInput } from "./CustomLauncherInput";
+import { CustomLauncherInput } from "../shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
 
 interface FormState {
