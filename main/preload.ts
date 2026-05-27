@@ -3,7 +3,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge, ipcRenderer } from "electron";
 import { CHANNELS } from "@shared/channels";
-import { projectsContract } from "@shared/modules/projects/contract";
+import { projectsContract } from "@shared/ipc/modules/projects/contract";
 import type {
   CommitSummary,
   CreateWorktreeResult,

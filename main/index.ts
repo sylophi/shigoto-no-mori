@@ -1,21 +1,27 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
 import { CHANNELS } from "@shared/channels";
-import { ensureShigomoriRoot } from "./app/bootstrap";
-import { attachContextMenu } from "./app/contextMenu";
-import { refreshAllProjectGitRefs, startBackgroundFetch } from "./app/fetch";
-import { readThemeSync } from "./config/global";
+import { ensureShigomoriRoot } from "./electron/bootstrap";
+import { attachContextMenu } from "./electron/contextMenu";
+import {
+  refreshAllProjectGitRefs,
+  startBackgroundFetch,
+} from "./electron/fetch";
+import { readThemeSync } from "./lib/config/global";
 import { registerIpcHandlers } from "./ipc";
-import { buildAppMenu } from "./app/menu";
+import { buildAppMenu } from "./electron/menu";
 import {
   getInflightDeleteIds,
   killAllScripts,
   killScriptsForWorktree,
   markShuttingDown,
   signalAllScriptsBestEffort,
-} from "./scripts";
-import { applyUserShellPath } from "./app/shellPath";
-import { isInstallingUpdate, startUpdater } from "./app/updater";
+} from "./lib/scripts";
+import { initShigomoriRoot } from "./lib/util/paths";
+import { applyUserShellPath } from "./electron/shellPath";
+import { isInstallingUpdate, startUpdater } from "./electron/updater";
+
+initShigomoriRoot(app.isPackaged);
 
 registerIpcHandlers();
 

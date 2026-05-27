@@ -2,8 +2,8 @@ import { app, ipcMain, nativeTheme } from "electron";
 import { homedir } from "node:os";
 import { CHANNELS } from "@shared/channels";
 import { type RuntimeInfo, SetThemePayloadSchema } from "@shared/schemas";
-import { nukeEverything } from "../app/nuke";
-import { shigomoriRoot } from "../util/paths";
+import { nukeEverything } from "../electron/nuke";
+import { shigomoriRoot } from "../lib/util/paths";
 
 export function registerRuntimeHandlers(): void {
   ipcMain.handle(

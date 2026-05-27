@@ -13,19 +13,19 @@ import {
 // ReadShigomoriPayloadSchema is reused here because LaunchersForProject
 // has the same `{ projectId }` shape as ShigomoriRead; the read handler
 // itself lives in main/ipc/shigomori.ts.
-import { findWorktreeIdentityOrThrow } from "../git";
-import { readGlobalConfig } from "../config/global";
+import { findWorktreeIdentityOrThrow } from "../lib/git";
+import { readGlobalConfig } from "../lib/config/global";
 import {
   type DetectedApp,
   detectApps,
   findDetected,
   launchCustom,
   launchDetected,
-} from "../launchers";
-import { findProjectOrThrow } from "../projects";
-import { readShigomoriConfig } from "../config/project";
-import { readKey, writeKey } from "../config/store";
-import { countWithin, pruneAndPush } from "../util/useLog";
+} from "../lib/launchers";
+import { findProjectOrThrow } from "../lib/projects";
+import { readShigomoriConfig } from "../lib/config/project";
+import { readKey, writeKey } from "../lib/config/store";
+import { countWithin, pruneAndPush } from "../lib/util/useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the

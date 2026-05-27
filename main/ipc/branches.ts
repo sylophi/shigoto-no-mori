@@ -9,8 +9,8 @@ import {
   createLocalBranch,
   deleteAnyLocalBranch,
   renameAnyLocalBranch,
-} from "../git";
-import { findProjectOrThrow } from "../projects";
+} from "../lib/git";
+import { findProjectOrThrow } from "../lib/projects";
 
 export function registerBranchHandlers(): void {
   ipcMain.handle(

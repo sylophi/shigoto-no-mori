@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { reorderProjects } from "@shared/reorder";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
-import { projectsContract } from "@shared/modules/projects/contract";
-import { readGlobalConfig } from "../../config/global";
+import { projectsContract } from "@shared/ipc/modules/projects/contract";
+import { readGlobalConfig } from "../../../lib/config/global";
 import {
   deleteProjectState,
   readShigomoriConfig,
   writeShigomoriConfig,
-} from "../../config/project";
-import { writeKey } from "../../config/store";
+} from "../../../lib/config/project";
+import { writeKey } from "../../../lib/config/store";
 import {
   deriveProjectName,
   isGitRepo,
@@ -17,16 +17,16 @@ import {
   listIgnoredPaths,
   pickAvailableWorktreeName,
   resolveDefaultBranch,
-} from "../../git";
+} from "../../../lib/git";
 import {
   findProjectOrThrow,
   listProjectsWithStatus,
   loadProjects,
   PROJECTS_KEY,
-} from "../../projects";
-import { forgetProjectIcon, readProjectIcon } from "../../projects/icon";
-import { readPackageScripts } from "../../scripts/packageScripts";
-import { expandHome } from "../../util/paths";
+} from "../../../lib/projects";
+import { forgetProjectIcon, readProjectIcon } from "../../../lib/projects/icon";
+import { readPackageScripts } from "../../../lib/scripts/packageScripts";
+import { expandHome } from "../../../lib/util/paths";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);

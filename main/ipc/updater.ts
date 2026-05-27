@@ -5,7 +5,7 @@ import {
   checkForUpdates,
   getUpdaterState,
   installUpdate,
-} from "../app/updater";
+} from "../electron/updater";
 
 export function registerUpdaterHandlers(): void {
   ipcMain.handle(CHANNELS.UpdaterGet, (): UpdaterState => getUpdaterState());
