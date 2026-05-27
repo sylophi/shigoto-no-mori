@@ -1,7 +1,6 @@
 import { ipcMain, type WebContents } from "electron";
-import type { z } from "zod";
 import type { Contract } from "@shared/ipc/contract";
-import type { Handlers } from "@shared/ipc/types";
+import type { BroadcastProducerPayload, Handlers } from "@shared/ipc/types";
 
 export function registerContract<C extends Contract>(
   contract: C,
@@ -21,11 +20,7 @@ export function registerContract<C extends Contract>(
 export function broadcast<C extends Contract, K extends keyof C>(
   contract: C,
   key: K,
-  payload: C[K] extends { kind: "broadcast"; payload: infer P }
-    ? P extends z.ZodTypeAny
-      ? z.infer<P>
-      : never
-    : never,
+  payload: BroadcastProducerPayload<C, K>,
   webContents: WebContents,
 ): void {
   const def = contract[key];
