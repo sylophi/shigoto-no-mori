@@ -10,15 +10,15 @@ import {
 import { Toaster } from "sonner";
 import { App } from "./App";
 import { notifyError } from "./lib/toast";
-import { ensureScriptEventSubscription } from "./store/scriptRuns";
-import { ensureLifecycleSubscription } from "./store/worktreeLifecycle";
+import { scriptRuns } from "./store/scriptRuns";
+import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
 
 // Single global subscriptions: events arrive whether or not any
 // component is mounted (e.g. carry-over failure toast must fire even
 // if the user navigated away from the new worktree's detail page).
-ensureScriptEventSubscription();
-ensureLifecycleSubscription();
+scriptRuns.start();
+worktreeLifecycle.start();
 
 // React Query's default focus listener subscribes to `window.focus` and
 // `visibilitychange`, but those don't fire on every Electron focus

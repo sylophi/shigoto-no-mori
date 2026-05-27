@@ -5,68 +5,108 @@
 // store only reflects events it broadcasts.
 import { useSyncExternalStore } from "react";
 import type { CreatePhase } from "@shared/schemas";
-import { singletonInit } from "@/lib/singletonInit";
 import { toast } from "@/lib/toast";
+import type { RendererApi } from "@/window";
 
 export type { CreatePhase } from "@shared/schemas";
 
-const phases = new Map<string, CreatePhase>();
-const subs = new Map<string, Set<() => void>>();
+type WorktreesApi = Pick<
+  RendererApi["worktrees"],
+  "onLifecyclePhase" | "onCarryOverComplete"
+>;
 
-function notify(worktreeId: string): void {
-  const bucket = subs.get(worktreeId);
-  if (!bucket) return;
-  for (const cb of bucket) cb();
-}
+type WarnFn = (title: string, options?: { description?: string }) => unknown;
 
-function setPhase(worktreeId: string, phase: CreatePhase | null): void {
-  if (phase === null) {
-    if (!phases.delete(worktreeId)) return;
-  } else {
-    if (phases.get(worktreeId) === phase) return;
-    phases.set(worktreeId, phase);
+class WorktreeLifecycleStore {
+  private phases = new Map<string, CreatePhase>();
+  private subs = new Map<string, Set<() => void>>();
+  private unsubscribePhase: (() => void) | null = null;
+  private unsubscribeCarryOver: (() => void) | null = null;
+  private api: WorktreesApi;
+  private warn: WarnFn;
+
+  constructor(api: WorktreesApi, warn: WarnFn) {
+    this.api = api;
+    this.warn = warn;
   }
-  notify(worktreeId);
-}
 
-export const ensureLifecycleSubscription = singletonInit(() => {
-  window.api.worktrees.onLifecyclePhase((evt) => {
-    setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
-  });
-  window.api.worktrees.onCarryOverComplete((evt) => {
-    const { applied, failures } = evt.report;
-    if (failures.length === 0) return;
-    const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
-    const more = failures.length - lines.length;
-    toast.warning(
-      `Carried over ${applied} of ${applied + failures.length} entries`,
-      {
-        description:
-          lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
-      },
-    );
-  });
-});
-
-function subscribe(worktreeId: string, cb: () => void): () => void {
-  let bucket = subs.get(worktreeId);
-  if (!bucket) {
-    bucket = new Set();
-    subs.set(worktreeId, bucket);
+  start(): void {
+    if (this.unsubscribePhase) return;
+    this.unsubscribePhase = this.api.onLifecyclePhase((evt) => {
+      this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
+    });
+    this.unsubscribeCarryOver = this.api.onCarryOverComplete((evt) => {
+      const { applied, failures } = evt.report;
+      if (failures.length === 0) return;
+      const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
+      const more = failures.length - lines.length;
+      this.warn(
+        `Carried over ${applied} of ${applied + failures.length} entries`,
+        {
+          description:
+            lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
+        },
+      );
+    });
   }
-  bucket.add(cb);
-  return () => {
-    const b = subs.get(worktreeId);
-    if (!b) return;
-    b.delete(cb);
-    if (b.size === 0) subs.delete(worktreeId);
-  };
+
+  dispose(): void {
+    this.unsubscribePhase?.();
+    this.unsubscribePhase = null;
+    this.unsubscribeCarryOver?.();
+    this.unsubscribeCarryOver = null;
+    this.phases.clear();
+    this.subs.clear();
+  }
+
+  subscribe(worktreeId: string, cb: () => void): () => void {
+    let bucket = this.subs.get(worktreeId);
+    if (!bucket) {
+      bucket = new Set();
+      this.subs.set(worktreeId, bucket);
+    }
+    bucket.add(cb);
+    return () => {
+      const b = this.subs.get(worktreeId);
+      if (!b) return;
+      b.delete(cb);
+      if (b.size === 0) this.subs.delete(worktreeId);
+    };
+  }
+
+  snapshot(worktreeId: string): CreatePhase | null {
+    return this.phases.get(worktreeId) ?? null;
+  }
+
+  private setPhase(worktreeId: string, phase: CreatePhase | null): void {
+    if (phase === null) {
+      if (!this.phases.delete(worktreeId)) return;
+    } else {
+      if (this.phases.get(worktreeId) === phase) return;
+      this.phases.set(worktreeId, phase);
+    }
+    this.notify(worktreeId);
+  }
+
+  private notify(worktreeId: string): void {
+    const bucket = this.subs.get(worktreeId);
+    if (!bucket) return;
+    for (const cb of bucket) cb();
+  }
 }
+
+// `start()` is called by the renderer entry point so subscription
+// lifecycle has a single owner. Importing this module just constructs
+// the singleton; it does not attach IPC listeners as a side effect.
+export const worktreeLifecycle = new WorktreeLifecycleStore(
+  window.api.worktrees,
+  (title, options) => toast.warning(title, options),
+);
 
 export function useWorktreeCreatePhase(worktreeId: string): CreatePhase | null {
   return useSyncExternalStore(
-    (cb) => subscribe(worktreeId, cb),
-    () => phases.get(worktreeId) ?? null,
+    (cb) => worktreeLifecycle.subscribe(worktreeId, cb),
+    () => worktreeLifecycle.snapshot(worktreeId),
     () => null,
   );
 }
