@@ -10,10 +10,10 @@ import {
   listWorktreeIdentities,
   pruneStaleWorktrees,
   removeWorktreeForce,
-} from "../git";
-import { readGlobalConfig } from "../config/global";
-import { shigomoriRoot } from "../util/paths";
-import { loadProjects } from "../projects";
+} from "../lib/git";
+import { readGlobalConfig } from "../lib/config/global";
+import { shigomoriRoot } from "../lib/util/paths";
+import { loadProjects } from "../lib/projects";
 
 export async function nukeEverything(): Promise<void> {
   const projects = loadProjects();

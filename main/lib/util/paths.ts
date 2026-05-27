@@ -3,11 +3,28 @@
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { app } from "electron";
+
+let cachedRoot: string | null = null;
+
+// Called once at boot from main/index.ts with `app.isPackaged`. Keeping the
+// `electron` import out of this file is what lets the rest of `main/lib/`
+// stay free of Electron coupling. Refuses a second call so a stray re-init
+// from somewhere unexpected fails loudly instead of silently flipping the
+// path under live callers.
+export function initShigomoriRoot(isPackaged: boolean): void {
+  if (cachedRoot !== null) {
+    throw new Error("shigomoriRoot already initialized");
+  }
+  cachedRoot = join(homedir(), isPackaged ? "shigomori" : "shigomori-dev");
+}
 
 export function shigomoriRoot(): string {
-  const name = app.isPackaged ? "shigomori" : "shigomori-dev";
-  return join(homedir(), name);
+  if (cachedRoot === null) {
+    throw new Error(
+      "shigomoriRoot not initialized; call initShigomoriRoot at boot",
+    );
+  }
+  return cachedRoot;
 }
 
 export function expandHome(path: string): string {

@@ -4,11 +4,11 @@ import {
   CancelScriptPayloadSchema,
   RunScriptPayloadSchema,
 } from "@shared/schemas";
-import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
-import { findProjectOrThrow } from "../projects";
-import { resolveScriptCommand } from "../scripts/command";
-import { cancelScript, startScript } from "../scripts";
-import { readShigomoriConfig } from "../config/project";
+import { listWorktreeIdentities, resolveDefaultBranch } from "../lib/git";
+import { findProjectOrThrow } from "../lib/projects";
+import { resolveScriptCommand } from "../lib/scripts/command";
+import { cancelScript, startScript } from "../lib/scripts";
+import { readShigomoriConfig } from "../lib/config/project";
 
 export function registerScriptHandlers(): void {
   ipcMain.handle(

@@ -1,5 +1,5 @@
-import { projectsContract } from "@shared/modules/projects/contract";
-import { projectsHandlers } from "../modules/projects/handlers";
+import { projectsContract } from "@shared/ipc/modules/projects/contract";
+import { projectsHandlers } from "./modules/projects/handlers";
 import { registerBranchHandlers } from "./branches";
 import { registerDialogHandlers } from "./dialog";
 import { registerFsHandlers } from "./fs";

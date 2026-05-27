@@ -19,8 +19,8 @@ import {
   listProjectPullRequests,
   mergePullRequest,
   setPullRequestDraft,
-} from "../githubCli";
-import { findProjectOrThrow } from "../projects";
+} from "../lib/githubCli";
+import { findProjectOrThrow } from "../lib/projects";
 
 export function registerGithubCliHandlers(): void {
   ipcMain.handle(

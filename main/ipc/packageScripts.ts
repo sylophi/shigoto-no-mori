@@ -12,20 +12,20 @@ import {
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
   resolveDefaultBranch,
-} from "../git";
+} from "../lib/git";
 import {
   buildScriptCommand,
   readPackageScripts,
-} from "../scripts/packageScripts";
+} from "../lib/scripts/packageScripts";
 import {
   bumpScriptUseCount,
   readScriptSort,
   usageFor,
   writeScriptSort,
-} from "../scripts/packageScriptStats";
-import { findProjectOrThrow } from "../projects";
-import { startScript } from "../scripts";
-import { readShigomoriConfig } from "../config/project";
+} from "../lib/scripts/packageScriptStats";
+import { findProjectOrThrow } from "../lib/projects";
+import { startScript } from "../lib/scripts";
+import { readShigomoriConfig } from "../lib/config/project";
 
 export function registerPackageScriptHandlers(): void {
   ipcMain.handle(

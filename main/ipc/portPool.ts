@@ -1,10 +1,10 @@
 import { ipcMain } from "electron";
 import { CHANNELS } from "@shared/channels";
 import { PortPoolIsActivePayloadSchema } from "@shared/schemas";
-import { findWorktreeIdentityOrThrow } from "../git";
-import { readGlobalConfig } from "../config/global";
-import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
-import { findProjectOrThrow } from "../projects";
+import { findWorktreeIdentityOrThrow } from "../lib/git";
+import { readGlobalConfig } from "../lib/config/global";
+import { isPortPoolConfigured, isPortPoolInstalled } from "../lib/portPool";
+import { findProjectOrThrow } from "../lib/projects";
 
 export function registerPortPoolHandlers(): void {
   ipcMain.handle(

@@ -7,3 +7,11 @@ pre-commit:
       run: pnpm run lint
     format:
       run: pnpm run format:check
+    layering:
+      run: pnpm run check-layering
+
+pre-push:
+  parallel: true
+  commands:
+    layering:
+      run: pnpm run check-layering
