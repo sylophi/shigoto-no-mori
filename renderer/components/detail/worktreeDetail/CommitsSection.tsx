@@ -15,8 +15,14 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
   // teaser's visible shape decoupled from that probe.
   const commits = worktree.recentCommits.slice(0, 3);
   const showAll = worktree.recentCommits.length > 3;
+  // Mirror the upstream-sync pill's dirty-state gate: rebase/merge
+  // needs a clean tree, so hide the affordance instead of surfacing a
+  // git failure after the click.
   const showPrimarySync =
-    !worktree.isPrimary && !worktree.detached && worktree.behindPrimary > 0;
+    !worktree.isPrimary &&
+    !worktree.detached &&
+    worktree.changedCount === 0 &&
+    worktree.behindPrimary > 0;
   const [historyOpen, setHistoryOpen] = useState(false);
   return (
     <section className="space-y-3">

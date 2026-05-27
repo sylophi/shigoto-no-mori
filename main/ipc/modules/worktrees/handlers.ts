@@ -407,7 +407,7 @@ export const worktreesHandlers: Handlers<
         () => null,
       );
       const primaryRef = await resolveDefaultBranch(pp, config?.defaultBranch);
-      await syncWithPrimary(wt, primaryRef);
+      await syncWithPrimary(wt, pp, primaryRef);
     }),
 };
 

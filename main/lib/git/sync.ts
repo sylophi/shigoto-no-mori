@@ -3,7 +3,7 @@
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
 import { run, runLenient } from "./core";
-import { listRemotes } from "./remotes";
+import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -73,10 +73,16 @@ export async function pullRebaseOrMergeAndPush(
   await run(worktreePath, ["push"]);
 }
 
+// Fetch *all* remotes from the project root, not the worktree's tracked
+// upstream: primaryRef can live on a different remote than the branch
+// tracks (e.g. branch tracks fork/feat while primary is origin/main), so
+// `git fetch` from the worktree would leave the rebase target stale.
+// The coalescing helper also dedupes against the focus-driven sweep.
 export async function syncWithPrimary(
   worktreePath: string,
+  projectPath: string,
   primaryRef: string,
 ): Promise<void> {
-  await run(worktreePath, ["fetch"]);
+  await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
 }
