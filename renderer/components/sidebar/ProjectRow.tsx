@@ -1,12 +1,5 @@
 import { useRef } from "react";
-import {
-  AlertTriangle,
-  ChevronRight,
-  Loader2,
-  MoreHorizontal,
-  Plus,
-} from "lucide-react";
-import type { DraggableSyntheticListeners } from "@dnd-kit/core";
+import { Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "@tanstack/react-router";
@@ -19,18 +12,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
-import { ProjectIcon } from "./ProjectIcon";
 import type { Project } from "@shared/schemas";
+import { ProjectHeader } from "./ProjectHeader";
 
 interface ProjectRowProps {
   project: Project;
@@ -296,105 +282,5 @@ export function ProjectRow({
         )}
       </div>
     </div>
-  );
-}
-
-interface ProjectHeaderProps {
-  project: Project;
-  expanded?: boolean;
-  onToggle?: () => void;
-  missing?: boolean;
-  listeners?: DraggableSyntheticListeners;
-  onContextMenu?: (event: React.MouseEvent) => void;
-  arrangeMode?: boolean;
-}
-
-// Header row shared by the healthy and missing-project branches. The
-// project name is `truncate`d, with a Tooltip that only opens when the
-// text actually overflows — uses `useIsTruncated` to suppress redundant
-// tooltips on names that already fit.
-function ProjectHeader({
-  project,
-  expanded,
-  onToggle,
-  missing,
-  listeners,
-  onContextMenu,
-  arrangeMode,
-}: ProjectHeaderProps) {
-  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
-  const baseClass =
-    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
-  const trigger = arrangeMode ? (
-    <div
-      {...listeners}
-      onContextMenu={onContextMenu}
-      className={cn(
-        baseClass,
-        "cursor-grab text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing",
-        missing && "text-muted-foreground/60 hover:text-muted-foreground",
-      )}
-    >
-      {missing ? (
-        <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
-      ) : (
-        <ProjectIcon projectId={project.id} />
-      )}
-      <span
-        ref={nameRef}
-        className={cn(
-          "min-w-0 truncate",
-          missing && "line-through decoration-1",
-        )}
-      >
-        {project.name}
-      </span>
-    </div>
-  ) : missing ? (
-    <div
-      onContextMenu={onContextMenu}
-      className={cn(baseClass, "text-muted-foreground/60")}
-    >
-      <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
-      <span
-        ref={nameRef}
-        className="min-w-0 truncate line-through decoration-1"
-      >
-        {project.name}
-      </span>
-      <span className="shrink-0 text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
-        missing
-      </span>
-    </div>
-  ) : (
-    <button
-      type="button"
-      onClick={onToggle}
-      onContextMenu={onContextMenu}
-      className={cn(
-        baseClass,
-        "text-muted-foreground transition-colors hover:text-foreground",
-      )}
-    >
-      <ChevronRight
-        className={cn(
-          "size-3 shrink-0 transition-transform",
-          expanded && "rotate-90",
-        )}
-      />
-      <ProjectIcon projectId={project.id} />
-      <span ref={nameRef} className="min-w-0 truncate">
-        {project.name}
-      </span>
-    </button>
-  );
-
-  return (
-    <TooltipProvider delay={400}>
-      <Tooltip disabled={!isTruncated}>
-        <TooltipTrigger render={trigger} />
-        <TooltipContent>{project.name}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
   );
 }
