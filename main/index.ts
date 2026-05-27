@@ -1,22 +1,37 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
-import { CHANNELS } from "@shared/channels";
-import { ensureShigomoriRoot } from "./app/bootstrap";
-import { attachContextMenu } from "./app/contextMenu";
-import { refreshAllProjectGitRefs, startBackgroundFetch } from "./app/fetch";
-import { readThemeSync } from "./config/global";
+import { windowContract } from "@shared/ipc/modules/window/contract";
+import { ensureShigomoriRoot } from "./electron/bootstrap";
+import { attachContextMenu } from "./electron/contextMenu";
+import {
+  refreshAllProjectGitRefs,
+  startBackgroundFetch,
+} from "./electron/fetch";
+import { readThemeSync } from "./lib/config/global";
 import { registerIpcHandlers } from "./ipc";
-import { buildAppMenu } from "./app/menu";
+import { buildAppMenu, installMenuImpl } from "./electron/menu";
+import { broadcast } from "./ipc/register";
 import {
   getInflightDeleteIds,
   killAllScripts,
   killScriptsForWorktree,
   markShuttingDown,
   signalAllScriptsBestEffort,
-} from "./scripts";
-import { applyUserShellPath } from "./app/shellPath";
-import { isInstallingUpdate, startUpdater } from "./app/updater";
+} from "./lib/scripts";
+import { initShigomoriRoot } from "./lib/util/paths";
+import { applyUserShellPath } from "./electron/shellPath";
+import {
+  installUpdaterImpl,
+  isInstallingUpdate,
+  startUpdater,
+} from "./electron/updater";
 
+initShigomoriRoot(app.isPackaged);
+
+// Electron-layer impls must be wired before registerIpcHandlers runs so
+// the first renderer call never lands on the throwing default.
+installMenuImpl();
+installUpdaterImpl();
 registerIpcHandlers();
 
 let mainWindow: BrowserWindow | null = null;
@@ -62,10 +77,14 @@ const createWindow = () => {
   // transition (notably ⌘Tab between apps), so React Query's
   // refetch-on-focus needs this signal to be reliable.
   const sendFocus = () => {
-    mainWindow?.webContents.send(CHANNELS.WindowFocused);
+    const wc = mainWindow?.webContents;
+    if (wc) broadcast(windowContract, "focused", undefined, wc);
     refreshAllProjectGitRefs();
   };
-  const sendBlur = () => mainWindow?.webContents.send(CHANNELS.WindowBlurred);
+  const sendBlur = () => {
+    const wc = mainWindow?.webContents;
+    if (wc) broadcast(windowContract, "blurred", undefined, wc);
+  };
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
 
