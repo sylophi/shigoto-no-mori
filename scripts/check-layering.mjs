@@ -132,8 +132,12 @@ function layerOf(repoPath) {
   return null;
 }
 
-function specifierIsSchemaModule(spec) {
-  return spec === "@shared/schemas" || spec.startsWith("@shared/schemas/");
+// Match a directory exactly or any file beneath it. The trailing-slash
+// guard prevents accidentally matching `main/ipcSpecial` against `main/ipc`,
+// while still catching directory imports like `import "../ipc"` that
+// resolve to the bare `main/ipc` path without the slash.
+function isPathOrChild(path, dir) {
+  return path === dir || path.startsWith(`${dir}/`);
 }
 
 function collectImports(source) {
@@ -289,7 +293,11 @@ for (const absPath of files) {
           `type import of "electron" not allowed in main/lib`,
         );
       }
-      if (specifierIsSchemaModule(imp.specifier) && imp.isRuntime) {
+      if (
+        resolved &&
+        isPathOrChild(resolved, "shared/schemas") &&
+        imp.isRuntime
+      ) {
         checkAllowed(
           "lib-schema-runtime",
           "schemaRuntimeImports",
@@ -300,8 +308,8 @@ for (const absPath of files) {
       }
       if (
         resolved &&
-        (resolved.startsWith("main/ipc/") ||
-          resolved.startsWith("main/electron/"))
+        (isPathOrChild(resolved, "main/ipc") ||
+          isPathOrChild(resolved, "main/electron"))
       ) {
         report(
           "lib-upward-import",
@@ -311,7 +319,7 @@ for (const absPath of files) {
         );
       }
     } else if (layer === "ipc") {
-      if (resolved && resolved.startsWith("main/electron/")) {
+      if (resolved && isPathOrChild(resolved, "main/electron")) {
         checkAllowed(
           "ipc-electron-import",
           "ipcImportingElectron",
@@ -339,13 +347,13 @@ for (const absPath of files) {
     } else if (layer === "preload") {
       if (
         resolved &&
-        (resolved.startsWith("main/lib/") ||
-          resolved.startsWith("main/electron/"))
+        (isPathOrChild(resolved, "main/lib") ||
+          isPathOrChild(resolved, "main/electron"))
       ) {
         report(
           "preload-import",
           repoPath,
-          lineOf(source, imp.node.pos),
+          line,
           `main/preload cannot import "${imp.specifier}" (resolves to ${resolved})`,
         );
       }
@@ -392,15 +400,55 @@ if (!FIXTURES) {
   }
 }
 
-if (violations.length === 0) {
-  if (FIXTURES) {
-    console.error(
-      "scripts/check-layering.fixtures/ produced no violations (expected at least one)",
-    );
-    process.exit(1);
+// Fixture mode is an assertion: each fixture file is designed to trip a
+// specific rule. Pass = every expected rule fires, nothing extra. Fail =
+// missing or unexpected violations.
+if (FIXTURES) {
+  const expected = {
+    "scripts/check-layering.fixtures/directoryImport.ts": ["lib-upward-import"],
+    "scripts/check-layering.fixtures/dynamicImport.ts": [
+      "lib-electron-runtime",
+    ],
+    "scripts/check-layering.fixtures/ipcMainImport.ts": [
+      "lib-electron-runtime",
+    ],
+    "scripts/check-layering.fixtures/reExport.ts": ["lib-schema-runtime"],
+    "scripts/check-layering.fixtures/relativeImport.ts": ["lib-upward-import"],
+    "scripts/check-layering.fixtures/relativeSchema.ts": ["lib-schema-runtime"],
+    "scripts/check-layering.fixtures/webContentsSend.ts": ["webcontents-send"],
+  };
+  const actual = new Map();
+  for (const v of violations) {
+    if (!actual.has(v.file)) actual.set(v.file, new Set());
+    actual.get(v.file).add(v.rule);
   }
-  process.exit(0);
+  const problems = [];
+  for (const [file, rules] of Object.entries(expected)) {
+    const fired = actual.get(file) ?? new Set();
+    for (const rule of rules) {
+      if (!fired.has(rule))
+        problems.push(`${file}: expected rule "${rule}" did not fire`);
+    }
+  }
+  for (const [file, rules] of actual) {
+    const exp = new Set(expected[file] ?? []);
+    for (const rule of rules) {
+      if (!exp.has(rule))
+        problems.push(`${file}: unexpected rule "${rule}" fired`);
+    }
+  }
+  if (problems.length === 0) {
+    console.log(
+      `fixtures ok: ${Object.keys(expected).length} files, ${violations.length} expected violation(s)`,
+    );
+    process.exit(0);
+  }
+  for (const p of problems) console.error(p);
+  console.error(`\n${problems.length} fixture problem(s)`);
+  process.exit(1);
 }
+
+if (violations.length === 0) process.exit(0);
 
 const grouped = new Map();
 for (const v of violations) {
