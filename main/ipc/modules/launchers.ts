@@ -1,12 +1,15 @@
+import { shell } from "electron";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import type { Handlers } from "@shared/ipc/types";
-import type {
-  CustomLauncher,
-  DetectedLauncher,
-  GlobalConfig,
-  LauncherCommand,
-  LauncherEntry,
-  ShigomoriConfig,
+import {
+  WEB_GITHUB_ID,
+  type CustomLauncher,
+  type DetectedLauncher,
+  type GlobalConfig,
+  type LauncherCommand,
+  type LauncherEntry,
+  type ShigomoriConfig,
+  type WebLauncher,
 } from "@shared/schemas";
 import { readGlobalConfig } from "../../lib/config/global";
 import { readShigomoriConfig } from "../../lib/config/project";
@@ -19,6 +22,7 @@ import {
   launchCustom,
   launchDetected,
 } from "../../lib/launchers";
+import { getGithubRepoInfo, githubRepoUrl } from "../../lib/githubCli/remote";
 import { findProjectOrThrow } from "../../lib/projects";
 import { countWithin, pruneAndPush } from "../../lib/util/useLog";
 
@@ -65,6 +69,12 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
   );
 }
 
+async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
+  const info = await getGithubRepoInfo(projectPath);
+  if (!info) return [];
+  return [{ kind: "web", id: WEB_GITHUB_ID, label: "GitHub" }];
+}
+
 // Authoritative ordering used by both the LauncherRow buttons and the File
 // menu ⌘1..⌘9 entries. Sort by rolling-window use count (descending),
 // alphabetical by label as the tiebreaker so first-time users see a
@@ -76,14 +86,16 @@ export async function getLaunchersForProject(
   projectId: string,
 ): Promise<LauncherEntry[]> {
   const project = findProjectOrThrow(projectId);
-  const [detected, projectConfig, globalConfig] = await Promise.all([
+  const [detected, projectConfig, globalConfig, web] = await Promise.all([
     detectApps(),
     readShigomoriConfig(project.id),
     readGlobalConfig(),
+    webEntriesFor(project.path),
   ]);
 
   const entries: LauncherEntry[] = [
     ...detectedEntries(detected).filter((e) => e.available),
+    ...web,
     ...customEntriesFrom(globalConfig.launchers),
     ...customEntriesFrom(projectConfig?.launchers),
   ];
@@ -128,6 +140,14 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       const app = findDetected(appId, apps);
       if (!app) throw new Error(`Launcher not detected: ${appId}`);
       await launchDetected(app, worktree.path);
+      bumpUseCount(launcherId);
+      return;
+    }
+
+    if (launcherId === WEB_GITHUB_ID) {
+      const info = await getGithubRepoInfo(project.path);
+      if (!info) throw new Error(`GitHub remote not found: ${project.name}`);
+      await shell.openExternal(githubRepoUrl(info));
       bumpUseCount(launcherId);
       return;
     }

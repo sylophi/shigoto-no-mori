@@ -11,10 +11,22 @@ import { ghReady } from "./readiness";
 // because users do occasionally `git remote add` mid-session, but long
 // enough that the sidebar + open worktree + repo-config queries all
 // share one probe.
-const HAS_GH_REMOTE_TTL_MS = 5 * 60_000;
-const hasGithubRemoteCache = new Map<
+const GH_REPO_TTL_MS = 5 * 60_000;
+
+export interface GithubRepoInfo {
+  // Hostname only, matched against the gh hosts.yml set.
+  host: string;
+  // Port for the web URL, empty when none applies. Populated only for
+  // https remotes — ssh/git/http ports belong to a different service
+  // than the browser would talk to.
+  port: string;
+  owner: string;
+  repo: string;
+}
+
+const githubRepoCache = new Map<
   string,
-  { value: boolean; expires: number }
+  { value: GithubRepoInfo | null; expires: number }
 >();
 
 const KNOWN_HOSTS_TTL_MS = 60 * 60_000;
@@ -53,17 +65,6 @@ function ghHostsPath(): string {
   return join(homedir(), ".config", "gh", "hosts.yml");
 }
 
-function extractHost(url: string): string | null {
-  // ssh shorthand "git@host:path" -- no scheme, colon separates host
-  // from path rather than acting as a port delimiter.
-  const ssh = url.match(/^[^@\s]+@([^:\s]+):/);
-  if (ssh?.[1]) return ssh[1];
-  // Anything with a scheme: https://, ssh://, git://, etc.
-  const u = url.match(/^[a-z]+:\/\/(?:[^@/]+@)?([^/:?\s]+)/i);
-  if (u?.[1]) return u[1];
-  return null;
-}
-
 // GitHub publishes ssh.github.com as an SSH-over-443 alias for users
 // behind firewalls that block port 22. gh itself resolves it to
 // github.com, so we'd hide PR data for valid repos if we matched the
@@ -73,23 +74,68 @@ function normalizeHost(host: string): string {
   return host.startsWith("ssh.") ? host.slice(4) : host;
 }
 
-async function hasGithubRemote(cwd: string): Promise<boolean> {
+// Parses a git remote URL into host/owner/repo. Accepts ssh shorthand
+// (`git@host:owner/repo`) and any URL with a scheme (https, ssh, git, ...).
+// Returns null when the URL isn't shaped like a remote we can resolve.
+function parseRemoteUrl(url: string): GithubRepoInfo | null {
+  const ssh = url.match(/^[^@\s]+@([^:\s]+):([^/\s]+)\/([^/\s]+)$/);
+  if (ssh?.[1] && ssh[2] && ssh[3]) {
+    const repo = ssh[3].replace(/\.git$/, "");
+    if (repo) {
+      return { host: normalizeHost(ssh[1]), port: "", owner: ssh[2], repo };
+    }
+  }
+  // URL handles ports, userinfo, trailing slashes, and non-special
+  // schemes (ssh://, git://) without us hand-rolling a regex that
+  // gets all of those right.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  const owner = segments[0];
+  const rawRepo = segments[1];
+  if (!owner || !rawRepo) return null;
+  const repo = rawRepo.replace(/\.git$/, "");
+  if (!repo) return null;
+  return {
+    host: normalizeHost(parsed.hostname),
+    port: parsed.protocol === "https:" ? parsed.port : "",
+    owner,
+    repo,
+  };
+}
+
+// First remote URL whose host matches a known GitHub host. One probe
+// covers both the "is this a GitHub repo?" gate (ghReadyForRepo) and
+// the web URL builder, since both fire on every worktree open.
+export async function getGithubRepoInfo(
+  cwd: string,
+): Promise<GithubRepoInfo | null> {
   const now = Date.now();
-  const cached = hasGithubRemoteCache.get(cwd);
+  const cached = githubRepoCache.get(cwd);
   if (cached && cached.expires > now) return cached.value;
   const [urls, hosts] = await Promise.all([
     listRemoteUrls(cwd),
     getKnownGithubHosts(),
   ]);
-  const value = urls.some((url) => {
-    const host = extractHost(url);
-    return host !== null && hosts.has(normalizeHost(host));
-  });
-  hasGithubRemoteCache.set(cwd, {
-    value,
-    expires: now + HAS_GH_REMOTE_TTL_MS,
-  });
+  let value: GithubRepoInfo | null = null;
+  for (const url of urls) {
+    const parsed = parseRemoteUrl(url);
+    if (parsed && hosts.has(parsed.host)) {
+      value = parsed;
+      break;
+    }
+  }
+  githubRepoCache.set(cwd, { value, expires: now + GH_REPO_TTL_MS });
   return value;
+}
+
+export function githubRepoUrl(info: GithubRepoInfo): string {
+  const host = info.port ? `${info.host}:${info.port}` : info.host;
+  return `https://${host}/${info.owner}/${info.repo}`;
 }
 
 // Combined gate for read paths: gh itself ready, AND this specific repo
@@ -97,5 +143,5 @@ async function hasGithubRemote(cwd: string): Promise<boolean> {
 // messages can stay specific.
 export async function ghReadyForRepo(cwd: string): Promise<boolean> {
   if (!(await ghReady())) return false;
-  return hasGithubRemote(cwd);
+  return (await getGithubRepoInfo(cwd)) !== null;
 }
