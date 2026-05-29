@@ -1,4 +1,5 @@
-import type { ClipboardEvent, CSSProperties } from "react";
+import type { CSSProperties } from "react";
+import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/utils";
 import { useShortPath } from "@/hooks/ui/useShortPath";
 
@@ -8,6 +9,7 @@ interface PathSpanProps {
   className?: string;
   style?: CSSProperties;
   title?: string;
+  copyable?: boolean;
 }
 
 // Renders a path as `~/...` (tildified) and progressively abbreviates
@@ -16,27 +18,39 @@ interface PathSpanProps {
 // normally apply to a truncating span (e.g. `min-w-0 truncate font-mono`)
 // so the layout still bounds the box and CSS truncate acts as the floor.
 //
-// Selection is enabled and copy yields the full absolute path, not the
-// abbreviated rendering, so pasting into a terminal works.
+// With `copyable`, an inline copy button (revealed on hover via `group/copy`)
+// is rendered next to the text and copies the full absolute path.
 export function PathSpan({
   path,
   home,
   className,
   style,
   title,
+  copyable = false,
 }: PathSpanProps) {
   const [ref, display] = useShortPath(path, home);
-  const handleCopy = (e: ClipboardEvent<HTMLSpanElement>) => {
-    e.preventDefault();
-    e.clipboardData.setData("text/plain", path);
-  };
+  if (copyable) {
+    return (
+      <span
+        ref={ref}
+        className={cn(
+          "group/copy flex min-w-0 items-center gap-1 select-text",
+          className,
+        )}
+        style={style}
+        title={title ?? path}
+      >
+        <span className="min-w-0 truncate">{display}</span>
+        <CopyButton value={path} label="Copy path" />
+      </span>
+    );
+  }
   return (
     <span
       ref={ref}
       className={cn("select-text", className)}
       style={style}
       title={title ?? path}
-      onCopy={handleCopy}
     >
       {display}
     </span>

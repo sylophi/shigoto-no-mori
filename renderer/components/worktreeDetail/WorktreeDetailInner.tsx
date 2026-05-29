@@ -213,7 +213,8 @@ export function WorktreeDetailInner({
           <PathSpan
             path={worktree.path}
             home={home}
-            className="min-w-0 flex-1 truncate font-mono"
+            className="min-w-0 flex-1 font-mono"
+            copyable
           />
           <WorktreeKindIcon worktree={worktree} />
         </div>
