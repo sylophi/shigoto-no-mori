@@ -58,11 +58,16 @@ export const queryKeys = {
     ["githubCli", "repoMergeConfig", projectId] as const,
   pullRequestDiff: (projectId: string, number: number | undefined) =>
     ["githubCli", "pullRequestDiff", projectId, number] as const,
+  // PR queries share a project-scoped prefix so invalidating
+  // pullRequestsForProject cascades to both projectPullRequests and
+  // any open worktreePullRequest.
+  pullRequestsAll: () => ["githubCli", "pullRequests"] as const,
+  pullRequestsForProject: (projectId: string) =>
+    ["githubCli", "pullRequests", projectId] as const,
   projectPullRequests: (projectId: string) =>
-    ["githubCli", "projectPullRequests", projectId] as const,
-  worktreePullRequests: () => ["githubCli", "worktreePullRequest"] as const,
+    ["githubCli", "pullRequests", projectId, "project"] as const,
   worktreePullRequest: (projectId: string, branch: string) =>
-    ["githubCli", "worktreePullRequest", projectId, branch] as const,
+    ["githubCli", "pullRequests", projectId, "branch", branch] as const,
 
   fsListDirectory: (path: string) => ["fs", "listDirectory", path] as const,
   fsIsGitRepo: (path: string) => ["fs", "isGitRepo", path] as const,

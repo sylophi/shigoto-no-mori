@@ -21,6 +21,8 @@ function useSyncMutation(
       void queryClient.invalidateQueries({
         queryKey: queryKeys.worktrees(vars.projectId),
       });
+      // PR queries refresh via the refs-changed broadcast that the push
+      // itself triggers, so no PR invalidation is needed here.
     },
     meta: { errorTitle },
   });

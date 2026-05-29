@@ -12,13 +12,17 @@ import {
 } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
-// Invalidates every active worktree PR query. The detail pane only
-// mounts one at a time, but the IPC events that drive this are
-// project-agnostic so we prefix-invalidate.
+// Invalidates per-branch PR queries across projects (one tab worth,
+// since only one detail pane mounts at a time). The predicate skips
+// project-map queries, which have their own sweep-driven refresh and
+// shouldn't refetch on every window focus.
 export function invalidateAllWorktreePullRequests(
   qc: ReturnType<typeof useQueryClient>,
 ) {
-  void qc.invalidateQueries({ queryKey: queryKeys.worktreePullRequests() });
+  void qc.invalidateQueries({
+    queryKey: queryKeys.pullRequestsAll(),
+    predicate: (q) => q.queryKey[3] === "branch",
+  });
 }
 
 // Refresh the open worktree's PR on the two events most likely to move

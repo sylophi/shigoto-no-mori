@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeMethod, PullRequestDetail } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 import { invalidateBranchState } from "../git/useBranches";
-import { invalidateAllWorktreePullRequests } from "../worktrees/useWorktreePullRequest";
+import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
 
 interface MergeVariables {
   projectId: string;
@@ -47,7 +47,7 @@ export function useMergePullRequest() {
       // delete), and rewrites the per-project ShigomoriConfig with the
       // new lastMergeMethod. Invalidate everything downstream so the
       // sidebar dot, sync pill, and merge button all catch up.
-      invalidateAllWorktreePullRequests(qc);
+      invalidatePullRequestsForProject(qc, vars.projectId);
       invalidateBranchState(qc, vars.projectId);
       void qc.invalidateQueries({
         queryKey: queryKeys.shigomoriConfig(vars.projectId),
