@@ -73,18 +73,27 @@ function normalizeHost(host: string): string {
 // (`git@host:owner/repo`) and any URL with a scheme (https, ssh, git, ...).
 // Returns null when the URL isn't shaped like a remote we can resolve.
 function parseRemoteUrl(url: string): GithubRepoInfo | null {
-  const cleaned = url.replace(/[?#].*$/, "").replace(/\.git$/, "");
-  const ssh = cleaned.match(/^[^@\s]+@([^:\s]+):([^/\s]+)\/([^/\s]+)$/);
+  const ssh = url.match(/^[^@\s]+@([^:\s]+):([^/\s]+)\/([^/\s]+)$/);
   if (ssh?.[1] && ssh[2] && ssh[3]) {
-    return { host: normalizeHost(ssh[1]), owner: ssh[2], repo: ssh[3] };
+    const repo = ssh[3].replace(/\.git$/, "");
+    if (repo) return { host: normalizeHost(ssh[1]), owner: ssh[2], repo };
   }
-  const u = cleaned.match(
-    /^[a-z]+:\/\/(?:[^@/]+@)?([^/:\s]+)\/([^/\s]+)\/([^/\s]+)$/i,
-  );
-  if (u?.[1] && u[2] && u[3]) {
-    return { host: normalizeHost(u[1]), owner: u[2], repo: u[3] };
+  // URL handles ports, userinfo, trailing slashes, and non-special
+  // schemes (ssh://, git://) without us hand-rolling a regex that
+  // gets all of those right.
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
   }
-  return null;
+  const segments = parsed.pathname.split("/").filter(Boolean);
+  const owner = segments[0];
+  const rawRepo = segments[1];
+  if (!owner || !rawRepo) return null;
+  const repo = rawRepo.replace(/\.git$/, "");
+  if (!repo) return null;
+  return { host: normalizeHost(parsed.hostname), owner, repo };
 }
 
 // First remote URL whose host matches a known GitHub host. One probe
