@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PullRequestDetail } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
-import { invalidateAllWorktreePullRequests } from "../worktrees/useWorktreePullRequest";
+import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
 
 interface SetDraftVariables {
   projectId: string;
@@ -43,8 +43,8 @@ export function useSetPullRequestDraft() {
       if (!context) return;
       qc.setQueryData(context.key, context.prev);
     },
-    onSettled: () => {
-      invalidateAllWorktreePullRequests(qc);
+    onSettled: (_data, _err, vars) => {
+      invalidatePullRequestsForProject(qc, vars.projectId);
     },
     meta: { silentError: true },
   });
