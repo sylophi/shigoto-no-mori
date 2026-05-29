@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { buildClient } from "@shared/ipc/buildClient";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   GithubCliProjectPayloadSchema,
@@ -52,16 +51,3 @@ export const githubCliContract = {
 } as const;
 
 export type GithubCliContract = typeof githubCliContract;
-
-const client = buildClient(githubCliContract);
-
-export const githubCli = {
-  readiness: () => client.readiness(),
-  projectPullRequests: client.projectPullRequests,
-  worktreePullRequest: client.worktreePullRequest,
-  repoMergeConfig: client.repoMergeConfig,
-  mergePullRequest: client.mergePullRequest,
-  pullRequestDiff: client.pullRequestDiff,
-  setPullRequestDraft: client.setPullRequestDraft,
-  onProjectPullRequestsRefreshed: client.projectPullRequestsRefreshed,
-} as const;

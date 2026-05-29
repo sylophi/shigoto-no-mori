@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { buildClient } from "@shared/ipc/buildClient";
 import { broadcast } from "@shared/ipc/contract";
 
 export const windowContract = {
@@ -8,10 +7,3 @@ export const windowContract = {
 } as const;
 
 export type WindowContract = typeof windowContract;
-
-const client = buildClient(windowContract);
-
-export const windowApi = {
-  onFocused: client.focused,
-  onBlurred: client.blurred,
-} as const;
