@@ -50,9 +50,6 @@ export function WorktreeLocation() {
             <LocationSkeleton />
           ) : (
             <LocationForm
-              // Remount when the persisted layout config changes so the
-              // form rehydrates from props without a useEffect mirror.
-              key={`${config?.worktreeLayout ?? "managed-root"}|${config?.customWorktreePath ?? ""}`}
               projectId={projectId}
               projectPath={project.path}
               shigomoriRoot={runtime.shigomoriRoot}
