@@ -14,7 +14,12 @@ import { ghReady } from "./readiness";
 const GH_REPO_TTL_MS = 5 * 60_000;
 
 export interface GithubRepoInfo {
+  // Hostname only, matched against the gh hosts.yml set.
   host: string;
+  // Port for the web URL, empty when none applies. Populated only for
+  // https remotes — ssh/git/http ports belong to a different service
+  // than the browser would talk to.
+  port: string;
   owner: string;
   repo: string;
 }
@@ -76,7 +81,9 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
   const ssh = url.match(/^[^@\s]+@([^:\s]+):([^/\s]+)\/([^/\s]+)$/);
   if (ssh?.[1] && ssh[2] && ssh[3]) {
     const repo = ssh[3].replace(/\.git$/, "");
-    if (repo) return { host: normalizeHost(ssh[1]), owner: ssh[2], repo };
+    if (repo) {
+      return { host: normalizeHost(ssh[1]), port: "", owner: ssh[2], repo };
+    }
   }
   // URL handles ports, userinfo, trailing slashes, and non-special
   // schemes (ssh://, git://) without us hand-rolling a regex that
@@ -93,7 +100,12 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
   if (!owner || !rawRepo) return null;
   const repo = rawRepo.replace(/\.git$/, "");
   if (!repo) return null;
-  return { host: normalizeHost(parsed.hostname), owner, repo };
+  return {
+    host: normalizeHost(parsed.hostname),
+    port: parsed.protocol === "https:" ? parsed.port : "",
+    owner,
+    repo,
+  };
 }
 
 // First remote URL whose host matches a known GitHub host. One probe
@@ -122,7 +134,8 @@ export async function getGithubRepoInfo(
 }
 
 export function githubRepoUrl(info: GithubRepoInfo): string {
-  return `https://${info.host}/${info.owner}/${info.repo}`;
+  const host = info.port ? `${info.host}:${info.port}` : info.host;
+  return `https://${host}/${info.owner}/${info.repo}`;
 }
 
 // Combined gate for read paths: gh itself ready, AND this specific repo
