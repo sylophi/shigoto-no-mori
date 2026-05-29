@@ -4,7 +4,7 @@ import {
   createLocalBranch,
   deleteAnyLocalBranch,
   renameAnyLocalBranch,
-} from "../../lib/git";
+} from "../../lib/git/branches";
 import { findProjectOrThrow } from "../../lib/projects";
 
 export const branchesHandlers: Handlers<typeof branchesContract> = {

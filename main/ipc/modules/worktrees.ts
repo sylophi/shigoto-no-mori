@@ -9,25 +9,25 @@ import {
   type WorktreeLifecyclePhase,
 } from "@shared/schemas";
 import { readShigomoriConfig } from "../../lib/config/project";
+import { checkoutBranch, renameBranch } from "../../lib/git/branches";
+import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
+import { resolveDefaultBranch } from "../../lib/git/remotes";
 import {
-  checkoutBranch,
-  describeWorktree,
-  findWorktreeIdentityOrThrow,
-  getCommitDiff,
-  getWorktreeDiff,
-  listCommits,
-  listWorktrees,
   overwriteFromUpstream,
   publishCurrentBranch,
   pullFastForward,
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
-  renameBranch,
-  resolveDefaultBranch,
   syncWithPrimary,
+} from "../../lib/git/sync";
+import {
+  describeWorktree,
+  findWorktreeIdentityOrThrow,
+  listCommits,
+  listWorktrees,
   type WorktreeIdentity,
-} from "../../lib/git";
+} from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
 import {
   convertExternalWorktree,
@@ -110,6 +110,7 @@ export const worktreesHandlers: Handlers<
 
   renameBranch: async ({ projectId, worktreeId, newBranch }) => {
     const project = findProjectOrThrow(projectId);
+    // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
     const target = await findWorktreeIdentityOrThrow(
       project.id,
       project.path,
@@ -126,6 +127,7 @@ export const worktreesHandlers: Handlers<
 
   checkoutBranch: async ({ projectId, worktreeId, branch }) => {
     const project = findProjectOrThrow(projectId);
+    // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
     const target = await findWorktreeIdentityOrThrow(
       project.id,
       project.path,
@@ -208,6 +210,7 @@ async function syncWorktree(
   ) => Promise<void>,
 ): Promise<Worktree> {
   const project = findProjectOrThrow(projectId);
+  // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
   const target = await findWorktreeIdentityOrThrow(
     project.id,
     project.path,

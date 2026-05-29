@@ -30,6 +30,8 @@ interface AddProjectViewProps {
 
 type AddProjectStage = "browse" | "scanning" | "results";
 
+// react-doctor-disable-next-line react-doctor/no-giant-component -- browse logic already extracted to useBrowseState; remaining scan flow + keyboard handlers are tightly coupled
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- 7 fields split between browse and scan flows; transitions are linear and local, useReducer would add boilerplate without removing branching
 export function AddProjectView({ onClose }: AddProjectViewProps) {
   // The input value IS the path. Tildified paths are expanded server-side.
   const [query, setQuery] = useState<string>("~/");
@@ -132,8 +134,8 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     setBulkAdding(true);
     for (const path of toAdd) {
       try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential to avoid races on the state.json write
-        await addProject.mutateAsync(path);
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the state.json write
+        await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the state.json write
       } catch {
         // Skip individual failures; user can retry by re-scanning.
       }
@@ -330,12 +332,10 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
         })}
 
         {isLoading && !listing && (
-          <div className="px-3 py-3 text-xs text-muted-foreground">
-            Loading…
-          </div>
+          <div className="p-3 text-xs text-muted-foreground">Loading…</div>
         )}
         {!isLoading && !error && filtered.length === 0 && (
-          <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+          <div className="p-3 text-center text-xs text-muted-foreground">
             {leafFilter.length > 0
               ? `No folders matching "${leafFilter}".`
               : "Empty directory."}

@@ -7,12 +7,12 @@
 // fresher per-branch PR query.
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git";
+import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git/remotes";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
   refreshProjectPullRequests,
-} from "../lib/githubCli";
+} from "../lib/githubCli/pullRequests";
 import { loadProjects } from "../lib/projects";
 import { broadcastAll } from "../ipc/register";
 

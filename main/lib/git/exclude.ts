@@ -40,9 +40,11 @@ export async function appendExcludes(
     // file doesn't exist yet -- info/ may or may not; mkdir below handles it
   }
   const existingLines = new Set(existing.split("\n"));
-  const toAdd = paths
-    .map((p) => `/${escapeGitignorePattern(p)}`)
-    .filter((line) => !existingLines.has(line));
+  const toAdd: string[] = [];
+  for (const p of paths) {
+    const line = `/${escapeGitignorePattern(p)}`;
+    if (!existingLines.has(line)) toAdd.push(line);
+  }
   if (toAdd.length === 0) return;
   await mkdir(dirname(excludeFile), { recursive: true });
   const needsLeadingNewline =

@@ -1,6 +1,7 @@
 /* oxlint-disable no-await-in-loop -- candidate sweeps are intentionally
    serial: the first match in priority order wins, so parallelising would
    either do unnecessary work or pick a lower-priority winner. */
+/* react-doctor-disable react-doctor/async-await-in-loop -- same reason as oxlint above. */
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
@@ -139,6 +140,7 @@ async function findFirstExisting(
 ): Promise<string | null> {
   for (const candidate of candidates) {
     if (!isPathWithinProject(projectCwd, candidate)) continue;
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
     if (await fileExists(candidate)) return candidate;
   }
   return null;
@@ -152,18 +154,21 @@ function resolveIconHref(projectCwd: string, href: string): string[] {
 async function resolveIconPath(cwd: string): Promise<string | null> {
   for (const candidate of ICON_CANDIDATES) {
     const resolved = join(cwd, candidate);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
     if (await fileExists(resolved)) return resolved;
   }
 
   for (const sourceFile of ICON_SOURCE_FILES) {
     let source: string;
     try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
       source = await readFile(join(cwd, sourceFile), "utf8");
     } catch {
       continue;
     }
     const href = extractIconHref(source);
     if (!href) continue;
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
     const existing = await findFirstExisting(cwd, resolveIconHref(cwd, href));
     if (existing) return existing;
   }
@@ -262,6 +267,7 @@ function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
       do {
         persistPending = false;
         try {
+          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- do/while coalesces concurrent persists into one in-flight write
           await atomicWriteJson(indexPath(), Object.fromEntries(map));
         } catch (error) {
           console.warn("[icon-cache] failed to persist index:", error);

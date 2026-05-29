@@ -3,11 +3,11 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import type { ScriptEvent } from "@shared/schemas";
 import { readShigomoriConfig } from "../../lib/config/project";
+import { resolveDefaultBranch } from "../../lib/git/remotes";
 import {
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
-  resolveDefaultBranch,
-} from "../../lib/git";
+} from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
 import { startScript } from "../../lib/scripts";
 import {
@@ -54,8 +54,10 @@ export const packageScriptsHandlers: Handlers<
   run: async ({ projectId, worktreeId, scriptName }, { event }) => {
     const project = findProjectOrThrow(projectId);
 
-    const config = await readShigomoriConfig(project.id);
-    const identities = await listWorktreeIdentities(project.id, project.path);
+    const [config, identities] = await Promise.all([
+      readShigomoriConfig(project.id),
+      listWorktreeIdentities(project.id, project.path),
+    ]);
     const worktree = identities.find((i) => i.id === worktreeId);
     if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
 

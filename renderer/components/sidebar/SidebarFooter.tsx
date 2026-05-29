@@ -32,7 +32,7 @@ export function SidebarFooter({
           onClick={onToggleArrange}
           className="rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
         >
-          Done
+          Done arranging
         </button>
       </div>
     );

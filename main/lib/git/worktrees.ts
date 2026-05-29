@@ -129,6 +129,7 @@ function parseLog(stdout: string): CommitSummary[] {
   const commits: CommitSummary[] = [];
   for (const chunk of stdout.split(LOG_SENTINEL)) {
     if (!chunk) continue;
+    // react-doctor-disable-next-line react-doctor/js-set-map-lookups -- string.indexOf for a single newline, not an array membership test
     const newlineAt = chunk.indexOf("\n");
     const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
     const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
@@ -203,26 +204,29 @@ export async function listWorktreeIdentities(
   // This keeps mixed states (some worktrees still in the old layout
   // after a partial migration) from mislabeling rows as external.
   const managedPrefixes = managedPrefixesFor(projectPath, config);
-  return parsePorcelain(stdout)
-    .filter((e) => !e.bare)
-    .map((entry, index) => {
-      const branch = deriveBranch(entry);
-      const isPrimary = entry.path === projectPath || index === 0;
-      // Primary checkout sits at the project root, so its "name" is just
-      // the project's directory basename. Managed worktrees use the picked
-      // animal dirname; external ones use whatever the user named them.
-      const name = basename(entry.path);
-      return {
-        id: worktreeIdFromPath(entry.path),
-        projectId,
-        name,
-        branch,
-        path: entry.path,
-        isPrimary,
-        isExternal: !isManagedPath(entry.path, managedPrefixes),
-        detached: entry.detached ?? false,
-      };
+  const identities: WorktreeIdentity[] = [];
+  let index = 0;
+  for (const entry of parsePorcelain(stdout)) {
+    if (entry.bare) continue;
+    const branch = deriveBranch(entry);
+    const isPrimary = entry.path === projectPath || index === 0;
+    // Primary checkout sits at the project root, so its "name" is just
+    // the project's directory basename. Managed worktrees use the picked
+    // animal dirname; external ones use whatever the user named them.
+    const name = basename(entry.path);
+    identities.push({
+      id: worktreeIdFromPath(entry.path),
+      projectId,
+      name,
+      branch,
+      path: entry.path,
+      isPrimary,
+      isExternal: !isManagedPath(entry.path, managedPrefixes),
+      detached: entry.detached ?? false,
     });
+    index++;
+  }
+  return identities;
 }
 
 // How many recent commits to surface on the worktree detail page. The

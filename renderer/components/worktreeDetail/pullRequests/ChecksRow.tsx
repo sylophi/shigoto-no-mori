@@ -38,9 +38,8 @@ export function ChecksRow({ pr }: { pr: PullRequestDetail }) {
       </button>
       {expanded && (
         <ul className="space-y-0.5 pl-8">
-          {pr.checkList.map((check, i) => (
-            // oxlint-disable-next-line react/no-array-index-key -- check names aren't unique across providers
-            <li key={`${check.name}::${i}`}>
+          {pr.checkList.map((check) => (
+            <li key={`${check.name}::${check.url ?? ""}`}>
               <CheckEntry check={check} />
             </li>
           ))}

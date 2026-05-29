@@ -101,7 +101,7 @@ export function SettingsForm({
   };
 
   const pickTheme = (theme: Theme) => {
-    setForm({ ...form, theme });
+    setForm((prev) => ({ ...prev, theme }));
     setOverride(theme);
   };
 
@@ -114,7 +114,7 @@ export function SettingsForm({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-10">
           <VersionSection />
 
@@ -173,7 +173,7 @@ export function SettingsForm({
             <ToggleRow
               checked={form.deleteBranchOnRemove}
               onCheckedChange={(v) =>
-                setForm({ ...form, deleteBranchOnRemove: v })
+                setForm((prev) => ({ ...prev, deleteBranchOnRemove: v }))
               }
               label="Delete branch when removing worktree"
               description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
@@ -184,7 +184,9 @@ export function SettingsForm({
             <SectionHeading className="mb-1">Integrations</SectionHeading>
             <ToggleRow
               checked={form.githubCli && ghReady}
-              onCheckedChange={(v) => setForm({ ...form, githubCli: v })}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, githubCli: v }))
+              }
               disabled={!ghReady}
               label="Use GitHub CLI"
               description={ghDescription(ghInstalled, ghAuthed)}
@@ -192,14 +194,16 @@ export function SettingsForm({
             <ToggleRow
               checked={form.autoPopulateInstall}
               onCheckedChange={(v) =>
-                setForm({ ...form, autoPopulateInstall: v })
+                setForm((prev) => ({ ...prev, autoPopulateInstall: v }))
               }
               label="Auto-populate install command"
               description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
             />
             <ToggleRow
               checked={form.portPool && portPoolInstalled}
-              onCheckedChange={(v) => setForm({ ...form, portPool: v })}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, portPool: v }))
+              }
               disabled={!portPoolInstalled}
               label="Automatically use port-pool"
               description={

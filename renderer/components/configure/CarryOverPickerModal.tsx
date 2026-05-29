@@ -51,6 +51,7 @@ export function CarryOverPickerModal({
   onPick,
   onClose,
 }: CarryOverPickerModalProps) {
+  // react-doctor-disable-next-line react-doctor/no-derived-useState -- cwd diverges from projectPath as the user navigates; CarryOverSection remounts via key={projectPath} to reseed
   const [cwd, setCwd] = useState(projectPath);
   const [filter, setFilter] = useState("");
   const [highlightedIdx, setHighlightedIdx] = useState(0);
@@ -74,19 +75,23 @@ export function CarryOverPickerModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const resetView = (nextCwd: string) => {
+    setCwd(nextCwd);
+    setFilter("");
+    setHighlightedIdx(0);
+  };
+
   const goUp = () => {
     if (atRoot) return;
     const idx = cwd.lastIndexOf("/");
     if (idx <= 0) return;
     const parent = cwd.slice(0, idx);
     if (parent.length < projectPath.length) return;
-    setCwd(parent);
-    setFilter("");
+    resetView(parent);
   };
 
   const navigateInto = (name: string) => {
-    setCwd(`${cwd}/${name}`);
-    setFilter("");
+    resetView(`${cwd}/${name}`);
   };
 
   const relativeFor = (name: string): string => {
@@ -108,12 +113,6 @@ export function CarryOverPickerModal({
   const entries = (listing?.entries ?? []).filter((e) =>
     trimmed ? e.name.toLowerCase().includes(trimmed) : true,
   );
-
-  // Snap back to the top whenever the visible list shifts under us so the
-  // highlight never lands on a stale or out-of-range row.
-  useEffect(() => {
-    setHighlightedIdx(0);
-  }, [cwd, filter]);
 
   useEffect(() => {
     if (entries.length === 0) return;
@@ -184,7 +183,10 @@ export function CarryOverPickerModal({
         <input
           type="text"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) => {
+            setFilter(e.target.value);
+            setHighlightedIdx(0);
+          }}
           onKeyDown={onInputKeyDown}
           placeholder="Filter"
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
@@ -208,7 +210,7 @@ export function CarryOverPickerModal({
         {isLoading && !listing ? (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            Loading...
+            Loading…
           </div>
         ) : error ? (
           <div className="px-3 py-6 text-center text-xs text-muted-foreground">

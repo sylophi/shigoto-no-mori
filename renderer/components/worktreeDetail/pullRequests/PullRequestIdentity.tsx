@@ -133,16 +133,13 @@ function MetaSentence({
 
 function PullRequestTitleLink({ pr }: { pr: PullRequestDetail }) {
   return (
-    <a
-      href={pr.url}
-      onClick={(e) => {
-        e.preventDefault();
-        openPullRequest(pr.url);
-      }}
-      className="rounded text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+    <button
+      type="button"
+      onClick={() => openPullRequest(pr.url)}
+      className="rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
       title={`Open #${pr.number} on GitHub`}
     >
       {pr.title}
-    </a>
+    </button>
   );
 }

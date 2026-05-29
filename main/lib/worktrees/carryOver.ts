@@ -33,6 +33,7 @@ async function applyOne(
     };
   }
   try {
+    // react-doctor-disable-next-line react-doctor/async-defer-await -- mkdir is required by both branches below; moving it past the guard would duplicate it
     await mkdir(dirname(dst), { recursive: true });
     if (entry.mode === "symlink") {
       // Absolute target so the link survives moving the worktree dir around.
@@ -78,12 +79,12 @@ export async function applyCarryOver(
   const outcomes = await Promise.all(
     entries.map((e) => applyOne(sourcePath, destPath, e)),
   );
-  const failures = outcomes
-    .map((o) => o.failure)
-    .filter((f): f is CarryOverFailure => f !== null);
-  const excludes = outcomes
-    .map((o) => o.excludePath)
-    .filter((p): p is string => p !== null);
+  const failures: CarryOverFailure[] = [];
+  const excludes: string[] = [];
+  for (const o of outcomes) {
+    if (o.failure !== null) failures.push(o.failure);
+    if (o.excludePath !== null) excludes.push(o.excludePath);
+  }
   // Single write coalesces concurrent symlink entries — no race on the file.
   await appendExcludes(destPath, excludes);
   return { applied: entries.length - failures.length, failures };

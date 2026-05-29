@@ -1,10 +1,14 @@
 import Anser, { type AnserJsonEntry } from "anser";
 
+export interface ConsoleToken extends AnserJsonEntry {
+  id: string;
+}
+
 // Combine chunks, collapse \r progress-bar overwrites within each line
 // (the last segment wins), then parse ANSI/SGR into colored + styled
 // tokens. \r-collapse runs before parsing so progress indicators that
 // don't change attributes mid-bar still show as one final line.
-export function parseOutput(chunks: string[]): AnserJsonEntry[] {
+export function parseOutput(chunks: string[]): ConsoleToken[] {
   if (chunks.length === 0) return [];
   const collapsed = chunks
     .join("")
@@ -13,10 +17,12 @@ export function parseOutput(chunks: string[]): AnserJsonEntry[] {
       line.includes("\r") ? (line.split("\r").pop() ?? line) : line,
     )
     .join("\n");
-  return Anser.ansiToJson(collapsed, {
+  const tokens = Anser.ansiToJson(collapsed, {
     use_classes: true,
     remove_empty: true,
   });
+  // oxlint-disable-next-line no-map-spread -- intentional copy: keeps parseOutput pure so React Compiler can memoize
+  return tokens.map((tok, i) => ({ ...tok, id: String(i) }));
 }
 
 // http(s) only — file:/mailto:/data: would surprise the user if we

@@ -44,16 +44,20 @@ function RootLayout() {
 
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
-    document.body.style.cursor = "col-resize";
-    document.body.style.userSelect = "none";
+    Object.assign(document.body.style, {
+      cursor: "col-resize",
+      userSelect: "none",
+    });
     let last = sidebarWidth;
     const onMove = (ev: MouseEvent) => {
       last = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX));
       setSidebarWidth(last);
     };
     const onUp = () => {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
+      Object.assign(document.body.style, {
+        cursor: "",
+        userSelect: "",
+      });
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       try {

@@ -28,16 +28,16 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
 
   const sorted = sortEntries(entries, sortMode, pkg.usage);
 
-  const filtered: SortableEntry[] = query
-    ? sorted
-        .map((e) => ({
-          name: e.name,
-          command: e.command,
-          score: scoreMatch(query, e.name),
-        }))
-        .filter((e) => e.score > 0)
-        .toSorted((a, b) => b.score - a.score)
-    : sorted;
+  let filtered: SortableEntry[] = sorted;
+  if (query) {
+    const scored: (SortableEntry & { score: number })[] = [];
+    for (const e of sorted) {
+      const score = scoreMatch(query, e.name);
+      if (score > 0) scored.push({ name: e.name, command: e.command, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    filtered = scored;
+  }
 
   return (
     <div className="space-y-2">
@@ -84,9 +84,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
           </div>
 
           {filtered.length === 0 ? (
-            <p className="px-1 py-1 text-xs text-muted-foreground/70">
-              No matches.
-            </p>
+            <p className="p-1 text-xs text-muted-foreground/70">No matches.</p>
           ) : (
             <ScriptList>
               {filtered.map((entry, idx) => (

@@ -10,7 +10,8 @@ import type {
   WorktreeLifecyclePhase,
 } from "@shared/schemas";
 import { applyCarryOver } from "./carryOver";
-import { listWorktreeIdentities, resolveDefaultBranch } from "../git";
+import { resolveDefaultBranch } from "../git/remotes";
+import { listWorktreeIdentities } from "../git/worktrees";
 import { readGlobalConfig } from "../config/global";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
 import { resolveScriptCommand } from "../scripts/command";

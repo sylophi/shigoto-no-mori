@@ -59,6 +59,7 @@ export function CarryOverSection({
 
       {picking && (
         <CarryOverPickerModal
+          key={projectPath}
           projectId={projectId}
           projectPath={projectPath}
           selectedPaths={selectedPaths}

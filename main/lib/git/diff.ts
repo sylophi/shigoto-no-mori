@@ -6,16 +6,14 @@ import { runLenient } from "./core";
 // modifications in @pierre/diffs. `runLenient` swallows the non-zero
 // exits `git diff --no-index` always emits when there's a diff.
 export async function getWorktreeDiff(worktreePath: string): Promise<string> {
-  const tracked = await runLenient(worktreePath, [
-    "diff",
-    "HEAD",
-    "--no-color",
-  ]);
-  const lsOutput = await runLenient(worktreePath, [
-    "ls-files",
-    "--others",
-    "--exclude-standard",
-    "-z",
+  const [tracked, lsOutput] = await Promise.all([
+    runLenient(worktreePath, ["diff", "HEAD", "--no-color"]),
+    runLenient(worktreePath, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+    ]),
   ]);
   const untracked = lsOutput.split("\0").filter((s) => s.length > 0);
   const additions = await Promise.all(

@@ -124,7 +124,7 @@ export function ConfigureForm({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
@@ -167,7 +167,9 @@ export function ConfigureForm({
                 id="default-branch"
                 projectId={projectId}
                 value={form.defaultBranch}
-                onChange={(v) => setForm({ ...form, defaultBranch: v })}
+                onChange={(v) =>
+                  setForm((prev) => ({ ...prev, defaultBranch: v }))
+                }
                 placeholder={resolvedDefaultBranch}
               />
               <p className="text-xs text-muted-foreground">
@@ -210,13 +212,15 @@ export function ConfigureForm({
               id="script-setup"
               label="Setup"
               value={form.setup}
-              onChange={(setup) => setForm({ ...form, setup })}
+              onChange={(setup) => setForm((prev) => ({ ...prev, setup }))}
             />
             <ScriptField
               id="script-teardown"
               label="Teardown"
               value={form.teardown}
-              onChange={(teardown) => setForm({ ...form, teardown })}
+              onChange={(teardown) =>
+                setForm((prev) => ({ ...prev, teardown }))
+              }
             />
           </section>
 

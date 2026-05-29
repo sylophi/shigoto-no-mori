@@ -10,14 +10,13 @@ import {
   writeShigomoriConfig,
 } from "../../lib/config/project";
 import { writeKey } from "../../lib/config/store";
+import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
+import { isGitRepo } from "../../lib/git/core";
+import { resolveDefaultBranch } from "../../lib/git/remotes";
 import {
   deriveProjectName,
-  isGitRepo,
-  listBranches,
-  listIgnoredPaths,
   pickAvailableWorktreeName,
-  resolveDefaultBranch,
-} from "../../lib/git";
+} from "../../lib/git/worktrees";
 import {
   findProjectOrThrow,
   listProjectsWithStatus,

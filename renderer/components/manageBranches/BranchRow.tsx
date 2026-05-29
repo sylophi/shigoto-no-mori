@@ -20,25 +20,24 @@ export function BranchRow({
   const navigate = useNavigate();
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(name);
+  // null when not editing; otherwise holds the in-flight edit value.
+  // Folding "editing" and "draft" together avoids initializing local
+  // state from the `name` prop.
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
   const checkedOut = !!worktree;
 
   const commitRename = () => {
-    const next = draft.trim();
+    const next = (draft ?? "").trim();
     if (!next || next === name) {
-      setEditing(false);
-      setDraft(name);
+      setDraft(null);
       return;
     }
     rename.mutate(
       { projectId, oldName: name, newName: next },
       {
-        onSuccess: () => setEditing(false),
-        onError: () => {
-          setEditing(false);
-          setDraft(name);
-        },
+        onSuccess: () => setDraft(null),
+        onError: () => setDraft(null),
       },
     );
   };
@@ -52,14 +51,11 @@ export function BranchRow({
     >
       {editing ? (
         <input
-          value={draft}
+          value={draft ?? ""}
           onChange={(e) => setDraft(sanitizeBranchName(e.target.value))}
           onKeyDown={(e) => {
             if (e.key === "Enter") commitRename();
-            if (e.key === "Escape") {
-              setEditing(false);
-              setDraft(name);
-            }
+            if (e.key === "Escape") setDraft(null);
           }}
           onBlur={commitRename}
           disabled={rename.isPending}
@@ -98,7 +94,7 @@ export function BranchRow({
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={() => setDraft(name)}
             aria-label={`Rename ${name}`}
             title="Rename"
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -128,8 +124,7 @@ export function BranchRow({
           onMouseDown={(e) => {
             // Prevent onBlur from firing before this click is processed.
             e.preventDefault();
-            setEditing(false);
-            setDraft(name);
+            setDraft(null);
           }}
           aria-label="Cancel rename"
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

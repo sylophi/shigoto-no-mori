@@ -24,6 +24,7 @@ import { ModeToggle, type Mode } from "./ModeToggle";
 const TEXT_INPUT_CLASS =
   "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
   const navigate = useNavigate();
@@ -35,9 +36,10 @@ export function NewWorktree() {
   const { data: branches } = useBranches(projectId);
   const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
-  const occupiedBranches = worktrees
-    .filter((w) => isRealBranch(w.branch))
-    .map((w) => w.branch);
+  const occupiedBranches = worktrees.reduce<string[]>((acc, w) => {
+    if (isRealBranch(w.branch)) acc.push(w.branch);
+    return acc;
+  }, []);
   const [mode, setMode] = useState<Mode>("branch-from");
   const [branchName, setBranchName] = useState("");
   const [base, setBase] = useState("");
@@ -158,7 +160,7 @@ export function NewWorktree() {
       </header>
 
       <form
-        className="flex max-w-xl flex-col gap-7 px-6 py-6"
+        className="flex max-w-xl flex-col gap-7 p-6"
         onSubmit={handleSubmit}
       >
         <div className="space-y-2">

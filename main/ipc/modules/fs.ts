@@ -2,7 +2,7 @@ import { access, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fsContract } from "@shared/ipc/modules/fs";
 import type { Handlers } from "@shared/ipc/types";
-import { isGitRepo } from "../../lib/git";
+import { isGitRepo } from "../../lib/git/core";
 import { toAbsolute } from "../../lib/util/paths";
 
 // Directories that virtually never contain git repos but are huge and slow to
@@ -106,16 +106,18 @@ export const fsHandlers: Handlers<typeof fsContract> = {
   listEntries: async ({ path }) => {
     const absolute = toAbsolute(path);
     const raw = await readdir(absolute, { withFileTypes: true });
-    const entries = raw
-      // .git is special (worktree metadata); never useful as carry-over,
-      // and it's where git stores its own state.
-      .filter((e) => e.name !== ".git")
-      .map((e) => ({ name: e.name, isDirectory: e.isDirectory() }))
-      // Folders before files, then alphabetical within each group.
-      .toSorted((a, b) => {
-        if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-        return a.name.localeCompare(b.name);
-      });
+    // .git is special (worktree metadata); never useful as carry-over,
+    // and it's where git stores its own state.
+    const entries: { name: string; isDirectory: boolean }[] = [];
+    for (const e of raw) {
+      if (e.name === ".git") continue;
+      entries.push({ name: e.name, isDirectory: e.isDirectory() });
+    }
+    // Folders before files, then alphabetical within each group.
+    entries.sort((a, b) => {
+      if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
     return { path: absolute, entries };
   },
 };

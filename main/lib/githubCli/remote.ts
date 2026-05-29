@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listRemoteUrls } from "../git";
+import { listRemoteUrls } from "../git/remotes";
 import { ghReady } from "./readiness";
 
 // Per-repo gate for any path that would shell out to gh. Without this,

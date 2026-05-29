@@ -29,14 +29,14 @@ export function toBranchEntries(
   branches: BranchList | undefined,
   exclude: ReadonlySet<string>,
 ): BranchEntry[] {
-  return [
-    ...(branches?.local ?? [])
-      .filter((name) => !exclude.has(name))
-      .map((name) => ({ name, kind: "local" as const })),
-    ...(branches?.remote ?? [])
-      .filter((name) => !exclude.has(name))
-      .map((name) => ({ name, kind: "remote" as const })),
-  ];
+  const out: BranchEntry[] = [];
+  for (const name of branches?.local ?? []) {
+    if (!exclude.has(name)) out.push({ name, kind: "local" });
+  }
+  for (const name of branches?.remote ?? []) {
+    if (!exclude.has(name)) out.push({ name, kind: "remote" });
+  }
+  return out;
 }
 
 export function BranchCombobox({
@@ -54,13 +54,16 @@ export function BranchCombobox({
   const [query, setQuery] = useState("");
 
   const all = toBranchEntries(branches, new Set(excludeBranches ?? []));
-  const sorted: BranchEntry[] = query
-    ? all
-        .map((b) => ({ b, score: scoreMatch(query, b.name) }))
-        .filter((x) => x.score > 0)
-        .toSorted((a, b) => b.score - a.score)
-        .map((x) => x.b)
-    : all;
+  let sorted: BranchEntry[] = all;
+  if (query) {
+    const scored: { b: BranchEntry; score: number }[] = [];
+    for (const b of all) {
+      const score = scoreMatch(query, b.name);
+      if (score > 0) scored.push({ b, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    sorted = scored.map((x) => x.b);
+  }
 
   const trimmedQuery = query.trim();
   const showCustom =

@@ -23,6 +23,7 @@ import { SidebarHeader } from "./SidebarHeader";
 import { useSidebarRows } from "./useSidebarRows";
 import { VirtualRow } from "./VirtualRow";
 
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
 export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
   const reorderProjects = useReorderProjects();

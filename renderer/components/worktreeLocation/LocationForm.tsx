@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,7 @@ export function LocationForm({
   worktrees,
   config,
   resolvedDefaultBranch,
+  // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; parent-key resync handles the prop sync
 }: LocationFormProps) {
   const navigate = useNavigate();
   const write = useShigomoriWrite();
@@ -61,17 +62,13 @@ export function LocationForm({
   // immediately after a successful save. Reading the config prop
   // directly would lag while the shigomori query refetches, which
   // briefly re-enables the Move button after a batch completes. The
-  // effect below resyncs the mirror when the prop changes (e.g.
-  // another window writes the same project's config).
+  // parent keys this component on the config layout values, so a
+  // background refetch that changes them remounts us with fresh state.
   const configLayout = config?.worktreeLayout ?? "managed-root";
   const configCustomPath = config?.customWorktreePath ?? "";
   const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(configLayout);
   const [savedCustomPath, setSavedCustomPath] =
     useState<string>(configCustomPath);
-  useEffect(() => {
-    setSavedLayout(configLayout);
-    setSavedCustomPath(configCustomPath);
-  }, [configLayout, configCustomPath]);
 
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
@@ -163,13 +160,14 @@ export function LocationForm({
     );
 
     for (const { worktree, destination } of queue) {
+      const args = {
+        projectId,
+        worktreeId: worktree.id,
+        destinationPath: destination,
+      };
       try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential by design
-        await relocate.mutateAsync({
-          projectId,
-          worktreeId: worktree.id,
-          destinationPath: destination,
-        });
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
+        await relocate.mutateAsync(args); // oxlint-disable-line no-await-in-loop -- sequential by design
         setStatus((prev) => {
           const next = new Map(prev);
           next.set(worktree.id, { kind: "done" });
