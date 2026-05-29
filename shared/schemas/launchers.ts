@@ -18,9 +18,22 @@ export const CustomLauncherSchema = z.object({
 });
 export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;
 
+// URL-based launcher. The id encodes which provider it is so the main
+// process can resolve the URL at launch time. Shared so both ends of
+// the IPC compare against the same string.
+export const WEB_GITHUB_ID = "web:github";
+
+export const WebLauncherSchema = z.object({
+  kind: z.literal("web"),
+  id: z.string(),
+  label: z.string(),
+});
+export type WebLauncher = z.infer<typeof WebLauncherSchema>;
+
 export const LauncherEntrySchema = z.discriminatedUnion("kind", [
   DetectedLauncherSchema,
   CustomLauncherSchema,
+  WebLauncherSchema,
 ]);
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 

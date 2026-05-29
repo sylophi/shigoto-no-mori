@@ -2,6 +2,7 @@
 // app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
 // each app's bundle; the rest fall back to svgl SVGs.
 import { Sparkles } from "lucide-react";
+import { GithubMark } from "@/components/ui/svgs/github-mark";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
 import { Phpstorm } from "@/components/ui/svgs/phpstorm";
@@ -25,7 +26,7 @@ import vscodiumIconUrl from "@/app-icons/vscodium.png";
 import windsurfIconUrl from "@/app-icons/windsurf.png";
 import xcodeIconUrl from "@/app-icons/xcode.png";
 import zedIconUrl from "@/app-icons/zed.png";
-import type { LauncherEntry } from "@shared/schemas";
+import { WEB_GITHUB_ID, type LauncherEntry } from "@shared/schemas";
 
 interface LauncherIconProps {
   entry: LauncherEntry;
@@ -41,6 +42,11 @@ export function LauncherIcon({
   className = "size-4",
 }: LauncherIconProps) {
   if (entry.kind === "custom") {
+    return <Sparkles className={className} />;
+  }
+
+  if (entry.kind === "web") {
+    if (entry.id === WEB_GITHUB_ID) return <GithubMark className={className} />;
     return <Sparkles className={className} />;
   }
 
