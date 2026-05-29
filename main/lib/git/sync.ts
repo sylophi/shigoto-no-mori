@@ -68,6 +68,7 @@ async function rebaseOrMergeAgainst(
 export async function pullRebaseOrMergeAndPush(
   worktreePath: string,
 ): Promise<void> {
+  // react-doctor-disable-next-line react-doctor/async-parallel -- fetch → rebase/merge → push is a sequential domain operation
   await run(worktreePath, ["fetch"]);
   await rebaseOrMergeAgainst(worktreePath, "@{u}");
   await run(worktreePath, ["push"]);

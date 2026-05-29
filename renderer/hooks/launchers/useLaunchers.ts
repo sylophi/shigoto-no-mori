@@ -43,6 +43,7 @@ interface LaunchInput {
 }
 
 export function useLaunch() {
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject pins order for the route mount so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
     mutationFn: (input) => window.api.launchers.launch(input),
     meta: { errorTitle: "Couldn't launch" },

@@ -8,8 +8,10 @@ import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 
 export function BranchTitle({ worktree }: { worktree: Worktree }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(worktree.branch);
+  // null while idle; the in-flight edit value otherwise. Folds "editing"
+  // and "draft" together so we don't seed state from a prop.
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
   const rename = useRenameBranch();
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -17,17 +19,15 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
     // Detached HEAD has no branch to rename — guard against any caller
     // (incl. future keybindings) that bypasses the hidden pencil button.
     if (worktree.detached) return;
-    setDraft(worktree.branch);
     rename.reset();
-    setEditing(true);
+    setDraft(worktree.branch);
   };
   const cancel = () => {
-    setEditing(false);
-    setDraft(worktree.branch);
+    setDraft(null);
     rename.reset();
   };
   const commit = () => {
-    const next = draft.trim();
+    const next = (draft ?? "").trim();
     if (!next || next === worktree.branch) {
       cancel();
       return;
@@ -38,7 +38,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
         worktreeId: worktree.id,
         newBranch: next,
       },
-      { onSuccess: () => setEditing(false) },
+      { onSuccess: () => setDraft(null) },
     );
   };
 
@@ -48,7 +48,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
         <input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
           autoFocus
-          value={draft}
+          value={draft ?? ""}
           disabled={rename.isPending}
           onChange={(e) => setDraft(sanitizeBranchName(e.target.value))}
           onKeyDown={(e) => {

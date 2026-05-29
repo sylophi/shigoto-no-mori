@@ -16,9 +16,9 @@ import {
   readWorktreeData,
   writeWorktreeData,
 } from "../config/project";
+import { deleteBranchAfterWorktreeRemoval } from "../git/branches";
 import {
   createWorktree,
-  deleteBranchAfterWorktreeRemoval,
   describeWorktree,
   findWorktreeIdentityOrThrow,
   listWorktreeIdentities,
@@ -26,7 +26,7 @@ import {
   removeWorktree,
   removeWorktreeForce,
   worktreeIdFromPath,
-} from "../git";
+} from "../git/worktrees";
 import { killScriptsForWorktree } from "../scripts";
 import { runCreateLifecycle, runDeleteCleanup } from "./lifecycle";
 import { pruneEmptyManagedParents } from "./paths";

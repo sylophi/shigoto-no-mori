@@ -39,10 +39,12 @@ export async function remoteRefExists(
 export async function listRemotes(projectPath: string): Promise<string[]> {
   try {
     const stdout = await run(projectPath, ["remote"]);
-    return stdout
-      .split("\n")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    const remotes: string[] = [];
+    for (const line of stdout.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed.length > 0) remotes.push(trimmed);
+    }
+    return remotes;
   } catch {
     return [];
   }
@@ -97,10 +99,10 @@ export async function resolveDefaultBranch(
   const remotes = await listRemotes(projectPath);
   for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
     for (const remote of remotes) {
-      // oxlint-disable-next-line no-await-in-loop -- priority order matters
-      if (await remoteRefExists(projectPath, `${remote}/${candidate}`)) {
-        return `${remote}/${candidate}`;
-      }
+      const ref = `${remote}/${candidate}`;
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters
+      const exists = await remoteRefExists(projectPath, ref); // oxlint-disable-line no-await-in-loop -- priority order matters
+      if (exists) return ref;
     }
     // oxlint-disable-next-line no-await-in-loop -- priority order matters
     if (await localBranchExists(projectPath, candidate)) return candidate;

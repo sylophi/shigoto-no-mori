@@ -1,37 +1,38 @@
 import { useEffect, useRef } from "react";
-import { type AnserJsonEntry } from "anser";
 import { Trash2 } from "lucide-react";
 import { type ScriptRunState } from "@/store/scriptRuns";
 import { AnsiSpan } from "./AnsiSpan";
-import { findUrlRanges, parseOutput } from "./scriptConsoleAnsi";
+import {
+  findUrlRanges,
+  parseOutput,
+  type ConsoleToken,
+} from "./scriptConsoleAnsi";
 
 // URLs are detected over the joined token text (not per-token) so a URL
 // whose styling changes mid-string -- Vite bolds the port, npm
 // underlines repo URLs, etc. -- still gets a single anchor wrapping its
 // styled spans.
-function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
+function renderTokens(tokens: ConsoleToken[]): React.ReactNode {
   const fullText = tokens.map((t) => t.content).join("");
   const urls = findUrlRanges(fullText);
   if (urls.length === 0) {
-    return tokens.map((tok, i) => (
-      // oxlint-disable-next-line react/no-array-index-key
-      <AnsiSpan key={i} token={tok} />
-    ));
+    return tokens.map((tok) => <AnsiSpan key={tok.id} token={tok} />);
   }
 
   let tokIdx = 0;
   let tokStart = 0;
-  let key = 0;
+  let sliceCounter = 0;
   const emit = (from: number, to: number, sink: React.ReactNode[]) => {
     while (from < to) {
       const tok = tokens[tokIdx]!;
       const tokEnd = tokStart + tok.content.length;
       const sliceEnd = Math.min(to, tokEnd);
-      const sliceTok: AnserJsonEntry = {
-        ...tok,
+      const sliceTok = Object.assign({}, tok, {
         content: tok.content.slice(from - tokStart, sliceEnd - tokStart),
-      };
-      sink.push(<AnsiSpan key={key++} token={sliceTok} />);
+      });
+      sink.push(
+        <AnsiSpan key={`${tok.id}:${sliceCounter++}`} token={sliceTok} />,
+      );
       from = sliceEnd;
       if (from === tokEnd) {
         tokStart = tokEnd;
@@ -42,22 +43,21 @@ function renderTokens(tokens: AnserJsonEntry[]): React.ReactNode {
 
   const out: React.ReactNode[] = [];
   let pos = 0;
+  let urlCounter = 0;
   for (const { start, end, url } of urls) {
     emit(pos, start, out);
     const children: React.ReactNode[] = [];
     emit(start, end, children);
     out.push(
-      <a
-        key={key++}
-        href={url}
-        onClick={(e) => {
-          e.preventDefault();
-          void window.api.shell.openExternal(url);
-        }}
-        className="cursor-pointer underline-offset-2 hover:underline"
+      <button
+        key={`url:${urlCounter++}:${start}`}
+        type="button"
+        onClick={() => void window.api.shell.openExternal(url)}
+        title={url}
+        className="inline cursor-pointer underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
       >
         {children}
-      </a>,
+      </button>,
     );
     pos = end;
   }
@@ -90,7 +90,7 @@ export function ConsoleBody({
   useEffect(() => {
     const el = scrollRef.current;
     if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [tokens]);
+  }, [state.output]);
 
   if (state.status === "idle" && tokens.length === 0) {
     return (

@@ -56,15 +56,16 @@ async function migrateOne(projectId: string): Promise<void> {
     // `allSettled` so one bad note doesn't strand the rest of the project's
     // state mid-migration. Failures get logged and the legacy file is kept
     // (we skip the unlink below), so a future launch can retry.
-    const results = await Promise.allSettled(
-      Object.entries(notes)
-        .filter(([, text]) => typeof text === "string" && text.length > 0)
-        .map(([worktreeId, text]) =>
-          atomicWriteJson(join(newWorktreesDir, `${worktreeId}.json`), {
-            notes: text,
-          }),
-        ),
-    );
+    const writes: Promise<void>[] = [];
+    for (const [worktreeId, text] of Object.entries(notes)) {
+      if (typeof text !== "string" || text.length === 0) continue;
+      writes.push(
+        atomicWriteJson(join(newWorktreesDir, `${worktreeId}.json`), {
+          notes: text,
+        }),
+      );
+    }
+    const results = await Promise.allSettled(writes);
     const failures = results.filter((r) => r.status === "rejected");
     if (failures.length > 0) {
       for (const f of failures) {
@@ -86,9 +87,12 @@ export async function migrateProjectConfigsToDirLayout(): Promise<void> {
     throw err;
   }
 
-  const legacyIds = entries
-    .filter((e) => e.isFile() && e.name.endsWith(LEGACY_EXT))
-    .map((e) => basename(e.name, LEGACY_EXT));
+  const legacyIds: string[] = [];
+  for (const e of entries) {
+    if (e.isFile() && e.name.endsWith(LEGACY_EXT)) {
+      legacyIds.push(basename(e.name, LEGACY_EXT));
+    }
+  }
 
   await Promise.all(legacyIds.map(migrateOne));
 }

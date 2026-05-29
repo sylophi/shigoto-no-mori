@@ -44,7 +44,7 @@ export function WorktreeLocation() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-6">
           {!formReady ? (
             <LocationSkeleton />

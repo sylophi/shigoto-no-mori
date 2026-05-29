@@ -1,7 +1,7 @@
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import type { Handlers } from "@shared/ipc/types";
 import { readGlobalConfig } from "../../lib/config/global";
-import { findWorktreeIdentityOrThrow } from "../../lib/git";
+import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../../lib/portPool";
 import { findProjectOrThrow } from "../../lib/projects";
 

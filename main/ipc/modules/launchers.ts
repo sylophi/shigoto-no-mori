@@ -11,7 +11,7 @@ import type {
 import { readGlobalConfig } from "../../lib/config/global";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { readKey, writeKey } from "../../lib/config/store";
-import { findWorktreeIdentityOrThrow } from "../../lib/git";
+import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import {
   type DetectedApp,
   detectApps,

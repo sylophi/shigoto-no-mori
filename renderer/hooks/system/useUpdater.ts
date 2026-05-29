@@ -22,9 +22,11 @@ export function useUpdater() {
     [queryClient],
   );
 
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast above is the single source of truth; main pushes the new state via setQueryData
   const check = useMutation({
     mutationFn: () => window.api.updater.check(),
   });
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast above is the single source of truth; main pushes the new state via setQueryData
   const install = useMutation({
     mutationFn: () => window.api.updater.install(),
   });

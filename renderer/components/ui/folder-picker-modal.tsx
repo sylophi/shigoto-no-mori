@@ -201,19 +201,17 @@ export function FolderPickerModal({
           })}
 
           {isLoading && !listing && (
-            <div className="px-3 py-3 text-xs text-muted-foreground">
-              Loading…
-            </div>
+            <div className="p-3 text-xs text-muted-foreground">Loading…</div>
           )}
           {!isLoading && !error && filtered.length === 0 && (
-            <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+            <div className="p-3 text-center text-xs text-muted-foreground">
               {leafFilter.length > 0
                 ? `No folders matching "${leafFilter}".`
                 : "Empty directory."}
             </div>
           )}
           {error && (
-            <div className="px-3 py-3 text-center text-xs text-muted-foreground">
+            <div className="p-3 text-center text-xs text-muted-foreground">
               Couldn't read folder.
             </div>
           )}

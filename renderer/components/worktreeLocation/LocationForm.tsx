@@ -52,6 +52,7 @@ export function LocationForm({
   worktrees,
   config,
   resolvedDefaultBranch,
+  // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; saved* mirrors track persisted state without coupling between fields
 }: LocationFormProps) {
   const navigate = useNavigate();
   const write = useShigomoriWrite();
@@ -60,18 +61,14 @@ export function LocationForm({
   // Mirror the persisted config in local state so we can flip it
   // immediately after a successful save. Reading the config prop
   // directly would lag while the shigomori query refetches, which
-  // briefly re-enables the Move button after a batch completes. The
-  // effect below resyncs the mirror when the prop changes (e.g.
-  // another window writes the same project's config).
+  // briefly re-enables the Move button after a batch completes.
   const configLayout = config?.worktreeLayout ?? "managed-root";
   const configCustomPath = config?.customWorktreePath ?? "";
+  // react-doctor-disable-next-line react-doctor/no-derived-useState -- savedLayout tracks the last-persisted value, not the prop; updated in handleApply and synced from the prop only when no batch is in flight
   const [savedLayout, setSavedLayout] = useState<WorktreeLayout>(configLayout);
+  // react-doctor-disable-next-line react-doctor/no-derived-useState -- savedCustomPath tracks the last-persisted value, not the prop; updated in handleApply and synced from the prop only when no batch is in flight
   const [savedCustomPath, setSavedCustomPath] =
     useState<string>(configCustomPath);
-  useEffect(() => {
-    setSavedLayout(configLayout);
-    setSavedCustomPath(configCustomPath);
-  }, [configLayout, configCustomPath]);
 
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
@@ -79,6 +76,17 @@ export function LocationForm({
   const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
   const [batchRunning, setBatchRunning] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Pick up external config changes (e.g. another window edited the project).
+  // Keying the parent on the config would remount us mid-batch and orphan
+  // the in-flight relocate loop, so we sync the mirrors instead and skip
+  // while a batch is running.
+  // react-doctor-disable-next-line react-doctor/no-derived-state-effect -- key-prop reset would remount mid-batch and orphan the in-flight relocate loop
+  useEffect(() => {
+    if (batchRunning) return;
+    setSavedLayout(configLayout);
+    setSavedCustomPath(configCustomPath);
+  }, [configLayout, configCustomPath, batchRunning]);
 
   const layoutInputs = {
     layout,
@@ -163,13 +171,14 @@ export function LocationForm({
     );
 
     for (const { worktree, destination } of queue) {
+      const args = {
+        projectId,
+        worktreeId: worktree.id,
+        destinationPath: destination,
+      };
       try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential by design
-        await relocate.mutateAsync({
-          projectId,
-          worktreeId: worktree.id,
-          destinationPath: destination,
-        });
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
+        await relocate.mutateAsync(args); // oxlint-disable-line no-await-in-loop -- sequential by design
         setStatus((prev) => {
           const next = new Map(prev);
           next.set(worktree.id, { kind: "done" });

@@ -27,29 +27,33 @@ export function BranchSwitcher({
 
   // Exclude branches in use by *other* worktrees only; keeping this
   // worktree's own branch lets the popup show it with a check mark.
-  const occupied = new Set(
-    peerWorktrees
-      .filter((w) => w.id !== worktree.id && isRealBranch(w.branch))
-      .map((w) => w.branch),
-  );
+  const occupied = new Set<string>();
+  for (const w of peerWorktrees) {
+    if (w.id !== worktree.id && isRealBranch(w.branch)) occupied.add(w.branch);
+  }
   // Local branches always shown; remotes only when no matching local
   // exists. Picking a remote orphan creates a local tracking branch
   // (handled in onValueChange below).
   const localSet = new Set(branches?.local ?? []);
-  const localEntries: BranchEntry[] = (branches?.local ?? [])
-    .filter((name) => !occupied.has(name))
-    .map((name) => ({ name, kind: "local" as const }));
-  const remoteEntries: BranchEntry[] = (branches?.remote ?? [])
-    .filter((name) => !localSet.has(name.replace(/^[^/]+\//, "")))
-    .map((name) => ({ name, kind: "remote" as const }));
-  const all = [...localEntries, ...remoteEntries];
-  const sorted: BranchEntry[] = query
-    ? all
-        .map((b) => ({ b, score: scoreMatch(query, b.name) }))
-        .filter((x) => x.score > 0)
-        .toSorted((a, b) => b.score - a.score)
-        .map((x) => x.b)
-    : all;
+  const all: BranchEntry[] = [];
+  for (const name of branches?.local ?? []) {
+    if (!occupied.has(name)) all.push({ name, kind: "local" });
+  }
+  for (const name of branches?.remote ?? []) {
+    if (!localSet.has(name.replace(/^[^/]+\//, ""))) {
+      all.push({ name, kind: "remote" });
+    }
+  }
+  let sorted: BranchEntry[] = all;
+  if (query) {
+    const scored: { b: BranchEntry; score: number }[] = [];
+    for (const b of all) {
+      const score = scoreMatch(query, b.name);
+      if (score > 0) scored.push({ b, score });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    sorted = scored.map((x) => x.b);
+  }
 
   return (
     <Combobox.Root

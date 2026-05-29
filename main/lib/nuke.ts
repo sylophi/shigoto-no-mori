@@ -6,21 +6,25 @@
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
 import { readGlobalConfig } from "./config/global";
+import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
 import {
-  deleteBranchAfterWorktreeRemoval,
   listWorktreeIdentities,
   pruneStaleWorktrees,
   removeWorktreeForce,
-} from "./git";
+} from "./git/worktrees";
 import { loadProjects } from "./projects";
 import { shigomoriRoot } from "./util/paths";
 
 export async function nukeEverything(): Promise<void> {
   const projects = loadProjects();
-  const deleteBranches = await readGlobalConfig()
+  // Kick off the config read in parallel with the per-project worktree work.
+  // deleteBranches is only needed inside the inner branch-cleanup step, so we
+  // don't have to block the outer fan-out on it.
+  const deleteBranchesPromise = readGlobalConfig()
     .then((c) => c.deleteBranchOnRemove ?? true)
     .catch(() => true);
 
+  // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
   await Promise.all(
     projects.map(async (project) => {
       let identities;
@@ -35,15 +39,18 @@ export async function nukeEverything(): Promise<void> {
       // delete them when wiping our own state. (Branches are filtered
       // the same way inside deleteBranchAfterWorktreeRemoval.)
       const targets = identities.filter((i) => !i.isPrimary && !i.isExternal);
+      const deleteBranches = await deleteBranchesPromise;
       await Promise.all(
-        targets.map((i) =>
-          removeWorktreeForce(project.path, i.path).catch(() => undefined),
-        ),
-      );
-      await Promise.all(
-        targets.map((i) =>
-          deleteBranchAfterWorktreeRemoval(project.path, i, deleteBranches),
-        ),
+        targets.map(async (i) => {
+          await removeWorktreeForce(project.path, i.path).catch(
+            () => undefined,
+          );
+          await deleteBranchAfterWorktreeRemoval(
+            project.path,
+            i,
+            deleteBranches,
+          );
+        }),
       );
     }),
   );

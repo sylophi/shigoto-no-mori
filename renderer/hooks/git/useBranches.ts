@@ -57,6 +57,7 @@ interface CreateBranchInput {
 
 export function useCreateBranch() {
   const queryClient = useQueryClient();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<void, Error, CreateBranchInput>({
     mutationFn: (input) => window.api.branches.create(input),
     onSuccess: (_data, vars) =>
@@ -73,6 +74,7 @@ interface RenameAnyBranchInput {
 
 export function useRenameAnyBranch() {
   const queryClient = useQueryClient();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<void, Error, RenameAnyBranchInput>({
     mutationFn: (input) => window.api.branches.rename(input),
     onSuccess: (_data, vars) =>
@@ -88,6 +90,7 @@ interface DeleteBranchInput {
 
 export function useDeleteBranch() {
   const queryClient = useQueryClient();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<void, Error, DeleteBranchInput>({
     mutationFn: (input) => window.api.branches.delete(input),
     onSuccess: (_data, vars) =>

@@ -37,17 +37,17 @@ export function CheckEntry({ check }: { check: PullRequestCheck }) {
   }
   const url = check.url;
   return (
-    <a
-      href={url}
-      onClick={(e) => {
-        e.preventDefault();
+    <button
+      type="button"
+      onClick={() => {
         window.api.shell
           .openExternal(url)
           .catch((err) => notifyError("Couldn't open check", err));
       }}
-      className="group/check flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
+      title={url}
+      className="group/check flex w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring"
     >
       {Body}
-    </a>
+    </button>
   );
 }

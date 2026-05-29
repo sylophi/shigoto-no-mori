@@ -1,14 +1,16 @@
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Handlers } from "@shared/ipc/types";
 import {
-  getGithubCliReadiness,
   getPullRequestDiff,
-  getRepoMergeConfig,
-  getWorktreePullRequest,
-  listProjectPullRequests,
   mergePullRequest,
   setPullRequestDraft,
-} from "../../lib/githubCli";
+} from "../../lib/githubCli/actions";
+import {
+  getWorktreePullRequest,
+  listProjectPullRequests,
+} from "../../lib/githubCli/pullRequests";
+import { getGithubCliReadiness } from "../../lib/githubCli/readiness";
+import { getRepoMergeConfig } from "../../lib/githubCli/repoConfig";
 import { findProjectOrThrow } from "../../lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {

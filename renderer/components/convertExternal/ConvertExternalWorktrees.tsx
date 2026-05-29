@@ -87,12 +87,10 @@ export function ConvertExternalWorktrees() {
     setStatus(new Map(queue.map((w) => [w.id, { kind: "running" as const }])));
     let lastSuccess: Worktree | null = null;
     for (const wt of queue) {
+      const args = { projectId: project.id, worktreeId: wt.id };
       try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential by design
-        const result = await convert.mutateAsync({
-          projectId: project.id,
-          worktreeId: wt.id,
-        });
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
+        const result = await convert.mutateAsync(args); // oxlint-disable-line no-await-in-loop -- sequential by design
         lastSuccess = result.worktree;
         setStatus((prev) => {
           const next = new Map(prev);
@@ -138,7 +136,7 @@ export function ConvertExternalWorktrees() {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-6">
           <ErrorBanner>
             <p className="text-[11px] font-semibold tracking-wide uppercase">

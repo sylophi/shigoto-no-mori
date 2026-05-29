@@ -124,7 +124,7 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
       {isLoading ? (
         <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
           <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          Loading commits...
+          Loading commits…
         </div>
       ) : isError ? (
         <div className="space-y-2 py-6 text-sm">
@@ -172,7 +172,7 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
       {isFetchingNextPage && (
         <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
           <Loader2 aria-hidden className="size-3 animate-spin" />
-          Loading more...
+          Loading more…
         </div>
       )}
       {!hasNextPage && !isLoading && commits.length > 0 && (
