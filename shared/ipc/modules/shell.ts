@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { buildClient } from "@shared/ipc/buildClient";
 import { invoke } from "@shared/ipc/contract";
 import {
   ShellOpenExternalPayloadSchema,
@@ -21,11 +20,3 @@ export const shellContract = {
 } as const;
 
 export type ShellContract = typeof shellContract;
-
-const client = buildClient(shellContract);
-
-export const shell = {
-  openPath: (path: string) => client.openPath({ path }),
-  openExternal: (url: string) => client.openExternal({ url }),
-  showItemInFolder: (path: string) => client.showItemInFolder({ path }),
-} as const;

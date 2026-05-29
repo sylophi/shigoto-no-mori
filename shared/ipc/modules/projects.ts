@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { buildClient } from "@shared/ipc/buildClient";
 import { invoke } from "@shared/ipc/contract";
 import {
   AddProjectPayloadSchema,
@@ -48,23 +47,3 @@ export const projectsContract = {
 } as const;
 
 export type ProjectsContract = typeof projectsContract;
-
-const client = buildClient(projectsContract);
-
-export const projects = {
-  list: () => client.list(),
-  add: (path: string) => client.add({ path }),
-  remove: (id: string) => client.remove({ id }),
-  reorder: (input: {
-    draggedId: string;
-    targetId: string;
-    position: "before" | "after";
-  }) => client.reorder(input),
-  defaultBranch: (projectId: string) => client.defaultBranch({ projectId }),
-  listBranches: (projectId: string) => client.listBranches({ projectId }),
-  pickWorktreeName: (projectId: string) =>
-    client.pickWorktreeName({ projectId }),
-  listIgnoredPaths: (projectId: string) =>
-    client.listIgnoredPaths({ projectId }),
-  icon: (projectId: string) => client.icon({ projectId }),
-} as const;
