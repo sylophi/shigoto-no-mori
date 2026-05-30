@@ -9,3 +9,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
 Note: This project is still early and in active development. We only offer macOS Apple Silicon builds at this time.
+
+## License
+
+Shigoto no Mori is licensed under the MIT License. See [LICENSE](LICENSE).

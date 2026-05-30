@@ -3,6 +3,7 @@
   "productName": "Shigoto no Mori",
   "version": "0.0.0",
   "description": "Lightweight desktop app for managing git worktrees in parallel.",
+  "license": "MIT",
   "main": ".vite/build/index.js",
   "repository": {
     "type": "git",
