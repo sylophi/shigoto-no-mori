@@ -4,6 +4,7 @@ import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+import { execFileSync } from "node:child_process";
 import { config as loadEnv } from "dotenv";
 
 loadEnv();
@@ -31,6 +32,7 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
+    extraResource: ["resources/licenses"],
     ...(shouldSignMac
       ? {
           osxSign: {
@@ -45,6 +47,14 @@ const config: ForgeConfig = {
       : {}),
   },
   rebuildConfig: {},
+  hooks: {
+    prePackage: async () => {
+      execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {
+        cwd: import.meta.dirname,
+        stdio: "inherit",
+      });
+    },
+  },
   makers: [new MakerZIP({}, ["darwin"])],
   publishers: [
     new PublisherGithub({

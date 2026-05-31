@@ -21,6 +21,8 @@
     "lint": "oxlint .",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
+    "licenses": "node scripts/generate-third-party-licenses.mjs",
+    "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "extract-icon": "scripts/extract-app-icon.sh",
     "seed": "node scripts/seed-test-data.mts",
     "postinstall": "node scripts/copy-material-icons.mjs"
@@ -69,6 +71,7 @@
     "dotenv": "^17.4.2",
     "electron": "42.0.0",
     "lefthook": "^2.1.4",
+    "license-checker": "^25.0.1",
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",
     "react-grab": "^0.1.33",
