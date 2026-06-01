@@ -21,7 +21,6 @@ import {
   remoteRefExists,
   resolveDefaultBranch,
   splitRemoteRef,
-  splitRemoteRefSync,
 } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -261,7 +260,6 @@ async function getBehindPrimary(
 interface BuildContext {
   hasRemote: boolean;
   primaryRef: string | null;
-  primaryBranch: string | undefined;
   shelvedSet: ReadonlySet<string>;
 }
 
@@ -280,9 +278,6 @@ export async function loadBuildContext(
   return {
     hasRemote: remotes.length > 0,
     primaryRef,
-    primaryBranch: primaryRef
-      ? (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef)
-      : undefined,
     shelvedSet: readShelvedSet(),
   };
 }
@@ -310,7 +305,7 @@ async function buildWorktree(
     hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
     behindPrimary,
-    primaryBranch: ctx.primaryBranch,
+    primaryRef: ctx.primaryRef ?? undefined,
     changedCount,
     recentCommits,
     isPrimary: identity.isPrimary,
