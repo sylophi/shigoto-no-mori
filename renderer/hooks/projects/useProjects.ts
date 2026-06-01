@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
@@ -9,6 +10,20 @@ export function useProjects() {
     queryFn: () => window.api.projects.list(),
     meta: { errorTitle: "Couldn't load projects" },
   });
+}
+
+// Refetch the projects list whenever main records a project action, so the
+// usage-sorted sidebar ("most used" / "most recently used") reorders live.
+// Call once at the App root; the subscriber owns its lifecycle.
+export function useWatchProjectUsage(): void {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      window.api.projects.onUsageBumped(() => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+      }),
+    [queryClient],
+  );
 }
 
 export function useAddProject() {

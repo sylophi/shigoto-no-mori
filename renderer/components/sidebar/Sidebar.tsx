@@ -14,18 +14,21 @@ import {
 } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
+import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/lib/toast";
 import { ProjectDragPreview } from "./ProjectDragPreview";
 import { ROW_SIZE_HINTS } from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
+import { sortProjects } from "./sortProjects";
 import { useSidebarRows } from "./useSidebarRows";
 import { VirtualRow } from "./VirtualRow";
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
 export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
+  const { data: sortMode = "manual" } = useProjectSort();
   const reorderProjects = useReorderProjects();
   // Absence == expanded, so new projects default open.
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -59,8 +62,13 @@ export function Sidebar() {
     });
   };
 
+  // Display order only. Drag-reorder still operates on the stored order
+  // (`projects`), which is safe because dragging is gated to arrange mode and
+  // arrange mode is only reachable via the manual sort, where the orders match.
+  const orderedProjects = sortProjects(projects, sortMode);
+
   const { rows, failedCount } = useSidebarRows({
-    projects,
+    projects: orderedProjects,
     collapsed,
     shelvedExpanded,
     arrangeMode,
@@ -102,6 +110,10 @@ export function Sidebar() {
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
+    // Reorder writes the stored (manual) order, so it must only run while the
+    // displayed order is the stored order. Any other sort means the dragged
+    // indices wouldn't line up with `projects` -- bail rather than corrupt.
+    if (sortMode !== "manual") return;
     if (!over || active.id === over.id) return;
     const draggedId = String(active.id);
     const targetId = String(over.id);
@@ -134,7 +146,7 @@ export function Sidebar() {
             onDragCancel={() => setActiveId(null)}
           >
             <SortableContext
-              items={projects.map((p) => p.id)}
+              items={orderedProjects.map((p) => p.id)}
               strategy={verticalListSortingStrategy}
             >
               <div

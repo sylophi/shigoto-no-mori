@@ -23,6 +23,7 @@ import type {
   GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
+  ProjectSortMode,
   ShigomoriConfig,
   ShigomoriWorktreeData,
   Theme,
@@ -132,6 +133,9 @@ export const projects = {
     targetId: string;
     position: "before" | "after";
   }) => projectsClient.reorder(input),
+  getSort: () => projectsClient.getSort(),
+  setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
+  onUsageBumped: projectsClient.usageBumped,
   defaultBranch: (projectId: string) =>
     projectsClient.defaultBranch({ projectId }),
   listBranches: (projectId: string) =>

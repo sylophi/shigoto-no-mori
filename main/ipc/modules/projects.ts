@@ -24,6 +24,7 @@ import {
   PROJECTS_KEY,
 } from "../../lib/projects";
 import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
+import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { expandHome } from "../../lib/util/paths";
 
@@ -87,6 +88,10 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const projects = loadProjects();
     saveProjects(reorderProjects(projects, draggedId, targetId, position));
   },
+
+  getSort: () => readProjectSort(),
+
+  setSort: ({ mode }) => writeProjectSort(mode),
 
   defaultBranch: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);

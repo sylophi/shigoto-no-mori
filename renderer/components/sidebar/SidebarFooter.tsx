@@ -1,18 +1,40 @@
 import {
   ArrowUpDown,
+  Check,
   FolderPlus,
   Search,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import type { ProjectSortMode } from "@shared/schemas";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import {
+  useProjectSort,
+  useSetProjectSort,
+} from "@/hooks/projects/useProjectSort";
 import { useUpdater } from "@/hooks/system/useUpdater";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;
   onToggleArrange: () => void;
 }
+
+const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "recent", label: "Most recently used" },
+  { value: "frequent", label: "Most used" },
+  { value: "manual", label: "Manual order" },
+];
 
 export function SidebarFooter({
   arrangeMode,
@@ -21,9 +43,19 @@ export function SidebarFooter({
   const navigate = useNavigate();
   const location = useLocation();
   const { openIn } = useCommandPalette();
+  const { data: sortMode = "manual" } = useProjectSort();
+  const setSortMode = useSetProjectSort();
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
+
+  // Dragging only reorders coherently when the displayed order matches the
+  // stored order, so arranging forces the manual sort before entering the
+  // drag view.
+  const arrangeManually = () => {
+    setSortMode.mutate("manual");
+    onToggleArrange();
+  };
   if (arrangeMode) {
     return (
       <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
@@ -60,15 +92,43 @@ export function SidebarFooter({
           />
         )}
       </button>
-      <button
-        type="button"
-        onClick={onToggleArrange}
-        aria-label="Arrange projects"
-        title="Arrange projects"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <ArrowUpDown className="size-3.5" />
-      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <button
+              type="button"
+              aria-label="Sort projects"
+              title="Sort projects"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
+            >
+              <ArrowUpDown className="size-3.5" />
+            </button>
+          }
+        />
+        <DropdownMenuContent align="start" side="top" sideOffset={2}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            {SORT_OPTIONS.map((option) => (
+              <DropdownMenuItem
+                key={option.value}
+                onClick={() => setSortMode.mutate(option.value)}
+              >
+                <Check
+                  className={cn(
+                    "size-3.5",
+                    sortMode === option.value ? "opacity-100" : "opacity-0",
+                  )}
+                />
+                {option.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={arrangeManually}>
+            Set manual order
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       <div className="flex-1" />
       <button
         type="button"

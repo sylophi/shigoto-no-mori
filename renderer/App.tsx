@@ -7,6 +7,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { useWatchGitRefs } from "@/hooks/git/useBranches";
+import { useWatchProjectUsage } from "@/hooks/projects/useProjects";
 import { useWatchProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useWatchWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import { router } from "./router";
@@ -32,6 +33,7 @@ function AppErrorFallback({ error }: FallbackProps) {
 // the query it owns.
 export function App() {
   useWatchGitRefs();
+  useWatchProjectUsage();
   useWatchWorktreePullRequests();
   useWatchProjectPullRequests();
 

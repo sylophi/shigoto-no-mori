@@ -10,7 +10,9 @@ import {
   type WebContents,
 } from "electron";
 import type { Contract } from "@shared/ipc/contract";
+import { projectsContract } from "@shared/ipc/modules/projects";
 import type { BroadcastProducerPayload, Handlers } from "@shared/ipc/types";
+import { recordProjectActionUsage } from "../lib/projects/usage";
 
 export type HandlerContext = { event: IpcMainInvokeEvent };
 
@@ -37,6 +39,15 @@ export function registerContract<C extends Contract>(
     ipcMain.handle(def.channel, async (event, raw) => {
       const input = def.input.parse(raw);
       const result = await handler(input, { event });
+      // A successful project-scoped action ranks that project for the
+      // sidebar "most used" / "most recently used" sorts. Reads are excluded.
+      // Tell renderers so a usage-sorted sidebar reorders live.
+      const bumpedProjectId = recordProjectActionUsage(def.channel, input);
+      if (bumpedProjectId) {
+        broadcastAll(projectsContract, "usageBumped", {
+          projectId: bumpedProjectId,
+        });
+      }
       return VALIDATE_OUTPUTS ? def.output.parse(result) : result;
     });
   }
