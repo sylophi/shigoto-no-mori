@@ -7,9 +7,15 @@ import {
 } from "@shared/schemas";
 
 export const branchesContract = {
-  create: invoke("branches:create", CreateBranchPayloadSchema, z.void()),
-  rename: invoke("branches:rename", RenameAnyBranchPayloadSchema, z.void()),
-  delete: invoke("branches:delete", DeleteBranchPayloadSchema, z.void()),
+  create: invoke("branches:create", CreateBranchPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+  }),
+  rename: invoke("branches:rename", RenameAnyBranchPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+  }),
+  delete: invoke("branches:delete", DeleteBranchPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+  }),
 } as const;
 
 export type BranchesContract = typeof branchesContract;

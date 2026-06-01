@@ -39,14 +39,16 @@ export function registerContract<C extends Contract>(
     ipcMain.handle(def.channel, async (event, raw) => {
       const input = def.input.parse(raw);
       const result = await handler(input, { event });
-      // A successful project-scoped action ranks that project for the
-      // sidebar "most used" / "most recently used" sorts. Reads are excluded.
-      // Tell renderers so a usage-sorted sidebar reorders live.
-      const bumpedProjectId = recordProjectActionUsage(def.channel, input);
-      if (bumpedProjectId) {
-        broadcastAll(projectsContract, "usageBumped", {
-          projectId: bumpedProjectId,
-        });
+      // Actions that opt in via `tracksProjectUsage` rank their project for the
+      // sidebar "most used" / "most recently used" sorts; tell renderers so a
+      // usage-sorted sidebar reorders live.
+      if (def.tracksProjectUsage) {
+        const bumpedProjectId = recordProjectActionUsage(input);
+        if (bumpedProjectId) {
+          broadcastAll(projectsContract, "usageBumped", {
+            projectId: bumpedProjectId,
+          });
+        }
       }
       return VALIDATE_OUTPUTS ? def.output.parse(result) : result;
     });
