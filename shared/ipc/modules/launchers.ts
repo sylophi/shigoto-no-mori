@@ -16,7 +16,9 @@ export const launchersContract = {
     ReadShigomoriPayloadSchema,
     z.object({ entries: z.array(LauncherEntrySchema) }),
   ),
-  launch: invoke("launchers:launch", LaunchPayloadSchema, z.void()),
+  launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+  }),
 } as const;
 
 export type LaunchersContract = typeof launchersContract;

@@ -11,6 +11,7 @@ export const scriptsContract = {
     "scripts:run",
     RunScriptPayloadSchema,
     z.object({ runId: z.string() }),
+    { tracksProjectUsage: true },
   ),
   cancel: invoke(
     "scripts:cancel",

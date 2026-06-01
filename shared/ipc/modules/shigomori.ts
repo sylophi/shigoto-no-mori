@@ -15,7 +15,9 @@ export const shigomoriContract = {
     ReadShigomoriPayloadSchema,
     ShigomoriConfigSchema.nullable(),
   ),
-  write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void()),
+  write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
+    tracksProjectUsage: true,
+  }),
   worktreeDataRead: invoke(
     "worktreeData:read",
     ReadWorktreeDataPayloadSchema,
@@ -25,6 +27,7 @@ export const shigomoriContract = {
     "worktreeData:write",
     WriteWorktreeDataPayloadSchema,
     z.void(),
+    { tracksProjectUsage: true },
   ),
 } as const;
 

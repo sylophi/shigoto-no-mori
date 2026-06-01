@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import type { Project } from "@shared/schemas";
 import { readKey } from "../config/store";
+import { usageFor } from "./usage";
 
 export const PROJECTS_KEY = "projects";
 
@@ -10,13 +11,18 @@ export function loadProjects(): Project[] {
 }
 
 // Decorated with `pathExists` for renderer-side "this project is missing"
-// affordances. Only the ProjectsList IPC handler should call this.
+// affordances, plus `lastUsed` / `recentCount` for the sidebar sort modes.
+// Only the ProjectsList IPC handler should call this.
 export function listProjectsWithStatus(): Project[] {
-  return loadProjects().map((p) => ({
+  const projects = loadProjects();
+  const usage = usageFor(projects.map((p) => p.id));
+  return projects.map((p) => ({
     id: p.id,
     name: p.name,
     path: p.path,
     pathExists: existsSync(p.path),
+    lastUsed: usage[p.id]?.lastUsed ?? 0,
+    recentCount: usage[p.id]?.recentCount ?? 0,
   }));
 }
 

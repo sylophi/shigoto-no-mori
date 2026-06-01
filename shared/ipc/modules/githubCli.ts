@@ -33,6 +33,7 @@ export const githubCliContract = {
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
     z.void(),
+    { tracksProjectUsage: true },
   ),
   pullRequestDiff: invoke(
     "githubCli:pullRequestDiff",
@@ -43,6 +44,7 @@ export const githubCliContract = {
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
     z.void(),
+    { tracksProjectUsage: true },
   ),
   projectPullRequestsRefreshed: broadcast(
     "githubCli:projectPullRequestsRefreshed",

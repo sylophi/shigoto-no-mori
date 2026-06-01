@@ -19,6 +19,7 @@ export const packageScriptsContract = {
     "packageScripts:run",
     RunPackageScriptPayloadSchema,
     z.object({ runId: z.string() }),
+    { tracksProjectUsage: true },
   ),
   getSort: invoke(
     "packageScripts:getSort",
