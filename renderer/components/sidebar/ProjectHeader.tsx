@@ -36,7 +36,7 @@ export function ProjectHeader({
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
-    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-[11px] font-semibold tracking-wide uppercase";
+    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
   const trigger = arrangeMode ? (
     <div
       {...listeners}
