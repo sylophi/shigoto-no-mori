@@ -9,7 +9,7 @@ import { commitsLabel, SyncActionButton } from "./SyncActionButton";
 // resolved on the backend.
 export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
   const sync = useSyncWithPrimaryWorktree();
-  const branchName = worktree.primaryBranch ?? "primary";
+  const branchName = worktree.primaryRef ?? "primary";
   return (
     <SyncActionButton
       tone="sky"

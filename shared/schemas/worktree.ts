@@ -48,10 +48,12 @@ export const WorktreeSchema = z.object({
   // ref can't be resolved -- the UI uses > 0 as the gate for offering
   // the "Sync from primary" action.
   behindPrimary: z.number().int().nonnegative(),
-  // Display name of the project's primary branch (e.g. "main"), with
-  // any matching remote prefix stripped using the project's configured
-  // remotes -- the renderer shows it on the sync pill.
-  primaryBranch: z.string().optional(),
+  // The ref the "Sync from primary" action rebases onto -- the same ref
+  // `behindPrimary` is measured against. Carries the remote prefix when
+  // the primary resolves to a remote-tracking ref (e.g. "origin/main"),
+  // so the renderer can show it on the pill without implying the source
+  // is a local branch.
+  primaryRef: z.string().optional(),
   changedCount: z.number().int().nonnegative(),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 4) so the IPC payload stays
