@@ -277,10 +277,21 @@ async function openWithCli(cli: string, worktreePath: string): Promise<void> {
   await exec(cli, [worktreePath]);
 }
 
+async function openCodexProject(worktreePath: string): Promise<void> {
+  const url = new URL("codex://threads/new");
+  url.searchParams.set("path", worktreePath);
+  await exec("open", [url.toString()]);
+}
+
 export async function launchDetected(
   app: DetectedApp,
   worktreePath: string,
 ): Promise<void> {
+  if (app.id === "codex") {
+    await openCodexProject(worktreePath);
+    return;
+  }
+
   if (app.id === "claude") {
     const url = new URL("claude://code/new");
     url.searchParams.set("folder", worktreePath);
