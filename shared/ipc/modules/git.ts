@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { broadcast } from "@shared/ipc/contract";
+import { broadcast, invoke } from "@shared/ipc/contract";
 
 export const gitContract = {
+  refreshProject: invoke(
+    "git:refreshProject",
+    z.object({ projectId: z.string() }),
+    z.void(),
+  ),
   refsRefreshed: broadcast(
     "git:refsRefreshed",
     z.object({ projectId: z.string() }),

@@ -27,7 +27,7 @@ const SWEEP_INTERVAL_MS = 60_000;
 const lastFetchedAt = new Map<string, number>();
 let sweepHandle: NodeJS.Timeout | null = null;
 
-async function maybeFetchProject(
+export async function maybeFetchProject(
   projectId: string,
   projectPath: string,
 ): Promise<void> {

@@ -70,6 +70,8 @@ export const fs = {
 } as const;
 
 export const git = {
+  refreshProject: (projectId: string) =>
+    gitClient.refreshProject({ projectId }),
   onRefsRefreshed: gitClient.refsRefreshed,
   onFetchActive: gitClient.fetchActive,
 } as const;
