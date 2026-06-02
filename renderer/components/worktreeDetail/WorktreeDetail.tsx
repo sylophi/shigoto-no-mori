@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -10,6 +11,10 @@ export function WorktreeDetail() {
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
+
+  useEffect(() => {
+    void window.api.git.refreshProject(projectId);
+  }, [projectId, worktreeId]);
 
   if (!worktree || !project) {
     return <CenteredMessage>Worktree not found.</CenteredMessage>;

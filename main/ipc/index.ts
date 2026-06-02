@@ -1,6 +1,7 @@
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
+import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { launchersContract } from "@shared/ipc/modules/launchers";
@@ -17,6 +18,7 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "./modules/branches";
 import { dialogHandlers } from "./modules/dialog";
 import { fsHandlers } from "./modules/fs";
+import { gitHandlers } from "./modules/git";
 import { githubCliHandlers } from "./modules/githubCli";
 import { globalConfigHandlers } from "./modules/globalConfig";
 import { launchersHandlers } from "./modules/launchers";
@@ -44,6 +46,7 @@ export function registerIpcHandlers(): void {
   registerContract(launchersContract, launchersHandlers);
   registerContract(packageScriptsContract, packageScriptsHandlers);
   registerContract(fsContract, fsHandlers);
+  registerContract(gitContract, gitHandlers);
   registerContract(githubCliContract, githubCliHandlers);
   registerContract(worktreesContract, worktreesHandlers);
   registerContract(scriptsContract, scriptsHandlers);
