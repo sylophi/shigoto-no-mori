@@ -5,8 +5,9 @@
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import type { ProjectIcon } from "@shared/schemas";
+import { listProjectFiles } from "../git/files";
 import { atomicWriteJson } from "../util/jsonFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
 
@@ -151,7 +152,125 @@ function resolveIconHref(projectCwd: string, href: string): string[] {
   return [join(projectCwd, "public", clean), join(projectCwd, clean)];
 }
 
+// ─── Git-driven resolution ──────────────────────────────────────────────────
+//
+// The primary resolver probes the existing candidate/source patterns at every
+// *package root* in the repo — the top level plus each package.json directory
+// — over the set of files git can see (tracked plus untracked-but-not-ignored).
+// Driving off that set keeps build output (dist/, .next/) and node_modules
+// invisible while still surfacing an uncommitted favicon. It also descends into
+// monorepo subpackages (a web app in web/ or apps/web/ resolves its favicon
+// just like one at the root) while anchoring on package roots, so a vendored
+// asset buried under, say, convex/.agents/skills/foo/assets/icon.svg is never
+// mistaken for the project icon: that directory isn't a package, so
+// "assets/icon.svg" is only probed where a package.json actually lives.
+
+function posixDir(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? "" : path.slice(0, slash);
+}
+
+function posixJoin(dir: string, rest: string): string {
+  return dir ? `${dir}/${rest}` : rest;
+}
+
+// Repo root ("") plus every directory holding a package.json, shallowest
+// first so the root and top-level packages win ties.
+function packageRoots(files: readonly string[]): string[] {
+  const roots = new Set<string>([""]);
+  for (const file of files) {
+    if (file === "package.json" || file.endsWith("/package.json")) {
+      roots.add(posixDir(file));
+    }
+  }
+  // Shallowest first; the empty-string root sorts ahead of everything else.
+  return [...roots].toSorted(
+    (a, b) =>
+      a.split("/").length - b.split("/").length || (a < b ? -1 : a > b ? 1 : 0),
+  );
+}
+
+// Resolve a <link rel="icon" href> against a package root (and its public/
+// dir), returning the listed path it points at. Candidates are normalised so
+// "./icon.svg" or "a/../b" canonicalise before the membership test; an href
+// that escapes the repo normalises to a path the set never contains, so
+// traversal is rejected for free.
+function resolveIconHrefInFiles(
+  root: string,
+  href: string,
+  files: ReadonlySet<string>,
+): string | null {
+  const clean = href.replace(/^\//, "");
+  const candidates = [
+    posix.normalize(posixJoin(root, `public/${clean}`)),
+    posix.normalize(posixJoin(root, clean)),
+  ];
+  return candidates.find((candidate) => files.has(candidate)) ?? null;
+}
+
+// The historical two-phase scan (conventional files, then <link rel="icon">
+// in a source file), scoped to a single package root. `root === ""` is the
+// repo top level and reproduces the pre-descent behaviour exactly. A path in
+// `files` is git's view, so a file staged-then-deleted from the working tree
+// still appears; each match is confirmed on disk before we commit to it, so a
+// phantom entry can't shadow a lower-priority icon that does exist.
+async function resolveIconAtRoot(
+  cwd: string,
+  root: string,
+  files: ReadonlySet<string>,
+): Promise<string | null> {
+  for (const candidate of ICON_CANDIDATES) {
+    const rel = posixJoin(root, candidate);
+    if (!files.has(rel)) continue;
+    const abs = join(cwd, rel);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
+    if (await fileExists(abs)) return abs;
+  }
+
+  for (const sourceFile of ICON_SOURCE_FILES) {
+    const rel = posixJoin(root, sourceFile);
+    if (!files.has(rel)) continue;
+    let source: string;
+    try {
+      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
+      source = await readFile(join(cwd, rel), "utf8");
+    } catch {
+      continue;
+    }
+    const href = extractIconHref(source);
+    if (!href) continue;
+    const resolved = resolveIconHrefInFiles(root, href, files);
+    if (!resolved) continue;
+    const abs = join(cwd, resolved);
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
+    if (await fileExists(abs)) return abs;
+  }
+
+  return null;
+}
+
 async function resolveIconPath(cwd: string): Promise<string | null> {
+  const files = await listProjectFiles(cwd);
+  // git unavailable or an empty working tree: fall back to a top-level
+  // filesystem scan.
+  if (files.length === 0) return resolveIconPathShallow(cwd);
+
+  const fileSet = new Set(files);
+  // Repo root first — so any project that resolved before resolves to the
+  // identical icon — then each deeper package root, nearest first. Descent is
+  // pure addition: it only fires where the top-level scan came up empty.
+  for (const root of packageRoots(files)) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- nearest package root wins; first hit short-circuits
+    const resolved = await resolveIconAtRoot(cwd, root, fileSet);
+    if (resolved) return resolved;
+  }
+
+  return null;
+}
+
+// Filesystem fallback for when git lists nothing (git unavailable, or an
+// empty working tree). Mirrors the historical top-level-only behaviour.
+async function resolveIconPathShallow(cwd: string): Promise<string | null> {
   for (const candidate of ICON_CANDIDATES) {
     const resolved = join(cwd, candidate);
     // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
