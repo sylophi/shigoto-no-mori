@@ -12,14 +12,28 @@ export function NotesSection({ worktree }: { worktree: Worktree }) {
   // but it's ours to annotate, so notes stay available for it. Only
   // genuinely external worktrees (manual checkouts elsewhere) are skipped.
   if (worktree.isExternal && !worktree.isPrimary) return null;
-  return <NotesSectionInner key={worktree.id} worktree={worktree} />;
+  return <NotesSectionLoader key={worktree.id} worktree={worktree} />;
 }
 
-function NotesSectionInner({ worktree }: { worktree: Worktree }) {
-  const { data } = useWorktreeData(worktree.projectId, worktree.id);
+function NotesSectionLoader({ worktree }: { worktree: Worktree }) {
+  const { data, isPending } = useWorktreeData(worktree.projectId, worktree.id);
+  // Wait for the persisted value before mounting the editor. The inner
+  // seeds its draft from `saved` via useState, which only reads the
+  // initial value -- mounting while the read is still in flight would
+  // seed an empty draft that never picks up the notes once they arrive.
+  if (isPending) return null;
+  return <NotesSectionInner worktree={worktree} saved={data?.notes ?? ""} />;
+}
+
+function NotesSectionInner({
+  worktree,
+  saved,
+}: {
+  worktree: Worktree;
+  saved: string;
+}) {
   const write = useWorktreeDataWrite();
 
-  const saved = data?.notes ?? "";
   const [draft, setDraft] = useState(saved);
 
   const commit = () => {
