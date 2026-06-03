@@ -2,8 +2,8 @@
 //   project.json                       -- project-wide settings (scripts, layout, ...)
 //   worktrees/<worktreeId>.json        -- per-worktree state (notes, ...)
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
-// files only exist for managed worktrees -- externals deliberately have no
-// persisted state.
+// files exist for managed worktrees and the primary checkout (the main repo
+// root); other external worktrees deliberately have no persisted state.
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
