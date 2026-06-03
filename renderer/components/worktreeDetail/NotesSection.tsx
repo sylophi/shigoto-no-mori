@@ -7,7 +7,11 @@ import {
 import type { Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
-  if (worktree.isExternal) return null;
+  // The primary checkout (the main repo root) lives at the project path,
+  // which never sits under a managed prefix, so it's flagged external --
+  // but it's ours to annotate, so notes stay available for it. Only
+  // genuinely external worktrees (manual checkouts elsewhere) are skipped.
+  if (worktree.isExternal && !worktree.isPrimary) return null;
   return <NotesSectionInner key={worktree.id} worktree={worktree} />;
 }
 
