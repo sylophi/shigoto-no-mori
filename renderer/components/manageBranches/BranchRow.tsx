@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Check, ExternalLink, House, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { ModalShell } from "@/components/ui/modal-shell";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { cn } from "@/lib/utils";
 import { sanitizeBranchName } from "@shared/branches";
@@ -20,6 +22,7 @@ export function BranchRow({
   const navigate = useNavigate();
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   // null when not editing; otherwise holds the in-flight edit value.
   // Folding "editing" and "draft" together avoids initializing local
   // state from the `name` prop.
@@ -103,7 +106,7 @@ export function BranchRow({
           </button>
           <button
             type="button"
-            onClick={() => del.mutate({ projectId, name })}
+            onClick={() => setConfirmingDelete(true)}
             disabled={checkedOut || del.isPending}
             aria-label={`Delete ${name}`}
             title={
@@ -143,6 +146,47 @@ export function BranchRow({
         >
           <Check className="size-3.5" />
         </button>
+      )}
+
+      {confirmingDelete && (
+        <ModalShell
+          onClose={() => setConfirmingDelete(false)}
+          popoverClassName="max-w-md"
+        >
+          <div className="p-5">
+            <h2 className="text-base font-semibold">Delete branch</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Permanently delete the local branch{" "}
+              <span className="font-mono text-foreground">{name}</span>? Any
+              commits not merged elsewhere will be lost. This cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
+                autoFocus
+                onClick={() => setConfirmingDelete(false)}
+                disabled={del.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={del.isPending}
+                onClick={() =>
+                  del.mutate(
+                    { projectId, name },
+                    { onSuccess: () => setConfirmingDelete(false) },
+                  )
+                }
+              >
+                {del.isPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </ModalShell>
       )}
     </div>
   );
