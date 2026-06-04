@@ -57,11 +57,9 @@ function stripVPrefix(name: string): string {
 
 export function checkForUpdates(): void {
   if (!started) return;
-  // Keep polling while an update is staged so a newer release can replace
-  // it; the event guards below preserve the "ready" UI during that poll.
-  // Skip while a download is mid-flight so we don't pile on requests.
-  if (state.kind === "downloading") return;
-  if (state.kind !== "ready") setState({ kind: "checking" });
+  // No-op once an update is ready -- the only useful action left is install.
+  if (state.kind === "ready" || state.kind === "downloading") return;
+  setState({ kind: "checking" });
   try {
     autoUpdater.checkForUpdates();
   } catch (err) {
