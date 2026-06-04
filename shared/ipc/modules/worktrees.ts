@@ -118,6 +118,12 @@ export const worktreesContract = {
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
+  switchToPrimary: invoke(
+    "worktrees:switchToPrimary",
+    SyncWorktreePayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true },
+  ),
   lifecyclePhase: broadcast(
     "worktrees:lifecyclePhase",
     WorktreeLifecyclePhaseSchema,

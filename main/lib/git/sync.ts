@@ -2,8 +2,9 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
+import { checkoutBranch } from "./branches";
 import { run, runLenient } from "./core";
-import { fetchAllRemotes, listRemotes } from "./remotes";
+import { fetchAllRemotes, listRemotes, splitRemoteRefSync } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -86,4 +87,27 @@ export async function syncWithPrimary(
 ): Promise<void> {
   await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
+}
+
+// Switch a worktree onto the primary branch and snap it to the remote.
+// Used by the "delete branch and switch to <primary>" cleanup on the repo
+// root after a PR merges: the local primary is typically behind the just-
+// merged remote tip, and the user wants the root to land on an up-to-date
+// primary, not a stale local copy. When the primary resolves to a remote
+// ref we fetch and hard-reset the local branch onto it, fully replacing
+// any local state (the user explicitly asked for "the remote"). A purely
+// local primary has no remote to sync to, so we just check it out.
+export async function switchToPrimaryBranch(
+  worktreePath: string,
+  projectPath: string,
+  primaryRef: string,
+): Promise<void> {
+  const remotes = await listRemotes(projectPath);
+  // DWIM remote refs into the local tracking branch (also avoids landing
+  // on a detached HEAD); a local primaryRef is checked out as-is.
+  await checkoutBranch(worktreePath, primaryRef, remotes);
+  if (splitRemoteRefSync(primaryRef, remotes)) {
+    await fetchAllRemotes(projectPath);
+    await run(worktreePath, ["reset", "--hard", primaryRef]);
+  }
 }

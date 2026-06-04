@@ -19,6 +19,7 @@ import {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
+  switchToPrimaryBranch,
   syncWithPrimary,
 } from "../../lib/git/sync";
 import {
@@ -190,13 +191,25 @@ export const worktreesHandlers: Handlers<
           "Detached worktrees can't be synced with the primary branch",
         );
       }
-      const config = await readShigomoriConfig(target.projectId).catch(
-        () => null,
-      );
-      const primaryRef = await resolveDefaultBranch(pp, config?.defaultBranch);
+      const primaryRef = await resolvePrimaryRef(target.projectId, pp);
       await syncWithPrimary(wt, pp, primaryRef);
     }),
+  switchToPrimary: (input) =>
+    syncWorktree(input, async (wt, pp, target) => {
+      const primaryRef = await resolvePrimaryRef(target.projectId, pp);
+      await switchToPrimaryBranch(wt, pp, primaryRef);
+    }),
 };
+
+// Resolve the project's primary ref, honoring the configured override.
+// Shared by the sync-from-primary and switch-to-primary handlers.
+async function resolvePrimaryRef(
+  projectId: string,
+  projectPath: string,
+): Promise<string> {
+  const config = await readShigomoriConfig(projectId).catch(() => null);
+  return resolveDefaultBranch(projectPath, config?.defaultBranch);
+}
 
 // Remote-sync mutations all share the same shape: resolve the worktree,
 // run a git action, return the freshly-described worktree so the

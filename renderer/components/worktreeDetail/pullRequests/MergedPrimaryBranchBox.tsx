@@ -4,7 +4,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useBranches, useDeleteBranch } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
+import { useSwitchToPrimary } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { cn } from "@/lib/utils";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 
@@ -15,7 +15,7 @@ import { isRealBranch, type Worktree } from "@shared/schemas";
 export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   const { data: defaultBranch } = useDefaultBranch(worktree.projectId);
   const { data: branches } = useBranches(worktree.projectId);
-  const checkout = useCheckoutBranch();
+  const switchToPrimary = useSwitchToPrimary();
   const del = useDeleteBranch();
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
 
@@ -24,9 +24,10 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   if (!defaultBranch || !isRealBranch(worktree.branch)) return null;
 
   // The default branch can resolve to a remote-tracking ref (e.g.
-  // "origin/main"); strip the remote prefix so `git checkout` DWIMs into
-  // the local tracking branch instead of detached HEAD — mirroring
-  // BranchSwitcher's remote-orphan handling.
+  // "origin/main"); strip the remote prefix for the local branch name we
+  // show in the label and compare against. The actual switch (DWIM into
+  // the local branch + reset onto the remote tip) is done server-side in
+  // worktrees.switchToPrimary.
   const remoteSet = new Set(branches?.remote ?? []);
   const target = remoteSet.has(defaultBranch)
     ? defaultBranch.replace(/^[^/]+\//, "")
@@ -34,16 +35,15 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   // Already on the primary branch — nothing to switch to or delete.
   if (target === worktree.branch) return null;
 
-  const busy = checkout.isPending || del.isPending;
-  // Capture before checkout flips worktree.branch to the primary branch.
+  const busy = switchToPrimary.isPending || del.isPending;
+  // Capture before the switch flips worktree.branch to the primary branch.
   const mergedBranch = worktree.branch;
 
   const run = () => {
-    checkout.mutate(
+    switchToPrimary.mutate(
       {
         projectId: worktree.projectId,
         worktreeId: worktree.id,
-        branch: target,
       },
       {
         // Only delete once the root has switched off the merged branch —
@@ -55,11 +55,11 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
     );
   };
 
-  // Checkout failures (e.g. a dirty root) keep this box mounted, so its
+  // Switch failures (e.g. a dirty root) keep this box mounted, so its
   // error shows here. A delete failure may unmount the box once the
   // branch has switched, but useDeleteBranch toasts on error, so it's
   // still surfaced.
-  const error = checkout.error ?? del.error;
+  const error = switchToPrimary.error ?? del.error;
 
   return (
     <div className="space-y-2">
@@ -78,7 +78,9 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
           {busy ? (
             <>
               <Loader2 aria-hidden className="size-3.5 animate-spin" />
-              {checkout.isPending ? `Switching to ${target}…` : "Deleting…"}
+              {switchToPrimary.isPending
+                ? `Switching to ${target}…`
+                : "Deleting…"}
             </>
           ) : armed ? (
             "Click again to confirm"

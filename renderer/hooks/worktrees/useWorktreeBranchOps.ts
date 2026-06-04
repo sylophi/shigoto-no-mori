@@ -49,3 +49,28 @@ export function useCheckoutBranch() {
     meta: { silentError: true },
   });
 }
+
+interface SwitchToPrimaryInput {
+  projectId: string;
+  worktreeId: string;
+}
+
+// Switch the repo root back onto the primary branch, resetting the local
+// primary to its remote tip so the root lands fully up to date rather than
+// on a stale local copy. Used by the post-merge cleanup on the root.
+export function useSwitchToPrimary() {
+  const queryClient = useQueryClient();
+  return useMutation<Worktree, Error, SwitchToPrimaryInput>({
+    mutationFn: (input) => window.api.worktrees.switchToPrimary(input),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.worktrees(vars.projectId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.branches(vars.projectId),
+      });
+    },
+    // The cleanup box renders its own inline ErrorBanner.
+    meta: { silentError: true },
+  });
+}

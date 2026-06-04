@@ -1,5 +1,6 @@
 import { type BranchList, isRealBranch } from "@shared/schemas";
 import { run } from "./core";
+import { listRemotes, localBranchExists, splitRemoteRefSync } from "./remotes";
 import type { WorktreeIdentity } from "./worktrees";
 
 // Rename the branch currently checked out in a worktree.
@@ -11,13 +12,29 @@ export async function renameBranch(
   await run(worktreePath, ["branch", "-m", newBranch]);
 }
 
-// Switch a worktree to a different branch. For remote-tracking refs
-// like `origin/foo`, git creates the local tracking branch automatically.
+// Switch a worktree to a different branch. Callers may hand us a
+// remote-tracking ref like `origin/main` (e.g. when the primary branch
+// resolves to a remote ref). `git checkout origin/main` would silently
+// land on a detached HEAD rather than switching to the branch, so strip
+// the remote prefix and let git DWIM into the local tracking branch,
+// creating it if it doesn't exist yet. We only strip when no local branch
+// of that exact name exists, so a real local branch that happens to look
+// like `remote/thing` still wins. Callers that already hold the remote
+// list can pass it to skip a redundant `git remote`.
 export async function checkoutBranch(
   worktreePath: string,
   branch: string,
+  remotes?: readonly string[],
 ): Promise<void> {
-  await run(worktreePath, ["checkout", branch]);
+  let target = branch;
+  if (!(await localBranchExists(worktreePath, branch))) {
+    const split = splitRemoteRefSync(
+      branch,
+      remotes ?? (await listRemotes(worktreePath)),
+    );
+    if (split) target = split.branch;
+  }
+  await run(worktreePath, ["checkout", target]);
 }
 
 // Force-delete a local branch. Used after worktree removal when the
