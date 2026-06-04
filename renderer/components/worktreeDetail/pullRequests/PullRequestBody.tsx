@@ -6,6 +6,7 @@ import type {
 } from "@shared/schemas";
 import { ChecksRow } from "./ChecksRow";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
+import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
 import { PullRequestIdentity } from "./PullRequestIdentity";
 
@@ -41,6 +42,9 @@ export function PullRequestBody({
       )}
       {!isOpen && !worktree.isPrimary && (
         <ClosedPullRequestBox worktree={worktree} />
+      )}
+      {pr.state === "MERGED" && worktree.isPrimary && (
+        <MergedPrimaryBranchBox worktree={worktree} />
       )}
     </div>
   );
