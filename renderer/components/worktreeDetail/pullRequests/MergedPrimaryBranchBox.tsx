@@ -25,9 +25,9 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
 
   // The default branch can resolve to a remote-tracking ref (e.g.
   // "origin/main"); strip the remote prefix for the local branch name we
-  // show in the label and compare against. The actual switch (DWIM into
-  // the local branch + reset onto the remote tip) is done server-side in
-  // worktrees.switchToPrimary.
+  // show in the label and compare against. The actual switch (land on the
+  // local tracking branch + fast-forward onto the remote tip) is done
+  // server-side in worktrees.switchToPrimary.
   const remoteSet = new Set(branches?.remote ?? []);
   const target = remoteSet.has(defaultBranch)
     ? defaultBranch.replace(/^[^/]+\//, "")

@@ -14,27 +14,37 @@ export async function renameBranch(
 
 // Switch a worktree to a different branch. Callers may hand us a
 // remote-tracking ref like `origin/main` (e.g. when the primary branch
-// resolves to a remote ref). `git checkout origin/main` would silently
-// land on a detached HEAD rather than switching to the branch, so strip
-// the remote prefix and let git DWIM into the local tracking branch,
-// creating it if it doesn't exist yet. We only strip when no local branch
-// of that exact name exists, so a real local branch that happens to look
-// like `remote/thing` still wins. Callers that already hold the remote
-// list can pass it to skip a redundant `git remote`.
+// resolves to a remote ref). `git checkout origin/main` would land on a
+// detached HEAD, so when the local branch doesn't exist yet we create a
+// local tracking branch from the explicit remote ref via `--track`. Using
+// the qualified ref (rather than a bare `git checkout main`) keeps the
+// checkout unambiguous when several remotes share the branch name. An
+// exact local branch always wins over the remote interpretation. Callers
+// that already hold the remote list can pass it to skip a `git remote`.
 export async function checkoutBranch(
   worktreePath: string,
   branch: string,
   remotes?: readonly string[],
 ): Promise<void> {
-  let target = branch;
-  if (!(await localBranchExists(worktreePath, branch))) {
-    const split = splitRemoteRefSync(
-      branch,
-      remotes ?? (await listRemotes(worktreePath)),
-    );
-    if (split) target = split.branch;
+  // An exact local branch (including the rare literal "remote/thing") wins.
+  if (await localBranchExists(worktreePath, branch)) {
+    await run(worktreePath, ["checkout", branch]);
+    return;
   }
-  await run(worktreePath, ["checkout", target]);
+  const split = splitRemoteRefSync(
+    branch,
+    remotes ?? (await listRemotes(worktreePath)),
+  );
+  // A qualified remote ref whose local branch doesn't exist yet: create the
+  // tracking branch from the explicit ref so a name shared across remotes
+  // stays unambiguous.
+  if (split && !(await localBranchExists(worktreePath, split.branch))) {
+    await run(worktreePath, ["checkout", "--track", branch]);
+    return;
+  }
+  // Either a plain name git can DWIM, or the stripped local branch already
+  // exists — switch to it.
+  await run(worktreePath, ["checkout", split ? split.branch : branch]);
 }
 
 // Force-delete a local branch. Used after worktree removal when the

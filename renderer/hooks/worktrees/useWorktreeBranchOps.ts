@@ -55,9 +55,9 @@ interface SwitchToPrimaryInput {
   worktreeId: string;
 }
 
-// Switch the repo root back onto the primary branch, resetting the local
-// primary to its remote tip so the root lands fully up to date rather than
-// on a stale local copy. Used by the post-merge cleanup on the root.
+// Switch the repo root back onto the primary branch, fast-forwarding the
+// local primary onto its remote tip so the root lands up to date rather
+// than on a stale local copy. Used by the post-merge cleanup on the root.
 export function useSwitchToPrimary() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, SwitchToPrimaryInput>({
