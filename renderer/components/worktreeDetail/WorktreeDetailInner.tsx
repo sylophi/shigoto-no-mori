@@ -242,12 +242,12 @@ export function WorktreeDetailInner({
 
           <PullRequestSection worktree={worktree} />
 
+          <CommitsSection worktree={worktree} />
+
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
             <ScriptsSection worktree={worktree} />
           </section>
-
-          <CommitsSection worktree={worktree} />
 
           <NotesSection worktree={worktree} />
         </div>
