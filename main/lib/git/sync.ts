@@ -2,8 +2,9 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
+import { checkoutBranch } from "./branches";
 import { run, runLenient } from "./core";
-import { fetchAllRemotes, listRemotes } from "./remotes";
+import { fetchAllRemotes, listRemotes, splitRemoteRefSync } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -86,4 +87,29 @@ export async function syncWithPrimary(
 ): Promise<void> {
   await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
+}
+
+// Switch a worktree onto the primary branch and bring it up to date with
+// the remote. Used by the "delete branch and switch to <primary>" cleanup
+// on the repo root after a PR merges: the local primary is typically behind
+// the just-merged remote tip. When the primary tracks a remote we
+// fast-forward the local branch onto it with `pull --ff-only`, which is
+// non-destructive — it refuses (surfacing git's error in the UI) rather
+// than discarding local commits or uncommitted work when a clean
+// fast-forward isn't possible. A purely local primary has no remote to sync
+// to, so we just check it out.
+export async function switchToPrimaryBranch(
+  worktreePath: string,
+  projectPath: string,
+  primaryRef: string,
+): Promise<void> {
+  const remotes = await listRemotes(projectPath);
+  // Checking out the qualified ref creates/lands on the local tracking
+  // branch (never a detached HEAD); a local primaryRef is checked out as-is.
+  await checkoutBranch(worktreePath, primaryRef, remotes);
+  const split = splitRemoteRefSync(primaryRef, remotes);
+  if (split) {
+    // `pull` fetches the ref itself, so no separate fetch is needed.
+    await run(worktreePath, ["pull", "--ff-only", split.remote, split.branch]);
+  }
 }

@@ -213,4 +213,5 @@ export const worktrees = {
   publish: worktreesClient.publish,
   pullAndPush: worktreesClient.pullAndPush,
   syncWithPrimary: worktreesClient.syncWithPrimary,
+  switchToPrimary: worktreesClient.switchToPrimary,
 } as const;
