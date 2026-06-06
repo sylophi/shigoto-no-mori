@@ -118,8 +118,8 @@ export const worktreesContract = {
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
-  switchToPrimary: invoke(
-    "worktrees:switchToPrimary",
+  switchToPrimaryAndDeleteBranch: invoke(
+    "worktrees:switchToPrimaryAndDeleteBranch",
     SyncWorktreePayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },

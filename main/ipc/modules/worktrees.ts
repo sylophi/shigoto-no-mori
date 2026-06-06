@@ -3,6 +3,7 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import {
+  isRealBranch,
   type ScriptEvent,
   type Worktree,
   type WorktreeCarryOverComplete,
@@ -19,7 +20,7 @@ import {
   pullRebaseOrMergeAndPush,
   pushFastForward,
   pushForceWithLease,
-  switchToPrimaryBranch,
+  switchToPrimaryAndDeleteBranch,
   syncWithPrimary,
 } from "../../lib/git/sync";
 import {
@@ -194,10 +195,16 @@ export const worktreesHandlers: Handlers<
       const primaryRef = await resolvePrimaryRef(target.projectId, pp);
       await syncWithPrimary(wt, pp, primaryRef);
     }),
-  switchToPrimary: (input) =>
+  switchToPrimaryAndDeleteBranch: (input) =>
     syncWorktree(input, async (wt, pp, target) => {
+      if (!isRealBranch(target.branch)) {
+        throw new Error("No branch checked out to clean up");
+      }
       const primaryRef = await resolvePrimaryRef(target.projectId, pp);
-      await switchToPrimaryBranch(wt, pp, primaryRef);
+      // Atomic switch + delete: doing this in one main-side call avoids the
+      // renderer-side race where the switch unmounts the cleanup box and the
+      // chained delete gets dropped (see switchToPrimaryAndDeleteBranch).
+      await switchToPrimaryAndDeleteBranch(wt, pp, primaryRef, target.branch);
     }),
 };
 

@@ -55,13 +55,19 @@ interface SwitchToPrimaryInput {
   worktreeId: string;
 }
 
-// Switch the repo root back onto the primary branch, fast-forwarding the
-// local primary onto its remote tip so the root lands up to date rather
-// than on a stale local copy. Used by the post-merge cleanup on the root.
-export function useSwitchToPrimary() {
+// Post-merge cleanup on the repo root: switch it back onto the primary
+// branch (fast-forwarding the local primary onto its remote tip) and delete
+// the now-merged branch it was sitting on. This is a SINGLE main-side
+// operation on purpose: the switch flips the root's branch to the primary,
+// which unmounts the cleanup box, and React Query drops a `mutate()`
+// callback once its component has unmounted — so chaining the delete in the
+// renderer would silently lose it (which is exactly the bug this replaced).
+// Errors surface via a global toast so they survive the box unmounting.
+export function useSwitchToPrimaryAndDeleteBranch() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, SwitchToPrimaryInput>({
-    mutationFn: (input) => window.api.worktrees.switchToPrimary(input),
+    mutationFn: (input) =>
+      window.api.worktrees.switchToPrimaryAndDeleteBranch(input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.worktrees(vars.projectId),
@@ -70,7 +76,6 @@ export function useSwitchToPrimary() {
         queryKey: queryKeys.branches(vars.projectId),
       });
     },
-    // The cleanup box renders its own inline ErrorBanner.
-    meta: { silentError: true },
+    meta: { errorTitle: "Couldn't clean up the merged branch" },
   });
 }
