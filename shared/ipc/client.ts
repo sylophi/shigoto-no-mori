@@ -213,5 +213,6 @@ export const worktrees = {
   publish: worktreesClient.publish,
   pullAndPush: worktreesClient.pullAndPush,
   syncWithPrimary: worktreesClient.syncWithPrimary,
-  switchToPrimary: worktreesClient.switchToPrimary,
+  switchToPrimaryAndDeleteBranch:
+    worktreesClient.switchToPrimaryAndDeleteBranch,
 } as const;

@@ -1,10 +1,9 @@
 import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { useBranches, useDeleteBranch } from "@/hooks/git/useBranches";
+import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useSwitchToPrimary } from "@/hooks/worktrees/useWorktreeBranchOps";
+import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { cn } from "@/lib/utils";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 
@@ -12,11 +11,15 @@ import { isRealBranch, type Worktree } from "@shared/schemas";
 // the repo root can't be removed, so once its branch is merged we offer
 // to switch it back to the primary branch and delete the merged branch
 // — the same cleanup a regular worktree gets, adapted to the root.
+//
+// Both halves run as one main-side operation (worktrees.switchToPrimaryAndDeleteBranch):
+// the switch unmounts this box, and a renderer-chained delete would be lost
+// to that unmount (React Query drops mutate() callbacks once their component
+// is gone). Failures surface via a global toast for the same reason.
 export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   const { data: defaultBranch } = useDefaultBranch(worktree.projectId);
   const { data: branches } = useBranches(worktree.projectId);
-  const switchToPrimary = useSwitchToPrimary();
-  const del = useDeleteBranch();
+  const cleanup = useSwitchToPrimaryAndDeleteBranch();
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
 
   // Wait for the primary ref to resolve, and never offer this on a
@@ -26,8 +29,8 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   // The default branch can resolve to a remote-tracking ref (e.g.
   // "origin/main"); strip the remote prefix for the local branch name we
   // show in the label and compare against. The actual switch (land on the
-  // local tracking branch + fast-forward onto the remote tip) is done
-  // server-side in worktrees.switchToPrimary.
+  // local tracking branch + fast-forward onto the remote tip) and the delete
+  // of the merged branch are done server-side in one atomic operation.
   const remoteSet = new Set(branches?.remote ?? []);
   const target = remoteSet.has(defaultBranch)
     ? defaultBranch.replace(/^[^/]+\//, "")
@@ -35,64 +38,40 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   // Already on the primary branch — nothing to switch to or delete.
   if (target === worktree.branch) return null;
 
-  const busy = switchToPrimary.isPending || del.isPending;
-  // Capture before the switch flips worktree.branch to the primary branch.
-  const mergedBranch = worktree.branch;
-
   const run = () => {
-    switchToPrimary.mutate(
-      {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-      },
-      {
-        // Only delete once the root has switched off the merged branch —
-        // git refuses to delete a branch checked out anywhere.
-        onSuccess: () => {
-          del.mutate({ projectId: worktree.projectId, name: mergedBranch });
-        },
-      },
-    );
+    cleanup.mutate({
+      projectId: worktree.projectId,
+      worktreeId: worktree.id,
+    });
   };
 
-  // Switch failures (e.g. a dirty root) keep this box mounted, so its
-  // error shows here. A delete failure may unmount the box once the
-  // branch has switched, but useDeleteBranch toasts on error, so it's
-  // still surfaced.
-  const error = switchToPrimary.error ?? del.error;
-
   return (
-    <div className="space-y-2">
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={busy}
-          onClick={() => trigger(run)}
-          className={cn(
-            "text-destructive hover:bg-destructive/10 hover:text-destructive",
-            armed && "bg-destructive/10",
-          )}
-        >
-          {busy ? (
-            <>
-              <Loader2 aria-hidden className="size-3.5 animate-spin" />
-              {switchToPrimary.isPending
-                ? `Switching to ${target}…`
-                : "Deleting…"}
-            </>
-          ) : armed ? (
-            "Click again to confirm"
-          ) : (
-            <>
-              <Trash2 aria-hidden className="size-3.5" />
-              {`Delete branch and switch to ${target}`}
-            </>
-          )}
-        </Button>
-      </div>
-      {error && <ErrorBanner>{error.message}</ErrorBanner>}
+    <div className="flex justify-end">
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={cleanup.isPending}
+        onClick={() => trigger(run)}
+        className={cn(
+          "text-destructive hover:bg-destructive/10 hover:text-destructive",
+          armed && "bg-destructive/10",
+        )}
+      >
+        {cleanup.isPending ? (
+          <>
+            <Loader2 aria-hidden className="size-3.5 animate-spin" />
+            {`Switching to ${target}…`}
+          </>
+        ) : armed ? (
+          "Click again to confirm"
+        ) : (
+          <>
+            <Trash2 aria-hidden className="size-3.5" />
+            {`Delete branch and switch to ${target}`}
+          </>
+        )}
+      </Button>
     </div>
   );
 }
