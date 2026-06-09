@@ -25,6 +25,18 @@ function truncateForLabel(text: string): string {
   return single.slice(0, MAX_LABEL_LEN - 1) + "…";
 }
 
+// Mirrors the allow-list on the shell:openExternal IPC channel: only web
+// URLs may be handed to the OS. Anything else (file:, custom app schemes)
+// could launch local apps from a crafted href.
+function isWebUrl(url: string): boolean {
+  try {
+    const protocol = new URL(url).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export function attachContextMenu(window: BrowserWindow): void {
   window.webContents.on("context-menu", (_event, params) => {
     const items: MenuItemConstructorOptions[] = [];
@@ -53,12 +65,14 @@ export function attachContextMenu(window: BrowserWindow): void {
     }
 
     if (params.linkURL) {
-      items.push({
-        label: "Open Link",
-        click: () => {
-          void shell.openExternal(params.linkURL);
-        },
-      });
+      if (isWebUrl(params.linkURL)) {
+        items.push({
+          label: "Open Link",
+          click: () => {
+            void shell.openExternal(params.linkURL);
+          },
+        });
+      }
       items.push({
         label: "Copy Link Address",
         click: () => clipboard.writeText(params.linkURL),

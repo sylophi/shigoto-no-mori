@@ -8,6 +8,17 @@ export const UNKNOWN_BRANCH = "(unknown)";
 export const isRealBranch = (branch: string): boolean =>
   branch !== UNKNOWN_BRANCH;
 
+// Branch names and base refs cross the IPC boundary straight into git
+// argv. git itself rejects refs starting with "-" (check-ref-format),
+// so refusing them here costs nothing and guarantees user input can
+// never land in a flag position (`--track`, `-D`, ...).
+export const GitRefNameSchema = z
+  .string()
+  .min(1)
+  .refine((value) => !value.startsWith("-"), {
+    message: "Branch names cannot start with '-'",
+  });
+
 export const ProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -91,17 +102,17 @@ export type BranchList = z.infer<typeof BranchListSchema>;
 // specific worktree). Used by the Manage Branches page.
 export const CreateBranchPayloadSchema = z.object({
   projectId: z.string().min(1),
-  name: z.string().min(1),
-  base: z.string().min(1).optional(),
+  name: GitRefNameSchema,
+  base: GitRefNameSchema.optional(),
 });
 
 export const RenameAnyBranchPayloadSchema = z.object({
   projectId: z.string().min(1),
-  oldName: z.string().min(1),
-  newName: z.string().min(1),
+  oldName: GitRefNameSchema,
+  newName: GitRefNameSchema,
 });
 
 export const DeleteBranchPayloadSchema = z.object({
   projectId: z.string().min(1),
-  name: z.string().min(1),
+  name: GitRefNameSchema,
 });

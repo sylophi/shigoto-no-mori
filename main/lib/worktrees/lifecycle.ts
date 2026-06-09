@@ -16,8 +16,7 @@ import { readGlobalConfig } from "../config/global";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
 import { resolveScriptCommand } from "../scripts/command";
 import {
-  clearDeleteInflight,
-  markDeleteInflight,
+  getInflightDeleteIds,
   type NotifyScriptEvent,
   startScriptForLifecycle,
 } from "../scripts";
@@ -88,8 +87,16 @@ async function runStep(args: {
 export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
   const projectId = args.project.id;
   const worktreeId = args.worktree.id;
+  // The renderer deliberately allows deleting a worktree while its setup
+  // is still running; the delete path kills the running step, which
+  // resolves our `await exit` and would otherwise let this chain keep
+  // going -- e.g. spawning port-pool provision right after the delete's
+  // port-pool release, inside a directory that's being removed. Re-check
+  // before every step and bail once a delete is in flight.
+  const deleting = () => getInflightDeleteIds().has(worktreeId);
   try {
     const config = await readShigomoriConfig(projectId).catch(() => null);
+    if (deleting()) return;
 
     const carryOverEntries = config?.carryOver ?? [];
     if (carryOverEntries.length > 0) {
@@ -130,6 +137,8 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
     ]);
     const projectBranch = identities.find((i) => i.isPrimary)?.branch ?? "";
 
+    if (deleting()) return;
+
     if (setupCommand) {
       args.notifyPhase({ projectId, worktreeId, phase: "setup" });
       await runStep({
@@ -143,6 +152,8 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         notify: args.notifyScript,
       });
     }
+
+    if (deleting()) return;
 
     if (portPoolNeeded) {
       args.notifyPhase({
@@ -191,50 +202,29 @@ interface DeleteArgs {
   notifyScript: NotifyScriptEvent;
 }
 
+// Inflight-delete marking lives in deleteWorktreeWithCleanup (the sole
+// caller), which wraps the whole delete -- cleanup scripts AND the actual
+// removal -- so the busy-quit prompt can't miss the removal phase.
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
-  markDeleteInflight(args.worktree.id);
-  try {
-    const defaultBranch = await resolveDefaultBranch(
-      args.project.path,
-      args.config?.defaultBranch,
-    ).catch(() => "");
+  const defaultBranch = await resolveDefaultBranch(
+    args.project.path,
+    args.config?.defaultBranch,
+  ).catch(() => "");
 
-    if (args.globalPortPoolEnabled) {
-      const [installed, hasConfig] = await Promise.all([
-        isPortPoolInstalled(),
-        isPortPoolConfigured(args.worktree.path),
-      ]);
-      if (installed && hasConfig) {
-        const { runId, exitCode } = await runStep({
-          command: resolveScriptCommand(
-            "port-pool-release",
-            args.config,
-            args.worktree.path,
-          ),
-          scriptName: "port-pool-release",
-          slot: { kind: "portPool", phase: "release" },
-          worktree: args.worktree,
-          project: args.project,
-          projectBranch: args.projectBranch,
-          defaultBranch,
-          notify: args.notifyScript,
-        });
-        if (exitCode !== 0) {
-          throw cleanupError("portPoolRelease", exitCode, runId);
-        }
-      }
-    }
-
-    const teardownCommand = resolveScriptCommand(
-      "teardown",
-      args.config,
-      args.worktree.path,
-    );
-    if (teardownCommand) {
+  if (args.globalPortPoolEnabled) {
+    const [installed, hasConfig] = await Promise.all([
+      isPortPoolInstalled(),
+      isPortPoolConfigured(args.worktree.path),
+    ]);
+    if (installed && hasConfig) {
       const { runId, exitCode } = await runStep({
-        command: teardownCommand,
-        scriptName: "teardown",
-        slot: { kind: "teardown" },
+        command: resolveScriptCommand(
+          "port-pool-release",
+          args.config,
+          args.worktree.path,
+        ),
+        scriptName: "port-pool-release",
+        slot: { kind: "portPool", phase: "release" },
         worktree: args.worktree,
         project: args.project,
         projectBranch: args.projectBranch,
@@ -242,11 +232,30 @@ export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
         notify: args.notifyScript,
       });
       if (exitCode !== 0) {
-        throw cleanupError("teardown", exitCode, runId);
+        throw cleanupError("portPoolRelease", exitCode, runId);
       }
     }
-  } finally {
-    clearDeleteInflight(args.worktree.id);
+  }
+
+  const teardownCommand = resolveScriptCommand(
+    "teardown",
+    args.config,
+    args.worktree.path,
+  );
+  if (teardownCommand) {
+    const { runId, exitCode } = await runStep({
+      command: teardownCommand,
+      scriptName: "teardown",
+      slot: { kind: "teardown" },
+      worktree: args.worktree,
+      project: args.project,
+      projectBranch: args.projectBranch,
+      defaultBranch,
+      notify: args.notifyScript,
+    });
+    if (exitCode !== 0) {
+      throw cleanupError("teardown", exitCode, runId);
+    }
   }
 }
 

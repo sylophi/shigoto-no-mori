@@ -2,7 +2,7 @@
 // (via `git worktree remove --force`) and wipes the shigomori root so state,
 // global config, and any orphan worktree directories all go away.
 //
-// The original project repos on disk are untouched — we only act on data
+// The original project repos on disk are untouched -- we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
 import { readGlobalConfig } from "./config/global";
@@ -13,9 +13,16 @@ import {
   removeWorktreeForce,
 } from "./git/worktrees";
 import { loadProjects } from "./projects";
+import { killAllScripts } from "./scripts";
 import { shigomoriRoot } from "./util/paths";
 
 export async function nukeEverything(): Promise<void> {
+  // Reap every running script first -- dev servers and watchers may have
+  // their cwd inside the worktrees we're about to force-remove. Skipping
+  // this would orphan them with deleted working directories, still
+  // holding their ports, exactly what the per-worktree delete path
+  // guards against via killScriptsForWorktree.
+  await killAllScripts();
   const projects = loadProjects();
   // Kick off the config read in parallel with the per-project worktree work.
   // deleteBranches is only needed inside the inner branch-cleanup step, so we

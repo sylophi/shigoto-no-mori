@@ -203,6 +203,21 @@ function bucketForItem(item: StatusCheckRollupItem): PullRequestCheckBucket {
   return "pending";
 }
 
+// detailsUrl/targetUrl are whatever the CI integration wrote: frequently
+// an empty string (no details link), occasionally relative, and in the
+// worst case a non-web scheme. PullRequestCheckSchema.url requires a real
+// URL, and the renderer feeds it to openExternal, so only absolute
+// http(s) links make the cut.
+function toCheckUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
   const summary: PullRequestChecksSummary = {
     total: checks.length,
@@ -271,7 +286,7 @@ async function runGhPrListDetail(
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",
     bucket: bucketForItem(item),
-    url: item.detailsUrl ?? item.targetUrl ?? undefined,
+    url: toCheckUrl(item.detailsUrl) ?? toCheckUrl(item.targetUrl),
   }));
   return {
     number: first.number,

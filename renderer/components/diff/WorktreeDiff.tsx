@@ -8,7 +8,7 @@ import { DiffView } from "./DiffView";
 export function WorktreeDiff() {
   const { projectId, worktreeId } = worktreeDiffRoute.useParams();
   const navigate = useNavigate();
-  const { data: worktrees = [] } = useWorktrees(projectId);
+  const { data: worktrees = [], isPending } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   const goBack = () =>
@@ -24,6 +24,9 @@ export function WorktreeDiff() {
   } = useWorktreeDiff(projectId, worktree?.id);
 
   if (!worktree) {
+    // Cold cache (e.g. a reload landing directly on this route): the
+    // list hasn't resolved yet, so absence doesn't mean missing.
+    if (isPending) return null;
     return <DiffNotFound onBack={goBack} message="Worktree not found." />;
   }
 

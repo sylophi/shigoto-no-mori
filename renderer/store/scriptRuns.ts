@@ -4,7 +4,7 @@
 // via a runId→key index built when a run starts.
 //
 // React reads via `useScriptRunState(key)`. The store survives
-// navigation but not a renderer reload — matches the user-confirmed
+// navigation but not a renderer reload -- matches the user-confirmed
 // "in-memory only" scope.
 //
 // Snapshots are immutable: every transition replaces the record with
@@ -32,6 +32,14 @@ export {
 // "data" event may carry a single byte or a 4 KB burst), so this is a
 // rough ceiling. The console replays the buffer on mount.
 const MAX_CHUNKS = 5_000;
+
+// Cap per-runId pre-bind buffers. The legitimate buffering window is one
+// IPC round-trip (events arriving before `scripts.run` resolves), so a
+// bucket this deep means the runId will never bind -- e.g. a script that
+// was already streaming when the renderer reloaded and rebuilt this
+// store. Without a cap those orphaned buckets grow for as long as the
+// script keeps producing output.
+const MAX_PENDING_CHUNKS = 500;
 
 // "started" is handled separately by handleEvent (which binds the runId
 // before delegating to applyEvent). Narrowing the post-start union lets
@@ -442,6 +450,7 @@ class ScriptRunsStore {
       return;
     }
     const bucket = this.pendingByRunId.get(event.runId) ?? [];
+    if (bucket.length >= MAX_PENDING_CHUNKS) bucket.shift();
     bucket.push(event);
     this.pendingByRunId.set(event.runId, bucket);
   }

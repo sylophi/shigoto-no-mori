@@ -415,12 +415,13 @@ export async function createWorktree(
     if (!base) throw new Error("Checkout mode requires a base ref");
     // No `-b`: reuse the existing branch in this new worktree. git
     // refuses if the branch is already checked out in another worktree.
-    await run(projectPath, ["worktree", "add", worktreePath, base]);
+    // `--` keeps a base ref from being parsed as flags.
+    await run(projectPath, ["worktree", "add", "--", worktreePath, base]);
   } else {
     // Quick-create: when the caller doesn't specify a branch, reuse the
     // animal dirname so the branch and worktree start aligned.
     const branch = branchName?.trim() || worktreeName;
-    const args = ["worktree", "add", "-b", branch, worktreePath];
+    const args = ["worktree", "add", "-b", branch, "--", worktreePath];
     if (base) args.push(base);
     await run(projectPath, args);
   }

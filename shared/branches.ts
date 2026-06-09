@@ -25,7 +25,10 @@ export function sanitizeBranchForPath(branch: string): string {
 // Live sanitizer for branch-name text inputs. Forward slashes stay valid
 // (git uses them for namespaces like feat/foo); anything else outside the
 // safe set becomes a dash so a stray space or punctuation can't smuggle in
-// a ref git will refuse.
+// a ref git will refuse. A leading dash survives editing (stripping it
+// live would eat an interior dash whose prefix was just deleted); names
+// that still start with "-" at submit are rejected by the IPC schemas,
+// matching git's own check-ref-format rule.
 const INVALID_BRANCH_INPUT_CHARS = /[^A-Za-z0-9._/-]/g;
 
 export function sanitizeBranchName(name: string): string {

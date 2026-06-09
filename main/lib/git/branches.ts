@@ -1,6 +1,11 @@
 import { type BranchList, isRealBranch } from "@shared/schemas";
 import { run } from "./core";
-import { listRemotes, localBranchExists, splitRemoteRefSync } from "./remotes";
+import {
+  listRemotes,
+  localBranchExists,
+  remoteRefExists,
+  splitRemoteRefSync,
+} from "./remotes";
 import type { WorktreeIdentity } from "./worktrees";
 
 // Rename the branch currently checked out in a worktree.
@@ -9,7 +14,7 @@ export async function renameBranch(
   worktreePath: string,
   newBranch: string,
 ): Promise<void> {
-  await run(worktreePath, ["branch", "-m", newBranch]);
+  await run(worktreePath, ["branch", "-m", "--", newBranch]);
 }
 
 // Switch a worktree to a different branch. Callers may hand us a
@@ -55,7 +60,7 @@ export async function deleteLocalBranch(
   projectPath: string,
   branch: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-D", branch]);
+  await run(projectPath, ["branch", "-D", "--", branch]);
 }
 
 // Centralizes the "delete the local branch after the worktree is gone"
@@ -80,15 +85,24 @@ export async function deleteBranchAfterWorktreeRemoval(
 }
 
 // Create a local branch pointing at `base` (or HEAD if omitted). When
-// base is a remote-tracking ref, `--track` sets upstream automatically.
+// base is a remote-tracking ref, `--track` sets upstream explicitly so
+// the behavior doesn't depend on the user's branch.autoSetupMerge. A
+// local base (even a slashed one like `feature/foo`) must not track --
+// that would pin the new branch's upstream to a local ref. An exact
+// local branch wins over the remote interpretation, matching
+// checkoutBranch's precedence.
 export async function createLocalBranch(
   projectPath: string,
   name: string,
   base: string | undefined,
 ): Promise<void> {
+  const track = base
+    ? !(await localBranchExists(projectPath, base)) &&
+      (await remoteRefExists(projectPath, base))
+    : false;
   const args = ["branch"];
-  if (base?.includes("/")) args.push("--track");
-  args.push(name);
+  if (track) args.push("--track");
+  args.push("--", name);
   if (base) args.push(base);
   await run(projectPath, args);
 }
@@ -101,7 +115,7 @@ export async function renameAnyLocalBranch(
   oldName: string,
   newName: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-m", oldName, newName]);
+  await run(projectPath, ["branch", "-m", "--", oldName, newName]);
 }
 
 // Force-delete a local branch. Git still refuses if the branch is
@@ -110,7 +124,7 @@ export async function deleteAnyLocalBranch(
   projectPath: string,
   name: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-D", name]);
+  await run(projectPath, ["branch", "-D", "--", name]);
 }
 
 // `--directory` collapses fully-ignored directories into a single
