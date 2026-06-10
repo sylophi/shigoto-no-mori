@@ -8,7 +8,7 @@ import { DiffView } from "./DiffView";
 export function CommitDiff() {
   const { projectId, worktreeId, hash } = commitDiffRoute.useParams();
   const navigate = useNavigate();
-  const { data: worktrees = [] } = useWorktrees(projectId);
+  const { data: worktrees = [], isPending } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   const goBack = () =>
@@ -29,6 +29,9 @@ export function CommitDiff() {
   } = useCommitDiff(projectId, worktree?.id, hash);
 
   if (!worktree) {
+    // Cold cache (e.g. a reload landing directly on this route): the
+    // list hasn't resolved yet, so absence doesn't mean missing.
+    if (isPending) return null;
     return <DiffNotFound onBack={goBack} message="Worktree not found." />;
   }
 

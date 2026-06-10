@@ -5,7 +5,7 @@
 // wrapping shell.
 //
 // Kill strategy:
-//   1. SIGTERM the process group (negative pgid) — covers normal forks.
+//   1. SIGTERM the process group (negative pgid) -- covers normal forks.
 //   2. Walk `ps` for any descendant still reachable via ppid (e.g.
 //      double-forked daemons) and SIGTERM those too.
 //   3. After a grace period, SIGKILL anything still alive in either set.
@@ -132,7 +132,7 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
 
 // Walks `ps` to find every process that descends from rootPid via the
 // ppid chain. Catches grandchildren that called setsid() and left our
-// process group — still reachable here as long as their ppid hasn't
+// process group -- still reachable here as long as their ppid hasn't
 // been re-parented to init.
 async function listDescendantPids(rootPid: number): Promise<number[]> {
   let stdout: string;
@@ -278,19 +278,26 @@ export function startScript(args: RunArgs): string {
   });
 
   if (!child.pid) {
-    queueMicrotask(() => {
-      args.notify({
-        runId,
-        kind: "error",
-        data: "Failed to start script process",
-      });
+    // spawn failed before a process existed (missing shell binary,
+    // deleted cwd). Node reports the cause via an async "error" event;
+    // with no listener attached that emit rethrows as an uncaught
+    // exception and crashes the main process. The microtask fallback
+    // covers any path where the event never fires, and both run after
+    // startScriptForLifecycle has registered its exit observer.
+    let reported = false;
+    const reportSpawnFailure = (message: string) => {
+      if (reported) return;
+      reported = true;
+      args.notify({ runId, kind: "error", data: message });
       args.notify({ runId, kind: "exit", code: null });
       const observer = exitObservers.get(runId);
       if (observer) {
         exitObservers.delete(runId);
         observer(null);
       }
-    });
+    };
+    child.once("error", (error) => reportSpawnFailure(error.message));
+    queueMicrotask(() => reportSpawnFailure("Failed to start script process"));
     return runId;
   }
 
@@ -346,7 +353,15 @@ export function startScript(args: RunArgs): string {
     runningScripts.delete(runId);
   });
 
-  child.on("exit", (code, signal) => {
+  let exitNotified = false;
+  let flushTimer: NodeJS.Timeout | null = null;
+  const finalizeExit = (code: number | null, signal: string | null) => {
+    if (exitNotified) return;
+    exitNotified = true;
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)
     // because the shell wrapping the user's command translated the
     // signal into an exit code. If we initiated the cancel, report
@@ -362,6 +377,19 @@ export function startScript(args: RunArgs): string {
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
+  };
+
+  // Notify exit on "close" (process ended AND stdio flushed), not "exit":
+  // the pipes routinely still hold the run's last chunks at "exit", and
+  // the renderer unbinds the runId once it sees the exit event -- a
+  // fast-failing script would lose its final error output. The timer
+  // fallback keeps a backgrounded grandchild that inherited the pipes
+  // from wedging the run (and the kill/lifecycle chains awaiting `done`).
+  child.on("exit", (code, signal) => {
+    flushTimer = setTimeout(() => finalizeExit(code, signal), 500);
+  });
+  child.on("close", (code, signal) => {
+    finalizeExit(code, signal);
   });
 
   return runId;

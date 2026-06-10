@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isRealBranch } from "./project";
+import { GitRefNameSchema, isRealBranch } from "./project";
 
 export const CommitSummarySchema = z.object({
   hash: z.string(),
@@ -134,8 +134,8 @@ export const CreateWorktreePayloadSchema = z.object({
   worktreeName: z.string().min(1).optional(),
   // Optional: when omitted, the worktree's auto-picked animal name is
   // used as the branch name too (the quick-create shortcut).
-  branchName: z.string().min(1).optional(),
-  base: z.string().optional(),
+  branchName: GitRefNameSchema.optional(),
+  base: GitRefNameSchema.optional(),
   // When true: check out `base` as the worktree's branch (no -b, no new
   // branch). Requires `base` to be set and not already checked out
   // elsewhere. Ignores `branchName`.
@@ -210,7 +210,7 @@ export const DeleteWorktreePayloadSchema = z.object({
 export const RenameBranchPayloadSchema = z.object({
   projectId: z.string().min(1),
   worktreeId: z.string().min(1),
-  newBranch: z.string().min(1),
+  newBranch: GitRefNameSchema,
 });
 
 export const SetShelvedPayloadSchema = z.object({
@@ -222,7 +222,7 @@ export const SetShelvedPayloadSchema = z.object({
 export const CheckoutBranchPayloadSchema = z.object({
   projectId: z.string().min(1),
   worktreeId: z.string().min(1),
-  branch: z.string().min(1),
+  branch: GitRefNameSchema,
 });
 
 // Every remote-sync mutation operates on a single worktree, so payload

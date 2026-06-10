@@ -46,12 +46,15 @@ function NotesSectionInner({
     });
   };
 
-  const status =
-    write.isPending && draft !== saved
-      ? "Saving…"
-      : write.isSuccess && draft === saved
-        ? "Saved"
-        : "";
+  // Compare against what the last write actually sent, not `saved` --
+  // the prop lags behind until the invalidation refetch lands, which
+  // would blank the status right after a successful save.
+  const submitted = write.variables?.data.notes ?? "";
+  const status = write.isPending
+    ? "Saving…"
+    : write.isSuccess && draft === submitted
+      ? "Saved"
+      : "";
 
   return (
     <section className="space-y-3">

@@ -18,10 +18,12 @@ export async function getWorktreeDiff(worktreePath: string): Promise<string> {
   const untracked = lsOutput.split("\0").filter((s) => s.length > 0);
   const additions = await Promise.all(
     untracked.map((file) =>
+      // `--` keeps a filename like `-weird.txt` from being parsed as flags.
       runLenient(worktreePath, [
         "diff",
         "--no-index",
         "--no-color",
+        "--",
         "/dev/null",
         file,
       ]),

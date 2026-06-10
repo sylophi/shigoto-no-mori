@@ -127,11 +127,20 @@ export function startUpdater(): void {
   autoUpdater.on(
     "update-downloaded",
     (_event, releaseNotes, releaseName, releaseDate) => {
+      // Squirrel can hand us an Invalid Date (truthy!) when the feed's
+      // pubDate is malformed; toISOString() on it throws, and a throw in
+      // this listener would surface as an uncaught exception and leave
+      // the state machine stuck before "ready".
+      const parsedDate = releaseDate ? new Date(releaseDate) : null;
+      const releaseDateIso =
+        parsedDate && !Number.isNaN(parsedDate.getTime())
+          ? parsedDate.toISOString()
+          : null;
       setState({
         kind: "ready",
         version: stripVPrefix(releaseName ?? ""),
         notes: releaseNotes || undefined,
-        releaseDate: releaseDate ? new Date(releaseDate).toISOString() : null,
+        releaseDate: releaseDateIso,
       });
     },
   );

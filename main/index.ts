@@ -65,6 +65,16 @@ const createWindow = () => {
     },
   });
 
+  // The renderer is a single local document with in-memory routing, so
+  // no in-page navigation or popup is ever legitimate. External links go
+  // through the scheme-validated shell:openExternal IPC instead. Same-URL
+  // navigation stays allowed so the dev server's full reload still works.
+  const webContents = mainWindow.webContents;
+  webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  webContents.on("will-navigate", (event, url) => {
+    if (url !== webContents.getURL()) event.preventDefault();
+  });
+
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   } else {
