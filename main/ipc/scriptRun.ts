@@ -27,16 +27,19 @@ export async function prepareScriptRun(
   project: Pick<Project, "id" | "path">,
   worktreeId: string,
 ): Promise<ScriptRunContext> {
-  const [config, identities] = await Promise.all([
-    readShigomoriConfig(project.id),
+  // The default-branch resolution only needs the config, so chain it off
+  // that read rather than the full join -- resolveDefaultBranch spawns
+  // several sequential git calls and shouldn't wait on the worktree list.
+  const configPromise = readShigomoriConfig(project.id);
+  const [config, identities, defaultBranch] = await Promise.all([
+    configPromise,
     listWorktreeIdentities(project.id, project.path),
+    configPromise
+      .then((c) => resolveDefaultBranch(project.path, c?.defaultBranch))
+      .catch(() => ""),
   ]);
   const worktree = identities.find((i) => i.id === worktreeId);
   if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
-  const defaultBranch = await resolveDefaultBranch(
-    project.path,
-    config?.defaultBranch,
-  ).catch(() => "");
   return {
     config,
     worktree,
