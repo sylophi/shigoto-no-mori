@@ -73,8 +73,7 @@ export function LocationForm({
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
   const [customPathError, setCustomPathError] = useState<string | null>(null);
-  const { status, batchRunning, setBatchRunning, runBatch } =
-    useSequentialBatch();
+  const { status, batchRunning, runBatch } = useSequentialBatch();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Pick up external config changes (e.g. another window edited the project).
@@ -133,10 +132,12 @@ export function LocationForm({
       return;
     }
     setCustomPathError(null);
-    setBatchRunning(true);
 
-    try {
-      if (layoutChanged) {
+    // The config write runs as the batch's prepare step so the form
+    // stays disabled across it and a write failure aborts the moves.
+    const saveLayoutIfChanged = async (): Promise<boolean> => {
+      if (!layoutChanged) return true;
+      try {
         // If the project has no on-disk config yet, fall back to the
         // resolved default branch (same source ConfigureProject uses)
         // so we never invent a branch name like "main" on a repo that
@@ -150,17 +151,12 @@ export function LocationForm({
         await write.mutateAsync({ projectId, config: nextConfig });
         setSavedLayout(layout);
         setSavedCustomPath(layout === "custom" ? customPath.trim() : "");
+        return true;
+      } catch {
+        // useShigomoriWrite already surfaces an error toast via its meta.
+        return false;
       }
-    } catch {
-      // useShigomoriWrite already surfaces an error toast via its meta.
-      setBatchRunning(false);
-      return;
-    }
-
-    if (toMove.length === 0) {
-      setBatchRunning(false);
-      return;
-    }
+    };
 
     const queue = toMove.map((w) => ({
       worktree: w,
@@ -176,9 +172,8 @@ export function LocationForm({
           destinationPath: destination,
         });
       },
+      { prepare: saveLayoutIfChanged },
     );
-
-    setBatchRunning(false);
   };
 
   const submitLabel = batchRunning ? "Moving…" : "Move";

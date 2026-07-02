@@ -29,8 +29,7 @@ export function ConvertExternalWorktrees() {
   const externals = worktrees.filter((w) => w.isExternal && !w.isPrimary);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const { status, batchRunning, setBatchRunning, runBatch } =
-    useSequentialBatch();
+  const { status, batchRunning, runBatch } = useSequentialBatch();
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -81,7 +80,6 @@ export function ConvertExternalWorktrees() {
 
   const runConversions = async () => {
     if (batchRunning || selected.size === 0) return;
-    setBatchRunning(true);
     // Snapshot the selection so toggles during the run don't drift it.
     const queue = externals.filter((w) => selected.has(w.id));
     const converted: Worktree[] = [];
@@ -96,7 +94,6 @@ export function ConvertExternalWorktrees() {
         converted.push(result.worktree);
       },
     );
-    setBatchRunning(false);
     setSelected(new Set());
 
     // One success? Drop the user into it. Multiple successes? Stay on the
