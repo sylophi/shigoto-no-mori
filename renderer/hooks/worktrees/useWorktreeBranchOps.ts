@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { invalidateBranchState } from "@/hooks/git/useBranches";
 
 interface RenameBranchInput {
   projectId: string;
@@ -12,14 +12,8 @@ export function useRenameBranch() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, RenameBranchInput>({
     mutationFn: (input) => window.api.worktrees.renameBranch(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(vars.projectId),
-      });
-    },
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     // The inline rename input surfaces the error next to the field; a
     // global toast on top would be noise.
     meta: { silentError: true },
@@ -36,14 +30,8 @@ export function useCheckoutBranch() {
   const queryClient = useQueryClient();
   return useMutation<Worktree, Error, CheckoutBranchInput>({
     mutationFn: (input) => window.api.worktrees.checkoutBranch(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(vars.projectId),
-      });
-    },
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     // The branch combobox surfaces the error inline so the user can pick a
     // different branch without leaving the dropdown; toast would duplicate.
     meta: { silentError: true },
@@ -68,14 +56,8 @@ export function useSwitchToPrimaryAndDeleteBranch() {
   return useMutation<Worktree, Error, SwitchToPrimaryInput>({
     mutationFn: (input) =>
       window.api.worktrees.switchToPrimaryAndDeleteBranch(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(vars.projectId),
-      });
-    },
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
     meta: { errorTitle: "Couldn't clean up the merged branch" },
   });
 }
