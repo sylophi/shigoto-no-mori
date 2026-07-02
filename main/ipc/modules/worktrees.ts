@@ -1,10 +1,8 @@
 import type { WebContents } from "electron";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import {
   isRealBranch,
-  type ScriptEvent,
   type Worktree,
   type WorktreeCarryOverComplete,
   type WorktreeLifecyclePhase,
@@ -39,6 +37,7 @@ import {
   setWorktreeShelved,
 } from "../../lib/worktrees/operations";
 import { broadcast, type HandlerContext } from "../register";
+import { scriptEventNotifier } from "../scriptRun";
 
 function notifierFor(sender: WebContents) {
   const notifyPhase = (payload: WorktreeLifecyclePhase) => {
@@ -49,11 +48,11 @@ function notifierFor(sender: WebContents) {
     if (sender.isDestroyed()) return;
     broadcast(worktreesContract, "carryOverComplete", payload, sender);
   };
-  const notifyScript = (payload: ScriptEvent) => {
-    if (sender.isDestroyed()) return;
-    broadcast(scriptsContract, "event", payload, sender);
+  return {
+    notifyPhase,
+    notifyCarryOverComplete,
+    notifyScript: scriptEventNotifier(sender),
   };
-  return { notifyPhase, notifyCarryOverComplete, notifyScript };
 }
 
 export const worktreesHandlers: Handlers<

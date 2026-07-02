@@ -1,13 +1,6 @@
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
-import type { ScriptEvent } from "@shared/schemas";
-import { readShigomoriConfig } from "../../lib/config/project";
-import { resolveDefaultBranch } from "../../lib/git/remotes";
-import {
-  findWorktreeIdentityOrThrow,
-  listWorktreeIdentities,
-} from "../../lib/git/worktrees";
+import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
 import { startScript } from "../../lib/scripts";
 import {
@@ -20,7 +13,8 @@ import {
   buildScriptCommand,
   readPackageScripts,
 } from "../../lib/scripts/packageScripts";
-import { broadcast, type HandlerContext } from "../register";
+import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
+import type { HandlerContext } from "../register";
 
 export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,
@@ -53,36 +47,21 @@ export const packageScriptsHandlers: Handlers<
 
   run: async ({ projectId, worktreeId, scriptName }, { event }) => {
     const project = findProjectOrThrow(projectId);
+    const ctx = await prepareScriptRun(project, worktreeId);
 
-    const [config, identities] = await Promise.all([
-      readShigomoriConfig(project.id),
-      listWorktreeIdentities(project.id, project.path),
-    ]);
-    const worktree = identities.find((i) => i.id === worktreeId);
-    if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
-
-    const [defaultBranch, pkg] = await Promise.all([
-      resolveDefaultBranch(project.path, config?.defaultBranch).catch(() => ""),
-      readPackageScripts(worktree.path),
-    ]);
+    const pkg = await readPackageScripts(ctx.worktree.path);
     if (!pkg || !(scriptName in pkg.scripts)) {
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 
-    const command = buildScriptCommand(pkg.packageManager, scriptName);
-    const sender = event.sender;
-    const notify = (payload: ScriptEvent) => {
-      if (sender.isDestroyed()) return;
-      broadcast(scriptsContract, "event", payload, sender);
-    };
     const runId = startScript({
-      command,
+      command: buildScriptCommand(pkg.packageManager, scriptName),
       scriptName,
-      worktree,
+      worktree: ctx.worktree,
       project,
-      projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
-      defaultBranch,
-      notify,
+      projectBranch: ctx.projectBranch,
+      defaultBranch: ctx.defaultBranch,
+      notify: scriptEventNotifier(event.sender),
     });
     bumpScriptUseCount(project.id, scriptName);
     return { runId };
