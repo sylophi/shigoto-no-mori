@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
@@ -18,54 +18,65 @@ import {
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
 } from "@shared/branches";
-import { isRealBranch } from "@shared/schemas";
+import { isRealBranch, type Project } from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
 
 const TEXT_INPUT_CLASS =
   "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
-// react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
-  const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
+  const { data: defaultBranch, isPending: basePending } =
+    useDefaultBranch(projectId);
+  const { data: pickedName, isPending: namePending } =
+    usePickedWorktreeName(projectId);
+  const project = projects.find((p) => p.id === projectId);
+
+  if (!project) {
+    return <CenteredMessage>Project not found.</CenteredMessage>;
+  }
+  // Wait for both seed reads before mounting the form. The inner seeds
+  // `base` and `branchName` from these via useState, which only reads the
+  // initial value -- mounting mid-flight would seed empty fields that never
+  // pick up the resolved default branch and picked name once they land.
+  if (basePending || namePending) return null;
+
+  return (
+    <NewWorktreeForm
+      project={project}
+      defaultBranch={defaultBranch}
+      pickedName={pickedName}
+    />
+  );
+}
+
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
+function NewWorktreeForm({
+  project,
+  defaultBranch,
+  pickedName,
+}: {
+  project: Project;
+  defaultBranch: string | undefined;
+  pickedName: string | undefined;
+}) {
+  const projectId = project.id;
+  const navigate = useNavigate();
   const { data: runtime } = useRuntimeInfo();
-  const { data: defaultBranch } = useDefaultBranch(projectId);
-  const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
   const { data: branches } = useBranches(projectId);
-  const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
   const occupiedBranches = worktrees.reduce<string[]>((acc, w) => {
     if (isRealBranch(w.branch)) acc.push(w.branch);
     return acc;
   }, []);
   const [mode, setMode] = useState<Mode>("branch-from");
-  const [branchName, setBranchName] = useState("");
-  const [base, setBase] = useState("");
+  const [branchName, setBranchName] = useState(pickedName ?? "");
+  const [base, setBase] = useState(defaultBranch ?? "");
   const [worktreeName, setWorktreeName] = useState("");
   const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
-  const baseSeeded = useRef(false);
-  const branchSeeded = useRef(false);
   const create = useCreateWorktree();
-
-  useEffect(() => {
-    if (defaultBranch && !baseSeeded.current) {
-      setBase(defaultBranch);
-      baseSeeded.current = true;
-    }
-  }, [defaultBranch]);
-
-  useEffect(() => {
-    if (pickedName && !branchSeeded.current) {
-      setBranchName(pickedName);
-      branchSeeded.current = true;
-    }
-  }, [pickedName]);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in — block submit and surface why.
