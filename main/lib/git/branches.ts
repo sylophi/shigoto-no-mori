@@ -52,17 +52,6 @@ export async function checkoutBranch(
   await run(worktreePath, ["checkout", split ? split.branch : branch]);
 }
 
-// Force-delete a local branch. Used after worktree removal when the
-// global "deleteBranchOnRemove" setting is on. `git branch -D` refuses if
-// the branch is checked out elsewhere, so safety against in-use branches
-// is enforced by git itself.
-export async function deleteLocalBranch(
-  projectPath: string,
-  branch: string,
-): Promise<void> {
-  await run(projectPath, ["branch", "-D", "--", branch]);
-}
-
 // Centralizes the "delete the local branch after the worktree is gone"
 // policy shared by per-worktree delete and the nuke-everything path:
 // honor the global toggle, never touch externals (we didn't create the
@@ -78,7 +67,7 @@ export async function deleteBranchAfterWorktreeRemoval(
   if (identity.isExternal) return;
   if (!isRealBranch(identity.branch)) return;
   try {
-    await deleteLocalBranch(projectPath, identity.branch);
+    await deleteAnyLocalBranch(projectPath, identity.branch);
   } catch {
     // see comment above
   }
