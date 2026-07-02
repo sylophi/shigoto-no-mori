@@ -1,11 +1,9 @@
-import { Loader2, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
-import { cn } from "@/lib/utils";
 import { isRealBranch, type Worktree } from "@shared/schemas";
+import { ConfirmDestructiveButton } from "./ConfirmDestructiveButton";
 
 // Primary-worktree analog of ClosedPullRequestBox's "Delete worktree":
 // the repo root can't be removed, so once its branch is merged we offer
@@ -47,31 +45,13 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
 
   return (
     <div className="flex justify-end">
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={cleanup.isPending}
+      <ConfirmDestructiveButton
+        armed={armed}
+        pending={cleanup.isPending}
+        pendingLabel={`Switching to ${target}…`}
+        idleLabel={`Delete branch and switch to ${target}`}
         onClick={() => trigger(run)}
-        className={cn(
-          "text-destructive hover:bg-destructive/10 hover:text-destructive",
-          armed && "bg-destructive/10",
-        )}
-      >
-        {cleanup.isPending ? (
-          <>
-            <Loader2 aria-hidden className="size-3.5 animate-spin" />
-            {`Switching to ${target}…`}
-          </>
-        ) : armed ? (
-          "Click again to confirm"
-        ) : (
-          <>
-            <Trash2 aria-hidden className="size-3.5" />
-            {`Delete branch and switch to ${target}`}
-          </>
-        )}
-      </Button>
+      />
     </div>
   );
 }
