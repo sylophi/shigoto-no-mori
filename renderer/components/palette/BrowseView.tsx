@@ -12,10 +12,7 @@ import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
-import { GROUP_HEADING_CLASS } from "./groupHeading";
-
-const COMMAND_ITEM_CLASS =
-  "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground";
+import { GROUP_HEADING_CLASS, ITEM_CLASS } from "./cmdkClasses";
 
 // Shown at the tail of a capped group to hint that typing reveals the rest.
 function MoreHint({ count }: { count: number }) {
@@ -93,7 +90,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
                       },
                     }),
                 )}
-                className={COMMAND_ITEM_CLASS}
+                className={ITEM_CLASS}
               >
                 <GitBranch className="size-4 text-muted-foreground/80" />
                 <span className="truncate font-mono">{tree.branch}</span>
@@ -123,7 +120,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
                     params: { projectId: project.id },
                   }),
               )}
-              className={COMMAND_ITEM_CLASS}
+              className={ITEM_CLASS}
             >
               <Plus className="size-4 text-muted-foreground/80" />
               <span>
@@ -136,7 +133,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
           <Command.Item
             value="add project local folder browse"
             onSelect={() => onAddProject()}
-            className={COMMAND_ITEM_CLASS}
+            className={ITEM_CLASS}
           >
             <FolderPlus className="size-4 text-muted-foreground/80" />
             <span className="flex min-w-0 flex-1 flex-col">
@@ -152,7 +149,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
           <Command.Item
             value="settings preferences appearance theme"
             onSelect={handle(() => void navigate({ to: "/settings" }))}
-            className={COMMAND_ITEM_CLASS}
+            className={ITEM_CLASS}
           >
             <SettingsIcon className="size-4 text-muted-foreground/80" />
             Settings
