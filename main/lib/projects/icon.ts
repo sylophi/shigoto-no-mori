@@ -208,104 +208,75 @@ function resolveIconHrefInFiles(
   return candidates.find((candidate) => files.has(candidate)) ?? null;
 }
 
-// How a scan sees the project. The git view answers from `git ls-files`
-// output (so build artifacts and node_modules stay invisible); the disk
-// view answers from the filesystem directly. Parameterising the scan
-// over this keeps the two-phase priority logic in exactly one place.
-interface IconScanView {
-  // Absolute path when the repo-relative candidate is visible in this
-  // view and confirmed on disk; null otherwise.
-  candidate(rel: string): Promise<string | null>;
-  // Source text of a repo-relative file, or null when invisible or
-  // unreadable.
-  readSource(rel: string): Promise<string | null>;
-  // Absolute path a <link rel="icon"> href resolves to, or null.
-  resolveHref(root: string, href: string): Promise<string | null>;
-}
-
 // The two-phase scan (conventional files, then <link rel="icon"> in a
-// source file), scoped to a single package root. `root === ""` is the
-// repo top level and reproduces the pre-descent behaviour exactly.
+// source file), scoped to a single package root. `files` is git's view
+// of the repo, which keeps build artifacts and node_modules invisible;
+// null means git listed nothing and we probe the filesystem directly.
+// A listed path may be staged-then-deleted from the working tree, so
+// each match is confirmed on disk before we commit to it -- a phantom
+// entry can't shadow a lower-priority icon that does exist. `root ===
+// ""` is the repo top level and reproduces the pre-descent behaviour
+// exactly.
 async function scanRootForIcon(
+  cwd: string,
   root: string,
-  view: IconScanView,
+  files: ReadonlySet<string> | null,
 ): Promise<string | null> {
   for (const candidate of ICON_CANDIDATES) {
-    const abs = await view.candidate(posixJoin(root, candidate));
-    if (abs) return abs;
+    const rel = posixJoin(root, candidate);
+    if (files && !files.has(rel)) continue;
+    const abs = join(cwd, rel);
+    if (await fileExists(abs)) return abs;
   }
 
   for (const sourceFile of ICON_SOURCE_FILES) {
-    const source = await view.readSource(posixJoin(root, sourceFile));
-    if (!source) continue;
+    const rel = posixJoin(root, sourceFile);
+    if (files && !files.has(rel)) continue;
+    let source: string;
+    try {
+      source = await readFile(join(cwd, rel), "utf8");
+    } catch {
+      continue;
+    }
     const href = extractIconHref(source);
     if (!href) continue;
-    const abs = await view.resolveHref(root, href);
+    const abs = await resolveHrefOnDisk(cwd, root, href, files);
     if (abs) return abs;
   }
 
   return null;
 }
 
-// A path in `files` is git's view, so a file staged-then-deleted from
-// the working tree still appears; each match is confirmed on disk
-// before we commit to it, so a phantom entry can't shadow a
-// lower-priority icon that does exist.
-function gitScanView(cwd: string, files: ReadonlySet<string>): IconScanView {
-  return {
-    async candidate(rel) {
-      if (!files.has(rel)) return null;
-      const abs = join(cwd, rel);
-      return (await fileExists(abs)) ? abs : null;
-    },
-    async readSource(rel) {
-      if (!files.has(rel)) return null;
-      try {
-        return await readFile(join(cwd, rel), "utf8");
-      } catch {
-        return null;
-      }
-    },
-    async resolveHref(root, href) {
-      const rel = resolveIconHrefInFiles(root, href, files);
-      if (!rel) return null;
-      const abs = join(cwd, rel);
-      return (await fileExists(abs)) ? abs : null;
-    },
-  };
-}
-
-function diskScanView(cwd: string): IconScanView {
-  return {
-    async candidate(rel) {
-      const abs = join(cwd, rel);
-      return (await fileExists(abs)) ? abs : null;
-    },
-    async readSource(rel) {
-      try {
-        return await readFile(join(cwd, rel), "utf8");
-      } catch {
-        return null;
-      }
-    },
-    resolveHref(_root, href) {
-      return findFirstExisting(cwd, resolveIconHref(cwd, href));
-    },
-  };
+// Where a <link rel="icon"> href lands. With a file set, membership both
+// resolves the path and rejects traversal; on the raw filesystem, the
+// within-project guard plus an existence probe do the same.
+async function resolveHrefOnDisk(
+  cwd: string,
+  root: string,
+  href: string,
+  files: ReadonlySet<string> | null,
+): Promise<string | null> {
+  if (!files) {
+    return findFirstExisting(cwd, resolveIconHref(cwd, href));
+  }
+  const rel = resolveIconHrefInFiles(root, href, files);
+  if (!rel) return null;
+  const abs = join(cwd, rel);
+  return (await fileExists(abs)) ? abs : null;
 }
 
 async function resolveIconPath(cwd: string): Promise<string | null> {
   const files = await listProjectFiles(cwd);
   // git unavailable or an empty working tree: fall back to a top-level
   // filesystem scan.
-  if (files.length === 0) return scanRootForIcon("", diskScanView(cwd));
+  if (files.length === 0) return scanRootForIcon(cwd, "", null);
 
-  const view = gitScanView(cwd, new Set(files));
+  const fileSet = new Set(files);
   // Repo root first — so any project that resolved before resolves to the
   // identical icon — then each deeper package root, nearest first. Descent is
   // pure addition: it only fires where the top-level scan came up empty.
   for (const root of packageRoots(files)) {
-    const resolved = await scanRootForIcon(root, view);
+    const resolved = await scanRootForIcon(cwd, root, fileSet);
     if (resolved) return resolved;
   }
 
