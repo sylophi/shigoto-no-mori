@@ -1,12 +1,7 @@
 import type { WebContents } from "electron";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Handlers } from "@shared/ipc/types";
-import {
-  isRealBranch,
-  type Worktree,
-  type WorktreeCarryOverComplete,
-  type WorktreeLifecyclePhase,
-} from "@shared/schemas";
+import { isRealBranch, type Worktree } from "@shared/schemas";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { checkoutBranch, renameBranch } from "../../lib/git/branches";
 import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
@@ -36,21 +31,17 @@ import {
   relocateWorktreeToManagedPath,
   setWorktreeShelved,
 } from "../../lib/worktrees/operations";
-import { broadcast, type HandlerContext } from "../register";
+import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
 
 function notifierFor(sender: WebContents) {
-  const notifyPhase = (payload: WorktreeLifecyclePhase) => {
-    if (sender.isDestroyed()) return;
-    broadcast(worktreesContract, "lifecyclePhase", payload, sender);
-  };
-  const notifyCarryOverComplete = (payload: WorktreeCarryOverComplete) => {
-    if (sender.isDestroyed()) return;
-    broadcast(worktreesContract, "carryOverComplete", payload, sender);
-  };
   return {
-    notifyPhase,
-    notifyCarryOverComplete,
+    notifyPhase: guardedNotifier(worktreesContract, "lifecyclePhase", sender),
+    notifyCarryOverComplete: guardedNotifier(
+      worktreesContract,
+      "carryOverComplete",
+      sender,
+    ),
     notifyScript: scriptEventNotifier(sender),
   };
 }

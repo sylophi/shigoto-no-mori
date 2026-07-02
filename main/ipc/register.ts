@@ -71,6 +71,20 @@ export function broadcast<C extends Contract, K extends keyof C>(
   webContents.send(def.channel, def.payload.parse(payload));
 }
 
+// Broadcast wrapper bound to one sender and silently dropped once that
+// sender is destroyed. For long-lived producers (script streams,
+// lifecycle phases) that can outlive the window that started them.
+export function guardedNotifier<C extends Contract, K extends keyof C>(
+  contract: C,
+  key: K,
+  sender: WebContents,
+): (payload: BroadcastProducerPayload<C, K>) => void {
+  return (payload) => {
+    if (sender.isDestroyed()) return;
+    broadcast(contract, key, payload, sender);
+  };
+}
+
 // Fan-out broadcast: parses the payload once, then ships it to every
 // open window. Used for state every window cares about (updater,
 // background refreshes); single-window broadcasts go through `broadcast`.

@@ -4,7 +4,7 @@
 // destroyed-sender-guarded notifier; only command resolution differs.
 import type { WebContents } from "electron";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
-import type { Project, ScriptEvent, ShigomoriConfig } from "@shared/schemas";
+import type { Project, ShigomoriConfig } from "@shared/schemas";
 import { readShigomoriConfig } from "../lib/config/project";
 import { resolveDefaultBranch } from "../lib/git/remotes";
 import {
@@ -12,7 +12,7 @@ import {
   type WorktreeIdentity,
 } from "../lib/git/worktrees";
 import type { NotifyScriptEvent } from "../lib/scripts";
-import { broadcast } from "./register";
+import { guardedNotifier } from "./register";
 
 export interface ScriptRunContext {
   config: ShigomoriConfig | null;
@@ -45,11 +45,6 @@ export async function prepareScriptRun(
   };
 }
 
-// Script events outlive navigation and window close; the guard keeps a
-// long-running script from broadcasting into a destroyed sender.
 export function scriptEventNotifier(sender: WebContents): NotifyScriptEvent {
-  return (payload: ScriptEvent) => {
-    if (sender.isDestroyed()) return;
-    broadcast(scriptsContract, "event", payload, sender);
-  };
+  return guardedNotifier(scriptsContract, "event", sender);
 }
