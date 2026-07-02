@@ -3,7 +3,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
-import { ConfirmDestructiveButton } from "./ConfirmDestructiveButton";
+import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 
 export function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
   const { data: siblings = [] } = useWorktrees(worktree.projectId);

@@ -11,9 +11,9 @@ interface ConfirmDestructiveButtonProps {
   onClick: () => void;
 }
 
-// The two-step "arm then confirm" destructive button shared by the
-// closed-PR and merged-primary cleanup boxes: same outline styling, same
-// spinner-while-pending / "click again" / icon+label states.
+// Two-step "arm then confirm" destructive button: outline styling
+// with spinner-while-pending / "click again" / icon+label states. Used
+// by the closed-PR and merged-primary cleanup boxes.
 export function ConfirmDestructiveButton({
   armed,
   pending,
