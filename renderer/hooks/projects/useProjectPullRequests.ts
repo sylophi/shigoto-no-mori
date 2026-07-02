@@ -49,7 +49,7 @@ export function useWatchProjectPullRequests(): void {
 export function useProjectPullRequests(projectId: string) {
   return useQuery<Record<string, PullRequest>>({
     queryKey: queryKeys.projectPullRequests(projectId),
-    queryFn: () => window.api.githubCli.projectPullRequests({ projectId }),
+    queryFn: () => window.api.githubCli.projectPullRequests(projectId),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

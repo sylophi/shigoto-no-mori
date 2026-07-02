@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/queryKeys";
 export function useDetectedLaunchers() {
   return useQuery<DetectedLauncher[]>({
     queryKey: queryKeys.detectedLaunchers(),
-    queryFn: () => window.api.launchers.detected(),
+    queryFn: () => window.api.launchers.detect(),
     // Detection spawns ~15 `which` calls; cache for the session. The
     // answer only changes when the user installs/removes an app.
     staleTime: Number.POSITIVE_INFINITY,
