@@ -18,65 +18,46 @@ import {
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
 } from "@shared/branches";
-import { isRealBranch, type Project } from "@shared/schemas";
+import { isRealBranch } from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
 
 const TEXT_INPUT_CLASS =
   "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
 
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 export function NewWorktree() {
   const { projectId } = newWorktreeRoute.useParams();
-  const { data: projects = [] } = useProjects();
-  const { data: defaultBranch, isPending: basePending } =
-    useDefaultBranch(projectId);
-  const { data: pickedName, isPending: namePending } =
-    usePickedWorktreeName(projectId);
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-  // Wait for both seed reads before mounting the form. The inner seeds
-  // `base` and `branchName` from these via useState, which only reads the
-  // initial value -- mounting mid-flight would seed empty fields that never
-  // pick up the resolved default branch and picked name once they land.
-  if (basePending || namePending) return null;
-
-  return (
-    <NewWorktreeForm
-      project={project}
-      defaultBranch={defaultBranch}
-      pickedName={pickedName}
-    />
-  );
-}
-
-// react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
-function NewWorktreeForm({
-  project,
-  defaultBranch,
-  pickedName,
-}: {
-  project: Project;
-  defaultBranch: string | undefined;
-  pickedName: string | undefined;
-}) {
-  const projectId = project.id;
   const navigate = useNavigate();
+  const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
+  const { data: defaultBranch } = useDefaultBranch(projectId);
+  const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
   const { data: branches } = useBranches(projectId);
+  const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
   const occupiedBranches = worktrees.reduce<string[]>((acc, w) => {
     if (isRealBranch(w.branch)) acc.push(w.branch);
     return acc;
   }, []);
   const [mode, setMode] = useState<Mode>("branch-from");
-  const [branchName, setBranchName] = useState(pickedName ?? "");
-  const [base, setBase] = useState(defaultBranch ?? "");
+  // The branch name and base are seeded from async reads (the picked
+  // animal name and the resolved default branch), so state holds only
+  // what the user typed; null means "not edited yet" and falls through
+  // to the seed. This keeps the form interactive the moment it mounts
+  // (the seeds fill in when they land) without a seed-once effect, and
+  // an explicit edit is never clobbered by a late-arriving seed.
+  const [branchNameInput, setBranchNameInput] = useState<string | null>(null);
+  const [baseInput, setBaseInput] = useState<string | null>(null);
+  const branchName = branchNameInput ?? pickedName ?? "";
+  const base = baseInput ?? defaultBranch ?? "";
   const [worktreeName, setWorktreeName] = useState("");
   const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
   const create = useCreateWorktree();
+
+  if (!project) {
+    return <CenteredMessage>Project not found.</CenteredMessage>;
+  }
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in — block submit and surface why.
@@ -182,7 +163,7 @@ function NewWorktreeForm({
             id="branch-base"
             projectId={projectId}
             value={base}
-            onChange={setBase}
+            onChange={setBaseInput}
             placeholder={defaultBranch ?? "main"}
             disabled={busy || !defaultBranch}
             excludeBranches={mode === "checkout" ? occupiedBranches : undefined}
@@ -207,7 +188,9 @@ function NewWorktreeForm({
             id="branch-name"
             type="text"
             value={mode === "checkout" ? base : branchName}
-            onChange={(e) => setBranchName(sanitizeBranchName(e.target.value))}
+            onChange={(e) =>
+              setBranchNameInput(sanitizeBranchName(e.target.value))
+            }
             placeholder="feat/new-thing"
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
