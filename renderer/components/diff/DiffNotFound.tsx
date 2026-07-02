@@ -1,4 +1,4 @@
-import { BackButton } from "./BackButton";
+import { BackButton } from "@/components/ui/back-button";
 
 export function DiffNotFound({
   onBack,
