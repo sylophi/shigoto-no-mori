@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isWebUrl } from "../webUrl";
 
 export const ShellPathPayloadSchema = z.object({
   path: z.string().min(1),
@@ -12,15 +13,5 @@ export const ShellOpenExternalPayloadSchema = z.object({
   url: z
     .string()
     .url()
-    .refine(
-      (value) => {
-        try {
-          const protocol = new URL(value).protocol;
-          return protocol === "http:" || protocol === "https:";
-        } catch {
-          return false;
-        }
-      },
-      { message: "Only http(s) URLs can be opened" },
-    ),
+    .refine(isWebUrl, { message: "Only http(s) URLs can be opened" }),
 });

@@ -12,6 +12,7 @@ import {
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
+import { isWebUrl } from "@shared/webUrl";
 
 const isMac = process.platform === "darwin";
 
@@ -23,18 +24,6 @@ function truncateForLabel(text: string): string {
   const single = text.replace(/\s+/g, " ").trim();
   if (single.length <= MAX_LABEL_LEN) return single;
   return single.slice(0, MAX_LABEL_LEN - 1) + "…";
-}
-
-// Mirrors the allow-list on the shell:openExternal IPC channel: only web
-// URLs may be handed to the OS. Anything else (file:, custom app schemes)
-// could launch local apps from a crafted href.
-function isWebUrl(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 export function attachContextMenu(window: BrowserWindow): void {
