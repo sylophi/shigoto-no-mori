@@ -20,6 +20,7 @@ import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { ITEM_CLASS } from "./cmdkClasses";
 import { ScanningPanel } from "./ScanningPanel";
 import { ResultsPanel } from "./ResultsPanel";
 import { useBrowseState } from "./useBrowseState";
@@ -284,7 +285,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
             value="browse:up"
             keywords={[".."]}
             onSelect={browseUp}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+            className={ITEM_CLASS}
           >
             <CornerLeftUp className="size-4 text-muted-foreground/80" />
             <span className="font-mono text-muted-foreground">..</span>
@@ -299,7 +300,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
               value={`browse:${entryPath}`}
               keywords={[entry.name]}
               onSelect={() => browseTo(entry.name)}
-              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+              className={ITEM_CLASS}
             >
               {entry.isGitRepo ? (
                 <FolderGit2 className="size-4 text-foreground" />

@@ -7,7 +7,7 @@ import { useBranches } from "@/hooks/git/useBranches";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/ui/branch-combobox";
-import { scoreMatch } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@/lib/fuzzyMatch";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 
 export function BranchSwitcher({
@@ -44,16 +44,7 @@ export function BranchSwitcher({
       all.push({ name, kind: "remote" });
     }
   }
-  let sorted: BranchEntry[] = all;
-  if (query) {
-    const scored: { b: BranchEntry; score: number }[] = [];
-    for (const b of all) {
-      const score = scoreMatch(query, b.name);
-      if (score > 0) scored.push({ b, score });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    sorted = scored.map((x) => x.b);
-  }
+  const sorted = rankByScore(query, all, (b) => b.name);
 
   return (
     <Combobox.Root

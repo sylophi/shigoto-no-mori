@@ -4,6 +4,31 @@ import { execFileP, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { ghReady } from "./readiness";
 
+// Every action here shares one policy: gate on readiness, then rethrow
+// gh failures with a trimmed message the renderer can show inline.
+// `fallback` covers the rare non-Error / empty-message throw.
+async function runGh(
+  args: string[],
+  opts: { cwd: string; fallback: string; maxBuffer?: number },
+): Promise<string> {
+  if (!(await ghReady())) {
+    throw new Error("GitHub CLI isn't ready");
+  }
+  try {
+    const { stdout } = await execFileP("gh", args, {
+      cwd: opts.cwd,
+      maxBuffer: opts.maxBuffer,
+    });
+    return stdout;
+  } catch (err) {
+    const message =
+      err instanceof Error && err.message
+        ? trimGhError(err.message)
+        : opts.fallback;
+    throw new Error(message, { cause: err });
+  }
+}
+
 // Streams `gh pr diff <num>` as plain unified diff text, ready to hand
 // to DiffView. Throws on gh failure so the renderer can show the error
 // inline (vs. silently rendering an empty diff).
@@ -11,25 +36,13 @@ export async function getPullRequestDiff(opts: {
   cwd: string;
   number: number;
 }): Promise<string> {
-  if (!(await ghReady())) {
-    throw new Error("GitHub CLI isn't ready");
-  }
-  try {
-    // PR diffs are usually small but can run into the MB range; bump the
-    // buffer so a sprawling PR doesn't ENOBUFS.
-    const { stdout } = await execFileP(
-      "gh",
-      ["pr", "diff", String(opts.number)],
-      { cwd: opts.cwd, maxBuffer: 32 * 1024 * 1024 },
-    );
-    return stdout;
-  } catch (err) {
-    const message =
-      err instanceof Error && err.message
-        ? trimGhError(err.message)
-        : "gh pr diff failed";
-    throw new Error(message, { cause: err });
-  }
+  // PR diffs are usually small but can run into the MB range; bump the
+  // buffer so a sprawling PR doesn't ENOBUFS.
+  return runGh(["pr", "diff", String(opts.number)], {
+    cwd: opts.cwd,
+    fallback: "gh pr diff failed",
+    maxBuffer: 32 * 1024 * 1024,
+  });
 }
 
 const MERGE_FLAG: Record<MergeMethod, string> = {
@@ -48,20 +61,10 @@ export async function mergePullRequest(opts: {
   method: MergeMethod;
 }): Promise<void> {
   const { projectId, cwd, number, method } = opts;
-  if (!(await ghReady())) {
-    throw new Error("GitHub CLI isn't ready");
-  }
-  try {
-    await execFileP("gh", ["pr", "merge", String(number), MERGE_FLAG[method]], {
-      cwd,
-    });
-  } catch (err) {
-    const message =
-      err instanceof Error && err.message
-        ? trimGhError(err.message)
-        : "gh pr merge failed";
-    throw new Error(message, { cause: err });
-  }
+  await runGh(["pr", "merge", String(number), MERGE_FLAG[method]], {
+    cwd,
+    fallback: "gh pr merge failed",
+  });
   // Best-effort: failure to persist the pref shouldn't fail the merge.
   try {
     const current = (await readShigomoriConfig(projectId).catch(
@@ -92,19 +95,8 @@ export async function setPullRequestDraft(opts: {
   draft: boolean;
 }): Promise<void> {
   const { cwd, number, draft } = opts;
-  if (!(await ghReady())) {
-    throw new Error("GitHub CLI isn't ready");
-  }
   const args = ["pr", "ready", String(number)];
   if (draft) args.push("--undo");
-  try {
-    await execFileP("gh", args, { cwd });
-  } catch (err) {
-    const message =
-      err instanceof Error && err.message
-        ? trimGhError(err.message)
-        : "gh pr ready failed";
-    throw new Error(message, { cause: err });
-  }
+  await runGh(args, { cwd, fallback: "gh pr ready failed" });
   evictProjectPullRequests(cwd);
 }

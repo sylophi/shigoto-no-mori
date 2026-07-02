@@ -6,7 +6,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { Loader2 } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { BackButton } from "./BackButton";
+import { BackButton } from "@/components/ui/back-button";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 
 const DIFF_THEME = {

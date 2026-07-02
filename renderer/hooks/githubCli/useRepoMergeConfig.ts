@@ -9,7 +9,7 @@ import { queryKeys } from "@/lib/queryKeys";
 export function useRepoMergeConfig(projectId: string) {
   return useQuery<RepoMergeConfig | null>({
     queryKey: queryKeys.repoMergeConfig(projectId),
-    queryFn: () => window.api.githubCli.repoMergeConfig({ projectId }),
+    queryFn: () => window.api.githubCli.repoMergeConfig(projectId),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

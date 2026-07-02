@@ -4,13 +4,13 @@ import {
   usePackageScriptSort,
   useSetPackageScriptSort,
 } from "@/hooks/scripts/usePackageScriptSort";
-import { scoreMatch } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
 import type { PackageScriptsResult, Worktree } from "@shared/schemas";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
 import { SortMenu } from "../SortMenu";
-import { sortEntries, type SortableEntry } from "./sortPackageScripts";
+import { sortEntries } from "./sortPackageScripts";
 
 interface PackageScriptsProps {
   worktree: Worktree;
@@ -27,17 +27,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const entries = Object.entries(pkg.scripts);
 
   const sorted = sortEntries(entries, sortMode, pkg.usage);
-
-  let filtered: SortableEntry[] = sorted;
-  if (query) {
-    const scored: (SortableEntry & { score: number })[] = [];
-    for (const e of sorted) {
-      const score = scoreMatch(query, e.name);
-      if (score > 0) scored.push({ name: e.name, command: e.command, score });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    filtered = scored;
-  }
+  const filtered = rankByScore(query, sorted, (e) => e.name);
 
   return (
     <div className="space-y-2">

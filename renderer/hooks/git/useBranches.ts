@@ -49,6 +49,22 @@ export function useWatchGitRefs(): void {
   );
 }
 
+// The Manage Branches mutations all share one shape: call the API, then
+// refresh everything derived from refs via invalidateBranchState.
+function useBranchMutation<Input extends { projectId: string }>(
+  mutationFn: (input: Input) => Promise<void>,
+  errorTitle: string,
+) {
+  const queryClient = useQueryClient();
+  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
+  return useMutation<void, Error, Input>({
+    mutationFn,
+    onSuccess: (_data, vars) =>
+      invalidateBranchState(queryClient, vars.projectId),
+    meta: { errorTitle },
+  });
+}
+
 interface CreateBranchInput {
   projectId: string;
   name: string;
@@ -56,14 +72,10 @@ interface CreateBranchInput {
 }
 
 export function useCreateBranch() {
-  const queryClient = useQueryClient();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
-  return useMutation<void, Error, CreateBranchInput>({
-    mutationFn: (input) => window.api.branches.create(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, vars.projectId),
-    meta: { errorTitle: "Couldn't create branch" },
-  });
+  return useBranchMutation<CreateBranchInput>(
+    (input) => window.api.branches.create(input),
+    "Couldn't create branch",
+  );
 }
 
 interface RenameAnyBranchInput {
@@ -73,14 +85,10 @@ interface RenameAnyBranchInput {
 }
 
 export function useRenameAnyBranch() {
-  const queryClient = useQueryClient();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
-  return useMutation<void, Error, RenameAnyBranchInput>({
-    mutationFn: (input) => window.api.branches.rename(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, vars.projectId),
-    meta: { errorTitle: "Couldn't rename branch" },
-  });
+  return useBranchMutation<RenameAnyBranchInput>(
+    (input) => window.api.branches.rename(input),
+    "Couldn't rename branch",
+  );
 }
 
 interface DeleteBranchInput {
@@ -89,12 +97,8 @@ interface DeleteBranchInput {
 }
 
 export function useDeleteBranch() {
-  const queryClient = useQueryClient();
-  // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
-  return useMutation<void, Error, DeleteBranchInput>({
-    mutationFn: (input) => window.api.branches.delete(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, vars.projectId),
-    meta: { errorTitle: "Couldn't delete branch" },
-  });
+  return useBranchMutation<DeleteBranchInput>(
+    (input) => window.api.branches.delete(input),
+    "Couldn't delete branch",
+  );
 }

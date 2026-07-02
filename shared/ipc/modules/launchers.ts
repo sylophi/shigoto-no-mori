@@ -4,16 +4,14 @@ import {
   DetectedLauncherSchema,
   LauncherEntrySchema,
   LaunchPayloadSchema,
-  ReadShigomoriPayloadSchema,
+  ProjectScopedPayloadSchema,
 } from "@shared/schemas";
 
-// LaunchersForProject reuses ReadShigomoriPayloadSchema since both
-// surfaces accept `{ projectId }`.
 export const launchersContract = {
   detect: invoke("launchers:detect", z.void(), z.array(DetectedLauncherSchema)),
   forProject: invoke(
     "launchers:forProject",
-    ReadShigomoriPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.object({ entries: z.array(LauncherEntrySchema) }),
   ),
   launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {

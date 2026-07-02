@@ -1,4 +1,5 @@
-import { ArrowLeft, Play, Square } from "lucide-react";
+import { Play, Square } from "lucide-react";
+import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
@@ -29,14 +30,7 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   return (
     <div className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
-        <button
-          type="button"
-          onClick={onBack}
-          className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft aria-hidden className="size-3" />
-          <span>{worktree.branch}</span>
-        </button>
+        <BackButton onClick={onBack} label={worktree.branch} />
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
             <h1 className="truncate font-mono text-xl font-medium tracking-tight">

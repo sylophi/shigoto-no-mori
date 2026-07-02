@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { listRemoteUrls } from "../git/remotes";
+import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
 
 // Per-repo gate for any path that would shell out to gh. Without this,
@@ -24,37 +25,29 @@ export interface GithubRepoInfo {
   repo: string;
 }
 
-const githubRepoCache = new Map<
-  string,
-  { value: GithubRepoInfo | null; expires: number }
->();
-
 const KNOWN_HOSTS_TTL_MS = 60 * 60_000;
-let knownHostsCache: { value: Set<string>; expires: number } | null = null;
 
 // gh stores logged-in hosts in a top-level YAML map. We only need the
 // keys, so a regex over "<host>:" lines is enough — pulling in a YAML
 // parser for this would be overkill. github.com is always allowed even
 // if the file is missing (most users) or unreadable.
-async function getKnownGithubHosts(): Promise<Set<string>> {
-  const now = Date.now();
-  if (knownHostsCache && knownHostsCache.expires > now) {
-    return knownHostsCache.value;
-  }
-  const hosts = new Set<string>(["github.com"]);
-  try {
-    const content = await readFile(ghHostsPath(), "utf-8");
-    for (const line of content.split("\n")) {
-      const m = line.match(/^([^\s:#]+):\s*$/);
-      if (m?.[1]) hosts.add(m[1]);
+const knownHostsCache = ttlValueCache<Set<string>>(
+  KNOWN_HOSTS_TTL_MS,
+  async () => {
+    const hosts = new Set<string>(["github.com"]);
+    try {
+      const content = await readFile(ghHostsPath(), "utf-8");
+      for (const line of content.split("\n")) {
+        const m = line.match(/^([^\s:#]+):\s*$/);
+        if (m?.[1]) hosts.add(m[1]);
+      }
+    } catch {
+      // hosts.yml may not exist yet (fresh install) or live in an
+      // unexpected location; the github.com fallback covers the common case.
     }
-  } catch {
-    // hosts.yml may not exist yet (fresh install) or live in an
-    // unexpected location; the github.com fallback covers the common case.
-  }
-  knownHostsCache = { value: hosts, expires: now + KNOWN_HOSTS_TTL_MS };
-  return hosts;
-}
+    return hosts;
+  },
+);
 
 function ghHostsPath(): string {
   if (process.platform === "win32") {
@@ -111,26 +104,23 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
 // First remote URL whose host matches a known GitHub host. One probe
 // covers both the "is this a GitHub repo?" gate (ghReadyForRepo) and
 // the web URL builder, since both fire on every worktree open.
-export async function getGithubRepoInfo(
-  cwd: string,
-): Promise<GithubRepoInfo | null> {
-  const now = Date.now();
-  const cached = githubRepoCache.get(cwd);
-  if (cached && cached.expires > now) return cached.value;
-  const [urls, hosts] = await Promise.all([
-    listRemoteUrls(cwd),
-    getKnownGithubHosts(),
-  ]);
-  let value: GithubRepoInfo | null = null;
-  for (const url of urls) {
-    const parsed = parseRemoteUrl(url);
-    if (parsed && hosts.has(parsed.host)) {
-      value = parsed;
-      break;
+const githubRepoCache = ttlMapCache<string, GithubRepoInfo | null>(
+  GH_REPO_TTL_MS,
+  async (cwd) => {
+    const [urls, hosts] = await Promise.all([
+      listRemoteUrls(cwd),
+      knownHostsCache.get(),
+    ]);
+    for (const url of urls) {
+      const parsed = parseRemoteUrl(url);
+      if (parsed && hosts.has(parsed.host)) return parsed;
     }
-  }
-  githubRepoCache.set(cwd, { value, expires: now + GH_REPO_TTL_MS });
-  return value;
+    return null;
+  },
+);
+
+export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
+  return githubRepoCache.get(cwd);
 }
 
 export function githubRepoUrl(info: GithubRepoInfo): string {

@@ -77,10 +77,12 @@ export const git = {
 } as const;
 
 export const githubCli = {
-  readiness: () => githubCliClient.readiness(),
-  projectPullRequests: githubCliClient.projectPullRequests,
+  readiness: githubCliClient.readiness,
+  projectPullRequests: (projectId: string) =>
+    githubCliClient.projectPullRequests({ projectId }),
   worktreePullRequest: githubCliClient.worktreePullRequest,
-  repoMergeConfig: githubCliClient.repoMergeConfig,
+  repoMergeConfig: (projectId: string) =>
+    githubCliClient.repoMergeConfig({ projectId }),
   mergePullRequest: githubCliClient.mergePullRequest,
   pullRequestDiff: githubCliClient.pullRequestDiff,
   setPullRequestDraft: githubCliClient.setPullRequestDraft,
@@ -88,12 +90,12 @@ export const githubCli = {
 } as const;
 
 export const globalConfig = {
-  read: () => globalConfigClient.read(),
+  read: globalConfigClient.read,
   write: (config: GlobalConfig) => globalConfigClient.write({ config }),
 } as const;
 
 export const launchers = {
-  detected: () => launchersClient.detect(),
+  detect: launchersClient.detect,
   forProject: (projectId: string) => launchersClient.forProject({ projectId }),
   launch: launchersClient.launch,
 } as const;
@@ -123,11 +125,11 @@ export const palette = {
 
 export const portPool = {
   isActive: portPoolClient.isActive,
-  isInstalled: () => portPoolClient.isInstalled(),
+  isInstalled: portPoolClient.isInstalled,
 } as const;
 
 export const projects = {
-  list: () => projectsClient.list(),
+  list: projectsClient.list,
   add: (path: string) => projectsClient.add({ path }),
   remove: (id: string) => projectsClient.remove({ id }),
   reorder: (input: {
@@ -135,7 +137,7 @@ export const projects = {
     targetId: string;
     position: "before" | "after";
   }) => projectsClient.reorder(input),
-  getSort: () => projectsClient.getSort(),
+  getSort: projectsClient.getSort,
   setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
   onUsageBumped: projectsClient.usageBumped,
   defaultBranch: (projectId: string) =>
@@ -150,9 +152,9 @@ export const projects = {
 } as const;
 
 export const runtime = {
-  info: () => runtimeClient.info(),
+  info: runtimeClient.info,
   setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
-  nuke: () => runtimeClient.nuke(),
+  nuke: runtimeClient.nuke,
 } as const;
 
 export const scripts = {
@@ -181,9 +183,9 @@ export const worktreeData = {
 } as const;
 
 export const updater = {
-  get: () => updaterClient.get(),
-  check: () => updaterClient.check(),
-  install: () => updaterClient.install(),
+  get: updaterClient.get,
+  check: updaterClient.check,
+  install: updaterClient.install,
   onState: updaterClient.state,
 } as const;
 

@@ -1,18 +1,18 @@
 import { z } from "zod";
 import { invoke } from "@shared/ipc/contract";
 import {
-  GetPackageScriptSortPayloadSchema,
-  ListPackageScriptsPayloadSchema,
   PackageScriptSortModeSchema,
   PackageScriptsResultSchema,
+  ProjectScopedPayloadSchema,
   RunPackageScriptPayloadSchema,
   SetPackageScriptSortPayloadSchema,
+  WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
 export const packageScriptsContract = {
   list: invoke(
     "packageScripts:list",
-    ListPackageScriptsPayloadSchema,
+    WorktreeScopedPayloadSchema,
     PackageScriptsResultSchema.nullable(),
   ),
   run: invoke(
@@ -23,7 +23,7 @@ export const packageScriptsContract = {
   ),
   getSort: invoke(
     "packageScripts:getSort",
-    GetPackageScriptSortPayloadSchema,
+    ProjectScopedPayloadSchema,
     PackageScriptSortModeSchema,
   ),
   setSort: invoke(

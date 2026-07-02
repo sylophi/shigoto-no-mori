@@ -1,22 +1,7 @@
 import { z } from "zod";
 
-// Filesystem browser used by the Add Project palette.
-
-export const ListDirectoryPayloadSchema = z.object({
-  path: z.string().min(1),
-});
-
-export const ScanForGitReposPayloadSchema = z.object({
-  path: z.string().min(1),
-});
-
-export const IsGitRepoPayloadSchema = z.object({
-  path: z.string().min(1),
-});
-
-export const FsStatPayloadSchema = z.object({
-  path: z.string().min(1),
-});
+// Filesystem browser used by the Add Project palette. Every call here
+// takes the shared PathPayloadSchema.
 
 // Optional copy for the native folder picker. Defaults to the
 // "Add a project" wording for backwards compatibility.
@@ -35,10 +20,6 @@ export const FsStatSchema = z.object({
   isDirectory: z.boolean(),
 });
 export type FsStat = z.infer<typeof FsStatSchema>;
-
-export const FsListEntriesPayloadSchema = z.object({
-  path: z.string().min(1),
-});
 
 // Filesystem entry as returned by FsListEntries. Includes dotfiles so the
 // carry-over picker can surface .env, .vscode, etc., but skips the special

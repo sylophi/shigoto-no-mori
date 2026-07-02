@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectScopedPayloadSchema } from "./payloads";
 
 export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
 export type PullRequestState = z.infer<typeof PullRequestStateSchema>;
@@ -123,22 +124,17 @@ export const GithubCliReadinessSchema = z.object({
 });
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 
-export const GithubCliProjectPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
+export const GithubCliWorktreePullRequestPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    branch: z.string().min(1),
+  });
 
-export const GithubCliWorktreePullRequestPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  branch: z.string().min(1),
-});
+export const GithubCliPullRequestDiffPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    number: z.number().int().positive(),
+  });
 
-export const GithubCliPullRequestDiffPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  number: z.number().int().positive(),
-});
-
-export const MergePullRequestPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const MergePullRequestPayloadSchema = ProjectScopedPayloadSchema.extend({
   number: z.number().int().positive(),
   method: MergeMethodSchema,
 });
@@ -146,8 +142,8 @@ export type MergePullRequestPayload = z.infer<
   typeof MergePullRequestPayloadSchema
 >;
 
-export const SetPullRequestDraftPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  number: z.number().int().positive(),
-  draft: z.boolean(),
-});
+export const SetPullRequestDraftPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    number: z.number().int().positive(),
+    draft: z.boolean(),
+  });

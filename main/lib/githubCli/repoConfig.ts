@@ -1,15 +1,12 @@
 import { z } from "zod";
 import type { RepoMergeConfig } from "@shared/schemas";
+import { ttlMapCache } from "../util/ttlCache";
 import { execFileP } from "./exec";
 import { ghReadyForRepo } from "./remote";
 
 // Repo-level merge-button settings. Stable across the session in
 // practice; cached for an hour so reopening the section is free.
 const REPO_MERGE_CONFIG_TTL_MS = 60 * 60_000;
-const repoMergeConfigCache = new Map<
-  string,
-  { value: RepoMergeConfig; expires: number }
->();
 
 const GhRepoMergeConfigSchema = z.object({
   mergeCommitAllowed: z.boolean(),
@@ -17,13 +14,12 @@ const GhRepoMergeConfigSchema = z.object({
   rebaseMergeAllowed: z.boolean(),
 });
 
-export async function getRepoMergeConfig(
-  cwd: string,
-): Promise<RepoMergeConfig | null> {
-  if (!(await ghReadyForRepo(cwd))) return null;
-  const cached = repoMergeConfigCache.get(cwd);
-  if (cached && cached.expires > Date.now()) return cached.value;
-  try {
+// The loader throws on gh failure or a malformed response so only
+// successful reads get cached -- a transient failure shouldn't pin
+// "no config" for the full hour.
+const repoMergeConfigCache = ttlMapCache<string, RepoMergeConfig>(
+  REPO_MERGE_CONFIG_TTL_MS,
+  async (cwd) => {
     const { stdout } = await execFileP(
       "gh",
       [
@@ -34,19 +30,21 @@ export async function getRepoMergeConfig(
       ],
       { cwd },
     );
-    const parsed: unknown = JSON.parse(stdout);
-    const validated = GhRepoMergeConfigSchema.safeParse(parsed);
-    if (!validated.success) return null;
-    const value: RepoMergeConfig = {
-      merge: validated.data.mergeCommitAllowed,
-      squash: validated.data.squashMergeAllowed,
-      rebase: validated.data.rebaseMergeAllowed,
+    const parsed = GhRepoMergeConfigSchema.parse(JSON.parse(stdout));
+    return {
+      merge: parsed.mergeCommitAllowed,
+      squash: parsed.squashMergeAllowed,
+      rebase: parsed.rebaseMergeAllowed,
     };
-    repoMergeConfigCache.set(cwd, {
-      value,
-      expires: Date.now() + REPO_MERGE_CONFIG_TTL_MS,
-    });
-    return value;
+  },
+);
+
+export async function getRepoMergeConfig(
+  cwd: string,
+): Promise<RepoMergeConfig | null> {
+  if (!(await ghReadyForRepo(cwd))) return null;
+  try {
+    return await repoMergeConfigCache.get(cwd);
   } catch {
     return null;
   }

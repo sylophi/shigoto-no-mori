@@ -8,8 +8,10 @@ import {
   type MenuItemConstructorOptions,
   type BrowserWindow,
 } from "electron";
+import type { Contract } from "@shared/ipc/contract";
 import { navContract } from "@shared/ipc/modules/nav";
 import { paletteContract } from "@shared/ipc/modules/palette";
+import type { BroadcastProducerPayload } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
@@ -60,20 +62,27 @@ export function installMenuImpl(): void {
   setMenuImpl(setLaunchToolsEnabled);
 }
 
-function openSettings(focusedWindow: BrowserWindow | undefined) {
-  const wc = focusedWindow?.webContents;
-  if (wc) broadcast(navContract, "openSettings", undefined, wc);
+// Click handler that broadcasts to the focused window. Electron types
+// the callback's window as BaseWindow (no webContents); every window
+// this app creates is a BrowserWindow, so narrow once here. No-op when
+// no window has focus.
+function clickBroadcast<C extends Contract, K extends keyof C>(
+  contract: C,
+  key: K,
+  payload: BroadcastProducerPayload<C, K>,
+): MenuItemConstructorOptions["click"] {
+  return (_item, focusedWindow) => {
+    const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
+    if (wc) broadcast(contract, key, payload, wc);
+  };
 }
 
-function togglePalette(focusedWindow: BrowserWindow | undefined) {
-  const wc = focusedWindow?.webContents;
-  if (wc) broadcast(paletteContract, "toggle", undefined, wc);
-}
-
-function addProject(focusedWindow: BrowserWindow | undefined) {
-  const wc = focusedWindow?.webContents;
-  if (wc) broadcast(paletteContract, "addProject", undefined, wc);
-}
+// Shared between the mac app menu and the non-mac File menu.
+const SETTINGS_MENU_ITEM: MenuItemConstructorOptions = {
+  label: "Settings…",
+  accelerator: "CmdOrCtrl+,",
+  click: clickBroadcast(navContract, "openSettings", undefined),
+};
 
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
   if (currentLaunchToolEntries.length === 0) return [];
@@ -84,10 +93,7 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
         label: entry.label,
         accelerator: `CmdOrCtrl+${i + 1}`,
         enabled: currentLaunchToolsEnabled,
-        click: (_item, focusedWindow) => {
-          const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
-          if (wc) broadcast(navContract, "launchById", entry.id, wc);
-        },
+        click: clickBroadcast(navContract, "launchById", entry.id),
       }),
     ),
   ];
@@ -102,12 +108,7 @@ export function buildAppMenu(): void {
             submenu: [
               { role: "about" },
               { type: "separator" },
-              {
-                label: "Settings…",
-                accelerator: "CmdOrCtrl+,",
-                click: (_item, focusedWindow) =>
-                  openSettings(focusedWindow as BrowserWindow | undefined),
-              },
+              SETTINGS_MENU_ITEM,
               { type: "separator" },
               { role: "services" },
               { type: "separator" },
@@ -126,20 +127,14 @@ export function buildAppMenu(): void {
         {
           label: "Add project…",
           accelerator: "CmdOrCtrl+N",
-          click: (_item, focusedWindow) =>
-            addProject(focusedWindow as BrowserWindow | undefined),
+          click: clickBroadcast(paletteContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),
         ...(isMac
           ? ([] satisfies MenuItemConstructorOptions[])
           : ([
               { type: "separator" },
-              {
-                label: "Settings…",
-                accelerator: "CmdOrCtrl+,",
-                click: (_item, focusedWindow) =>
-                  openSettings(focusedWindow as BrowserWindow | undefined),
-              },
+              SETTINGS_MENU_ITEM,
             ] satisfies MenuItemConstructorOptions[])),
       ],
     },
@@ -161,8 +156,7 @@ export function buildAppMenu(): void {
         {
           label: "Command palette",
           accelerator: "CmdOrCtrl+Shift+P",
-          click: (_item, focusedWindow) =>
-            togglePalette(focusedWindow as BrowserWindow | undefined),
+          click: clickBroadcast(paletteContract, "toggle", undefined),
         },
         // Hidden synonym so ⌘P also opens the palette. Electron keeps the
         // accelerator live for hidden items on macOS; for cross-platform
@@ -171,8 +165,7 @@ export function buildAppMenu(): void {
           label: "Command palette (alt)",
           accelerator: "CmdOrCtrl+P",
           visible: false,
-          click: (_item, focusedWindow) =>
-            togglePalette(focusedWindow as BrowserWindow | undefined),
+          click: clickBroadcast(paletteContract, "toggle", undefined),
         },
         { type: "separator" },
         { role: "reload" },

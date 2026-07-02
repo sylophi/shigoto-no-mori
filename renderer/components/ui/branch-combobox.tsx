@@ -3,7 +3,7 @@ import { Combobox } from "@base-ui/react/combobox";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { scoreMatch } from "@/lib/fuzzyMatch";
+import { rankByScore } from "@/lib/fuzzyMatch";
 import { queryKeys } from "@/lib/queryKeys";
 import { useBranches } from "@/hooks/git/useBranches";
 import type { BranchList } from "@shared/schemas";
@@ -25,7 +25,7 @@ export interface BranchEntry {
   kind: "local" | "remote";
 }
 
-export function toBranchEntries(
+function toBranchEntries(
   branches: BranchList | undefined,
   exclude: ReadonlySet<string>,
 ): BranchEntry[] {
@@ -54,16 +54,7 @@ export function BranchCombobox({
   const [query, setQuery] = useState("");
 
   const all = toBranchEntries(branches, new Set(excludeBranches ?? []));
-  let sorted: BranchEntry[] = all;
-  if (query) {
-    const scored: { b: BranchEntry; score: number }[] = [];
-    for (const b of all) {
-      const score = scoreMatch(query, b.name);
-      if (score > 0) scored.push({ b, score });
-    }
-    scored.sort((a, b) => b.score - a.score);
-    sorted = scored.map((x) => x.b);
-  }
+  const sorted = rankByScore(query, all, (b) => b.name);
 
   const trimmedQuery = query.trim();
   const showCustom =

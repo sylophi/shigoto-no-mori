@@ -1,4 +1,3 @@
-import { useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
@@ -6,7 +5,7 @@ import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import {
   scriptKey,
   scriptRuns,
@@ -26,7 +25,11 @@ import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
-import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
+import {
+  WorktreeDetailFooter,
+  type WorktreeFooterActions,
+  type WorktreeFooterState,
+} from "./WorktreeDetailFooter";
 import { BranchHeaderRow } from "./branch/BranchHeader";
 import { CommitsSection } from "./commits/CommitsSection";
 import { NotesSection } from "./NotesSection";
@@ -53,11 +56,18 @@ export function WorktreeDetailInner({
 }: InnerProps) {
   const navigate = useNavigate();
   const { data: runtime } = useRuntimeInfo();
-  const deleteMutation = useDeleteWorktree();
+  const {
+    deleteMutation,
+    needsForce,
+    cleanupError,
+    runDelete,
+    cancelForce,
+    retryCleanup,
+    skipCleanup,
+    clearCleanupError,
+  } = useDeleteAndNavigate(worktree, siblings);
   const { armed: confirmDelete, trigger: confirmDeleteTrigger } =
     useConfirmTwice(CONFIRM_QUICK_MS);
-  const [needsForce, setNeedsForce] = useState(false);
-  const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
 
   // Derive limbo state from script-runs: any cleanup-tier script
   // currently running indicates we're mid-cleanup; otherwise if the
@@ -91,69 +101,9 @@ export function WorktreeDetailInner({
     !inLimbo && createPhase ? CREATE_PHASE_LABEL[createPhase] : null;
   const locked = inLimbo || createPhase === "carryOver";
 
-  // Tracks the flags from the most recent delete attempt so that the
-  // retry/skip affordances on a cleanup failure carry the user's
-  // original intent (notably: a force-delete that hit a cleanup error
-  // should stay force on retry/skip, since the worktree is still dirty).
-  const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
+  const handleDelete = () => confirmDeleteTrigger(() => runDelete());
+  const handleForceDelete = () => runDelete({ force: true });
 
-  const runDelete = (opts: { force?: boolean; skipCleanup?: boolean } = {}) => {
-    if (!opts.skipCleanup) {
-      lastDeleteOptsRef.current = { force: opts.force };
-    }
-    setCleanupError(null);
-    deleteMutation.mutate(
-      {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        ...opts,
-      },
-      {
-        onSuccess: (data) => {
-          if (data.ok) {
-            // Prefer the sibling above so the user's eye stays in place.
-            const index = siblings.findIndex((w) => w.id === worktree.id);
-            const next =
-              index >= 0
-                ? (siblings[index - 1] ?? siblings[index + 1])
-                : undefined;
-            if (next) {
-              void navigate({
-                to: "/projects/$projectId/worktrees/$worktreeId",
-                params: { projectId: project.id, worktreeId: next.id },
-                replace: true,
-              });
-            } else {
-              void navigate({ to: "/", replace: true });
-            }
-          } else {
-            setCleanupError(data.cleanupError);
-          }
-        },
-        onError: () => {
-          setNeedsForce(true);
-        },
-      },
-    );
-  };
-
-  const handleDelete = () => {
-    confirmDeleteTrigger(() => runDelete());
-  };
-
-  const handleForceDelete = () => {
-    runDelete({ force: true });
-  };
-
-  const cancelForce = () => {
-    setNeedsForce(false);
-    deleteMutation.reset();
-  };
-
-  const handleRetryCleanup = () => runDelete(lastDeleteOptsRef.current);
-  const handleSkipCleanup = () =>
-    runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true });
-  const handleCancelCleanupError = () => setCleanupError(null);
   const handleCancelCleanup = () => {
     if (teardownState.runId) {
       void scriptRuns.cancel(teardownKey);
@@ -189,6 +139,26 @@ export function WorktreeDetailInner({
 
   const limboLabel = computeLimboLabel(teardownState, releaseState);
   const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
+
+  const footerState = computeFooterState({
+    cleanupError,
+    needsForce,
+    cleanupRunning,
+    cleanupCancelling,
+    busy,
+    confirmDelete,
+    deleteErrorMessage: deleteMutation.error?.message,
+  });
+  const footerActions: WorktreeFooterActions = {
+    onCancelCleanupError: clearCleanupError,
+    onOpenCleanupConsole: openCleanupConsole,
+    onRetryCleanup: retryCleanup,
+    onSkipCleanup: skipCleanup,
+    onCancelForce: cancelForce,
+    onForceDelete: handleForceDelete,
+    onCancelCleanup: handleCancelCleanup,
+    onDelete: handleDelete,
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -255,24 +225,44 @@ export function WorktreeDetailInner({
 
       <WorktreeDetailFooter
         worktree={worktree}
-        cleanupError={cleanupError}
-        needsForce={needsForce}
-        cleanupRunning={cleanupRunning}
-        busy={busy}
-        confirmDelete={confirmDelete}
-        cleanupCancelling={cleanupCancelling}
-        deleteErrorMessage={deleteMutation.error?.message}
-        onCancelCleanupError={handleCancelCleanupError}
-        onOpenCleanupConsole={openCleanupConsole}
-        onRetryCleanup={handleRetryCleanup}
-        onSkipCleanup={handleSkipCleanup}
-        onCancelForce={cancelForce}
-        onForceDelete={handleForceDelete}
-        onCancelCleanup={handleCancelCleanup}
-        onDelete={handleDelete}
+        state={footerState}
+        actions={footerActions}
       />
     </div>
   );
+}
+
+// Collapse the loose deletion flags into the footer's discriminated
+// state. Order is priority: a cleanup failure and a pending force-delete
+// each override the running/normal views, matching how a delete attempt
+// walks through these phases.
+function computeFooterState(input: {
+  cleanupError: CleanupError | null;
+  needsForce: boolean;
+  cleanupRunning: boolean;
+  cleanupCancelling: boolean;
+  busy: boolean;
+  confirmDelete: boolean;
+  deleteErrorMessage: string | undefined;
+}): WorktreeFooterState {
+  if (input.cleanupError) {
+    return { kind: "cleanupError", error: input.cleanupError };
+  }
+  if (input.needsForce) {
+    return {
+      kind: "needsForce",
+      errorMessage: input.deleteErrorMessage,
+      busy: input.busy,
+    };
+  }
+  if (input.cleanupRunning) {
+    return { kind: "cleanupRunning", cancelling: input.cleanupCancelling };
+  }
+  return {
+    kind: "normal",
+    confirmDelete: input.confirmDelete,
+    busy: input.busy,
+  };
 }
 
 // Decide which limbo phase label to show -- release runs before

@@ -24,7 +24,6 @@ const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
 let state: UpdaterState = { kind: "idle" };
 let started = false;
 let installing = false;
-let intervalHandle: NodeJS.Timeout | null = null;
 
 // quitAndInstall() stages Squirrel's ShipIt helper and then calls
 // app.quit(), which still emits before-quit. The app-wide before-quit
@@ -153,12 +152,7 @@ export function startUpdater(): void {
 
   started = true;
   checkForUpdates();
-  intervalHandle = setInterval(checkForUpdates, CHECK_INTERVAL_MS);
-}
-
-export function stopUpdater(): void {
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
-  }
+  // Runs for the app's lifetime; quit tears the interval down with the
+  // process, so there's no stop path.
+  setInterval(checkForUpdates, CHECK_INTERVAL_MS);
 }

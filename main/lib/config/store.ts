@@ -1,6 +1,13 @@
 // Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
+import { tempPathFor } from "../util/jsonFile";
 import { shigomoriRoot } from "../util/paths";
 
 const FILE = "state.json";
@@ -23,9 +30,18 @@ function readAll(): Record<string, unknown> {
 function writeAll(data: Record<string, unknown>): void {
   const path = filePath();
   mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
+  const tmp = tempPathFor(path);
   writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
-  renameSync(tmp, path);
+  try {
+    renameSync(tmp, path);
+  } catch (error) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // Best effort; the stray tmp file is harmless.
+    }
+    throw error;
+  }
 }
 
 export function readKey<T>(key: string, fallback: T): T {

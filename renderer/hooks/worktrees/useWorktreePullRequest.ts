@@ -16,7 +16,7 @@ import { queryKeys } from "@/lib/queryKeys";
 // since only one detail pane mounts at a time). The predicate skips
 // project-map queries, which have their own sweep-driven refresh and
 // shouldn't refetch on every window focus.
-export function invalidateAllWorktreePullRequests(
+function invalidateAllWorktreePullRequests(
   qc: ReturnType<typeof useQueryClient>,
 ) {
   void qc.invalidateQueries({

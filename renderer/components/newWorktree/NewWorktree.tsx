@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
@@ -41,27 +41,19 @@ export function NewWorktree() {
     return acc;
   }, []);
   const [mode, setMode] = useState<Mode>("branch-from");
-  const [branchName, setBranchName] = useState("");
-  const [base, setBase] = useState("");
+  // The branch name and base are seeded from async reads (the picked
+  // animal name and the resolved default branch), so state holds only
+  // what the user typed; null means "not edited yet" and falls through
+  // to the seed. This keeps the form interactive the moment it mounts
+  // (the seeds fill in when they land) without a seed-once effect, and
+  // an explicit edit is never clobbered by a late-arriving seed.
+  const [branchNameInput, setBranchNameInput] = useState<string | null>(null);
+  const [baseInput, setBaseInput] = useState<string | null>(null);
+  const branchName = branchNameInput ?? pickedName ?? "";
+  const base = baseInput ?? defaultBranch ?? "";
   const [worktreeName, setWorktreeName] = useState("");
   const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
-  const baseSeeded = useRef(false);
-  const branchSeeded = useRef(false);
   const create = useCreateWorktree();
-
-  useEffect(() => {
-    if (defaultBranch && !baseSeeded.current) {
-      setBase(defaultBranch);
-      baseSeeded.current = true;
-    }
-  }, [defaultBranch]);
-
-  useEffect(() => {
-    if (pickedName && !branchSeeded.current) {
-      setBranchName(pickedName);
-      branchSeeded.current = true;
-    }
-  }, [pickedName]);
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -171,7 +163,7 @@ export function NewWorktree() {
             id="branch-base"
             projectId={projectId}
             value={base}
-            onChange={setBase}
+            onChange={setBaseInput}
             placeholder={defaultBranch ?? "main"}
             disabled={busy || !defaultBranch}
             excludeBranches={mode === "checkout" ? occupiedBranches : undefined}
@@ -196,7 +188,9 @@ export function NewWorktree() {
             id="branch-name"
             type="text"
             value={mode === "checkout" ? base : branchName}
-            onChange={(e) => setBranchName(sanitizeBranchName(e.target.value))}
+            onChange={(e) =>
+              setBranchNameInput(sanitizeBranchName(e.target.value))
+            }
             placeholder="feat/new-thing"
             disabled={busy || mode === "checkout"}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectScopedPayloadSchema } from "./payloads";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every
@@ -50,10 +51,6 @@ export const SetProjectSortPayloadSchema = z.object({
   mode: ProjectSortModeSchema,
 });
 
-export const AddProjectPayloadSchema = z.object({
-  path: z.string().min(1),
-});
-
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),
 });
@@ -62,26 +59,6 @@ export const ReorderProjectsPayloadSchema = z.object({
   draggedId: z.string().min(1),
   targetId: z.string().min(1),
   position: z.enum(["before", "after"]),
-});
-
-export const ProjectsDefaultBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const ProjectsListBranchesPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const PickWorktreeNamePayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const ListIgnoredPathsPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const ProjectIconPayloadSchema = z.object({
-  projectId: z.string().min(1),
 });
 
 // Bytes for a detected project icon, ready to drop into a data URL.
@@ -100,19 +77,16 @@ export type BranchList = z.infer<typeof BranchListSchema>;
 
 // Branch operations against the project's primary repo (not tied to any
 // specific worktree). Used by the Manage Branches page.
-export const CreateBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const CreateBranchPayloadSchema = ProjectScopedPayloadSchema.extend({
   name: GitRefNameSchema,
   base: GitRefNameSchema.optional(),
 });
 
-export const RenameAnyBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const RenameAnyBranchPayloadSchema = ProjectScopedPayloadSchema.extend({
   oldName: GitRefNameSchema,
   newName: GitRefNameSchema,
 });
 
-export const DeleteBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const DeleteBranchPayloadSchema = ProjectScopedPayloadSchema.extend({
   name: GitRefNameSchema,
 });

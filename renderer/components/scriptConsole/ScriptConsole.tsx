@@ -1,5 +1,5 @@
-import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { BackButton } from "@/components/ui/back-button";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { paramToSlot } from "@/store/scriptRuns";
 import { scriptConsoleRoute } from "@/router";
@@ -26,14 +26,7 @@ export function ScriptConsole() {
     return (
       <div className="flex h-full flex-col">
         <header className="border-b border-border px-6 pt-7 pb-4">
-          <button
-            type="button"
-            onClick={goBack}
-            className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft aria-hidden className="size-3" />
-            <span>Back</span>
-          </button>
+          <BackButton onClick={goBack} label="Back" />
         </header>
         <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
           Script not found.

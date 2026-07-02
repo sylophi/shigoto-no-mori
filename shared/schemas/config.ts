@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 
 export const ThemeSchema = z.enum(["light", "dark", "system"]);
@@ -108,12 +109,7 @@ export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,
 });
 
-export const ReadShigomoriPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const WriteShigomoriPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
   config: ShigomoriConfigSchema,
 });
 
@@ -124,16 +120,14 @@ export const WriteShigomoriPayloadSchema = z.object({
 // projects/<id>/worktrees/ directory.
 const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 
-export const ReadWorktreeDataPayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadSchema.extend({
   worktreeId: WorktreeIdSchema,
 });
 
-export const WriteWorktreeDataPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
-  data: ShigomoriWorktreeDataSchema,
-});
+export const WriteWorktreeDataPayloadSchema =
+  ReadWorktreeDataPayloadSchema.extend({
+    data: ShigomoriWorktreeDataSchema,
+  });
 
 export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,

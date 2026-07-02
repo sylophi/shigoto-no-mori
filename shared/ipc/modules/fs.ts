@@ -2,33 +2,25 @@ import { z } from "zod";
 import { invoke } from "@shared/ipc/contract";
 import {
   DirectoryListingSchema,
-  FsListEntriesPayloadSchema,
   FsListingSchema,
-  FsStatPayloadSchema,
   FsStatSchema,
-  IsGitRepoPayloadSchema,
-  ListDirectoryPayloadSchema,
-  ScanForGitReposPayloadSchema,
+  PathPayloadSchema,
 } from "@shared/schemas";
 
 export const fsContract = {
   listDirectory: invoke(
     "fs:listDirectory",
-    ListDirectoryPayloadSchema,
+    PathPayloadSchema,
     DirectoryListingSchema,
   ),
   scanForGitRepos: invoke(
     "fs:scanForGitRepos",
-    ScanForGitReposPayloadSchema,
+    PathPayloadSchema,
     z.array(z.string()),
   ),
-  isGitRepo: invoke("fs:isGitRepo", IsGitRepoPayloadSchema, z.boolean()),
-  stat: invoke("fs:stat", FsStatPayloadSchema, FsStatSchema),
-  listEntries: invoke(
-    "fs:listEntries",
-    FsListEntriesPayloadSchema,
-    FsListingSchema,
-  ),
+  isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean()),
+  stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema),
+  listEntries: invoke("fs:listEntries", PathPayloadSchema, FsListingSchema),
 } as const;
 
 export type FsContract = typeof fsContract;

@@ -1,6 +1,7 @@
 import { Command } from "cmdk";
 import { Check, FolderGit2, Square } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
+import { ITEM_CLASS } from "./cmdkClasses";
 
 function relativeFromRoot(absolute: string, root: string): string {
   const trimmedRoot = root.endsWith("/") ? root : `${root}/`;
@@ -33,7 +34,7 @@ export function ResultRow({
       value={`result:${path}`}
       keywords={[relative]}
       onSelect={onToggle}
-      className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+      className={ITEM_CLASS}
     >
       {isSelected ? (
         <Check className="size-4 text-foreground" />
