@@ -76,6 +76,17 @@ const exitObservers = new Map<string, (code: number | null) => void>();
 const inflightDeleteIds = new Set<string>();
 let shuttingDown = false;
 
+// Resolves the lifecycle observer registered by startScriptForLifecycle,
+// at most once per run. Every end-of-run path (spawn failure, child
+// "error", exit) funnels through here so none of them can leak or
+// double-resolve the observer.
+function resolveExitObserver(runId: string, code: number | null): void {
+  const observer = exitObservers.get(runId);
+  if (!observer) return;
+  exitObservers.delete(runId);
+  observer(code);
+}
+
 export function markDeleteInflight(worktreeId: string): void {
   inflightDeleteIds.add(worktreeId);
 }
@@ -290,11 +301,7 @@ export function startScript(args: RunArgs): string {
       reported = true;
       args.notify({ runId, kind: "error", data: message });
       args.notify({ runId, kind: "exit", code: null });
-      const observer = exitObservers.get(runId);
-      if (observer) {
-        exitObservers.delete(runId);
-        observer(null);
-      }
+      resolveExitObserver(runId, null);
     };
     child.once("error", (error) => reportSpawnFailure(error.message));
     queueMicrotask(() => reportSpawnFailure("Failed to start script process"));
@@ -321,6 +328,17 @@ export function startScript(args: RunArgs): string {
   };
   runningScripts.set(runId, record);
 
+  // Shared end-of-run bookkeeping. The renderer-facing event differs per
+  // path ("error" vs "exit"), so callers emit that first, then settle.
+  // Idempotent: a child "error" followed by "close" settles twice, and
+  // the second call finds everything already done.
+  const settle = (observedCode: number | null) => {
+    resolveExitObserver(runId, observedCode);
+    record.exited = true;
+    resolveDone();
+    runningScripts.delete(runId);
+  };
+
   // Both streams flow into a single "data" event so xterm sees one
   // ordered byte stream (matches how a real terminal would render it).
   child.stdout?.on("data", (chunk: Buffer) => {
@@ -341,16 +359,7 @@ export function startScript(args: RunArgs): string {
 
   child.on("error", (error) => {
     args.notify({ runId, kind: "error", data: error.message });
-    const observer = exitObservers.get(runId);
-    if (observer) {
-      exitObservers.delete(runId);
-      observer(null);
-    }
-    if (!record.exited) {
-      record.exited = true;
-      resolveDone();
-    }
-    runningScripts.delete(runId);
+    settle(null);
   });
 
   let exitNotified = false;
@@ -369,14 +378,7 @@ export function startScript(args: RunArgs): string {
     const wasSignal = signal !== null;
     const reported = record.cancelling || wasSignal ? null : code;
     args.notify({ runId, kind: "exit", code: reported });
-    const observer = exitObservers.get(runId);
-    if (observer) {
-      exitObservers.delete(runId);
-      observer(reported);
-    }
-    record.exited = true;
-    resolveDone();
-    runningScripts.delete(runId);
+    settle(reported);
   };
 
   // Notify exit on "close" (process ended AND stdio flushed), not "exit":
