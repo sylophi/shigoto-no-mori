@@ -6,6 +6,8 @@ import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
+import { binaryOnPath } from "./util/binaries";
+import { ttlValueCache } from "./util/ttlCache";
 
 const exec = promisify(execFile);
 
@@ -212,31 +214,17 @@ function appExists(bundleName: string): boolean {
   return false;
 }
 
-async function cliExists(name: string): Promise<boolean> {
-  try {
-    await exec("which", [name]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // Detection is expensive (10 `which` shell-outs + filesystem checks). Cache
 // briefly so a single user action that needs the list a few times doesn't
 // re-shell each time. Refreshes when the user opens the launcher row again
 // after the TTL.
 const DETECT_TTL_MS = 5_000;
-let detectionCache: { value: DetectedApp[]; expires: number } | null = null;
 
-export async function detectApps(): Promise<DetectedApp[]> {
-  const now = Date.now();
-  if (detectionCache && detectionCache.expires > now) {
-    return detectionCache.value;
-  }
-  const value = await Promise.all(
+const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
+  Promise.all(
     CATALOG.map(async (entry) => {
       const bundleHit = entry.bundleNames.some(appExists);
-      const cliHit = entry.cli ? await cliExists(entry.cli) : false;
+      const cliHit = entry.cli ? await binaryOnPath(entry.cli) : false;
       return {
         id: entry.id,
         label: entry.label,
@@ -245,9 +233,11 @@ export async function detectApps(): Promise<DetectedApp[]> {
         available: bundleHit || cliHit,
       };
     }),
-  );
-  detectionCache = { value, expires: now + DETECT_TTL_MS };
-  return value;
+  ),
+);
+
+export function detectApps(): Promise<DetectedApp[]> {
+  return detectionCache.get();
 }
 
 export function findDetected(
@@ -314,15 +304,10 @@ export async function launchDetected(
   await openWithBundle(app.bundleNames, worktreePath);
 }
 
-export function launchCustom(
-  command: string,
-  worktreePath: string,
-  port: number | undefined,
-): void {
+export function launchCustom(command: string, worktreePath: string): void {
   const env = {
     ...process.env,
     SHIGOMORI_WORKSPACE_PATH: worktreePath,
-    SHIGOMORI_PORT: port ? String(port) : "",
   };
   // Detached + unref so the spawned process outlives this main process,
   // which matches "fire and forget launcher" semantics.

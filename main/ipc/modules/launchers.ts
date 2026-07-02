@@ -82,7 +82,7 @@ async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
 // query has a staleTime and useLaunch doesn't invalidate it, so the visible
 // order stays put while the user interacts — only re-sorts when they
 // navigate away and back (or the cache goes stale).
-export async function getLaunchersForProject(
+async function getLaunchersForProject(
   projectId: string,
 ): Promise<LauncherEntry[]> {
   const project = findProjectOrThrow(projectId);
@@ -162,7 +162,7 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       if (!custom) {
         throw new Error(`Custom launcher not found: ${customId}`);
       }
-      launchCustom(custom.command, worktree.path, undefined);
+      launchCustom(custom.command, worktree.path);
       bumpUseCount(launcherId);
       return;
     }

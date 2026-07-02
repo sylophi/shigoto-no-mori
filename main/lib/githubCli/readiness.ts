@@ -1,32 +1,24 @@
 import type { GithubCliReadiness } from "@shared/schemas";
 import { readGlobalConfig } from "../config/global";
+import { binaryOnPath } from "../util/binaries";
+import { ttlValueCache } from "../util/ttlCache";
 import { execFileP } from "./exec";
 
-let readinessCache: { value: GithubCliReadiness; expires: number } | null =
-  null;
 const READINESS_CACHE_TTL_MS = 30_000;
 
-export async function getGithubCliReadiness(): Promise<GithubCliReadiness> {
-  const now = Date.now();
-  if (readinessCache && readinessCache.expires > now) {
-    return readinessCache.value;
-  }
-  const installed = await isInstalled();
-  // `gh auth status` exits non-zero when not signed in. We don't bother
-  // probing for auth when `gh` is missing -- there's nothing to ask.
-  const authed = installed ? await isAuthed() : false;
-  const value: GithubCliReadiness = { installed, authed };
-  readinessCache = { value, expires: now + READINESS_CACHE_TTL_MS };
-  return value;
-}
+const readinessCache = ttlValueCache<GithubCliReadiness>(
+  READINESS_CACHE_TTL_MS,
+  async () => {
+    const installed = await binaryOnPath("gh");
+    // `gh auth status` exits non-zero when not signed in. We don't bother
+    // probing for auth when `gh` is missing -- there's nothing to ask.
+    const authed = installed ? await isAuthed() : false;
+    return { installed, authed };
+  },
+);
 
-async function isInstalled(): Promise<boolean> {
-  try {
-    await execFileP("which", ["gh"]);
-    return true;
-  } catch {
-    return false;
-  }
+export function getGithubCliReadiness(): Promise<GithubCliReadiness> {
+  return readinessCache.get();
 }
 
 async function isAuthed(): Promise<boolean> {
