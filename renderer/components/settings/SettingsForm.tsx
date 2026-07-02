@@ -14,8 +14,14 @@ import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTheme } from "@/hooks/ui/useTheme";
+import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
-import type { GlobalConfig, LauncherCommand, Theme } from "@shared/schemas";
+import type {
+  DetectedLauncher,
+  GlobalConfig,
+  LauncherCommand,
+  Theme,
+} from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
@@ -237,13 +243,7 @@ export function SettingsForm({
             ) : (
               <div className="flex flex-wrap items-center gap-1.5">
                 {availableTools.map((d) => (
-                  <span
-                    key={d.id}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground"
-                  >
-                    <LauncherIcon entry={d} className="size-3.5" />
-                    {d.label}
-                  </span>
+                  <ToolPill key={d.id} entry={d} />
                 ))}
               </div>
             )}
@@ -262,14 +262,7 @@ export function SettingsForm({
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {missingTools.map((d) => (
-                  <span
-                    key={d.id}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
-                    title="Not installed"
-                  >
-                    <LauncherIcon entry={d} className="size-3.5 opacity-60" />
-                    {d.label}
-                  </span>
+                  <ToolPill key={d.id} entry={d} missing />
                 ))}
               </div>
             </section>
@@ -321,6 +314,32 @@ export function SettingsForm({
         onSave={() => void handleSave()}
       />
     </>
+  );
+}
+
+function ToolPill({
+  entry,
+  missing = false,
+}: {
+  entry: DetectedLauncher;
+  missing?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border py-0.5 pr-2 pl-1.5 text-xs",
+        missing
+          ? "border-dashed border-border text-muted-foreground/60"
+          : "border-border bg-card text-muted-foreground",
+      )}
+      title={missing ? "Not installed" : undefined}
+    >
+      <LauncherIcon
+        entry={entry}
+        className={cn("size-3.5", missing && "opacity-60")}
+      />
+      {entry.label}
+    </span>
   );
 }
 
