@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WorktreeScopedPayloadSchema } from "./payloads";
 
 // Detected apps + custom commands from the per-project config, ready for
 // the renderer to display in a single launcher row.
@@ -37,9 +38,7 @@ export const LauncherEntrySchema = z.discriminatedUnion("kind", [
 ]);
 export type LauncherEntry = z.infer<typeof LauncherEntrySchema>;
 
-export const LaunchPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const LaunchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   launcherId: z.string().min(1),
 });
 
