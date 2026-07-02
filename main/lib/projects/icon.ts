@@ -208,88 +208,105 @@ function resolveIconHrefInFiles(
   return candidates.find((candidate) => files.has(candidate)) ?? null;
 }
 
-// The historical two-phase scan (conventional files, then <link rel="icon">
-// in a source file), scoped to a single package root. `root === ""` is the
-// repo top level and reproduces the pre-descent behaviour exactly. A path in
-// `files` is git's view, so a file staged-then-deleted from the working tree
-// still appears; each match is confirmed on disk before we commit to it, so a
-// phantom entry can't shadow a lower-priority icon that does exist.
-async function resolveIconAtRoot(
-  cwd: string,
+// How a scan sees the project. The git view answers from `git ls-files`
+// output (so build artifacts and node_modules stay invisible); the disk
+// view answers from the filesystem directly. Parameterising the scan
+// over this keeps the two-phase priority logic in exactly one place.
+interface IconScanView {
+  // Absolute path when the repo-relative candidate is visible in this
+  // view and confirmed on disk; null otherwise.
+  candidate(rel: string): Promise<string | null>;
+  // Source text of a repo-relative file, or null when invisible or
+  // unreadable.
+  readSource(rel: string): Promise<string | null>;
+  // Absolute path a <link rel="icon"> href resolves to, or null.
+  resolveHref(root: string, href: string): Promise<string | null>;
+}
+
+// The two-phase scan (conventional files, then <link rel="icon"> in a
+// source file), scoped to a single package root. `root === ""` is the
+// repo top level and reproduces the pre-descent behaviour exactly.
+async function scanRootForIcon(
   root: string,
-  files: ReadonlySet<string>,
+  view: IconScanView,
 ): Promise<string | null> {
   for (const candidate of ICON_CANDIDATES) {
-    const rel = posixJoin(root, candidate);
-    if (!files.has(rel)) continue;
-    const abs = join(cwd, rel);
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-    if (await fileExists(abs)) return abs;
+    const abs = await view.candidate(posixJoin(root, candidate));
+    if (abs) return abs;
   }
 
   for (const sourceFile of ICON_SOURCE_FILES) {
-    const rel = posixJoin(root, sourceFile);
-    if (!files.has(rel)) continue;
-    let source: string;
-    try {
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-      source = await readFile(join(cwd, rel), "utf8");
-    } catch {
-      continue;
-    }
+    const source = await view.readSource(posixJoin(root, sourceFile));
+    if (!source) continue;
     const href = extractIconHref(source);
     if (!href) continue;
-    const resolved = resolveIconHrefInFiles(root, href, files);
-    if (!resolved) continue;
-    const abs = join(cwd, resolved);
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-    if (await fileExists(abs)) return abs;
+    const abs = await view.resolveHref(root, href);
+    if (abs) return abs;
   }
 
   return null;
+}
+
+// A path in `files` is git's view, so a file staged-then-deleted from
+// the working tree still appears; each match is confirmed on disk
+// before we commit to it, so a phantom entry can't shadow a
+// lower-priority icon that does exist.
+function gitScanView(cwd: string, files: ReadonlySet<string>): IconScanView {
+  return {
+    async candidate(rel) {
+      if (!files.has(rel)) return null;
+      const abs = join(cwd, rel);
+      return (await fileExists(abs)) ? abs : null;
+    },
+    async readSource(rel) {
+      if (!files.has(rel)) return null;
+      try {
+        return await readFile(join(cwd, rel), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    async resolveHref(root, href) {
+      const rel = resolveIconHrefInFiles(root, href, files);
+      if (!rel) return null;
+      const abs = join(cwd, rel);
+      return (await fileExists(abs)) ? abs : null;
+    },
+  };
+}
+
+function diskScanView(cwd: string): IconScanView {
+  return {
+    async candidate(rel) {
+      const abs = join(cwd, rel);
+      return (await fileExists(abs)) ? abs : null;
+    },
+    async readSource(rel) {
+      try {
+        return await readFile(join(cwd, rel), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    resolveHref(_root, href) {
+      return findFirstExisting(cwd, resolveIconHref(cwd, href));
+    },
+  };
 }
 
 async function resolveIconPath(cwd: string): Promise<string | null> {
   const files = await listProjectFiles(cwd);
   // git unavailable or an empty working tree: fall back to a top-level
   // filesystem scan.
-  if (files.length === 0) return resolveIconPathShallow(cwd);
+  if (files.length === 0) return scanRootForIcon("", diskScanView(cwd));
 
-  const fileSet = new Set(files);
+  const view = gitScanView(cwd, new Set(files));
   // Repo root first — so any project that resolved before resolves to the
   // identical icon — then each deeper package root, nearest first. Descent is
   // pure addition: it only fires where the top-level scan came up empty.
   for (const root of packageRoots(files)) {
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- nearest package root wins; first hit short-circuits
-    const resolved = await resolveIconAtRoot(cwd, root, fileSet);
+    const resolved = await scanRootForIcon(root, view);
     if (resolved) return resolved;
-  }
-
-  return null;
-}
-
-// Filesystem fallback for when git lists nothing (git unavailable, or an
-// empty working tree). Mirrors the historical top-level-only behaviour.
-async function resolveIconPathShallow(cwd: string): Promise<string | null> {
-  for (const candidate of ICON_CANDIDATES) {
-    const resolved = join(cwd, candidate);
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-    if (await fileExists(resolved)) return resolved;
-  }
-
-  for (const sourceFile of ICON_SOURCE_FILES) {
-    let source: string;
-    try {
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-      source = await readFile(join(cwd, sourceFile), "utf8");
-    } catch {
-      continue;
-    }
-    const href = extractIconHref(source);
-    if (!href) continue;
-    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters; first match wins
-    const existing = await findFirstExisting(cwd, resolveIconHref(cwd, href));
-    if (existing) return existing;
   }
 
   return null;
