@@ -3,8 +3,8 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { type RowStatus } from "@/components/ui/row-status";
 import { tildify } from "@/lib/projectPaths";
+import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -29,8 +29,8 @@ export function ConvertExternalWorktrees() {
   const externals = worktrees.filter((w) => w.isExternal && !w.isPrimary);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
-  const [batchRunning, setBatchRunning] = useState(false);
+  const { status, batchRunning, setBatchRunning, runBatch } =
+    useSequentialBatch();
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
@@ -84,33 +84,24 @@ export function ConvertExternalWorktrees() {
     setBatchRunning(true);
     // Snapshot the selection so toggles during the run don't drift it.
     const queue = externals.filter((w) => selected.has(w.id));
-    setStatus(new Map(queue.map((w) => [w.id, { kind: "running" as const }])));
-    let lastSuccess: Worktree | null = null;
-    for (const wt of queue) {
-      const args = { projectId: project.id, worktreeId: wt.id };
-      try {
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
-        const result = await convert.mutateAsync(args); // oxlint-disable-line no-await-in-loop -- sequential by design
-        lastSuccess = result.worktree;
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(wt.id, { kind: "done" });
-          return next;
+    const converted: Worktree[] = [];
+    await runBatch(
+      queue,
+      (wt) => wt.id,
+      async (wt) => {
+        const result = await convert.mutateAsync({
+          projectId: project.id,
+          worktreeId: wt.id,
         });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(wt.id, { kind: "error", message });
-          return next;
-        });
-      }
-    }
+        converted.push(result.worktree);
+      },
+    );
     setBatchRunning(false);
     setSelected(new Set());
 
     // One success? Drop the user into it. Multiple successes? Stay on the
     // page so they can see what happened with the rest.
+    const lastSuccess = converted.at(-1) ?? null;
     if (lastSuccess && queue.length === 1) {
       void navigate({
         to: "/projects/$projectId/worktrees/$worktreeId",

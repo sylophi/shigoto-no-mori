@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
-import { type RowStatus } from "@/components/ui/row-status";
+import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type {
@@ -73,8 +73,8 @@ export function LocationForm({
   const [layout, setLayout] = useState<WorktreeLayout>(savedLayout);
   const [customPath, setCustomPath] = useState<string>(savedCustomPath);
   const [customPathError, setCustomPathError] = useState<string | null>(null);
-  const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
-  const [batchRunning, setBatchRunning] = useState(false);
+  const { status, batchRunning, setBatchRunning, runBatch } =
+    useSequentialBatch();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // Pick up external config changes (e.g. another window edited the project).
@@ -166,33 +166,17 @@ export function LocationForm({
       worktree: w,
       destination: proposedFor(w),
     }));
-    setStatus(
-      new Map(queue.map((q) => [q.worktree.id, { kind: "running" as const }])),
+    await runBatch(
+      queue,
+      (q) => q.worktree.id,
+      async ({ worktree, destination }) => {
+        await relocate.mutateAsync({
+          projectId,
+          worktreeId: worktree.id,
+          destinationPath: destination,
+        });
+      },
     );
-
-    for (const { worktree, destination } of queue) {
-      const args = {
-        projectId,
-        worktreeId: worktree.id,
-        destinationPath: destination,
-      };
-      try {
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
-        await relocate.mutateAsync(args); // oxlint-disable-line no-await-in-loop -- sequential by design
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(worktree.id, { kind: "done" });
-          return next;
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(worktree.id, { kind: "error", message });
-          return next;
-        });
-      }
-    }
 
     setBatchRunning(false);
   };
