@@ -109,39 +109,11 @@ export const worktreesHandlers: Handlers<
     return setWorktreeShelved(project, worktreeId, shelved);
   },
 
-  renameBranch: async ({ projectId, worktreeId, newBranch }) => {
-    const project = findProjectOrThrow(projectId);
-    // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
-    const target = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    await renameBranch(target.path, newBranch);
-    const refreshed = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    return describeWorktree(refreshed, project.path);
-  },
+  renameBranch: (input) =>
+    mutateAndDescribe(input, (wt) => renameBranch(wt, input.newBranch)),
 
-  checkoutBranch: async ({ projectId, worktreeId, branch }) => {
-    const project = findProjectOrThrow(projectId);
-    // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
-    const target = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    await checkoutBranch(target.path, branch);
-    const refreshed = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    return describeWorktree(refreshed, project.path);
-  },
+  checkoutBranch: (input) =>
+    mutateAndDescribe(input, (wt) => checkoutBranch(wt, input.branch)),
 
   diff: async ({ projectId, worktreeId }) => {
     const project = findProjectOrThrow(projectId);
@@ -173,16 +145,18 @@ export const worktreesHandlers: Handlers<
     return listCommits(target.path, { skip, count });
   },
 
-  push: (input) => syncWorktree(input, (wt) => pushFastForward(wt)),
-  pull: (input) => syncWorktree(input, (wt) => pullFastForward(wt)),
-  pushForce: (input) => syncWorktree(input, (wt) => pushForceWithLease(wt)),
-  overwrite: (input) => syncWorktree(input, (wt) => overwriteFromUpstream(wt)),
+  push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt)),
+  pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt)),
+  pushForce: (input) =>
+    mutateAndDescribe(input, (wt) => pushForceWithLease(wt)),
+  overwrite: (input) =>
+    mutateAndDescribe(input, (wt) => overwriteFromUpstream(wt)),
   publish: (input) =>
-    syncWorktree(input, (wt, pp) => publishCurrentBranch(wt, pp)),
+    mutateAndDescribe(input, (wt, pp) => publishCurrentBranch(wt, pp)),
   pullAndPush: (input) =>
-    syncWorktree(input, (wt) => pullRebaseOrMergeAndPush(wt)),
+    mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt)),
   syncWithPrimary: (input) =>
-    syncWorktree(input, async (wt, pp, target) => {
+    mutateAndDescribe(input, async (wt, pp, target) => {
       if (target.isPrimary) {
         throw new Error("The primary checkout can't be synced from itself");
       }
@@ -195,7 +169,7 @@ export const worktreesHandlers: Handlers<
       await syncWithPrimary(wt, pp, primaryRef);
     }),
   switchToPrimaryAndDeleteBranch: (input) =>
-    syncWorktree(input, async (wt, pp, target) => {
+    mutateAndDescribe(input, async (wt, pp, target) => {
       if (!isRealBranch(target.branch)) {
         throw new Error("No branch checked out to clean up");
       }
@@ -217,10 +191,11 @@ async function resolvePrimaryRef(
   return resolveDefaultBranch(projectPath, config?.defaultBranch);
 }
 
-// Remote-sync mutations all share the same shape: resolve the worktree,
-// run a git action, return the freshly-described worktree so the
-// renderer can replace its cached row in one round trip.
-async function syncWorktree(
+// Worktree mutations (remote syncs and local branch ops) all share the
+// same shape: resolve the worktree, run a git action, return the
+// freshly-described worktree so the renderer can replace its cached row
+// in one round trip.
+async function mutateAndDescribe(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
   action: (
     worktreePath: string,
