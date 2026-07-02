@@ -14,6 +14,18 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { GROUP_HEADING_CLASS } from "./groupHeading";
 
+const COMMAND_ITEM_CLASS =
+  "flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground";
+
+// Shown at the tail of a capped group to hint that typing reveals the rest.
+function MoreHint({ count }: { count: number }) {
+  return (
+    <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
+      +{count} more, type to search
+    </div>
+  );
+}
+
 interface BrowseViewProps {
   onAddProject: () => void;
 }
@@ -81,7 +93,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
                       },
                     }),
                 )}
-                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+                className={COMMAND_ITEM_CLASS}
               >
                 <GitBranch className="size-4 text-muted-foreground/80" />
                 <span className="truncate font-mono">{tree.branch}</span>
@@ -94,9 +106,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
               </Command.Item>
             ))}
             {hiddenWorktreeCount > 0 && (
-              <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
-                +{hiddenWorktreeCount} more, type to search
-              </div>
+              <MoreHint count={hiddenWorktreeCount} />
             )}
           </Command.Group>
         )}
@@ -113,7 +123,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
                     params: { projectId: project.id },
                   }),
               )}
-              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+              className={COMMAND_ITEM_CLASS}
             >
               <Plus className="size-4 text-muted-foreground/80" />
               <span>
@@ -122,15 +132,11 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
               </span>
             </Command.Item>
           ))}
-          {hiddenProjectCount > 0 && (
-            <div className="px-2 py-1.5 text-xs text-muted-foreground/70">
-              +{hiddenProjectCount} more, type to search
-            </div>
-          )}
+          {hiddenProjectCount > 0 && <MoreHint count={hiddenProjectCount} />}
           <Command.Item
             value="add project local folder browse"
             onSelect={() => onAddProject()}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+            className={COMMAND_ITEM_CLASS}
           >
             <FolderPlus className="size-4 text-muted-foreground/80" />
             <span className="flex min-w-0 flex-1 flex-col">
@@ -146,7 +152,7 @@ export function BrowseView({ onAddProject }: BrowseViewProps) {
           <Command.Item
             value="settings preferences appearance theme"
             onSelect={handle(() => void navigate({ to: "/settings" }))}
-            className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+            className={COMMAND_ITEM_CLASS}
           >
             <SettingsIcon className="size-4 text-muted-foreground/80" />
             Settings
