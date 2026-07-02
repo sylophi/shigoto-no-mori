@@ -20,10 +20,16 @@ function readAll(): Record<string, unknown> {
   }
 }
 
+// Same tmp-name discipline as util/jsonFile.ts. Sync writes can't
+// interleave within this process, but a fixed `.tmp` suffix would let a
+// second app instance race the same tmp file, so the name carries
+// pid + time + counter.
+let tempCounter = 0;
+
 function writeAll(data: Record<string, unknown>): void {
   const path = filePath();
   mkdirSync(dirname(path), { recursive: true });
-  const tmp = `${path}.tmp`;
+  const tmp = `${path}.tmp.${process.pid}.${Date.now()}.${tempCounter++}`;
   writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
   renameSync(tmp, path);
 }
