@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  ProjectScopedPayloadSchema,
+  WorktreeScopedPayloadSchema,
+} from "./payloads";
 import { GitRefNameSchema, isRealBranch } from "./project";
 
 export const CommitSummarySchema = z.object({
@@ -123,12 +127,7 @@ export function deriveRemoteSyncState(
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
 }
 
-export const ListWorktreesPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const CreateWorktreePayloadSchema = z.object({
-  projectId: z.string().min(1),
+export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
   worktreeName: z.string().min(1).optional(),
@@ -169,85 +168,51 @@ export const CreatePhaseSchema = z.enum([
 ]);
 export type CreatePhase = z.infer<typeof CreatePhaseSchema>;
 
-export const WorktreeLifecyclePhaseSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const WorktreeLifecyclePhaseSchema = WorktreeScopedPayloadSchema.extend({
   phase: z.union([CreatePhaseSchema, z.literal("idle")]),
 });
 export type WorktreeLifecyclePhase = z.infer<
   typeof WorktreeLifecyclePhaseSchema
 >;
 
-export const WorktreeCarryOverCompleteSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-  report: CarryOverReportSchema,
-});
+export const WorktreeCarryOverCompleteSchema =
+  WorktreeScopedPayloadSchema.extend({
+    report: CarryOverReportSchema,
+  });
 export type WorktreeCarryOverComplete = z.infer<
   typeof WorktreeCarryOverCompleteSchema
 >;
 
-export const ConvertExternalWorktreePayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-});
+export const RelocateWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend(
+  {
+    // Absolute target directory for the moved worktree (parent is
+    // created if it doesn't exist).
+    destinationPath: z.string().min(1),
+  },
+);
 
-export const RelocateWorktreePayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-  // Absolute target directory for the moved worktree (parent is
-  // created if it doesn't exist).
-  destinationPath: z.string().min(1),
-});
-
-export const DeleteWorktreePayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const DeleteWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend({
   force: z.boolean().optional(),
   skipCleanup: z.boolean().optional(),
 });
 
-export const RenameBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   newBranch: GitRefNameSchema,
 });
 
-export const SetShelvedPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
   shelved: z.boolean(),
 });
 
-export const CheckoutBranchPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   branch: GitRefNameSchema,
 });
 
-// Every remote-sync mutation operates on a single worktree, so payload
-// and result are shared across push/pull/force-push/overwrite/publish
-// /pull-and-push. The result is the refreshed Worktree so the renderer
-// can update its UI without an extra round trip.
-export const SyncWorktreePayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-});
-
-export const WorktreeDiffPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-});
-
-export const CommitDiffPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const CommitDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
   hash: z.string().min(1),
 });
 
-export const ListCommitsPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
   // `git log --skip=N -n COUNT`; the renderer pages through with skip
   // = pageIndex * count and stops when fewer than `count` come back.
   skip: z.number().int().nonnegative(),

@@ -4,27 +4,25 @@ import {
   CheckoutBranchPayloadSchema,
   CommitDiffPayloadSchema,
   CommitSummarySchema,
-  ConvertExternalWorktreePayloadSchema,
   CreateWorktreePayloadSchema,
   CreateWorktreeResultSchema,
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
   ListCommitsPayloadSchema,
-  ListWorktreesPayloadSchema,
+  ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
   SetShelvedPayloadSchema,
-  SyncWorktreePayloadSchema,
   WorktreeCarryOverCompleteSchema,
-  WorktreeDiffPayloadSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeSchema,
+  WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
 export const worktreesContract = {
   list: invoke(
     "worktrees:list",
-    ListWorktreesPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.array(WorktreeSchema),
   ),
   create: invoke(
@@ -35,7 +33,7 @@ export const worktreesContract = {
   ),
   convertExternal: invoke(
     "worktrees:convertExternal",
-    ConvertExternalWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     CreateWorktreeResultSchema,
     { tracksProjectUsage: true },
   ),
@@ -69,7 +67,7 @@ export const worktreesContract = {
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
-  diff: invoke("worktrees:diff", WorktreeDiffPayloadSchema, z.string()),
+  diff: invoke("worktrees:diff", WorktreeScopedPayloadSchema, z.string()),
   commitDiff: invoke(
     "worktrees:commitDiff",
     CommitDiffPayloadSchema,
@@ -80,27 +78,27 @@ export const worktreesContract = {
     ListCommitsPayloadSchema,
     z.array(CommitSummarySchema),
   ),
-  push: invoke("worktrees:push", SyncWorktreePayloadSchema, WorktreeSchema, {
+  push: invoke("worktrees:push", WorktreeScopedPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
   }),
-  pull: invoke("worktrees:pull", SyncWorktreePayloadSchema, WorktreeSchema, {
+  pull: invoke("worktrees:pull", WorktreeScopedPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
   }),
   pushForce: invoke(
     "worktrees:pushForce",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
   overwrite: invoke(
     "worktrees:overwrite",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
   publish: invoke(
     "worktrees:publish",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     {
       tracksProjectUsage: true,
@@ -108,19 +106,19 @@ export const worktreesContract = {
   ),
   pullAndPush: invoke(
     "worktrees:pullAndPush",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
   syncWithPrimary: invoke(
     "worktrees:syncWithPrimary",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
   switchToPrimaryAndDeleteBranch: invoke(
     "worktrees:switchToPrimaryAndDeleteBranch",
-    SyncWorktreePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),

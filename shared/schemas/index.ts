@@ -6,6 +6,7 @@
 // the IPC contract: runtime parsing happens at the IPC boundary (input
 // in main/ipc/register.ts, payload in `broadcast`), not inside backend
 // logic. Renderer code and main/ipc/** are free to runtime-import.
+export * from "./payloads";
 export * from "./project";
 export * from "./worktree";
 export * from "./pullRequest";

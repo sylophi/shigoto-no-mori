@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { invoke } from "@shared/ipc/contract";
 import {
+  PathPayloadSchema,
   ShellOpenExternalPayloadSchema,
-  ShellPathPayloadSchema,
 } from "@shared/schemas";
 
 export const shellContract = {
-  openPath: invoke("shell:openPath", ShellPathPayloadSchema, z.void()),
+  openPath: invoke("shell:openPath", PathPayloadSchema, z.void()),
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,
@@ -14,7 +14,7 @@ export const shellContract = {
   ),
   showItemInFolder: invoke(
     "shell:showItemInFolder",
-    ShellPathPayloadSchema,
+    PathPayloadSchema,
     z.void(),
   ),
 } as const;

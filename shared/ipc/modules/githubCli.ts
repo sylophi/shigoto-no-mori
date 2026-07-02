@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
-  GithubCliProjectPayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
+  ProjectScopedPayloadSchema,
   PullRequestDetailSchema,
   PullRequestSchema,
   RepoMergeConfigSchema,
@@ -16,7 +16,7 @@ export const githubCliContract = {
   readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
-    GithubCliProjectPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.record(z.string(), PullRequestSchema),
   ),
   worktreePullRequest: invoke(
@@ -26,7 +26,7 @@ export const githubCliContract = {
   ),
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
-    GithubCliProjectPayloadSchema,
+    ProjectScopedPayloadSchema,
     RepoMergeConfigSchema.nullable(),
   ),
   mergePullRequest: invoke(

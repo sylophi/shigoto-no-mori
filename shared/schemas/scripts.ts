@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  ProjectScopedPayloadSchema,
+  WorktreeScopedPayloadSchema,
+} from "./payloads";
 
 export const ScriptNameSchema = z.enum([
   "setup",
@@ -8,9 +12,7 @@ export const ScriptNameSchema = z.enum([
 ]);
 export type ScriptName = z.infer<typeof ScriptNameSchema>;
 
-export const RunScriptPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
+export const RunScriptPayloadSchema = WorktreeScopedPayloadSchema.extend({
   script: ScriptNameSchema,
 });
 
@@ -42,30 +44,16 @@ export const PackageScriptSortModeSchema = z.enum([
 ]);
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
-export const ListPackageScriptsPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-});
+export const RunPackageScriptPayloadSchema = WorktreeScopedPayloadSchema.extend(
+  {
+    scriptName: z.string().min(1),
+  },
+);
 
-export const RunPackageScriptPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-  scriptName: z.string().min(1),
-});
-
-export const GetPackageScriptSortPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
-
-export const SetPackageScriptSortPayloadSchema = z.object({
-  projectId: z.string().min(1),
-  mode: PackageScriptSortModeSchema,
-});
-
-export const PortPoolIsActivePayloadSchema = z.object({
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-});
+export const SetPackageScriptSortPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    mode: PackageScriptSortModeSchema,
+  });
 
 export const CancelScriptPayloadSchema = z.object({
   runId: z.string().min(1),

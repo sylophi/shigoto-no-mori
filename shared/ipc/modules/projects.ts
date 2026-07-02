@@ -1,16 +1,12 @@
 import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
-  AddProjectPayloadSchema,
   BranchListSchema,
-  ListIgnoredPathsPayloadSchema,
-  PickWorktreeNamePayloadSchema,
-  ProjectIconPayloadSchema,
+  PathPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
+  ProjectScopedPayloadSchema,
   ProjectSortModeSchema,
-  ProjectsDefaultBranchPayloadSchema,
-  ProjectsListBranchesPayloadSchema,
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
   SetProjectSortPayloadSchema,
@@ -18,7 +14,7 @@ import {
 
 export const projectsContract = {
   list: invoke("projects:list", z.void(), z.array(ProjectSchema)),
-  add: invoke("projects:add", AddProjectPayloadSchema, ProjectSchema),
+  add: invoke("projects:add", PathPayloadSchema, ProjectSchema),
   remove: invoke("projects:remove", RemoveProjectPayloadSchema, z.void()),
   reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void()),
   getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema),
@@ -31,27 +27,27 @@ export const projectsContract = {
   ),
   defaultBranch: invoke(
     "projects:defaultBranch",
-    ProjectsDefaultBranchPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.string(),
   ),
   listBranches: invoke(
     "projects:listBranches",
-    ProjectsListBranchesPayloadSchema,
+    ProjectScopedPayloadSchema,
     BranchListSchema,
   ),
   pickWorktreeName: invoke(
     "projects:pickWorktreeName",
-    PickWorktreeNamePayloadSchema,
+    ProjectScopedPayloadSchema,
     z.string(),
   ),
   listIgnoredPaths: invoke(
     "projects:listIgnoredPaths",
-    ListIgnoredPathsPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.array(z.string()),
   ),
   icon: invoke(
     "projects:icon",
-    ProjectIconPayloadSchema,
+    ProjectScopedPayloadSchema,
     ProjectIconSchema.nullable(),
   ),
 } as const;

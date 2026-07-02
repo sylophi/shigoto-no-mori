@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { invoke } from "@shared/ipc/contract";
 import {
-  ReadShigomoriPayloadSchema,
+  ProjectScopedPayloadSchema,
   ReadWorktreeDataPayloadSchema,
   ShigomoriConfigSchema,
   ShigomoriWorktreeDataSchema,
@@ -12,7 +12,7 @@ import {
 export const shigomoriContract = {
   read: invoke(
     "shigomori:read",
-    ReadShigomoriPayloadSchema,
+    ProjectScopedPayloadSchema,
     ShigomoriConfigSchema.nullable(),
   ),
   write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
