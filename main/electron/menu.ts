@@ -130,11 +130,15 @@ export function buildAppMenu(): void {
           click: clickBroadcast(paletteContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),
+        // Without a mac-style app menu, File carries Settings and Exit
+        // (the conventional Windows/Linux placement).
         ...(isMac
           ? ([] satisfies MenuItemConstructorOptions[])
           : ([
               { type: "separator" },
               SETTINGS_MENU_ITEM,
+              { type: "separator" },
+              { role: "quit", label: "Exit" },
             ] satisfies MenuItemConstructorOptions[])),
       ],
     },
@@ -159,8 +163,8 @@ export function buildAppMenu(): void {
           click: clickBroadcast(paletteContract, "toggle", undefined),
         },
         // Hidden synonym so ⌘P also opens the palette. Electron keeps the
-        // accelerator live for hidden items on macOS; for cross-platform
-        // reliability we'd need a renderer-side listener.
+        // accelerator live for hidden items on macOS only; other platforms
+        // get a renderer-side Ctrl+P listener in CommandPalette.tsx.
         {
           label: "Command palette (alt)",
           accelerator: "CmdOrCtrl+P",
@@ -185,6 +189,16 @@ export function buildAppMenu(): void {
           : []),
       ],
     },
+    // The About entry lives in the app menu on macOS; elsewhere it gets
+    // the conventional Help menu slot.
+    ...(isMac
+      ? ([] satisfies MenuItemConstructorOptions[])
+      : ([
+          {
+            label: "Help",
+            submenu: [{ role: "about" }],
+          },
+        ] satisfies MenuItemConstructorOptions[])),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

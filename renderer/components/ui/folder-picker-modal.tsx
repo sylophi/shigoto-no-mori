@@ -7,11 +7,12 @@ import {
   CornerLeftUp,
   Folder,
 } from "lucide-react";
-import finderIconUrl from "@/app-icons/finder.png";
 import { Button } from "@/components/ui/button";
+import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { modKey, shortcutLabel } from "@/lib/platform";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -127,7 +128,7 @@ export function FolderPickerModal({
   };
 
   const canBrowseUp = canNavigateUp(query);
-  const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
+  const confirmKbd = hasHighlighted ? shortcutLabel(modKey, "↩") : "↩";
 
   return (
     // Escape is owned by the Command.Input handler so it can also exit
@@ -252,8 +253,8 @@ export function FolderPickerModal({
             }}
             className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
           >
-            <img src={finderIconUrl} alt="" className="size-4" />
-            Open in Finder
+            <FileManagerIcon />
+            Open in {fileManagerName}
           </button>
         </div>
       </Command>

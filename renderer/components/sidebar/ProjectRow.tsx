@@ -148,7 +148,7 @@ export function ProjectRow({
               <button
                 type="button"
                 onClick={(e) => {
-                  if (e.shiftKey || e.metaKey) {
+                  if (e.shiftKey || e.metaKey || e.ctrlKey) {
                     void navigate({
                       to: "/projects/$projectId/new",
                       params: { projectId: project.id },

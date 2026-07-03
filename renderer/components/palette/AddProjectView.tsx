@@ -1,6 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
 import { Command } from "cmdk";
-import finderIconUrl from "@/app-icons/finder.png";
 import {
   ArrowDown,
   ArrowLeft,
@@ -16,6 +15,8 @@ import {
   normalizeForSubmit,
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
+import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
+import { modKey, shortcutLabel } from "@/lib/platform";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -232,7 +233,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
 
   // Browse stage.
   const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
-  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
+  const submitKbd = hasHighlighted ? shortcutLabel(modKey, "↩") : "↩";
   const canBrowseUp = canNavigateUp(query);
   const canPrimary = targetIsGitRepo
     ? submitTarget.length > 0
@@ -375,8 +376,8 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
           onClick={() => void pickViaDialog()}
           className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
         >
-          <img src={finderIconUrl} alt="" className="size-4" />
-          Open in Finder
+          <FileManagerIcon />
+          Open in {fileManagerName}
         </button>
       </div>
     </Command>

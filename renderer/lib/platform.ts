@@ -5,9 +5,10 @@ export const platform = window.api.platform;
 export const isMac = platform === "darwin";
 export const isWindows = platform === "win32";
 
-// Display glyph for the primary modifier: ⌘ on macOS, Ctrl elsewhere
-// (matching the CmdOrCtrl accelerators the menu registers).
+// Display glyphs for modifiers: macOS symbols, spelled-out names
+// elsewhere (matching the CmdOrCtrl accelerators the menu registers).
 export const modKey = isMac ? "⌘" : "Ctrl";
+export const shiftKey = isMac ? "⇧" : "Shift";
 
 // Human-readable shortcut joined the way each OS writes it: "⌘N" on
 // macOS, "Ctrl+N" elsewhere.
