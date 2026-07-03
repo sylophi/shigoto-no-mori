@@ -25,9 +25,13 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 // separator style they already use, so previews match what the main
 // process will create.
 const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
+// UNC prefix in either separator style: node joins produce
+// \\\\server\\share while git porcelain reports //server/share. (POSIX
+// paths never begin with a doubled separator in practice.)
+const UNC_PREFIX = /^[\\/]{2}/;
 
 export function isWindowsStyle(base: string): boolean {
-  return WINDOWS_DRIVE_PREFIX.test(base) || base.startsWith("\\\\");
+  return WINDOWS_DRIVE_PREFIX.test(base) || UNC_PREFIX.test(base);
 }
 
 // Comparison form for path equality and prefix checks, keyed off the
@@ -75,7 +79,16 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   if (layout === "custom") {
     const trimmed = customPath?.trim();
     if (trimmed) {
-      return trimmed.replace(isWindowsStyle(trimmed) ? /[\\/]+$/ : /\/+$/, "");
+      const stripped = trimmed.replace(
+        isWindowsStyle(trimmed) ? /[\\/]+$/ : /\/+$/,
+        "",
+      );
+      // Don't strip a drive root ("C:\") down to the drive-relative form
+      // "C:", which would prefix-match every path on the drive.
+      if (/^[A-Za-z]:$/.test(stripped)) {
+        return `${stripped}${trimmed.includes("\\") ? "\\" : "/"}`;
+      }
+      return stripped;
     }
   }
   const segments = projectPath.split(

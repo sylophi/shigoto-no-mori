@@ -6,12 +6,7 @@
 // sends WM_CLOSE, which they ignore), so both signals map to
 // `taskkill /T /F` -- a forced kill of the whole tree. The caller's
 // SIGKILL escalation after its grace period is then a no-op backstop.
-import {
-  type ChildProcess,
-  execFile,
-  execFileSync,
-  spawn,
-} from "node:child_process";
+import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import {
   SCRIPT_STDIO,
@@ -52,20 +47,22 @@ async function signalTree(pid: number): Promise<void> {
   await taskkillTree(pid);
 }
 
-// Synchronous: the quit path returns immediately after calling this and
-// Electron tears the process down, which would kill an in-flight async
-// taskkill child before it finishes walking the tree. Blocking briefly
-// (bounded by the timeout) mirrors the POSIX side's synchronous
-// process.kill semantics.
+// Detached + unref: the quit path returns immediately after calling
+// this and Electron tears the process down. A detached taskkill escapes
+// the parent's teardown (it isn't tied to our process's lifetime) and
+// finishes walking the tree on its own, without ever blocking the
+// Squirrel handoff the caller is racing toward.
 function signalTreeBestEffort(pid: number): void {
   try {
-    execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
-      windowsHide: true,
-      timeout: 2_000,
+    const child = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      detached: true,
       stdio: "ignore",
+      windowsHide: true,
     });
+    child.on("error", () => {});
+    child.unref();
   } catch {
-    // Tree already gone, we lost ownership, or the timeout hit.
+    // Best effort; nothing to do if taskkill can't start.
   }
 }
 

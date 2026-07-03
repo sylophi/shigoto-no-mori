@@ -33,6 +33,9 @@ function windowOptions(): Electron.BrowserWindowConstructorOptions {
     titleBarStyle: "hidden",
     titleBarOverlay: overlay,
     backgroundColor,
+    // Without this Electron still draws the menu-bar row in the client
+    // area despite the hidden title bar; Alt reveals it on demand.
+    autoHideMenuBar: true,
   };
 }
 
