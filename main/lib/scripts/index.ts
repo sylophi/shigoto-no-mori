@@ -28,6 +28,7 @@ import { userInfo } from "node:os";
 import { promisify } from "node:util";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
+import { isWindows } from "../util/platform";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -35,8 +36,6 @@ import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
 const execFileP = promisify(execFile);
-
-const isWindows = process.platform === "win32";
 
 const DEFAULT_GRACE_MS = 3_000;
 
@@ -329,13 +328,20 @@ export function startScript(args: RunArgs): string {
   // POSIX: login shell wrapping via resolveShell, and `detached` so the
   // new session's pgid === child.pid, which lets the kill path signal the
   // whole tree via process.kill(-pid, sig).
-  const { command: shellCmd, args: shellArgs } = resolveShell();
-  const child: ChildProcess = isWindows
-    ? spawn(args.command, [], { ...spawnBase, shell: true, windowsHide: true })
-    : spawn(shellCmd, [...shellArgs, args.command], {
-        ...spawnBase,
-        detached: true,
-      });
+  let child: ChildProcess;
+  if (isWindows) {
+    child = spawn(args.command, [], {
+      ...spawnBase,
+      shell: true,
+      windowsHide: true,
+    });
+  } else {
+    const { command: shellCmd, args: shellArgs } = resolveShell();
+    child = spawn(shellCmd, [...shellArgs, args.command], {
+      ...spawnBase,
+      detached: true,
+    });
+  }
 
   if (!child.pid) {
     // spawn failed before a process existed (missing shell binary,

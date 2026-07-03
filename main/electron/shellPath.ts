@@ -6,6 +6,7 @@
 import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
+import { isWindows } from "../lib/util/platform";
 
 const execFileP = promisify(execFile);
 
@@ -15,7 +16,7 @@ export async function applyUserShellPath(): Promise<void> {
   // Windows GUI apps inherit the user's full PATH from the registry-backed
   // environment; there is no login-shell profile to source, so this whole
   // capture is a POSIX-only concern.
-  if (process.platform === "win32") return;
+  if (isWindows) return;
   const shell = process.env["SHELL"] ?? userInfo().shell ?? null;
   if (!shell) return;
   try {

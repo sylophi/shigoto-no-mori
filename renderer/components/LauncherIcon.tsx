@@ -1,7 +1,8 @@
 // Maps a launcher entry to the right brand asset. Apple- and vendor-provided
 // app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
 // each app's bundle; the rest fall back to svgl SVGs.
-import { FolderOpen, Sparkles, SquareTerminal } from "lucide-react";
+import { Sparkles, SquareTerminal } from "lucide-react";
+import { FileManagerIcon } from "@/components/ui/file-manager";
 import { GithubMark } from "@/components/ui/svgs/github-mark";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
@@ -14,7 +15,6 @@ import antigravityIconUrl from "@/app-icons/antigravity.png";
 import claudeIconUrl from "@/app-icons/claude.png";
 import codexIconUrl from "@/app-icons/codex.png";
 import cursorIconUrl from "@/app-icons/cursor.png";
-import finderIconUrl from "@/app-icons/finder.png";
 import ghosttyIconUrl from "@/app-icons/ghostty.png";
 import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
 import itermIconUrl from "@/app-icons/iterm.png";
@@ -70,11 +70,11 @@ export function LauncherIcon({
       return <AppIcon src={githubDesktopIconUrl} className={className} />;
     case "xcode":
       return <AppIcon src={xcodeIconUrl} className={className} />;
+    // Finder detects only on macOS and Explorer only on Windows, so both
+    // render whatever FileManagerIcon says the OS file manager looks like.
     case "finder":
-      return <AppIcon src={finderIconUrl} className={className} />;
-    // Windows-only launchers; no bundled brand asset, lucide stands in.
     case "explorer":
-      return <FolderOpen className={className} />;
+      return <FileManagerIcon className={className} />;
     case "windows-terminal":
       return <SquareTerminal className={className} />;
     case "antigravity":

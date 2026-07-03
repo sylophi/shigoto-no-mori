@@ -4,10 +4,11 @@
 // here too. Windows GUI apps inherit the full user PATH already.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { isWindows } from "./platform";
 
 const execFileP = promisify(execFile);
 
-const PROBE = process.platform === "win32" ? "where" : "which";
+const PROBE = isWindows ? "where" : "which";
 
 export async function binaryOnPath(name: string): Promise<boolean> {
   try {

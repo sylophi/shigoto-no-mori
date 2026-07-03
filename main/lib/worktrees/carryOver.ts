@@ -5,6 +5,7 @@ import { cp, mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CarryOverEntry, CarryOverFailure } from "@shared/schemas";
 import { appendExcludes } from "../git/exclude";
+import { isWindows } from "../util/platform";
 
 export interface CarryOverResult {
   applied: number;
@@ -44,7 +45,7 @@ async function applyOne(
       // Developer Mode; the EPERM below explains that instead of leaking
       // a bare errno.
       const winType = srcIsDir ? "junction" : "file";
-      await symlink(src, dst, process.platform === "win32" ? winType : null);
+      await symlink(src, dst, isWindows ? winType : null);
       // Only directory symlinks need to be hidden from git: `git diff
       // --no-index` tries to recurse through the link and errors, leaving
       // the file with a "1 file changed" count but a blank diff body.
@@ -67,11 +68,7 @@ async function applyOne(
         excludePath: null,
       };
     }
-    if (
-      code === "EPERM" &&
-      entry.mode === "symlink" &&
-      process.platform === "win32"
-    ) {
+    if (code === "EPERM" && entry.mode === "symlink" && isWindows) {
       return {
         failure: {
           path: entry.path,

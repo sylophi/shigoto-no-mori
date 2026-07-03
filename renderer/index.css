@@ -129,15 +129,17 @@
   /*
    * Windows has no vibrancy material behind the transparent sidebar, so
    * the sidebar paints its own opaque surface: a quiet neutral a step
-   * off the main pane's background, echoing the macOS sidebar contrast.
-   * The translucent accent/hover tokens above read fine on these too.
+   * off the main pane's background (white / neutral-900), echoing the
+   * macOS sidebar contrast. The translucent accent/hover tokens above
+   * read fine on these too. The window shell behind these surfaces is
+   * colored in main/index.ts (windowsChromeColors) -- keep the two in
+   * the same family when tuning.
    */
   [data-platform="win32"] [data-sidebar] {
     background: var(--color-neutral-100);
   }
-  .dark[data-platform="win32"] [data-sidebar],
   [data-platform="win32"].dark [data-sidebar] {
-    background: oklch(0.205 0 0);
+    background: oklch(0.235 0 0);
   }
 }
 

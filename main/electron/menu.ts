@@ -162,15 +162,22 @@ export function buildAppMenu(): void {
           accelerator: "CmdOrCtrl+Shift+P",
           click: clickBroadcast(paletteContract, "toggle", undefined),
         },
-        // Hidden synonym so ⌘P also opens the palette. Electron keeps the
-        // accelerator live for hidden items on macOS only; other platforms
-        // get a renderer-side Ctrl+P listener in CommandPalette.tsx.
-        {
-          label: "Command palette (alt)",
-          accelerator: "CmdOrCtrl+P",
-          visible: false,
-          click: clickBroadcast(paletteContract, "toggle", undefined),
-        },
+        // Hidden synonym so ⌘P also opens the palette. Electron only keeps
+        // accelerators live for hidden items on macOS, and on other
+        // platforms the behavior is inconsistent -- so the item exists
+        // only on mac, and everywhere else the renderer's Ctrl+P listener
+        // in CommandPalette.tsx owns the shortcut outright (no double
+        // handling).
+        ...(isMac
+          ? ([
+              {
+                label: "Command palette (alt)",
+                accelerator: "CmdOrCtrl+P",
+                visible: false,
+                click: clickBroadcast(paletteContract, "toggle", undefined),
+              },
+            ] satisfies MenuItemConstructorOptions[])
+          : []),
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },

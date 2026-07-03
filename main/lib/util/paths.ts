@@ -3,6 +3,7 @@
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { isWindows } from "./platform";
 
 let cachedRoot: string | null = null;
 
@@ -29,9 +30,9 @@ export function shigomoriRoot(): string {
 
 export function expandHome(path: string): string {
   if (path === "~") return homedir();
-  // Accept both separator styles after "~" so Windows users typing
-  // `~\projects` get the same expansion as `~/projects`.
-  if (path.startsWith("~/") || path.startsWith("~\\")) {
+  // On Windows both separator styles work after "~"; on POSIX a
+  // backslash is an ordinary filename character, not a separator.
+  if (path.startsWith("~/") || (isWindows && path.startsWith("~\\"))) {
     return join(homedir(), path.slice(2));
   }
   return path;
@@ -43,7 +44,7 @@ export function expandHome(path: string): string {
 // sides fold separators and case before comparing. Identity on POSIX,
 // where backslash is a legal filename character and case matters.
 export function comparablePath(path: string): string {
-  if (process.platform !== "win32") return path;
+  if (!isWindows) return path;
   return path.replaceAll("\\", "/").toLowerCase();
 }
 

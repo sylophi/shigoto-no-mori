@@ -27,7 +27,8 @@ export function CommandPalette() {
         e.ctrlKey &&
         !e.shiftKey &&
         !e.altKey &&
-        !e.metaKey
+        !e.metaKey &&
+        !e.repeat
       ) {
         e.preventDefault();
         toggle();

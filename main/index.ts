@@ -20,6 +20,7 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { initShigomoriRoot } from "./lib/util/paths";
+import { isWindows } from "./lib/util/platform";
 import { applyUserShellPath } from "./electron/shellPath";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
@@ -46,13 +47,13 @@ registerIpcHandlers();
 
 let mainWindow: BrowserWindow | null = null;
 
-const isWindowsOS = process.platform === "win32";
-
 // Windows chrome colors follow the effective theme (nativeTheme already
 // reflects the in-app choice via themeSource). The window background
 // matches the renderer's `--background` tokens (white / neutral-900) so
 // resize flashes blend in, and the title-bar overlay hosting the caption
-// buttons matches the main pane it floats above.
+// buttons matches the main pane it floats above. The sidebar surface on
+// top of this shell is painted by renderer/index.css (the
+// data-platform="win32" block) -- keep the two in the same family.
 function windowsChromeColors() {
   const dark = nativeTheme.shouldUseDarkColors;
   return {
@@ -76,7 +77,7 @@ function windowsChromeColors() {
 // opaque and the renderer paints the sidebar surface itself (index.css
 // branches on data-platform).
 function platformWindowOptions(): Electron.BrowserWindowConstructorOptions {
-  if (isWindowsOS) {
+  if (isWindows) {
     const { backgroundColor, overlay } = windowsChromeColors();
     return {
       titleBarStyle: "hidden",
@@ -154,7 +155,7 @@ const createWindow = () => {
 // setTheme IPC flips nativeTheme.themeSource; "system" follows the OS).
 // macOS needs nothing here -- AppKit re-tints the vibrancy material on
 // its own.
-if (isWindowsOS) {
+if (isWindows) {
   nativeTheme.on("updated", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const { backgroundColor, overlay } = windowsChromeColors();

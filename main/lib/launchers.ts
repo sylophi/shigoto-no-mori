@@ -7,6 +7,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { binaryOnPath } from "./util/binaries";
+import { isWindows } from "./util/platform";
 import { ttlValueCache } from "./util/ttlCache";
 
 const exec = promisify(execFile);
@@ -14,8 +15,6 @@ const exec = promisify(execFile);
 // hand-joined `"cli" "path"` argument list, while exec's own shell
 // invocation wraps the full command line correctly.
 const execShell = promisify(execCommand);
-
-const isWindows = process.platform === "win32";
 
 export interface DetectedApp {
   id: string;

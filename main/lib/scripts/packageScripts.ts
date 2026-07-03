@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PackageManager } from "@shared/schemas";
 import { pathExists } from "../util/paths";
+import { isWindows } from "../util/platform";
 
 // Raw read of `package.json` + the package manager we'd use to run a
 // script. The IPC layer enriches this with per-script usage stats before
@@ -74,7 +75,7 @@ export async function readPackageScripts(
 // parser downstream, so those are stripped -- `"` is illegal in Windows
 // paths and script names anyway.
 export function shellQuote(s: string): string {
-  if (process.platform === "win32") {
+  if (isWindows) {
     return `"${s.replace(/"/g, "")}"`;
   }
   return `'${s.replace(/'/g, `'\\''`)}'`;
