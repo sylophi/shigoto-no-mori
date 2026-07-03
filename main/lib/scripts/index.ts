@@ -4,11 +4,16 @@
 // watchers, compilers the user's command spawns), not just the
 // wrapping shell.
 //
-// Kill strategy:
+// Kill strategy (POSIX):
 //   1. SIGTERM the process group (negative pgid) -- covers normal forks.
 //   2. Walk `ps` for any descendant still reachable via ppid (e.g.
 //      double-forked daemons) and SIGTERM those too.
 //   3. After a grace period, SIGKILL anything still alive in either set.
+//
+// Kill strategy (Windows): POSIX signals and process groups don't exist,
+// so both stages shell out to `taskkill /T`, which walks the child tree
+// itself. The first pass asks politely (WM_CLOSE -- console-only children
+// typically ignore it); after the grace period the second pass adds /F.
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
@@ -25,6 +30,8 @@ import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
 const execFileP = promisify(execFile);
+
+const isWindows = process.platform === "win32";
 
 const DEFAULT_GRACE_MS = 3_000;
 
@@ -118,13 +125,22 @@ export function markShuttingDown(): void {
   shuttingDown = true;
 }
 
-// $SHELL is reliable when launched from a terminal, but can be empty in
-// GUI launches depending on launchd state. os.userInfo().shell reads the
-// passwd entry directly. We use a *login* shell (no `-i`) so the user's
-// `.zprofile` / `.bash_profile` runs without zsh's interactive-init
-// code (job control, gitstatus, prompt setup) throwing errors at us
-// when there's no controlling TTY.
+// POSIX: $SHELL is reliable when launched from a terminal, but can be
+// empty in GUI launches depending on launchd state. os.userInfo().shell
+// reads the passwd entry directly. We use a *login* shell (no `-i`) so
+// the user's `.zprofile` / `.bash_profile` runs without zsh's
+// interactive-init code (job control, gitstatus, prompt setup) throwing
+// errors at us when there's no controlling TTY.
+//
+// Windows: cmd.exe via %ComSpec%, matching what `shell: true` would pick
+// and what npm's .cmd shims assume. `/d` skips AutoRun registry commands
+// (the cmd analog of skipping rc files), `/s` keeps quote handling sane
+// for commands that contain quoted paths.
 function resolveShell(): { command: string; args: string[] } {
+  if (isWindows) {
+    const comSpec = process.env["ComSpec"];
+    return { command: comSpec || "cmd.exe", args: ["/d", "/s", "/c"] };
+  }
   const fromEnv = process.env["SHELL"];
   if (fromEnv) return { command: fromEnv, args: ["-l", "-c"] };
   const fromPasswd = userInfo().shell;
@@ -183,10 +199,29 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
   return out;
 }
 
+// Windows tree kill. `/T` makes taskkill walk the child tree itself, so
+// no separate descendant walk is needed. SIGTERM maps to the polite pass
+// (WM_CLOSE; console-only processes typically refuse it and taskkill
+// exits nonzero, which we swallow -- the /F pass after the grace period
+// is the backstop). SIGKILL maps to /F, which cannot be refused.
+async function taskkillTree(pid: number, force: boolean): Promise<void> {
+  const args = ["/pid", String(pid), "/T"];
+  if (force) args.push("/F");
+  try {
+    await execFileP("taskkill", args, { windowsHide: true });
+  } catch {
+    // Nonzero exit: tree already gone, or graceful close was refused.
+  }
+}
+
 async function signalTree(
   record: RunRecord,
   signal: NodeJS.Signals,
 ): Promise<void> {
+  if (isWindows) {
+    await taskkillTree(record.pid, signal === "SIGKILL");
+    return;
+  }
   safeKill(-record.pid, signal);
   const descendants = await listDescendantPids(record.pid);
   for (const pid of descendants) safeKill(pid, signal);
@@ -283,9 +318,13 @@ export function startScript(args: RunArgs): string {
     // for keystrokes ("rs", "q") interpret it as "user closed the
     // terminal" and shut down, dragging the dev server with them.
     stdio: ["pipe", "pipe", "pipe"],
-    // New session = new process group with pgid === child.pid. Lets us
-    // signal the whole tree via process.kill(-pid, sig).
-    detached: true,
+    // POSIX: new session = new process group with pgid === child.pid.
+    // Lets us signal the whole tree via process.kill(-pid, sig). On
+    // Windows there are no process groups to claim -- taskkill /T walks
+    // the tree by parent pid -- and `detached` would only spawn a stray
+    // console window.
+    detached: !isWindows,
+    windowsHide: true,
   });
 
   if (!child.pid) {
@@ -434,10 +473,16 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 // still want well-behaved scripts to clean up gracefully before
 // Electron tears the main process down. Descendants that escaped the
 // group via setsid() get reparented to launchd, same as if we hadn't
-// signaled at all.
+// signaled at all. On Windows this fires taskkill /T /F without
+// awaiting it: there is no graceful signal to send, and the force kill
+// races the process exit the same way the POSIX SIGTERM does.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited) continue;
+    if (isWindows) {
+      void taskkillTree(record.pid, true);
+      continue;
+    }
     safeKill(-record.pid, signal);
   }
 }

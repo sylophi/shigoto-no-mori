@@ -67,7 +67,16 @@ export async function readPackageScripts(
 // All four package managers accept `<mgr> run <name>`. The bare alias
 // (`bun <name>`, `pnpm <name>`) works too for non-reserved names, but
 // `run` is unambiguous and matches what users normally type.
+
+// Quote one argument for the shell the script runner uses: POSIX sh
+// single-quoting, or cmd.exe double-quoting on Windows. cmd has no
+// escape for a double quote inside a quoted string that survives every
+// parser downstream, so those are stripped -- `"` is illegal in Windows
+// paths and script names anyway.
 export function shellQuote(s: string): string {
+  if (process.platform === "win32") {
+    return `"${s.replace(/"/g, "")}"`;
+  }
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
