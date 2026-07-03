@@ -12,6 +12,10 @@ const execFileP = promisify(execFile);
 const SENTINEL = "__SHIGOMORI_PATH__";
 
 export async function applyUserShellPath(): Promise<void> {
+  // Windows GUI apps inherit the user's full PATH from the registry-backed
+  // environment; there is no login-shell profile to source, so this whole
+  // capture is a POSIX-only concern.
+  if (process.platform === "win32") return;
   const shell = process.env["SHELL"] ?? userInfo().shell ?? null;
   if (!shell) return;
   try {
