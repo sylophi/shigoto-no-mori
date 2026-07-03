@@ -11,9 +11,9 @@
 //   3. After a grace period, SIGKILL anything still alive in either set.
 //
 // Kill strategy (Windows): POSIX signals and process groups don't exist,
-// so both stages shell out to `taskkill /T`, which walks the child tree
-// itself. The first pass asks politely (WM_CLOSE -- console-only children
-// typically ignore it); after the grace period the second pass adds /F.
+// and console processes have no graceful-kill channel (taskkill without
+// /F sends WM_CLOSE, which they ignore), so we go straight to
+// `taskkill /T /F` -- a forced kill of the whole tree.
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
@@ -198,17 +198,19 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
 }
 
 // Windows tree kill. `/T` makes taskkill walk the child tree itself, so
-// no separate descendant walk is needed. SIGTERM maps to the polite pass
-// (WM_CLOSE; console-only processes typically refuse it and taskkill
-// exits nonzero, which we swallow -- the /F pass after the grace period
-// is the backstop). SIGKILL maps to /F, which cannot be refused.
-async function taskkillTree(pid: number, force: boolean): Promise<void> {
-  const args = ["/pid", String(pid), "/T"];
-  if (force) args.push("/F");
+// no separate descendant walk is needed. Always `/F`: the polite
+// non-forced mode sends WM_CLOSE, which console processes (everything a
+// script spawns) ignore, so a "graceful" first pass would only burn the
+// grace period before the forced pass lands anyway. Windows has no
+// SIGTERM equivalent for console trees; forced kill is the native
+// behavior.
+async function taskkillTree(pid: number): Promise<void> {
   try {
-    await execFileP("taskkill", args, { windowsHide: true });
+    await execFileP("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      windowsHide: true,
+    });
   } catch {
-    // Nonzero exit: tree already gone, or graceful close was refused.
+    // Nonzero exit: tree already gone, or we lost ownership.
   }
 }
 
@@ -217,7 +219,8 @@ async function signalTree(
   signal: NodeJS.Signals,
 ): Promise<void> {
   if (isWindows) {
-    await taskkillTree(record.pid, signal === "SIGKILL");
+    // Both kill stages force-kill; the second pass is a no-op backstop.
+    await taskkillTree(record.pid);
     return;
   }
   safeKill(-record.pid, signal);
@@ -487,7 +490,7 @@ export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited) continue;
     if (isWindows) {
-      void taskkillTree(record.pid, true);
+      void taskkillTree(record.pid);
       continue;
     }
     safeKill(-record.pid, signal);
