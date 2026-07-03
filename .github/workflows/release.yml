@@ -145,9 +145,9 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            npm pkg set version="$VERSION"
+            pnpm pkg set version="$VERSION"
           else
-            echo "Tag '$TAG' isn't semver — leaving package.json unchanged"
+            echo "Tag '$TAG' isn't semver, leaving package.json unchanged"
           fi
 
       # Unsigned for now: Windows builds ship without Authenticode until

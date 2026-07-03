@@ -1,36 +1,35 @@
 // Path helpers for the filesystem-browse command palette mode. Ported
-// from T3 Code's projectPaths.ts, extended for Windows: pure string math
-// that accepts both separator styles and drive-letter roots, and extends
-// a path with whatever separator style it already uses so the user's
-// input never flips under them.
+// from T3 Code's projectPaths.ts. On Windows both separator styles and
+// drive-letter/UNC roots are understood, and a path is extended with the
+// separator style it already uses so the user's input never flips under
+// them. On POSIX only "/" separates -- a backslash is a legal filename
+// character there.
+import { isWindows } from "./platform";
 
-const TRAILING_SEPS = /[\\/]+$/;
-const ANY_SEP = /[\\/]/;
+const TRAILING_SEPS = isWindows ? /[\\/]+$/ : /\/+$/;
+const SPLIT_SEPS = isWindows ? /[\\/]/ : "/";
 // "C:" -- a drive designator with nothing after it (post sep-trim form
 // of the drive root "C:\").
 const DRIVE_ONLY = /^[A-Za-z]:$/;
+// "\\server" or "\\server\share" -- UNC hosts and share roots have no
+// browsable parent.
+const UNC_ROOT = /^\\\\[^\\]+(\\[^\\]+)?$/;
 
 function lastSepIndex(value: string): number {
-  return Math.max(value.lastIndexOf("/"), value.lastIndexOf("\\"));
+  const slash = value.lastIndexOf("/");
+  if (!isWindows) return slash;
+  return Math.max(slash, value.lastIndexOf("\\"));
 }
 
 // Separator to use when extending `value`: keep the style already in the
 // string (Windows paths carry backslashes), default POSIX "/".
 function sepStyle(value: string): "/" | "\\" {
-  return value.includes("\\") ? "\\" : "/";
-}
-
-export function isFilesystemBrowseQuery(value: string): boolean {
-  return (
-    value.startsWith("/") ||
-    /^~[\\/]/.test(value) ||
-    /^\.\.?[\\/]/.test(value) ||
-    /^[A-Za-z]:[\\/]/.test(value)
-  );
+  return isWindows && value.includes("\\") ? "\\" : "/";
 }
 
 export function hasTrailingSlash(value: string): boolean {
-  return ANY_SEP.test(value.slice(-1));
+  const last = value.slice(-1);
+  return last === "/" || (isWindows && last === "\\");
 }
 
 export function ensureTrailingSep(value: string): string {
@@ -58,11 +57,18 @@ export function appendBrowsePathSegment(
 export function getBrowseParentPath(currentPath: string): string | null {
   const trimmed = currentPath.replace(TRAILING_SEPS, "");
   if (trimmed === "" || trimmed === "~") return null;
-  // Drive roots ("C:\" trims to "C:") have no parent we can browse.
-  if (DRIVE_ONLY.test(trimmed)) return null;
+  if (isWindows) {
+    // Drive roots ("C:\" trims to "C:") and UNC host/share roots have no
+    // parent we can browse.
+    if (DRIVE_ONLY.test(trimmed) || UNC_ROOT.test(trimmed)) return null;
+  }
   const idx = lastSepIndex(trimmed);
   if (idx < 0) return null;
-  if (idx === 0) return "/";
+  if (idx === 0) {
+    // "/foo" parents to the POSIX root; a drive-relative "\foo" has no
+    // stable parent (it floats with the process's current drive).
+    return trimmed.startsWith("\\") ? null : "/";
+  }
   const parent = trimmed.slice(0, idx);
   // Sliced down to the drive designator: keep its separator so the
   // result stays an absolute root ("C:\"), not a drive-relative "C:".
@@ -80,14 +86,19 @@ export function normalizeForSubmit(value: string): string {
   if (trimmed.length <= 1) return trimmed;
   const stripped = trimmed.replace(TRAILING_SEPS, "");
   // Don't strip a drive root down to the drive-relative form "C:".
-  if (DRIVE_ONLY.test(stripped)) return `${stripped}${sepStyle(trimmed)}`;
+  if (isWindows && DRIVE_ONLY.test(stripped)) {
+    return `${stripped}${sepStyle(trimmed)}`;
+  }
   return stripped;
 }
 
 export function tildify(path: string, home: string | null | undefined): string {
   if (!home || !path) return path;
   if (path === home) return "~";
-  if (path.startsWith(`${home}/`) || path.startsWith(`${home}\\`)) {
+  if (
+    path.startsWith(`${home}/`) ||
+    (isWindows && path.startsWith(`${home}\\`))
+  ) {
     return `~${path.slice(home.length)}`;
   }
   return path;
@@ -108,7 +119,7 @@ export function tildifyAndShorten(
   if (tildified.length <= maxChars) return tildified;
 
   const sep = sepStyle(tildified);
-  const parts = tildified.split(ANY_SEP);
+  const parts = tildified.split(SPLIT_SEPS);
   if (parts.length < 3) return tildified;
 
   const anchor = parts[0];

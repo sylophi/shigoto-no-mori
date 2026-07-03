@@ -37,6 +37,16 @@ export function expandHome(path: string): string {
   return path;
 }
 
+// Comparison form for path equality and prefix checks. Git for Windows
+// reports paths with forward slashes ("C:/Users/…") while node's join
+// builds backslashes, and NTFS paths are case-insensitive, so both
+// sides fold separators and case before comparing. Identity on POSIX,
+// where backslash is a legal filename character and case matters.
+export function comparablePath(path: string): string {
+  if (process.platform !== "win32") return path;
+  return path.replaceAll("\\", "/").toLowerCase();
+}
+
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
   return isAbsolute(expanded) ? expanded : resolve(expanded);

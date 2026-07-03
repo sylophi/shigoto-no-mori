@@ -7,7 +7,7 @@ import { rmdir } from "node:fs/promises";
 import { basename, dirname, join, sep } from "node:path";
 import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
 import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
-import { shigomoriRoot } from "../util/paths";
+import { comparablePath, shigomoriRoot } from "../util/paths";
 
 export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
   return config?.worktreeLayout ?? "managed-root";
@@ -45,15 +45,6 @@ export function managedPrefixesFor(
       }) + sep,
     ];
   });
-}
-
-// Comparison form for prefix checks. Git for Windows reports worktree
-// paths with forward slashes ("C:/Users/…") while our computed bases use
-// backslashes, and NTFS paths are case-insensitive, so both sides fold
-// separators and case before comparing. Identity on POSIX.
-function comparablePath(p: string): string {
-  if (process.platform !== "win32") return p;
-  return p.replaceAll("\\", "/").toLowerCase();
 }
 
 export function isManagedPath(

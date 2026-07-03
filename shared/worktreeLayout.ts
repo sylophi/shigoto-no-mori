@@ -18,18 +18,29 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 ];
 
 // Dependency-free join that works in both main and the renderer (no
-// node:path). The separator follows the base path's own style: Windows
-// bases (drive letter or backslashes) extend with "\", everything else
-// with "/", so previews match what the main process will create.
+// node:path). A base counts as Windows-style only when it starts with a
+// drive designator ("C:\" / "C:/") or a UNC prefix ("\\server\...") --
+// a bare backslash elsewhere is NOT a separator signal, since it's a
+// legal filename character on POSIX. Windows bases extend with the
+// separator style they already use, so previews match what the main
+// process will create.
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
+
+function isWindowsStyle(base: string): boolean {
+  return WINDOWS_DRIVE_PREFIX.test(base) || base.startsWith("\\\\");
+}
+
 function sepFor(base: string): "/" | "\\" {
-  return /^[A-Za-z]:[\\/]/.test(base) || base.includes("\\") ? "\\" : "/";
+  return isWindowsStyle(base) && base.includes("\\") ? "\\" : "/";
 }
 
 function joinPath(base: string, ...segments: string[]): string {
+  const win = isWindowsStyle(base);
   const sep = sepFor(base);
-  let out = base.replace(/[\\/]+$/, "");
+  const sepClass = win ? /[\\/]+/ : /\/+/;
+  let out = base.replace(win ? /[\\/]+$/ : /\/+$/, "");
   for (const seg of segments) {
-    const parts = seg.split(/[\\/]+/).filter((p) => p.length > 0);
+    const parts = seg.split(sepClass).filter((p) => p.length > 0);
     for (const part of parts) out += sep + part;
   }
   return out;
@@ -52,9 +63,13 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   }
   if (layout === "custom") {
     const trimmed = customPath?.trim();
-    if (trimmed) return trimmed.replace(/[\\/]+$/, "");
+    if (trimmed) {
+      return trimmed.replace(isWindowsStyle(trimmed) ? /[\\/]+$/ : /\/+$/, "");
+    }
   }
-  const segments = projectPath.split(/[\\/]/);
+  const segments = projectPath.split(
+    isWindowsStyle(projectPath) ? /[\\/]/ : "/",
+  );
   const projectName = segments.findLast((s) => s.length > 0) ?? "";
   return joinPath(shigomoriRoot, "worktrees", projectName);
 }
