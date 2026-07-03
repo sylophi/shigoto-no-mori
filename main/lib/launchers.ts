@@ -171,6 +171,12 @@ const CATALOG: CatalogEntry[] = [
   },
   // Terminals (we go further than T3 here)
   {
+    id: "cmux",
+    label: "cmux",
+    bundleNames: ["cmux.app"],
+    cli: "cmux",
+  },
+  {
     id: "ghostty",
     label: "Ghostty",
     bundleNames: ["Ghostty.app"],
