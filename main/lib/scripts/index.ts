@@ -17,7 +17,12 @@
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFile,
+  spawn,
+  type StdioOptions,
+} from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
@@ -125,22 +130,15 @@ export function markShuttingDown(): void {
   shuttingDown = true;
 }
 
-// POSIX: $SHELL is reliable when launched from a terminal, but can be
-// empty in GUI launches depending on launchd state. os.userInfo().shell
-// reads the passwd entry directly. We use a *login* shell (no `-i`) so
-// the user's `.zprofile` / `.bash_profile` runs without zsh's
-// interactive-init code (job control, gitstatus, prompt setup) throwing
-// errors at us when there's no controlling TTY.
-//
-// Windows: cmd.exe via %ComSpec%, matching what `shell: true` would pick
-// and what npm's .cmd shims assume. `/d` skips AutoRun registry commands
-// (the cmd analog of skipping rc files), `/s` keeps quote handling sane
-// for commands that contain quoted paths.
+// POSIX shell resolution; Windows runs go through `shell: true` instead
+// (see startScript), which picks %ComSpec% and handles cmd.exe's quote
+// rules itself. $SHELL is reliable when launched from a terminal, but
+// can be empty in GUI launches depending on launchd state.
+// os.userInfo().shell reads the passwd entry directly. We use a *login*
+// shell (no `-i`) so the user's `.zprofile` / `.bash_profile` runs
+// without zsh's interactive-init code (job control, gitstatus, prompt
+// setup) throwing errors at us when there's no controlling TTY.
 function resolveShell(): { command: string; args: string[] } {
-  if (isWindows) {
-    const comSpec = process.env["ComSpec"];
-    return { command: comSpec || "cmd.exe", args: ["/d", "/s", "/c"] };
-  }
   const fromEnv = process.env["SHELL"];
   if (fromEnv) return { command: fromEnv, args: ["-l", "-c"] };
   const fromPasswd = userInfo().shell;
@@ -309,23 +307,32 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
-  const { command: shellCmd, args: shellArgs } = resolveShell();
-  const child = spawn(shellCmd, [...shellArgs, args.command], {
+  // Shared spawn options. stdin is a pipe we never write to or close:
+  // closed stdin (EOF on first read) makes tools like electron-forge and
+  // vite that listen for keystrokes ("rs", "q") interpret it as "user
+  // closed the terminal" and shut down, dragging the dev server with
+  // them.
+  const spawnBase = {
     cwd: args.worktree.path,
     env,
-    // stdin is a pipe we never write to or close. Closed stdin (EOF on
-    // first read) makes tools like electron-forge and vite that listen
-    // for keystrokes ("rs", "q") interpret it as "user closed the
-    // terminal" and shut down, dragging the dev server with them.
-    stdio: ["pipe", "pipe", "pipe"],
-    // POSIX: new session = new process group with pgid === child.pid.
-    // Lets us signal the whole tree via process.kill(-pid, sig). On
-    // Windows there are no process groups to claim -- taskkill /T walks
-    // the tree by parent pid -- and `detached` would only spawn a stray
-    // console window.
-    detached: !isWindows,
-    windowsHide: true,
-  });
+    stdio: ["pipe", "pipe", "pipe"] satisfies StdioOptions,
+  };
+  // Windows: `shell: true` runs the command through %ComSpec% (cmd.exe)
+  // with Node handling cmd's quote rules; hand-assembling the /d /s /c
+  // argument list mangles commands with quoted paths. No `detached`:
+  // there are no POSIX process groups to claim -- taskkill /T walks the
+  // tree by parent pid -- and detaching would only spawn a stray console.
+  //
+  // POSIX: login shell wrapping via resolveShell, and `detached` so the
+  // new session's pgid === child.pid, which lets the kill path signal the
+  // whole tree via process.kill(-pid, sig).
+  const { command: shellCmd, args: shellArgs } = resolveShell();
+  const child: ChildProcess = isWindows
+    ? spawn(args.command, [], { ...spawnBase, shell: true, windowsHide: true })
+    : spawn(shellCmd, [...shellArgs, args.command], {
+        ...spawnBase,
+        detached: true,
+      });
 
   if (!child.pid) {
     // spawn failed before a process existed (missing shell binary,

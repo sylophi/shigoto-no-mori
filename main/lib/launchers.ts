@@ -2,7 +2,7 @@
 // tools, check whether each is installed (macOS: .app bundle presence,
 // Windows: known install paths) OR a CLI shim on PATH, and provide a
 // `launch(target)` that opens the worktree path in the chosen target.
-import { execFile, spawn } from "node:child_process";
+import { exec as execCommand, execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
@@ -10,6 +10,10 @@ import { binaryOnPath } from "./util/binaries";
 import { ttlValueCache } from "./util/ttlCache";
 
 const exec = promisify(execFile);
+// String-form exec for Windows: cmd.exe's /s quote-stripping mangles a
+// hand-joined `"cli" "path"` argument list, while exec's own shell
+// invocation wraps the full command line correctly.
+const execShell = promisify(execCommand);
 
 const isWindows = process.platform === "win32";
 
@@ -339,10 +343,8 @@ function spawnDetached(command: string, args: string[]): void {
 async function openUrl(url: string): Promise<void> {
   if (isWindows) {
     // `start` is a cmd.exe builtin; the empty string is the window title
-    // slot so the URL isn't mistaken for it.
-    await exec("cmd.exe", ["/d", "/s", "/c", `start "" "${url}"`], {
-      windowsVerbatimArguments: true,
-    });
+    // slot so the URL isn't mistaken for it. URLs never contain `"`.
+    await execShell(`start "" "${url}"`);
     return;
   }
   await exec("open", [url]);
@@ -367,11 +369,10 @@ async function openWithBundle(
 async function openWithCli(cli: string, worktreePath: string): Promise<void> {
   // Windows CLI shims are mostly `.cmd` batch wrappers (code.cmd,
   // cursor.cmd, JetBrains Toolbox scripts); execFile can't run those
-  // directly, so route through the shell with explicit quoting.
+  // directly, so route through the shell. Quotes are illegal in Windows
+  // paths, so plain wrapping is sufficient.
   if (isWindows) {
-    await exec("cmd.exe", ["/d", "/s", "/c", `"${cli}" "${worktreePath}"`], {
-      windowsVerbatimArguments: true,
-    });
+    await execShell(`"${cli}" "${worktreePath}"`);
     return;
   }
   await exec(cli, [worktreePath]);
