@@ -37,26 +37,65 @@ registerIpcHandlers();
 
 let mainWindow: BrowserWindow | null = null;
 
+const isWindowsOS = process.platform === "win32";
+
+// Windows chrome colors follow the effective theme (nativeTheme already
+// reflects the in-app choice via themeSource). The window background
+// matches the renderer's `--background` tokens (white / neutral-900) so
+// resize flashes blend in, and the title-bar overlay hosting the caption
+// buttons matches the main pane it floats above.
+function windowsChromeColors() {
+  const dark = nativeTheme.shouldUseDarkColors;
+  return {
+    backgroundColor: dark ? "#171717" : "#ffffff",
+    overlay: {
+      color: dark ? "#171717" : "#ffffff",
+      symbolColor: dark ? "#fafafa" : "#171717",
+      // Matches the h-7 drag strip the renderer lays across the top of
+      // the main pane, so the caption buttons and the draggable band
+      // form one continuous title-bar area.
+      height: 28,
+    },
+  };
+}
+
+// macOS: inset traffic lights over a transparent shell so the
+// NSVisualEffectView material set via `vibrancy` shows through where the
+// renderer paints no background (the sidebar column). Windows: hidden
+// title bar with native caption buttons overlaid top-right; there is no
+// vibrancy equivalent that can follow the in-app theme, so the window is
+// opaque and the renderer paints the sidebar surface itself (index.css
+// branches on data-platform).
+function platformWindowOptions(): Electron.BrowserWindowConstructorOptions {
+  if (isWindowsOS) {
+    const { backgroundColor, overlay } = windowsChromeColors();
+    return {
+      titleBarStyle: "hidden",
+      titleBarOverlay: overlay,
+      backgroundColor,
+    };
+  }
+  return {
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
+  };
+}
+
 const createWindow = () => {
-  // Drive AppKit appearance from the saved theme before constructing
-  // the window so the NSVisualEffectView material under `vibrancy`
-  // picks the right light/dark variant on first paint. Without this,
-  // vibrancy stays glued to the OS appearance regardless of the in-app
-  // theme; a value of "system" delegates back to the OS.
+  // Drive the native appearance from the saved theme before constructing
+  // the window so the macOS vibrancy material (or the Windows chrome
+  // colors) picks the right light/dark variant on first paint. A value
+  // of "system" delegates back to the OS.
   nativeTheme.themeSource = readThemeSync();
   mainWindow = new BrowserWindow({
     width: 920,
     height: 600,
     minWidth: 640,
     minHeight: 420,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
-    // Transparent shell so the macOS NSVisualEffectView material set via
-    // `vibrancy` shows through the regions where the renderer paints no
-    // background (currently just the sidebar column).
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
+    ...platformWindowOptions(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -101,6 +140,19 @@ const createWindow = () => {
 
   attachContextMenu(mainWindow);
 };
+
+// Keep the Windows chrome in sync with theme changes (the renderer's
+// setTheme IPC flips nativeTheme.themeSource; "system" follows the OS).
+// macOS needs nothing here -- AppKit re-tints the vibrancy material on
+// its own.
+if (isWindowsOS) {
+  nativeTheme.on("updated", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const { backgroundColor, overlay } = windowsChromeColors();
+    mainWindow.setBackgroundColor(backgroundColor);
+    mainWindow.setTitleBarOverlay(overlay);
+  });
+}
 
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start

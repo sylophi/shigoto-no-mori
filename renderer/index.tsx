@@ -9,10 +9,16 @@ import {
 } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
+import { platform } from "./lib/platform";
 import { notifyError } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
+
+// Tag the document with the OS so index.css can branch window-chrome
+// styling (e.g. the sidebar paints an opaque surface on Windows where
+// there's no vibrancy material behind it).
+document.documentElement.dataset["platform"] = platform;
 
 // Single global subscriptions: events arrive whether or not any
 // component is mounted (e.g. carry-over failure toast must fire even
