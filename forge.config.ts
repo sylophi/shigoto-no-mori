@@ -27,6 +27,18 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
 const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY);
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
+// Target platform of this build: the host by default, overridden by
+// `--platform win32` / `--platform=win32` when cross-packaging (e.g.
+// building a Windows test app from macOS to run under CrossOver).
+function targetPlatform(): string {
+  const eq = process.argv.find((a) => a.startsWith("--platform="));
+  if (eq) return eq.slice("--platform=".length);
+  const idx = process.argv.indexOf("--platform");
+  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
+  return process.platform;
+}
+const isWindowsTarget = targetPlatform() === "win32";
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -37,10 +49,9 @@ const config: ForgeConfig = {
     // Squirrel.Windows tooling (Update.exe --processStart shortcut
     // targets, nupkg packing) has a long history of breaking on spaces
     // in the exe name, so Windows builds get a space-free executable.
-    // Scoped to win32 so the macOS bundle keeps its productName binary.
-    ...(process.platform === "win32"
-      ? { executableName: "shigoto-no-mori" }
-      : {}),
+    // Scoped to win32 targets so the macOS bundle keeps its productName
+    // binary.
+    ...(isWindowsTarget ? { executableName: "shigoto-no-mori" } : {}),
     ...(shouldSignMac
       ? {
           osxSign: {
