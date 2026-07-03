@@ -15,6 +15,7 @@ import { useFsListEntries } from "@/hooks/fs/useFsListEntries";
 import { useIgnoredPaths } from "@/hooks/projects/useIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
+import { makeIgnoreMatcher } from "@shared/gitPaths";
 import type { CarryOverEntry, FsEntry } from "@shared/schemas";
 import { PickerRow } from "./PickerRow";
 
@@ -22,32 +23,19 @@ interface CarryOverPickerModalProps {
   projectId: string;
   projectPath: string;
   selectedPaths: Set<string>;
+  // True when .worktreeinclude already copies the path into every new
+  // worktree, so offering a manual entry would be futile (it gets
+  // auto-removed at the next creation).
+  isCovered: (relative: string) => boolean;
   onPick: (entry: CarryOverEntry) => void;
   onClose: () => void;
-}
-
-// A path is gitignored if it appears in the leaf list directly, if its
-// directory form (path + "/") does, or if any ancestor folder is a fully
-// ignored directory (entry with trailing slash). Mirrors how `git
-// check-ignore` resolves nested paths against `--directory` output.
-function makeIgnoreMatcher(paths: string[]): (relative: string) => boolean {
-  const set = new Set(paths);
-  return (relative) => {
-    if (!relative) return false;
-    if (set.has(relative)) return true;
-    if (set.has(`${relative}/`)) return true;
-    const parts = relative.split("/");
-    for (let i = 1; i < parts.length; i++) {
-      if (set.has(`${parts.slice(0, i).join("/")}/`)) return true;
-    }
-    return false;
-  };
 }
 
 export function CarryOverPickerModal({
   projectId,
   projectPath,
   selectedPaths,
+  isCovered,
   onPick,
   onClose,
 }: CarryOverPickerModalProps) {
@@ -235,6 +223,7 @@ export function CarryOverPickerModal({
                   key={entry.name}
                   entry={entry}
                   added={added}
+                  covered={isCovered(relative)}
                   ignored={ignored}
                   index={idx}
                   highlighted={idx === highlightedIdx}

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeRelPath } from "../gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 
@@ -16,16 +17,9 @@ export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 // worktrees. `path` is relative to the project root; gitignored entries are
 // the expected source. `symlink` keeps state shared; `copy` snapshots.
 export const CarryOverEntrySchema = z.object({
-  path: z
-    .string()
-    .min(1)
-    .refine(
-      (p) =>
-        !p.startsWith("/") &&
-        !p.split(/[\\/]/).includes("..") &&
-        !p.includes("\0"),
-      { message: "Path must stay within the project root" },
-    ),
+  path: z.string().min(1).refine(isSafeRelPath, {
+    message: "Path must stay within the project root",
+  }),
   mode: z.enum(["copy", "symlink"]),
 });
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
@@ -60,6 +54,9 @@ export const ShigomoriConfigSchema = z.object({
   portBase: z.number().int().positive().optional(),
   defaultBranch: z.string().min(1),
   carryOver: z.array(CarryOverEntrySchema).optional(),
+  // When false, the repo's .worktreeinclude file is ignored at worktree
+  // creation. Absent = enabled (the integration is opt-out).
+  useWorktreeInclude: z.boolean().optional(),
   worktreeLayout: WorktreeLayoutSchema.optional(),
   // Absolute path; only meaningful when worktreeLayout === "custom".
   customWorktreePath: z.string().optional(),
@@ -70,6 +67,19 @@ export const ShigomoriConfigSchema = z.object({
   lastMergeMethod: MergeMethodSchema.optional(),
 });
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
+
+// Snapshot of the repo's .worktreeinclude file (Claude Code convention:
+// gitignore-syntax patterns whose gitignored matches are copied into new
+// worktrees). Read-only from the app's side; the file belongs to the repo.
+export const WorktreeIncludeStatusSchema = z.object({
+  fileExists: z.boolean(),
+  // Raw pattern lines, blank and comment lines dropped, for display.
+  patterns: z.array(z.string()),
+  // Paths the patterns currently resolve to (matched AND gitignored),
+  // trailing slashes stripped. Empty when resolution fails.
+  resolvedPaths: z.array(z.string()),
+});
+export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
 // external worktrees deliberately have no on-disk state.

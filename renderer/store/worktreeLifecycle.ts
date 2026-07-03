@@ -15,7 +15,20 @@ type WorktreesApi = Pick<
   "onLifecyclePhase" | "onCarryOverComplete"
 >;
 
-type WarnFn = (title: string, options?: { description?: string }) => unknown;
+type NotifyFn = (title: string, options?: { description?: string }) => unknown;
+
+interface StartDeps {
+  // Fired when main auto-removed manual carry-over entries because
+  // .worktreeinclude now covers them, so caches over project.json can be
+  // invalidated.
+  onCarryOverReconciled?: (projectId: string) => void;
+}
+
+function clippedLines(lines: string[], max: number): string {
+  const shown = lines.slice(0, max);
+  const more = lines.length - shown.length;
+  return shown.join("\n") + (more > 0 ? `\n...and ${more} more` : "");
+}
 
 class WorktreeLifecycleStore {
   private phases = new Map<string, CreatePhase>();
@@ -23,28 +36,47 @@ class WorktreeLifecycleStore {
   private unsubscribePhase: (() => void) | null = null;
   private unsubscribeCarryOver: (() => void) | null = null;
   private api: WorktreesApi;
-  private warn: WarnFn;
+  private warn: NotifyFn;
+  private info: NotifyFn;
+  private onCarryOverReconciled: ((projectId: string) => void) | null = null;
 
-  constructor(api: WorktreesApi, warn: WarnFn) {
+  constructor(api: WorktreesApi, warn: NotifyFn, info: NotifyFn) {
     this.api = api;
     this.warn = warn;
+    this.info = info;
   }
 
-  start(): void {
+  start(deps?: StartDeps): void {
     if (this.unsubscribePhase) return;
+    this.onCarryOverReconciled = deps?.onCarryOverReconciled ?? null;
     this.unsubscribePhase = this.api.onLifecyclePhase((evt) => {
       this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
     });
     this.unsubscribeCarryOver = this.api.onCarryOverComplete((evt) => {
+      const removed = evt.removedCarryOverPaths ?? [];
+      if (removed.length > 0) {
+        this.onCarryOverReconciled?.(evt.projectId);
+        this.info(
+          `.worktreeinclude replaced ${removed.length} carry-over ${
+            removed.length === 1 ? "entry" : "entries"
+          }`,
+          {
+            description:
+              "The repo's .worktreeinclude file now covers these paths, so " +
+              "their manual carry-over entries were removed:\n" +
+              clippedLines(removed, 4),
+          },
+        );
+      }
       const { applied, failures } = evt.report;
       if (failures.length === 0) return;
-      const lines = failures.slice(0, 4).map((f) => `${f.path}: ${f.reason}`);
-      const more = failures.length - lines.length;
       this.warn(
         `Carried over ${applied} of ${applied + failures.length} entries`,
         {
-          description:
-            lines.join("\n") + (more > 0 ? `\n...and ${more} more` : ""),
+          description: clippedLines(
+            failures.map((f) => `${f.path}: ${f.reason}`),
+            4,
+          ),
         },
       );
     });
@@ -101,6 +133,7 @@ class WorktreeLifecycleStore {
 export const worktreeLifecycle = new WorktreeLifecycleStore(
   window.api.worktrees,
   (title, options) => toast.warning(title, options),
+  (title, options) => toast.info(title, options),
 );
 
 export function useWorktreeCreatePhase(worktreeId: string): CreatePhase | null {

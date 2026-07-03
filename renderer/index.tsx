@@ -9,16 +9,17 @@ import {
 } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
+import { queryKeys } from "./lib/queryKeys";
 import { notifyError } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
 
-// Single global subscriptions: events arrive whether or not any
+// Single global subscription: events arrive whether or not any
 // component is mounted (e.g. carry-over failure toast must fire even
 // if the user navigated away from the new worktree's detail page).
+// worktreeLifecycle.start() needs queryClient and moves below it.
 scriptRuns.start();
-worktreeLifecycle.start();
 
 // React Query's default focus listener subscribes to `window.focus` and
 // `visibilitychange`, but those don't fire on every Electron focus
@@ -79,6 +80,19 @@ const queryClient = new QueryClient({
       notifyError(mutation.meta?.errorTitle ?? "Something went wrong", err);
     },
   }),
+});
+
+// Main rewrote project.json (carry-over entries removed in favor of
+// .worktreeinclude); drop the caches that mirror it so open views refresh.
+worktreeLifecycle.start({
+  onCarryOverReconciled: (projectId) => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.shigomoriConfig(projectId),
+    });
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.worktreeIncludeStatus(projectId),
+    });
+  },
 });
 
 const rootElement = document.getElementById("root");

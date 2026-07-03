@@ -7,6 +7,9 @@ import type { CarryOverEntry, FsEntry } from "@shared/schemas";
 interface PickerRowProps {
   entry: FsEntry;
   added: boolean;
+  // .worktreeinclude already copies this path into every new worktree; a
+  // manual entry would be auto-removed at the next creation.
+  covered: boolean;
   ignored: boolean;
   index: number;
   highlighted: boolean;
@@ -18,6 +21,7 @@ interface PickerRowProps {
 export function PickerRow({
   entry,
   added,
+  covered,
   ignored,
   index,
   highlighted,
@@ -54,6 +58,13 @@ export function PickerRow({
       </span>
       {added ? (
         <span className="px-2 text-[11px] text-muted-foreground">Added</span>
+      ) : covered ? (
+        <span
+          className="px-2 text-[11px] text-amber-600 dark:text-amber-400"
+          title=".worktreeinclude already copies this path into every new worktree."
+        >
+          covered
+        </span>
       ) : ignored ? (
         <div
           className="inline-flex items-center gap-1"

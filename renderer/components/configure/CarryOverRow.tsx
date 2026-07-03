@@ -8,6 +8,9 @@ import { ModePicker } from "./ModePicker";
 interface CarryOverRowProps {
   entry: CarryOverEntry;
   projectPath: string;
+  // .worktreeinclude already covers this path; the entry will be
+  // auto-removed the next time a worktree is created.
+  covered?: boolean;
   onChangeMode: (mode: CarryOverEntry["mode"]) => void;
   onRemove: () => void;
 }
@@ -15,6 +18,7 @@ interface CarryOverRowProps {
 export function CarryOverRow({
   entry,
   projectPath,
+  covered = false,
   onChangeMode,
   onRemove,
 }: CarryOverRowProps) {
@@ -45,6 +49,14 @@ export function CarryOverRow({
           >
             <AlertTriangle className="size-3" />
             missing
+          </span>
+        )}
+        {covered && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+            title=".worktreeinclude now covers this path; this entry will be removed the next time a worktree is created."
+          >
+            covered
           </span>
         )}
       </span>

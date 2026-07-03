@@ -178,6 +178,9 @@ export type WorktreeLifecyclePhase = z.infer<
 export const WorktreeCarryOverCompleteSchema =
   WorktreeScopedPayloadSchema.extend({
     report: CarryOverReportSchema,
+    // Manual carry-over entries auto-removed because .worktreeinclude now
+    // covers them. Absent when reconciliation removed nothing.
+    removedCarryOverPaths: z.array(z.string()).optional(),
   });
 export type WorktreeCarryOverComplete = z.infer<
   typeof WorktreeCarryOverCompleteSchema
