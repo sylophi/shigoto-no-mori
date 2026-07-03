@@ -10,7 +10,7 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 Note: This project is still early and in active development. We offer macOS Apple Silicon builds and Windows builds (Squirrel installer, currently unsigned, so SmartScreen will warn on first run).
 
-On Windows, Git for Windows must be installed and on PATH. Symlink-mode carry-over entries for single files need Developer Mode enabled (directory entries use junctions and work everywhere); copy mode always works.
+On Windows, Git for Windows must be installed and on PATH. Symlink-mode carry-over entries need Developer Mode enabled (Settings > System > For developers); copy mode always works. For development on Windows, use `pnpm run start:win` (the plain `start` script depends on the macOS-only port-pool tool).
 
 ## License
 

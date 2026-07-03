@@ -34,6 +34,13 @@ const config: ForgeConfig = {
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
     extraResource: ["resources/licenses"],
+    // Squirrel.Windows tooling (Update.exe --processStart shortcut
+    // targets, nupkg packing) has a long history of breaking on spaces
+    // in the exe name, so Windows builds get a space-free executable.
+    // Scoped to win32 so the macOS bundle keeps its productName binary.
+    ...(process.platform === "win32"
+      ? { executableName: "shigoto-no-mori" }
+      : {}),
     ...(shouldSignMac
       ? {
           osxSign: {
@@ -64,6 +71,9 @@ const config: ForgeConfig = {
     // `windowsSign` once a certificate exists.
     new MakerSquirrel(
       {
+        // Required nuspec metadata; electron-winstaller errors out when
+        // neither this nor package.json's author is set.
+        authors: "sylophi",
         setupIcon: "assets/icon.ico",
         // Shown in Add/Remove Programs; must be a URL, not a local path.
         iconUrl:

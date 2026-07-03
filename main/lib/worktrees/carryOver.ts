@@ -38,20 +38,30 @@ async function applyOne(
     await mkdir(dirname(dst), { recursive: true });
     if (entry.mode === "symlink") {
       // Absolute target so the link survives moving the worktree dir
-      // around. On Windows, directory links are junctions: real symlinks
-      // need admin rights or Developer Mode, junctions need neither and
-      // behave the same for our always-absolute, always-local targets.
-      // File symlinks have no such fallback, so those still require
-      // Developer Mode; the EPERM below explains that instead of leaking
-      // a bare errno.
-      const winType = srcIsDir ? "junction" : "file";
+      // around. On Windows these are real symlinks (type "dir"/"file"),
+      // which require Developer Mode -- NOT junctions, even though those
+      // need no privilege: Git for Windows treats junction reparse
+      // points as plain directories in several recursive-delete paths,
+      // so a `git worktree remove --force` or `git clean -dfx` could
+      // recurse THROUGH the junction and wipe the linked source in the
+      // main checkout. Real symlinks are recognized as links and only
+      // ever unlinked. The EPERM mapping below explains the Developer
+      // Mode requirement instead of leaking a bare errno.
+      const winType = srcIsDir ? "dir" : "file";
       await symlink(src, dst, isWindows ? winType : null);
       // Only directory symlinks need to be hidden from git: `git diff
       // --no-index` tries to recurse through the link and errors, leaving
       // the file with a "1 file changed" count but a blank diff body.
       // File symlinks render fine as a `120000` patch, so we leave them
-      // visible as ordinary uncommitted changes.
-      return { failure: null, excludePath: srcIsDir ? entry.path : null };
+      // visible as ordinary uncommitted changes. Exclude patterns must
+      // use git's forward-slash form even when the config entry was
+      // written with backslashes on Windows.
+      const excludePath = srcIsDir
+        ? isWindows
+          ? entry.path.replaceAll("\\", "/")
+          : entry.path
+        : null;
+      return { failure: null, excludePath };
     }
     // force:false makes cp throw EEXIST instead of overwriting files git
     // just laid down (the branch already tracks them).
@@ -73,7 +83,7 @@ async function applyOne(
         failure: {
           path: entry.path,
           reason:
-            "Creating file symlinks on Windows requires Developer Mode; " +
+            "Creating symlinks on Windows requires Developer Mode; " +
             "enable it in Windows Settings or switch this entry to copy",
         },
         excludePath: null,
