@@ -13,6 +13,7 @@ import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import antigravityIconUrl from "@/app-icons/antigravity.png";
 import claudeIconUrl from "@/app-icons/claude.png";
+import cmuxIconUrl from "@/app-icons/cmux.png";
 import codexIconUrl from "@/app-icons/codex.png";
 import cursorIconUrl from "@/app-icons/cursor.png";
 import ghosttyIconUrl from "@/app-icons/ghostty.png";
@@ -60,6 +61,8 @@ export function LauncherIcon({
       return <AppIcon src={vscodeInsidersIconUrl} className={className} />;
     case "zed":
       return <AppIcon src={zedIconUrl} className={className} />;
+    case "cmux":
+      return <AppIcon src={cmuxIconUrl} className={className} />;
     case "ghostty":
       return <AppIcon src={ghosttyIconUrl} className={className} />;
     case "terminal":
