@@ -1,7 +1,7 @@
 // Maps a launcher entry to the right brand asset. Apple- and vendor-provided
 // app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
 // each app's bundle; the rest fall back to svgl SVGs.
-import { Sparkles } from "lucide-react";
+import { FolderOpen, Sparkles, SquareTerminal } from "lucide-react";
 import { GithubMark } from "@/components/ui/svgs/github-mark";
 import { Intellijidea } from "@/components/ui/svgs/intellijidea";
 import { JetbrainsSolid } from "@/components/ui/svgs/jetbrains-solid";
@@ -72,6 +72,11 @@ export function LauncherIcon({
       return <AppIcon src={xcodeIconUrl} className={className} />;
     case "finder":
       return <AppIcon src={finderIconUrl} className={className} />;
+    // Windows-only launchers; no bundled brand asset, lucide stands in.
+    case "explorer":
+      return <FolderOpen className={className} />;
+    case "windows-terminal":
+      return <SquareTerminal className={className} />;
     case "antigravity":
       return <AppIcon src={antigravityIconUrl} className={className} />;
     case "codex":
