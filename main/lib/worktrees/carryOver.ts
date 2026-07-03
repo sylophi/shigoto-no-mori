@@ -53,15 +53,9 @@ async function applyOne(
       // --no-index` tries to recurse through the link and errors, leaving
       // the file with a "1 file changed" count but a blank diff body.
       // File symlinks render fine as a `120000` patch, so we leave them
-      // visible as ordinary uncommitted changes. Exclude patterns must
-      // use git's forward-slash form even when the config entry was
-      // written with backslashes on Windows.
-      const excludePath = srcIsDir
-        ? isWindows
-          ? entry.path.replaceAll("\\", "/")
-          : entry.path
-        : null;
-      return { failure: null, excludePath };
+      // visible as ordinary uncommitted changes. appendExcludes folds
+      // Windows separators into git's forward-slash pattern form itself.
+      return { failure: null, excludePath: srcIsDir ? entry.path : null };
     }
     // force:false makes cp throw EEXIST instead of overwriting files git
     // just laid down (the branch already tracks them).

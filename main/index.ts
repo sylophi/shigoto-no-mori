@@ -20,6 +20,7 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { initShigomoriRoot } from "./lib/util/paths";
+import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
 import { applyUserShellPath } from "./electron/shellPath";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
@@ -35,6 +36,16 @@ import {
 // booting the app. No-op (false) everywhere but Windows.
 if (squirrelStartup) {
   app.quit();
+}
+
+// Match the AppUserModelID Squirrel stamps on the Start-menu shortcut
+// (com.squirrel.<nuget id>.<exe name>; the maker rewrites the package
+// name's hyphens to underscores for the nuget id). Without this the
+// running window doesn't group with the pinned shortcut on the taskbar.
+// Verify against the shortcut's properties if the packaging ever
+// changes.
+if (isWindows) {
+  app.setAppUserModelId("com.squirrel.shigoto_no_mori.shigoto-no-mori");
 }
 
 initShigomoriRoot(app.isPackaged);

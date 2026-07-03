@@ -132,8 +132,8 @@
    * off the main pane's background (white / neutral-900), echoing the
    * macOS sidebar contrast. The translucent accent/hover tokens above
    * read fine on these too. The window shell behind these surfaces is
-   * colored in main/index.ts (windowsChromeColors) -- keep the two in
-   * the same family when tuning.
+   * colored in main/electron/chrome/win32.ts (chromeColors) -- keep the
+   * two in the same family when tuning.
    */
   [data-platform="win32"] [data-sidebar] {
     background: var(--color-neutral-100);

@@ -26,7 +26,7 @@ import {
 import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
-import { expandHome } from "../../lib/util/paths";
+import { comparablePath, expandHome } from "../../lib/util/paths";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);
@@ -43,7 +43,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
 
     const existing = loadProjects();
-    if (existing.some((p) => p.path === path)) {
+    // comparablePath: the same directory can arrive as C:/x, C:\x, or
+    // different casing on Windows; one project row per directory.
+    if (existing.some((p) => comparablePath(p.path) === comparablePath(path))) {
       throw new Error(`Project already added: ${path}`);
     }
 

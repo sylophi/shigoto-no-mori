@@ -4,6 +4,7 @@
 // separator style it already uses so the user's input never flips under
 // them. On POSIX only "/" separates -- a backslash is a legal filename
 // character there.
+import { comparablePath } from "@shared/worktreeLayout";
 import { isWindows } from "./platform";
 
 const TRAILING_SEPS = isWindows ? /[\\/]+$/ : /\/+$/;
@@ -94,11 +95,16 @@ export function normalizeForSubmit(value: string): string {
 
 export function tildify(path: string, home: string | null | undefined): string {
   if (!home || !path) return path;
-  if (path === home) return "~";
-  if (
-    path.startsWith(`${home}/`) ||
-    (isWindows && path.startsWith(`${home}\\`))
-  ) {
+  // comparablePath: on Windows the path often arrives git-style
+  // ("C:/Users/…") while home is native ("C:\Users\…"); fold both so
+  // the prefix still matches. Slicing by length is safe because the
+  // folding preserves length.
+  // Folding rewrites Windows separators to "/", so one prefix check
+  // covers both input styles.
+  const foldedPath = comparablePath(path);
+  const foldedHome = comparablePath(home);
+  if (foldedPath === foldedHome) return "~";
+  if (foldedPath.startsWith(`${foldedHome}/`)) {
     return `~${path.slice(home.length)}`;
   }
   return path;

@@ -43,11 +43,15 @@ export function launchDetected(
 }
 
 // Deep-link URL for launchers whose app opens via a custom protocol
-// rather than an exe/bundle invocation. The IPC layer opens these with
-// Electron's shell.openExternal -- routing them through a shell would
-// expose the URL to cmd.exe's %VAR% expansion on Windows. Ids that a
-// platform's catalog doesn't include (codex is macOS-only) are simply
-// never asked for.
+// rather than an exe/bundle invocation. These deliberately bypass the
+// detected exe even when one exists: the protocol URL is the only API
+// these apps expose for "open this folder" -- spawning the exe with a
+// path argument just opens the app. Detection still gates visibility
+// (the launcher only shows when the app is installed, and installers
+// register their scheme). The IPC layer opens the URL with Electron's
+// shell.openExternal -- routing it through a shell would expose it to
+// cmd.exe's %VAR% expansion on Windows. Ids a platform's catalog
+// doesn't include (codex is macOS-only) are simply never asked for.
 export function deepLinkFor(
   appId: string,
   worktreePath: string,

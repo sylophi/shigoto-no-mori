@@ -17,6 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
 import { modKey, shortcutLabel } from "@/lib/platform";
+import { comparablePath } from "@shared/worktreeLayout";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -102,8 +103,12 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     setStage("scanning");
     try {
       const results = await window.api.fs.scanForGitRepos(browseDir);
-      const existingPaths = new Set(existingProjects.map((p) => p.path));
-      const newOnly = results.filter((p) => !existingPaths.has(p));
+      const existingPaths = new Set(
+        existingProjects.map((p) => comparablePath(p.path)),
+      );
+      const newOnly = results.filter(
+        (p) => !existingPaths.has(comparablePath(p)),
+      );
       setScanResults(newOnly);
       setSelected(new Set(newOnly));
       setHighlighted("");

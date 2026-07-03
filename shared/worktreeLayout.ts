@@ -26,8 +26,19 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 // process will create.
 const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
 
-function isWindowsStyle(base: string): boolean {
+export function isWindowsStyle(base: string): boolean {
   return WINDOWS_DRIVE_PREFIX.test(base) || base.startsWith("\\\\");
+}
+
+// Comparison form for path equality and prefix checks, keyed off the
+// path's own shape (not the host OS) so main and renderer fold
+// identically: Git for Windows reports "C:/Users/…" while node joins
+// build "C:\Users\…", and NTFS paths are case-insensitive. POSIX paths
+// pass through untouched -- backslash is a legal filename character
+// there and case matters.
+export function comparablePath(path: string): string {
+  if (!isWindowsStyle(path)) return path;
+  return path.replaceAll("\\", "/").toLowerCase();
 }
 
 function sepFor(base: string): "/" | "\\" {

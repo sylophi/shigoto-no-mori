@@ -6,7 +6,12 @@
 // sends WM_CLOSE, which they ignore), so both signals map to
 // `taskkill /T /F` -- a forced kill of the whole tree. The caller's
 // SIGKILL escalation after its grace period is then a no-op backstop.
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFile,
+  execFileSync,
+  spawn,
+} from "node:child_process";
 import { promisify } from "node:util";
 import {
   SCRIPT_STDIO,
@@ -47,8 +52,21 @@ async function signalTree(pid: number): Promise<void> {
   await taskkillTree(pid);
 }
 
+// Synchronous: the quit path returns immediately after calling this and
+// Electron tears the process down, which would kill an in-flight async
+// taskkill child before it finishes walking the tree. Blocking briefly
+// (bounded by the timeout) mirrors the POSIX side's synchronous
+// process.kill semantics.
 function signalTreeBestEffort(pid: number): void {
-  void taskkillTree(pid);
+  try {
+    execFileSync("taskkill", ["/pid", String(pid), "/T", "/F"], {
+      windowsHide: true,
+      timeout: 2_000,
+      stdio: "ignore",
+    });
+  } catch {
+    // Tree already gone, we lost ownership, or the timeout hit.
+  }
 }
 
 export const win32ScriptPlatform: ScriptPlatform = {

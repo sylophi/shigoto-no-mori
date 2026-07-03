@@ -12,7 +12,7 @@ import type {
   Worktree,
   WorktreeLayout,
 } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { isWindowsStyle, worktreePathFor } from "@shared/worktreeLayout";
 import { isWindows } from "@/lib/platform";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
 import { RelocateRow } from "./RelocateRow";
@@ -123,7 +123,7 @@ export function LocationForm({
     // form on Windows, "/" elsewhere. A Windows-style path pasted on
     // macOS would silently resolve relative to cwd, so it's rejected.
     const absolute = isWindows
-      ? /^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("\\\\")
+      ? isWindowsStyle(trimmed)
       : trimmed.startsWith("/");
     if (!absolute) return "Path must be absolute.";
     return null;

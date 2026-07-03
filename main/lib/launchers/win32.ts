@@ -9,6 +9,7 @@
 import { exec as execCommand, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { promisify } from "node:util";
+import { isWindowsStyle } from "@shared/worktreeLayout";
 import { binaryOnPath } from "../util/binaries";
 import type { DetectedApp, PlatformLaunchers } from "./types";
 
@@ -146,12 +147,12 @@ const CATALOG: Win32CatalogEntry[] = [
 ];
 
 // First exe candidate that exists on disk; `__explorer__` is the
-// always-available Explorer sentinel. Candidates without a drive prefix
-// mean the env var they were built from was missing.
+// always-available Explorer sentinel. Candidates that aren't
+// Windows-absolute mean the env var they were built from was missing.
 function findWinExe(winPaths: string[]): string | null {
   for (const candidate of winPaths) {
     if (candidate === "__explorer__") return candidate;
-    if (!/^[A-Za-z]:[\\/]/.test(candidate)) continue;
+    if (!isWindowsStyle(candidate)) continue;
     if (existsSync(candidate)) return candidate;
   }
   return null;
@@ -205,21 +206,26 @@ async function openWithCli(cli: string, worktreePath: string): Promise<void> {
 }
 
 async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
+  // Worktree paths flow in as git porcelain reports them -- forward
+  // slashes -- which explorer.exe rejects outright (it falls back to the
+  // default view) and other tools merely tolerate. Fold to native
+  // backslashes before handing the path to anything.
+  const nativePath = worktreePath.replaceAll("/", "\\");
   // Prefer the exe detection resolved -- a direct spawn with an argument
   // array, no cmd.exe and none of its quoting/expansion rules. Fall back
   // to the CLI shim only when no exe was found.
   if (app.winExe) {
     if (app.winExe === "__explorer__") {
-      await spawnDetached("explorer.exe", [worktreePath]);
+      await spawnDetached("explorer.exe", [nativePath]);
       return;
     }
     const entry = CATALOG.find((e) => e.id === app.id);
-    const args = entry?.winArgs?.(worktreePath) ?? [worktreePath];
+    const args = entry?.winArgs?.(nativePath) ?? [nativePath];
     await spawnDetached(app.winExe, args);
     return;
   }
   if (app.cli) {
-    await openWithCli(app.cli, worktreePath);
+    await openWithCli(app.cli, nativePath);
     return;
   }
   throw new Error(`No installed app found for ${app.label}`);

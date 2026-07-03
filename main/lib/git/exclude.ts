@@ -5,6 +5,7 @@
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { isWindows } from "../util/platform";
 import { run } from "./core";
 
 // Backslash-escape gitignore metacharacters so a literal path like
@@ -42,7 +43,14 @@ export async function appendExcludes(
   const existingLines = new Set(existing.split("\n"));
   const toAdd: string[] = [];
   for (const p of paths) {
-    const line = `/${escapeGitignorePattern(p)}`;
+    // git patterns always use forward slashes; a Windows caller may hold
+    // a backslash-separated relative path. Folding here (rather than at
+    // call sites) keeps escapeGitignorePattern below from turning the
+    // separators into literal-backslash escapes that never match. On
+    // POSIX a backslash is a real filename character and must survive
+    // into the escaper.
+    const gitPath = isWindows ? p.replaceAll("\\", "/") : p;
+    const line = `/${escapeGitignorePattern(gitPath)}`;
     if (!existingLines.has(line)) toAdd.push(line);
   }
   if (toAdd.length === 0) return;
