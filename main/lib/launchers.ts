@@ -21,6 +21,11 @@ export interface DetectedApp {
   id: string;
   label: string;
   bundleNames: string[];
+  // Resolved Windows executable (first winPaths candidate that exists),
+  // captured at detection time so launch uses exactly what detection
+  // vouched for. `__explorer__` is the Explorer sentinel; null when only
+  // a CLI shim was found (or not on Windows).
+  winExe: string | null;
   cli?: string | undefined;
   available: boolean;
 }
@@ -34,9 +39,12 @@ interface CatalogEntry {
   // Windows absolute exe candidates (built from env vars at module load).
   // `__explorer__` is the always-available Explorer sentinel.
   winPaths?: string[];
+  // Arguments the Windows exe takes to open a directory; defaults to the
+  // bare path. Windows Terminal needs `-d <path>`.
+  winArgs?: (worktreePath: string) => string[];
   // PATH shim, probed on every platform the entry supports. On Windows
   // these are the `.cmd`/`.exe` shims installers put on PATH (code,
-  // cursor, JetBrains Toolbox scripts, wt, …).
+  // cursor, JetBrains Toolbox scripts, …).
   cli?: string;
 }
 
@@ -236,6 +244,8 @@ const CATALOG: CatalogEntry[] = [
     // Store apps expose an App Execution Alias rather than a stable
     // install dir; the `wt` alias under WindowsApps is the canonical probe.
     winPaths: [`${LOCAL_APP_DATA}\\Microsoft\\WindowsApps\\wt.exe`],
+    // No "open folder" verb; -d starts the default profile in the dir.
+    winArgs: (worktreePath) => ["-d", worktreePath],
   },
   // Git clients
   {
@@ -273,21 +283,15 @@ function appExists(bundleName: string): boolean {
 }
 
 // First Windows exe candidate that exists on disk; `__explorer__` is the
-// always-available Explorer sentinel.
+// always-available Explorer sentinel. Candidates without a drive prefix
+// mean the env var they were built from was missing.
 function findWinExe(winPaths: string[]): string | null {
   for (const candidate of winPaths) {
     if (candidate === "__explorer__") return candidate;
-    if (candidate.startsWith("\\")) continue; // env var missing
+    if (!/^[A-Za-z]:[\\/]/.test(candidate)) continue;
     if (existsSync(candidate)) return candidate;
   }
   return null;
-}
-
-function installHit(entry: CatalogEntry): boolean {
-  if (isWindows) {
-    return entry.winPaths ? findWinExe(entry.winPaths) !== null : false;
-  }
-  return entry.bundleNames?.some(appExists) ?? false;
 }
 
 // Detection is expensive (10 `which`/`where` shell-outs + filesystem
@@ -299,14 +303,19 @@ const DETECT_TTL_MS = 5_000;
 const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
   Promise.all(
     CATALOG.map(async (entry) => {
-      const installed = installHit(entry);
+      const winExe =
+        isWindows && entry.winPaths ? findWinExe(entry.winPaths) : null;
+      const bundleHit = isWindows
+        ? false
+        : (entry.bundleNames?.some(appExists) ?? false);
       const cliHit = entry.cli ? await binaryOnPath(entry.cli) : false;
       return {
         id: entry.id,
         label: entry.label,
         bundleNames: entry.bundleNames ?? [],
+        winExe,
         cli: entry.cli,
-        available: installed || cliHit,
+        available: bundleHit || winExe !== null || cliHit,
       };
     }),
   ),
@@ -323,31 +332,44 @@ export function findDetected(
   return all.find((a) => a.id === id);
 }
 
-// Fire-and-forget spawn that outlives the main process and never throws
-// on a nonzero exit (explorer.exe famously exits 1 even on success).
-function spawnDetached(command: string, args: string[]): void {
-  const child = spawn(command, args, {
-    detached: true,
-    stdio: "ignore",
+// Detached spawn that outlives the main process. Resolves once the OS
+// accepts the process (the `spawn` event) so failures like ENOENT reach
+// the caller as errors instead of vanishing, but never waits for -- or
+// judges -- the exit code (explorer.exe famously exits 1 even on
+// success).
+function spawnDetached(command: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
   });
-  child.on("error", () => {
-    // Detection already vouched for the binary; a race (uninstalled since
-    // the probe) just means the launch silently no-ops.
-  });
-  child.unref();
 }
 
-// Open a custom protocol URL (codex://, claude://) with the OS default
-// handler. Kept exec-based rather than Electron's shell.openExternal so
-// this module stays importable outside the Electron main process.
-async function openUrl(url: string): Promise<void> {
-  if (isWindows) {
-    // `start` is a cmd.exe builtin; the empty string is the window title
-    // slot so the URL isn't mistaken for it. URLs never contain `"`.
-    await execShell(`start "" "${url}"`);
-    return;
+// Deep-link URL for launchers whose app opens via a custom protocol
+// rather than an exe/bundle invocation. The IPC layer opens these with
+// Electron's shell.openExternal -- routing them through a shell would
+// expose the URL to cmd.exe's %VAR% expansion on Windows.
+export function deepLinkFor(
+  appId: string,
+  worktreePath: string,
+): string | null {
+  if (appId === "codex") {
+    const url = new URL("codex://threads/new");
+    url.searchParams.set("path", worktreePath);
+    return url.toString();
   }
-  await exec("open", [url]);
+  if (appId === "claude") {
+    const url = new URL("claude://code/new");
+    url.searchParams.set("folder", worktreePath);
+    return url.toString();
+  }
+  return null;
 }
 
 async function openWithBundle(
@@ -370,56 +392,56 @@ async function openWithCli(cli: string, worktreePath: string): Promise<void> {
   // Windows CLI shims are mostly `.cmd` batch wrappers (code.cmd,
   // cursor.cmd, JetBrains Toolbox scripts); execFile can't run those
   // directly, so route through the shell. Quotes are illegal in Windows
-  // paths, so plain wrapping is sufficient.
+  // paths, so plain wrapping is sufficient. Residual cmd.exe caveat:
+  // %VAR% expands even inside quotes, so a path containing a defined
+  // env-var name opens the wrong folder -- unavoidable with cmd, which
+  // is why the resolved-exe launch below is preferred on Windows.
   if (isWindows) {
-    await execShell(`"${cli}" "${worktreePath}"`);
+    await execShell(`"${cli}" "${worktreePath}"`, { windowsHide: true });
     return;
   }
   await exec(cli, [worktreePath]);
 }
 
-function openWithWinExe(exe: string, worktreePath: string): void {
+async function openWithWinExe(
+  entry: CatalogEntry | undefined,
+  exe: string,
+  worktreePath: string,
+): Promise<void> {
   if (exe === "__explorer__") {
-    spawnDetached("explorer.exe", [worktreePath]);
+    await spawnDetached("explorer.exe", [worktreePath]);
     return;
   }
-  spawnDetached(exe, [worktreePath]);
-}
-
-async function openCodexProject(worktreePath: string): Promise<void> {
-  const url = new URL("codex://threads/new");
-  url.searchParams.set("path", worktreePath);
-  await openUrl(url.toString());
+  const args = entry?.winArgs?.(worktreePath) ?? [worktreePath];
+  await spawnDetached(exe, args);
 }
 
 export async function launchDetected(
   app: DetectedApp,
   worktreePath: string,
 ): Promise<void> {
-  if (app.id === "codex") {
-    await openCodexProject(worktreePath);
-    return;
+  // Windows: prefer the exe detection resolved -- a direct spawn with an
+  // argument array, no cmd.exe and none of its quoting/expansion rules.
+  // Fall back to the CLI shim (which must run through cmd) only when no
+  // exe was found.
+  if (isWindows) {
+    if (app.winExe) {
+      const entry = CATALOG.find((e) => e.id === app.id);
+      await openWithWinExe(entry, app.winExe, worktreePath);
+      return;
+    }
+    if (app.cli) {
+      await openWithCli(app.cli, worktreePath);
+      return;
+    }
+    throw new Error(`No installed app found for ${app.label}`);
   }
 
-  if (app.id === "claude") {
-    const url = new URL("claude://code/new");
-    url.searchParams.set("folder", worktreePath);
-    await openUrl(url.toString());
-    return;
-  }
-
-  // Windows Terminal has no "open folder" verb; `-d` starts the default
-  // profile in the worktree directory.
-  if (app.id === "windows-terminal") {
-    spawnDetached("wt.exe", ["-d", worktreePath]);
-    return;
-  }
-
-  // `open -a` routes through Launch Services, which ignores in-app window
-  // preferences like Zed's "CLI Default Open Behavior" or VS Code's
-  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those settings
-  // are honored; fall back to the bundle/exe if the shim is missing or
-  // broken.
+  // macOS: `open -a` routes through Launch Services, which ignores
+  // in-app window preferences like Zed's "CLI Default Open Behavior" or
+  // VS Code's `window.openFoldersInNewWindow`. Prefer the CLI shim so
+  // those settings are honored; fall back to the bundle if the shim is
+  // missing or broken.
   if (app.cli) {
     try {
       await openWithCli(app.cli, worktreePath);
@@ -427,15 +449,6 @@ export async function launchDetected(
     } catch {
       // Fall through.
     }
-  }
-  if (isWindows) {
-    const entry = CATALOG.find((e) => e.id === app.id);
-    const exe = entry?.winPaths ? findWinExe(entry.winPaths) : null;
-    if (!exe) {
-      throw new Error(`No installed app found for ${app.label}`);
-    }
-    openWithWinExe(exe, worktreePath);
-    return;
   }
   await openWithBundle(app.bundleNames, worktreePath);
 }
