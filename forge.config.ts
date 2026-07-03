@@ -1,4 +1,5 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
+import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -55,7 +56,22 @@ const config: ForgeConfig = {
       });
     },
   },
-  makers: [new MakerZIP({}, ["darwin"])],
+  makers: [
+    new MakerZIP({}, ["darwin"]),
+    // Squirrel.Windows: produces Setup.exe plus the RELEASES/.nupkg pair
+    // that update.electronjs.org serves to the in-app autoUpdater.
+    // Unsigned for now -- Authenticode signing slots in here via
+    // `windowsSign` once a certificate exists.
+    new MakerSquirrel(
+      {
+        setupIcon: "assets/icon.ico",
+        // Shown in Add/Remove Programs; must be a URL, not a local path.
+        iconUrl:
+          "https://raw.githubusercontent.com/sylophi/shigoto-no-mori/main/assets/icon.ico",
+      },
+      ["win32"],
+    ),
+  ],
   publishers: [
     new PublisherGithub({
       repository: {

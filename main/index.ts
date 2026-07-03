@@ -1,4 +1,5 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
+import squirrelStartup from "electron-squirrel-startup";
 import path from "node:path";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./electron/bootstrap";
@@ -26,6 +27,14 @@ import {
   isInstallingUpdate,
   startUpdater,
 } from "./electron/updater";
+
+// Squirrel.Windows relaunches the app with install/update/uninstall
+// flags; electron-squirrel-startup handles the shortcut bookkeeping for
+// those and returns true, in which case this process must exit without
+// booting the app. No-op (false) everywhere but Windows.
+if (squirrelStartup) {
+  app.quit();
+}
 
 initShigomoriRoot(app.isPackaged);
 
