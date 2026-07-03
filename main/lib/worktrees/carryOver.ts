@@ -36,8 +36,15 @@ async function applyOne(
     // react-doctor-disable-next-line react-doctor/async-defer-await -- mkdir is required by both branches below; moving it past the guard would duplicate it
     await mkdir(dirname(dst), { recursive: true });
     if (entry.mode === "symlink") {
-      // Absolute target so the link survives moving the worktree dir around.
-      await symlink(src, dst);
+      // Absolute target so the link survives moving the worktree dir
+      // around. On Windows, directory links are junctions: real symlinks
+      // need admin rights or Developer Mode, junctions need neither and
+      // behave the same for our always-absolute, always-local targets.
+      // File symlinks have no such fallback, so those still require
+      // Developer Mode; the EPERM below explains that instead of leaking
+      // a bare errno.
+      const winType = srcIsDir ? "junction" : "file";
+      await symlink(src, dst, process.platform === "win32" ? winType : null);
       // Only directory symlinks need to be hidden from git: `git diff
       // --no-index` tries to recurse through the link and errors, leaving
       // the file with a "1 file changed" count but a blank diff body.
@@ -57,6 +64,21 @@ async function applyOne(
     if (code === "EEXIST" || code === "ERR_FS_CP_EEXIST") {
       return {
         failure: { path: entry.path, reason: "Destination already exists" },
+        excludePath: null,
+      };
+    }
+    if (
+      code === "EPERM" &&
+      entry.mode === "symlink" &&
+      process.platform === "win32"
+    ) {
+      return {
+        failure: {
+          path: entry.path,
+          reason:
+            "Creating file symlinks on Windows requires Developer Mode; " +
+            "enable it in Windows Settings or switch this entry to copy",
+        },
         excludePath: null,
       };
     }
