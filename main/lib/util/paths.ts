@@ -29,7 +29,11 @@ export function shigomoriRoot(): string {
 
 export function expandHome(path: string): string {
   if (path === "~") return homedir();
-  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  // Accept both separator styles after "~" so Windows users typing
+  // `~\projects` get the same expansion as `~/projects`.
+  if (path.startsWith("~/") || path.startsWith("~\\")) {
+    return join(homedir(), path.slice(2));
+  }
   return path;
 }
 

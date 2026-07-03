@@ -17,13 +17,20 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
   "custom",
 ];
 
-// posix-style join: trims trailing slashes from `base`, then concatenates.
-// Both main (node:path) and renderer call sites work with forward-slash
-// paths on the platforms shigomori supports (macOS first; Linux later).
+// Dependency-free join that works in both main and the renderer (no
+// node:path). The separator follows the base path's own style: Windows
+// bases (drive letter or backslashes) extend with "\", everything else
+// with "/", so previews match what the main process will create.
+function sepFor(base: string): "/" | "\\" {
+  return /^[A-Za-z]:[\\/]/.test(base) || base.includes("\\") ? "\\" : "/";
+}
+
 function joinPath(base: string, ...segments: string[]): string {
-  let out = base.replace(/\/+$/, "");
+  const sep = sepFor(base);
+  let out = base.replace(/[\\/]+$/, "");
   for (const seg of segments) {
-    out += "/" + seg.replace(/^\/+/, "").replace(/\/+$/, "");
+    const parts = seg.split(/[\\/]+/).filter((p) => p.length > 0);
+    for (const part of parts) out += sep + part;
   }
   return out;
 }
@@ -45,9 +52,9 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   }
   if (layout === "custom") {
     const trimmed = customPath?.trim();
-    if (trimmed) return trimmed.replace(/\/+$/, "");
+    if (trimmed) return trimmed.replace(/[\\/]+$/, "");
   }
-  const segments = projectPath.split("/");
+  const segments = projectPath.split(/[\\/]/);
   const projectName = segments.findLast((s) => s.length > 0) ?? "";
   return joinPath(shigomoriRoot, "worktrees", projectName);
 }

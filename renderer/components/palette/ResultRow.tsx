@@ -1,10 +1,11 @@
 import { Command } from "cmdk";
 import { Check, FolderGit2, Square } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
+import { ensureTrailingSep } from "@/lib/projectPaths";
 import { ITEM_CLASS } from "./cmdkClasses";
 
 function relativeFromRoot(absolute: string, root: string): string {
-  const trimmedRoot = root.endsWith("/") ? root : `${root}/`;
+  const trimmedRoot = ensureTrailingSep(root);
   return absolute.startsWith(trimmedRoot)
     ? absolute.slice(trimmedRoot.length)
     : absolute;

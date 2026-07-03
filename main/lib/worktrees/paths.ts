@@ -47,11 +47,21 @@ export function managedPrefixesFor(
   });
 }
 
+// Comparison form for prefix checks. Git for Windows reports worktree
+// paths with forward slashes ("C:/Users/…") while our computed bases use
+// backslashes, and NTFS paths are case-insensitive, so both sides fold
+// separators and case before comparing. Identity on POSIX.
+function comparablePath(p: string): string {
+  if (process.platform !== "win32") return p;
+  return p.replaceAll("\\", "/").toLowerCase();
+}
+
 export function isManagedPath(
   worktreePath: string,
   managedPrefixes: string[],
 ): boolean {
-  return managedPrefixes.some((p) => worktreePath.startsWith(p));
+  const target = comparablePath(worktreePath);
+  return managedPrefixes.some((p) => target.startsWith(comparablePath(p)));
 }
 
 // Best-effort cleanup of the empty parent directory a worktree just
@@ -74,13 +84,13 @@ export async function pruneEmptyManagedParents(
     "worktrees",
     basename(projectPath),
   );
-  if (parent === managedRootBase) {
+  if (comparablePath(parent) === comparablePath(managedRootBase)) {
     await tryRmdir(parent);
     return;
   }
 
   const inProjectBase = join(projectPath, ".shigomori", "worktrees");
-  if (parent === inProjectBase) {
+  if (comparablePath(parent) === comparablePath(inProjectBase)) {
     const removed = await tryRmdir(parent);
     if (removed) {
       await tryRmdir(dirname(parent));

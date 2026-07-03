@@ -118,7 +118,10 @@ export function LocationForm({
     if (layout !== "custom") return null;
     const trimmed = customPath.trim();
     if (!trimmed) return "Path is required for a custom layout.";
-    if (!trimmed.startsWith("/")) return "Path must be absolute.";
+    // POSIX root or Windows drive-letter absolute ("C:\..." / "C:/...").
+    if (!trimmed.startsWith("/") && !/^[A-Za-z]:[\\/]/.test(trimmed)) {
+      return "Path must be absolute.";
+    }
     return null;
   };
 

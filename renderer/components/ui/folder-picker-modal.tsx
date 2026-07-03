@@ -15,6 +15,7 @@ import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
+  ensureTrailingSep,
   getBrowseDirectoryPath,
   getBrowseLeafSegment,
   getBrowseParentPath,
@@ -46,13 +47,10 @@ export function FolderPickerModal({
   onClose,
 }: FolderPickerModalProps) {
   // Seed the input value with the caller's path; otherwise drop into ~/.
-  // When an initialPath is provided we append "/" so the listing fires
-  // immediately rather than treating the basename as a leaf filter.
-  const seed = initialPath
-    ? initialPath.endsWith("/")
-      ? initialPath
-      : `${initialPath}/`
-    : "~/";
+  // When an initialPath is provided we append a separator (matching the
+  // path's own style) so the listing fires immediately rather than
+  // treating the basename as a leaf filter.
+  const seed = initialPath ? ensureTrailingSep(initialPath) : "~/";
   const [query, setQuery] = useState<string>(seed);
   const [highlighted, setHighlighted] = useState<string>("");
 
