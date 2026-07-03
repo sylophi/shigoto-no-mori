@@ -15,8 +15,7 @@ import type { BroadcastProducerPayload } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
-
-const isMac = process.platform === "darwin";
+import { isMac } from "../lib/util/platform";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;

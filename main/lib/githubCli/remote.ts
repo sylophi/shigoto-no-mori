@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { listRemoteUrls } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
+import { isWindows } from "../util/platform";
 
 // Per-repo gate for any path that would shell out to gh. Without this,
 // non-github repos eat the full TanStack retry budget on every worktree
@@ -50,7 +51,7 @@ const knownHostsCache = ttlValueCache<Set<string>>(
 );
 
 function ghHostsPath(): string {
-  if (process.platform === "win32") {
+  if (isWindows) {
     return join(process.env["APPDATA"] ?? "", "GitHub CLI", "hosts.yml");
   }
   const xdg = process.env["XDG_CONFIG_HOME"];

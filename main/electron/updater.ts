@@ -19,6 +19,8 @@ import { broadcastAll } from "../ipc/register";
 import { confirmBusyAction } from "./busyPrompt";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
+// oxlint-disable-next-line no-restricted-properties -- the feed URL needs the raw platform *value*, not a boolean branch
+const FEED_PLATFORM = process.platform;
 const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
 
 let state: UpdaterState = { kind: "idle" };
@@ -46,8 +48,8 @@ export function getUpdaterState(): UpdaterState {
 function buildFeedUrl(): string | null {
   const override = process.env.SHIGOMORI_UPDATE_FEED_URL?.trim();
   if (override) return override;
-  if (!SUPPORTED_PLATFORMS.has(process.platform)) return null;
-  return `https://update.electronjs.org/sylophi/shigoto-no-mori/${process.platform}-${process.arch}/${app.getVersion()}`;
+  if (!SUPPORTED_PLATFORMS.has(FEED_PLATFORM)) return null;
+  return `https://update.electronjs.org/sylophi/shigoto-no-mori/${FEED_PLATFORM}-${process.arch}/${app.getVersion()}`;
 }
 
 function stripVPrefix(name: string): string {
