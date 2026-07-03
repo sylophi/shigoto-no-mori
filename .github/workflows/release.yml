@@ -107,3 +107,55 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: pnpm exec electron-forge publish --from-dry-run
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ensure release tag is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Release tag must point to a commit on origin/main."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same tag/version sync as the macOS job; app.getVersion() and the
+      # Squirrel nupkg version both come from package.json.
+      - name: Sync package.json version with tag
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            npm pkg set version="$VERSION"
+          else
+            echo "Tag '$TAG' isn't semver — leaving package.json unchanged"
+          fi
+
+      # Unsigned for now: Windows builds ship without Authenticode until
+      # a certificate exists (SmartScreen will warn on first run).
+      - name: Build distributables
+        run: pnpm exec electron-forge publish --dry-run
+
+      - name: Upload assets to release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm exec electron-forge publish --from-dry-run

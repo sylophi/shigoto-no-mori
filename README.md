@@ -8,7 +8,9 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
-Note: This project is still early and in active development. We only offer macOS Apple Silicon builds at this time.
+Note: This project is still early and in active development. We offer macOS Apple Silicon builds and Windows builds (Squirrel installer, currently unsigned, so SmartScreen will warn on first run).
+
+On Windows, Git for Windows must be installed and on PATH. Symlink-mode carry-over entries for single files need Developer Mode enabled (directory entries use junctions and work everywhere); copy mode always works.
 
 ## License
 
