@@ -10,6 +10,7 @@ import {
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
   SetProjectSortPayloadSchema,
+  WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
 
 export const projectsContract = {
@@ -44,6 +45,11 @@ export const projectsContract = {
     "projects:listIgnoredPaths",
     ProjectScopedPayloadSchema,
     z.array(z.string()),
+  ),
+  worktreeIncludeStatus: invoke(
+    "projects:worktreeIncludeStatus",
+    ProjectScopedPayloadSchema,
+    WorktreeIncludeStatusSchema,
   ),
   icon: invoke(
     "projects:icon",

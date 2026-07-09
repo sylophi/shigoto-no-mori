@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Tracks a form value against its last-saved snapshot. Dirty detection
 // is a JSON.stringify comparison, which is fine for the shallow,
@@ -7,5 +7,33 @@ export function useDirtyForm<T>(initial: T) {
   const [form, setForm] = useState<T>(initial);
   const [savedSnapshot, setSavedSnapshot] = useState<T>(initial);
   const isDirty = JSON.stringify(form) !== JSON.stringify(savedSnapshot);
-  return { form, setForm, savedSnapshot, setSavedSnapshot, isDirty };
+
+  // Latest-value ref so reseed stays referentially stable: it captures
+  // only the ref and setters, so callers can list it in effect deps
+  // without the effect re-running (and re-stringifying) every render.
+  const latest = useRef({ form, savedSnapshot });
+  useEffect(() => {
+    latest.current = { form, savedSnapshot };
+  });
+
+  // Rebase onto a value that changed underneath the form (e.g. main
+  // rewrote the config while a draft was open). Clean form: adopt `next`
+  // wholesale. Dirty form: move the snapshot to `next` so Save diffs
+  // against reality instead of a stale baseline, and let the caller merge
+  // the remote change into the draft.
+  const reseed = (
+    next: T,
+    mergeWhenDirty?: (prevForm: T, prevSnapshot: T, next: T) => T,
+  ): void => {
+    const { form: prevForm, savedSnapshot: prevSnapshot } = latest.current;
+    if (JSON.stringify(next) === JSON.stringify(prevSnapshot)) return;
+    if (JSON.stringify(prevForm) === JSON.stringify(prevSnapshot)) {
+      setForm(next);
+    } else if (mergeWhenDirty) {
+      setForm((prev) => mergeWhenDirty(prev, prevSnapshot, next));
+    }
+    setSavedSnapshot(next);
+  };
+
+  return { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed };
 }

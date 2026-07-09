@@ -25,6 +25,7 @@ import {
 } from "../../lib/projects";
 import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
+import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
 
@@ -117,6 +118,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   listIgnoredPaths: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);
     return listIgnoredPaths(project.path);
+  },
+
+  worktreeIncludeStatus: async ({ projectId }) => {
+    const project = findProjectOrThrow(projectId);
+    return readWorktreeIncludeStatus(project.path);
   },
 
   icon: async ({ projectId }) => {

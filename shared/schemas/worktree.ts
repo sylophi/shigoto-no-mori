@@ -158,6 +158,9 @@ export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;
 export const CarryOverReportSchema = z.object({
   applied: z.number().int().nonnegative(),
   failures: z.array(CarryOverFailureSchema),
+  // .worktreeinclude resolution errors. Not carry-over entries, so they
+  // are reported separately from the per-entry failures above.
+  includeFailures: z.array(CarryOverFailureSchema).optional(),
 });
 export type CarryOverReport = z.infer<typeof CarryOverReportSchema>;
 
@@ -186,6 +189,9 @@ export type WorktreeLifecyclePhase = z.infer<
 export const WorktreeCarryOverCompleteSchema =
   WorktreeScopedPayloadSchema.extend({
     report: CarryOverReportSchema,
+    // Manual carry-over entries auto-removed because .worktreeinclude now
+    // covers them. Absent when reconciliation removed nothing.
+    removedCarryOverPaths: z.array(z.string()).optional(),
   });
 export type WorktreeCarryOverComplete = z.infer<
   typeof WorktreeCarryOverCompleteSchema

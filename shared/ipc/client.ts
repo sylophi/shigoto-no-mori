@@ -148,6 +148,8 @@ export const projects = {
     projectsClient.pickWorktreeName({ projectId }),
   listIgnoredPaths: (projectId: string) =>
     projectsClient.listIgnoredPaths({ projectId }),
+  worktreeIncludeStatus: (projectId: string) =>
+    projectsClient.worktreeIncludeStatus({ projectId }),
   icon: (projectId: string) => projectsClient.icon({ projectId }),
 } as const;
 

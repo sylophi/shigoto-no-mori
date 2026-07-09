@@ -1090,6 +1090,72 @@ async function seedCarryoverSymlinkDir(): Promise<Manifest> {
   };
 }
 
+// Exercises .worktreeinclude support: gitignore-syntax patterns whose
+// gitignored matches are copied (never symlinked) into new worktrees,
+// plus the auto-removal of manual carry-over entries the file covers.
+async function seedWorktreeInclude(): Promise<Manifest> {
+  const repo = join(REPOS, "worktreeinclude");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# worktreeinclude\n\nExercises .worktreeinclude resolution, reconciliation, and the per-project toggle.\n",
+      ".gitignore": ".env\n.env.local\nnode_modules/\n*.log\n",
+      // Committed, as a real repo would ship it. Contains, in order:
+      // a comment + blank line (must be filtered from the Configure list),
+      // two gitignored matches (.env, node_modules/), a negation pair
+      // (*.log minus debug.log), a match on a TRACKED file (must not
+      // copy), and a match on an untracked NON-ignored file (must not
+      // copy either -- spec requires matched AND gitignored).
+      ".worktreeinclude":
+        "# Copied into every new worktree when gitignored\n" +
+        "\n" +
+        ".env\n" +
+        "node_modules/\n" +
+        "*.log\n" +
+        "!debug.log\n" +
+        "tracked.txt\n" +
+        "notes.txt\n",
+      "package.json": pkgJson("worktreeinclude", {
+        hello: "echo 'hi from worktreeinclude'",
+      }),
+      "tracked.txt": "committed content\n",
+      "src/index.ts": "export {};\n",
+    },
+    "Initial",
+  );
+  // Gitignored candidates.
+  await writeAt(repo, ".env", "FAKE_API_KEY=wt-include\n");
+  // Gitignored but matched by no pattern: control, must not copy.
+  await writeAt(repo, ".env.local", "OVERRIDE=true\n");
+  await writeAt(
+    repo,
+    "node_modules/placeholder/package.json",
+    `${JSON.stringify({ name: "placeholder", version: "0.0.0" })}\n`,
+  );
+  await writeAt(repo, "app.log", "copied via *.log\n");
+  await writeAt(repo, "debug.log", "negated via !debug.log, must not copy\n");
+  // Untracked and NOT gitignored; matched by pattern, must not copy.
+  await writeAt(repo, "notes.txt", "untracked scratch notes\n");
+  return {
+    name: "worktreeinclude",
+    path: repo,
+    purpose:
+      ".worktreeinclude patterns (comments, dirs, negation, tracked/non-ignored traps) plus manual-entry reconciliation",
+    tests: [
+      "Configure → Carry over: the 'Use .worktreeinclude' toggle row is on by default, and .env, node_modules, app.log appear as read-only rows in the carry-over list with a static Copy indicator, a 'used by .worktreeinclude' note, and a disabled remove button.",
+      "Carry-over picker: .env, node_modules/, app.log show a 'covered' label instead of Symlink/Copy buttons; .env.local still offers both. Toggle .worktreeinclude off and reopen: the buttons return.",
+      "Create a worktree: .env, node_modules/, app.log are copied (real files, not symlinks); debug.log, tracked.txt, notes.txt, .env.local are NOT; .git/info/exclude gains no lines from include entries.",
+      "Reconciliation: add .env as a manual entry (any mode) and save; the row shows the amber 'covered' badge. Create a worktree: the entry disappears from Configure, and a toast explains a .worktreeinclude update removed it.",
+      "Symlink downgrade: add node_modules as a manual Symlink entry, save, create a worktree. The entry is auto-removed (toast) and the new worktree gets a copied node_modules, not a symlink.",
+      "Draft race: dirty the form (edit the setup script, don't save), create a worktree, then Save. The removed entries must not reappear in ~/shigomori-dev/projects/<id>/project.json.",
+      "Toggle .worktreeinclude off, save, create a worktree: the read-only rows disappear, nothing from the file is copied, manual entries untouched, no reconcile toast.",
+      "File-missing state: in a repo without the file (e.g. carryover-rich) the toggle row is hidden entirely while the toggle is on, and reappears (for re-enabling) after toggling it off.",
+    ],
+  };
+}
+
 async function seedPathSpaces(): Promise<Manifest> {
   const repo = join(REPOS, "path with spaces");
   await initRepo(repo);
@@ -1536,6 +1602,7 @@ async function main(): Promise<void> {
     { name: "convertible-externals", run: seedConvertibleExternals },
     { name: "carryover-rich", run: seedCarryoverRich },
     { name: "carryover-symlink-dir", run: seedCarryoverSymlinkDir },
+    { name: "worktreeinclude", run: seedWorktreeInclude },
     { name: "path with spaces", run: seedPathSpaces },
     { name: "プロジェクト", run: seedUnicodePath },
     { name: "deeply-nested", run: seedDeeplyNested },
