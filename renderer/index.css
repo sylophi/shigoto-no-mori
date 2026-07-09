@@ -102,6 +102,15 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Disabled controls show the not-allowed cursor. Only reaches elements
+     that keep pointer events, so components must not pair disabled state
+     with pointer-events-none (see button.tsx / dropdown-menu.tsx). */
+  :disabled,
+  [data-disabled],
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
   /*
    * Token overrides scoped to the vibrancy sidebar surface (marked
    * with `data-sidebar` on the <aside>). The global muted/accent

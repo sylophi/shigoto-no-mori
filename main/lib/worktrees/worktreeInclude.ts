@@ -1,5 +1,6 @@
 // Resolves the repo's .worktreeinclude file (Claude Code convention,
-// https://code.claude.com/docs/en/worktrees): gitignore-syntax patterns
+// https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees):
+// gitignore-syntax patterns
 // whose matches, when also gitignored, are copied into new worktrees.
 // Always copy mode, resolved fresh per worktree creation, never persisted.
 
