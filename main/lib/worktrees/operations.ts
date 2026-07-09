@@ -123,6 +123,23 @@ export async function convertExternalWorktree(
   if (getInflightDeleteIds().has(worktreeId)) {
     throw new Error("This worktree is already being removed.");
   }
+  // Refuse a name collision BEFORE the destructive wipe below --
+  // createWorktree's own check runs after the old directory is already
+  // force-removed, which would strand the user with neither checkout.
+  // Case-insensitive to match createWorktree (NTFS / default APFS).
+  if (worktreeName) {
+    const identities = await listWorktreeIdentities(project.id, project.path);
+    const taken = identities.some(
+      (i) =>
+        i.id !== worktreeId &&
+        i.name.toLowerCase() === worktreeName.toLowerCase(),
+    );
+    if (taken) {
+      throw new Error(
+        `A worktree folder named "${worktreeName}" already exists in this project.`,
+      );
+    }
+  }
   markDeleteInflight(worktreeId);
   try {
     await killScriptsForWorktree(worktreeId);

@@ -17,6 +17,7 @@ Windows caveats:
 - Tools are discovered through the PATH that GUI apps see (the registry user PATH). Entries added per-session by shell profiles (e.g. `fnm env`) aren't visible, and installing a CLI like `gh` while the app is running needs an app restart to be picked up.
 - Worktrees on network (UNC) paths can't run scripts or custom launchers; cmd.exe silently falls back to `C:\Windows` as the working directory there. Map the share to a drive letter instead.
 - Deep worktree paths can exceed the legacy 260-character limit; enable long paths with `git config --global core.longpaths true`.
+- Don't create directory junctions (`mklink /J`) inside worktrees: Git for Windows can recurse through a junction during `git worktree remove --force` and delete the junction's target. Carry-over links created by the app are real symlinks, which are safe.
 
 ## License
 

@@ -81,9 +81,12 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const removed = projects.find((p) => p.id === id);
     saveProjects(projects.filter((p) => p.id !== id));
     // Drop the icon-cache entry and on-disk state so neither leaks across
-    // re-adds of the same path.
-    if (removed) await forgetProjectIcon(removed.path);
-    await deleteProjectState(id);
+    // re-adds of the same path. State deletion is a recursive rm keyed
+    // on the id, so only run it for an id that matched a real project.
+    if (removed) {
+      await forgetProjectIcon(removed.path);
+      await deleteProjectState(id);
+    }
   },
 
   reorder: ({ draggedId, targetId, position }) => {

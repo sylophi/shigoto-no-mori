@@ -3,7 +3,7 @@
 // added here apply everywhere -- but they're anchored with a leading `/`
 // to the worktree root, which means they only match at the top level.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isWindows } from "../util/platform";
 import { run } from "./core";
@@ -57,8 +57,13 @@ export async function appendExcludes(
   await mkdir(dirname(excludeFile), { recursive: true });
   const needsLeadingNewline =
     existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  // tmp + rename, same discipline as the app's own state writes: this
+  // file lives in the USER's repo and may hold their hand-written
+  // excludes -- a crash mid-write must not truncate it.
+  const tmpFile = `${excludeFile}.shigomori-tmp`;
   await writeFile(
-    excludeFile,
+    tmpFile,
     `${existing}${needsLeadingNewline}${toAdd.join("\n")}\n`,
   );
+  await rename(tmpFile, excludeFile);
 }

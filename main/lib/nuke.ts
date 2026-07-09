@@ -13,17 +13,37 @@ import {
   removeWorktreeForce,
 } from "./git/worktrees";
 import { loadProjects } from "./projects";
-import { killAllScripts } from "./scripts";
-import { shigomoriRoot } from "./util/paths";
+import {
+  clearDeleteInflight,
+  killAllScripts,
+  markDeleteInflight,
+} from "./scripts";
+import { comparablePath, shigomoriRoot, toAbsolute } from "./util/paths";
 
 export async function nukeEverything(): Promise<void> {
+  const projects = loadProjects();
+  // The final step rm -rf's the shigomori root. A project repo the user
+  // keeps INSIDE that root (nothing stops projects.add from accepting
+  // one) would be wiped with it -- .git, uncommitted work, everything.
+  // Refuse up front, before any script kill or worktree removal.
+  const root = comparablePath(shigomoriRoot()).replace(/\/+$/, "");
+  const trapped = projects.find((p) => {
+    const folded = comparablePath(toAbsolute(p.path)).replace(/\/+$/, "");
+    return folded === root || folded.startsWith(`${root}/`);
+  });
+  if (trapped) {
+    throw new Error(
+      `Refusing to nuke: project "${trapped.name}" lives inside ` +
+        `${shigomoriRoot()}, which would be deleted with it. ` +
+        "Move the repository out first.",
+    );
+  }
   // Reap every running script first -- dev servers and watchers may have
   // their cwd inside the worktrees we're about to force-remove. Skipping
   // this would orphan them with deleted working directories, still
   // holding their ports, exactly what the per-worktree delete path
   // guards against via killScriptsForWorktree.
   await killAllScripts();
-  const projects = loadProjects();
   // Kick off the config read in parallel with the per-project worktree work.
   // deleteBranches is only needed inside the inner branch-cleanup step, so we
   // don't have to block the outer fan-out on it.
@@ -49,14 +69,22 @@ export async function nukeEverything(): Promise<void> {
       const deleteBranches = await deleteBranchesPromise;
       await Promise.all(
         targets.map(async (i) => {
-          await removeWorktreeForce(project.path, i.path).catch(
-            () => undefined,
-          );
-          await deleteBranchAfterWorktreeRemoval(
-            project.path,
-            i,
-            deleteBranches,
-          );
+          // Same inflight marking as the per-worktree delete: blocks a
+          // renderer script run from landing in a directory mid-removal
+          // and keeps the busy-quit prompt honest during the wipe.
+          markDeleteInflight(i.id);
+          try {
+            await removeWorktreeForce(project.path, i.path).catch(
+              () => undefined,
+            );
+            await deleteBranchAfterWorktreeRemoval(
+              project.path,
+              i,
+              deleteBranches,
+            );
+          } finally {
+            clearDeleteInflight(i.id);
+          }
         }),
       );
     }),

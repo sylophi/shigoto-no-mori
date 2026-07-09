@@ -6,11 +6,7 @@
 import { rmdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
-import {
-  ALL_WORKTREE_LAYOUTS,
-  withTrailingSep,
-  worktreeBaseFor,
-} from "@shared/worktreeLayout";
+import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
 import { comparablePath, shigomoriRoot } from "../util/paths";
 
 export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
@@ -29,40 +25,44 @@ export function resolveWorktreeBase(
   });
 }
 
-// Every path prefix that should count as "managed" for this project.
-// All known layouts are included unconditionally so worktrees created
-// under a previous layout still appear managed after the user switches,
-// up until they run the migration.
-export function managedPrefixesFor(
+// Every base directory whose direct children count as "managed" for
+// this project. All known layouts are included unconditionally so
+// worktrees created under a previous layout still appear managed after
+// the user switches, up until they run the migration.
+export function managedBasesFor(
   projectPath: string,
   config: ShigomoriConfig | null,
 ): string[] {
   const customPath = config?.customWorktreePath?.trim() ?? null;
   return ALL_WORKTREE_LAYOUTS.flatMap((layout) => {
     if (layout === "custom" && !customPath) return [];
-    // withTrailingSep, not `+ sep`: a drive-root custom base ("C:\")
-    // already ends with its separator, and doubling it ("C:\\") folds
-    // to a prefix no real path starts with. It also keeps the base's
-    // own separator style instead of forcing the host's.
     return [
-      withTrailingSep(
-        worktreeBaseFor({
-          layout,
-          projectPath,
-          shigomoriRoot: shigomoriRoot(),
-          customPath,
-        }),
-      ),
+      worktreeBaseFor({
+        layout,
+        projectPath,
+        shigomoriRoot: shigomoriRoot(),
+        customPath,
+      }),
     ];
   });
 }
 
+// A worktree is managed when it sits DIRECTLY under one of the bases --
+// the app only ever creates worktrees as `<base>/<name>`. Parent
+// equality, not prefix matching: a prefix check would let a root base
+// ("C:\", "/") claim every worktree on the volume, and managed status
+// feeds destructive flows (nuke, delete cleanup).
 export function isManagedPath(
   worktreePath: string,
-  managedPrefixes: string[],
+  managedBases: string[],
 ): boolean {
-  const target = comparablePath(worktreePath);
-  return managedPrefixes.some((p) => target.startsWith(comparablePath(p)));
+  const folded = comparablePath(worktreePath).replace(/\/+$/, "");
+  const cut = folded.lastIndexOf("/");
+  if (cut < 0) return false;
+  const parent = folded.slice(0, cut);
+  return managedBases.some(
+    (base) => parent === comparablePath(base).replace(/\/+$/, ""),
+  );
 }
 
 // Best-effort cleanup of the empty parent directory a worktree just

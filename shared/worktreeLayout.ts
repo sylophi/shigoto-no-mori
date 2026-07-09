@@ -56,17 +56,6 @@ function sepFor(base: string): "/" | "\\" {
   return isWindowsStyle(base) && base.includes("\\") ? "\\" : "/";
 }
 
-// Trailing separator in the path's own style. For building "is this
-// under the base?" prefix strings: bases that are already roots ("C:\",
-// "/") keep their separator instead of getting a doubled one, which
-// would never prefix-match a real path.
-export function withTrailingSep(path: string): string {
-  const hasSep = isWindowsStyle(path)
-    ? /[\\/]$/.test(path)
-    : path.endsWith("/");
-  return hasSep ? path : path + sepFor(path);
-}
-
 function joinPath(base: string, ...segments: string[]): string {
   const win = isWindowsStyle(base);
   const sep = sepFor(base);
