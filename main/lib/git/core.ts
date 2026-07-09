@@ -12,7 +12,13 @@ async function exec(
 ): Promise<{ stdout: string }> {
   const start = performance.now();
   try {
-    const result = await execFileP("git", args, options);
+    // windowsHide: git.exe is a console-subsystem binary; without this,
+    // every spawn from the windowless packaged app flashes a conhost
+    // window on Windows -- and this chokepoint runs on a 60s sweep.
+    const result = await execFileP("git", args, {
+      windowsHide: true,
+      ...options,
+    });
     const elapsed = Math.round(performance.now() - start);
     console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
     return { stdout: result.stdout };

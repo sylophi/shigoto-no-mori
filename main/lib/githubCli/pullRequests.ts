@@ -9,7 +9,7 @@ import {
   PullRequestStateSchema,
   pullRequestsEqual,
 } from "@shared/schemas";
-import { execFileP } from "./exec";
+import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
 
 const GhPrListItemSchema = z.object({
@@ -36,8 +36,7 @@ async function runGhPrList(
   extraArgs: string[],
 ): Promise<GhPrListItem[] | null> {
   try {
-    const { stdout } = await execFileP(
-      "gh",
+    const { stdout } = await execGh(
       [
         "pr",
         "list",
@@ -257,8 +256,7 @@ async function runGhPrListDetail(
   cwd: string,
   branch: string,
 ): Promise<PullRequestDetail | null> {
-  const { stdout } = await execFileP(
-    "gh",
+  const { stdout } = await execGh(
     [
       "pr",
       "list",

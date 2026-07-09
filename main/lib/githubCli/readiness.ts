@@ -2,7 +2,7 @@ import type { GithubCliReadiness } from "@shared/schemas";
 import { readGlobalConfig } from "../config/global";
 import { binaryOnPath } from "../util/binaries";
 import { ttlValueCache } from "../util/ttlCache";
-import { execFileP } from "./exec";
+import { execGh } from "./exec";
 
 const READINESS_CACHE_TTL_MS = 30_000;
 
@@ -23,7 +23,7 @@ export function getGithubCliReadiness(): Promise<GithubCliReadiness> {
 
 async function isAuthed(): Promise<boolean> {
   try {
-    await execFileP("gh", ["auth", "status"]);
+    await execGh(["auth", "status"]);
     return true;
   } catch {
     return false;
