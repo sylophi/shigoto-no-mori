@@ -28,6 +28,11 @@ async function runGh(
     if (isENOENT(err)) {
       throw new Error("GitHub CLI isn't installed", { cause: err });
     }
+    // A timeout kill rejects with "Command failed: gh ..." and empty
+    // stderr; name the actual cause instead.
+    if (err instanceof Error && "killed" in err && err.killed === true) {
+      throw new Error("GitHub CLI timed out", { cause: err });
+    }
     const message =
       err instanceof Error && err.message
         ? trimGhError(err.message)

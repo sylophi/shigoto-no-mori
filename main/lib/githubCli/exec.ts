@@ -19,10 +19,14 @@ export function execGh(
   args: string[],
   options: { cwd?: string; maxBuffer?: number; timeout?: number } = {},
 ): Promise<{ stdout: string; stderr: string }> {
+  // No option spreading: a caller passing `timeout: undefined` would
+  // override (and disable) the default -- spread own-properties win
+  // even when undefined.
   return execFileP("gh", args, {
     windowsHide: true,
-    timeout: DEFAULT_TIMEOUT_MS,
-    ...options,
+    timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
+    cwd: options.cwd,
+    maxBuffer: options.maxBuffer,
   });
 }
 

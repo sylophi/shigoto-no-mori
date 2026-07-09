@@ -14,12 +14,14 @@ import { resolveDefaultBranch } from "../git/remotes";
 import { listWorktreeIdentities } from "../git/worktrees";
 import { readGlobalConfig } from "../config/global";
 import { isPortPoolConfigured, isPortPoolInstalled } from "../portPool";
+import { randomUUID } from "node:crypto";
 import { resolveScriptCommand } from "../scripts/command";
 import {
   getInflightDeleteIds,
   type NotifyScriptEvent,
   startScriptForLifecycle,
 } from "../scripts";
+import { scriptPlatform } from "../scripts/platform";
 import { readShigomoriConfig } from "../config/project";
 
 // Renderer-bound emit callbacks supplied by the IPC handler. Keeps the
@@ -64,21 +66,44 @@ async function runStep(args: {
   defaultBranch: string;
   notify: NotifyScriptEvent;
 }): Promise<{ runId: string; exitCode: number | null }> {
-  const { runId, exit } = startScriptForLifecycle({
-    command: args.command,
-    scriptName: args.scriptName,
-    worktree: args.worktree,
-    project: args.project,
-    projectBranch: args.projectBranch,
-    defaultBranch: args.defaultBranch,
-    notify: args.notify,
-    started: {
-      slot: args.slot,
+  let started: { runId: string; exit: Promise<number | null> };
+  try {
+    started = startScriptForLifecycle({
+      command: args.command,
+      scriptName: args.scriptName,
+      worktree: args.worktree,
+      project: args.project,
+      projectBranch: args.projectBranch,
+      defaultBranch: args.defaultBranch,
+      notify: args.notify,
+      started: {
+        slot: args.slot,
+        projectId: args.project.id,
+        worktreeId: args.worktree.id,
+      },
+    });
+  } catch (err) {
+    // startScript refused to spawn (unsupported cwd, app shutting
+    // down). Emit the started/error/exit sequence a spawn failure
+    // produces so the renderer surfaces the reason instead of the
+    // lifecycle phase silently flickering back to idle.
+    const runId = randomUUID();
+    args.notify({
+      runId,
+      kind: "started",
       projectId: args.project.id,
       worktreeId: args.worktree.id,
-    },
-  });
-  return { runId, exitCode: await exit };
+      slot: args.slot,
+    });
+    args.notify({
+      runId,
+      kind: "error",
+      data: err instanceof Error ? err.message : String(err),
+    });
+    args.notify({ runId, kind: "exit", code: null });
+    return { runId, exitCode: null };
+  }
+  return { runId: started.runId, exitCode: await started.exit };
 }
 
 // Fire-and-forget after the create IPC returns. Progress flows back
@@ -206,6 +231,18 @@ interface DeleteArgs {
 // caller), which wraps the whole delete -- cleanup scripts AND the actual
 // removal -- so the busy-quit prompt can't miss the removal phase.
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
+  // Cleanup scripts can't run in this cwd (UNC path on Windows). Setup
+  // was refused for the same reason at create time, so there is nothing
+  // a teardown or port-pool release could need to undo. Skip rather
+  // than fail: a failing cleanup makes the delete un-completable (force
+  // re-runs cleanup, and the skip-cleanup affordance only appears for
+  // script failures).
+  if (scriptPlatform.unsupportedCwdReason(args.worktree.path) !== null) {
+    console.warn(
+      `[lifecycle] skipping delete cleanup for unsupported cwd: ${args.worktree.path}`,
+    );
+    return;
+  }
   const defaultBranch = await resolveDefaultBranch(
     args.project.path,
     args.config?.defaultBranch,

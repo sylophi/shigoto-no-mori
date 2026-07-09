@@ -200,6 +200,13 @@ function spawnDetached(
 }
 
 async function openWithCli(cli: string, worktreePath: string): Promise<void> {
+  // Detection results are cached (main-side TTL plus the renderer's
+  // query cache), and the detached shell spawn below can't report a
+  // missing shim -- cmd.exe itself spawns fine either way. Re-probe so
+  // a stale entry surfaces as a launch error instead of a silent no-op.
+  if (!(await binaryOnPath(cli))) {
+    throw new Error(`"${cli}" is not on PATH`);
+  }
   // CLI shims are mostly `.cmd` batch wrappers (code.cmd, cursor.cmd,
   // JetBrains Toolbox scripts); a plain spawn can't run those directly,
   // so route through the shell. Quotes are illegal in Windows paths, so

@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  release-mac:
     # Apple Silicon runner; matches the only arch we ship right now.
     runs-on: macos-latest
     steps:
