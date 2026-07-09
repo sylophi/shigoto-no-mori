@@ -25,7 +25,6 @@
     "erasableSyntaxOnly": true,
     "noEmit": true,
     "sourceMap": true,
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./renderer/*"],
       "@shared/*": ["./shared/*"]
