@@ -77,8 +77,11 @@ export function NewWorktree() {
   const folderName = sanitizeBranchForPath(
     useBranchAsFolder ? folderSource : worktreeName,
   );
+  // Case-insensitive: NTFS and default APFS treat "Feature" and
+  // "feature" as the same directory (matches the main-side check).
   const folderTaken =
-    folderName.length > 0 && worktrees.some((w) => w.name === folderName);
+    folderName.length > 0 &&
+    worktrees.some((w) => w.name.toLowerCase() === folderName.toLowerCase());
 
   const canSubmit =
     base.length > 0 &&

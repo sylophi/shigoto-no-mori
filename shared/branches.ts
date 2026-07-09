@@ -53,3 +53,12 @@ const INVALID_WORKTREE_NAME_INPUT_CHARS = /[^A-Za-z0-9._-]/g;
 export function sanitizeWorktreeNameInput(name: string): string {
   return name.replace(INVALID_WORKTREE_NAME_INPUT_CHARS, "-");
 }
+
+// Submit-time check for user-typed worktree folder names: valid exactly
+// when sanitizing is a no-op. The live input filter above allows
+// individually-legal characters that combine into names no platform
+// should get ("con", "foo." — Win32 strips the trailing dot on create,
+// so the dir on disk wouldn't match the name we asked for).
+export function isValidWorktreeDirName(name: string): boolean {
+  return name.length > 0 && sanitizeBranchForPath(name) === name;
+}

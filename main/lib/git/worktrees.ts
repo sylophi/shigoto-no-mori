@@ -369,7 +369,7 @@ export async function pickAvailableWorktreeName(
   projectPath: string,
 ): Promise<string> {
   const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name));
+  const used = new Set(existing.map((w) => w.name.toLowerCase()));
   return pickWorktreeName(used);
 }
 
@@ -391,9 +391,12 @@ export async function createWorktree(
   // supplies a name we treat it as a user-chosen destination and fail
   // loudly on collision; only the unset case falls back to an animal
   // pick (the renderer's pre-pick also flows through here).
+  // Case-insensitive: NTFS and default APFS treat "Feature" and
+  // "feature" as the same directory, so a same-case-different-name
+  // create would die inside `git worktree add` with a raw error.
   const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name));
-  if (requestedWorktreeName && used.has(requestedWorktreeName)) {
+  const used = new Set(existing.map((w) => w.name.toLowerCase()));
+  if (requestedWorktreeName && used.has(requestedWorktreeName.toLowerCase())) {
     throw new Error(
       `A worktree folder named "${requestedWorktreeName}" already exists in this project.`,
     );
@@ -481,7 +484,15 @@ export async function removeWorktreeForce(
     }
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
-  await rm(worktreePath, { recursive: true, force: true });
+  // maxRetries: Windows surfaces transient EBUSY/EPERM while a terminal
+  // or editor still holds a handle in the tree; brief retries clear the
+  // common case. Harmless elsewhere.
+  await rm(worktreePath, {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+    retryDelay: 100,
+  });
   await pruneStaleWorktrees(projectPath);
 }
 

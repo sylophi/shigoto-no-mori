@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidWorktreeDirName } from "../branches";
 import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
@@ -130,7 +131,14 @@ export function deriveRemoteSyncState(
 export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
-  worktreeName: z.string().min(1).optional(),
+  // The refine backstops the renderer's sanitizing: reserved device
+  // names ("con") or trailing dots ("foo.") break as directory names on
+  // Windows, so they never reach `git worktree add`.
+  worktreeName: z
+    .string()
+    .min(1)
+    .refine(isValidWorktreeDirName, { message: "Not a valid folder name" })
+    .optional(),
   // Optional: when omitted, the worktree's auto-picked animal name is
   // used as the branch name too (the quick-create shortcut).
   branchName: GitRefNameSchema.optional(),

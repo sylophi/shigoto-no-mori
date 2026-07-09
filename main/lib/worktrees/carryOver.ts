@@ -72,14 +72,17 @@ async function applyOne(
         excludePath: null,
       };
     }
-    if (code === "EPERM" && entry.mode === "symlink" && isWindows) {
+    if (code === "EPERM" && isWindows) {
+      // Symlink mode hits this creating the link itself; copy mode hits
+      // it when cp recreates a symlink nested inside the copied tree.
+      const reason =
+        entry.mode === "symlink"
+          ? "Creating symlinks on Windows requires Developer Mode; " +
+            "enable it in Windows Settings or switch this entry to copy"
+          : "Copy failed with EPERM. If the source contains symlinks, " +
+            "recreating them requires Developer Mode on Windows";
       return {
-        failure: {
-          path: entry.path,
-          reason:
-            "Creating symlinks on Windows requires Developer Mode; " +
-            "enable it in Windows Settings or switch this entry to copy",
-        },
+        failure: { path: entry.path, reason },
         excludePath: null,
       };
     }
