@@ -161,6 +161,10 @@ export function startScript(args: RunArgs): string {
   if (shuttingDown) {
     throw new Error("App is shutting down; refusing to start a new script.");
   }
+  const cwdIssue = scriptPlatform.unsupportedCwdReason(args.worktree.path);
+  if (cwdIssue) {
+    throw new Error(cwdIssue);
+  }
 
   const runId = randomUUID();
 

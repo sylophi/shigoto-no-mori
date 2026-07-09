@@ -147,12 +147,14 @@ app.on("before-quit", (event) => {
   // An update-triggered quit has to flow through Electron's natural
   // quit so Squirrel's ShipIt helper detects the parent PID exit and
   // swaps bundles. Awaiting the full kill chain here would block that
-  // handoff for up to ~1.5s (grace + SIGKILL); instead we fire SIGTERM
-  // to every script's process group synchronously and let the natural
-  // quit window (~100ms) give well-behaved scripts a chance to clean
-  // up. The trade-off vs the normal-quit path: misbehaving children
-  // don't get the SIGKILL fallback and may end up reparented to
-  // launchd. Acceptable for an explicit, user-initiated update.
+  // handoff for up to ~1.5s (grace + SIGKILL); instead we fire a
+  // synchronous best-effort kill per platform: SIGTERM to each process
+  // group on macOS (well-behaved scripts get the natural quit window
+  // ~100ms to clean up), a detached forced taskkill on Windows (no
+  // graceful channel exists there). The trade-off vs the normal-quit
+  // path: children that survive the best-effort pass don't get the
+  // escalation fallback and may end up orphaned. Acceptable for an
+  // explicit, user-initiated update.
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");

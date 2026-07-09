@@ -4,6 +4,7 @@
 // cache, custom launchers, and protocol deep links -- so callers never
 // branch on platform themselves.
 import { spawn } from "node:child_process";
+import { isUncPath } from "@shared/worktreeLayout";
 import { isWindows } from "../util/platform";
 import { ttlValueCache } from "../util/ttlCache";
 import { darwinLaunchers } from "./darwin";
@@ -70,6 +71,15 @@ export function deepLinkFor(
 }
 
 export function launchCustom(command: string, worktreePath: string): void {
+  // Same cmd.exe limitation as the script runner: a UNC cwd silently
+  // falls back to %windir%, so the user's command would run in
+  // C:\Windows instead of the worktree.
+  if (isWindows && isUncPath(worktreePath)) {
+    throw new Error(
+      "Custom launchers can't run in a network (UNC) worktree on " +
+        "Windows; map the share to a drive letter first.",
+    );
+  }
   const env = {
     ...process.env,
     SHIGOMORI_WORKSPACE_PATH: worktreePath,

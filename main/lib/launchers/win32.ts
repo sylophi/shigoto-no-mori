@@ -6,18 +6,12 @@
 // macOS-only tools (Xcode, iTerm, Ghostty, Terminal.app, Finder, the
 // Codex app) are deliberately absent -- a Windows user should never see
 // them, not even as "supported but not installed".
-import { exec as execCommand, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { promisify } from "node:util";
 import { isWindowsStyle } from "@shared/worktreeLayout";
 import { binaryOnPath } from "../util/binaries";
+import { toNativePath } from "../util/paths";
 import type { DetectedApp, PlatformLaunchers } from "./types";
-
-// String-form exec for the .cmd shim fallback: cmd.exe's /s
-// quote-stripping mangles a hand-joined `"cli" "path"` argument list,
-// while exec's own shell invocation wraps the full command line
-// correctly.
-const execShell = promisify(execCommand);
 
 interface Win32CatalogEntry {
   id: string;
@@ -179,12 +173,23 @@ async function detect(): Promise<DetectedApp[]> {
 // accepts the process (the `spawn` event) so failures like ENOENT reach
 // the caller as errors instead of vanishing, but never waits for -- or
 // judges -- the exit code (explorer.exe famously exits 1 even on
-// success).
-function spawnDetached(command: string, args: string[]): Promise<void> {
+// success). Never awaiting the exit also matters for the shell path
+// below: a batch shim waits on GUI processes it starts synchronously,
+// so awaiting it (exec-style) would pin the launch IPC until the IDE
+// closes -- and exec's output buffering could even kill the tree later
+// on maxBuffer. detached means DETACHED_PROCESS, so no console window
+// is created; windowsHide covers children that allocate their own.
+function spawnDetached(
+  command: string,
+  args: string[],
+  opts: { shell?: boolean } = {},
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       detached: true,
       stdio: "ignore",
+      windowsHide: true,
+      shell: opts.shell ?? false,
     });
     child.once("error", reject);
     child.once("spawn", () => {
@@ -196,13 +201,13 @@ function spawnDetached(command: string, args: string[]): Promise<void> {
 
 async function openWithCli(cli: string, worktreePath: string): Promise<void> {
   // CLI shims are mostly `.cmd` batch wrappers (code.cmd, cursor.cmd,
-  // JetBrains Toolbox scripts); execFile can't run those directly, so
-  // route through the shell. Quotes are illegal in Windows paths, so
+  // JetBrains Toolbox scripts); a plain spawn can't run those directly,
+  // so route through the shell. Quotes are illegal in Windows paths, so
   // plain wrapping is sufficient. Residual cmd.exe caveat: %VAR% expands
   // even inside quotes, so a path containing a defined env-var name
   // opens the wrong folder -- unavoidable with cmd, which is why the
   // resolved-exe launch is preferred.
-  await execShell(`"${cli}" "${worktreePath}"`, { windowsHide: true });
+  await spawnDetached(`"${cli}" "${worktreePath}"`, [], { shell: true });
 }
 
 async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
@@ -210,7 +215,7 @@ async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
   // slashes -- which explorer.exe rejects outright (it falls back to the
   // default view) and other tools merely tolerate. Fold to native
   // backslashes before handing the path to anything.
-  const nativePath = worktreePath.replaceAll("/", "\\");
+  const nativePath = toNativePath(worktreePath);
   // Prefer the exe detection resolved -- a direct spawn with an argument
   // array, no cmd.exe and none of its quoting/expansion rules. Fall back
   // to the CLI shim only when no exe was found.

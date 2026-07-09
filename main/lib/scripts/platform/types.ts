@@ -17,6 +17,10 @@ export interface SpawnScriptOptions {
 export const SCRIPT_STDIO: StdioOptions = ["pipe", "pipe", "pipe"];
 
 export interface ScriptPlatform {
+  // Reason this cwd can't host a script on this platform, or null when
+  // it can. Checked before spawning so the user gets an actionable
+  // error instead of a script that silently ran somewhere else.
+  unsupportedCwdReason(cwd: string): string | null;
   // Spawn the user's shell command with merged-stream pipes attached.
   spawnScript(opts: SpawnScriptOptions): ChildProcess;
   // Signal the process tree rooted at pid. Callers escalate SIGTERM ->

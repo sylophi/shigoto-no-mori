@@ -108,6 +108,8 @@ function signalTreeBestEffort(pid: number, signal: NodeJS.Signals): void {
 }
 
 export const darwinScriptPlatform: ScriptPlatform = {
+  // POSIX shells are happy with any directory.
+  unsupportedCwdReason: () => null,
   spawnScript,
   signalTree,
   signalTreeBestEffort,

@@ -49,6 +49,15 @@ export function toAbsolute(path: string): string {
   return isAbsolute(expanded) ? expanded : resolve(expanded);
 }
 
+// Fold to the OS-native separator before handing a path to anything
+// outside the app. Git porcelain reports forward slashes even on
+// Windows; explorer.exe rejects those outright and other shell targets
+// merely tolerate them. No-op on POSIX, where backslash is a filename
+// character.
+export function toNativePath(path: string): string {
+  return isWindows ? path.replaceAll("/", "\\") : path;
+}
+
 export async function pathExists(target: string): Promise<boolean> {
   try {
     await lstat(target);

@@ -8,6 +8,7 @@
 // SIGKILL escalation after its grace period is then a no-op backstop.
 import { type ChildProcess, execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { isUncPath } from "@shared/worktreeLayout";
 import {
   SCRIPT_STDIO,
   type ScriptPlatform,
@@ -15,6 +16,21 @@ import {
 } from "./types";
 
 const execFileP = promisify(execFile);
+
+// cmd.exe refuses a UNC current directory: it prints "UNC paths are not
+// supported", falls back to %windir%, and runs the script THERE -- a
+// teardown like `rmdir /s /q node_modules` in C:\Windows. Refuse
+// loudly instead.
+function unsupportedCwdReason(cwd: string): string | null {
+  if (isUncPath(cwd)) {
+    return (
+      "Scripts can't run in a network (UNC) worktree on Windows: " +
+      "cmd.exe would silently run them in C:\\Windows instead. " +
+      "Map the share to a drive letter to use scripts here."
+    );
+  }
+  return null;
+}
 
 function spawnScript(opts: SpawnScriptOptions): ChildProcess {
   // `shell: true` runs the command through %ComSpec% (cmd.exe) with Node
@@ -67,6 +83,7 @@ function signalTreeBestEffort(pid: number): void {
 }
 
 export const win32ScriptPlatform: ScriptPlatform = {
+  unsupportedCwdReason,
   spawnScript,
   signalTree,
   signalTreeBestEffort,
