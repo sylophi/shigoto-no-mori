@@ -28,12 +28,13 @@ const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY);
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
 // Target platform of this build: the host by default, overridden by
-// `--platform win32` / `--platform=win32` when cross-packaging (e.g.
-// building a Windows test app from macOS to run under CrossOver).
+// `--platform win32` / `--platform=win32` / `-p win32` when
+// cross-packaging (e.g. building a Windows test app from macOS to run
+// under CrossOver).
 function targetPlatform(): string {
   const eq = process.argv.find((a) => a.startsWith("--platform="));
   if (eq) return eq.slice("--platform=".length);
-  const idx = process.argv.indexOf("--platform");
+  const idx = process.argv.findIndex((a) => a === "--platform" || a === "-p");
   if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
   return process.platform;
 }

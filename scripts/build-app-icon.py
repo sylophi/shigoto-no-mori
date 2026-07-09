@@ -3,12 +3,13 @@
 # dependencies = ["Pillow>=10.0"]
 # ///
 """
-Build the macOS app icon (.icns) — a deep-emerald squircle with a stylized
-tree, echoing the TreeDeciduous glyph from the welcome panel.
+Build the app icons — a deep-emerald squircle with a stylized tree,
+echoing the TreeDeciduous glyph from the welcome panel.
 
 Produces:
   assets/icon.png        — 1024x1024 master
   assets/icon.iconset/   — per-size PNGs for `iconutil`
+  assets/icon.ico        — multi-size Windows icon (PNG-compressed entries)
 
 Run `iconutil -c icns assets/icon.iconset -o assets/icon.icns` after.
 """
@@ -127,6 +128,11 @@ ICONSET_SIZES: list[tuple[str, int]] = [
 ]
 
 
+# Windows shell contexts pick from these; 256 is the Vista+ "extra
+# large" slot, the rest cover taskbar/title-bar/Explorer list sizes.
+ICO_SIZES: list[int] = [16, 24, 32, 48, 64, 256]
+
+
 def main() -> None:
     ASSETS.mkdir(exist_ok=True)
     ICONSET.mkdir(exist_ok=True)
@@ -137,7 +143,16 @@ def main() -> None:
     for name, px in ICONSET_SIZES:
         master.resize((px, px), Image.LANCZOS).save(ICONSET / name, format="PNG")
 
-    print(f"wrote {ASSETS / 'icon.png'} and {len(ICONSET_SIZES)} sized PNGs")
+    master.save(
+        ASSETS / "icon.ico",
+        format="ICO",
+        sizes=[(px, px) for px in ICO_SIZES],
+    )
+
+    print(
+        f"wrote {ASSETS / 'icon.png'}, {ASSETS / 'icon.ico'} "
+        f"and {len(ICONSET_SIZES)} sized PNGs"
+    )
     print("now run: iconutil -c icns assets/icon.iconset -o assets/icon.icns")
 
 

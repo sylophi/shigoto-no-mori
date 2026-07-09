@@ -145,7 +145,8 @@ jobs:
         run: |
           VERSION="${TAG#v}"
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            pnpm pkg set version="$VERSION"
+            # npm, not pnpm: pnpm has no `pkg` command (matches the macOS job).
+            npm pkg set version="$VERSION"
           else
             echo "Tag '$TAG' isn't semver, leaving package.json unchanged"
           fi
