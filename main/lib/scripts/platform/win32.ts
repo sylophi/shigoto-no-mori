@@ -48,8 +48,9 @@ function spawnScript(opts: SpawnScriptOptions): ChildProcess {
 }
 
 // `/T` makes taskkill walk the child tree itself, so no separate
-// descendant walk is needed.
-async function taskkillTree(pid: number): Promise<void> {
+// descendant walk is needed. Both signals map here (see file header):
+// console processes have no graceful-kill channel, so every kill is forced.
+async function signalTree(pid: number): Promise<void> {
   try {
     await execFileP("taskkill", ["/pid", String(pid), "/T", "/F"], {
       windowsHide: true,
@@ -57,10 +58,6 @@ async function taskkillTree(pid: number): Promise<void> {
   } catch {
     // Nonzero exit: tree already gone, or we lost ownership.
   }
-}
-
-async function signalTree(pid: number): Promise<void> {
-  await taskkillTree(pid);
 }
 
 // Detached + unref: the quit path returns immediately after calling

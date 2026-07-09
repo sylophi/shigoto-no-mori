@@ -10,7 +10,7 @@ import type { WorktreeLayout } from "./schemas";
 // component (`.shigomori`) is also the path appended to the primary's
 // `.git/info/exclude` so it stays out of `git status`.
 export const IN_PROJECT_ROOT_DIR = ".shigomori";
-export const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
+const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
 export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
   "managed-root",
   "in-project",

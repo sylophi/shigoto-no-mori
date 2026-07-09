@@ -6,11 +6,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// macOS title-bar drag region: a non-standard CSS property React's typed
-// CSSProperties doesn't model. Wrap the cast in one place so callers
-// just say `dragRegion("drag")` or `dragRegion("no-drag")`.
+// Title-bar drag region: a non-standard CSS property React's typed
+// CSSProperties doesn't model. The camelCase form sets the same style
+// through Chromium's CSSOM without React's dev-mode "unsupported style
+// property" warning. Wrap the cast in one place so callers just say
+// `dragRegion("drag")` or `dragRegion("no-drag")`.
 export function dragRegion(value: "drag" | "no-drag"): CSSProperties {
-  return { ["-webkit-app-region" as never]: value };
+  return { ["WebkitAppRegion" as never]: value };
 }
 
 // Exhaustiveness guard. In a `switch` over a discriminated union, putting
