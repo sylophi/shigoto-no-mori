@@ -1144,14 +1144,14 @@ async function seedWorktreeInclude(): Promise<Manifest> {
     purpose:
       ".worktreeinclude patterns (comments, dirs, negation, tracked/non-ignored traps) plus manual-entry reconciliation",
     tests: [
-      "Configure → Carry over: the .worktreeinclude box lists 6 patterns (comment/blank filtered), toggle on by default, and reports 'Matches 3 gitignored paths' (.env, node_modules/, app.log).",
-      "Carry-over picker: .env, node_modules/, app.log show a 'covered' label instead of Symlink/Copy buttons; .env.local still offers both. Toggle .worktreeinclude off and reopen — the buttons return.",
+      "Configure → Carry over: the 'Use .worktreeinclude' toggle row is on by default, and .env, node_modules, app.log appear as read-only rows in the carry-over list with a static Copy indicator, a 'used by .worktreeinclude' note, and a disabled remove button.",
+      "Carry-over picker: .env, node_modules/, app.log show a 'covered' label instead of Symlink/Copy buttons; .env.local still offers both. Toggle .worktreeinclude off and reopen: the buttons return.",
       "Create a worktree: .env, node_modules/, app.log are copied (real files, not symlinks); debug.log, tracked.txt, notes.txt, .env.local are NOT; .git/info/exclude gains no lines from include entries.",
-      "Reconciliation: add .env as a manual entry (any mode) and save — the row shows the amber 'covered' badge. Create a worktree: the entry disappears from Configure, and a toast explains a .worktreeinclude update removed it.",
-      "Symlink downgrade: add node_modules as a manual Symlink entry, save, create a worktree — entry auto-removed (toast) and the new worktree gets a copied node_modules, not a symlink.",
-      "Draft race: dirty the form (edit the setup script, don't save), create a worktree, then Save — the removed entries must not reappear in ~/shigomori-dev/projects/<id>/project.json.",
-      "Toggle .worktreeinclude off, save, create a worktree: nothing from the file is copied; manual entries untouched, no reconcile toast.",
-      "File-missing state: check any repo without the file (e.g. carryover-rich) shows 'No .worktreeinclude file at the repo root.'",
+      "Reconciliation: add .env as a manual entry (any mode) and save; the row shows the amber 'covered' badge. Create a worktree: the entry disappears from Configure, and a toast explains a .worktreeinclude update removed it.",
+      "Symlink downgrade: add node_modules as a manual Symlink entry, save, create a worktree. The entry is auto-removed (toast) and the new worktree gets a copied node_modules, not a symlink.",
+      "Draft race: dirty the form (edit the setup script, don't save), create a worktree, then Save. The removed entries must not reappear in ~/shigomori-dev/projects/<id>/project.json.",
+      "Toggle .worktreeinclude off, save, create a worktree: the read-only rows disappear, nothing from the file is copied, manual entries untouched, no reconcile toast.",
+      "File-missing state: in a repo without the file (e.g. carryover-rich) the toggle row is hidden entirely while the toggle is on, and reappears (for re-enabling) after toggling it off.",
     ],
   };
 }

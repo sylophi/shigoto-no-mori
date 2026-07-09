@@ -3,8 +3,8 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
+import { ExternalLink } from "@/components/ui/external-link";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
-import { notifyError } from "@/lib/toast";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
 import type { CarryOverEntry } from "@shared/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
@@ -35,22 +35,23 @@ export function CarryOverSection({
   const selectedPaths = new Set(entries.map((e) => e.path));
   const { data: status } = useWorktreeIncludeStatus(projectId);
 
-  // resolvedPaths come trailing-slash-stripped, so re-add the directory
-  // form; otherwise a manual entry nested under a covered directory
-  // (node_modules/some-pkg under node_modules/) would miss its badge
-  // while creation-time reconciliation would still remove it.
+  // matchedPaths keep git's raw shape (directories keep their trailing
+  // slash), the same input creation-time reconciliation matches against,
+  // so the covered badge and the actual auto-removal always agree.
   const isCovered =
     useWorktreeInclude && status?.fileExists
-      ? makeIgnoreMatcher(status.resolvedPaths.flatMap((p) => [p, `${p}/`]))
+      ? makeIgnoreMatcher(status.matchedPaths)
       : () => false;
 
   // .worktreeinclude matches render as read-only rows in the same list as
-  // manual entries. On an exact path collision the manual row wins — it
+  // manual entries. On an exact path collision the manual row wins; it
   // carries the covered badge until creation-time reconciliation removes it.
   const manualPaths = new Set(entries.map((e) => normalizeRelPath(e.path)));
   const includePaths =
     useWorktreeInclude && status?.fileExists
-      ? status.resolvedPaths.filter((p) => !manualPaths.has(p))
+      ? status.matchedPaths
+          .map(normalizeRelPath)
+          .filter((p) => !manualPaths.has(p))
       : [];
 
   return (
@@ -74,22 +75,13 @@ export function CarryOverSection({
             <p className="mt-0.5 text-xs text-muted-foreground">
               {useWorktreeInclude &&
               status?.fileExists &&
-              status.resolvedPaths.length === 0
+              status.matchedPaths.length === 0
                 ? "No gitignored files match its patterns."
                 : "Copies matching gitignored files into every new worktree."}{" "}
-              <button
-                type="button"
-                onClick={() => {
-                  window.api.shell
-                    .openExternal(
-                      "https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees",
-                    )
-                    .catch((err) => notifyError("Couldn't open docs", err));
-                }}
-                className="underline underline-offset-2 hover:text-foreground"
-              >
-                Learn more
-              </button>
+              <ExternalLink
+                href="https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees"
+                errorTitle="Couldn't open docs"
+              />
             </p>
           </div>
           <Switch

@@ -126,21 +126,27 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         includeEntries = resolution.entries;
         // Manual entries the file now covers get auto-removed. Reconcile
         // against a fresh config read so a save that landed after our
-        // cached read at the top isn't clobbered.
+        // cached read at the top isn't clobbered. That save may also have
+        // toggled the integration off; honor the opt-out too, not just
+        // the fresh carryOver list.
         const freshConfig = await readShigomoriConfigFresh(projectId);
         if (freshConfig) {
           manualEntries = freshConfig.carryOver ?? [];
-          const { kept, removedPaths } = reconcileManualEntries(
-            manualEntries,
-            resolution.matchedPaths,
-          );
-          if (removedPaths.length > 0) {
-            await writeShigomoriConfig(projectId, {
-              ...freshConfig,
-              carryOver: kept.length > 0 ? kept : undefined,
-            });
-            manualEntries = kept;
-            removedCarryOverPaths = removedPaths;
+          if (freshConfig.useWorktreeInclude === false) {
+            includeEntries = [];
+          } else {
+            const { kept, removedPaths } = reconcileManualEntries(
+              manualEntries,
+              resolution.matchedPaths,
+            );
+            if (removedPaths.length > 0) {
+              await writeShigomoriConfig(projectId, {
+                ...freshConfig,
+                carryOver: kept.length > 0 ? kept : undefined,
+              });
+              manualEntries = kept;
+              removedCarryOverPaths = removedPaths;
+            }
           }
         }
       }
@@ -150,7 +156,20 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         reason: err instanceof Error ? err.message : String(err),
       });
     }
-    if (deleting()) return;
+    if (deleting()) {
+      // The reconcile write may already have landed; without the event an
+      // open Configure view keeps the removed entries in its snapshot and
+      // a later Save resurrects them.
+      if (removedCarryOverPaths) {
+        args.notifyCarryOverComplete({
+          projectId,
+          worktreeId,
+          report: { applied: 0, failures: [] },
+          removedCarryOverPaths,
+        });
+      }
+      return;
+    }
 
     const carryOverEntries = mergeCarryOver(manualEntries, includeEntries);
     if (carryOverEntries.length > 0 || includeFailures.length > 0) {
@@ -169,7 +188,11 @@ export async function runCreateLifecycle(args: CreateArgs): Promise<void> {
         worktreeId,
         report: {
           applied: report.applied,
-          failures: [...includeFailures, ...report.failures],
+          failures: report.failures,
+          // Resolution errors are not entries; keep them out of the
+          // per-entry failure list so toast counts stay accurate.
+          includeFailures:
+            includeFailures.length > 0 ? includeFailures : undefined,
         },
         removedCarryOverPaths,
       });

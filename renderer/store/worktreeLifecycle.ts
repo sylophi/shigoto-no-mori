@@ -69,6 +69,15 @@ class WorktreeLifecycleStore {
         );
       }
       const { applied, failures } = evt.report;
+      const includeFailures = evt.report.includeFailures ?? [];
+      if (includeFailures.length > 0) {
+        this.warn("Couldn't resolve .worktreeinclude", {
+          description: clippedLines(
+            includeFailures.map((f) => f.reason),
+            4,
+          ),
+        });
+      }
       if (failures.length === 0) return;
       this.warn(
         `Carried over ${applied} of ${applied + failures.length} entries`,

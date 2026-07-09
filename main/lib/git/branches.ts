@@ -118,40 +118,40 @@ export async function deleteAnyLocalBranch(
 
 // `--directory` collapses fully-ignored directories into a single
 // trailing-slash entry; loose files inside partially-ignored dirs are
-// listed individually. The renderer derives membership from this list to
-// decide whether a filesystem entry can be carried over. `-z` keeps
-// non-ASCII names raw instead of core.quotePath-escaped so they compare
-// equal against filesystem-derived paths.
-export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
-  const stdout = await run(projectPath, [
-    "ls-files",
-    "-z",
-    "--others",
-    "--ignored",
-    "--exclude-standard",
-    "--directory",
-  ]);
-  return stdout.split("\0").filter((line) => line.length > 0);
-}
-
-// Untracked paths matched by the gitignore-syntax patterns in
-// `excludeFile` (absolute path). `--exclude-from` replaces the standard
-// excludes as the pattern source, so this evaluates ONLY the given file's
-// patterns, with full gitignore semantics including negation. Same
-// `--directory` collapsing as listIgnoredPaths.
-export async function listUntrackedMatchingExcludeFile(
+// listed individually. `-z` keeps non-ASCII names raw instead of
+// core.quotePath-escaped so they compare equal against
+// filesystem-derived paths.
+async function listOthersIgnored(
   projectPath: string,
-  excludeFile: string,
+  excludeArg: string,
 ): Promise<string[]> {
   const stdout = await run(projectPath, [
     "ls-files",
     "-z",
     "--others",
     "--ignored",
-    `--exclude-from=${excludeFile}`,
+    excludeArg,
     "--directory",
   ]);
   return stdout.split("\0").filter((line) => line.length > 0);
+}
+
+// Untracked paths ignored by the standard excludes (.gitignore et al).
+// The renderer derives membership from this list to decide whether a
+// filesystem entry can be carried over.
+export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
+  return listOthersIgnored(projectPath, "--exclude-standard");
+}
+
+// Untracked paths matched by the gitignore-syntax patterns in
+// `excludeFile` (absolute path). `--exclude-from` replaces the standard
+// excludes as the pattern source, so this evaluates ONLY the given file's
+// patterns, with full gitignore semantics including negation.
+export async function listUntrackedMatchingExcludeFile(
+  projectPath: string,
+  excludeFile: string,
+): Promise<string[]> {
+  return listOthersIgnored(projectPath, `--exclude-from=${excludeFile}`);
 }
 
 // Lists branches usable as a base ref: local heads and remote-tracking refs.

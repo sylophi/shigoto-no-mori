@@ -150,6 +150,9 @@ export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;
 export const CarryOverReportSchema = z.object({
   applied: z.number().int().nonnegative(),
   failures: z.array(CarryOverFailureSchema),
+  // .worktreeinclude resolution errors. Not carry-over entries, so they
+  // are reported separately from the per-entry failures above.
+  includeFailures: z.array(CarryOverFailureSchema).optional(),
 });
 export type CarryOverReport = z.infer<typeof CarryOverReportSchema>;
 

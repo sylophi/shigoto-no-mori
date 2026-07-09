@@ -4,13 +4,13 @@
 // whose matches, when also gitignored, are copied into new worktrees.
 // Always copy mode, resolved fresh per worktree creation, never persisted.
 
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   isSafeRelPath,
   makeIgnoreMatcher,
   normalizeRelPath,
 } from "@shared/gitPaths";
+import { pathExists } from "../util/paths";
 import type {
   CarryOverEntry,
   ShigomoriConfig,
@@ -31,20 +31,12 @@ export interface WorktreeIncludeResolution {
   matchedPaths: string[];
 }
 
-function isEnoent(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    "code" in err &&
-    (err as NodeJS.ErrnoException).code === "ENOENT"
-  );
-}
-
 // Spec: a path is copied when it matches a .worktreeinclude pattern AND is
 // gitignored. `--others` already excludes tracked files; the intersection
 // with the standard ignored list drops untracked-but-not-ignored matches.
 // A directory that is only partially gitignored collapses to `dir/` on the
 // pattern side but appears as individual files on the ignored side, so the
-// intersection drops it entirely — conservative, and avoids enumerating
+// intersection drops it entirely: conservative, and avoids enumerating
 // node_modules-scale trees.
 async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
   const [candidates, ignored] = await Promise.all([
@@ -69,11 +61,8 @@ export async function resolveWorktreeInclude(
   config: ShigomoriConfig | null,
 ): Promise<WorktreeIncludeResolution | null> {
   if (config?.useWorktreeInclude === false) return null;
-  try {
-    await readFile(join(projectPath, WORKTREE_INCLUDE_FILE));
-  } catch (err) {
-    if (isEnoent(err)) return null;
-    throw err;
+  if (!(await pathExists(join(projectPath, WORKTREE_INCLUDE_FILE)))) {
+    return null;
   }
   const matchedPaths = await resolveMatchedPaths(projectPath);
   const entries = matchedPaths
@@ -99,38 +88,45 @@ export function reconcileManualEntries(
   return { kept, removedPaths };
 }
 
-// Manual entries win on exact path collision — only reachable when the
-// reconcile write failed and a covered manual entry survived; dropping the
-// include duplicate avoids a spurious EEXIST failure from applyCarryOver.
+// Manual entries win when an include path collides with or overlaps a
+// manual path. Exact collisions are only reachable when the reconcile
+// write failed and a covered manual entry survived. Nested overlaps are
+// reachable normally: a manual entry for a partially-gitignored directory
+// survives reconciliation while the file's patterns match ignored files
+// inside it, and applyCarryOver runs entries concurrently, so applying
+// both races the parent against the child (spurious EEXIST failures).
 export function mergeCarryOver(
   manual: CarryOverEntry[],
   include: CarryOverEntry[],
 ): CarryOverEntry[] {
-  const manualPaths = new Set(manual.map((e) => normalizeRelPath(e.path)));
-  return [...manual, ...include.filter((e) => !manualPaths.has(e.path))];
+  const manualPaths = manual.map((e) => normalizeRelPath(e.path));
+  return [
+    ...manual,
+    ...include.filter((e) => !manualPaths.some((m) => pathsOverlap(e.path, m))),
+  ];
+}
+
+// True when the paths are equal or one is nested inside the other.
+function pathsOverlap(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
 // Pure read for the Configure view. Never throws: a broken file or git
 // failure degrades to an empty resolution so the UI can still render.
+// matchedPaths keep git's raw shape (directories keep their trailing
+// slash) so the renderer's coverage matcher sees the same input as
+// creation-time reconciliation.
 export async function readWorktreeIncludeStatus(
   projectPath: string,
 ): Promise<WorktreeIncludeStatus> {
-  let raw: string;
-  try {
-    raw = await readFile(join(projectPath, WORKTREE_INCLUDE_FILE), "utf8");
-  } catch {
-    return { fileExists: false, patterns: [], resolvedPaths: [] };
+  if (!(await pathExists(join(projectPath, WORKTREE_INCLUDE_FILE)))) {
+    return { fileExists: false, matchedPaths: [] };
   }
-  const patterns = raw
-    .split("\n")
-    .filter((line) => line.trim() !== "" && !line.startsWith("#"));
-  let resolvedPaths: string[] = [];
+  let matchedPaths: string[] = [];
   try {
-    resolvedPaths = (await resolveMatchedPaths(projectPath)).map(
-      stripTrailingSlash,
-    );
+    matchedPaths = await resolveMatchedPaths(projectPath);
   } catch {
     // Leave empty; creation-time resolution surfaces the real error.
   }
-  return { fileExists: true, patterns, resolvedPaths };
+  return { fileExists: true, matchedPaths };
 }

@@ -73,11 +73,12 @@ export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 // worktrees). Read-only from the app's side; the file belongs to the repo.
 export const WorktreeIncludeStatusSchema = z.object({
   fileExists: z.boolean(),
-  // Raw pattern lines, blank and comment lines dropped, for display.
-  patterns: z.array(z.string()),
-  // Paths the patterns currently resolve to (matched AND gitignored),
-  // trailing slashes stripped. Empty when resolution fails.
-  resolvedPaths: z.array(z.string()),
+  // Paths the file's patterns currently resolve to (matched AND
+  // gitignored), in git's raw shape: fully-ignored directories keep
+  // their trailing slash. Matches what creation-time reconciliation
+  // sees, so the UI's covered badge and the actual auto-removal agree.
+  // Empty when resolution fails.
+  matchedPaths: z.array(z.string()),
 });
 export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 

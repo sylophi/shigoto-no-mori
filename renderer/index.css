@@ -4,6 +4,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Disabled controls keep pointer events so the not-allowed cursor and
+   title tooltips work (see the base-layer cursor rule below). In turn,
+   `hover:` must never style a disabled element, or dead controls light
+   up on hover; guarding it here covers every call site instead of
+   requiring `not-disabled:` prefixes everywhere. */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover:not(:disabled, [aria-disabled="true"], [data-disabled]) {
+      @slot;
+    }
+  }
+}
+
 :root {
   --background: var(--color-white);
   --foreground: var(--color-neutral-950);

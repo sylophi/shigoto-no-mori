@@ -117,7 +117,11 @@ export function ConfigureForm({
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
     await write.mutateAsync({ projectId, config: next });
-    setSavedSnapshot(form);
+    // Snapshot what was actually persisted, not the raw form: toConfig
+    // drops half-filled launcher rows and normalizes fields. Snapshotting
+    // the raw form would mark those leftovers clean, and the post-save
+    // refetch would reseed the form from disk and silently wipe them.
+    setSavedSnapshot(fromConfig(next, resolvedDefaultBranch));
   };
 
   const handleDiscard = () => {
