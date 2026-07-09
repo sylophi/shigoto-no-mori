@@ -137,20 +137,21 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Same tag/version sync as the macOS job; app.getVersion() and the
-      # Squirrel nupkg version both come from package.json.
+      # Same tag/version sync as the macOS job (npm, not pnpm: pnpm has
+      # no `pkg` command); app.getVersion() and the Squirrel nupkg
+      # version both come from package.json, and a non-semver tag would
+      # otherwise ship the placeholder 0.0.0.
       - name: Sync package.json version with tag
         shell: bash
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           VERSION="${TAG#v}"
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            # npm, not pnpm: pnpm has no `pkg` command (matches the macOS job).
-            npm pkg set version="$VERSION"
-          else
-            echo "Tag '$TAG' isn't semver, leaving package.json unchanged"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
+            exit 1
           fi
+          npm pkg set version="$VERSION"
 
       # Unsigned for now: Windows builds ship without Authenticode until
       # a certificate exists (SmartScreen will warn on first run).
