@@ -2,7 +2,8 @@
 // top-right. There is no vibrancy equivalent that can follow the in-app
 // theme, so the window is opaque and the renderer paints the sidebar
 // surface itself (renderer/index.css branches on data-platform).
-import { type BrowserWindow, nativeTheme } from "electron";
+import { join } from "node:path";
+import { app, type BrowserWindow, nativeTheme } from "electron";
 import type { PlatformChrome } from "./types";
 
 // Colors follow the effective theme (nativeTheme already reflects the
@@ -36,6 +37,12 @@ function windowOptions(): Electron.BrowserWindowConstructorOptions {
     // Without this Electron still draws the menu-bar row in the client
     // area despite the hidden title bar; Alt reveals it on demand.
     autoHideMenuBar: true,
+    // Dev only: packaged builds embed the icon in the exe (rcedit via
+    // packagerConfig.icon), but `electron-forge start` would show the
+    // stock Electron icon in the taskbar without an explicit one.
+    ...(app.isPackaged
+      ? {}
+      : { icon: join(app.getAppPath(), "assets", "icon.ico") }),
   };
 }
 

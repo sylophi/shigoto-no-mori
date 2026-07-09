@@ -141,6 +141,32 @@
   [data-platform="win32"].dark [data-sidebar] {
     background: oklch(0.235 0 0);
   }
+
+  /*
+   * Windows draws classic always-visible 17px scrollbars in the
+   * scrollable panes (macOS uses overlay scrollbars, so this never
+   * shows there). Restyle to a quiet thin thumb; the translucent
+   * neutral reads on both themes.
+   */
+  [data-platform="win32"] ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  [data-platform="win32"] ::-webkit-scrollbar-track,
+  [data-platform="win32"] ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  [data-platform="win32"] ::-webkit-scrollbar-thumb {
+    background: oklch(0.55 0 0 / 0.35);
+    background-clip: content-box;
+    border: 2px solid transparent;
+    border-radius: 5px;
+  }
+  [data-platform="win32"] ::-webkit-scrollbar-thumb:hover {
+    background: oklch(0.55 0 0 / 0.55);
+    background-clip: content-box;
+    border: 2px solid transparent;
+  }
 }
 
 /*

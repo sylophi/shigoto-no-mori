@@ -37,6 +37,10 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: port ? { port, strictPort: true } : undefined,
+    // Scope the dep scanner to the real entry; its default **/*.html
+    // glob picks up LICENSES.chromium.html inside out/ packaged builds
+    // and fails the scan with noisy (harmless) errors at dev boot.
+    optimizeDeps: { entries: ["index.html"] },
     define: {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),

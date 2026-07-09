@@ -22,8 +22,11 @@ export function CommandPalette() {
   useEffect(() => {
     if (isMac) return;
     const onKey = (e: KeyboardEvent) => {
+      // e.code fallback: on non-Latin layouts (Cyrillic, Greek, ...)
+      // e.key is the layout character, so the physical P key would
+      // otherwise never match.
       if (
-        e.key.toLowerCase() === "p" &&
+        (e.key.toLowerCase() === "p" || e.code === "KeyP") &&
         e.ctrlKey &&
         !e.shiftKey &&
         !e.altKey &&
