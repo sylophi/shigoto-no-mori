@@ -66,8 +66,8 @@ async function signalTree(pid: number): Promise<void> {
 // Detached + unref: the quit path returns immediately after calling
 // this and Electron tears the process down. A detached taskkill escapes
 // the parent's teardown (it isn't tied to our process's lifetime) and
-// finishes walking the tree on its own, without ever blocking the
-// Squirrel handoff the caller is racing toward.
+// finishes walking the tree on its own, without ever blocking the quit
+// the caller is racing toward.
 function signalTreeBestEffort(pid: number): void {
   try {
     const child = spawn("taskkill", ["/pid", String(pid), "/T", "/F"], {

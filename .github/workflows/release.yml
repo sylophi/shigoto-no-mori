@@ -138,8 +138,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Same tag/version sync as the macOS job (npm, not pnpm: pnpm has
-      # no `pkg` command); app.getVersion() and the Squirrel nupkg
-      # version both come from package.json, and a non-semver tag would
+      # no `pkg` command); app.getVersion() and the zip's version suffix
+      # both come from package.json, and a non-semver tag would
       # otherwise ship the placeholder 0.0.0.
       - name: Sync package.json version with tag
         shell: bash

@@ -18,7 +18,7 @@ export function VersionSection() {
             {__APP_VERSION__}{" "}
             <span className="text-muted-foreground">({__APP_COMMIT__})</span>
           </div>
-          {ready ? (
+          {kind === "unsupported" ? null : ready ? (
             <Button
               size="sm"
               onClick={() => install.mutate()}

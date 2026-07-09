@@ -1,5 +1,4 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
-import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -47,11 +46,11 @@ const config: ForgeConfig = {
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
     extraResource: ["resources/licenses"],
-    // Squirrel.Windows tooling (Update.exe --processStart shortcut
-    // targets, nupkg packing) has a long history of breaking on spaces
-    // in the exe name, so Windows builds get a space-free executable.
-    // Scoped to win32 targets so the macOS bundle keeps its productName
-    // binary.
+    // The portable zip puts the exe directly in front of the user (no
+    // installer-made shortcut), so give it a space-free name: spaces in
+    // exe paths are a chronic quoting hazard in Windows shortcuts,
+    // scripts, and tooling. Scoped to win32 targets so the macOS bundle
+    // keeps its productName binary.
     ...(isWindowsTarget ? { executableName: "shigoto-no-mori" } : {}),
     ...(shouldSignMac
       ? {
@@ -76,23 +75,13 @@ const config: ForgeConfig = {
     },
   },
   makers: [
-    new MakerZIP({}, ["darwin"]),
-    // Squirrel.Windows: produces Setup.exe plus the RELEASES/.nupkg pair
-    // that update.electronjs.org serves to the in-app autoUpdater.
-    // Unsigned for now -- Authenticode signing slots in here via
-    // `windowsSign` once a certificate exists.
-    new MakerSquirrel(
-      {
-        // Required nuspec metadata; electron-winstaller errors out when
-        // neither this nor package.json's author is set.
-        authors: "sylophi",
-        setupIcon: "assets/icon.ico",
-        // Shown in Add/Remove Programs; must be a URL, not a local path.
-        iconUrl:
-          "https://raw.githubusercontent.com/sylophi/shigoto-no-mori/main/assets/icon.ico",
-      },
-      ["win32"],
-    ),
+    // Both platforms ship as plain zips. On Windows that means a
+    // portable app (unzip anywhere, run the exe): no installer, no
+    // registry writes, and no Squirrel machinery to carry -- the
+    // trade-off is no auto-update there (Electron's Windows autoUpdater
+    // requires a Squirrel install), so Windows users update by
+    // downloading a new zip.
+    new MakerZIP({}, ["darwin", "win32"]),
   ],
   publishers: [
     new PublisherGithub({

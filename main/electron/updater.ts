@@ -1,8 +1,13 @@
-// In-app auto-update built on Electron's `autoUpdater` (Squirrel.Mac on
-// darwin, Squirrel on win32). We point the feed at
-// update.electronjs.org, which already filters to the latest non-draft,
-// non-prerelease GitHub release and does the version comparison for us
-// -- the renderer just sees a small state machine and a button.
+// In-app auto-update built on Electron's `autoUpdater` (Squirrel.Mac).
+// We point the feed at update.electronjs.org, which already filters to
+// the latest non-draft, non-prerelease GitHub release and does the
+// version comparison for us -- the renderer just sees a small state
+// machine and a button.
+//
+// macOS-only: the Windows build is a portable zip with no installer,
+// and Electron's Windows autoUpdater only works under a Squirrel
+// install. Windows (and dev) builds report `unsupported` so the
+// renderer can hide the check button instead of showing a dead one.
 //
 // We deliberately replace `update-electron-app`'s OS dialog: the
 // "Restart to update" prompt lives in Settings and a dot on the sidebar
@@ -16,12 +21,10 @@ import { updaterContract } from "@shared/ipc/modules/updater";
 import type { UpdaterState } from "@shared/schemas";
 import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
+import { isMac } from "../lib/util/platform";
 import { confirmBusyAction } from "./busyPrompt";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
-// oxlint-disable-next-line no-restricted-properties -- the feed URL needs the raw platform *value*, not a boolean branch
-const FEED_PLATFORM = process.platform;
-const SUPPORTED_PLATFORMS = new Set(["darwin", "win32"]);
 
 let state: UpdaterState = { kind: "idle" };
 let started = false;
@@ -46,10 +49,10 @@ export function getUpdaterState(): UpdaterState {
 }
 
 function buildFeedUrl(): string | null {
+  if (!isMac) return null;
   const override = process.env.SHIGOMORI_UPDATE_FEED_URL?.trim();
   if (override) return override;
-  if (!SUPPORTED_PLATFORMS.has(FEED_PLATFORM)) return null;
-  return `https://update.electronjs.org/sylophi/shigoto-no-mori/${FEED_PLATFORM}-${process.arch}/${app.getVersion()}`;
+  return `https://update.electronjs.org/sylophi/shigoto-no-mori/darwin-${process.arch}/${app.getVersion()}`;
 }
 
 function stripVPrefix(name: string): string {
@@ -99,9 +102,11 @@ export function installUpdaterImpl(): void {
 
 export function startUpdater(): void {
   if (started) return;
-  if (!app.isPackaged) return;
-  const feedUrl = buildFeedUrl();
-  if (!feedUrl) return;
+  const feedUrl = app.isPackaged ? buildFeedUrl() : null;
+  if (!feedUrl) {
+    setState({ kind: "unsupported" });
+    return;
+  }
 
   try {
     autoUpdater.setFeedURL({

@@ -387,10 +387,11 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 }
 
 // Synchronous best-effort kill for every running script's tree. Used
-// by the update-install quit path, where we can't await the full kill
-// chain (that would block Squirrel's ShipIt handoff) but still want
-// well-behaved scripts to clean up before Electron tears the main
-// process down. Per-OS semantics live in ./platform.
+// by the update-install quit path (macOS-only today), where we can't
+// await the full kill chain (that would block the updater's ShipIt
+// handoff) but still want well-behaved scripts to clean up before
+// Electron tears the main process down. Per-OS semantics live in
+// ./platform.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited || rootPidDead(record)) continue;

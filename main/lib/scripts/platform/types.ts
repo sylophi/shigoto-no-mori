@@ -28,6 +28,9 @@ export interface ScriptPlatform {
   // both signals as forced.
   signalTree(pid: number, signal: NodeJS.Signals): Promise<void>;
   // Synchronous fire-and-forget variant for the update-install quit
-  // path, where awaiting the kill chain would block Squirrel's handoff.
+  // path, where awaiting the kill chain would block the updater's
+  // handoff. Only reachable on macOS today (the portable Windows build
+  // has no updater), but every platform implements it so a future
+  // updater inherits correct behavior instead of a silent no-op.
   signalTreeBestEffort(pid: number, signal: NodeJS.Signals): void;
 }

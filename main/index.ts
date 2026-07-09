@@ -1,5 +1,4 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
-import squirrelStartup from "electron-squirrel-startup";
 import path from "node:path";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./electron/bootstrap";
@@ -30,22 +29,12 @@ import {
   startUpdater,
 } from "./electron/updater";
 
-// Squirrel.Windows relaunches the app with install/update/uninstall
-// flags; electron-squirrel-startup handles the shortcut bookkeeping for
-// those and returns true, in which case this process must exit without
-// booting the app. No-op (false) everywhere but Windows.
-if (squirrelStartup) {
-  app.quit();
-}
-
-// Match the AppUserModelID Squirrel stamps on the Start-menu shortcut
-// (com.squirrel.<nuget id>.<exe name>; the maker rewrites the package
-// name's hyphens to underscores for the nuget id). Without this the
-// running window doesn't group with the pinned shortcut on the taskbar.
-// Verify against the shortcut's properties if the packaging ever
-// changes.
+// A stable explicit AppUserModelID keeps taskbar grouping and pins
+// working for the portable build: the default AUMID is derived from the
+// exe path, so moving the unzipped folder would otherwise orphan pins
+// and split window grouping.
 if (isWindows) {
-  app.setAppUserModelId("com.squirrel.shigoto_no_mori.shigoto-no-mori");
+  app.setAppUserModelId("com.sylophi.shigomori");
 }
 
 initShigomoriRoot(app.isPackaged);
@@ -144,17 +133,16 @@ app.on("window-all-closed", () => {
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
-  // An update-triggered quit has to flow through Electron's natural
-  // quit so Squirrel's ShipIt helper detects the parent PID exit and
-  // swaps bundles. Awaiting the full kill chain here would block that
-  // handoff for up to ~1.5s (grace + SIGKILL); instead we fire a
-  // synchronous best-effort kill per platform: SIGTERM to each process
-  // group on macOS (well-behaved scripts get the natural quit window
-  // ~100ms to clean up), a detached forced taskkill on Windows (no
-  // graceful channel exists there). The trade-off vs the normal-quit
-  // path: children that survive the best-effort pass don't get the
-  // escalation fallback and may end up orphaned. Acceptable for an
-  // explicit, user-initiated update.
+  // An update-triggered quit (macOS-only: the portable Windows build
+  // has no auto-updater) has to flow through Electron's natural quit so
+  // Squirrel.Mac's ShipIt helper detects the parent PID exit and swaps
+  // bundles. Awaiting the full kill chain here would block that handoff
+  // for up to ~1.5s (grace + SIGKILL); instead we fire a synchronous
+  // best-effort SIGTERM to each process group, so well-behaved scripts
+  // get the natural quit window ~100ms to clean up. The trade-off vs
+  // the normal-quit path: children that survive the best-effort pass
+  // don't get the escalation fallback and may end up orphaned.
+  // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
