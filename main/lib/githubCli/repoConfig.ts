@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { RepoMergeConfig } from "@shared/schemas";
 import { ttlMapCache } from "../util/ttlCache";
-import { execFileP } from "./exec";
+import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
 
 // Repo-level merge-button settings. Stable across the session in
@@ -20,8 +20,7 @@ const GhRepoMergeConfigSchema = z.object({
 const repoMergeConfigCache = ttlMapCache<string, RepoMergeConfig>(
   REPO_MERGE_CONFIG_TTL_MS,
   async (cwd) => {
-    const { stdout } = await execFileP(
-      "gh",
+    const { stdout } = await execGh(
       [
         "repo",
         "view",

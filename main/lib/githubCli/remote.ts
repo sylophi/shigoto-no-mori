@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { listRemoteUrls } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
+import { isWindows } from "../util/platform";
 
 // Per-repo gate for any path that would shell out to gh. Without this,
 // non-github repos eat the full TanStack retry budget on every worktree
@@ -49,12 +50,18 @@ const knownHostsCache = ttlValueCache<Set<string>>(
   },
 );
 
+// Mirrors gh's own config-dir precedence: GH_CONFIG_DIR beats
+// XDG_CONFIG_HOME beats the platform default (%AppData%\GitHub CLI on
+// Windows, ~/.config/gh elsewhere). Diverging from gh here would make
+// GHE hosts silently unrecognized for users who set either variable.
 function ghHostsPath(): string {
-  if (process.platform === "win32") {
-    return join(process.env["APPDATA"] ?? "", "GitHub CLI", "hosts.yml");
-  }
+  const override = process.env["GH_CONFIG_DIR"];
+  if (override) return join(override, "hosts.yml");
   const xdg = process.env["XDG_CONFIG_HOME"];
   if (xdg) return join(xdg, "gh", "hosts.yml");
+  if (isWindows) {
+    return join(process.env["APPDATA"] ?? "", "GitHub CLI", "hosts.yml");
+  }
   return join(homedir(), ".config", "gh", "hosts.yml");
 }
 

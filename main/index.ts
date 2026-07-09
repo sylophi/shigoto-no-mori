@@ -19,6 +19,8 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { initShigomoriRoot } from "./lib/util/paths";
+import { isWindows } from "./lib/util/platform";
+import { platformChrome } from "./electron/chrome";
 import { applyUserShellPath } from "./electron/shellPath";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
@@ -26,6 +28,14 @@ import {
   isInstallingUpdate,
   startUpdater,
 } from "./electron/updater";
+
+// A stable explicit AppUserModelID keeps taskbar grouping and pins
+// working for the portable build: the default AUMID is derived from the
+// exe path, so moving the unzipped folder would otherwise orphan pins
+// and split window grouping.
+if (isWindows) {
+  app.setAppUserModelId("com.sylophi.shigomori");
+}
 
 initShigomoriRoot(app.isPackaged);
 
@@ -38,25 +48,17 @@ registerIpcHandlers();
 let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
-  // Drive AppKit appearance from the saved theme before constructing
-  // the window so the NSVisualEffectView material under `vibrancy`
-  // picks the right light/dark variant on first paint. Without this,
-  // vibrancy stays glued to the OS appearance regardless of the in-app
-  // theme; a value of "system" delegates back to the OS.
+  // Drive the native appearance from the saved theme before constructing
+  // the window so the macOS vibrancy material (or the Windows chrome
+  // colors) picks the right light/dark variant on first paint. A value
+  // of "system" delegates back to the OS.
   nativeTheme.themeSource = readThemeSync();
   mainWindow = new BrowserWindow({
     width: 920,
     height: 600,
     minWidth: 640,
     minHeight: 420,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
-    // Transparent shell so the macOS NSVisualEffectView material set via
-    // `vibrancy` shows through the regions where the renderer paints no
-    // background (currently just the sidebar column).
-    backgroundColor: "#00000000",
-    vibrancy: "sidebar",
-    visualEffectState: "active",
+    ...platformChrome.windowOptions(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -102,6 +104,10 @@ const createWindow = () => {
   attachContextMenu(mainWindow);
 };
 
+// Keep native chrome in sync with theme changes where the OS doesn't do
+// it on its own (Windows caption buttons + window background).
+platformChrome.attachThemeSync(() => mainWindow);
+
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start
   // from the user's terminal and already have the right one.
@@ -127,15 +133,16 @@ app.on("window-all-closed", () => {
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
-  // An update-triggered quit has to flow through Electron's natural
-  // quit so Squirrel's ShipIt helper detects the parent PID exit and
-  // swaps bundles. Awaiting the full kill chain here would block that
-  // handoff for up to ~1.5s (grace + SIGKILL); instead we fire SIGTERM
-  // to every script's process group synchronously and let the natural
-  // quit window (~100ms) give well-behaved scripts a chance to clean
-  // up. The trade-off vs the normal-quit path: misbehaving children
-  // don't get the SIGKILL fallback and may end up reparented to
-  // launchd. Acceptable for an explicit, user-initiated update.
+  // An update-triggered quit (macOS-only: the portable Windows build
+  // has no auto-updater) has to flow through Electron's natural quit so
+  // Squirrel.Mac's ShipIt helper detects the parent PID exit and swaps
+  // bundles. Awaiting the full kill chain here would block that handoff
+  // for up to ~1.5s (grace + SIGKILL); instead we fire a synchronous
+  // best-effort SIGTERM to each process group, so well-behaved scripts
+  // get the natural quit window ~100ms to clean up. The trade-off vs
+  // the normal-quit path: children that survive the best-effort pass
+  // don't get the escalation fallback and may end up orphaned.
+  // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
@@ -159,8 +166,15 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
+  // Backstop: if a kill chain wedges (unkillable child), don't leave
+  // the app running headless after the window is gone.
+  setTimeout(() => app.exit(1), 15_000);
   const inflight = getInflightDeleteIds();
-  void Promise.all(Array.from(inflight).map((id) => killScriptsForWorktree(id)))
+  // allSettled: one rejected per-worktree kill must not skip the
+  // killAllScripts pass for everything else.
+  void Promise.allSettled(
+    Array.from(inflight).map((id) => killScriptsForWorktree(id)),
+  )
     .then(() => killAllScripts({ graceMs: 1_500 }))
     .finally(() => {
       // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.

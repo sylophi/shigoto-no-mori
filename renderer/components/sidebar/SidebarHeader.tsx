@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { isMac } from "@/lib/platform";
 import { cn, dragRegion } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 
@@ -11,8 +12,10 @@ export function SidebarHeader() {
   const showDevStyle = isDev && !revealProd;
   return (
     <div
-      className="flex h-[52px] items-center px-3 pl-[92px]"
-      // macOS title-bar drag region
+      // Title-bar drag region. The left inset clears the macOS traffic
+      // lights; Windows keeps its caption buttons top-right, over the
+      // main pane, so the sidebar needs no reserve.
+      className={cn("flex h-[52px] items-center px-3", isMac && "pl-[92px]")}
       style={dragRegion("drag")}
     >
       {/* oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- internal dev affordance, no keyboard equivalent needed */}

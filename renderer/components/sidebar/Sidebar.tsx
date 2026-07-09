@@ -130,11 +130,12 @@ export function Sidebar() {
     : null;
 
   return (
-    // Both themes are fully transparent so the BrowserWindow vibrancy
-    // material shows through. A heavy white wash in light mode washes
-    // out the chroma, so we let the macOS "sidebar" material do its job
-    // on its own. The `data-sidebar` attribute scopes the token
-    // overrides in index.css to this surface only.
+    // On macOS both themes are fully transparent so the BrowserWindow
+    // vibrancy material shows through. A heavy white wash in light mode
+    // washes out the chroma, so we let the "sidebar" material do its
+    // job on its own. On Windows index.css paints an opaque surface via
+    // the data-platform hook instead. The `data-sidebar` attribute
+    // scopes the token overrides in index.css to this surface only.
     <aside data-sidebar className="flex h-full flex-col">
       <SidebarHeader />
       <div className="min-h-0 flex-1">

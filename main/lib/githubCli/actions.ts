@@ -1,6 +1,7 @@
 import type { MergeMethod } from "@shared/schemas";
 import { readShigomoriConfig, writeShigomoriConfig } from "../config/project";
-import { execFileP, trimGhError } from "./exec";
+import { isENOENT } from "../util/paths";
+import { execGh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { ghReady } from "./readiness";
 
@@ -9,18 +10,29 @@ import { ghReady } from "./readiness";
 // `fallback` covers the rare non-Error / empty-message throw.
 async function runGh(
   args: string[],
-  opts: { cwd: string; fallback: string; maxBuffer?: number },
+  opts: { cwd: string; fallback: string; maxBuffer?: number; timeout?: number },
 ): Promise<string> {
   if (!(await ghReady())) {
     throw new Error("GitHub CLI isn't ready");
   }
   try {
-    const { stdout } = await execFileP("gh", args, {
+    const { stdout } = await execGh(args, {
       cwd: opts.cwd,
       maxBuffer: opts.maxBuffer,
+      timeout: opts.timeout,
     });
     return stdout;
   } catch (err) {
+    // gh vanished between the readiness probe (cached 30s) and this
+    // spawn; "spawn gh ENOENT" would read as a bug rather than a state.
+    if (isENOENT(err)) {
+      throw new Error("GitHub CLI isn't installed", { cause: err });
+    }
+    // A timeout kill rejects with "Command failed: gh ..." and empty
+    // stderr; name the actual cause instead.
+    if (err instanceof Error && "killed" in err && err.killed === true) {
+      throw new Error("GitHub CLI timed out", { cause: err });
+    }
     const message =
       err instanceof Error && err.message
         ? trimGhError(err.message)
@@ -37,11 +49,13 @@ export async function getPullRequestDiff(opts: {
   number: number;
 }): Promise<string> {
   // PR diffs are usually small but can run into the MB range; bump the
-  // buffer so a sprawling PR doesn't ENOBUFS.
+  // buffer so a sprawling PR doesn't ENOBUFS, and give the transfer
+  // more room than the default gh timeout.
   return runGh(["pr", "diff", String(opts.number)], {
     cwd: opts.cwd,
     fallback: "gh pr diff failed",
     maxBuffer: 32 * 1024 * 1024,
+    timeout: 120_000,
   });
 }
 

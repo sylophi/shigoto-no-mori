@@ -16,6 +16,7 @@ import { readShigomoriConfig } from "../../lib/config/project";
 import { readKey, writeKey } from "../../lib/config/store";
 import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import {
+  deepLinkFor,
   type DetectedApp,
   detectApps,
   findDetected,
@@ -139,7 +140,15 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       const apps = await detectApps();
       const app = findDetected(appId, apps);
       if (!app) throw new Error(`Launcher not detected: ${appId}`);
-      await launchDetected(app, worktree.path);
+      // Protocol-based apps (Codex, Claude) open via the OS URL handler.
+      // shell.openExternal lives here rather than in lib/launchers so
+      // that module stays Electron-free.
+      const deepLink = deepLinkFor(appId, worktree.path);
+      if (deepLink) {
+        await shell.openExternal(deepLink);
+      } else {
+        await launchDetected(app, worktree.path);
+      }
       bumpUseCount(launcherId);
       return;
     }

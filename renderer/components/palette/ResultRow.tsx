@@ -1,11 +1,17 @@
 import { Command } from "cmdk";
 import { Check, FolderGit2, Square } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
+import { ensureTrailingSep } from "@/lib/projectPaths";
+import { comparablePath } from "@shared/worktreeLayout";
 import { ITEM_CLASS } from "./cmdkClasses";
 
+// Windows scan results come back with native backslashes while the user
+// may have typed the root with forward slashes (both are accepted), and
+// NTFS is case-insensitive -- comparablePath folds both. Slicing by
+// length is safe because the folding preserves length.
 function relativeFromRoot(absolute: string, root: string): string {
-  const trimmedRoot = root.endsWith("/") ? root : `${root}/`;
-  return absolute.startsWith(trimmedRoot)
+  const trimmedRoot = ensureTrailingSep(root);
+  return comparablePath(absolute).startsWith(comparablePath(trimmedRoot))
     ? absolute.slice(trimmedRoot.length)
     : absolute;
 }

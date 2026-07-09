@@ -15,8 +15,7 @@ import type { BroadcastProducerPayload } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
-
-const isMac = process.platform === "darwin";
+import { isMac } from "../lib/util/platform";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
@@ -130,11 +129,15 @@ export function buildAppMenu(): void {
           click: clickBroadcast(paletteContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),
+        // Without a mac-style app menu, File carries Settings and Exit
+        // (the conventional Windows/Linux placement).
         ...(isMac
           ? ([] satisfies MenuItemConstructorOptions[])
           : ([
               { type: "separator" },
               SETTINGS_MENU_ITEM,
+              { type: "separator" },
+              { role: "quit", label: "Exit" },
             ] satisfies MenuItemConstructorOptions[])),
       ],
     },
@@ -158,15 +161,22 @@ export function buildAppMenu(): void {
           accelerator: "CmdOrCtrl+Shift+P",
           click: clickBroadcast(paletteContract, "toggle", undefined),
         },
-        // Hidden synonym so ⌘P also opens the palette. Electron keeps the
-        // accelerator live for hidden items on macOS; for cross-platform
-        // reliability we'd need a renderer-side listener.
-        {
-          label: "Command palette (alt)",
-          accelerator: "CmdOrCtrl+P",
-          visible: false,
-          click: clickBroadcast(paletteContract, "toggle", undefined),
-        },
+        // Hidden synonym so ⌘P also opens the palette. Electron only keeps
+        // accelerators live for hidden items on macOS, and on other
+        // platforms the behavior is inconsistent -- so the item exists
+        // only on mac, and everywhere else the renderer's Ctrl+P listener
+        // in CommandPalette.tsx owns the shortcut outright (no double
+        // handling).
+        ...(isMac
+          ? ([
+              {
+                label: "Command palette (alt)",
+                accelerator: "CmdOrCtrl+P",
+                visible: false,
+                click: clickBroadcast(paletteContract, "toggle", undefined),
+              },
+            ] satisfies MenuItemConstructorOptions[])
+          : []),
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },
@@ -185,6 +195,16 @@ export function buildAppMenu(): void {
           : []),
       ],
     },
+    // The About entry lives in the app menu on macOS; elsewhere it gets
+    // the conventional Help menu slot.
+    ...(isMac
+      ? ([] satisfies MenuItemConstructorOptions[])
+      : ([
+          {
+            label: "Help",
+            submenu: [{ role: "about" }],
+          },
+        ] satisfies MenuItemConstructorOptions[])),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

@@ -12,7 +12,8 @@ import type {
   Worktree,
   WorktreeLayout,
 } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { isWindowsStyle, worktreePathFor } from "@shared/worktreeLayout";
+import { isWindows } from "@/lib/platform";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
 import { RelocateRow } from "./RelocateRow";
 
@@ -118,7 +119,13 @@ export function LocationForm({
     if (layout !== "custom") return null;
     const trimmed = customPath.trim();
     if (!trimmed) return "Path is required for a custom layout.";
-    if (!trimmed.startsWith("/")) return "Path must be absolute.";
+    // Absolute on the platform we're running on: drive-letter or UNC
+    // form on Windows, "/" elsewhere. A Windows-style path pasted on
+    // macOS would silently resolve relative to cwd, so it's rejected.
+    const absolute = isWindows
+      ? isWindowsStyle(trimmed)
+      : trimmed.startsWith("/");
+    if (!absolute) return "Path must be absolute.";
     return null;
   };
 

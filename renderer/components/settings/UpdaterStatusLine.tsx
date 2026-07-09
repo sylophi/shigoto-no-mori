@@ -8,6 +8,13 @@ import type { UpdaterState } from "@shared/schemas";
 export function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
   if (!state) return null;
   switch (state.kind) {
+    case "unsupported":
+      return (
+        <span className="text-xs text-muted-foreground">
+          Updates aren't automatic in this build; download new releases from
+          GitHub.
+        </span>
+      );
     case "idle":
       return (
         <span className="text-xs text-muted-foreground">

@@ -34,8 +34,29 @@
       }
     ],
     "react/react-in-jsx-scope": "off",
-    "react/jsx-no-constructed-context-values": "off"
+    "react/jsx-no-constructed-context-values": "off",
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "process",
+        "property": "platform",
+        "message": "Branch on the named platform primitives instead: main/lib/util/platform.ts (main) or renderer/lib/platform.ts (renderer)."
+      }
+    ]
   },
+  "overrides": [
+    {
+      "files": [
+        "main/lib/util/platform.ts",
+        "main/preload.ts",
+        "forge.config.ts",
+        "scripts/**"
+      ],
+      "rules": {
+        "no-restricted-properties": "off"
+      }
+    }
+  ],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/out/**",

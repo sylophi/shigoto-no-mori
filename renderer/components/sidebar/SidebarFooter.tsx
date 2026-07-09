@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
+import { modKey, shiftKey, shortcutLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -134,7 +135,7 @@ export function SidebarFooter({
         type="button"
         onClick={() => openIn("browse")}
         aria-label="Command palette"
-        title="Command palette (⌘⇧P)"
+        title={`Command palette (${shortcutLabel(modKey, shiftKey, "P")})`}
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <Search className="size-3.5" />
@@ -143,7 +144,7 @@ export function SidebarFooter({
         type="button"
         onClick={() => openIn("add-project")}
         aria-label="Add project"
-        title="Add project (⌘N)"
+        title={`Add project (${shortcutLabel(modKey, "N")})`}
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
         <FolderPlus className="size-3.5" />

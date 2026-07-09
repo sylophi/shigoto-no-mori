@@ -11,7 +11,8 @@
       // background is painted by the main detail pane only.
       (function () {
         try {
-          var stored = localStorage.getItem("shigoto.theme") || "system";
+          // Key must match THEME_STORAGE_KEY in renderer/hooks/ui/useTheme.tsx.
+          var stored = localStorage.getItem("shigomori.theme") || "system";
           var dark =
             stored === "dark" ||
             (stored === "system" &&

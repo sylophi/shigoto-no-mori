@@ -21,6 +21,12 @@ import { shigomoriRoot } from "../util/paths";
 import { ttlMapCache } from "../util/ttlCache";
 
 function projectDir(projectId: string): string {
+  // Defense in depth: ids come from our own store, but this path feeds
+  // a recursive rm (deleteProjectState). Refuse anything that could
+  // escape the projects directory.
+  if (/[\\/]/.test(projectId) || projectId.includes("..")) {
+    throw new Error(`Invalid project id: ${projectId}`);
+  }
   return join(shigomoriRoot(), "projects", projectId);
 }
 

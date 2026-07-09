@@ -1,35 +1,28 @@
-// App detection + launching for macOS. We hand-roll a small catalog of common
-// dev tools, check whether each is installed via .app bundle presence OR a CLI
-// shim on PATH, and provide a `launch(target)` that opens the worktree path in
-// the chosen target.
-import { execFile, spawn } from "node:child_process";
+// macOS launcher implementation: the catalog of tools that exist on
+// macOS, detected via .app bundle presence OR a CLI shim on PATH, and
+// launched through the shim (preferred) or `open -a`.
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
-import { binaryOnPath } from "./util/binaries";
-import { ttlValueCache } from "./util/ttlCache";
+import { binaryOnPath } from "../util/binaries";
+import type { DetectedApp, PlatformLaunchers } from "./types";
 
 const exec = promisify(execFile);
 
-export interface DetectedApp {
+interface DarwinCatalogEntry {
   id: string;
   label: string;
-  bundleNames: string[];
-  cli?: string | undefined;
-  available: boolean;
-}
-
-interface CatalogEntry {
-  id: string;
-  label: string;
+  // Resolved against APP_ROOTS. `__finder__` is the always-available
+  // Finder sentinel.
   bundleNames: string[];
   cli?: string;
 }
 
-// The renderer maps each id to a brand SVG (or a lucide fallback). Catalog
-// shape mirrors T3 Code's editor list so any tool worth supporting there is
-// supported here too.
-const CATALOG: CatalogEntry[] = [
+// The renderer maps each id to a brand SVG (or a lucide fallback).
+// Catalog shape mirrors T3 Code's editor list so any tool worth
+// supporting there is supported here too.
+const CATALOG: DarwinCatalogEntry[] = [
   // Editors
   {
     id: "cursor",
@@ -220,14 +213,8 @@ function appExists(bundleName: string): boolean {
   return false;
 }
 
-// Detection is expensive (10 `which` shell-outs + filesystem checks). Cache
-// briefly so a single user action that needs the list a few times doesn't
-// re-shell each time. Refreshes when the user opens the launcher row again
-// after the TTL.
-const DETECT_TTL_MS = 5_000;
-
-const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
-  Promise.all(
+async function detect(): Promise<DetectedApp[]> {
+  return Promise.all(
     CATALOG.map(async (entry) => {
       const bundleHit = entry.bundleNames.some(appExists);
       const cliHit = entry.cli ? await binaryOnPath(entry.cli) : false;
@@ -235,22 +222,12 @@ const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
         id: entry.id,
         label: entry.label,
         bundleNames: entry.bundleNames,
+        winExe: null,
         cli: entry.cli,
         available: bundleHit || cliHit,
       };
     }),
-  ),
-);
-
-export function detectApps(): Promise<DetectedApp[]> {
-  return detectionCache.get();
-}
-
-export function findDetected(
-  id: string,
-  all: DetectedApp[],
-): DetectedApp | undefined {
-  return all.find((a) => a.id === id);
+  );
 }
 
 async function openWithBundle(
@@ -269,39 +246,15 @@ async function openWithBundle(
   await exec("open", ["-a", appName, worktreePath]);
 }
 
-async function openWithCli(cli: string, worktreePath: string): Promise<void> {
-  await exec(cli, [worktreePath]);
-}
-
-async function openCodexProject(worktreePath: string): Promise<void> {
-  const url = new URL("codex://threads/new");
-  url.searchParams.set("path", worktreePath);
-  await exec("open", [url.toString()]);
-}
-
-export async function launchDetected(
-  app: DetectedApp,
-  worktreePath: string,
-): Promise<void> {
-  if (app.id === "codex") {
-    await openCodexProject(worktreePath);
-    return;
-  }
-
-  if (app.id === "claude") {
-    const url = new URL("claude://code/new");
-    url.searchParams.set("folder", worktreePath);
-    await exec("open", [url.toString()]);
-    return;
-  }
-
+async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
   // `open -a` routes through Launch Services, which ignores in-app window
   // preferences like Zed's "CLI Default Open Behavior" or VS Code's
-  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those settings
-  // are honored; fall back to the bundle if the shim is missing or broken.
+  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those
+  // settings are honored; fall back to the bundle if the shim is missing
+  // or broken.
   if (app.cli) {
     try {
-      await openWithCli(app.cli, worktreePath);
+      await exec(app.cli, [worktreePath]);
       return;
     } catch {
       // Fall through.
@@ -310,19 +263,4 @@ export async function launchDetected(
   await openWithBundle(app.bundleNames, worktreePath);
 }
 
-export function launchCustom(command: string, worktreePath: string): void {
-  const env = {
-    ...process.env,
-    SHIGOMORI_WORKSPACE_PATH: worktreePath,
-  };
-  // Detached + unref so the spawned process outlives this main process,
-  // which matches "fire and forget launcher" semantics.
-  const child = spawn(command, [], {
-    cwd: worktreePath,
-    env,
-    shell: true,
-    detached: true,
-    stdio: "ignore",
-  });
-  child.unref();
-}
+export const darwinLaunchers: PlatformLaunchers = { detect, launch };

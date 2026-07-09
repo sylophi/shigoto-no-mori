@@ -8,7 +8,7 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  release-mac:
     # Apple Silicon runner; matches the only arch we ship right now.
     runs-on: macos-latest
     steps:
@@ -103,6 +103,60 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           spctl --assess --type execute --verbose "$APP_PATH"
           xcrun stapler validate "$APP_PATH"
+
+      - name: Upload assets to release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: pnpm exec electron-forge publish --from-dry-run
+
+  release-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Ensure release tag is on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "Release tag must point to a commit on origin/main."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Same tag/version sync as the macOS job (npm, not pnpm: pnpm has
+      # no `pkg` command); app.getVersion() and the zip's version suffix
+      # both come from package.json, and a non-semver tag would
+      # otherwise ship the placeholder 0.0.0.
+      - name: Sync package.json version with tag
+        shell: bash
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION="${TAG#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
+            exit 1
+          fi
+          npm pkg set version="$VERSION"
+
+      # Unsigned for now: Windows builds ship without Authenticode until
+      # a certificate exists (SmartScreen will warn on first run).
+      - name: Build distributables
+        run: pnpm exec electron-forge publish --dry-run
 
       - name: Upload assets to release
         env:

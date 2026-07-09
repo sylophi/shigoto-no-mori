@@ -13,8 +13,7 @@ import {
   shell,
 } from "electron";
 import { isWebUrl } from "@shared/webUrl";
-
-const isMac = process.platform === "darwin";
+import { isMac } from "../lib/util/platform";
 
 // Cap inline label text so a paragraph-sized selection doesn't blow out the
 // menu. Matches what Safari/Chrome show.

@@ -4,29 +4,28 @@
 // watchers, compilers the user's command spawns), not just the
 // wrapping shell.
 //
-// Kill strategy:
-//   1. SIGTERM the process group (negative pgid) -- covers normal forks.
-//   2. Walk `ps` for any descendant still reachable via ppid (e.g.
-//      double-forked daemons) and SIGTERM those too.
-//   3. After a grace period, SIGKILL anything still alive in either set.
+// The OS-specific mechanics (which shell wraps the command, how a
+// process tree is signaled) live in ./platform -- this file only runs
+// the SIGTERM -> grace -> SIGKILL escalation over that interface.
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { userInfo } from "node:os";
-import { promisify } from "node:util";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
+import { scriptPlatform } from "./platform";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
 // caller's window.
 export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
-const execFileP = promisify(execFile);
-
 const DEFAULT_GRACE_MS = 3_000;
+// How long to wait for a child that survived SIGKILL / taskkill -F
+// (kernel-stuck I/O, taskkill unavailable) before giving up. Callers
+// (worktree delete, app quit) must not hang forever behind it.
+const UNKILLABLE_WAIT_MS = 5_000;
 
 interface ScriptWorktree {
   id: string;
@@ -118,80 +117,6 @@ export function markShuttingDown(): void {
   shuttingDown = true;
 }
 
-// $SHELL is reliable when launched from a terminal, but can be empty in
-// GUI launches depending on launchd state. os.userInfo().shell reads the
-// passwd entry directly. We use a *login* shell (no `-i`) so the user's
-// `.zprofile` / `.bash_profile` runs without zsh's interactive-init
-// code (job control, gitstatus, prompt setup) throwing errors at us
-// when there's no controlling TTY.
-function resolveShell(): { command: string; args: string[] } {
-  const fromEnv = process.env["SHELL"];
-  if (fromEnv) return { command: fromEnv, args: ["-l", "-c"] };
-  const fromPasswd = userInfo().shell;
-  if (fromPasswd) return { command: fromPasswd, args: ["-l", "-c"] };
-  return { command: "/bin/sh", args: ["-c"] };
-}
-
-function safeKill(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(pid, signal);
-  } catch {
-    // ESRCH (no such process) is the common case once the tree is down.
-    // EPERM means we lost ownership; nothing we can do either way.
-  }
-}
-
-// Walks `ps` to find every process that descends from rootPid via the
-// ppid chain. Catches grandchildren that called setsid() and left our
-// process group -- still reachable here as long as their ppid hasn't
-// been re-parented to init.
-async function listDescendantPids(rootPid: number): Promise<number[]> {
-  let stdout: string;
-  try {
-    const result = await execFileP("ps", ["-A", "-o", "pid=,ppid="]);
-    stdout = result.stdout;
-  } catch {
-    return [];
-  }
-  const byParent = new Map<number, number[]>();
-  for (const line of stdout.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const m = trimmed.match(/^(\d+)\s+(\d+)$/);
-    if (!m) continue;
-    const pid = Number(m[1]);
-    const ppid = Number(m[2]);
-    if (pid === rootPid) continue;
-    const bucket = byParent.get(ppid);
-    if (bucket) bucket.push(pid);
-    else byParent.set(ppid, [pid]);
-  }
-  const out: number[] = [];
-  const stack: number[] = [rootPid];
-  const seen = new Set<number>([rootPid]);
-  while (stack.length > 0) {
-    const cur = stack.pop()!;
-    const kids = byParent.get(cur);
-    if (!kids) continue;
-    for (const k of kids) {
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push(k);
-      stack.push(k);
-    }
-  }
-  return out;
-}
-
-async function signalTree(
-  record: RunRecord,
-  signal: NodeJS.Signals,
-): Promise<void> {
-  safeKill(-record.pid, signal);
-  const descendants = await listDescendantPids(record.pid);
-  for (const pid of descendants) safeKill(pid, signal);
-}
-
 async function waitWithTimeout(
   promise: Promise<void>,
   ms: number,
@@ -211,9 +136,30 @@ interface KillOptions {
   reason?: string;
 }
 
+// The OS frees the child's pid at its "exit" event, but record.exited
+// only flips once stdio flushes ("close", or "exit" + 500ms when a
+// grandchild inherited the pipes). Killing by pid inside that gap can
+// hit a recycled pid -- on Windows, taskkill /T would then take down an
+// unrelated process and its whole descendant tree. A dead root is also
+// useless as a kill target (the tree walks need it alive), so every
+// kill path treats it as already exited.
+function rootPidDead(record: RunRecord): boolean {
+  return record.child.exitCode !== null || record.child.signalCode !== null;
+}
+
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
+    // Another caller is already escalating; wait for it, but bounded --
+    // an unkillable child must not wedge this caller's chain too.
+    await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
+    return;
+  }
+  if (rootPidDead(record)) {
+    // Root already exited; only the stdio flush is outstanding (the
+    // "exit" handler armed the fallback timer, so `done` resolves within
+    // 500ms). Waiting preserves the caller's "nothing running after
+    // this" guarantee without ever signaling a possibly-recycled pid.
     await record.done;
     return;
   }
@@ -227,18 +173,38 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
     });
   }
 
-  await signalTree(record, "SIGTERM");
+  await scriptPlatform.signalTree(record.pid, "SIGTERM");
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
   const exited = await waitWithTimeout(record.done, graceMs);
   if (exited) return;
 
-  await signalTree(record, "SIGKILL");
-  await record.done;
+  await scriptPlatform.signalTree(record.pid, "SIGKILL");
+  const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
+  if (!died) {
+    // Give up rather than hanging the caller forever. The record stays
+    // live on purpose: the process really is still running, so the busy
+    // counts stay honest and a later delete attempt can retry.
+    console.warn(
+      `[scripts] "${record.scriptName}" (pid ${record.pid}) survived SIGKILL; giving up on this kill attempt`,
+    );
+  }
 }
 
 export function startScript(args: RunArgs): string {
   if (shuttingDown) {
     throw new Error("App is shutting down; refusing to start a new script.");
+  }
+  const cwdIssue = scriptPlatform.unsupportedCwdReason(args.worktree.path);
+  if (cwdIssue) {
+    throw new Error(cwdIssue);
+  }
+  // Renderer-driven runs must not land in a worktree that's mid-delete:
+  // the delete flow snapshots running scripts once (killScriptsForWorktree),
+  // so a spawn slipping in after that leaves a live dev server whose cwd
+  // is being rm'd. Lifecycle runs (args.started set) are exempt -- the
+  // delete's own teardown executes while the id is flagged.
+  if (args.started === undefined && inflightDeleteIds.has(args.worktree.id)) {
+    throw new Error("This worktree is being deleted.");
   }
 
   const runId = randomUUID();
@@ -274,18 +240,10 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
-  const { command: shellCmd, args: shellArgs } = resolveShell();
-  const child = spawn(shellCmd, [...shellArgs, args.command], {
+  const child: ChildProcess = scriptPlatform.spawnScript({
+    command: args.command,
     cwd: args.worktree.path,
     env,
-    // stdin is a pipe we never write to or close. Closed stdin (EOF on
-    // first read) makes tools like electron-forge and vite that listen
-    // for keystrokes ("rs", "q") interpret it as "user closed the
-    // terminal" and shut down, dragging the dev server with them.
-    stdio: ["pipe", "pipe", "pipe"],
-    // New session = new process group with pgid === child.pid. Lets us
-    // signal the whole tree via process.kill(-pid, sig).
-    detached: true,
   });
 
   if (!child.pid) {
@@ -428,17 +386,16 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   );
 }
 
-// Synchronous best-effort SIGTERM to every running script's process
-// group. Used by the update-install quit path, where we can't await
-// the full kill chain (that would block Squirrel's ShipIt handoff) but
-// still want well-behaved scripts to clean up gracefully before
-// Electron tears the main process down. Descendants that escaped the
-// group via setsid() get reparented to launchd, same as if we hadn't
-// signaled at all.
+// Synchronous best-effort kill for every running script's tree. Used
+// by the update-install quit path (macOS-only today), where we can't
+// await the full kill chain (that would block the updater's ShipIt
+// handoff) but still want well-behaved scripts to clean up before
+// Electron tears the main process down. Per-OS semantics live in
+// ./platform.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
-    if (record.exited) continue;
-    safeKill(-record.pid, signal);
+    if (record.exited || rootPidDead(record)) continue;
+    scriptPlatform.signalTreeBestEffort(record.pid, signal);
   }
 }
 

@@ -10,20 +10,60 @@ import type { WorktreeLayout } from "./schemas";
 // component (`.shigomori`) is also the path appended to the primary's
 // `.git/info/exclude` so it stays out of `git status`.
 export const IN_PROJECT_ROOT_DIR = ".shigomori";
-export const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
+const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
 export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
   "managed-root",
   "in-project",
   "custom",
 ];
 
-// posix-style join: trims trailing slashes from `base`, then concatenates.
-// Both main (node:path) and renderer call sites work with forward-slash
-// paths on the platforms shigomori supports (macOS first; Linux later).
+// Dependency-free join that works in both main and the renderer (no
+// node:path). A base counts as Windows-style only when it starts with a
+// drive designator ("C:\" / "C:/") or a UNC prefix ("\\server\...") --
+// a bare backslash elsewhere is NOT a separator signal, since it's a
+// legal filename character on POSIX. Windows bases extend with the
+// separator style they already use, so previews match what the main
+// process will create.
+const WINDOWS_DRIVE_PREFIX = /^[A-Za-z]:[\\/]/;
+// UNC prefix in either separator style: node joins produce
+// \\\\server\\share while git porcelain reports //server/share. (POSIX
+// paths never begin with a doubled separator in practice.)
+const UNC_PREFIX = /^[\\/]{2}/;
+
+export function isWindowsStyle(base: string): boolean {
+  return WINDOWS_DRIVE_PREFIX.test(base) || UNC_PREFIX.test(base);
+}
+
+// UNC network paths (\\server\share or git's //server/share) need
+// special handling in a few places: cmd.exe refuses them as a working
+// directory, and their host/share roots aren't browsable.
+export function isUncPath(path: string): boolean {
+  return UNC_PREFIX.test(path);
+}
+
+// Comparison form for path equality and prefix checks, keyed off the
+// path's own shape (not the host OS) so main and renderer fold
+// identically: Git for Windows reports "C:/Users/…" while node joins
+// build "C:\Users\…", and NTFS paths are case-insensitive. POSIX paths
+// pass through untouched -- backslash is a legal filename character
+// there and case matters.
+export function comparablePath(path: string): string {
+  if (!isWindowsStyle(path)) return path;
+  return path.replaceAll("\\", "/").toLowerCase();
+}
+
+function sepFor(base: string): "/" | "\\" {
+  return isWindowsStyle(base) && base.includes("\\") ? "\\" : "/";
+}
+
 function joinPath(base: string, ...segments: string[]): string {
-  let out = base.replace(/\/+$/, "");
+  const win = isWindowsStyle(base);
+  const sep = sepFor(base);
+  const sepClass = win ? /[\\/]+/ : /\/+/;
+  let out = base.replace(win ? /[\\/]+$/ : /\/+$/, "");
   for (const seg of segments) {
-    out += "/" + seg.replace(/^\/+/, "").replace(/\/+$/, "");
+    const parts = seg.split(sepClass).filter((p) => p.length > 0);
+    for (const part of parts) out += sep + part;
   }
   return out;
 }
@@ -45,9 +85,26 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   }
   if (layout === "custom") {
     const trimmed = customPath?.trim();
-    if (trimmed) return trimmed.replace(/\/+$/, "");
+    if (trimmed) {
+      const stripped = trimmed.replace(
+        isWindowsStyle(trimmed) ? /[\\/]+$/ : /\/+$/,
+        "",
+      );
+      // A bare root ("/") is nothing but separators; return it as-is
+      // rather than an empty string that would later join as a relative
+      // path and prefix-match everything.
+      if (!stripped) return trimmed;
+      // Don't strip a drive root ("C:\") down to the drive-relative form
+      // "C:", which would prefix-match every path on the drive.
+      if (/^[A-Za-z]:$/.test(stripped)) {
+        return `${stripped}${trimmed.includes("\\") ? "\\" : "/"}`;
+      }
+      return stripped;
+    }
   }
-  const segments = projectPath.split("/");
+  const segments = projectPath.split(
+    isWindowsStyle(projectPath) ? /[\\/]/ : "/",
+  );
   const projectName = segments.findLast((s) => s.length > 0) ?? "";
   return joinPath(shigomoriRoot, "worktrees", projectName);
 }

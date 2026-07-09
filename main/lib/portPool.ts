@@ -6,6 +6,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { binaryOnPath } from "./util/binaries";
+import { isWindows } from "./util/platform";
 import { ttlValueCache } from "./util/ttlCache";
 
 const INSTALLED_CACHE_TTL_MS = 30_000;
@@ -14,7 +15,10 @@ const installedCache = ttlValueCache(INSTALLED_CACHE_TTL_MS, () =>
   binaryOnPath("port-pool"),
 );
 
+// port-pool ships for macOS only; short-circuit rather than probing so
+// the integration can never half-activate on Windows.
 export function isPortPoolInstalled(): Promise<boolean> {
+  if (isWindows) return Promise.resolve(false);
   return installedCache.get();
 }
 

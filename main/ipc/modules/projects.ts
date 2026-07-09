@@ -27,7 +27,7 @@ import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
-import { expandHome } from "../../lib/util/paths";
+import { comparablePath, expandHome } from "../../lib/util/paths";
 
 function saveProjects(projects: Project[]): void {
   writeKey<Project[]>(PROJECTS_KEY, projects);
@@ -44,7 +44,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
 
     const existing = loadProjects();
-    if (existing.some((p) => p.path === path)) {
+    // comparablePath: the same directory can arrive as C:/x, C:\x, or
+    // different casing on Windows; one project row per directory.
+    if (existing.some((p) => comparablePath(p.path) === comparablePath(path))) {
       throw new Error(`Project already added: ${path}`);
     }
 
@@ -80,9 +82,12 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const removed = projects.find((p) => p.id === id);
     saveProjects(projects.filter((p) => p.id !== id));
     // Drop the icon-cache entry and on-disk state so neither leaks across
-    // re-adds of the same path.
-    if (removed) await forgetProjectIcon(removed.path);
-    await deleteProjectState(id);
+    // re-adds of the same path. State deletion is a recursive rm keyed
+    // on the id, so only run it for an id that matched a real project.
+    if (removed) {
+      await forgetProjectIcon(removed.path);
+      await deleteProjectState(id);
+    }
   },
 
   reorder: ({ draggedId, targetId, position }) => {
