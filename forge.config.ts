@@ -5,6 +5,7 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
+import { rename } from "node:fs/promises";
 import { config as loadEnv } from "dotenv";
 
 loadEnv();
@@ -73,6 +74,24 @@ const config: ForgeConfig = {
         stdio: "inherit",
       });
     },
+    // Windows support is experimental; put that in the artifact name so
+    // the download itself carries the caveat. The returned results feed
+    // the publisher, so the GitHub release asset gets the renamed file.
+    postMake: async (_forgeConfig, makeResults) =>
+      Promise.all(
+        makeResults.map(async (result) => {
+          if (result.platform !== "win32") return result;
+          const artifacts = await Promise.all(
+            result.artifacts.map(async (artifact) => {
+              const renamed = artifact.replace(/\.zip$/, "-experimental.zip");
+              if (renamed === artifact) return artifact;
+              await rename(artifact, renamed);
+              return renamed;
+            }),
+          );
+          return { ...result, artifacts };
+        }),
+      ),
   },
   makers: [
     // Both platforms ship as plain zips. On Windows that means a
