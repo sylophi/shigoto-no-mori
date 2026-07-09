@@ -4,9 +4,13 @@
 // matching "is this path one we manage?" check.
 
 import { rmdir } from "node:fs/promises";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
-import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
+import {
+  ALL_WORKTREE_LAYOUTS,
+  withTrailingSep,
+  worktreeBaseFor,
+} from "@shared/worktreeLayout";
 import { comparablePath, shigomoriRoot } from "../util/paths";
 
 export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
@@ -36,13 +40,19 @@ export function managedPrefixesFor(
   const customPath = config?.customWorktreePath?.trim() ?? null;
   return ALL_WORKTREE_LAYOUTS.flatMap((layout) => {
     if (layout === "custom" && !customPath) return [];
+    // withTrailingSep, not `+ sep`: a drive-root custom base ("C:\")
+    // already ends with its separator, and doubling it ("C:\\") folds
+    // to a prefix no real path starts with. It also keeps the base's
+    // own separator style instead of forcing the host's.
     return [
-      worktreeBaseFor({
-        layout,
-        projectPath,
-        shigomoriRoot: shigomoriRoot(),
-        customPath,
-      }) + sep,
+      withTrailingSep(
+        worktreeBaseFor({
+          layout,
+          projectPath,
+          shigomoriRoot: shigomoriRoot(),
+          customPath,
+        }),
+      ),
     ];
   });
 }

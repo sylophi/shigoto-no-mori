@@ -34,6 +34,13 @@ export function isWindowsStyle(base: string): boolean {
   return WINDOWS_DRIVE_PREFIX.test(base) || UNC_PREFIX.test(base);
 }
 
+// UNC network paths (\\server\share or git's //server/share) need
+// special handling in a few places: cmd.exe refuses them as a working
+// directory, and their host/share roots aren't browsable.
+export function isUncPath(path: string): boolean {
+  return UNC_PREFIX.test(path);
+}
+
 // Comparison form for path equality and prefix checks, keyed off the
 // path's own shape (not the host OS) so main and renderer fold
 // identically: Git for Windows reports "C:/Users/…" while node joins
@@ -47,6 +54,17 @@ export function comparablePath(path: string): string {
 
 function sepFor(base: string): "/" | "\\" {
   return isWindowsStyle(base) && base.includes("\\") ? "\\" : "/";
+}
+
+// Trailing separator in the path's own style. For building "is this
+// under the base?" prefix strings: bases that are already roots ("C:\",
+// "/") keep their separator instead of getting a doubled one, which
+// would never prefix-match a real path.
+export function withTrailingSep(path: string): string {
+  const hasSep = isWindowsStyle(path)
+    ? /[\\/]$/.test(path)
+    : path.endsWith("/");
+  return hasSep ? path : path + sepFor(path);
 }
 
 function joinPath(base: string, ...segments: string[]): string {
@@ -83,6 +101,10 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
         isWindowsStyle(trimmed) ? /[\\/]+$/ : /\/+$/,
         "",
       );
+      // A bare root ("/") is nothing but separators; return it as-is
+      // rather than an empty string that would later join as a relative
+      // path and prefix-match everything.
+      if (!stripped) return trimmed;
       // Don't strip a drive root ("C:\") down to the drive-relative form
       // "C:", which would prefix-match every path on the drive.
       if (/^[A-Za-z]:$/.test(stripped)) {

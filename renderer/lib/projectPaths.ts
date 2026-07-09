@@ -13,8 +13,9 @@ const SPLIT_SEPS = isWindows ? /[\\/]/ : "/";
 // of the drive root "C:\").
 const DRIVE_ONLY = /^[A-Za-z]:$/;
 // "\\server" or "\\server\share" -- UNC hosts and share roots have no
-// browsable parent.
-const UNC_ROOT = /^\\\\[^\\]+(\\[^\\]+)?$/;
+// browsable parent. Either separator style: git porcelain reports UNC
+// paths as "//server/share".
+const UNC_ROOT = /^[\\/]{2}[^\\/]+([\\/][^\\/]+)?$/;
 
 function lastSepIndex(value: string): number {
   const slash = value.lastIndexOf("/");
@@ -66,9 +67,10 @@ export function getBrowseParentPath(currentPath: string): string | null {
   const idx = lastSepIndex(trimmed);
   if (idx < 0) return null;
   if (idx === 0) {
-    // "/foo" parents to the POSIX root; a drive-relative "\foo" has no
-    // stable parent (it floats with the process's current drive).
-    return trimmed.startsWith("\\") ? null : "/";
+    // "/foo" parents to the POSIX root; on Windows a drive-relative
+    // "\foo" or "/foo" has no stable parent (it floats with the
+    // process's current drive).
+    return isWindows ? null : "/";
   }
   const parent = trimmed.slice(0, idx);
   // Sliced down to the drive designator: keep its separator so the
