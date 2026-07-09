@@ -40,19 +40,20 @@ jobs:
       # CFBundleVersion) and Electron's app.getVersion() both come from
       # package.json at packaging time. Patch it from the release tag so
       # the displayed version always matches the tag, without anyone
-      # having to remember to bump package.json before tagging. Skipped
-      # for non-semver tags (e.g. "latest", "release-2026-05-17") so a
-      # weird tag can't corrupt the package.json that Forge reads.
+      # having to remember to bump package.json before tagging. A
+      # non-semver tag (e.g. "v0.17", "latest") fails the run: building
+      # with the placeholder 0.0.0 version makes the publisher create a
+      # v0.0.0 release instead of populating the tagged one.
       - name: Sync package.json version with tag
         env:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           VERSION="${TAG#v}"
-          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            npm pkg set version="$VERSION"
-          else
-            echo "Tag '$TAG' isn't semver — leaving package.json unchanged"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Tag '$TAG' isn't semver (expected e.g. v0.17.0); refusing to build with the placeholder 0.0.0 version."
+            exit 1
           fi
+          npm pkg set version="$VERSION"
 
       - name: Import Developer ID certificate
         env:
