@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { FolderOpen, Plus } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
@@ -27,6 +28,7 @@ interface FormState {
   teardown: string;
   launchers: LauncherCommand[];
   carryOver: CarryOverEntry[];
+  useWorktreeInclude: boolean;
 }
 
 function fromConfig(
@@ -39,6 +41,7 @@ function fromConfig(
     teardown: config?.scripts?.teardown ?? "",
     launchers: config?.launchers ?? [],
     carryOver: config?.carryOver ?? [],
+    useWorktreeInclude: config?.useWorktreeInclude !== false,
   };
 }
 
@@ -60,6 +63,8 @@ function toConfig(
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
     carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
+    // Enabled is the default; only persist the opt-out.
+    useWorktreeInclude: state.useWorktreeInclude ? undefined : false,
   };
 }
 
@@ -81,14 +86,42 @@ export function ConfigureForm({
   const navigate = useNavigate();
   const write = useShigomoriWrite();
 
-  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
+  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<FormState>(fromConfig(initialConfig, resolvedDefaultBranch));
   const canSave = isDirty && form.defaultBranch.trim().length > 0;
+
+  // The config can change underneath an open draft: creating a worktree
+  // auto-removes carry-over entries that .worktreeinclude now covers.
+  // Rebase the snapshot and drop remotely-removed entries from the draft
+  // so a later Save can't resurrect them.
+  useEffect(() => {
+    reseed(
+      fromConfig(initialConfig, resolvedDefaultBranch),
+      (prevForm, prevSnapshot, next) => {
+        const nextPaths = new Set(next.carryOver.map((e) => e.path));
+        const removedRemotely = new Set(
+          prevSnapshot.carryOver
+            .map((e) => e.path)
+            .filter((p) => !nextPaths.has(p)),
+        );
+        return {
+          ...prevForm,
+          carryOver: prevForm.carryOver.filter(
+            (e) => !removedRemotely.has(e.path),
+          ),
+        };
+      },
+    );
+  }, [initialConfig, resolvedDefaultBranch, reseed]);
 
   const handleSave = async () => {
     const next = toConfig(initialConfig, form);
     await write.mutateAsync({ projectId, config: next });
-    setSavedSnapshot(form);
+    // Snapshot what was actually persisted, not the raw form: toConfig
+    // drops half-filled launcher rows and normalizes fields. Snapshotting
+    // the raw form would mark those leftovers clean, and the post-save
+    // refetch would reseed the form from disk and silently wipe them.
+    setSavedSnapshot(fromConfig(next, resolvedDefaultBranch));
   };
 
   const handleDiscard = () => {
@@ -186,6 +219,10 @@ export function ConfigureForm({
             projectId={projectId}
             projectPath={projectPath}
             entries={form.carryOver}
+            useWorktreeInclude={form.useWorktreeInclude}
+            onToggleUseWorktreeInclude={(useWorktreeInclude) =>
+              setForm((prev) => ({ ...prev, useWorktreeInclude }))
+            }
             onAdd={addCarryOver}
             onChangeMode={updateCarryOverMode}
             onRemove={removeCarryOver}

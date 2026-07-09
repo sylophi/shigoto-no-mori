@@ -77,6 +77,8 @@ export const queryKeys = {
 
   ignoredPaths: (projectId: string | null) =>
     ["ignoredPaths", projectId] as const,
+  worktreeIncludeStatus: (projectId: string | null) =>
+    ["worktreeIncludeStatus", projectId] as const,
 
   runtimeInfo: () => ["runtime", "info"] as const,
   updaterState: () => ["updater", "state"] as const,
