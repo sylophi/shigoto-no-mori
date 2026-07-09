@@ -178,8 +178,15 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
+  // Backstop: if a kill chain wedges (unkillable child), don't leave
+  // the app running headless after the window is gone.
+  setTimeout(() => app.exit(1), 15_000);
   const inflight = getInflightDeleteIds();
-  void Promise.all(Array.from(inflight).map((id) => killScriptsForWorktree(id)))
+  // allSettled: one rejected per-worktree kill must not skip the
+  // killAllScripts pass for everything else.
+  void Promise.allSettled(
+    Array.from(inflight).map((id) => killScriptsForWorktree(id)),
+  )
     .then(() => killAllScripts({ graceMs: 1_500 }))
     .finally(() => {
       // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.

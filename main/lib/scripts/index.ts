@@ -22,6 +22,10 @@ import { scriptPlatform } from "./platform";
 export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
 const DEFAULT_GRACE_MS = 3_000;
+// How long to wait for a child that survived SIGKILL / taskkill -F
+// (kernel-stuck I/O, taskkill unavailable) before giving up. Callers
+// (worktree delete, app quit) must not hang forever behind it.
+const UNKILLABLE_WAIT_MS = 5_000;
 
 interface ScriptWorktree {
   id: string;
@@ -132,9 +136,30 @@ interface KillOptions {
   reason?: string;
 }
 
+// The OS frees the child's pid at its "exit" event, but record.exited
+// only flips once stdio flushes ("close", or "exit" + 500ms when a
+// grandchild inherited the pipes). Killing by pid inside that gap can
+// hit a recycled pid -- on Windows, taskkill /T would then take down an
+// unrelated process and its whole descendant tree. A dead root is also
+// useless as a kill target (the tree walks need it alive), so every
+// kill path treats it as already exited.
+function rootPidDead(record: RunRecord): boolean {
+  return record.child.exitCode !== null || record.child.signalCode !== null;
+}
+
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
+    // Another caller is already escalating; wait for it, but bounded --
+    // an unkillable child must not wedge this caller's chain too.
+    await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
+    return;
+  }
+  if (rootPidDead(record)) {
+    // Root already exited; only the stdio flush is outstanding (the
+    // "exit" handler armed the fallback timer, so `done` resolves within
+    // 500ms). Waiting preserves the caller's "nothing running after
+    // this" guarantee without ever signaling a possibly-recycled pid.
     await record.done;
     return;
   }
@@ -154,7 +179,15 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (exited) return;
 
   await scriptPlatform.signalTree(record.pid, "SIGKILL");
-  await record.done;
+  const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
+  if (!died) {
+    // Give up rather than hanging the caller forever. The record stays
+    // live on purpose: the process really is still running, so the busy
+    // counts stay honest and a later delete attempt can retry.
+    console.warn(
+      `[scripts] "${record.scriptName}" (pid ${record.pid}) survived SIGKILL; giving up on this kill attempt`,
+    );
+  }
 }
 
 export function startScript(args: RunArgs): string {
@@ -164,6 +197,14 @@ export function startScript(args: RunArgs): string {
   const cwdIssue = scriptPlatform.unsupportedCwdReason(args.worktree.path);
   if (cwdIssue) {
     throw new Error(cwdIssue);
+  }
+  // Renderer-driven runs must not land in a worktree that's mid-delete:
+  // the delete flow snapshots running scripts once (killScriptsForWorktree),
+  // so a spawn slipping in after that leaves a live dev server whose cwd
+  // is being rm'd. Lifecycle runs (args.started set) are exempt -- the
+  // delete's own teardown executes while the id is flagged.
+  if (args.started === undefined && inflightDeleteIds.has(args.worktree.id)) {
+    throw new Error("This worktree is being deleted.");
   }
 
   const runId = randomUUID();
@@ -352,7 +393,7 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 // process down. Per-OS semantics live in ./platform.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
-    if (record.exited) continue;
+    if (record.exited || rootPidDead(record)) continue;
     scriptPlatform.signalTreeBestEffort(record.pid, signal);
   }
 }
