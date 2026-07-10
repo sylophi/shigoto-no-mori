@@ -2,11 +2,14 @@
 
 ## Theming: two visual systems, one component tree
 
-The app ships two designs: **v1** (default, neutral shadcn-style) and
-**doubutsu** (opt-in Animal Crossing overlay, toggled in Settings, class
-`doubutsu` on `<html>`, orthogonal to light/dark). There is ONE component
-tree — doubutsu is `renderer/doubutsu.css` remapping tokens and hooking
-stable attributes. Keep it that way; never fork a component per theme.
+The app ships two designs: **doubutsu** (default: Animal Crossing
+overlay, class `doubutsu` on `<html>`, orthogonal to light/dark) and
+**v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
+There is ONE component tree — doubutsu is `renderer/doubutsu.css`
+remapping tokens and hooking stable attributes on top of the v1 base.
+Keep it that way; never fork a component per theme. Components are
+still written in v1's vocabulary (tokens, borders, shadows) — the
+overlay handles translation, so build in v1 terms and verify in both.
 
 Rules that keep both themes cheap to maintain:
 

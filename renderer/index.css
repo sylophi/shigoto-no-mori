@@ -5,7 +5,8 @@
 @import "@fontsource/zen-maru-gothic/900.css";
 @import "tailwindcss";
 @import "tw-animate-css";
-/* Opt-in Animal Crossing overlay. Self-contained; see the CONTRACT
+/* Default-on Animal Crossing overlay (opt-out in Settings). Self-
+   contained; see the CONTRACT
    header in the file for the hooks it depends on (token blocks in it
    use :root.doubutsu so this early import position can't lose to the
    :root/.dark blocks below). */

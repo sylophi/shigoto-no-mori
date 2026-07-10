@@ -42,7 +42,7 @@ export function AppearanceSection({
         checked={doubutsu}
         onCheckedChange={onDoubutsuChange}
         label="Doubutsu mode"
-        description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark."
+        description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
       />
     </section>
   );

@@ -16,8 +16,10 @@ const DoubutsuContext = createContext<DoubutsuState | null>(null);
 export const DOUBUTSU_STORAGE_KEY = "shigomori.doubutsu";
 
 function readBootHint(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(DOUBUTSU_STORAGE_KEY) === "true";
+  // Default is ON: only an explicit "false" (a saved opt-out) disables
+  // the first paint's doubutsu look.
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(DOUBUTSU_STORAGE_KEY) !== "false";
 }
 
 export function DoubutsuProvider({ children }: { children: ReactNode }) {
@@ -25,7 +27,7 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
   // Avoid a one-frame v1-look flash while globalConfig fetches by trusting
   // the last cached value. Config wins as soon as it arrives.
   const [bootHint] = useState<boolean>(() => readBootHint());
-  const saved: boolean = isLoading ? bootHint : (config?.doubutsu ?? false);
+  const saved: boolean = isLoading ? bootHint : (config?.doubutsu ?? true);
   const [override, setOverride] = useState<boolean | null>(null);
   const applied = override ?? saved;
 

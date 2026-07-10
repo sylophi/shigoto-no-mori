@@ -1,6 +1,7 @@
 /*
- * Doubutsu mode -- opt-in Animal Crossing visual overlay. Activated by
- * adding `.doubutsu` to <html> (via useDoubutsu). Orthogonal to .dark;
+ * Doubutsu mode -- the default Animal Crossing visual overlay (opt-out
+ * via Settings -> Appearance, which restores the plain v1 look).
+ * Activated by adding `.doubutsu` to <html> (via useDoubutsu). Orthogonal to .dark;
  * .doubutsu and .doubutsu.dark each remap the same shadcn-style tokens
  * the rest of the app already consumes, so existing components inherit
  * the bolder palette/radii/font without any per-component changes.

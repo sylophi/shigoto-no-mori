@@ -45,7 +45,7 @@ interface FormState {
 function fromConfig(config: GlobalConfig): FormState {
   return {
     theme: config.theme ?? "system",
-    doubutsu: config.doubutsu ?? false,
+    doubutsu: config.doubutsu ?? true,
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
@@ -62,8 +62,9 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     ...original,
     // Default is "system"; omit when on the default to keep config.json tidy.
     theme: state.theme === "system" ? undefined : state.theme,
-    // Default is off; only persist when explicitly enabled.
-    doubutsu: state.doubutsu ? true : undefined,
+    // Default is on; omit when on, store explicit `false` when off so
+    // the user's opt-out survives reads (same as deleteBranchOnRemove).
+    doubutsu: state.doubutsu ? undefined : false,
     launchers: valid.length > 0 ? valid : undefined,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.

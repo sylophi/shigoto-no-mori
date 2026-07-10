@@ -95,10 +95,11 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // settings.
 export const GlobalConfigSchema = z.object({
   theme: ThemeSchema.optional(),
-  // Opt-in "Animal Crossing" visual mode. Orthogonal to theme: when on,
-  // both the light and dark palettes shift to a bolder, color-blocked,
-  // Zen-Maru-Gothic-typeset look. Off by default; persisted so it
-  // survives restarts and paints without a flash via localStorage.
+  // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
+  // the light and dark palettes shift to a bolder, color-blocked,
+  // Zen-Maru-Gothic-typeset look. On by default; absent = on, explicit
+  // `false` is the opt-out back to the v1 look. Mirrored to
+  // localStorage so startup paints without a flash.
   doubutsu: z.boolean().optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
   // When true, deleting a worktree also force-deletes its checked-out
