@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { toast } from "@/lib/toast";
 
 // Dev-only hotkeys for flipping through the four visual modes without
 // opening Settings:
@@ -21,8 +20,6 @@ export function DevThemeHotkeys() {
 
   useEffect(() => {
     if (!isDev) return;
-    const describe = (theme: string, doubutsu: boolean) =>
-      `Preview: ${theme} · ${doubutsu ? "doubutsu" : "plain"}`;
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.repeat) {
         return;
@@ -39,21 +36,14 @@ export function DevThemeHotkeys() {
       }
       if (e.code === "KeyT") {
         e.preventDefault();
-        const next = resolved === "dark" ? "light" : "dark";
-        setTheme(next);
-        toast(describe(next, doubutsuApplied), { id: "dev-theme-hotkeys" });
+        setTheme(resolved === "dark" ? "light" : "dark");
       } else if (e.code === "KeyD") {
         e.preventDefault();
-        const next = !doubutsuApplied;
-        setDoubutsu(next);
-        toast(describe(resolved, next), { id: "dev-theme-hotkeys" });
+        setDoubutsu(!doubutsuApplied);
       } else if (e.code === "KeyR") {
         e.preventDefault();
         setTheme(null);
         setDoubutsu(null);
-        toast("Preview cleared — back to saved appearance", {
-          id: "dev-theme-hotkeys",
-        });
       }
     };
     window.addEventListener("keydown", onKey);
