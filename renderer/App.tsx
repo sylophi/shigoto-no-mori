@@ -4,6 +4,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommandPalette } from "@/components/CommandPalette";
+import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
@@ -54,6 +55,7 @@ export function App() {
             <TooltipProvider>
               <RouterProvider router={router} />
               <CommandPalette />
+              <DevThemeHotkeys />
             </TooltipProvider>
           </CommandPaletteProvider>
         </ErrorBoundary>

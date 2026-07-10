@@ -32,5 +32,7 @@ Rules that keep both themes cheap to maintain:
   pre-commit) verifies every hook still exists. If it fails, either
   restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
-  both themes: Settings → Appearance → Doubutsu mode toggles it live
-  without saving.
+  all four modes. In dev builds: Ctrl+Alt+T toggles light/dark,
+  Ctrl+Alt+D toggles doubutsu, Ctrl+Alt+R resets to saved — all
+  non-persisted previews (components/DevThemeHotkeys.tsx). Settings →
+  Appearance does the same with a save option.
