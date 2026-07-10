@@ -103,10 +103,11 @@
   --doubutsu-stripe: oklch(1 0 0 / 0.3);
   --doubutsu-watermark: oklch(0.66 0.15 155);
   --doubutsu-pattern: oklch(0.66 0.15 155);
-  /* Peach tint for outline buttons: distinct hue (60) from secondary's
-     sand (82) and from canvas, so outline + secondary read as different
-     button TYPES even though both are pastels. */
-  --doubutsu-button-outline: oklch(0.92 0.05 60);
+  /* Milk-tea brown for outline buttons: on the foreground's warm-brown
+     axis (hue ~70) and a step darker than secondary's sand (0.93/82),
+     so outline + secondary read as different button TYPES without
+     drifting orange. */
+  --doubutsu-button-outline: oklch(0.9 0.04 70);
   /* Chunky sticker edge for floating surfaces (see the elevation rule
      below): a hard blur-less drop + faint solid outline stand in for
      the soft shadow/ring stack that doubutsu strips. */
@@ -175,7 +176,7 @@
   --doubutsu-stripe: oklch(1 0 0 / 0.1);
   --doubutsu-watermark: oklch(0.7 0.17 155);
   --doubutsu-pattern: oklch(0.7 0.17 155);
-  --doubutsu-button-outline: oklch(0.32 0.04 50);
+  --doubutsu-button-outline: oklch(0.34 0.03 65);
   --doubutsu-edge: oklch(0 0 0 / 0.45);
   --doubutsu-edge-line: oklch(1 0 0 / 0.07);
 
