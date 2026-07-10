@@ -32,6 +32,7 @@ Rules that keep both themes cheap to maintain:
   pre-commit) verifies every hook still exists. If it fails, either
   restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
-  all four modes. In dev builds, Ctrl+Alt+T cycles through them as a
-  non-persisted preview (components/DevThemeHotkeys.tsx); reload to
-  snap back. Settings → Appearance does the same with a save option.
+  all four modes. In dev builds: Ctrl+T toggles light/dark, Ctrl+D
+  toggles doubutsu, Ctrl+R resets to saved — non-persisted previews
+  (components/DevThemeHotkeys.tsx), inactive while a text field has
+  focus. Settings → Appearance does the same with a save option.
