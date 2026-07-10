@@ -156,6 +156,7 @@ export const projects = {
 export const runtime = {
   info: runtimeClient.info,
   setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
+  setDoubutsu: (enabled: boolean) => runtimeClient.setDoubutsu({ enabled }),
   nuke: runtimeClient.nuke,
 } as const;
 

@@ -9,6 +9,7 @@ import {
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { DOUBUTSU_STORAGE_KEY } from "@/hooks/ui/useDoubutsu";
 import { THEME_STORAGE_KEY } from "@/hooks/ui/useTheme";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
@@ -32,6 +33,7 @@ export function DangerZone() {
         await window.api.runtime.nuke();
         try {
           window.localStorage.removeItem(THEME_STORAGE_KEY);
+          window.localStorage.removeItem(DOUBUTSU_STORAGE_KEY);
         } catch {
           // localStorage may be unavailable; not fatal.
         }

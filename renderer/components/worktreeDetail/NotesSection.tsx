@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { Textarea } from "@/components/ui/textarea";
 import {
   useWorktreeData,
   useWorktreeDataWrite,
@@ -62,12 +63,12 @@ function NotesSectionInner({
         <SectionHeading>Notes</SectionHeading>
         <span className="text-xs text-muted-foreground/60">{status}</span>
       </div>
-      <textarea
+      <Textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+        className="w-full resize-y px-3 py-2 text-sm"
       />
     </section>
   );

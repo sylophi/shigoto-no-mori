@@ -94,6 +94,7 @@ export function DiffView({
           </div>
         ) : (
           <div
+            data-slot="diff-view"
             className="flex flex-col gap-2 p-2 select-text"
             style={DIFF_STYLE}
           >

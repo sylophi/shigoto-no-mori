@@ -81,6 +81,7 @@ export function BranchCombobox({
     >
       <Combobox.Trigger
         id={id}
+        data-slot="combobox-trigger"
         className={cn(
           "group flex w-full cursor-pointer items-center gap-2 rounded-md border border-transparent bg-muted/40 px-3 py-2 font-mono text-sm transition-colors outline-none",
           "hover:bg-muted/60",
@@ -110,8 +111,14 @@ export function BranchCombobox({
           align="start"
           className="z-50"
         >
-          <Combobox.Popup className="flex max-h-72 w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md">
-            <div className="flex items-center gap-2 border-b border-border px-3">
+          <Combobox.Popup
+            data-slot="combobox-popup"
+            className="flex max-h-72 w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
+          >
+            <div
+              data-slot="combobox-search"
+              className="flex items-center gap-2 border-b border-border px-3"
+            >
               <Search
                 aria-hidden
                 className="size-3.5 shrink-0 text-muted-foreground/60"

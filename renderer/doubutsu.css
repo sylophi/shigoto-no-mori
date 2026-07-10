@@ -1,0 +1,524 @@
+/*
+ * Doubutsu mode -- the default Animal Crossing visual overlay (opt-out
+ * via Settings -> Appearance, which restores the plain v1 look).
+ * Activated by adding `.doubutsu` to <html> (via useDoubutsu). Orthogonal to .dark;
+ * .doubutsu and .doubutsu.dark each remap the same shadcn-style tokens
+ * the rest of the app already consumes, so existing components inherit
+ * the bolder palette/radii/font without any per-component changes.
+ *
+ * Design language taken from the animal-crossing-demo branch and
+ * tightened per the impeccable shape brief: no borders, no gradients,
+ * no soft shadows -- color-blocking and fill contrast carry hierarchy.
+ *
+ * ============================= CONTRACT =============================
+ * Everything this file hooks into, so refactors can't silently strip
+ * the theme. `pnpm check:theme` (scripts/check-theme-contract.mjs, run
+ * in pre-commit) verifies each hook still exists.
+ *
+ * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
+ *    --primary, --secondary, --muted, --accent, --destructive, --input,
+ *    --ring, --radius, and the --color-{emerald,rose,amber,sky}-* vars
+ *    Tailwind emits for raw palette utilities.
+ *
+ * 2. data-slot attributes set by our components (the preferred hook --
+ *    when building new UI that doubutsu must restyle, add a slot here
+ *    rather than targeting utility classes):
+ *      button (+ data-variant)   ui/button.tsx
+ *      input, textarea           ui/input.tsx, ui/textarea.tsx
+ *      chip                      ui/chip-button.tsx, configure/CarryOverRow.tsx
+ *      segmented-control         ui/segmented-control.tsx
+ *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
+ *      modal-shell               ui/modal-shell.tsx
+ *      diff-view                 diff/DiffView.tsx
+ *      sheet-content             ui/sheet.tsx
+ *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
+ *
+ * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
+ *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
+ *    doubutsu markup), li[data-row-idx] (configure/PickerRow.tsx),
+ *    data-platform (stamped on <html> via dataset in renderer/index.tsx).
+ *    Native chrome counterpart: main/electron/chrome/win32.ts holds
+ *    sRGB hexes of the background/card/foreground tokens below;
+ *    check:theme recomputes them from this file and fails on drift.
+ *
+ * 4. Upstream library attributes (re-verify on upgrades; check:theme
+ *    greps the packages): Base UI's data-highlighted / data-disabled /
+ *    data-popup-open, cmdk's [cmdk-item] + aria-selected, sonner's
+ *    [data-sonner-toast].
+ *
+ * 5. Tailwind utility names (stable public API, checked loosely):
+ *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
+ *    -semibold/-bold/-black/-mono, .border-b/.border-t (only inside
+ *    slotted surfaces), [class*="backdrop-blur"].
+ *
+ * Token blocks below use `:root.doubutsu` (not `.doubutsu`) so they
+ * outrank index.css's `:root` / `.dark` blocks by specificity -- this
+ * file is @imported before those rules, so order can't be relied on.
+ * ====================================================================
+ */
+:root.doubutsu {
+  /*
+   * Palette designed as a layered system, not a swatch grab. Five
+   * distinct cream tints + one mint family carry every surface in the
+   * app, each with its own job. Each layer is calibrated against its
+   * neighbors so that adjacent elements (button on canvas, card on
+   * canvas, secondary button next to outline button) are visually
+   * distinct without anyone needing a border.
+   *
+   *   background  (0.974 c=0.011)  base canvas cream
+   *   card        (0.992 c=0.008)  lifted -- panels float ABOVE canvas
+   *   popover     (pure white)     floats above even card; with shadows
+   *                                stripped the color step IS elevation
+   *   muted       (0.945 c=0.025)  recessed warm cream -- chips, code,
+   *                                ghost-button hover, outline-button hover
+   *   secondary   (0.930 c=0.038)  sandier still -- secondary button fill
+   *
+   *   primary    (saturated leaf)  the rare loud CTA: Save, Add, Confirm
+   *   accent     (pastel mint)     the constant quiet pillow: selection
+   *   sidebar    (calm mint)       the rail; accent reads "one notch darker"
+   *
+   * Foreground text is the same warm brown across everything; AC uses
+   * one text color, not a contrast cascade per surface.
+   */
+  --background: oklch(0.974 0.011 84.6);
+  --foreground: oklch(0.39 0.045 74.1);
+  --card: oklch(0.992 0.008 88);
+  --card-foreground: oklch(0.39 0.045 74.1);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.39 0.045 74.1);
+  --primary: oklch(0.66 0.15 155);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.93 0.038 82);
+  --secondary-foreground: oklch(0.39 0.045 74.1);
+  --muted: oklch(0.945 0.025 85);
+  --muted-foreground: oklch(0.55 0.031 67.2);
+  --accent: oklch(0.88 0.07 155);
+  --accent-foreground: oklch(0.39 0.045 74.1);
+  --destructive: oklch(0.6 0.16 30);
+  /* See the universal `border-color: transparent` rule below. */
+  --border: transparent;
+  --input: oklch(0.92 0.025 85);
+  --ring: oklch(0.66 0.15 155);
+  --radius: 1rem;
+  --font-sans:
+    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
+    sans-serif;
+
+  --doubutsu-sidebar: oklch(0.93 0.045 160);
+  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-watermark: oklch(0.66 0.15 155);
+  --doubutsu-pattern: oklch(0.66 0.15 155);
+  /* Milk-tea brown for outline buttons: on the foreground's warm-brown
+     axis (hue ~70) and a step darker than secondary's sand (0.93/82),
+     so outline + secondary read as different button TYPES without
+     drifting orange. */
+  --doubutsu-button-outline: oklch(0.9 0.04 70);
+  /* Chunky sticker edge for floating surfaces (see the elevation rule
+     below): a hard blur-less drop + faint solid outline stand in for
+     the soft shadow/ring stack that doubutsu strips. */
+  --doubutsu-edge: oklch(0.39 0.045 74.1 / 0.14);
+  --doubutsu-edge-line: oklch(0.39 0.045 74.1 / 0.08);
+
+  /* Semantic status colors that components use as raw Tailwind palette
+     utilities (text-emerald-500, bg-amber-500/10, text-sky-500, ...)
+     across status pills, diff stats, badges, sync buttons, and warning
+     callouts. Tailwind v4 emits those utilities as var(--color-*)
+     references, so remapping the handful of families the app uses pulls
+     every status accent into the doubutsu palette without touching any
+     component. Greens sit on the leaf hue (155), reds on the destructive
+     hue (30), ambers become warm honey, sky calms toward the palette.
+     If a NEW raw color family enters the app, add its remap here. */
+  --color-emerald-500: oklch(0.6 0.15 155);
+  --color-rose-500: oklch(0.58 0.18 30);
+  --color-amber-300: oklch(0.85 0.12 84);
+  --color-amber-400: oklch(0.8 0.13 82);
+  --color-amber-500: oklch(0.68 0.13 76);
+  --color-amber-600: oklch(0.58 0.12 68);
+  --color-amber-700: oklch(0.5 0.1 62);
+  --color-sky-500: oklch(0.6 0.11 235);
+
+  /* @pierre/diffs theme vars -- the diff viewer lives in shadow DOM but
+     CSS custom props cascade in. Wiring these to the doubutsu palette
+     makes the diff feel like part of the app instead of a foreign blue
+     panel pasted in. */
+  --diffs-bg: var(--background);
+  --diffs-fg: var(--foreground);
+  --diffs-bg-context: var(--background);
+  --diffs-bg-context-gutter: var(--card);
+  --diffs-bg-addition: oklch(0.94 0.07 155);
+  --diffs-bg-addition-emphasis: oklch(0.88 0.13 155);
+  --diffs-addition-color: oklch(0.45 0.15 155);
+  --diffs-bg-deletion: oklch(0.94 0.07 30);
+  --diffs-bg-deletion-emphasis: oklch(0.88 0.13 30);
+  --diffs-deletion-color: oklch(0.5 0.18 30);
+  --diffs-bg-separator: var(--muted);
+}
+
+:root.doubutsu.dark {
+  /* Same system, evening. The layered cream tints become warm wood
+     tints with the same lightness deltas between layers. Primary
+     lifts to a brighter leaf so the CTA still sings against the dark. */
+  --background: oklch(0.219 0.008 84.6);
+  --foreground: oklch(0.942 0.011 76.6);
+  --card: oklch(0.31 0.01 85);
+  --card-foreground: oklch(0.942 0.011 76.6);
+  --popover: oklch(0.3 0.012 80);
+  --popover-foreground: oklch(0.942 0.011 76.6);
+  --primary: oklch(0.7 0.17 155);
+  --primary-foreground: oklch(0.18 0.01 84.6);
+  --secondary: oklch(0.35 0.025 70);
+  --secondary-foreground: oklch(0.942 0.011 76.6);
+  --muted: oklch(0.325 0.011 67.4);
+  --muted-foreground: oklch(0.741 0.025 73.5);
+  --accent: oklch(0.4 0.07 155);
+  --accent-foreground: oklch(0.942 0.011 76.6);
+  --destructive: oklch(0.7 0.14 32);
+  --border: transparent;
+  --input: oklch(0.34 0.012 70);
+  --ring: oklch(0.7 0.17 155);
+
+  --doubutsu-sidebar: oklch(0.272 0.025 162);
+  --doubutsu-stripe: oklch(1 0 0 / 0.1);
+  --doubutsu-watermark: oklch(0.7 0.17 155);
+  --doubutsu-pattern: oklch(0.7 0.17 155);
+  --doubutsu-button-outline: oklch(0.34 0.03 65);
+  --doubutsu-edge: oklch(0 0 0 / 0.45);
+  --doubutsu-edge-line: oklch(1 0 0 / 0.07);
+
+  /* Status families, evening variants (the amber pairs are theme-split
+     in component code via dark: prefixes, so the light-block values
+     already cover both). */
+  --color-emerald-500: oklch(0.74 0.16 155);
+  --color-rose-500: oklch(0.72 0.15 32);
+  --color-amber-500: oklch(0.78 0.13 80);
+  --color-sky-500: oklch(0.72 0.12 235);
+
+  --diffs-bg: var(--background);
+  --diffs-fg: var(--foreground);
+  --diffs-bg-context: var(--background);
+  --diffs-bg-context-gutter: var(--card);
+  --diffs-bg-addition: oklch(0.34 0.07 155);
+  --diffs-bg-addition-emphasis: oklch(0.42 0.12 155);
+  --diffs-addition-color: oklch(0.88 0.12 155);
+  --diffs-bg-deletion: oklch(0.34 0.07 30);
+  --diffs-bg-deletion-emphasis: oklch(0.42 0.12 30);
+  --diffs-deletion-color: oklch(0.85 0.13 30);
+  --diffs-bg-separator: var(--muted);
+}
+
+/* --- Strip ambient depth ---
+   AC differentiates surfaces by stacked colored fills, not by hairlines,
+   shadows, or rings. The :not(:focus-visible) carve-out preserves
+   keyboard focus indication, which targets the focused element with
+   higher specificity via Tailwind's focus-visible:* utilities. */
+.doubutsu *,
+.doubutsu *::before,
+.doubutsu *::after {
+  border-color: transparent;
+}
+.doubutsu *:not(:focus-visible) {
+  box-shadow: none;
+  outline: 0;
+  --tw-ring-shadow: 0 0 transparent;
+  --tw-ring-offset-shadow: 0 0 transparent;
+}
+.doubutsu [class*="backdrop-blur"] {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* --- Sentence case, no tracking ---
+   AC never uses all-caps or wide tracking. Section headings and the
+   like still read as headings via size + weight + color. */
+.doubutsu .uppercase {
+  text-transform: none;
+}
+.doubutsu .tracking-wide,
+.doubutsu .tracking-wider,
+.doubutsu .tracking-widest {
+  letter-spacing: normal;
+}
+
+/* --- Outline button fill ---
+   In v1, the outline variant relies on its 1px border to read as a
+   button against the canvas. In doubutsu the border is gone, so we
+   give it a peach pastel fill -- distinct hue from secondary's sand
+   and clearly different from canvas, so outline / secondary read as
+   different button TYPES. (Unlayered, so it also outranks the
+   variant's hover:bg-muted -- the stripe overlay is the hover signal.) */
+.doubutsu [data-slot="button"][data-variant="outline"] {
+  background-color: var(--doubutsu-button-outline);
+}
+
+/* --- Dropdown / menu separator ---
+   The Tailwind `bg-border` separator went transparent when we zeroed
+   --border. AC's equivalent is a chunky tinted bar, not a hairline --
+   bump to --muted as a soft 1px-tall band. Same fix for the diff hunk
+   separator which lives in pierre's shadow DOM but inherits the var. */
+.doubutsu [data-slot="dropdown-menu-separator"] {
+  background-color: var(--muted);
+}
+
+/* --- Floating surfaces: sticker elevation ---
+   Popovers, menus, modals, sheets, and toasts lost their soft shadow +
+   hairline ring to the ambient-depth strip above, and the popover white
+   alone can't define an edge against the card cream. Every floating
+   surface gets the AC sticker treatment instead: a faint solid outline
+   plus a hard, blur-less drop. !important outranks sonner's !shadow-md. */
+.doubutsu
+  :is(
+    [data-slot="dropdown-menu-content"],
+    [data-slot="combobox-popup"],
+    [data-slot="modal-shell"],
+    [data-slot="sheet-content"],
+    [data-sonner-toast]
+  ) {
+  box-shadow:
+    0 0 0 1px var(--doubutsu-edge-line),
+    0 5px 0 0 var(--doubutsu-edge) !important;
+}
+
+/* Hairline separators inside those surfaces (the combobox search row,
+   modal header/footer rows) went transparent with --border; replace
+   them with the same chunky muted band as the dropdown separator. */
+.doubutsu
+  :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+  .border-b,
+.doubutsu [data-slot="combobox-search"] {
+  box-shadow: inset 0 -2px 0 0 var(--muted);
+}
+.doubutsu
+  :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+  .border-t {
+  box-shadow: inset 0 2px 0 0 var(--muted);
+}
+
+/* --- Text fields read as inset trays ---
+   v1 fields are border-input + bg-background: with borders gone they'd
+   melt into the canvas. Filling the field slots (and the segmented-
+   control tracks) with the --input tray tint keeps them legible
+   without hairlines. */
+.doubutsu
+  :is(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="segmented-control"]
+  ) {
+  background-color: var(--input);
+}
+
+/* Quiet action chips built on an inset ring alone in v1; the muted
+   pill fill makes them read as controls with the rings gone. */
+.doubutsu [data-slot="chip"] {
+  background-color: var(--muted);
+}
+
+/* --- Open popups keep their trigger lit ---
+   v1 marks an open trigger with border-input + a ring, both stripped.
+   The accent pillow is doubutsu's "active" signal everywhere else, so
+   use it here too. aria-haspopup scopes this to menu/combobox triggers;
+   tooltip triggers also carry data-popup-open but no haspopup, and the
+   combobox's search <input> carries both -- keep it a plain field. */
+.doubutsu [aria-haspopup][data-popup-open]:not(input) {
+  background-color: var(--accent);
+}
+
+/* --- Detail page zones get a lifted header ---
+   Header + footer of the main detail surfaces in v1 are bounded by
+   border-b / border-t hairlines. With borders gone, the header would
+   bleed into content. Lift the header to bg-card so it reads as its
+   own panel stacked on the cream canvas (with its leaf pattern). A
+   descendant selector on purpose: views nest their <header> at varying
+   depths (Settings at the route root, WorktreeDetailInner one level
+   down), and the card band is the intended pattern for all of them.
+   The footer already uses bg-card explicitly in the component code. */
+.doubutsu [data-doubutsu-zone="main"] header {
+  background-color: var(--card);
+}
+
+/* --- Typography: AC chunky-by-default ---
+   The body font-family is re-declared literally (not via --font-sans)
+   because Tailwind's `@theme inline` inlines the Geist stack into the
+   base-layer body rule, so a token override alone can't reach it.
+   Body lifts to 700 (the AC base weight). Tailwind's explicit weight
+   utilities are re-pinned so anything labeled font-medium is still at
+   least as bold as the body, preserving hierarchy. Mono wants roughly
+   a 550: 500 looks anemic next to Zen Maru's chunky strokes and 600
+   reads too loud, but the system mono stack has no weight between --
+   so 500 plus a hairline text-stroke splits the difference. */
+.doubutsu body {
+  font-family:
+    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
+    sans-serif;
+  font-weight: 700;
+}
+.doubutsu .font-mono,
+.doubutsu pre,
+.doubutsu code,
+.doubutsu kbd {
+  font-weight: 500;
+  -webkit-text-stroke: 0.2px currentColor;
+}
+/* The pierre diff viewer renders inside shadow DOM, where the class
+   selectors above can't reach -- but the body's 700 still gets in via
+   inheritance, so diff code rendered fat. Pin the mono treatment on
+   the wrapper; font-weight and text-stroke are inherited properties,
+   so they carry across the shadow boundary. */
+.doubutsu [data-slot="diff-view"] {
+  font-weight: 500;
+  -webkit-text-stroke: 0.2px currentColor;
+}
+.doubutsu .font-normal {
+  font-weight: 500;
+}
+.doubutsu .font-medium {
+  font-weight: 700;
+}
+.doubutsu .font-semibold {
+  font-weight: 900;
+}
+.doubutsu .font-bold,
+.doubutsu .font-black,
+.doubutsu h1,
+.doubutsu h2,
+.doubutsu h3 {
+  font-weight: 900;
+  letter-spacing: -0.01em;
+}
+
+/* --- Zone tints ---
+   AC menus separate regions by stacking flat colored panels. The
+   sidebar gets a calm mint, the main canvas keeps the cream --background
+   plus a low-opacity leaf wallpaper. No borders between them -- the
+   color shift is the boundary.
+
+   The base-layer [data-sidebar] token overrides assume the translucent
+   vibrancy surface; doubutsu's rail is opaque mint, so restore the
+   doubutsu palette's own muted/accent pairings here. */
+.doubutsu [data-doubutsu-zone="sidebar"] {
+  background-color: var(--doubutsu-sidebar);
+  --muted-foreground: oklch(0.55 0.031 67.2);
+  --accent: oklch(0.88 0.07 155);
+  --accent-foreground: oklch(0.39 0.045 74.1);
+}
+.doubutsu.dark [data-doubutsu-zone="sidebar"] {
+  --muted-foreground: oklch(0.741 0.025 73.5);
+  --accent: oklch(0.4 0.07 155);
+  --accent-foreground: oklch(0.942 0.011 76.6);
+}
+
+/* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
+   leaving a transparent slit that lets the window material show
+   through as a hairline "border" between the rails. Paint it as an
+   extension of the sidebar so the mint meets the canvas seamlessly. */
+.doubutsu :has(> [data-doubutsu-zone="sidebar"]) + [role="separator"] {
+  background-color: var(--doubutsu-sidebar);
+}
+
+/* Windows draws the always-visible custom scrollbars from index.css
+   with a neutral gray thumb; warm it to the palette's brown axis so it
+   doesn't read foreign on the cream/wood surfaces. (data-platform and
+   .doubutsu share the <html> element.) */
+.doubutsu[data-platform="win32"] ::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0.04 74 / 0.35);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 5px;
+}
+.doubutsu[data-platform="win32"] ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0.04 74 / 0.55);
+  background-clip: content-box;
+  border: 2px solid transparent;
+}
+
+/* The leaf wallpaper lives on the main canvas (the big surface where
+   the content breathes), not the sidebar. Pattern color comes from the
+   CSS variable via mask-image so OKLCH stays in charge of hue.
+
+   Stacking: the zone isolates its own context so the ::before can sit
+   at z-index -1 -- above main's background paint, below every in-flow
+   child. This deliberately avoids touching the children's `position`
+   (an earlier `> * { position: relative }` lift silently converted the
+   absolutely-positioned title-bar drag strip into a 28px flex row and
+   pushed every page down). */
+.doubutsu [data-doubutsu-zone="main"] {
+  isolation: isolate;
+}
+.doubutsu [data-doubutsu-zone="main"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-color: var(--doubutsu-pattern);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20width%3D%2280%22%20height%3D%2240%22%20viewBox%3D%220%200%2080%2040%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22%23000%22%20fill-rule%3D%22evenodd%22%3E%3Cpath%20d%3D%22M2.011%2039.976c.018-4.594%201.785-9.182%205.301-12.687.475-.474.97-.916%201.483-1.326v9.771L4.54%2039.976H2.01zm5.373%200L23.842%2023.57c.687%205.351-1.031%2010.95-5.154%2015.06-.483.483-.987.931-1.508%201.347H7.384zm-7.384%200c.018-5.107%201.982-10.208%205.89-14.104%205.263-5.247%2012.718-6.978%2019.428-5.192%201.783%206.658.07%2014.053-5.137%2019.296H.001zm10.806-15.41c3.537-2.116%207.644-2.921%2011.614-2.415L10.806%2033.73v-9.163zM65.25.75C58.578-1.032%2051.164.694%2045.93%205.929c-5.235%205.235-6.961%2012.649-5.18%2019.321%206.673%201.782%2014.087.056%2019.322-5.179%205.235-5.235%206.961-12.649%205.18-19.321zM43.632%2023.783c5.338.683%2010.925-1.026%2015.025-5.126%204.1-4.1%205.809-9.687%205.126-15.025l-20.151%2020.15zm7.186-19.156c3.518-2.112%207.602-2.915%2011.55-2.41l-11.55%2011.55v-9.14zm-3.475%202.716c-4.1%204.1-5.809%209.687-5.126%2015.025l6.601-6.6V6.02c-.51.41-1.002.85-1.475%201.323zM.071%200C.065%201.766.291%203.533.75%205.25%207.422%207.032%2014.836%205.306%2020.07.071l.07-.071H.072zm17.086%200C13.25%203.125%208.345%204.386%203.632%203.783L7.414%200h9.743zM2.07%200c-.003.791.046%201.582.146%202.368L4.586%200H2.07z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20width%3D%2280%22%20height%3D%2240%22%20viewBox%3D%220%200%2080%2040%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cg%20fill%3D%22%23000%22%20fill-rule%3D%22evenodd%22%3E%3Cpath%20d%3D%22M2.011%2039.976c.018-4.594%201.785-9.182%205.301-12.687.475-.474.97-.916%201.483-1.326v9.771L4.54%2039.976H2.01zm5.373%200L23.842%2023.57c.687%205.351-1.031%2010.95-5.154%2015.06-.483.483-.987.931-1.508%201.347H7.384zm-7.384%200c.018-5.107%201.982-10.208%205.89-14.104%205.263-5.247%2012.718-6.978%2019.428-5.192%201.783%206.658.07%2014.053-5.137%2019.296H.001zm10.806-15.41c3.537-2.116%207.644-2.921%2011.614-2.415L10.806%2033.73v-9.163zM65.25.75C58.578-1.032%2051.164.694%2045.93%205.929c-5.235%205.235-6.961%2012.649-5.18%2019.321%206.673%201.782%2014.087.056%2019.322-5.179%205.235-5.235%206.961-12.649%205.18-19.321zM43.632%2023.783c5.338.683%2010.925-1.026%2015.025-5.126%204.1-4.1%205.809-9.687%205.126-15.025l-20.151%2020.15zm7.186-19.156c3.518-2.112%207.602-2.915%2011.55-2.41l-11.55%2011.55v-9.14zm-3.475%202.716c-4.1%204.1-5.809%209.687-5.126%2015.025l6.601-6.6V6.02c-.51.41-1.002.85-1.475%201.323zM.071%200C.065%201.766.291%203.533.75%205.25%207.422%207.032%2014.836%205.306%2020.07.071l.07-.071H.072zm17.086%200C13.25%203.125%208.345%204.386%203.632%203.783L7.414%200h9.743zM2.07%200c-.003.791.046%201.582.146%202.368L4.586%200H2.07z%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 80px 40px;
+  mask-size: 80px 40px;
+  opacity: 0.08;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* `doubutsu-only` lets components ship the AC-specific overlay/markup
+   inline. Hidden in v1, visible when `.doubutsu` lights up. */
+.doubutsu-only {
+  display: none;
+}
+.doubutsu .doubutsu-only {
+  display: block;
+}
+
+/* AC signature: diagonal stripes that slide vertically while you hover.
+   Applied universally to interactive elements -- in AC, hovering ANY
+   button brings it to life with sliding stripes. The pattern goes in as
+   a background-image so it layers on top of whatever fill the element
+   already has, no markup changes required.
+
+   Coverage comes in two kinds. Pointer things (:hover): buttons, links,
+   radio/checkbox option cards, the file-picker rows. Composite widgets
+   (Base UI menus/comboboxes, cmdk lists) move a highlight themselves
+   instead of relying on :hover -- there the stripes ride the
+   highlighted item, which also animates keyboard navigation. */
+@keyframes ac-stripe-slide {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 20px;
+  }
+}
+
+.doubutsu button:not(:disabled):hover,
+.doubutsu [role="button"]:not([aria-disabled="true"]):hover,
+.doubutsu a[href]:hover,
+.doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
+.doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
+.doubutsu li[data-row-idx].cursor-pointer:hover,
+.doubutsu [data-highlighted]:not([data-disabled]),
+.doubutsu [cmdk-item][aria-selected="true"] {
+  background-image: linear-gradient(
+    45deg,
+    transparent 25%,
+    var(--doubutsu-stripe) 25%,
+    var(--doubutsu-stripe) 50%,
+    transparent 50%,
+    transparent 75%,
+    var(--doubutsu-stripe) 75%
+  );
+  background-size: 20px 20px;
+  animation: ac-stripe-slide 0.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doubutsu button:not(:disabled):hover,
+  .doubutsu [role="button"]:not([aria-disabled="true"]):hover,
+  .doubutsu a[href]:hover,
+  .doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
+  .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
+  .doubutsu li[data-row-idx].cursor-pointer:hover,
+  .doubutsu [data-highlighted]:not([data-disabled]),
+  .doubutsu [cmdk-item][aria-selected="true"] {
+    animation: none;
+  }
+}

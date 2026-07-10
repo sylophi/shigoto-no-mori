@@ -49,6 +49,9 @@ function Button({
   return (
     <ButtonPrimitive
       data-slot="button"
+      // Variant exposed as a data attribute so theme overlays (doubutsu)
+      // can restyle a variant without depending on its utility classes.
+      data-variant={variant}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

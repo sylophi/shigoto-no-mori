@@ -71,6 +71,7 @@ export function CarryOverRow({
             used by <span className="font-mono">.worktreeinclude</span>
           </span>
           <span
+            data-slot="chip"
             className="inline-flex shrink-0 cursor-not-allowed items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] text-muted-foreground"
             title="Matches a pattern in the repo's .worktreeinclude file, so it's copied into every new worktree. Edit that file to change or remove it."
           >

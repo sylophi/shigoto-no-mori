@@ -39,6 +39,7 @@ export function ModalShell({
       className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
     >
       <div
+        data-slot="modal-shell"
         className={cn(
           "w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
           popoverClassName,

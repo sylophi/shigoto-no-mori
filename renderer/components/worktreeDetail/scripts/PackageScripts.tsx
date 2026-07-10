@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import {
   usePackageScriptSort,
   useSetPackageScriptSort,
@@ -64,12 +65,12 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
               aria-hidden
               className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground/60"
             />
-            <input
+            <Input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search scripts…"
-              className="w-full rounded-md border border-input bg-background py-1 pr-2.5 pl-7 text-xs transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+              className="w-full py-1 pr-2.5 pl-7 text-xs"
             />
           </div>
 

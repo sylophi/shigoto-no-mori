@@ -2,13 +2,21 @@ import { Moon, Sun, SunMoon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
+import { ToggleRow } from "./ToggleRow";
 
 interface AppearanceSectionProps {
   theme: Theme;
   onPick: (theme: Theme) => void;
+  doubutsu: boolean;
+  onDoubutsuChange: (next: boolean) => void;
 }
 
-export function AppearanceSection({ theme, onPick }: AppearanceSectionProps) {
+export function AppearanceSection({
+  theme,
+  onPick,
+  doubutsu,
+  onDoubutsuChange,
+}: AppearanceSectionProps) {
   const options: { value: Theme; label: string; Icon: typeof Sun }[] = [
     { value: "light", label: "Light", Icon: Sun },
     { value: "dark", label: "Dark", Icon: Moon },
@@ -30,6 +38,12 @@ export function AppearanceSection({ theme, onPick }: AppearanceSectionProps) {
           </Button>
         ))}
       </div>
+      <ToggleRow
+        checked={doubutsu}
+        onCheckedChange={onDoubutsuChange}
+        label="Doubutsu mode"
+        description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
+      />
     </section>
   );
 }

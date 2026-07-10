@@ -15,6 +15,7 @@ import {
   normalizeForSubmit,
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
+import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
 import { modKey, shortcutLabel } from "@/lib/platform";
 import { comparablePath } from "@shared/worktreeLayout";
@@ -376,14 +377,10 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
             </KbdGroup>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void pickViaDialog()}
-          className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
-        >
+        <ChipButton onClick={() => void pickViaDialog()}>
           <FileManagerIcon />
           Open in {fileManagerName}
-        </button>
+        </ChipButton>
       </div>
     </Command>
   );

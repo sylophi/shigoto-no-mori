@@ -38,7 +38,7 @@ export function ConvertRow({
         "group flex items-start gap-3 px-3 py-3 text-sm",
         !isLast && "border-b border-border",
         disabled && "opacity-70",
-        interactive && "cursor-pointer",
+        interactive && "cursor-pointer transition-colors hover:bg-accent/30",
       )}
     >
       <input

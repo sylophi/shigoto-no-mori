@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
+import { Input } from "@/components/ui/input";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { sanitizeBranchName } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
@@ -45,7 +46,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
   if (editing) {
     return (
       <div className="flex items-center gap-2">
-        <input
+        <Input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
           autoFocus
           value={draft ?? ""}
@@ -60,7 +61,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
               cancel();
             }
           }}
-          className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-2xl font-medium tracking-tight outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:opacity-50"
+          className="min-w-0 flex-1 px-2 py-1 font-mono text-2xl font-medium tracking-tight"
         />
         <button
           type="button"
