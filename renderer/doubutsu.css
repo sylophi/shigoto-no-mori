@@ -337,8 +337,10 @@
    base-layer body rule, so a token override alone can't reach it.
    Body lifts to 700 (the AC base weight). Tailwind's explicit weight
    utilities are re-pinned so anything labeled font-medium is still at
-   least as bold as the body, preserving hierarchy. Mono drops to 500
-   for code readability against a bolder surround. */
+   least as bold as the body, preserving hierarchy. Mono wants roughly
+   a 550: 500 looks anemic next to Zen Maru's chunky strokes and 600
+   reads too loud, but the system mono stack has no weight between --
+   so 500 plus a hairline text-stroke splits the difference. */
 .doubutsu body {
   font-family:
     "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
@@ -350,6 +352,7 @@
 .doubutsu code,
 .doubutsu kbd {
   font-weight: 500;
+  -webkit-text-stroke: 0.2px currentColor;
 }
 .doubutsu .font-normal {
   font-weight: 500;
