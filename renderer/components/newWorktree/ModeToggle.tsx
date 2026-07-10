@@ -16,7 +16,10 @@ export function ModeToggle({
     { value: "checkout", label: "Check out source" },
   ];
   return (
-    <div className="inline-flex rounded-md border border-input p-0.5">
+    <div
+      data-slot="segmented-control"
+      className="inline-flex rounded-md border border-input p-0.5"
+    >
       {options.map((opt) => (
         <button
           key={opt.value}

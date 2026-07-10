@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
+import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
@@ -21,8 +22,7 @@ import {
 import { isRealBranch } from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
 
-const TEXT_INPUT_CLASS =
-  "w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50";
+const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 export function NewWorktree() {
@@ -187,7 +187,7 @@ export function NewWorktree() {
           >
             Branch name
           </label>
-          <input
+          <Input
             id="branch-name"
             type="text"
             value={mode === "checkout" ? base : branchName}
@@ -235,7 +235,7 @@ export function NewWorktree() {
               Use {mode === "checkout" ? "source" : "branch"} name
             </label>
           </div>
-          <input
+          <Input
             id="worktree-name"
             type="text"
             value={useBranchAsFolder ? folderName : worktreeName}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useCreateBranch } from "@/hooks/git/useBranches";
 import { sanitizeBranchName } from "@shared/branches";
 
@@ -42,7 +43,7 @@ export function NewBranchForm({
         <label htmlFor="new-branch-name" className="block text-xs font-medium">
           Branch name
         </label>
-        <input
+        <Input
           id="new-branch-name"
           type="text"
           value={name}
@@ -50,7 +51,7 @@ export function NewBranchForm({
           placeholder="feat/new-thing"
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused on opening form
           autoFocus
-          className="w-full rounded-md border border-input bg-background px-3 py-1.5 font-mono text-sm transition-colors outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+          className="w-full px-3 py-1.5 font-mono text-sm"
         />
       </div>
       <div className="space-y-1.5">

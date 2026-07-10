@@ -21,6 +21,7 @@
     "publish": "electron-forge publish",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
+    "check:theme": "node scripts/check-theme-contract.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "licenses": "node scripts/generate-third-party-licenses.mjs",

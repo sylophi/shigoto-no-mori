@@ -7,3 +7,5 @@ pre-commit:
       run: pnpm run lint
     format:
       run: pnpm run format:check
+    theme-contract:
+      run: pnpm run check:theme

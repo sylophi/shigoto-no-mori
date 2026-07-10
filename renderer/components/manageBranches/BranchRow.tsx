@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, ExternalLink, House, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { cn } from "@/lib/utils";
@@ -53,7 +54,7 @@ export function BranchRow({
       )}
     >
       {editing ? (
-        <input
+        <Input
           value={draft ?? ""}
           onChange={(e) => setDraft(sanitizeBranchName(e.target.value))}
           onKeyDown={(e) => {
@@ -64,7 +65,7 @@ export function BranchRow({
           disabled={rename.isPending}
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- inline edit
           autoFocus
-          className="flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-sm outline-none focus:border-ring focus:ring-2 focus:ring-ring/30"
+          className="flex-1 px-2 py-1 font-mono text-sm"
         />
       ) : (
         <span className="min-w-0 flex-1 truncate font-mono select-text">

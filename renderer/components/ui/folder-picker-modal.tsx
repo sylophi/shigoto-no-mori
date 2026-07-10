@@ -8,6 +8,7 @@ import {
   Folder,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -242,8 +243,7 @@ export function FolderPickerModal({
               </KbdGroup>
             )}
           </div>
-          <button
-            type="button"
+          <ChipButton
             onClick={async () => {
               const picked = await window.api.dialog.pickFolder({
                 title,
@@ -251,11 +251,10 @@ export function FolderPickerModal({
               });
               if (picked) onPick(picked);
             }}
-            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground/80 ring-1 ring-border transition-colors ring-inset hover:bg-accent hover:text-foreground"
           >
             <FileManagerIcon />
             Open in {fileManagerName}
-          </button>
+          </ChipButton>
         </div>
       </Command>
     </ModalShell>

@@ -28,7 +28,10 @@ export function ModePicker({ mode, onChange }: ModePickerProps) {
     },
   ];
   return (
-    <div className="inline-flex shrink-0 rounded-md border border-input p-0.5">
+    <div
+      data-slot="segmented-control"
+      className="inline-flex shrink-0 rounded-md border border-input p-0.5"
+    >
       {options.map((opt) => {
         const active = mode === opt.value;
         return (
