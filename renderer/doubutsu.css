@@ -390,6 +390,14 @@
   --accent-foreground: oklch(0.942 0.011 76.6);
 }
 
+/* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
+   leaving a transparent slit that lets the window material show
+   through as a hairline "border" between the rails. Paint it as an
+   extension of the sidebar so the mint meets the canvas seamlessly. */
+.doubutsu :has(> [data-doubutsu-zone="sidebar"]) + [role="separator"] {
+  background-color: var(--doubutsu-sidebar);
+}
+
 /* The leaf wallpaper lives on the main canvas (the big surface where
    the content breathes), not the sidebar. Pattern color comes from the
    CSS variable via mask-image so OKLCH stays in charge of hue.
