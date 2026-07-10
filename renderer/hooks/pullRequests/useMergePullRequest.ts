@@ -31,10 +31,8 @@ export function useMergePullRequest() {
       await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData<PullRequestDetail | null>(key);
       if (prev) {
-        qc.setQueryData<PullRequestDetail | null>(key, {
-          ...prev,
-          state: "MERGED",
-        });
+        const next: PullRequestDetail = { ...prev, state: "MERGED" };
+        qc.setQueryData<PullRequestDetail | null>(key, next);
       }
       return { key, prev };
     },

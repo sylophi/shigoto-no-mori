@@ -31,5 +31,9 @@ export function useUpdater() {
     mutationFn: () => window.api.updater.install(),
   });
 
-  return { state: query.data ?? null, check, install };
+  // The explicit annotation strips react-query's NoInfer wrapper from
+  // `data`; tsgo (TypeScript 7) can't narrow the discriminated union
+  // through the intrinsic NoInfer that query-core 5.101 switched to.
+  const state: UpdaterState | null = query.data ?? null;
+  return { state, check, install };
 }

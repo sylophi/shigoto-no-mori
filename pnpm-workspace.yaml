@@ -24,9 +24,11 @@ allowBuilds:
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
 #
-# Force tmp >= 0.2.6 to patch CVE-2026-44705 (GHSA-ph9p-34f9-6g65) and
-# CVE-2025-54798 (GHSA-52f5-9888-hmc6). Pulled in transitively through
-# @electron-forge/cli -> @inquirer/prompts -> external-editor.
+# Force tmp >= 0.2.7 to patch CVE-2026-44705 (GHSA-ph9p-34f9-6g65),
+# CVE-2025-54798 (GHSA-52f5-9888-hmc6), and the 0.2.6 _assertPath
+# type-confusion path traversal (GHSA on tmp < 0.2.7). Pulled in
+# transitively through @electron-forge/cli -> @inquirer/prompts ->
+# external-editor.
 overrides:
   "tar@<7.5.10": "^7.5.10"
-  "tmp@<0.2.6": "0.2.6"
+  "tmp@<0.2.7": "0.2.7"
