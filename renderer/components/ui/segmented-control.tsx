@@ -50,7 +50,11 @@ export function SegmentedControl<T extends string>({
           title={opt.title}
           aria-pressed={value === opt.value}
           className={cn(
-            "inline-flex items-center gap-1 rounded-[5px] transition-colors",
+            // Concentric with the track: the option radius is the
+            // rounded-md outer radius (--radius * 0.8) minus the p-0.5
+            // track padding, so it stays correct when a theme scales
+            // --radius (doubutsu bumps it to 1rem).
+            "inline-flex items-center gap-1 rounded-[calc(var(--radius)*0.8-2px)] transition-colors",
             optionClassName ?? "px-3 py-1 text-xs",
             value === opt.value
               ? "bg-accent text-accent-foreground"
