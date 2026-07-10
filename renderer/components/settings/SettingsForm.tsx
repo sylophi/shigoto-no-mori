@@ -7,6 +7,7 @@ import { LauncherIcon } from "@/components/LauncherIcon";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { useGlobalConfigWrite } from "@/hooks/config/useGlobalConfig";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
@@ -33,6 +34,7 @@ import { VersionSection } from "./VersionSection";
 
 interface FormState {
   theme: Theme;
+  doubutsu: boolean;
   launchers: LauncherCommand[];
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
@@ -43,6 +45,7 @@ interface FormState {
 function fromConfig(config: GlobalConfig): FormState {
   return {
     theme: config.theme ?? "system",
+    doubutsu: config.doubutsu ?? false,
     launchers: config.launchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
@@ -59,6 +62,8 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     ...original,
     // Default is "system"; omit when on the default to keep config.json tidy.
     theme: state.theme === "system" ? undefined : state.theme,
+    // Default is off; only persist when explicitly enabled.
+    doubutsu: state.doubutsu ? true : undefined,
     launchers: valid.length > 0 ? valid : undefined,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
@@ -85,6 +90,7 @@ export function SettingsForm({
   const ghReady = ghInstalled && ghAuthed;
   const write = useGlobalConfigWrite();
   const { setOverride } = useTheme();
+  const { setOverride: setDoubutsuOverride } = useDoubutsu();
 
   const availableTools = detected.filter((d) => d.available);
   const missingTools = detected.filter((d) => !d.available);
@@ -92,25 +98,37 @@ export function SettingsForm({
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
     useDirtyForm<FormState>(fromConfig(initialConfig));
 
-  // Drop any staged theme preview when leaving the settings page so the
-  // rest of the app falls back to the saved value.
-  useEffect(() => () => setOverride(null), [setOverride]);
+  // Drop any staged previews when leaving the settings page so the rest
+  // of the app falls back to the saved values.
+  useEffect(
+    () => () => {
+      setOverride(null);
+      setDoubutsuOverride(null);
+    },
+    [setOverride, setDoubutsuOverride],
+  );
 
   const handleSave = async () => {
     await write.mutateAsync(toConfig(initialConfig, form));
     setSavedSnapshot(form);
-    // No explicit setOverride(null) — the provider clears the override
+    // No explicit setOverride(null) — the providers clear the override
     // automatically once `saved` catches up to the staged value.
   };
 
   const handleDiscard = () => {
     setForm(savedSnapshot);
     setOverride(null);
+    setDoubutsuOverride(null);
   };
 
   const pickTheme = (theme: Theme) => {
     setForm((prev) => ({ ...prev, theme }));
     setOverride(theme);
+  };
+
+  const setDoubutsu = (next: boolean) => {
+    setForm((prev) => ({ ...prev, doubutsu: next }));
+    setDoubutsuOverride(next);
   };
 
   const { addLauncher, updateLauncher, removeLauncher } =
@@ -174,7 +192,12 @@ export function SettingsForm({
             </div>
           </section>
 
-          <AppearanceSection theme={form.theme} onPick={pickTheme} />
+          <AppearanceSection
+            theme={form.theme}
+            onPick={pickTheme}
+            doubutsu={form.doubutsu}
+            onDoubutsuChange={setDoubutsu}
+          />
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Worktrees</SectionHeading>

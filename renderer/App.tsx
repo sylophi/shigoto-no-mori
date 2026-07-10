@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommandPalette } from "@/components/CommandPalette";
 import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
+import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { useWatchGitRefs } from "@/hooks/git/useBranches";
 import { useWatchProjectUsage } from "@/hooks/projects/useProjects";
@@ -47,14 +48,16 @@ export function App() {
 
   return (
     <ThemeProvider>
-      <ErrorBoundary FallbackComponent={AppErrorFallback}>
-        <CommandPaletteProvider>
-          <TooltipProvider>
-            <RouterProvider router={router} />
-            <CommandPalette />
-          </TooltipProvider>
-        </CommandPaletteProvider>
-      </ErrorBoundary>
+      <DoubutsuProvider>
+        <ErrorBoundary FallbackComponent={AppErrorFallback}>
+          <CommandPaletteProvider>
+            <TooltipProvider>
+              <RouterProvider router={router} />
+              <CommandPalette />
+            </TooltipProvider>
+          </CommandPaletteProvider>
+        </ErrorBoundary>
+      </DoubutsuProvider>
     </ThemeProvider>
   );
 }

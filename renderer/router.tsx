@@ -85,7 +85,10 @@ function RootLayout() {
       >
         <div className="absolute inset-y-0 -left-1 w-2" />
       </div>
-      <main className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background">
+      <main
+        data-doubutsu-zone="main"
+        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
+      >
         <div
           aria-hidden
           className="absolute inset-x-0 top-0 z-30 h-7"

@@ -136,7 +136,11 @@ export function Sidebar() {
     // job on its own. On Windows index.css paints an opaque surface via
     // the data-platform hook instead. The `data-sidebar` attribute
     // scopes the token overrides in index.css to this surface only.
-    <aside data-sidebar className="flex h-full flex-col">
+    <aside
+      data-sidebar
+      data-doubutsu-zone="sidebar"
+      className="flex h-full flex-col"
+    >
       <SidebarHeader />
       <div className="min-h-0 flex-1">
         <ScrollArea className="size-full" viewportRef={viewportRef}>
