@@ -87,10 +87,7 @@
   --secondary-foreground: oklch(0.39 0.045 74.1);
   --muted: oklch(0.945 0.025 85);
   --muted-foreground: oklch(0.55 0.031 67.2);
-  /* Calmer than the sidebar-zone accent below: on the cream canvas a
-     saturated mint shouts; the sidebar's own --accent override keeps
-     the stronger pillow where it sits on mint. */
-  --accent: oklch(0.91 0.045 155);
+  --accent: oklch(0.88 0.07 155);
   --accent-foreground: oklch(0.39 0.045 74.1);
   --destructive: oklch(0.6 0.16 30);
   /* See the universal `border-color: transparent` rule below. */
@@ -168,7 +165,7 @@
   --secondary-foreground: oklch(0.942 0.011 76.6);
   --muted: oklch(0.325 0.011 67.4);
   --muted-foreground: oklch(0.741 0.025 73.5);
-  --accent: oklch(0.36 0.05 155);
+  --accent: oklch(0.4 0.07 155);
   --accent-foreground: oklch(0.942 0.011 76.6);
   --destructive: oklch(0.7 0.14 32);
   --border: transparent;
@@ -395,7 +392,17 @@
 
 /* The leaf wallpaper lives on the main canvas (the big surface where
    the content breathes), not the sidebar. Pattern color comes from the
-   CSS variable via mask-image so OKLCH stays in charge of hue. */
+   CSS variable via mask-image so OKLCH stays in charge of hue.
+
+   Stacking: the zone isolates its own context so the ::before can sit
+   at z-index -1 -- above main's background paint, below every in-flow
+   child. This deliberately avoids touching the children's `position`
+   (an earlier `> * { position: relative }` lift silently converted the
+   absolutely-positioned title-bar drag strip into a 28px flex row and
+   pushed every page down). */
+.doubutsu [data-doubutsu-zone="main"] {
+  isolation: isolate;
+}
 .doubutsu [data-doubutsu-zone="main"]::before {
   content: "";
   position: absolute;
@@ -409,11 +416,7 @@
   mask-size: 80px 40px;
   opacity: 0.08;
   pointer-events: none;
-  z-index: 0;
-}
-.doubutsu [data-doubutsu-zone="main"] > * {
-  position: relative;
-  z-index: 1;
+  z-index: -1;
 }
 
 /* `doubutsu-only` lets components ship the AC-specific overlay/markup
