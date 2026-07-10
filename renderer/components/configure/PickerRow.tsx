@@ -31,7 +31,7 @@ export function PickerRow({
 }: PickerRowProps) {
   const isFolder = entry.isDirectory;
   return (
-    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events -- keyboard nav lives on the focused filter input above
+    // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- keyboard nav lives on the focused filter input above
     <li
       data-row-idx={index}
       className={cn(

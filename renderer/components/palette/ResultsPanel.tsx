@@ -27,6 +27,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
     props.results.length > 0 && props.selected.size === props.results.length;
 
   return (
+    // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard nav is delegated from the cmdk input; this wrapper only forwards it
     <div onKeyDown={props.onKeyDown} role="group" aria-label="Scan results">
       <Command
         label="Scan results"

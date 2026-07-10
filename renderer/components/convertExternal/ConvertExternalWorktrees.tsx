@@ -16,6 +16,13 @@ import type { Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 
+// For detached HEADs `worktree.branch` is a short SHA -- pass it
+// through unchanged so the managed worktree gets a hash-named dir.
+// (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
+// never see here.)
+const proposedName = (worktree: Worktree): string =>
+  worktree.detached ? worktree.branch : sanitizeBranchForPath(worktree.branch);
+
 export function ConvertExternalWorktrees() {
   const { projectId } = convertExternalRoute.useParams();
   const navigate = useNavigate();
@@ -37,14 +44,6 @@ export function ConvertExternalWorktrees() {
 
   const home = runtime?.homedir ?? null;
 
-  // For detached HEADs `worktree.branch` is a short SHA -- pass it
-  // through unchanged so the managed worktree gets a hash-named dir.
-  // (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
-  // never see here.)
-  const proposedName = (worktree: Worktree): string =>
-    worktree.detached
-      ? worktree.branch
-      : sanitizeBranchForPath(worktree.branch);
   const proposedPath = (worktree: Worktree): string => {
     if (!runtime) return "";
     return tildify(
