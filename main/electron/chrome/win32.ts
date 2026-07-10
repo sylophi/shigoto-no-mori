@@ -13,9 +13,11 @@ import type { PlatformChrome } from "./types";
 // token so resize flashes blend in, and the title-bar overlay hosting
 // the caption buttons matches the surface it floats above: the plain
 // main pane in v1, the card-tinted headers in doubutsu. Doubutsu hexes
-// are the renderer/doubutsu.css tokens rasterized to sRGB. The sidebar
+// are the renderer/doubutsu.css background/card/foreground tokens
+// converted to sRGB -- `pnpm check:theme` recomputes them from the CSS
+// and fails if these drift, printing the expected values. The sidebar
 // surface on top of this shell is painted by the renderer (index.css /
-// doubutsu.css) -- keep the families in sync when tuning.
+// doubutsu.css).
 function chromeColors() {
   const dark = nativeTheme.shouldUseDarkColors;
   const height = 28; // matches the renderer's h-7 drag strip

@@ -38,8 +38,8 @@
  *    doubutsu markup), li[data-row-idx] (configure/PickerRow.tsx),
  *    data-platform (stamped on <html> via dataset in renderer/index.tsx).
  *    Native chrome counterpart: main/electron/chrome/win32.ts holds
- *    rasterized hexes of the background/card/foreground tokens below --
- *    keep them in sync when retuning the palette.
+ *    sRGB hexes of the background/card/foreground tokens below;
+ *    check:theme recomputes them from this file and fails on drift.
  *
  * 4. Upstream library attributes (re-verify on upgrades; check:theme
  *    greps the packages): Base UI's data-highlighted / data-disabled /

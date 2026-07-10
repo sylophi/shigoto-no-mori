@@ -20,6 +20,7 @@ export function setDoubutsu(enabled: boolean): void {
   for (const listener of listeners) listener();
 }
 
-export function onAppearanceChange(listener: () => void): void {
+export function onAppearanceChange(listener: () => void): () => void {
   listeners.add(listener);
+  return () => listeners.delete(listener);
 }

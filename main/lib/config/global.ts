@@ -32,29 +32,27 @@ export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
   cache.invalidate();
 }
 
-// Sync read used by the main process at window-create time, where async
-// IO would race the BrowserWindow constructor. Any parse failure falls
-// back to "system" so a corrupt config can never block startup.
-export function readThemeSync(): Theme {
+// Sync reads used by the main process at window-create time, where
+// async IO would race the BrowserWindow constructor. Any read/parse
+// failure falls back to the field's default so a corrupt config can
+// never block startup.
+function readConfigFieldSync(field: string): unknown {
   try {
     const raw = readFileSync(configPath(), "utf8");
-    const parsed = ThemeSchema.safeParse(
-      (JSON.parse(raw) as { theme?: unknown }).theme,
-    );
-    return parsed.success ? parsed.data : "system";
+    return (JSON.parse(raw) as Record<string, unknown>)[field];
   } catch {
-    return "system";
+    return undefined;
   }
 }
 
-// Same window-create-time idiom for doubutsu mode: absent = on (the
-// default), explicit false is the opt-out, anything unreadable = on.
+export function readThemeSync(): Theme {
+  const parsed = ThemeSchema.safeParse(readConfigFieldSync("theme"));
+  return parsed.success ? parsed.data : "system";
+}
+
+// Doubutsu mode: absent = on (the default), explicit false is the
+// opt-out, anything unreadable = on.
 export function readDoubutsuSync(): boolean {
-  try {
-    const raw = readFileSync(configPath(), "utf8");
-    const value = (JSON.parse(raw) as { doubutsu?: unknown }).doubutsu;
-    return typeof value === "boolean" ? value : true;
-  } catch {
-    return true;
-  }
+  const value = readConfigFieldSync("doubutsu");
+  return typeof value === "boolean" ? value : true;
 }
