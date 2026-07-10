@@ -346,7 +346,10 @@
   --foreground: oklch(0.39 0.045 74.1);
   --card: oklch(0.992 0.008 88);
   --card-foreground: oklch(0.39 0.045 74.1);
-  --popover: oklch(0.99 0.012 86);
+  /* Pure white: popovers float above even the lifted card cream, and
+     with shadows/rings stripped the color step IS the elevation (plus
+     the sticker edge below). */
+  --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.39 0.045 74.1);
   --primary: oklch(0.66 0.15 155);
   --primary-foreground: oklch(1 0 0);
@@ -374,6 +377,28 @@
      sand (82) and from canvas, so outline + secondary read as different
      button TYPES even though both are pastels. */
   --doubutsu-button-outline: oklch(0.92 0.05 60);
+  /* Chunky sticker edge for floating surfaces (see the elevation rule
+     below): a hard blur-less drop + faint solid outline stand in for
+     the soft shadow/ring stack that doubutsu strips. */
+  --doubutsu-edge: oklch(0.39 0.045 74.1 / 0.14);
+  --doubutsu-edge-line: oklch(0.39 0.045 74.1 / 0.08);
+
+  /* Semantic status colors that components use as raw Tailwind palette
+     utilities (text-emerald-500, bg-amber-500/10, text-sky-500, ...)
+     across status pills, diff stats, badges, sync buttons, and warning
+     callouts. Tailwind v4 emits those utilities as var(--color-*)
+     references, so remapping the handful of families the app uses pulls
+     every status accent into the doubutsu palette without touching any
+     component. Greens sit on the leaf hue (155), reds on the destructive
+     hue (30), ambers become warm honey, sky calms toward the palette. */
+  --color-emerald-500: oklch(0.6 0.15 155);
+  --color-rose-500: oklch(0.58 0.18 30);
+  --color-amber-300: oklch(0.85 0.12 84);
+  --color-amber-400: oklch(0.8 0.13 82);
+  --color-amber-500: oklch(0.68 0.13 76);
+  --color-amber-600: oklch(0.58 0.12 68);
+  --color-amber-700: oklch(0.5 0.1 62);
+  --color-sky-500: oklch(0.6 0.11 235);
 
   /* @pierre/diffs theme vars -- the diff viewer lives in shadow DOM but
      CSS custom props cascade in. Wiring these to the doubutsu palette
@@ -420,6 +445,16 @@
   --doubutsu-watermark: oklch(0.7 0.17 155);
   --doubutsu-pattern: oklch(0.7 0.17 155);
   --doubutsu-button-outline: oklch(0.32 0.04 50);
+  --doubutsu-edge: oklch(0 0 0 / 0.45);
+  --doubutsu-edge-line: oklch(1 0 0 / 0.07);
+
+  /* Status families, evening variants (the amber pairs are theme-split
+     in component code via dark: prefixes, so the light-block values
+     already cover both). */
+  --color-emerald-500: oklch(0.74 0.16 155);
+  --color-rose-500: oklch(0.72 0.15 32);
+  --color-amber-500: oklch(0.78 0.13 80);
+  --color-sky-500: oklch(0.72 0.12 235);
 
   --diffs-bg: var(--background);
   --diffs-fg: var(--foreground);
@@ -488,13 +523,63 @@
   background-color: var(--muted);
 }
 
+/* --- Floating surfaces: sticker elevation ---
+   Popovers, menus, modals, sheets, and toasts lost their soft shadow +
+   hairline ring to the ambient-depth strip above, and the popover white
+   alone can't define an edge against the card cream. Every surface
+   painted bg-popover gets the AC sticker treatment instead: a faint
+   solid outline plus a hard, blur-less drop. [class*=] also catches
+   sonner's !bg-popover; !important outranks its !shadow-md. */
+.doubutsu [class*="bg-popover"] {
+  box-shadow:
+    0 0 0 1px var(--doubutsu-edge-line),
+    0 5px 0 0 var(--doubutsu-edge) !important;
+}
+
+/* Hairline separators inside those surfaces (the combobox search row,
+   modal headers) went transparent with --border; replace them with the
+   same chunky muted band as the dropdown separator. */
+.doubutsu [class*="bg-popover"] .border-b {
+  box-shadow: inset 0 -2px 0 0 var(--muted);
+}
+
+/* --- Text fields read as inset trays ---
+   v1 text inputs are border-input + bg-background: with borders gone
+   they'd melt into the canvas. Filling everything that declared
+   border-input with the --input tray tint keeps fields (and the
+   segmented-control tracks in ModePicker/ModeToggle) legible without
+   hairlines. */
+.doubutsu .border-input {
+  background-color: var(--input);
+}
+
+/* The breadcrumb chips built on ring-1 ring-inset alone (folder picker,
+   add-project palette) lost their ring; the muted pill fill makes them
+   read as controls again. */
+.doubutsu .ring-inset {
+  background-color: var(--muted);
+}
+
+/* --- Open popups keep their trigger lit ---
+   v1 marks an open trigger with border-input + a ring, both stripped.
+   The accent pillow is doubutsu's "active" signal everywhere else, so
+   use it here too. aria-haspopup scopes this to menu/combobox triggers;
+   tooltip triggers also carry data-popup-open but no haspopup, and the
+   combobox's search <input> carries both -- keep it a plain field. */
+.doubutsu [aria-haspopup][data-popup-open]:not(input) {
+  background-color: var(--accent);
+}
+
 /* --- Detail page zones get a lifted header ---
    Header + footer of the main detail surfaces in v1 are bounded by
    border-b / border-t hairlines. With borders gone, the header would
    bleed into content. Lift the header to bg-card so it reads as its
-   own panel stacked on the cream canvas (with its leaf pattern). The
-   footer already uses bg-card explicitly in the component code. */
-.doubutsu [data-doubutsu-zone="main"] > * > header {
+   own panel stacked on the cream canvas (with its leaf pattern). A
+   descendant selector on purpose: views nest their <header> at varying
+   depths (Settings at the route root, WorktreeDetailInner one level
+   down), and the card band is the intended pattern for all of them.
+   The footer already uses bg-card explicitly in the component code. */
+.doubutsu [data-doubutsu-zone="main"] header {
   background-color: var(--card);
 }
 
@@ -593,7 +678,13 @@
    Applied universally to interactive elements -- in AC, hovering ANY
    button brings it to life with sliding stripes. The pattern goes in as
    a background-image so it layers on top of whatever fill the element
-   already has, no markup changes required. */
+   already has, no markup changes required.
+
+   Coverage comes in two kinds. Pointer things (:hover): buttons, links,
+   radio/checkbox option cards, the file-picker rows. Composite widgets
+   (Base UI menus/comboboxes, cmdk lists) move a highlight themselves
+   instead of relying on :hover -- there the stripes ride the
+   highlighted item, which also animates keyboard navigation. */
 @keyframes ac-stripe-slide {
   from {
     background-position: 0 0;
@@ -604,9 +695,13 @@
 }
 
 .doubutsu button:not(:disabled):hover,
-.doubutsu [role="button"]:not(:disabled):hover,
+.doubutsu [role="button"]:not([aria-disabled="true"]):hover,
 .doubutsu a[href]:hover,
-.doubutsu [data-slot="menu-item"]:not([data-disabled]):hover {
+.doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
+.doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
+.doubutsu li[data-row-idx].cursor-pointer:hover,
+.doubutsu [data-highlighted]:not([data-disabled]),
+.doubutsu [cmdk-item][aria-selected="true"] {
   background-image: linear-gradient(
     45deg,
     transparent 25%,
@@ -622,9 +717,13 @@
 
 @media (prefers-reduced-motion: reduce) {
   .doubutsu button:not(:disabled):hover,
-  .doubutsu [role="button"]:not(:disabled):hover,
+  .doubutsu [role="button"]:not([aria-disabled="true"]):hover,
   .doubutsu a[href]:hover,
-  .doubutsu [data-slot="menu-item"]:not([data-disabled]):hover {
+  .doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
+  .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
+  .doubutsu li[data-row-idx].cursor-pointer:hover,
+  .doubutsu [data-highlighted]:not([data-disabled]),
+  .doubutsu [cmdk-item][aria-selected="true"] {
     animation: none;
   }
 }
