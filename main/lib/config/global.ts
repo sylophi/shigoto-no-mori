@@ -46,3 +46,15 @@ export function readThemeSync(): Theme {
     return "system";
   }
 }
+
+// Same window-create-time idiom for doubutsu mode: absent = on (the
+// default), explicit false is the opt-out, anything unreadable = on.
+export function readDoubutsuSync(): boolean {
+  try {
+    const raw = readFileSync(configPath(), "utf8");
+    const value = (JSON.parse(raw) as { doubutsu?: unknown }).doubutsu;
+    return typeof value === "boolean" ? value : true;
+  } catch {
+    return true;
+  }
+}

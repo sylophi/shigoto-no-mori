@@ -46,6 +46,13 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
     }
   }, [applied]);
 
+  // Keep the main process in sync so native chrome (the Windows caption
+  // overlay and window background) tracks the applied value, including
+  // unsaved previews -- mirrors useTheme's setTheme effect.
+  useEffect(() => {
+    void window.api.runtime.setDoubutsu(applied);
+  }, [applied]);
+
   // Mirror the saved value into localStorage so the next launch can
   // paint without waiting for globalConfig to load.
   useEffect(() => {

@@ -2,6 +2,7 @@ import { app, nativeTheme } from "electron";
 import { homedir } from "node:os";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
+import { setDoubutsu } from "../../electron/appearance";
 import { nukeEverything } from "../../lib/nuke";
 import { shigomoriRoot } from "../../lib/util/paths";
 
@@ -18,6 +19,12 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   // and is written by the renderer through the globalConfig IPC.
   setTheme: ({ theme }) => {
     nativeTheme.themeSource = theme;
+  },
+
+  // Same contract for doubutsu: native chrome (the win32 caption
+  // overlay and window background) follows the applied value.
+  setDoubutsu: ({ enabled }) => {
+    setDoubutsu(enabled);
   },
 
   nuke: () => nukeEverything(),

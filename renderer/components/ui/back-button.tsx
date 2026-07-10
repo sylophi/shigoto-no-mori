@@ -1,4 +1,5 @@
 import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function BackButton({
   onClick,
@@ -8,13 +9,16 @@ export function BackButton({
   label: string;
 }) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="xs"
       onClick={onClick}
-      className="inline-flex w-fit items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      // Negative margin keeps the label aligned with the header column;
+      // the ghost fill only shows on hover.
+      className="-ml-2 w-fit gap-1 text-xs font-normal text-muted-foreground hover:text-foreground"
     >
       <ArrowLeft aria-hidden className="size-3" />
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }

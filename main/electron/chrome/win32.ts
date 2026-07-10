@@ -4,26 +4,38 @@
 // surface itself (renderer/index.css branches on data-platform).
 import { join } from "node:path";
 import { app, type BrowserWindow, nativeTheme } from "electron";
+import { isDoubutsu, onAppearanceChange } from "../appearance";
 import type { PlatformChrome } from "./types";
 
-// Colors follow the effective theme (nativeTheme already reflects the
-// in-app choice via themeSource). The window background matches the
-// renderer's `--background` tokens (white / neutral-900) so resize
-// flashes blend in, and the title-bar overlay hosting the caption
-// buttons matches the main pane it floats above. The sidebar surface on
-// top of this shell is painted by renderer/index.css (the
-// data-platform="win32" block) -- keep the two in the same family.
+// Colors follow the effective appearance (nativeTheme already reflects
+// the in-app theme via themeSource; doubutsu arrives via the appearance
+// module). The window background matches the renderer's `--background`
+// token so resize flashes blend in, and the title-bar overlay hosting
+// the caption buttons matches the surface it floats above: the plain
+// main pane in v1, the card-tinted headers in doubutsu. Doubutsu hexes
+// are the renderer/doubutsu.css tokens rasterized to sRGB. The sidebar
+// surface on top of this shell is painted by the renderer (index.css /
+// doubutsu.css) -- keep the families in sync when tuning.
 function chromeColors() {
   const dark = nativeTheme.shouldUseDarkColors;
+  const height = 28; // matches the renderer's h-7 drag strip
+  if (isDoubutsu()) {
+    return dark
+      ? {
+          backgroundColor: "#1c1a16",
+          overlay: { color: "#33302b", symbolColor: "#f0ebe4", height },
+        }
+      : {
+          backgroundColor: "#faf6ee",
+          overlay: { color: "#fffcf6", symbolColor: "#544129", height },
+        };
+  }
   return {
     backgroundColor: dark ? "#171717" : "#ffffff",
     overlay: {
       color: dark ? "#171717" : "#ffffff",
       symbolColor: dark ? "#fafafa" : "#171717",
-      // Matches the h-7 drag strip the renderer lays across the top of
-      // the main pane, so the caption buttons and the draggable band
-      // form one continuous title-bar area.
-      height: 28,
+      height,
     },
   };
 }
@@ -46,16 +58,20 @@ function windowOptions(): Electron.BrowserWindowConstructorOptions {
   };
 }
 
-// Re-apply chrome colors when the theme changes (the renderer's setTheme
-// IPC flips nativeTheme.themeSource; "system" follows the OS).
+// Re-apply chrome colors when the appearance changes: nativeTheme
+// "updated" fires for theme flips (the renderer's setTheme IPC drives
+// themeSource; "system" follows the OS), and the appearance module
+// fires for doubutsu toggles.
 function attachThemeSync(getWindow: () => BrowserWindow | null): void {
-  nativeTheme.on("updated", () => {
+  const apply = () => {
     const win = getWindow();
     if (!win || win.isDestroyed()) return;
     const { backgroundColor, overlay } = chromeColors();
     win.setBackgroundColor(backgroundColor);
     win.setTitleBarOverlay(overlay);
-  });
+  };
+  nativeTheme.on("updated", apply);
+  onAppearanceChange(apply);
 }
 
 export const win32Chrome: PlatformChrome = { windowOptions, attachThemeSync };

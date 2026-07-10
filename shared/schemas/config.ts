@@ -149,3 +149,7 @@ export const WriteWorktreeDataPayloadSchema =
 export const SetThemePayloadSchema = z.object({
   theme: ThemeSchema,
 });
+
+export const SetDoubutsuPayloadSchema = z.object({
+  enabled: z.boolean(),
+});
