@@ -27,7 +27,7 @@ export function useSetPullRequestDraft() {
       await qc.cancelQueries({ queryKey: key });
       const prev = qc.getQueryData<PullRequestDetail | null>(key);
       if (prev) {
-        qc.setQueryData<PullRequestDetail | null>(key, {
+        const next: PullRequestDetail = {
           ...prev,
           isDraft: draft,
           // gh recomputes mergeable state after the flip; we can't
@@ -35,7 +35,8 @@ export function useSetPullRequestDraft() {
           // mark it UNKNOWN until the refetch settles. The button
           // becomes inert for the brief window, which is honest.
           mergeState: draft ? "DRAFT" : "UNKNOWN",
-        });
+        };
+        qc.setQueryData<PullRequestDetail | null>(key, next);
       }
       return { key, prev };
     },

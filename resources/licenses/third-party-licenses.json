@@ -1,7 +1,7 @@
 [
   {
     "name": "@babel/runtime",
-    "version": "7.29.2",
+    "version": "7.29.7",
     "licenses": "MIT",
     "repository": "https://github.com/babel/babel",
     "publisher": "",
@@ -12,24 +12,24 @@
   },
   {
     "name": "@base-ui/react",
-    "version": "1.4.1",
+    "version": "1.6.0",
     "licenses": "MIT",
     "repository": "https://github.com/mui/base-ui",
     "publisher": "",
     "url": "",
     "licenseFile": "node_modules/@base-ui/react/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2019 Material-UI SAS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "licenseText": "MIT License\n\nCopyright (c) 2019 Material-UI SAS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "copyright": "Copyright (c) 2019 Material-UI SAS"
   },
   {
     "name": "@base-ui/utils",
-    "version": "0.2.8",
+    "version": "0.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/mui/base-ui",
     "publisher": "",
     "url": "",
     "licenseFile": "node_modules/@base-ui/utils/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2019 Material-UI SAS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "licenseText": "MIT License\n\nCopyright (c) 2019 Material-UI SAS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "copyright": "Copyright (c) 2019 Material-UI SAS"
   },
   {
@@ -122,18 +122,18 @@
   },
   {
     "name": "@fontsource-variable/geist",
-    "version": "5.2.8",
+    "version": "5.2.9",
     "licenses": "OFL-1.1",
     "repository": "https://github.com/fontsource/font-files",
     "publisher": "",
     "url": "",
     "licenseFile": "node_modules/@fontsource-variable/geist/LICENSE",
-    "licenseText": "Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nThis license is copied below, and is also available with a FAQ at:\nhttp://scripts.sil.org/OFL\n\n\n-----------------------------------------------------------\nSIL OPEN FONT LICENSE Version 1.1 - 26 February 2007\n-----------------------------------------------------------\n\nPREAMBLE\nThe goals of the Open Font License (OFL) are to stimulate worldwide\ndevelopment of collaborative font projects, to support the font creation\nefforts of academic and linguistic communities, and to provide a free and\nopen framework in which fonts may be shared and improved in partnership\nwith others.\n\nThe OFL allows the licensed fonts to be used, studied, modified and\nredistributed freely as long as they are not sold by themselves. The\nfonts, including any derivative works, can be bundled, embedded,\nredistributed and/or sold with any software provided that any reserved\nnames are not used by derivative works. The fonts and derivatives,\nhowever, cannot be released under any other type of license. The\nrequirement for fonts to remain under this license does not apply\nto any document created using the fonts or their derivatives.\n\nDEFINITIONS\n\"Font Software\" refers to the set of files released by the Copyright\nHolder(s) under this license and clearly marked as such. This may\ninclude source files, build scripts and documentation.\n\n\"Reserved Font Name\" refers to any names specified as such after the\ncopyright statement(s).\n\n\"Original Version\" refers to the collection of Font Software components as\ndistributed by the Copyright Holder(s).\n\n\"Modified Version\" refers to any derivative made by adding to, deleting,\nor substituting -- in part or in whole -- any of the components of the\nOriginal Version, by changing formats or by porting the Font Software to a\nnew environment.\n\n\"Author\" refers to any designer, engineer, programmer, technical\nwriter or other person who contributed to the Font Software.\n\nPERMISSION & CONDITIONS\nPermission is hereby granted, free of charge, to any person obtaining\na copy of the Font Software, to use, study, copy, merge, embed, modify,\nredistribute, and sell modified and unmodified copies of the Font\nSoftware, subject to the following conditions:\n\n1) Neither the Font Software nor any of its individual components,\nin Original or Modified Versions, may be sold by itself.\n\n2) Original or Modified Versions of the Font Software may be bundled,\nredistributed and/or sold with any software, provided that each copy\ncontains the above copyright notice and this license. These can be\nincluded either as stand-alone text files, human-readable headers or\nin the appropriate machine-readable metadata fields within text or\nbinary files as long as those fields can be easily viewed by the user.\n\n3) No Modified Version of the Font Software may use the Reserved Font\nName(s) unless explicit written permission is granted by the corresponding\nCopyright Holder. This restriction only applies to the primary font name as\npresented to the users.\n\n4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font\nSoftware shall not be used to promote, endorse or advertise any\nModified Version, except to acknowledge the contribution(s) of the\nCopyright Holder(s) and the Author(s) or with their explicit written\npermission.\n\n5) The Font Software, modified or unmodified, in part or in whole,\nmust be distributed entirely under this license, and must not be\ndistributed under any other license. The requirement for fonts to\nremain under this license does not apply to any document created\nusing the Font Software.\n\nTERMINATION\nThis license becomes null and void if any of the above conditions are\nnot met.\n\nDISCLAIMER\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT\nOF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE\nCOPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nINCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL\nDAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM\nOTHER DEALINGS IN THE FONT SOFTWARE.",
-    "copyright": "Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)"
+    "licenseText": "Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font) Geist-Italic[wght].ttf: Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)\n\nThis Font Software is licensed under the SIL Open Font License, Version 1.1.\nThis license is copied below, and is also available with a FAQ at:\nhttp://scripts.sil.org/OFL\n\n\n-----------------------------------------------------------\nSIL OPEN FONT LICENSE Version 1.1 - 26 February 2007\n-----------------------------------------------------------\n\nPREAMBLE\nThe goals of the Open Font License (OFL) are to stimulate worldwide\ndevelopment of collaborative font projects, to support the font creation\nefforts of academic and linguistic communities, and to provide a free and\nopen framework in which fonts may be shared and improved in partnership\nwith others.\n\nThe OFL allows the licensed fonts to be used, studied, modified and\nredistributed freely as long as they are not sold by themselves. The\nfonts, including any derivative works, can be bundled, embedded,\nredistributed and/or sold with any software provided that any reserved\nnames are not used by derivative works. The fonts and derivatives,\nhowever, cannot be released under any other type of license. The\nrequirement for fonts to remain under this license does not apply\nto any document created using the fonts or their derivatives.\n\nDEFINITIONS\n\"Font Software\" refers to the set of files released by the Copyright\nHolder(s) under this license and clearly marked as such. This may\ninclude source files, build scripts and documentation.\n\n\"Reserved Font Name\" refers to any names specified as such after the\ncopyright statement(s).\n\n\"Original Version\" refers to the collection of Font Software components as\ndistributed by the Copyright Holder(s).\n\n\"Modified Version\" refers to any derivative made by adding to, deleting,\nor substituting -- in part or in whole -- any of the components of the\nOriginal Version, by changing formats or by porting the Font Software to a\nnew environment.\n\n\"Author\" refers to any designer, engineer, programmer, technical\nwriter or other person who contributed to the Font Software.\n\nPERMISSION & CONDITIONS\nPermission is hereby granted, free of charge, to any person obtaining\na copy of the Font Software, to use, study, copy, merge, embed, modify,\nredistribute, and sell modified and unmodified copies of the Font\nSoftware, subject to the following conditions:\n\n1) Neither the Font Software nor any of its individual components,\nin Original or Modified Versions, may be sold by itself.\n\n2) Original or Modified Versions of the Font Software may be bundled,\nredistributed and/or sold with any software, provided that each copy\ncontains the above copyright notice and this license. These can be\nincluded either as stand-alone text files, human-readable headers or\nin the appropriate machine-readable metadata fields within text or\nbinary files as long as those fields can be easily viewed by the user.\n\n3) No Modified Version of the Font Software may use the Reserved Font\nName(s) unless explicit written permission is granted by the corresponding\nCopyright Holder. This restriction only applies to the primary font name as\npresented to the users.\n\n4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font\nSoftware shall not be used to promote, endorse or advertise any\nModified Version, except to acknowledge the contribution(s) of the\nCopyright Holder(s) and the Author(s) or with their explicit written\npermission.\n\n5) The Font Software, modified or unmodified, in part or in whole,\nmust be distributed entirely under this license, and must not be\ndistributed under any other license. The requirement for fonts to\nremain under this license does not apply to any document created\nusing the Font Software.\n\nTERMINATION\nThis license becomes null and void if any of the above conditions are\nnot met.\n\nDISCLAIMER\nTHE FONT SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO ANY WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT\nOF COPYRIGHT, PATENT, TRADEMARK, OR OTHER RIGHT. IN NO EVENT SHALL THE\nCOPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nINCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL\nDAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM\nOTHER DEALINGS IN THE FONT SOFTWARE.",
+    "copyright": "Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font) Geist-Italic[wght].ttf: Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font)"
   },
   {
     "name": "@pierre/diffs",
-    "version": "1.1.21",
+    "version": "1.2.12",
     "licenses": "Apache*",
     "repository": "",
     "publisher": "",
@@ -144,18 +144,29 @@
   },
   {
     "name": "@pierre/theme",
-    "version": "0.0.28",
+    "version": "1.1.0",
     "licenses": "MIT",
-    "repository": "https://github.com/pierrecomputer/theme",
+    "repository": "https://github.com/pierrecomputer/pierre",
     "publisher": "pierrecomputer",
     "url": "",
-    "licenseFile": "node_modules/@pierre/theme/LICENSE.md",
+    "licenseFile": "node_modules/@pierre/theme/LICENSE",
     "licenseText": "MIT License\n\nCopyright (c) 2026 The Pierre Computer Company\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "copyright": "Copyright (c) 2026 The Pierre Computer Company"
   },
   {
+    "name": "@pierre/theming",
+    "version": "0.0.2",
+    "licenses": "Custom: https://shiki.style/",
+    "repository": "",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "node_modules/@pierre/theming/README.md",
+    "licenseText": "# @pierre/theming\n\nThe theming toolkit for Pierre's open-source UI packages. It provides catalog\nprimitives, the loader/cache for resolving theme JSON, a normalizer plus color\ntransforms that resolve and derive accessible UI colors from a resolved shiki\ntheme, and a framework-agnostic controller for the selected color mode and\ntheme. `@pierre/diffs`, `@pierre/trees`, and the apps built on top of them all\ndraw their colors from this one package, so a single theme resolves to the same\nsurfaces everywhere.\n\nIt understands the [Shiki](https://shiki.style/) / VS Code theme format, so\nthemes shipped by Shiki, custom VS Code themes, and Pierre's first-party themes\nall resolve to the same shape.\n\n## Theme model\n\nTheme-kit uses a few names for related but different things:\n\n- **theme name**: the stable string apps pass around, such as `pierre-dark` or\n  `github-light`. It is the id used by catalogs, resolvers, controllers,\n  storage, and theme pickers. Treat it like a database key: small, serializable,\n  and safe to persist.\n- **theme descriptor**: the catalog entry for one name. It contains the name,\n  optional metadata (`displayName`, `collection`, `colorScheme`), and a lazy\n  `load()` function. Descriptors let an app list available themes without\n  loading theme JSON yet.\n- **resolved theme object**: the actual theme returned by a descriptor loader or\n  resolver. This is the Shiki / VS Code-like object that has `colors`, `fg`,\n  `bg`, `type`, and `name` after normalization.\n\nRecommendation for apps: keep the theme name in state and storage, use\ndescriptors for menus and metadata, and use the resolved theme object only when\nyou need to color UI or hand a theme to Shiki.\n\n### Shiki theme shape\n\nA Shiki / VS Code theme has two important color areas:\n\n- `tokenColors` / `settings` describe syntax highlighting rules: comments,\n  strings, keywords, functions, and other code tokens.\n- `colors` is a map of workbench-style UI keys, such as `editor.background`,\n  `editor.foreground`, `sideBar.background`, `list.hoverBackground`,\n  `focusBorder`, and `gitDecoration.addedResourceForeground`.\n\n`normalizeThemeColors` and the color transforms read the workbench-like `colors`\nkeys plus the normalized top-level `fg`, `bg`, and `type`. They do not inspect\nsyntax-token rules. Use the raw resolved Shiki theme when rendering highlighted\ncode; use `normalizeThemeColors` (and the transforms) when coloring app UI\naround that code.\n\n## Entry points\n\ntheming ships one implementation through four public entry points.\n\n| Import                   | Peer dep                                    | Purpose                                                            |\n| ------------------------ | ------------------------------------------- | ------------------------------------------------------------------ |\n| `@pierre/theming`        | —                                           | Catalog/resolver/controller primitives and types                   |\n| `@pierre/theming/color`  | —                                           | `normalizeThemeColors` plus the `colorUtils` color transforms      |\n| `@pierre/theming/react`  | `react`                                     | hooks over a controller                                            |\n| `@pierre/theming/themes` | `@pierre/theme`, `@shikijs/themes`, `shiki` | Bundled Pierre/Shiki collections and Shiki / VS Code normalization |\n\n## Install\n\n```bash\npnpm add @pierre/theming\n```\n\nAdd the optional peers only for the entries you use, e.g., `react` for `/react`,\nand `@pierre/theme`, `@shikijs/themes`, and `shiki` for `/themes`.\n\n## Collections and catalogs\n\nThe core entry exports two closely-related composition primitives:\n\n- A `ThemeCollection` is an ordered set of theme descriptors and lazy loaders.\n  The `/themes` entry exports `themes`, the bundled Pierre-then-Shiki\n  collection, plus `pierreThemes` and `shikiThemes` source collections when an\n  app wants one source or wants to compose its own order.\n- A `ThemeCatalog` is the app-level collection, plus `defaultLightThemeName` and\n  `defaultDarkThemeName`.\n\nListing a name never loads, imports, or evaluates that theme. Each descriptor\nonly carries a loader function, so it is safe to render a full theme picker on a\npage that never resolves a theme.\n\n```ts\nimport { createThemeCatalog } from '@pierre/theming';\nimport { themes } from '@pierre/theming/themes';\n\nconst catalog = createThemeCatalog({\n  themes,\n  defaultLightThemeName: 'pierre-light',\n  defaultDarkThemeName: 'pierre-dark',\n});\n\ncatalog.getThemeNames(); // ['pierre-light', 'pierre-light-soft', …]\ncatalog.getThemeNames({ colorScheme: 'light' }); // ['pierre-light', …]\ncatalog.getThemeNames({ colorScheme: 'dark' }); // ['pierre-dark', …]\ncatalog.getThemes({ collection: 'pierre' }); // Pierre descriptors only\ncatalog.defaultLightThemeName; // 'pierre-light'\ncatalog.defaultDarkThemeName; // 'pierre-dark'\n\nconst opinionatedCatalog = createThemeCatalog({\n  themes: themes.pick(['github-light', 'solarized-dark']),\n  defaultLightThemeName: 'github-light',\n  defaultDarkThemeName: 'solarized-dark',\n});\n```\n\nApps that want a local default different from theming's canonical Pierre pair\nshould set it on their catalog, then let the controller read those defaults:\n\n```ts\nconst diffshubCatalog = createThemeCatalog({\n  themes,\n  defaultLightThemeName: 'pierre-light-soft',\n  defaultDarkThemeName: 'pierre-dark-soft',\n});\n\nconst controller = createThemeController({\n  catalog: diffshubCatalog,\n  defaultMode: 'system',\n});\n```\n\nCollections can be passed anywhere descriptors can be passed, so larger\ncollections are just wrappers around smaller collections:\n\n```ts\nimport { createThemeCollection } from '@pierre/theming';\nimport { pierreThemes, shikiThemes, createTheme } from '@pierre/theming/themes';\n\nconst appThemes = createThemeCollection({\n  themes: [\n    pierreThemes.pick(['pierre-light', 'pierre-dark']),\n    shikiThemes.pick(['github-light', 'solarized-dark']),\n    createTheme({\n      name: 'acme-dark',\n      collection: 'acme',\n      colorScheme: 'dark',\n      load: () => import('./acme-dark.json'),\n    }),\n  ],\n});\n```\n\nCollections are immutable snapshots: their descriptor lists do not change after\nconstruction, and helpers such as `pick()` and `orderBy()` return new\ncollections. Order is part of that contract:\n\n- `themes` is bundled in a stable default order: all Pierre themes first, then\n  Shiki themes.\n- `getThemeNames(options)` and `getThemes(options)` preserve the current\n  collection order after filtering by `colorScheme` and/or `collection`.\n- `pick([...])` returns the requested themes in the caller-provided order.\n- `orderBy(compare)` returns a reordered collection without loading any theme.\n\n```ts\n// Reverse alphabetical selector order.\nconst reverseAlphabetical = themes.orderBy((a, b) =>\n  b.name.localeCompare(a.name)\n);\n\n// Pierre first, then all non-Pierre themes alphabetically by display label/name.\nconst collectionRank = (collection: string | undefined) =>\n  collection === 'pierre' ? 0 : 1;\nconst pierreFirst = themes.orderBy((a, b) => {\n  const rank = collectionRank(a.collection) - collectionRank(b.collection);\n  if (rank !== 0) return rank;\n  const aLabel = a.displayName ?? a.name;\n  const bLabel = b.displayName ?? b.name;\n  return aLabel.localeCompare(bLabel);\n});\n```\n\nPass plain descriptors for custom loaders that already return a usable\n`ThemeLike`. Use `createTheme()` from `/themes` when the loader returns a raw VS\nCode/Shiki theme that should be normalized before consumers use it:\n\n```ts\nimport { createTheme } from '@pierre/theming/themes';\n\nconst acmeDark = createTheme({\n  name: 'acme-dark',\n  colorScheme: 'dark',\n  collection: 'acme',\n  displayName: 'Acme Dark',\n  load: () => import('./acme-dark.json'),\n});\n```\n\nDescriptor names should match the resolved theme object's machine name. The\noptional `collection` field identifies the source collection for filtering and\nordering; the convention is lowercase names such as `pierre`, `shiki`, or an\napp/package slug.\n\nNormalization intentionally lives behind the public `/themes` helper, not in\n`createThemeCollection()`. Collections are dependency-light registries for\nnames, metadata, and loaders; they can hold already-resolved `ThemeLike`\nobjects, app-specific generated themes, or raw VS Code/Shiki themes. Raw VS\nCode/Shiki themes should use `createTheme()`. The bundled Pierre and Shiki\ncollections use that same helper. If an app pre-normalizes themes at build time,\nit can use plain descriptors and does not need `createTheme()`.\n\n## Resolving themes\n\nA `ThemeResolver` is a registry of named loaders plus a cache. You register a\nloader for a name; the resolver runs it at most once, dedupes concurrent calls,\nand serves the resolved theme synchronously thereafter. The resolver itself\nknows nothing about Shiki or theme JSON — it just caches whatever a loader\nreturns.\n\n```ts\nimport { createThemeResolver } from '@pierre/theming';\n\n// An isolated instance with its own registry and cache.\nconst resolver = createThemeResolver();\n```\n\nA loader is a zero-argument async factory that returns a theme object or a\n`{ default }` ES-module namespace (the shape a dynamic `import()` of a JSON or\n`.mjs` theme produces — the resolver unwraps `default`):\n\n```ts\nresolver.registerTheme('my-theme', () => import('./my-theme.json'));\n\n// Async cold path — runs the loader, caches the result, dedupes concurrent calls.\nconst theme = await resolver.resolveTheme('my-theme');\n\n// Sync warm path — returns the cached theme or undefined if not resolved yet.\nconst cached = resolver.getResolvedTheme('my-theme');\n\n// \"Get hot, resolve cold\" — the cached theme synchronously, or a Promise.\nconst value = resolver.getResolvedOrResolveTheme('my-theme');\n```\n\nOther methods worth knowing:\n\n- `registerThemeIfAbsent(name, loader)` — register only when the name is free;\n  returns whether it was added. `registerTheme` throws `DuplicateThemeError`.\n- `resolveThemes(names)` / `getResolvedThemes(names)` — batch variants\n  (`getResolvedThemes` throws `UnresolvedThemeError` for the first cold name).\n- `seedResolvedTheme(name, theme)` / `seedResolvedThemes(entries)` — drop a\n  fully-resolved theme straight into the cache without a loader, for\n  environments (e.g. a worker handed pre-resolved themes by the main thread)\n  that can't run one.\n- `hasRegisteredTheme` / `hasResolvedTheme` / `hasResolvedThemes` — registry and\n  cache introspection.\n- `clearResolvedThemes()` — clear the cache and in-flight loads while keeping\n  the registered loaders.\n\n`resolveTheme` rejects with `UnregisteredThemeError` when no loader exists for\nthe name.\n\n### Registering theme loaders\n\nCollections register themselves into a resolver with the per-name lazy imports.\nMany themes can be registered without generating a large initial bundle to load.\n\n```ts\nimport { createTheme, themes } from '@pierre/theming/themes';\n\n// Register exactly the themes an opinionated app exposes.\nthemes.pick(['github-light', 'solarized-dark']).registerInto(resolver);\n\n// Or register the full bundled Pierre-then-Shiki collection.\nthemes.registerInto(resolver);\n\n// Custom VS Code/Shiki themes use the same descriptor model.\nconst acmeDark = createTheme({\n  name: 'my-vscode-theme',\n  colorScheme: 'dark',\n  load: () => import('./theme.json'),\n});\n\nresolver.registerTheme(acmeDark.name, acmeDark.load);\n```\n\nUse `collection.registerInto(resolver)` when you want idempotent registration:\nit calls `registerThemeIfAbsent`, so existing resolver entries win. Use\n`resolver.registerTheme(descriptor.name, descriptor.load)` when duplicate names\nshould be an error.\n\nRegistering a whole app catalog against a resolver is also a single call. Most\napps can let `createThemeController({ catalog })` do this automatically; use\nmanual registration when lower-level code owns the resolver directly.\n\n```ts\nimport { createThemeCatalog, createThemeResolver } from '@pierre/theming';\nimport { themes } from '@pierre/theming/themes';\n\nconst catalog = createThemeCatalog({\n  themes,\n  defaultLightThemeName: 'pierre-light',\n  defaultDarkThemeName: 'pierre-dark',\n});\n\nconst resolver = createThemeResolver();\ncatalog.registerInto(resolver);\n```\n\n## Reading theme colors\n\nOnce you have a resolved theme object, the `@pierre/theming/color` entry gives\nyou two things for working with its colors: `normalizeThemeColors` to read the\ncolors a theme actually defines, and a `colorUtils` bag of color transforms to\nderive new colors from them. They live in their own entry so apps that only need\nthe catalog/controller don't pay for the color math.\n\nBoth exist because a raw Shiki theme is not a UI component API. Each theme may\nuse different workbench keys, omit optional keys, or ship a value that works in\nthe editor but not in a tree, popover, or app shell. Rather than make every\nconsumer rediscover the same fallback chains and repairs, theming centralizes\nthem in `normalizeThemeColors` and ships the contrast/color math as standalone\ntransforms.\n\n`normalizeThemeColors` and the transforms accept a `ThemeLike` — a structural\nsubset of a Shiki / VS Code theme, so resolved themes from this package,\n`@pierre/diffs`, or Shiki all fit:\n\n```ts\ninterface ThemeLike {\n  bg?: string;\n  colors?: Record<string, string>;\n  fg?: string;\n  name?: string;\n  type?: 'dark' | 'light';\n}\n```\n\n### `normalizeThemeColors`\n\n`normalizeThemeColors(theme: ThemeLike): ThemeLike` is the front door for\nreading the colors a theme defines. It takes a Shiki-normalized theme (fg, bg,\nand type already present) and returns a **same-shape** theme — the same\ntop-level fields and the same `colors` map vocabulary (the VS Code / Shiki\nworkbench keys, nothing renamed) — with the `colors` map resolved.\n\nWhat it **fills** (mechanical fallback, no opinion):\n\n- surfaces: `editor.background` / `editor.foreground`, `sideBar.background` /\n  `sideBar.foreground`, `input.background`, `sideBarSectionHeader.foreground`,\n  and `list.activeSelectionForeground`.\n- git status: `gitDecoration.{added,modified,deleted}ResourceForeground` via the\n  `gitDecoration → terminal.ansi* → editorGutter.*` chain.\n- the focus ring: `list.focusOutline`, set to the first non-transparent of\n  `list.focusOutline` then `focusBorder`.\n\nWhat it **repairs** (universal correctness): it drops `list.hoverBackground`\nwhen it equals the sidebar surface or would erase the row text.\n\nWhat it deliberately **leaves alone** (consumer opinion): the selection lookup\n(`list.activeSelectionBackground` / `list.focusBackground` /\n`editor.selectionBackground`) passes through raw, so each consumer applies its\nown choice.\n\nThe result is pure, frozen, WeakMap-memoized per input theme, and idempotent. It\nruns lazily at read time by default.\n\n```ts\nimport { normalizeThemeColors } from '@pierre/theming/color';\n\nconst { colors } = normalizeThemeColors(theme);\n// colors['sideBar.background'], colors['gitDecoration.addedResourceForeground'],\n// colors['list.focusOutline'], …\n```\n\n### Color transforms\n\n`colorUtils` bundles the pure color transforms — functions with no theme\nknowledge that take colors and answer questions about them or mix new ones.\nBundling them in one object keeps the entry's export surface small. Use them to\nderive **new** colors from a theme's colors. Its methods:\n\n- `relativeLuminance`, `contrastRatio` — WCAG luminance and contrast math.\n- `isDarkSurface`, `surfacesMatch`, `isFullyTransparent` — surface predicates.\n- `compositeOverBg` — flatten a translucent color over a background.\n- `hoverWouldEraseText` — whether a hover color would erase row text.\n- `pickReadableForeground` — the most legible foreground for a surface.\n- `deriveMutedFg` — a muted foreground derived from fg and surface.\n\n```ts\nimport { colorUtils, normalizeThemeColors } from '@pierre/theming/color';\n\nconst { colors } = normalizeThemeColors(theme);\nconst surface = colors['sideBar.background'];\nconst fg = colorUtils.pickReadableForeground(surface, [\n  colors['sideBar.foreground'],\n]);\nconst mutedFg = colorUtils.deriveMutedFg(fg, surface);\n```\n\n### `normalizeTheme` (Shiki) vs `normalizeThemeColors` (theming)\n\nThese are two different normalizers; do not wire them up backwards.\n\n- Shiki's `normalizeTheme` (from `shiki/core`, applied at load by `createTheme`)\n  normalizes the **whole** theme, including syntax token colors and the base\n  `fg` / `bg` / `type`.\n- theming's `normalizeThemeColors` only resolves the workbench `colors` map and\n  **assumes** a theme that has already been Shiki-normalized.\n\nSo `normalizeTheme` runs first, at load; `normalizeThemeColors` runs after, on\nthe already-normalized theme.\n\n### Assembled token sets are consumer-owned\n\ntheming ships no assembled token object. The opinionated, presentation-ready\ntoken sets live with their consumers:\n\n- `@pierre/trees`' `themeToTreeStyles()` builds its tree CSS variables on\n  `normalizeThemeColors`.\n- Apps build their own app-chrome tokens from `normalizeThemeColors` plus the\n  transforms — for example diffshub's `deriveChromeTokens`.\n\nEach consumer maps the resolved/derived colors onto its own variable names, so\nthe mapping lives in one place per consumer and the color resolution lives here,\nshared.\n\n### Read-time vs pre-warm at load\n\nNormalization runs lazily at read time and is memoized, so the default needs no\nwiring: the first read of a theme normalizes it, and every later read returns\nthe same frozen object.\n\nBecause `normalizeThemeColors` is pure and idempotent, an app that wants a\npre-densified canonical object at load can call `normalizeThemeColors` inside\nits loader and `seedResolvedTheme` the result. That captures the load-time\nbenefit for anyone who wants it without mandating a chokepoint that would break\nthe resolver's contract or miss runtime-registered themes. The default is\nlazy/read-time; pre-warming is a one-line opt-in.\n\n## The theme controller\n\nThe controller is the stateful layer: it owns the selected light and dark theme\nnames, the color mode (`'light' | 'dark' | 'system'`), the theme resolved for\nthe active mode, and persistence. It has no React dependency, so a vanilla app\ncan drive it directly; the `/react` hooks are thin wrappers over it.\n\nIt is **SSR-safe**: every browser access (`localStorage`, `matchMedia`) is\nguarded, so it constructs and runs on the server (persistence and the\nprefers-color-scheme listener no-op) and hydrates on the client.\n\n```ts\nimport { createThemeCatalog } from '@pierre/theming';\nimport { createThemeController } from '@pierre/theming';\nimport { themes } from '@pierre/theming/themes';\n\nconst catalog = createThemeCatalog({\n  themes,\n  defaultLightThemeName: 'pierre-light',\n  defaultDarkThemeName: 'pierre-dark',\n});\n\nconst controller = createThemeController({\n  catalog,\n  defaultMode: 'system',\n  storageKey: 'theme', // built-in localStorage persistence (one JSON entry)\n});\n\ncontroller.getState();\n// {\n//   mode: 'system',\n//   lightThemeName: 'pierre-light',\n//   darkThemeName: 'pierre-dark',\n//   resolvedTheme: ThemeLike | undefined,  // the active theme, once resolved\n//   resolvedColorScheme: 'light' | 'dark', // 'system' collapsed to a concrete scheme\n// }\n\ncontroller.resolver; // the resolver this controller created and registered into\n\ncontroller.setColorMode('dark');\ncontroller.setThemeNameForScheme('light', 'catppuccin-latte');\n\nconst unsubscribe = controller.subscribe(() => render(controller.getState()));\ncontroller.destroy(); // detach the prefers-color-scheme listener\n```\n\n`resolvedColorScheme` is the concrete `'light' | 'dark'` after resolving\n`'system'` against the OS preference — drive your `data-theme` / `class`\napplication off it directly rather than re-deriving it. While in `'system'` mode\nthe controller listens for OS theme flips and re-resolves automatically. Only\nthe active theme is resolved by default; pass `preloadInactive: true` to resolve\nthe inactive one too so a mode flip is instant.\n\n### Resolver ownership\n\n`createThemeController({ catalog })` creates an isolated resolver, registers the\ncatalog into it, and exposes it as `controller.resolver`. That is the\nrecommended path for most apps: the controller/provider becomes the single owner\nof theme selection and resolution.\n\nPass `resolver` explicitly when several controllers, vanilla widgets, workers,\nor tests intentionally need to share one registry/cache:\n\n```ts\nimport { createThemeResolver } from '@pierre/theming';\n\nconst resolver = createThemeResolver();\nconst controller = createThemeController({ catalog, resolver });\n\ncontroller.resolver === resolver; // true\n```\n\nUse multiple resolvers only for deliberate isolation: embedded widgets,\ntenant-specific registries, SSR request isolation, tests, or side-by-side\npreviews where the same theme name should resolve to different objects.\nOtherwise, share one resolver to avoid a split-cache bug where one part of an\napp registers a loader that another part cannot see.\n\n### Persistence\n\nBy default, pass a `storageKey` to get built-in `localStorage` persistence under\none JSON entry. Omit it to disable persistence. For a custom layout — for\nexample mapping the selection onto pre-existing keys, or a non-`localStorage`\nstore — pass a `persistence` adapter, which takes precedence over `storageKey`:\n\n```ts\nimport type { ThemePersistence } from '@pierre/theming';\n\nconst persistence: ThemePersistence = {\n  load() {\n    /* return a { mode, lightThemeName, darkThemeName } selection, or null */\n  },\n  save(selection) {\n    /* persist it; guard your own browser access to stay SSR-safe */\n  },\n};\n\ncreateThemeController({ catalog, persistence });\n```\n\nOnly the selection (`mode` + the two theme names) is ever persisted — the\nresolved theme object is always re-derived from the resolver on load.\n\n## React bindings\n\nThe `/react` entry is a `useSyncExternalStore` selector over a controller\ninstance — no state of its own, no tearing, SSR-friendly. Create the controller\nonce (a module singleton is fine) and pass it in. `useThemeController` returns\nthe full controller state, including `resolvedTheme`.\n\n```tsx\nimport { useThemeController } from '@pierre/theming/react';\n\nfunction ThemeToolbar() {\n  const { mode, resolvedColorScheme } = useThemeController(controller);\n\n  return (\n    <button\n      onClick={() =>\n        controller.setColorMode(mode === 'dark' ? 'light' : 'dark')\n      }\n    >\n      {resolvedColorScheme}\n    </button>\n  );\n}\n```\n\n## Putting it together\n\nA typical app wires the pieces in this order:\n\n1. **Create one catalog** from the theme collections the app exposes. Use\n   `themes.pick([...])` when the app only offers a small opinionated set.\n2. **Create one controller** as a module singleton with that catalog and your\n   persistence. Use `controller.resolver` anywhere lower-level code needs the\n   same registry/cache.\n3. **Subscribe** (via the `/react` hooks or `controller.subscribe`) and apply\n   `resolvedColorScheme` to the document (`data-theme`, `class`,\n   `style.colorScheme`).\n4. **Theme your chrome** by building your own chrome tokens from\n   `normalizeThemeColors(resolvedTheme)` plus the color transforms (as diffshub\n   does) and mapping them onto your CSS variables, and **theme nested file\n   trees** by handing the resolved theme to `@pierre/trees`'\n   `themeToTreeStyles()` (which sits on `normalizeThemeColors`).\n\nTheme-kit currently stops at these engine-level primitives. Higher-level\ncomponent-wrapper prop contracts, such as a single `theme` prop shared across\ndiff, tree, and chrome components, are still app-local while that API settles.",
+    "copyright": ""
+  },
+  {
     "name": "@radix-ui/primitive",
-    "version": "1.1.3",
+    "version": "1.1.5",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -166,29 +177,29 @@
   },
   {
     "name": "@radix-ui/react-compose-refs",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
     "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-compose-refs/README.md",
-    "licenseText": "# `react-compose-refs`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-compose-refs\n# or\n$ npm install @radix-ui/react-compose-refs\n```\n\n## Usage\n\nThis is an internal utility, not intended for public usage.",
-    "copyright": ""
+    "licenseFile": "node_modules/@radix-ui/react-compose-refs/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
     "name": "@radix-ui/react-context",
-    "version": "1.1.2",
+    "version": "1.2.0",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
     "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-context/README.md",
-    "licenseText": "# `react-context`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-context\n# or\n$ npm install @radix-ui/react-context\n```\n\n## Usage\n\nThis is an internal utility, not intended for public usage.",
-    "copyright": ""
+    "licenseFile": "node_modules/@radix-ui/react-context/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
     "name": "@radix-ui/react-dialog",
-    "version": "1.1.15",
+    "version": "1.1.19",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -199,7 +210,7 @@
   },
   {
     "name": "@radix-ui/react-dismissable-layer",
-    "version": "1.1.11",
+    "version": "1.1.15",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -210,7 +221,7 @@
   },
   {
     "name": "@radix-ui/react-focus-guards",
-    "version": "1.1.3",
+    "version": "1.1.4",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -221,7 +232,7 @@
   },
   {
     "name": "@radix-ui/react-focus-scope",
-    "version": "1.1.7",
+    "version": "1.1.12",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -232,18 +243,18 @@
   },
   {
     "name": "@radix-ui/react-id",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
     "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-id/README.md",
-    "licenseText": "# `react-id`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-id\n# or\n$ npm install @radix-ui/react-id\n```\n\n## Usage\n\nView docs [here](https://radix-ui.com/primitives/docs/utilities/id-provider).",
-    "copyright": ""
+    "licenseFile": "node_modules/@radix-ui/react-id/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
     "name": "@radix-ui/react-portal",
-    "version": "1.1.9",
+    "version": "1.1.13",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -254,7 +265,7 @@
   },
   {
     "name": "@radix-ui/react-presence",
-    "version": "1.1.5",
+    "version": "1.1.7",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -265,7 +276,7 @@
   },
   {
     "name": "@radix-ui/react-primitive",
-    "version": "2.1.3",
+    "version": "2.1.7",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -275,19 +286,8 @@
     "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
-    "name": "@radix-ui/react-primitive",
-    "version": "2.1.4",
-    "licenses": "MIT",
-    "repository": "https://github.com/radix-ui/primitives",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/cmdk/node_modules/@radix-ui/react-primitive/LICENSE",
-    "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "copyright": "Copyright (c) 2022 WorkOS"
-  },
-  {
     "name": "@radix-ui/react-slot",
-    "version": "1.2.3",
+    "version": "1.3.0",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -297,30 +297,19 @@
     "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
-    "name": "@radix-ui/react-slot",
-    "version": "1.2.4",
+    "name": "@radix-ui/react-use-callback-ref",
+    "version": "1.1.2",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
     "url": "",
-    "licenseFile": "node_modules/cmdk/node_modules/@radix-ui/react-slot/LICENSE",
+    "licenseFile": "node_modules/@radix-ui/react-use-callback-ref/LICENSE",
     "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
-    "name": "@radix-ui/react-use-callback-ref",
-    "version": "1.1.1",
-    "licenses": "MIT",
-    "repository": "https://github.com/radix-ui/primitives",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-use-callback-ref/README.md",
-    "licenseText": "# `react-use-callback-ref`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-use-callback-ref\n# or\n$ npm install @radix-ui/react-use-callback-ref\n```\n\n## Usage\n\nThis is an internal utility, not intended for public usage.",
-    "copyright": ""
-  },
-  {
     "name": "@radix-ui/react-use-controllable-state",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -331,7 +320,7 @@
   },
   {
     "name": "@radix-ui/react-use-effect-event",
-    "version": "0.0.2",
+    "version": "0.0.3",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
@@ -341,30 +330,19 @@
     "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
-    "name": "@radix-ui/react-use-escape-keydown",
-    "version": "1.1.1",
-    "licenses": "MIT",
-    "repository": "https://github.com/radix-ui/primitives",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-use-escape-keydown/README.md",
-    "licenseText": "# `react-use-escape-keydown`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-use-escape-keydown\n# or\n$ npm install @radix-ui/react-use-escape-keydown\n```\n\n## Usage\n\nThis is an internal utility, not intended for public usage.",
-    "copyright": ""
-  },
-  {
     "name": "@radix-ui/react-use-layout-effect",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "licenses": "MIT",
     "repository": "https://github.com/radix-ui/primitives",
     "publisher": "",
     "url": "",
-    "licenseFile": "node_modules/@radix-ui/react-use-layout-effect/README.md",
-    "licenseText": "# `react-use-layout-effect`\n\n## Installation\n\n```sh\n$ yarn add @radix-ui/react-use-layout-effect\n# or\n$ npm install @radix-ui/react-use-layout-effect\n```\n\n## Usage\n\nThis is an internal utility, not intended for public usage.",
-    "copyright": ""
+    "licenseFile": "node_modules/@radix-ui/react-use-layout-effect/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2022 WorkOS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "copyright": "Copyright (c) 2022 WorkOS"
   },
   {
     "name": "@shikijs/core",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -375,7 +353,7 @@
   },
   {
     "name": "@shikijs/engine-javascript",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -386,7 +364,7 @@
   },
   {
     "name": "@shikijs/engine-oniguruma",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -397,7 +375,7 @@
   },
   {
     "name": "@shikijs/langs",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -407,8 +385,19 @@
     "copyright": "Copyright (c) 2021 Pine Wu. Copyright (c) 2023 Anthony Fu <https://github.com/antfu>"
   },
   {
+    "name": "@shikijs/primitive",
+    "version": "4.3.1",
+    "licenses": "MIT",
+    "repository": "https://github.com/shikijs/shiki",
+    "publisher": "",
+    "url": "",
+    "licenseFile": "node_modules/@shikijs/primitive/LICENSE",
+    "licenseText": "MIT License\n\nCopyright (c) 2021 Pine Wu\nCopyright (c) 2023 Anthony Fu <https://github.com/antfu>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+    "copyright": "Copyright (c) 2021 Pine Wu. Copyright (c) 2023 Anthony Fu <https://github.com/antfu>"
+  },
+  {
     "name": "@shikijs/themes",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -419,7 +408,7 @@
   },
   {
     "name": "@shikijs/transformers",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -430,7 +419,7 @@
   },
   {
     "name": "@shikijs/types",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -463,7 +452,7 @@
   },
   {
     "name": "@tanstack/query-core",
-    "version": "5.100.9",
+    "version": "5.101.2",
     "licenses": "MIT",
     "repository": "https://github.com/TanStack/query",
     "publisher": "",
@@ -474,7 +463,7 @@
   },
   {
     "name": "@tanstack/react-query",
-    "version": "5.100.9",
+    "version": "5.101.2",
     "licenses": "MIT",
     "repository": "https://github.com/TanStack/query",
     "publisher": "",
@@ -507,7 +496,7 @@
   },
   {
     "name": "@tanstack/react-virtual",
-    "version": "3.13.24",
+    "version": "3.14.5",
     "licenses": "MIT",
     "repository": "https://github.com/TanStack/virtual",
     "publisher": "",
@@ -540,7 +529,7 @@
   },
   {
     "name": "@tanstack/virtual-core",
-    "version": "3.14.0",
+    "version": "3.17.3",
     "licenses": "MIT",
     "repository": "https://github.com/TanStack/virtual",
     "publisher": "",
@@ -584,7 +573,7 @@
   },
   {
     "name": "@types/react",
-    "version": "19.2.14",
+    "version": "19.2.17",
     "licenses": "MIT",
     "repository": "https://github.com/DefinitelyTyped/DefinitelyTyped",
     "publisher": "",
@@ -606,7 +595,7 @@
   },
   {
     "name": "@ungap/structured-clone",
-    "version": "1.3.1",
+    "version": "1.3.2",
     "licenses": "ISC",
     "repository": "https://github.com/ungap/structured-clone",
     "publisher": "",
@@ -748,17 +737,6 @@
     "copyright": "Copyright (c) 2017-2018 Fredrik Nicol"
   },
   {
-    "name": "deep-rename-keys",
-    "version": "0.2.1",
-    "licenses": "MIT",
-    "repository": "https://github.com/jonschlinkert/deep-rename-keys",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/deep-rename-keys/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2015-2017, Jon Schlinkert\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
-    "copyright": "Copyright (c) 2015-2017, Jon Schlinkert"
-  },
-  {
     "name": "dequal",
     "version": "2.0.3",
     "licenses": "MIT",
@@ -793,7 +771,7 @@
   },
   {
     "name": "diff",
-    "version": "8.0.3",
+    "version": "9.0.0",
     "licenses": "BSD-3-Clause",
     "repository": "https://github.com/kpdecker/jsdiff",
     "publisher": "",
@@ -801,28 +779,6 @@
     "licenseFile": "node_modules/diff/LICENSE",
     "licenseText": "BSD 3-Clause License\n\nCopyright (c) 2009-2015, Kevin Decker <kpdecker@gmail.com>\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its\n   contributors may be used to endorse or promote products derived from\n   this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
     "copyright": "Copyright (c) 2009-2015, Kevin Decker <kpdecker@gmail.com>. All rights reserved."
-  },
-  {
-    "name": "eventemitter3",
-    "version": "2.0.3",
-    "licenses": "MIT",
-    "repository": "https://github.com/primus/eventemitter3",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/eventemitter3/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2014 Arnout Kazemier\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "copyright": "Copyright (c) 2014 Arnout Kazemier"
-  },
-  {
-    "name": "events",
-    "version": "3.3.0",
-    "licenses": "MIT",
-    "repository": "https://github.com/Gozala/events",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/events/LICENSE",
-    "licenseText": "MIT\n\nCopyright Joyent, Inc. and other Node contributors.\n\nPermission is hereby granted, free of charge, to any person obtaining a\ncopy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to permit\npersons to whom the Software is furnished to do so, subject to the\nfollowing conditions:\n\nThe above copyright notice and this permission notice shall be included\nin all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS\nOR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN\nNO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,\nDAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR\nOTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE\nUSE OR OTHER DEALINGS IN THE SOFTWARE.",
-    "copyright": "Copyright Joyent, Inc. and other Node contributors."
   },
   {
     "name": "fast-deep-equal",
@@ -880,19 +836,8 @@
     "copyright": "Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>"
   },
   {
-    "name": "is-buffer",
-    "version": "1.1.6",
-    "licenses": "MIT",
-    "repository": "https://github.com/feross/is-buffer",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/is-buffer/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) Feross Aboukhadijeh\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
-    "copyright": "Copyright (c) Feross Aboukhadijeh"
-  },
-  {
     "name": "isbot",
-    "version": "5.1.40",
+    "version": "5.2.0",
     "licenses": "Unlicense",
     "repository": "https://github.com/omrilotan/isbot",
     "publisher": "",
@@ -900,17 +845,6 @@
     "licenseFile": "node_modules/isbot/LICENSE",
     "licenseText": "# Unlicense\n\nThis is free and unencumbered software released into the public domain.\n\nAnyone is free to copy, modify, publish, use, compile, sell, or\ndistribute this software, either in source code form or as a compiled\nbinary, for any purpose, commercial or non-commercial, and by any\nmeans.\n\nIn jurisdictions that recognize copyright laws, the author or authors\nof this software dedicate any and all copyright interest in the\nsoftware to the public domain. We make this dedication for the benefit\nof the public at large and to the detriment of our heirs and\nsuccessors. We intend this dedication to be an overt act of\nrelinquishment in perpetuity of all present and future rights to this\nsoftware under copyright law.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR\nOTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,\nARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\nOTHER DEALINGS IN THE SOFTWARE.\n\nFor more information, please refer to <http://unlicense.org/>",
     "copyright": ""
-  },
-  {
-    "name": "kind-of",
-    "version": "3.2.2",
-    "licenses": "MIT",
-    "repository": "https://github.com/jonschlinkert/kind-of",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/kind-of/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2014-2017, Jon Schlinkert\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
-    "copyright": "Copyright (c) 2014-2017, Jon Schlinkert"
   },
   {
     "name": "lru_map",
@@ -936,7 +870,7 @@
   },
   {
     "name": "material-icon-theme",
-    "version": "5.34.0",
+    "version": "5.36.1",
     "licenses": "MIT",
     "repository": "https://github.com/material-extensions/vscode-material-icon-theme",
     "publisher": "PKief",
@@ -1035,7 +969,7 @@
   },
   {
     "name": "property-information",
-    "version": "7.1.0",
+    "version": "7.2.0",
     "licenses": "MIT",
     "repository": "https://github.com/wooorm/property-information",
     "publisher": "",
@@ -1046,7 +980,7 @@
   },
   {
     "name": "react-dom",
-    "version": "19.2.6",
+    "version": "19.2.7",
     "licenses": "MIT",
     "repository": "https://github.com/facebook/react",
     "publisher": "",
@@ -1057,7 +991,7 @@
   },
   {
     "name": "react-error-boundary",
-    "version": "6.1.1",
+    "version": "6.1.2",
     "licenses": "MIT",
     "repository": "https://github.com/bvaughn/react-error-boundary",
     "publisher": "",
@@ -1101,7 +1035,7 @@
   },
   {
     "name": "react",
-    "version": "19.2.6",
+    "version": "19.2.7",
     "licenses": "MIT",
     "repository": "https://github.com/facebook/react",
     "publisher": "",
@@ -1144,25 +1078,14 @@
     "copyright": "Copyright (c) 2025 Steven Levithan"
   },
   {
-    "name": "rename-keys",
-    "version": "1.2.0",
-    "licenses": "MIT",
-    "repository": "https://github.com/jonschlinkert/rename-keys",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/rename-keys/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2014-2015, 2017, Jon Schlinkert.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
-    "copyright": "Copyright (c) 2014-2015, 2017, Jon Schlinkert."
-  },
-  {
     "name": "reselect",
-    "version": "5.1.1",
+    "version": "5.2.0",
     "licenses": "MIT",
     "repository": "https://github.com/reduxjs/reselect",
     "publisher": "",
     "url": "",
     "licenseFile": "node_modules/reselect/LICENSE",
-    "licenseText": "The MIT License (MIT)\r\n\r\nCopyright (c) 2015-2018 Reselect Contributors\r\n\r\nPermission is hereby granted, free of charge, to any person obtaining a copy\r\nof this software and associated documentation files (the \"Software\"), to deal\r\nin the Software without restriction, including without limitation the rights\r\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\r\ncopies of the Software, and to permit persons to whom the Software is\r\nfurnished to do so, subject to the following conditions:\r\n\r\nThe above copyright notice and this permission notice shall be included in all\r\ncopies or substantial portions of the Software.\r\n\r\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\r\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\r\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\r\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\r\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\r\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\r\nSOFTWARE.",
+    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2015-2018 Reselect Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "copyright": "Copyright (c) 2015-2018 Reselect Contributors"
   },
   {
@@ -1178,7 +1101,7 @@
   },
   {
     "name": "seroval-plugins",
-    "version": "1.5.4",
+    "version": "1.5.5",
     "licenses": "MIT",
     "repository": "https://github.com/lxsmnsyc/seroval",
     "publisher": "",
@@ -1189,7 +1112,7 @@
   },
   {
     "name": "seroval",
-    "version": "1.5.4",
+    "version": "1.5.5",
     "licenses": "MIT",
     "repository": "https://github.com/lxsmnsyc/seroval",
     "publisher": "",
@@ -1200,7 +1123,7 @@
   },
   {
     "name": "shiki",
-    "version": "3.23.0",
+    "version": "4.3.1",
     "licenses": "MIT",
     "repository": "https://github.com/shikijs/shiki",
     "publisher": "",
@@ -1243,19 +1166,8 @@
     "copyright": "Copyright (c) 2015 Titus Wormer <mailto:tituswormer@gmail.com>"
   },
   {
-    "name": "svgson",
-    "version": "5.3.1",
-    "licenses": "MIT",
-    "repository": "https://github.com/elrumordelaluz/svgson",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/svgson/LICENSE",
-    "licenseText": "MIT License\n\nCopyright (c) 2018 Lionel Tzatzkin\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "copyright": "Copyright (c) 2018 Lionel Tzatzkin"
-  },
-  {
     "name": "tailwind-merge",
-    "version": "3.5.0",
+    "version": "3.6.0",
     "licenses": "MIT",
     "repository": "https://github.com/dcastil/tailwind-merge",
     "publisher": "",
@@ -1406,28 +1318,6 @@
     "licenseFile": "node_modules/vfile/license",
     "licenseText": "(The MIT License)\n\nCopyright (c) 2015 Titus Wormer <tituswormer@gmail.com>\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
     "copyright": "Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com>"
-  },
-  {
-    "name": "xml-lexer",
-    "version": "0.2.2",
-    "licenses": "MIT",
-    "repository": "https://github.com/pladaria/xml-lexer",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/xml-lexer/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2016 Pedro Ladaria\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "copyright": "Copyright (c) 2016 Pedro Ladaria"
-  },
-  {
-    "name": "xml-reader",
-    "version": "2.4.3",
-    "licenses": "MIT",
-    "repository": "https://github.com/pladaria/xml-reader",
-    "publisher": "",
-    "url": "",
-    "licenseFile": "node_modules/xml-reader/LICENSE",
-    "licenseText": "The MIT License (MIT)\n\nCopyright (c) 2016 Pedro Ladaria\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "copyright": "Copyright (c) 2016 Pedro Ladaria"
   },
   {
     "name": "zod",
