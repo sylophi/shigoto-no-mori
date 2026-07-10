@@ -21,7 +21,8 @@ Rules that keep both themes cheap to maintain:
   a matching remap entry in doubutsu.css.
 - **Interactive primitives carry `data-slot`** (and `data-variant` where
   variants matter). Text fields use `ui/input.tsx` / `ui/textarea.tsx`,
-  chips use `ui/chip-button.tsx` — don't re-inline their class strings.
+  chips use `ui/chip-button.tsx`, few-way toggles use
+  `ui/segmented-control.tsx` — don't re-inline their class strings.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
   `data-doubutsu-zone` attributes, upstream library attributes (Base UI
   `data-highlighted` etc.), and plain Tailwind utility names. Never a

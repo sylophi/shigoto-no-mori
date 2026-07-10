@@ -26,7 +26,7 @@
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      chip                      ui/chip-button.tsx, configure/CarryOverRow.tsx
- *      segmented-control         configure/ModePicker.tsx, newWorktree/ModeToggle.tsx
+ *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
  *      modal-shell               ui/modal-shell.tsx
  *      sheet-content             ui/sheet.tsx
