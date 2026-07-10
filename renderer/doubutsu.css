@@ -87,7 +87,10 @@
   --secondary-foreground: oklch(0.39 0.045 74.1);
   --muted: oklch(0.945 0.025 85);
   --muted-foreground: oklch(0.55 0.031 67.2);
-  --accent: oklch(0.88 0.07 155);
+  /* Calmer than the sidebar-zone accent below: on the cream canvas a
+     saturated mint shouts; the sidebar's own --accent override keeps
+     the stronger pillow where it sits on mint. */
+  --accent: oklch(0.91 0.045 155);
   --accent-foreground: oklch(0.39 0.045 74.1);
   --destructive: oklch(0.6 0.16 30);
   /* See the universal `border-color: transparent` rule below. */
@@ -165,7 +168,7 @@
   --secondary-foreground: oklch(0.942 0.011 76.6);
   --muted: oklch(0.325 0.011 67.4);
   --muted-foreground: oklch(0.741 0.025 73.5);
-  --accent: oklch(0.4 0.07 155);
+  --accent: oklch(0.36 0.05 155);
   --accent-foreground: oklch(0.942 0.011 76.6);
   --destructive: oklch(0.7 0.14 32);
   --border: transparent;
