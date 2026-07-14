@@ -85,7 +85,7 @@ async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
 // navigate away and back (or the cache goes stale).
 async function getLaunchersForProject(
   projectId: string,
-): Promise<LauncherEntry[]> {
+): Promise<{ entries: LauncherEntry[]; hiddenCount: number }> {
   const project = findProjectOrThrow(projectId);
   const [detected, projectConfig, globalConfig, web] = await Promise.all([
     detectApps(),
@@ -94,20 +94,28 @@ async function getLaunchersForProject(
     webEntriesFor(project.path),
   ]);
 
-  const entries: LauncherEntry[] = [
+  const resolvable: LauncherEntry[] = [
     ...detectedEntries(detected).filter((e) => e.available),
     ...web,
     ...customEntriesFrom(globalConfig.launchers),
     ...customEntriesFrom(projectConfig?.launchers),
   ];
 
+  // Hiding is presentational only: `launch` still resolves a hidden id, so
+  // an in-flight deep link or a stale menu accelerator keeps working.
+  const hidden = new Set(globalConfig.hiddenLaunchers ?? []);
+  const entries = resolvable.filter((e) => !hidden.has(e.id));
+
   const log = readKey<UseLogMap>(USE_LOG_KEY, {});
   const now = Date.now();
-  return entries.toSorted((a, b) => {
-    const diff =
-      countWithin(log[b.id] ?? [], now) - countWithin(log[a.id] ?? [], now);
-    return diff !== 0 ? diff : a.label.localeCompare(b.label);
-  });
+  return {
+    entries: entries.toSorted((a, b) => {
+      const diff =
+        countWithin(log[b.id] ?? [], now) - countWithin(log[a.id] ?? [], now);
+      return diff !== 0 ? diff : a.label.localeCompare(b.label);
+    }),
+    hiddenCount: resolvable.length - entries.length,
+  };
 }
 
 function bumpUseCount(launcherId: string): void {
@@ -122,9 +130,7 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       a.label.localeCompare(b.label),
     ),
 
-  forProject: async ({ projectId }) => ({
-    entries: await getLaunchersForProject(projectId),
-  }),
+  forProject: async ({ projectId }) => getLaunchersForProject(projectId),
 
   launch: async ({ projectId, worktreeId, launcherId }) => {
     const project = findProjectOrThrow(projectId);

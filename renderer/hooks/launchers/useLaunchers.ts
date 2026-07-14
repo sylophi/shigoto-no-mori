@@ -15,13 +15,16 @@ export function useDetectedLaunchers() {
 
 interface LauncherForProjectResult {
   entries: LauncherEntry[];
+  // Resolvable entries the user hid in Settings. Only used to explain an
+  // otherwise-empty row.
+  hiddenCount: number;
 }
 
 export function useLauncherForProject(projectId: string | null) {
   return useQuery<LauncherForProjectResult>({
     queryKey: queryKeys.projectLaunchers(projectId),
     queryFn: () => {
-      if (!projectId) return { entries: [] };
+      if (!projectId) return { entries: [], hiddenCount: 0 };
       return window.api.launchers.forProject(projectId);
     },
     enabled: projectId !== null,

@@ -17,7 +17,6 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { fileManagerName } from "@/components/ui/file-manager";
 import { isMac } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
 import type {
   DetectedLauncher,
@@ -28,6 +27,7 @@ import type {
 import { AppearanceSection } from "./AppearanceSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
+import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
@@ -36,6 +36,7 @@ interface FormState {
   theme: Theme;
   doubutsu: boolean;
   launchers: LauncherCommand[];
+  hiddenLaunchers: string[];
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
@@ -47,6 +48,11 @@ function fromConfig(config: GlobalConfig): FormState {
     theme: config.theme ?? "system",
     doubutsu: config.doubutsu ?? true,
     launchers: config.launchers ?? [],
+    // Sorted here and on every toggle so the id list has one canonical
+    // order. useDirtyForm compares FormState by JSON.stringify, and
+    // hiding is set-semantic -- without this, re-hiding a tool in a
+    // different order would read as an unsaved change.
+    hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
@@ -66,6 +72,10 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
     launchers: valid.length > 0 ? valid : undefined,
+    // Default is everything shown; omit the key entirely when nothing is
+    // hidden rather than persisting an empty array.
+    hiddenLaunchers:
+      state.hiddenLaunchers.length > 0 ? state.hiddenLaunchers : undefined,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
@@ -130,6 +140,15 @@ export function SettingsForm({
   const setDoubutsu = (next: boolean) => {
     setForm((prev) => ({ ...prev, doubutsu: next }));
     setDoubutsuOverride(next);
+  };
+
+  const toggleToolHidden = (id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      hiddenLaunchers: prev.hiddenLaunchers.includes(id)
+        ? prev.hiddenLaunchers.filter((h) => h !== id)
+        : [...prev.hiddenLaunchers, id].toSorted(),
+    }));
   };
 
   const { addLauncher, updateLauncher, removeLauncher } =
@@ -257,27 +276,11 @@ export function SettingsForm({
             )}
           </section>
 
-          <section className="space-y-4">
-            <div>
-              <SectionHeading className="mb-1">Detected tools</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Editors and tools found on this machine. Shown in every worktree
-                automatically.
-              </p>
-            </div>
-            {availableTools.length === 0 ? (
-              <p className="text-xs text-muted-foreground/70">
-                Nothing detected yet. Install a supported tool below and
-                Shigomori will pick it up on next launch.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {availableTools.map((d) => (
-                  <ToolPill key={d.id} entry={d} />
-                ))}
-              </div>
-            )}
-          </section>
+          <DetectedToolsSection
+            tools={availableTools}
+            hidden={form.hiddenLaunchers}
+            onToggle={toggleToolHidden}
+          />
 
           {missingTools.length > 0 && (
             <section className="space-y-4">
@@ -292,7 +295,7 @@ export function SettingsForm({
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {missingTools.map((d) => (
-                  <ToolPill key={d.id} entry={d} missing />
+                  <ToolPill key={d.id} entry={d} />
                 ))}
               </div>
             </section>
@@ -350,27 +353,15 @@ export function SettingsForm({
   );
 }
 
-function ToolPill({
-  entry,
-  missing = false,
-}: {
-  entry: DetectedLauncher;
-  missing?: boolean;
-}) {
+// Static pill for a supported-but-not-installed tool. Detected tools are
+// interactive toggles instead -- see DetectedToolsSection.
+function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border py-0.5 pr-2 pl-1.5 text-xs",
-        missing
-          ? "border-dashed border-border text-muted-foreground/60"
-          : "border-border bg-card text-muted-foreground",
-      )}
-      title={missing ? "Not installed" : undefined}
+      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
+      title="Not installed"
     >
-      <LauncherIcon
-        entry={entry}
-        className={cn("size-3.5", missing && "opacity-60")}
-      />
+      <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
       {entry.label}
     </span>
   );
