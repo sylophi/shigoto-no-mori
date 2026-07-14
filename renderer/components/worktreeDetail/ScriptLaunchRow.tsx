@@ -32,7 +32,10 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
     worktree.projectId,
   );
 
-  const enabled = config?.launchScripts ?? true;
+  // Undefined config means the read is still in flight, which is NOT the same
+  // as "on by default" -- defaulting to on there flashes the row in and back
+  // out for anyone who switched it off.
+  const enabled = config !== undefined && (config.launchScripts ?? true);
   const candidates = pkg
     ? sortEntries(Object.entries(pkg.scripts), sortMode, pkg.usage).slice(
         0,
@@ -75,11 +78,11 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
 
   if (!enabled || candidates.length === 0) return null;
 
+  // No overflow-hidden on the row: the fit is measured, so there's nothing to
+  // clip -- and clipping would eat the pills' focus ring, which paints outside
+  // the button box.
   return (
-    <div
-      ref={containerRef}
-      className="relative flex items-center gap-2 overflow-hidden"
-    >
+    <div ref={containerRef} className="relative flex items-center gap-2">
       {candidates.slice(0, fitCount).map((entry) => (
         <ScriptLaunchButton
           key={entry.name}
