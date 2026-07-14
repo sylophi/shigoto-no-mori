@@ -37,6 +37,7 @@ interface FormState {
   doubutsu: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
+  launchScripts: boolean;
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
@@ -53,6 +54,7 @@ function fromConfig(config: GlobalConfig): FormState {
     // hiding is set-semantic -- without this, re-hiding a tool in a
     // different order would read as an unsaved change.
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
+    launchScripts: config.launchScripts ?? true,
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
@@ -76,6 +78,8 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // hidden rather than persisting an empty array.
     hiddenLaunchers:
       state.hiddenLaunchers.length > 0 ? state.hiddenLaunchers : undefined,
+    // Default is on; same opt-out serialization as deleteBranchOnRemove.
+    launchScripts: state.launchScripts ? undefined : false,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
@@ -274,6 +278,18 @@ export function SettingsForm({
                 }
               />
             )}
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading className="mb-1">Launch</SectionHeading>
+            <ToggleRow
+              checked={form.launchScripts}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, launchScripts: v }))
+              }
+              label="Show scripts in the Launch section"
+              description="Adds a row of the worktree's package.json scripts under the launch tools — as many as fit on one line, ordered the same way the Scripts section sorts them."
+            />
           </section>
 
           <DetectedToolsSection

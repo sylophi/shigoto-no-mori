@@ -110,6 +110,11 @@ export const GlobalConfigSchema = z.object({
   // uninstalled, a deleted custom tool) simply never match and are
   // harmless to keep.
   hiddenLaunchers: z.array(z.string()).optional(),
+  // When true, the Launch section carries a second row of the worktree's
+  // top package.json scripts -- as many as fit on one line, ordered by the
+  // project's script sort. On by default; absent = on, explicit `false` is
+  // the opt-out.
+  launchScripts: z.boolean().optional(),
   // When true, deleting a worktree also force-deletes its checked-out
   // local branch (skipped if the branch is the primary's or is in use
   // by another worktree). Off by default; matches git's native
