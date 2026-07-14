@@ -17,7 +17,6 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { fileManagerName } from "@/components/ui/file-manager";
 import { isMac } from "@/lib/platform";
-import { cn } from "@/lib/utils";
 import { notifyError } from "@/lib/toast";
 import type {
   DetectedLauncher,
@@ -49,7 +48,11 @@ function fromConfig(config: GlobalConfig): FormState {
     theme: config.theme ?? "system",
     doubutsu: config.doubutsu ?? true,
     launchers: config.launchers ?? [],
-    hiddenLaunchers: config.hiddenLaunchers ?? [],
+    // Sorted here and on every toggle so the id list has one canonical
+    // order. useDirtyForm compares FormState by JSON.stringify, and
+    // hiding is set-semantic -- without this, re-hiding a tool in a
+    // different order would read as an unsaved change.
+    hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
@@ -144,7 +147,7 @@ export function SettingsForm({
       ...prev,
       hiddenLaunchers: prev.hiddenLaunchers.includes(id)
         ? prev.hiddenLaunchers.filter((h) => h !== id)
-        : [...prev.hiddenLaunchers, id],
+        : [...prev.hiddenLaunchers, id].toSorted(),
     }));
   };
 
@@ -292,7 +295,7 @@ export function SettingsForm({
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
                 {missingTools.map((d) => (
-                  <ToolPill key={d.id} entry={d} missing />
+                  <ToolPill key={d.id} entry={d} />
                 ))}
               </div>
             </section>
@@ -350,27 +353,15 @@ export function SettingsForm({
   );
 }
 
-function ToolPill({
-  entry,
-  missing = false,
-}: {
-  entry: DetectedLauncher;
-  missing?: boolean;
-}) {
+// Static pill for a supported-but-not-installed tool. Detected tools are
+// interactive toggles instead -- see DetectedToolsSection.
+function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-md border py-0.5 pr-2 pl-1.5 text-xs",
-        missing
-          ? "border-dashed border-border text-muted-foreground/60"
-          : "border-border bg-card text-muted-foreground",
-      )}
-      title={missing ? "Not installed" : undefined}
+      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
+      title="Not installed"
     >
-      <LauncherIcon
-        entry={entry}
-        className={cn("size-3.5", missing && "opacity-60")}
-      />
+      <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
       {entry.label}
     </span>
   );

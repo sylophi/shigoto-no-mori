@@ -52,13 +52,10 @@ export function DetectedToolsSection({
                       ? `Show ${tool.label} in the Launch section`
                       : `Hide ${tool.label} from the Launch section`
                   }
-                  className={cn(
-                    isHidden && "opacity-50 hover:opacity-100",
-                    "transition-opacity",
-                  )}
+                  className={cn(isHidden && "opacity-50 hover:opacity-100")}
                   onClick={() => onToggle(tool.id)}
                 >
-                  <LauncherIcon entry={tool} />
+                  <LauncherIcon entry={tool} className="size-3.5" />
                   {tool.label}
                 </Button>
               );
