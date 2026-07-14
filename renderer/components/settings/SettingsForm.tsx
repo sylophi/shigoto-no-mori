@@ -288,7 +288,7 @@ export function SettingsForm({
                 setForm((prev) => ({ ...prev, launchScripts: v }))
               }
               label="Show scripts in the Launch section"
-              description="Adds a row of the worktree's package.json scripts under the launch tools — as many as fit on one line, ordered the same way the Scripts section sorts them."
+              description="Adds a row of the worktree's package.json scripts under the launch tools. Shows as many as fit on one line, ordered the same way the Scripts section sorts them."
             />
           </section>
 
