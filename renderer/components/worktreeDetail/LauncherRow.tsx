@@ -62,6 +62,25 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
     );
   }
 
+  // Everything the user could launch is switched off in Settings -- point
+  // there rather than at project Configure, which has no visibility toggles.
+  if (entries.length === 0 && (data?.hiddenCount ?? 0) > 0) {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Every launch tool is hidden.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void navigate({ to: "/settings" })}
+        >
+          Choose tools
+        </Button>
+      </div>
+    );
+  }
+
   if (entries.length === 0) {
     return (
       <div className="space-y-2">

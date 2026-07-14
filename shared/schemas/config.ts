@@ -102,6 +102,14 @@ export const GlobalConfigSchema = z.object({
   // localStorage so startup paints without a flash.
   doubutsu: z.boolean().optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
+  // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
+  // user has switched off, so they're skipped when building a project's
+  // launcher row -- and therefore also absent from the File menu's
+  // ⌘1..⌘9, which mirrors the row. Everything is shown by default;
+  // absent = nothing hidden. Ids that no longer resolve (an app the user
+  // uninstalled, a deleted custom tool) simply never match and are
+  // harmless to keep.
+  hiddenLaunchers: z.array(z.string()).optional(),
   // When true, deleting a worktree also force-deletes its checked-out
   // local branch (skipped if the branch is the primary's or is in use
   // by another worktree). Off by default; matches git's native

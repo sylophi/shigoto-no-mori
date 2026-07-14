@@ -28,6 +28,7 @@ import type {
 import { AppearanceSection } from "./AppearanceSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
+import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
@@ -36,6 +37,7 @@ interface FormState {
   theme: Theme;
   doubutsu: boolean;
   launchers: LauncherCommand[];
+  hiddenLaunchers: string[];
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
@@ -47,6 +49,7 @@ function fromConfig(config: GlobalConfig): FormState {
     theme: config.theme ?? "system",
     doubutsu: config.doubutsu ?? true,
     launchers: config.launchers ?? [],
+    hiddenLaunchers: config.hiddenLaunchers ?? [],
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
@@ -66,6 +69,10 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
     launchers: valid.length > 0 ? valid : undefined,
+    // Default is everything shown; omit the key entirely when nothing is
+    // hidden rather than persisting an empty array.
+    hiddenLaunchers:
+      state.hiddenLaunchers.length > 0 ? state.hiddenLaunchers : undefined,
     // Default is true; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads.
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
@@ -130,6 +137,15 @@ export function SettingsForm({
   const setDoubutsu = (next: boolean) => {
     setForm((prev) => ({ ...prev, doubutsu: next }));
     setDoubutsuOverride(next);
+  };
+
+  const toggleToolHidden = (id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      hiddenLaunchers: prev.hiddenLaunchers.includes(id)
+        ? prev.hiddenLaunchers.filter((h) => h !== id)
+        : [...prev.hiddenLaunchers, id],
+    }));
   };
 
   const { addLauncher, updateLauncher, removeLauncher } =
@@ -257,27 +273,11 @@ export function SettingsForm({
             )}
           </section>
 
-          <section className="space-y-4">
-            <div>
-              <SectionHeading className="mb-1">Detected tools</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Editors and tools found on this machine. Shown in every worktree
-                automatically.
-              </p>
-            </div>
-            {availableTools.length === 0 ? (
-              <p className="text-xs text-muted-foreground/70">
-                Nothing detected yet. Install a supported tool below and
-                Shigomori will pick it up on next launch.
-              </p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {availableTools.map((d) => (
-                  <ToolPill key={d.id} entry={d} />
-                ))}
-              </div>
-            )}
-          </section>
+          <DetectedToolsSection
+            tools={availableTools}
+            hidden={form.hiddenLaunchers}
+            onToggle={toggleToolHidden}
+          />
 
           {missingTools.length > 0 && (
             <section className="space-y-4">
