@@ -24,6 +24,7 @@ import type {
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
+import { ScriptLaunchRow } from "./ScriptLaunchRow";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import {
   WorktreeDetailFooter,
@@ -207,7 +208,12 @@ export function WorktreeDetailInner({
         <div className="flex max-w-4xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading>Launch</SectionHeading>
-            <LauncherRow worktree={worktree} />
+            {/* The two rows are one wrapping group of pills, so they sit a
+                pill-gap apart -- not the section's heading-to-content gap. */}
+            <div className="space-y-2">
+              <LauncherRow worktree={worktree} />
+              <ScriptLaunchRow worktree={worktree} />
+            </div>
           </section>
 
           <PullRequestSection worktree={worktree} />
