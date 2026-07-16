@@ -43,10 +43,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const applied = override ?? saved;
 
   // Once a save lands and `saved` catches up to the staged override, drop the
-  // override so future updates to `saved` (e.g. nuke) flow through.
-  useEffect(() => {
-    if (override && saved === override) setOverride(null);
-  }, [override, saved]);
+  // override so future updates to `saved` (e.g. nuke) flow through. Adjusted
+  // during render (not in an effect) so no committed frame holds the stale
+  // pair; `applied` is identical either way, so nothing visibly changes.
+  if (override && saved === override) setOverride(null);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() =>
     getSystemTheme(),

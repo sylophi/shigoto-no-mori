@@ -49,9 +49,10 @@ export function CarryOverSection({
   const manualPaths = new Set(entries.map((e) => normalizeRelPath(e.path)));
   const includePaths =
     useWorktreeInclude && status?.fileExists
-      ? status.matchedPaths
-          .map(normalizeRelPath)
-          .filter((p) => !manualPaths.has(p))
+      ? status.matchedPaths.flatMap((raw) => {
+          const p = normalizeRelPath(raw);
+          return manualPaths.has(p) ? [] : [p];
+        })
       : [];
 
   return (

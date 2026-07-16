@@ -254,17 +254,3 @@ declare module "@tanstack/react-router" {
     router: typeof router;
   }
 }
-
-export {
-  commitDiffRoute,
-  configureProjectRoute,
-  convertExternalRoute,
-  manageBranchesRoute,
-  newWorktreeRoute,
-  pullRequestDiffRoute,
-  scriptConsoleRoute,
-  settingsRoute,
-  worktreeDiffRoute,
-  worktreeLocationRoute,
-  worktreeRoute,
-};

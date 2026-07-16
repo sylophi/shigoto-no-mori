@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -13,7 +13,6 @@ import { useBranches } from "@/hooks/git/useBranches";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { tildify } from "@/lib/projectPaths";
-import { newWorktreeRoute } from "@/router";
 import {
   sanitizeBranchForPath,
   sanitizeBranchName,
@@ -22,11 +21,13 @@ import {
 import { isRealBranch } from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
 
+const route = getRouteApi("/projects/$projectId/new");
+
 const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 export function NewWorktree() {
-  const { projectId } = newWorktreeRoute.useParams();
+  const { projectId } = route.useParams();
   const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();

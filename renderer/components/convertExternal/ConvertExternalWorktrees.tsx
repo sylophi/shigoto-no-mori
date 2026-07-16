@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -10,11 +10,12 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import { convertExternalRoute } from "@/router";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
+
+const route = getRouteApi("/projects/$projectId/convert-external");
 
 // For detached HEADs `worktree.branch` is a short SHA -- pass it
 // through unchanged so the managed worktree gets a hash-named dir.
@@ -24,7 +25,7 @@ const proposedName = (worktree: Worktree): string =>
   worktree.detached ? worktree.branch : sanitizeBranchForPath(worktree.branch);
 
 export function ConvertExternalWorktrees() {
-  const { projectId } = convertExternalRoute.useParams();
+  const { projectId } = route.useParams();
   const navigate = useNavigate();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();

@@ -1,3 +1,4 @@
+import { getRouteApi } from "@tanstack/react-router";
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,13 +8,14 @@ import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { manageBranchesRoute } from "@/router";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
 
+const route = getRouteApi("/projects/$projectId/branches");
+
 export function ManageBranches() {
-  const { projectId } = manageBranchesRoute.useParams();
+  const { projectId } = route.useParams();
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const { data: branches } = useBranches(projectId);

@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
+import { FileManagerIcon } from "@/components/ui/file-manager";
+import { fileManagerName } from "@/lib/platform";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";

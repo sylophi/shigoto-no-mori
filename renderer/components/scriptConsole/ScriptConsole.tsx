@@ -1,16 +1,15 @@
-import { useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { BackButton } from "@/components/ui/back-button";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { paramToSlot } from "@/store/scriptRuns";
-import { scriptConsoleRoute } from "@/router";
 import { ScriptConsoleInner } from "./ScriptConsoleInner";
 
+const route = getRouteApi(
+  "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
+);
+
 export function ScriptConsole() {
-  const {
-    projectId,
-    worktreeId,
-    scriptKey: rawKey,
-  } = scriptConsoleRoute.useParams();
+  const { projectId, worktreeId, scriptKey: rawKey } = route.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);

@@ -41,9 +41,10 @@ export function DangerZone() {
         void navigate({ to: "/" });
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);
-      } finally {
-        setNuking(false);
       }
+      // The catch above swallows every failure, so this runs on all paths
+      // (a `finally` clause would bail React Compiler out of this component).
+      setNuking(false);
     });
   };
 

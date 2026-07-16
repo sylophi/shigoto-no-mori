@@ -8,7 +8,8 @@ import {
   usePushWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
 import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
-import { commitsLabel, SyncActionButton } from "./SyncActionButton";
+import { commitsLabel } from "./commitsLabel";
+import { SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
   worktree: Worktree;

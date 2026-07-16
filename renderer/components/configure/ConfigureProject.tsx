@@ -1,13 +1,15 @@
+import { getRouteApi } from "@tanstack/react-router";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
-import { configureProjectRoute } from "@/router";
 import { ConfigureForm } from "./ConfigureForm";
 import { ConfigureSkeleton } from "./ConfigureSkeleton";
 
+const route = getRouteApi("/projects/$projectId/configure");
+
 export function ConfigureProject() {
-  const { projectId } = configureProjectRoute.useParams();
+  const { projectId } = route.useParams();
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const { data: config, isLoading: configLoading } =

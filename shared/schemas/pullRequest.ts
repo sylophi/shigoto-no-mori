@@ -6,7 +6,7 @@ export type PullRequestState = z.infer<typeof PullRequestStateSchema>;
 
 export const PullRequestSchema = z.object({
   number: z.number().int().positive(),
-  url: z.string().url(),
+  url: z.url(),
   title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
@@ -68,7 +68,7 @@ export type PullRequestCheckBucket = z.infer<
 export const PullRequestCheckSchema = z.object({
   name: z.string(),
   bucket: PullRequestCheckBucketSchema,
-  url: z.string().url().optional(),
+  url: z.url().optional(),
 });
 export type PullRequestCheck = z.infer<typeof PullRequestCheckSchema>;
 

@@ -1,7 +1,8 @@
 import { ArrowDown } from "lucide-react";
 import { useSyncWithPrimaryWorktree } from "@/hooks/worktrees/useWorktreeSync";
 import type { Worktree } from "@shared/schemas";
-import { commitsLabel, SyncActionButton } from "./SyncActionButton";
+import { commitsLabel } from "./commitsLabel";
+import { SyncActionButton } from "./SyncActionButton";
 
 // Precondition: caller has verified the worktree is eligible
 // (non-primary, non-detached, behindPrimary > 0). The label still falls

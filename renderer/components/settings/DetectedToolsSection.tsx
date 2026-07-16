@@ -20,7 +20,8 @@ export function DetectedToolsSection({
   hidden,
   onToggle,
 }: DetectedToolsSectionProps) {
-  const hiddenCount = tools.filter((t) => hidden.includes(t.id)).length;
+  const hiddenSet = new Set(hidden);
+  const hiddenCount = tools.filter((t) => hiddenSet.has(t.id)).length;
 
   return (
     <section className="space-y-4">
@@ -40,7 +41,7 @@ export function DetectedToolsSection({
         <>
           <div className="flex flex-wrap items-center gap-1.5">
             {tools.map((tool) => {
-              const isHidden = hidden.includes(tool.id);
+              const isHidden = hiddenSet.has(tool.id);
               return (
                 <Button
                   key={tool.id}

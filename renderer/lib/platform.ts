@@ -15,3 +15,7 @@ export const shiftKey = isMac ? "⇧" : "Shift";
 export function shortcutLabel(...keys: string[]): string {
   return isMac ? keys.join("") : keys.join("+");
 }
+
+// Name of the OS file manager, used by "Open in Finder" style
+// affordances that must read as "Explorer" on Windows.
+export const fileManagerName = isMac ? "Finder" : "Explorer";
