@@ -33,7 +33,3 @@ export function BranchLabel({
     </>
   );
 }
-
-export function branchTooltip(worktree: { detached: boolean; branch: string }) {
-  return worktree.detached ? "Detached HEAD (commit hash)" : worktree.branch;
-}

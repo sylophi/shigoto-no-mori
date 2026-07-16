@@ -1,13 +1,14 @@
-import { useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { pullRequestDiffRoute } from "@/router";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
 
+const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/pr-diff");
+
 export function PullRequestDiff() {
-  const { projectId, worktreeId } = pullRequestDiffRoute.useParams();
+  const { projectId, worktreeId } = route.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);

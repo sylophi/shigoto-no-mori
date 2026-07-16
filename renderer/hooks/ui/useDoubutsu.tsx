@@ -33,9 +33,9 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
 
   // Once a save lands and `saved` catches up to the staged override,
   // drop the override so future updates to `saved` (e.g. nuke) flow.
-  useEffect(() => {
-    if (override !== null && saved === override) setOverride(null);
-  }, [override, saved]);
+  // Adjusted during render (not in an effect) so no committed frame holds
+  // the stale pair; `applied` is identical either way.
+  if (override !== null && saved === override) setOverride(null);
 
   useEffect(() => {
     const root = document.documentElement;

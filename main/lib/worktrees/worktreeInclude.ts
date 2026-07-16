@@ -65,10 +65,13 @@ export async function resolveWorktreeInclude(
     return null;
   }
   const matchedPaths = await resolveMatchedPaths(projectPath);
-  const entries = matchedPaths
-    .map(stripTrailingSlash)
-    .filter((p) => p.length > 0 && isSafeRelPath(p))
-    .map((path): CarryOverEntry => ({ path, mode: "copy" }));
+  const entries: CarryOverEntry[] = [];
+  for (const matched of matchedPaths) {
+    const path = stripTrailingSlash(matched);
+    if (path.length > 0 && isSafeRelPath(path)) {
+      entries.push({ path, mode: "copy" });
+    }
+  }
   return { entries, matchedPaths };
 }
 

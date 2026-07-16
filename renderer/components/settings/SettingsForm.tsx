@@ -15,7 +15,7 @@ import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { fileManagerName } from "@/components/ui/file-manager";
+import { fileManagerName } from "@/lib/platform";
 import { isMac } from "@/lib/platform";
 import { notifyError } from "@/lib/toast";
 import type {

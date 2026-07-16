@@ -1,10 +1,9 @@
-// Name + icon for the OS file manager, used by "Open in Finder" style
-// affordances that must read as "Explorer" on Windows.
+// Icon for the OS file manager, used by "Open in Finder" style
+// affordances. The matching display name lives in @/lib/platform
+// (fileManagerName).
 import { FolderOpen } from "lucide-react";
 import finderIconUrl from "@/app-icons/finder.png";
 import { isMac } from "@/lib/platform";
-
-export const fileManagerName = isMac ? "Finder" : "Explorer";
 
 export function FileManagerIcon({
   className = "size-4",

@@ -1,12 +1,15 @@
-import { useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { commitDiffRoute } from "@/router";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
 
+const route = getRouteApi(
+  "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+);
+
 export function CommitDiff() {
-  const { projectId, worktreeId, hash } = commitDiffRoute.useParams();
+  const { projectId, worktreeId, hash } = route.useParams();
   const navigate = useNavigate();
   const { data: worktrees = [], isPending } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);

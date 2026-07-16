@@ -16,7 +16,8 @@ import {
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { FileManagerIcon, fileManagerName } from "@/components/ui/file-manager";
+import { FileManagerIcon } from "@/components/ui/file-manager";
+import { fileManagerName } from "@/lib/platform";
 import { modKey, shortcutLabel } from "@/lib/platform";
 import { comparablePath } from "@shared/worktreeLayout";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";

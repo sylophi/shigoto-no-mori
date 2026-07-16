@@ -1,12 +1,14 @@
+import { getRouteApi } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { worktreeRoute } from "@/router";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
+const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId");
+
 export function WorktreeDetail() {
-  const { projectId, worktreeId } = worktreeRoute.useParams();
+  const { projectId, worktreeId } = route.useParams();
   const { data: projects = [] } = useProjects();
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 // Shows `true` only when `active` has been continuously on for at least
 // `delayMs`. Used to suppress sub-second indicator flicker on quick
@@ -6,27 +6,18 @@ import { useEffect, useRef, useState } from "react";
 // hook never reports `true`.
 export function useDelayedFlag(active: boolean, delayMs: number): boolean {
   const [visible, setVisible] = useState(false);
-  const timerRef = useRef<number | null>(null);
+
+  // Reset during render (not in an effect) so consumers never commit a
+  // frame where `active` is off but the flag still reads `true`.
+  if (!active && visible) setVisible(false);
 
   useEffect(() => {
-    if (!active) {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      setVisible(false);
-      return;
-    }
-    if (timerRef.current !== null) return;
-    timerRef.current = window.setTimeout(() => {
-      timerRef.current = null;
+    if (!active) return;
+    const timer = window.setTimeout(() => {
       setVisible(true);
     }, delayMs);
     return () => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
+      window.clearTimeout(timer);
     };
   }, [active, delayMs]);
 

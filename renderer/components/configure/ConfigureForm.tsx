@@ -11,7 +11,7 @@ import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
-import { fileManagerName } from "@/components/ui/file-manager";
+import { fileManagerName } from "@/lib/platform";
 import { notifyError } from "@/lib/toast";
 import type {
   CarryOverEntry,
@@ -100,11 +100,10 @@ export function ConfigureForm({
       fromConfig(initialConfig, resolvedDefaultBranch),
       (prevForm, prevSnapshot, next) => {
         const nextPaths = new Set(next.carryOver.map((e) => e.path));
-        const removedRemotely = new Set(
-          prevSnapshot.carryOver
-            .map((e) => e.path)
-            .filter((p) => !nextPaths.has(p)),
-        );
+        const removedRemotely = new Set<string>();
+        for (const entry of prevSnapshot.carryOver) {
+          if (!nextPaths.has(entry.path)) removedRemotely.add(entry.path);
+        }
         return {
           ...prevForm,
           carryOver: prevForm.carryOver.filter(

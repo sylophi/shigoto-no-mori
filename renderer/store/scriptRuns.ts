@@ -297,19 +297,6 @@ class ScriptRunsStore {
     return null;
   }
 
-  // True if any package script for this worktree has run (or is
-  // running). Drives whether the package.json section in the worktree
-  // detail expands by default.
-  hasWorktreePackageActivity(worktreeId: string): boolean {
-    for (const [key, m] of this.meta) {
-      if (m.worktreeId !== worktreeId) continue;
-      if (m.slotKind !== "package") continue;
-      const s = this.states.get(key);
-      if (s && s.status !== "idle") return true;
-    }
-    return false;
-  }
-
   private notify(key: ScriptKey): void {
     const subs = this.perKeySubs.get(key);
     if (!subs) return;
@@ -487,14 +474,6 @@ export function useWorktreeScriptActivity(
     (cb) => scriptRuns.subscribeWorktree(worktreeId, cb),
     () => scriptRuns.getActivityKind(worktreeId),
     () => null,
-  );
-}
-
-export function useWorktreeHasPackageActivity(worktreeId: string): boolean {
-  return useSyncExternalStore(
-    (cb) => scriptRuns.subscribeWorktree(worktreeId, cb),
-    () => scriptRuns.hasWorktreePackageActivity(worktreeId),
-    () => false,
   );
 }
 

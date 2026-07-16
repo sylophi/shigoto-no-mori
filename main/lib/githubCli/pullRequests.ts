@@ -14,7 +14,7 @@ import { ghReadyForRepo } from "./remote";
 
 const GhPrListItemSchema = z.object({
   number: z.number().int().positive(),
-  url: z.string().url(),
+  url: z.url(),
   title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
@@ -135,32 +135,30 @@ function cacheAndReturn(
 }
 
 // Each rollup item is either a CheckRun or a StatusContext. We keep the
-// schema permissive (passthrough + every field optional) because gh
+// schema permissive (loose object + every field optional) because gh
 // occasionally inlines extra typenames and we'd rather degrade
 // gracefully than reject the whole list.
-const StatusCheckRollupItemSchema = z
-  .object({
-    __typename: z.string().optional(),
-    name: z.string().optional(),
-    context: z.string().optional(),
-    status: z.string().optional(),
-    conclusion: z.string().optional(),
-    state: z.string().optional(),
-    detailsUrl: z.string().optional(),
-    targetUrl: z.string().optional(),
-  })
-  .passthrough();
+const StatusCheckRollupItemSchema = z.looseObject({
+  __typename: z.string().optional(),
+  name: z.string().optional(),
+  context: z.string().optional(),
+  status: z.string().optional(),
+  conclusion: z.string().optional(),
+  state: z.string().optional(),
+  detailsUrl: z.string().optional(),
+  targetUrl: z.string().optional(),
+});
 type StatusCheckRollupItem = z.infer<typeof StatusCheckRollupItemSchema>;
 
 const GhPrDetailSchema = z.object({
   number: z.number().int().positive(),
-  url: z.string().url(),
+  url: z.url(),
   title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
   baseRefName: z.string(),
-  author: z.object({ login: z.string().optional() }).passthrough().nullish(),
+  author: z.looseObject({ login: z.string().optional() }).nullish(),
   updatedAt: z.string(),
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
