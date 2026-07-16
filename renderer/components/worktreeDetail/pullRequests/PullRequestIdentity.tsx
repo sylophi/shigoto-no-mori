@@ -81,29 +81,37 @@ export function PullRequestIdentity({
         )}
         {/* inert keeps the natural-width measurer out of the tab order
             and the accessibility tree; pointer-events-none alone leaves
-            the duplicated button focusable. overflow-hidden keeps an
-            overwide measurer from widening the page's scrollable area;
-            scrollWidth still reports the clipped content's full width. */}
+            the duplicated button focusable. The wrapper is pinned to the
+            row's width and clips: a left-0 absolute nowrap box
+            shrink-wraps to its full content width, so unclipped it widens
+            the scroll pane's scrollable area (horizontal scrollbar). The
+            observed inner div stays w-max so content-width changes (font
+            swap, doubutsu weight remap) resize it and re-trigger
+            measurement; its scrollWidth reports the full natural width. */}
         <div
-          ref={measurerRef}
           aria-hidden
           inert
-          className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-x-3 overflow-hidden whitespace-nowrap"
+          className="pointer-events-none invisible absolute inset-x-0 top-0 overflow-hidden"
         >
-          <MetaSentence
-            authorLogin={pr.authorLogin}
-            baseRefName={pr.baseRefName}
-            updatedTitle={updatedTitle}
-            trailing={updatedLabel}
-          />
-          {pr.changedFiles > 0 && (
-            <DiffButton
-              changedFiles={pr.changedFiles}
-              additions={pr.additions}
-              deletions={pr.deletions}
-              onClick={openDiff}
+          <div
+            ref={measurerRef}
+            className="flex w-max items-center gap-x-3 whitespace-nowrap"
+          >
+            <MetaSentence
+              authorLogin={pr.authorLogin}
+              baseRefName={pr.baseRefName}
+              updatedTitle={updatedTitle}
+              trailing={updatedLabel}
             />
-          )}
+            {pr.changedFiles > 0 && (
+              <DiffButton
+                changedFiles={pr.changedFiles}
+                additions={pr.additions}
+                deletions={pr.deletions}
+                onClick={openDiff}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>
