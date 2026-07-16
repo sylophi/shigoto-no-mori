@@ -8,6 +8,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import { Toaster } from "sonner";
+import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
 import { platform } from "./lib/platform";
 import { queryKeys } from "./lib/queryKeys";
@@ -72,13 +73,12 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       refetchOnMount: "always",
       staleTime: 0,
-      // "Unknown project/worktree" means the entity was deleted out
-      // from under an in-flight query (worktree delete, project
-      // removal, nuke). That failure is deterministic; retrying only
-      // delays the toast until well after the UI has moved on. Keep
-      // the default three retries for everything else.
+      // An entity-gone failure (project/worktree deleted out from under
+      // an in-flight query) is deterministic; retrying only delays the
+      // toast until well after the UI has moved on. Keep the default
+      // three retries for everything else.
       retry: (failureCount, error) =>
-        failureCount < 3 && !/Unknown (project|worktree)/.test(String(error)),
+        failureCount < 3 && !isEntityGoneError(error),
     },
   },
   queryCache: new QueryCache({

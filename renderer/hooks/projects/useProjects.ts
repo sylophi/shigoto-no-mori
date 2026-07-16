@@ -43,6 +43,15 @@ export function useRemoveProject() {
   const router = useRouter();
   return useMutation<void, Error, string>({
     mutationFn: (id) => window.api.projects.remove(id),
+    onMutate: async (id) => {
+      // Cancel this project's in-flight fetches before main starts the
+      // removal (mirrors the nuke path): left to settle, one would
+      // reject with "Unknown project" during the awaits below and
+      // toast, while cancellation is swallowed silently.
+      await queryClient.cancelQueries({
+        predicate: (query) => query.queryKey.includes(id),
+      });
+    },
     onSuccess: async (_data, id) => {
       // Leave any route under the removed project before touching the
       // cache: its mounted queries (config, branches, diff, worktree

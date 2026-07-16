@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
   UNKNOWN_BRANCH,
@@ -356,7 +357,7 @@ export async function findWorktreeIdentityOrThrow(
 ): Promise<WorktreeIdentity> {
   const identities = await listWorktreeIdentities(projectId, projectPath);
   const identity = identities.find((w) => w.id === worktreeId);
-  if (!identity) throw new Error(`Unknown worktree: ${worktreeId}`);
+  if (!identity) throw unknownWorktreeError(worktreeId);
   return identity;
 }
 

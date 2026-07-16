@@ -1,5 +1,6 @@
 // Shared helpers for reading projects from the store.
 import { existsSync } from "node:fs";
+import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
 import { readKey } from "../config/store";
 import { usageFor } from "./usage";
@@ -28,6 +29,6 @@ export function listProjectsWithStatus(): Project[] {
 
 export function findProjectOrThrow(projectId: string): Project {
   const project = loadProjects().find((p) => p.id === projectId);
-  if (!project) throw new Error(`Unknown project: ${projectId}`);
+  if (!project) throw unknownProjectError(projectId);
   return project;
 }

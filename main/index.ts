@@ -1,7 +1,7 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
 import { windowContract } from "@shared/ipc/modules/window";
-import { ensureShigomoriRoot } from "./electron/bootstrap";
+import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
 import {
   refreshAllProjectGitRefs,

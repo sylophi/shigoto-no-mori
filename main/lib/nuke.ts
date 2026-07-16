@@ -5,6 +5,7 @@
 // The original project repos on disk are untouched -- we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
+import { ensureShigomoriRoot } from "./bootstrap";
 import { invalidateGlobalConfigCache, readGlobalConfig } from "./config/global";
 import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
 import {
@@ -44,9 +45,8 @@ export async function nukeEverything(): Promise<void> {
   // holding their ports, exactly what the per-worktree delete path
   // guards against via killScriptsForWorktree.
   await killAllScripts();
-  // Kick off the config read in parallel with the per-project worktree work.
-  // deleteBranches is only needed inside the inner branch-cleanup step, so we
-  // don't have to block the outer fan-out on it.
+  // Kick off the config read in parallel with the identity listing
+  // below; awaited once before the removal fan-out needs it.
   const deleteBranchesPromise = readGlobalConfig()
     .then((c) => c.deleteBranchOnRemove ?? true)
     .catch(() => true);
@@ -83,10 +83,10 @@ export async function nukeEverything(): Promise<void> {
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
   for (const id of marked) markDeleteInflight(id);
   try {
+    const deleteBranches = await deleteBranchesPromise;
     // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
     await Promise.all(
       perProject.map(async ({ project, targets }) => {
-        const deleteBranches = await deleteBranchesPromise;
         await Promise.all(
           targets.map(async (i) => {
             await removeWorktreeForce(project.path, i.path).catch(
@@ -108,6 +108,10 @@ export async function nukeEverything(): Promise<void> {
   // config.json is gone but the TTL cache would keep serving the old
   // preferences; drop it so post-nuke reads see a clean slate.
   invalidateGlobalConfigCache();
+  // Reseed an empty root right away (launch-time bootstrap won't run
+  // again this session): renderer refetches read a fresh valid layout,
+  // and a stray state write can't resurrect a half-empty root.
+  await ensureShigomoriRoot();
   // The root rm wipes any managed-root worktree dirs whose
   // `git worktree remove` failed silently above, leaving stale admin
   // entries behind. Sweep them per project now that the dirs are gone.
