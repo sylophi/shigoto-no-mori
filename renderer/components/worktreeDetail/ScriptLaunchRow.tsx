@@ -97,12 +97,14 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
 
       {/* inert keeps the natural-width copy out of the tab order and the
           accessibility tree; pointer-events-none alone leaves the duplicated
-          buttons focusable. */}
+          buttons focusable. overflow-hidden keeps the pills that don't fit
+          from widening the page's scrollable area (they'd otherwise force a
+          horizontal scrollbar); measured widths are unaffected. */}
       <div
         ref={measurerRef}
         aria-hidden
         inert
-        className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-2 whitespace-nowrap"
+        className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-2 overflow-hidden whitespace-nowrap"
       >
         {candidates.map((entry) => (
           <ScriptPill key={entry.name} name={entry.name} busy={false} />

@@ -81,12 +81,14 @@ export function PullRequestIdentity({
         )}
         {/* inert keeps the natural-width measurer out of the tab order
             and the accessibility tree; pointer-events-none alone leaves
-            the duplicated button focusable. */}
+            the duplicated button focusable. overflow-hidden keeps an
+            overwide measurer from widening the page's scrollable area;
+            scrollWidth still reports the clipped content's full width. */}
         <div
           ref={measurerRef}
           aria-hidden
           inert
-          className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-x-3 whitespace-nowrap"
+          className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-x-3 overflow-hidden whitespace-nowrap"
         >
           <MetaSentence
             authorLogin={pr.authorLogin}
