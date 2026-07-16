@@ -10,6 +10,7 @@ import {
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
   SetProjectSortPayloadSchema,
+  ToggleCollapsedProjectPayloadSchema,
   WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
 
@@ -20,6 +21,13 @@ export const projectsContract = {
   reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void()),
   getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema),
   setSort: invoke("projects:setSort", SetProjectSortPayloadSchema, z.void()),
+  getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string())),
+  // Returns the post-toggle list so the renderer can sync to disk truth.
+  toggleCollapsed: invoke(
+    "projects:toggleCollapsed",
+    ToggleCollapsedProjectPayloadSchema,
+    z.array(z.string()),
+  ),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.
   usageBumped: broadcast(

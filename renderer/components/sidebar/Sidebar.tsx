@@ -13,6 +13,10 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import {
+  useCollapsedProjects,
+  useToggleCollapsedProject,
+} from "@/hooks/projects/useCollapsedProjects";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -30,8 +34,12 @@ export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
   const { data: sortMode = "manual" } = useProjectSort();
   const reorderProjects = useReorderProjects();
-  // Absence == expanded, so new projects default open.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
+  // Absence == expanded, so new projects default open. Persisted in
+  // state.json (like the sort preference) so a relaunch keeps the tree
+  // the way the user pruned it; the remove handler prunes deleted ids.
+  const { data: collapsedIds = [] } = useCollapsedProjects();
+  const toggleCollapsed = useToggleCollapsedProject();
+  const collapsed = new Set(collapsedIds);
   // Per-project "Show shelved" reveal. Transient on purpose -- the
   // whole point of shelving is to keep the noise down on a fresh window.
   const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
@@ -45,12 +53,7 @@ export function Sidebar() {
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
 
   const toggleExpanded = (projectId: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
+    toggleCollapsed.mutate(projectId);
   };
 
   const toggleShelved = (projectId: string) => {

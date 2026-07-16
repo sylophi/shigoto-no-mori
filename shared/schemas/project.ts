@@ -51,6 +51,14 @@ export const SetProjectSortPayloadSchema = z.object({
   mode: ProjectSortModeSchema,
 });
 
+// Sidebar collapse state: toggles one project id in the persisted
+// collapsed set. A toggle (rather than a whole-list write) keeps the
+// read-modify-write in the main process, so a stale renderer cache
+// can't clobber collapse state it didn't know about.
+export const ToggleCollapsedProjectPayloadSchema = z.object({
+  projectId: z.string().min(1),
+});
+
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),
 });
