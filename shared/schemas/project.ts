@@ -51,6 +51,13 @@ export const SetProjectSortPayloadSchema = z.object({
   mode: ProjectSortModeSchema,
 });
 
+// Sidebar collapse state: ids of projects the user has folded shut.
+// Absence == expanded, so new projects default open and ids of removed
+// projects are harmless leftovers.
+export const SetCollapsedProjectsPayloadSchema = z.object({
+  ids: z.array(z.string()),
+});
+
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),
 });

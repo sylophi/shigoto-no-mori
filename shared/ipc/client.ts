@@ -139,6 +139,8 @@ export const projects = {
   }) => projectsClient.reorder(input),
   getSort: projectsClient.getSort,
   setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
+  getCollapsed: projectsClient.getCollapsed,
+  setCollapsed: (ids: string[]) => projectsClient.setCollapsed({ ids }),
   onUsageBumped: projectsClient.usageBumped,
   defaultBranch: (projectId: string) =>
     projectsClient.defaultBranch({ projectId }),

@@ -8,6 +8,7 @@ export const queryKeys = {
 
   projects: () => ["projects"] as const,
   projectsSort: () => ["projectsSort"] as const,
+  projectsCollapsed: () => ["projectsCollapsed"] as const,
   projectIcon: (projectId: string) => ["projectIcon", projectId] as const,
 
   shigomoriConfig: (projectId: string | null) =>
