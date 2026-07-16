@@ -97,16 +97,26 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
 
       {/* inert keeps the natural-width copy out of the tab order and the
           accessibility tree; pointer-events-none alone leaves the duplicated
-          buttons focusable. */}
+          buttons focusable. The wrapper is pinned to the row's width and
+          clips: a left-0 absolute nowrap box shrink-wraps to its full
+          content width, so unclipped it widens the scroll pane's scrollable
+          area (horizontal scrollbar). The observed inner div stays w-max so
+          pill-width changes (font swap, doubutsu weight remap) resize it
+          and re-trigger measurement even while it overflows the wrapper;
+          clipping doesn't affect the children's measured rects. */}
       <div
-        ref={measurerRef}
         aria-hidden
         inert
-        className="pointer-events-none invisible absolute top-0 left-0 flex items-center gap-2 whitespace-nowrap"
+        className="pointer-events-none invisible absolute inset-x-0 top-0 overflow-hidden"
       >
-        {candidates.map((entry) => (
-          <ScriptPill key={entry.name} name={entry.name} busy={false} />
-        ))}
+        <div
+          ref={measurerRef}
+          className="flex w-max items-center gap-2 whitespace-nowrap"
+        >
+          {candidates.map((entry) => (
+            <ScriptPill key={entry.name} name={entry.name} busy={false} />
+          ))}
+        </div>
       </div>
     </div>
   );
