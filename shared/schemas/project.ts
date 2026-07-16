@@ -51,11 +51,12 @@ export const SetProjectSortPayloadSchema = z.object({
   mode: ProjectSortModeSchema,
 });
 
-// Sidebar collapse state: ids of projects the user has folded shut.
-// Absence == expanded, so new projects default open and ids of removed
-// projects are harmless leftovers.
-export const SetCollapsedProjectsPayloadSchema = z.object({
-  ids: z.array(z.string()),
+// Sidebar collapse state: toggles one project id in the persisted
+// collapsed set. A toggle (rather than a whole-list write) keeps the
+// read-modify-write in the main process, so a stale renderer cache
+// can't clobber collapse state it didn't know about.
+export const ToggleCollapsedProjectPayloadSchema = z.object({
+  projectId: z.string().min(1),
 });
 
 export const RemoveProjectPayloadSchema = z.object({

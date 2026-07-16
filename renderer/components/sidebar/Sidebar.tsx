@@ -15,7 +15,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useCollapsedProjects,
-  useSetCollapsedProjects,
+  useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
@@ -36,10 +36,9 @@ export function Sidebar() {
   const reorderProjects = useReorderProjects();
   // Absence == expanded, so new projects default open. Persisted in
   // state.json (like the sort preference) so a relaunch keeps the tree
-  // the way the user pruned it; ids of removed projects linger in the
-  // stored list but never match, which is harmless.
+  // the way the user pruned it; the remove handler prunes deleted ids.
   const { data: collapsedIds = [] } = useCollapsedProjects();
-  const setCollapsedProjects = useSetCollapsedProjects();
+  const toggleCollapsed = useToggleCollapsedProject();
   const collapsed = new Set(collapsedIds);
   // Per-project "Show shelved" reveal. Transient on purpose -- the
   // whole point of shelving is to keep the noise down on a fresh window.
@@ -54,10 +53,7 @@ export function Sidebar() {
   const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
 
   const toggleExpanded = (projectId: string) => {
-    const next = new Set(collapsed);
-    if (next.has(projectId)) next.delete(projectId);
-    else next.add(projectId);
-    setCollapsedProjects.mutate([...next]);
+    toggleCollapsed.mutate(projectId);
   };
 
   const toggleShelved = (projectId: string) => {

@@ -25,11 +25,11 @@ import {
 } from "../../lib/projects";
 import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
 import {
+  dropCollapsedProject,
   readCollapsedProjects,
-  readProjectSort,
-  writeCollapsedProjects,
-  writeProjectSort,
-} from "../../lib/projects/usage";
+  toggleCollapsedProject,
+} from "../../lib/projects/collapsed";
+import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
@@ -92,6 +92,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     if (removed) {
       await forgetProjectIcon(removed.path);
       await deleteProjectState(id);
+      dropCollapsedProject(id);
     }
   },
 
@@ -106,7 +107,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
   getCollapsed: () => readCollapsedProjects(),
 
-  setCollapsed: ({ ids }) => writeCollapsedProjects(ids),
+  toggleCollapsed: ({ projectId }) => toggleCollapsedProject(projectId),
 
   defaultBranch: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);

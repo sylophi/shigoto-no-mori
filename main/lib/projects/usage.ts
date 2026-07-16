@@ -1,8 +1,7 @@
-// Per-project action usage log and the sidebar's per-user view state
-// (sort preference, collapsed set). Usage uses the same rolling-window
-// algorithm as the launcher row and package.json scripts list (see
-// ../util/useLog) so the "most used" sort behaves identically across the
-// app. Stored in the global state.json — all of this is app-managed UI
+// Per-project action usage log and the sidebar sort preference. Same
+// rolling-window algorithm as the launcher row and package.json scripts list
+// (see ../util/useLog) so the "most used" sort behaves identically across the
+// app. Stored in the global state.json — sort and usage are app-managed UI
 // state, not the user-editable per-project shigomori config.
 import type { ProjectSortMode } from "@shared/schemas";
 import { readKey, writeKey } from "../config/store";
@@ -10,7 +9,6 @@ import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "projectUseLog";
 const SORT_KEY = "projectsSort";
-const COLLAPSED_KEY = "projectsCollapsed";
 
 type UseLog = Record<string, number[]>;
 
@@ -30,14 +28,6 @@ export function readProjectSort(): ProjectSortMode {
 
 export function writeProjectSort(mode: ProjectSortMode): void {
   writeKey<ProjectSortMode>(SORT_KEY, mode);
-}
-
-export function readCollapsedProjects(): string[] {
-  return readKey<string[]>(COLLAPSED_KEY, []);
-}
-
-export function writeCollapsedProjects(ids: string[]): void {
-  writeKey<string[]>(COLLAPSED_KEY, ids);
 }
 
 export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {

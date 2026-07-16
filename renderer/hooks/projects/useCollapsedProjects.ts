@@ -1,6 +1,9 @@
-// Sidebar collapse state, persisted in the global state.json alongside
-// the sort preference. The mutation is optimistic so toggling feels
-// instant; the write itself is fire-and-forget.
+// Sidebar collapse state, persisted in the global state.json. The
+// mutation sends a per-id toggle (not a whole-list write): the main
+// process composes each toggle against disk, so rapid toggles and
+// toggles fired before the initial query resolves can't lose or wipe
+// state. The optimistic update mirrors the toggle functionally, then
+// onSuccess syncs the cache to the list that actually landed on disk.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -13,28 +16,31 @@ export function useCollapsedProjects() {
   });
 }
 
-interface CollapsedMutationContext {
-  previous?: string[];
-}
-
-export function useSetCollapsedProjects() {
+export function useToggleCollapsedProject() {
   const queryClient = useQueryClient();
-  return useMutation<void, Error, string[], CollapsedMutationContext>({
-    mutationFn: (ids) => window.api.projects.setCollapsed(ids),
-    onMutate: async (ids) => {
+  return useMutation<string[], Error, string>({
+    mutationFn: (projectId) => window.api.projects.toggleCollapsed(projectId),
+    onMutate: async (projectId) => {
       await queryClient.cancelQueries({
         queryKey: queryKeys.projectsCollapsed(),
       });
-      const previous = queryClient.getQueryData<string[]>(
+      queryClient.setQueryData<string[]>(
         queryKeys.projectsCollapsed(),
+        (old = []) =>
+          old.includes(projectId)
+            ? old.filter((id) => id !== projectId)
+            : [...old, projectId],
       );
-      queryClient.setQueryData(queryKeys.projectsCollapsed(), ids);
-      return { previous };
     },
-    onError: (_err, _ids, ctx) => {
-      if (ctx?.previous !== undefined) {
-        queryClient.setQueryData(queryKeys.projectsCollapsed(), ctx.previous);
-      }
+    onSuccess: (list) => {
+      queryClient.setQueryData(queryKeys.projectsCollapsed(), list);
+    },
+    // Refetch instead of snapshot-rollback: a snapshot taken before an
+    // overlapping toggle would clobber it; disk is the source of truth.
+    onError: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.projectsCollapsed(),
+      });
     },
     meta: { errorTitle: "Couldn't save collapsed projects" },
   });
