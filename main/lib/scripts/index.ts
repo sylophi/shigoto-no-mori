@@ -72,7 +72,12 @@ interface RunRecord {
 
 const runningScripts = new Map<string, RunRecord>();
 const exitObservers = new Map<string, (code: number | null) => void>();
-const inflightDeleteIds = new Set<string>();
+// Ref-counted: overlapping deleters can mark the same worktree (a
+// per-worktree delete racing a nuke that lists it too), and the guard
+// must hold until the LAST one finishes -- with a plain Set, whichever
+// finally ran first would drop the other's still-needed mark.
+const inflightDeleteCounts = new Map<string, number>();
+const inflightProjectDeleteIds = new Set<string>();
 let shuttingDown = false;
 
 // Resolves the lifecycle observer registered by startScriptForLifecycle,
@@ -87,15 +92,33 @@ function resolveExitObserver(runId: string, code: number | null): void {
 }
 
 export function markDeleteInflight(worktreeId: string): void {
-  inflightDeleteIds.add(worktreeId);
+  inflightDeleteCounts.set(
+    worktreeId,
+    (inflightDeleteCounts.get(worktreeId) ?? 0) + 1,
+  );
 }
 
 export function clearDeleteInflight(worktreeId: string): void {
-  inflightDeleteIds.delete(worktreeId);
+  const count = inflightDeleteCounts.get(worktreeId);
+  if (count === undefined) return;
+  if (count <= 1) inflightDeleteCounts.delete(worktreeId);
+  else inflightDeleteCounts.set(worktreeId, count - 1);
 }
 
 export function getInflightDeleteIds(): ReadonlySet<string> {
-  return inflightDeleteIds;
+  return new Set(inflightDeleteCounts.keys());
+}
+
+// Project-level counterpart for projects.remove, which doesn't know its
+// worktree ids without a git call: blocks new renderer script runs
+// anywhere in the project while its scripts are being reaped and the
+// registry entry is dropped.
+export function markProjectDeleteInflight(projectId: string): void {
+  inflightProjectDeleteIds.add(projectId);
+}
+
+export function clearProjectDeleteInflight(projectId: string): void {
+  inflightProjectDeleteIds.delete(projectId);
 }
 
 export interface BusyOperations {
@@ -109,7 +132,7 @@ export interface BusyOperations {
 export function getBusyOperations(): BusyOperations {
   return {
     runningScripts: runningScripts.size,
-    inflightDeletes: inflightDeleteIds.size,
+    inflightDeletes: inflightDeleteCounts.size + inflightProjectDeleteIds.size,
   };
 }
 
@@ -203,8 +226,13 @@ export function startScript(args: RunArgs): string {
   // so a spawn slipping in after that leaves a live dev server whose cwd
   // is being rm'd. Lifecycle runs (args.started set) are exempt -- the
   // delete's own teardown executes while the id is flagged.
-  if (args.started === undefined && inflightDeleteIds.has(args.worktree.id)) {
-    throw new Error("This worktree is being deleted.");
+  if (args.started === undefined) {
+    if (inflightDeleteCounts.has(args.worktree.id)) {
+      throw new Error("This worktree is being deleted.");
+    }
+    if (inflightProjectDeleteIds.has(args.project.id)) {
+      throw new Error("This project is being removed.");
+    }
   }
 
   const runId = randomUUID();
@@ -365,25 +393,38 @@ export async function cancelScript(
   return true;
 }
 
+async function killMatching(
+  predicate: (record: RunRecord) => boolean,
+  reason: string,
+  opts: KillOptions,
+): Promise<void> {
+  const targets = Array.from(runningScripts.values()).filter(
+    (r) => !r.exited && predicate(r),
+  );
+  if (targets.length === 0) return;
+  await Promise.all(targets.map((r) => killRecord(r, { reason, ...opts })));
+}
+
 export async function killScriptsForWorktree(
   worktreeId: string,
   opts: KillOptions = {},
 ): Promise<void> {
-  const targets = Array.from(runningScripts.values()).filter(
-    (r) => r.worktreeId === worktreeId && !r.exited,
-  );
-  if (targets.length === 0) return;
-  await Promise.all(
-    targets.map((r) => killRecord(r, { reason: "Worktree removed", ...opts })),
+  await killMatching(
+    (r) => r.worktreeId === worktreeId,
+    "Worktree removed",
+    opts,
   );
 }
 
+export async function killScriptsForProject(
+  projectId: string,
+  opts: KillOptions = {},
+): Promise<void> {
+  await killMatching((r) => r.projectId === projectId, "Project removed", opts);
+}
+
 export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
-  const targets = Array.from(runningScripts.values()).filter((r) => !r.exited);
-  if (targets.length === 0) return;
-  await Promise.all(
-    targets.map((r) => killRecord(r, { reason: "App quit", ...opts })),
-  );
+  await killMatching(() => true, "App quit", opts);
 }
 
 // Synchronous best-effort kill for every running script's tree. Used

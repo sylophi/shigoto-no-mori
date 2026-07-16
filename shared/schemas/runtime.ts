@@ -7,6 +7,20 @@ export const RuntimeInfoSchema = z.object({
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
+// Progress broadcast while `runtime:nuke` runs, driving the renderer's
+// blocking overlay: reap scripts → remove worktrees (with a counter) →
+// wipe the root.
+export const NukeProgressSchema = z.discriminatedUnion("phase", [
+  z.object({ phase: z.literal("scripts") }),
+  z.object({
+    phase: z.literal("worktrees"),
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+  }),
+  z.object({ phase: z.literal("wipe") }),
+]);
+export type NukeProgress = z.infer<typeof NukeProgressSchema>;
+
 // In-app updater state. `downloading` covers both "found an update" and
 // "still pulling bytes" -- macOS's autoUpdater doesn't expose progress,
 // so we collapse them. `ready` carries the version we'll restart into.

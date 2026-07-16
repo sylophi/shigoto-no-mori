@@ -93,6 +93,15 @@ export function useDeleteWorktree() {
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: DELETE_WORKTREE_MUTATION_KEY,
     mutationFn: (input) => window.api.worktrees.delete(input),
+    onMutate: async (vars) => {
+      // Cancel this worktree's in-flight fetches (a focus-triggered
+      // diff/data refetch) before main starts removing it: left to
+      // settle, they'd reject with "Unknown worktree" and toast, while
+      // cancellation is swallowed silently.
+      await queryClient.cancelQueries({
+        predicate: (query) => query.queryKey.includes(vars.worktreeId),
+      });
+    },
     onSuccess: (data, vars) => {
       // Only invalidate + clear runs when the worktree was actually
       // removed. Cleanup failures keep the worktree around for retry.
@@ -110,6 +119,15 @@ export function useDeleteWorktree() {
           queryKey: queryKeys.worktrees(vars.projectId),
         });
         scriptRuns.clearForWorktree(vars.worktreeId);
+        // Same treatment as project removal: drop the deleted
+        // worktree's no-longer-observed queries (worktree data, diff,
+        // commits, ...) so nothing can refetch or replay them. Active
+        // ones (the detail route unmounts only after the post-delete
+        // navigation) are left to go inactive and gc naturally.
+        queryClient.removeQueries({
+          type: "inactive",
+          predicate: (query) => query.queryKey.includes(vars.worktreeId),
+        });
       }
     },
     // The detail page swaps into a force-delete prompt on failure -- a

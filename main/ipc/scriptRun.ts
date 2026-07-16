@@ -3,6 +3,7 @@
 // project-level context resolved before startScript, and the same
 // destroyed-sender-guarded notifier; only command resolution differs.
 import type { WebContents } from "electron";
+import { unknownWorktreeError } from "@shared/errors";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
 import { readShigomoriConfig } from "../lib/config/project";
@@ -39,7 +40,7 @@ export async function prepareScriptRun(
       .catch(() => ""),
   ]);
   const worktree = identities.find((i) => i.id === worktreeId);
-  if (!worktree) throw new Error(`Unknown worktree: ${worktreeId}`);
+  if (!worktree) throw unknownWorktreeError(worktreeId);
   return {
     config,
     worktree,

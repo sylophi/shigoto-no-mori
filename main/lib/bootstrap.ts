@@ -1,10 +1,11 @@
-// Initialize ~/shigomori[-dev]/ on launch so the directory is browsable
-// before the user has done anything. Idempotent: re-runs after `nuke` or
-// when the user has deleted the folder by hand.
+// Initialize ~/shigomori[-dev]/ so the directory is browsable before the
+// user has done anything. Idempotent: runs at launch, again at the tail
+// of `nuke` (which just deleted it), and repairs a folder the user has
+// deleted by hand.
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { migrateProjectConfigsToDirLayout } from "../lib/projects/stateMigration";
-import { shigomoriRoot } from "../lib/util/paths";
+import { migrateProjectConfigsToDirLayout } from "./projects/stateMigration";
+import { shigomoriRoot } from "./util/paths";
 
 const EMPTY_JSON = "{}\n";
 

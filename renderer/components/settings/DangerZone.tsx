@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Flame } from "lucide-react";
+import { Flame, Loader2 } from "lucide-react";
+import type { NukeProgress } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
@@ -20,6 +21,9 @@ export function DangerZone() {
   const { data: runtime } = useRuntimeInfo();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   const [nuking, setNuking] = useState(false);
+  const [progress, setProgress] = useState<NukeProgress | null>(null);
+
+  useEffect(() => window.api.runtime.onNukeProgress(setProgress), []);
 
   const home = runtime?.homedir ?? null;
   const root = runtime?.shigomoriRoot
@@ -29,6 +33,7 @@ export function DangerZone() {
   const handleNuke = () => {
     trigger(async () => {
       setNuking(true);
+      setProgress(null);
       try {
         await window.api.runtime.nuke();
         try {
@@ -37,8 +42,17 @@ export function DangerZone() {
         } catch {
           // localStorage may be unavailable; not fatal.
         }
-        await queryClient.invalidateQueries();
-        void navigate({ to: "/" });
+        // Every cached query now describes deleted state. A blanket
+        // invalidateQueries() would refetch them all against the wiped
+        // root and raise a burst of "Unknown project/worktree" toasts,
+        // with retries landing even after the navigation below. Cancel
+        // in-flight fetches and drop the cache BEFORE navigating: the
+        // "/" route redirects to the first worktree it finds in cache
+        // (EmptyState's resolver), so navigating while pre-nuke data is
+        // still cached bounces straight back to a dead worktree view.
+        await queryClient.cancelQueries();
+        queryClient.clear();
+        await navigate({ to: "/" });
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);
       }
@@ -50,6 +64,7 @@ export function DangerZone() {
 
   return (
     <section className="space-y-3">
+      {nuking && <NukeOverlay progress={progress} />}
       <SectionHeading className="mb-1">Danger zone</SectionHeading>
       <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
         <div className="space-y-1">
@@ -84,4 +99,33 @@ export function DangerZone() {
       </div>
     </section>
   );
+}
+
+// Blocking overlay while the nuke IPC runs: force-removing worktrees and
+// reaping scripts takes seconds, and letting the user keep clicking
+// around (starting scripts, deleting worktrees) mid-wipe invites the
+// races the delete-inflight guards exist to catch.
+function NukeOverlay({ progress }: { progress: NukeProgress | null }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm">
+      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+      <p className="text-sm text-muted-foreground">
+        {describeNukeProgress(progress)}
+      </p>
+    </div>
+  );
+}
+
+function describeNukeProgress(progress: NukeProgress | null): string {
+  if (!progress) return "Preparing…";
+  switch (progress.phase) {
+    case "scripts":
+      return "Stopping running scripts…";
+    case "worktrees":
+      return progress.total > 0
+        ? `Removing worktrees (${progress.done}/${progress.total})…`
+        : "Removing worktrees…";
+    case "wipe":
+      return "Wiping shigomori data…";
+  }
 }
