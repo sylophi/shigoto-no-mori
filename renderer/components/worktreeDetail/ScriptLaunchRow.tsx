@@ -1,10 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePackageScriptSort } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { modKey, shortcutLabel } from "@/lib/platform";
+import { slotToParam } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { sortEntries } from "./scripts/sortPackageScripts";
 
@@ -137,20 +140,38 @@ function ScriptLaunchButton({
   name: string;
   command: string;
 }) {
+  const navigate = useNavigate();
   const { state, busy, start, stop } = useScriptRunner(worktree, {
     kind: "package",
     name,
   });
   const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
 
+  // Cmd/Ctrl-click detours to the script's console instead of toggling the
+  // run -- the modifier the tooltip advertises.
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.metaKey || e.ctrlKey) {
+      void navigate({
+        to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
+        params: {
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          scriptKey: slotToParam({ kind: "package", name }),
+        },
+      });
+      return;
+    }
+    (busy ? stop : start)();
+  };
+
   return (
     <ScriptPill
       name={name}
       busy={busy}
       disabled={state.cancelling}
-      onClick={busy ? stop : start}
+      onClick={handleClick}
       aria-label={actionLabel}
-      title={`${actionLabel}\n${command}`}
+      title={`${actionLabel}\n${command}\n${shortcutLabel(modKey, "click")} to view output`}
     />
   );
 }
