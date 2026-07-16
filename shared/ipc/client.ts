@@ -161,6 +161,7 @@ export const runtime = {
   setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
   setDoubutsu: (enabled: boolean) => runtimeClient.setDoubutsu({ enabled }),
   nuke: runtimeClient.nuke,
+  onNukeProgress: runtimeClient.nukeProgress,
 } as const;
 
 export const scripts = {

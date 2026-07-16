@@ -4,6 +4,7 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { setDoubutsu } from "../../electron/appearance";
 import { nukeEverything } from "../../lib/nuke";
+import { broadcastAll } from "../register";
 import { shigomoriRoot } from "../../lib/util/paths";
 
 export const runtimeHandlers: Handlers<typeof runtimeContract> = {
@@ -27,5 +28,8 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
     setDoubutsu(enabled);
   },
 
-  nuke: () => nukeEverything(),
+  nuke: () =>
+    nukeEverything((progress) =>
+      broadcastAll(runtimeContract, "nukeProgress", progress),
+    ),
 };

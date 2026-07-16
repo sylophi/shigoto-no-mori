@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { broadcast, invoke } from "@shared/ipc/contract";
 import {
+  NukeProgressSchema,
   RuntimeInfoSchema,
   SetDoubutsuPayloadSchema,
   SetThemePayloadSchema,
@@ -15,6 +16,7 @@ export const runtimeContract = {
     z.void(),
   ),
   nuke: invoke("runtime:nuke", z.void(), z.void()),
+  nukeProgress: broadcast("runtime:nukeProgress", NukeProgressSchema),
 } as const;
 
 export type RuntimeContract = typeof runtimeContract;

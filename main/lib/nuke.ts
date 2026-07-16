@@ -5,6 +5,7 @@
 // The original project repos on disk are untouched -- we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
+import type { NukeProgress } from "@shared/schemas";
 import { ensureShigomoriRoot } from "./bootstrap";
 import { invalidateGlobalConfigCache, readGlobalConfig } from "./config/global";
 import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
@@ -21,7 +22,9 @@ import {
 } from "./scripts";
 import { comparablePath, shigomoriRoot, toAbsolute } from "./util/paths";
 
-export async function nukeEverything(): Promise<void> {
+export async function nukeEverything(
+  onProgress: (progress: NukeProgress) => void = () => {},
+): Promise<void> {
   const projects = loadProjects();
   // The final step rm -rf's the shigomori root. A project repo the user
   // keeps INSIDE that root (nothing stops projects.add from accepting
@@ -44,6 +47,7 @@ export async function nukeEverything(): Promise<void> {
   // this would orphan them with deleted working directories, still
   // holding their ports, exactly what the per-worktree delete path
   // guards against via killScriptsForWorktree.
+  onProgress({ phase: "scripts" });
   await killAllScripts();
   // Kick off the config read in parallel with the identity listing
   // below; awaited once before the removal fan-out needs it.
@@ -84,6 +88,8 @@ export async function nukeEverything(): Promise<void> {
   for (const id of marked) markDeleteInflight(id);
   try {
     const deleteBranches = await deleteBranchesPromise;
+    let removed = 0;
+    onProgress({ phase: "worktrees", done: 0, total: marked.length });
     // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
     await Promise.all(
       perProject.map(async ({ project, targets }) => {
@@ -97,10 +103,17 @@ export async function nukeEverything(): Promise<void> {
               i,
               deleteBranches,
             );
+            removed += 1;
+            onProgress({
+              phase: "worktrees",
+              done: removed,
+              total: marked.length,
+            });
           }),
         );
       }),
     );
+    onProgress({ phase: "wipe" });
     await rm(shigomoriRoot(), { recursive: true, force: true });
   } finally {
     for (const id of marked) clearDeleteInflight(id);
