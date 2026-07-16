@@ -31,6 +31,7 @@ import {
 } from "../../lib/projects/collapsed";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
+import { killScriptsForProject } from "../../lib/scripts";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
 
@@ -85,6 +86,13 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   remove: async ({ id }) => {
     const projects = loadProjects();
     const removed = projects.find((p) => p.id === id);
+    // Reap scripts running in this project's worktrees before dropping
+    // the registry entry: once the id is gone the renderer has no UI
+    // left to stop them, and the per-worktree delete path (which would
+    // normally kill them) can't be reached for an unknown project.
+    if (removed) {
+      await killScriptsForProject(id);
+    }
     saveProjects(projects.filter((p) => p.id !== id));
     // Drop the icon-cache entry and on-disk state so neither leaks across
     // re-adds of the same path. State deletion is a recursive rm keyed

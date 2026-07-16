@@ -72,6 +72,13 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       refetchOnMount: "always",
       staleTime: 0,
+      // "Unknown project/worktree" means the entity was deleted out
+      // from under an in-flight query (worktree delete, project
+      // removal, nuke). That failure is deterministic; retrying only
+      // delays the toast until well after the UI has moved on. Keep
+      // the default three retries for everything else.
+      retry: (failureCount, error) =>
+        failureCount < 3 && !/Unknown (project|worktree)/.test(String(error)),
     },
   },
   queryCache: new QueryCache({

@@ -5,7 +5,7 @@
 // The original project repos on disk are untouched -- we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
-import { readGlobalConfig } from "./config/global";
+import { invalidateGlobalConfigCache, readGlobalConfig } from "./config/global";
 import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
 import {
   listWorktreeIdentities,
@@ -51,29 +51,44 @@ export async function nukeEverything(): Promise<void> {
     .then((c) => c.deleteBranchOnRemove ?? true)
     .catch(() => true);
 
-  // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
-  await Promise.all(
+  // List every project's worktrees up front so all targets can be
+  // marked delete-inflight for the whole wipe. Skip externals:
+  // shigomori didn't create them, so we shouldn't delete them when
+  // wiping our own state. (Branches are filtered the same way inside
+  // deleteBranchAfterWorktreeRemoval.)
+  const perProject = await Promise.all(
     projects.map(async (project) => {
-      let identities;
       try {
-        identities = await listWorktreeIdentities(project.id, project.path);
+        const identities = await listWorktreeIdentities(
+          project.id,
+          project.path,
+        );
+        return {
+          project,
+          targets: identities.filter((i) => !i.isPrimary && !i.isExternal),
+        };
       } catch {
         // Project repo might have moved or been deleted; nothing to clean
         // via git for this one. The shigomori root wipe below still happens.
-        return;
+        return { project, targets: [] };
       }
-      // Skip externals: shigomori didn't create them, so we shouldn't
-      // delete them when wiping our own state. (Branches are filtered
-      // the same way inside deleteBranchAfterWorktreeRemoval.)
-      const targets = identities.filter((i) => !i.isPrimary && !i.isExternal);
-      const deleteBranches = await deleteBranchesPromise;
-      await Promise.all(
-        targets.map(async (i) => {
-          // Same inflight marking as the per-worktree delete: blocks a
-          // renderer script run from landing in a directory mid-removal
-          // and keeps the busy-quit prompt honest during the wipe.
-          markDeleteInflight(i.id);
-          try {
+    }),
+  );
+  // Same inflight marking as the per-worktree delete: blocks a renderer
+  // script run from landing in a directory mid-removal and keeps the
+  // busy-quit prompt honest during the wipe. Held through the root rm
+  // below -- clearing each id right after its `git worktree remove`
+  // would leave a window where a script could spawn into a directory
+  // the rm is about to take out.
+  const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
+  for (const id of marked) markDeleteInflight(id);
+  try {
+    // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
+    await Promise.all(
+      perProject.map(async ({ project, targets }) => {
+        const deleteBranches = await deleteBranchesPromise;
+        await Promise.all(
+          targets.map(async (i) => {
             await removeWorktreeForce(project.path, i.path).catch(
               () => undefined,
             );
@@ -82,14 +97,17 @@ export async function nukeEverything(): Promise<void> {
               i,
               deleteBranches,
             );
-          } finally {
-            clearDeleteInflight(i.id);
-          }
-        }),
-      );
-    }),
-  );
-  await rm(shigomoriRoot(), { recursive: true, force: true });
+          }),
+        );
+      }),
+    );
+    await rm(shigomoriRoot(), { recursive: true, force: true });
+  } finally {
+    for (const id of marked) clearDeleteInflight(id);
+  }
+  // config.json is gone but the TTL cache would keep serving the old
+  // preferences; drop it so post-nuke reads see a clean slate.
+  invalidateGlobalConfigCache();
   // The root rm wipes any managed-root worktree dirs whose
   // `git worktree remove` failed silently above, leaving stale admin
   // entries behind. Sweep them per project now that the dirs are gone.

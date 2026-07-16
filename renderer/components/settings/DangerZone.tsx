@@ -37,8 +37,16 @@ export function DangerZone() {
         } catch {
           // localStorage may be unavailable; not fatal.
         }
-        await queryClient.invalidateQueries();
-        void navigate({ to: "/" });
+        // Every cached query now describes deleted state. A blanket
+        // invalidateQueries() would refetch them all against the wiped
+        // root and raise a burst of "Unknown project/worktree" toasts,
+        // with retries landing even after the navigation below. Cancel
+        // in-flight fetches, leave the dead route, then drop the cache
+        // so only the queries mounted on "/" refetch -- those all read
+        // the freshly reseeded empty root cleanly.
+        await queryClient.cancelQueries();
+        await navigate({ to: "/" });
+        queryClient.clear();
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);
       }

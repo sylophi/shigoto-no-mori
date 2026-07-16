@@ -378,6 +378,19 @@ export async function killScriptsForWorktree(
   );
 }
 
+export async function killScriptsForProject(
+  projectId: string,
+  opts: KillOptions = {},
+): Promise<void> {
+  const targets = Array.from(runningScripts.values()).filter(
+    (r) => r.projectId === projectId && !r.exited,
+  );
+  if (targets.length === 0) return;
+  await Promise.all(
+    targets.map((r) => killRecord(r, { reason: "Project removed", ...opts })),
+  );
+}
+
 export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   const targets = Array.from(runningScripts.values()).filter((r) => !r.exited);
   if (targets.length === 0) return;

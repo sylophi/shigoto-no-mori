@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { setDoubutsu } from "../../electron/appearance";
+import { ensureShigomoriRoot } from "../../electron/bootstrap";
 import { nukeEverything } from "../../lib/nuke";
 import { shigomoriRoot } from "../../lib/util/paths";
 
@@ -27,5 +28,12 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
     setDoubutsu(enabled);
   },
 
-  nuke: () => nukeEverything(),
+  // Reseed the empty root before resolving (bootstrap otherwise only
+  // runs at app launch): post-nuke renderer refetches read a fresh
+  // valid layout, and a stray state write can't resurrect a half-empty
+  // root that launch-time bootstrap never gets to repair.
+  nuke: async () => {
+    await nukeEverything();
+    await ensureShigomoriRoot();
+  },
 };

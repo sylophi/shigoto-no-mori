@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import type { Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
 import { queryKeys } from "@/lib/queryKeys";
@@ -39,10 +40,27 @@ export function useAddProject() {
 
 export function useRemoveProject() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   return useMutation<void, Error, string>({
     mutationFn: (id) => window.api.projects.remove(id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+    onSuccess: async (_data, id) => {
+      // Leave any route under the removed project before touching the
+      // cache: its mounted queries (config, branches, diff, worktree
+      // state, ...) would otherwise refetch against the unregistered id
+      // on the next focus and each toast an "Unknown project" error.
+      const { pathname } = router.state.location;
+      if (pathname.startsWith(`/projects/${id}`)) {
+        await router.navigate({ to: "/" });
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+      // With the route and sidebar row gone nothing observes the
+      // removed project's queries; drop the leftovers so nothing can
+      // replay them. Only inactive ones -- removing a query that still
+      // has an observer (a row mid-unmount) would refetch it instead.
+      queryClient.removeQueries({
+        type: "inactive",
+        predicate: (query) => query.queryKey.includes(id),
+      });
     },
     meta: { errorTitle: "Couldn't remove project" },
   });

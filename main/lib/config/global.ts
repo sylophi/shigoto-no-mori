@@ -27,6 +27,13 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
   return cache.get();
 }
 
+// For callers that delete config.json out from under the cache (nuke):
+// without this, reads for up to the TTL would keep serving the wiped
+// preferences as if the nuke hadn't happened.
+export function invalidateGlobalConfigCache(): void {
+  cache.invalidate();
+}
+
 export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
   await atomicWriteJson(configPath(), GlobalConfigSchema.parse(config));
   cache.invalidate();
