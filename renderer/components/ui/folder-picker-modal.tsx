@@ -39,7 +39,7 @@ interface FolderPickerModalProps {
 }
 
 // Folder picker built on the same path-as-input pattern as the Add
-// Project command palette: typing a path lists the directory live, the
+// Project modal: typing a path lists the directory live, the
 // list filters by the trailing leaf segment, and ↩ confirms / enters
 // the highlighted entry.
 export function FolderPickerModal({

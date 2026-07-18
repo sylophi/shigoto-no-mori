@@ -16,7 +16,7 @@ interface UseBrowseStateOptions {
   enabled: boolean;
 }
 
-// Browse-mode derivations + navigation helpers for the add-project palette.
+// Browse-mode derivations + navigation helpers for the add-project modal.
 // Owns the directory listing query and the "is this a git repo?" probe, plus
 // the path-segment math so the parent component stays focused on stage
 // orchestration and keyboard handling.

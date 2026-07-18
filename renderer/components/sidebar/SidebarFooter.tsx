@@ -2,7 +2,7 @@ import {
   ArrowUpDown,
   Check,
   FolderPlus,
-  Search,
+  LayoutGrid,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -18,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
   useProjectSort,
   useSetProjectSort,
@@ -43,7 +43,7 @@ export function SidebarFooter({
 }: SidebarFooterProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { openIn } = useCommandPalette();
+  const { toggleLauncher, openAddProject } = useOverlays();
   const { data: sortMode = "manual" } = useProjectSort();
   const setSortMode = useSetProjectSort();
   const { state: updaterState } = useUpdater();
@@ -133,16 +133,16 @@ export function SidebarFooter({
       <div className="flex-1" />
       <button
         type="button"
-        onClick={() => openIn("browse")}
-        aria-label="Command palette"
-        title={`Command palette (${shortcutLabel(modKey, shiftKey, "P")})`}
+        onClick={toggleLauncher}
+        aria-label="Project launcher"
+        title={`Project launcher (${shortcutLabel(modKey, shiftKey, "P")})`}
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <Search className="size-3.5" />
+        <LayoutGrid className="size-3.5" />
       </button>
       <button
         type="button"
-        onClick={() => openIn("add-project")}
+        onClick={openAddProject}
         aria-label="Add project"
         title={`Add project (${shortcutLabel(modKey, "N")})`}
         className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

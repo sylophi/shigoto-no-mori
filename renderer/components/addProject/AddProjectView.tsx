@@ -256,7 +256,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     >
       <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
         <Command.Input
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of a command palette
+          // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
           autoFocus
           value={query}
           onValueChange={setQuery}

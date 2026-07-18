@@ -4,13 +4,13 @@ import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { modKey, shiftKey } from "@/lib/platform";
-import { useCommandPalette } from "@/hooks/ui/useCommandPalette";
+import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
-  const { openIn } = useCommandPalette();
+  const { openAddProject } = useOverlays();
   const navigate = useNavigate();
   const worktreeQueries = useAllProjectWorktrees(projects);
 
@@ -52,7 +52,7 @@ export function EmptyState() {
 
   if (projectsLoading) return null;
   if (projects.length === 0) {
-    return <FirstRun onAdd={() => openIn("add-project")} />;
+    return <FirstRun onAdd={openAddProject} />;
   }
   // Suppress BetweenWorktrees while a redirect is pending or still resolvable.
   if (redirectProjectId || waitingForQuery) return null;
@@ -96,10 +96,9 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
             or{" "}
             <KbdGroup className="mx-0.5 inline-flex">
               <Kbd>{modKey}</Kbd>
-              <Kbd>{shiftKey}</Kbd>
-              <Kbd>P</Kbd>
+              <Kbd>N</Kbd>
             </KbdGroup>{" "}
-            for the palette
+            from anywhere
           </span>
         </div>
       </div>
@@ -119,7 +118,7 @@ function BetweenWorktrees() {
             <Kbd>{shiftKey}</Kbd>
             <Kbd>P</Kbd>
           </KbdGroup>{" "}
-          to jump.
+          for the project launcher.
         </p>
       </div>
     </div>

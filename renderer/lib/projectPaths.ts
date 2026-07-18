@@ -1,4 +1,4 @@
-// Path helpers for the filesystem-browse command palette mode. Ported
+// Path helpers for the add-project filesystem-browse flow. Ported
 // from T3 Code's projectPaths.ts. On Windows both separator styles and
 // drive-letter/UNC roots are understood, and a path is extended with the
 // separator style it already uses so the user's input never flips under

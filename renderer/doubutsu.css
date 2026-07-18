@@ -29,6 +29,8 @@
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
  *      modal-shell               ui/modal-shell.tsx
+ *      launcher                  launcher/ProjectLauncher.tsx
+ *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
@@ -493,10 +495,15 @@
     transform: translate3d(-80px, 80px, 0);
   }
 }
-.doubutsu [data-doubutsu-zone="main"] {
+.doubutsu [data-doubutsu-zone="main"],
+.doubutsu [data-slot="launcher"] {
   isolation: isolate;
 }
-.doubutsu [data-doubutsu-zone="main"]::before {
+/* The launcher's grid surface (data-slot="launcher", a non-scrolling
+   wrapper inside the modal) gets the same wallpaper -- picking a
+   project should feel like walking the forest floor. */
+.doubutsu [data-doubutsu-zone="main"]::before,
+.doubutsu [data-slot="launcher"]::before {
   content: "";
   position: absolute;
   inset: -80px -80px 0 0;
@@ -550,7 +557,8 @@
 .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
 .doubutsu li[data-row-idx].cursor-pointer:hover,
 .doubutsu [data-highlighted]:not([data-disabled]),
-.doubutsu [cmdk-item][aria-selected="true"] {
+.doubutsu [cmdk-item][aria-selected="true"],
+.doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
   background-image: linear-gradient(
     45deg,
     transparent 25%,
@@ -566,6 +574,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .doubutsu [data-doubutsu-zone="main"]::before,
+  .doubutsu [data-slot="launcher"]::before,
   .doubutsu button:not(:disabled):hover,
   .doubutsu [role="button"]:not([aria-disabled="true"]):hover,
   .doubutsu a[href]:hover,
@@ -573,7 +582,8 @@
   .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
   .doubutsu li[data-row-idx].cursor-pointer:hover,
   .doubutsu [data-highlighted]:not([data-disabled]),
-  .doubutsu [cmdk-item][aria-selected="true"] {
+  .doubutsu [cmdk-item][aria-selected="true"],
+  .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
     animation: none;
   }
 }

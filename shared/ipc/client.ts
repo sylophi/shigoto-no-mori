@@ -9,8 +9,8 @@ import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { navContract } from "@shared/ipc/modules/nav";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
-import { paletteContract } from "@shared/ipc/modules/palette";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
+import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -39,8 +39,8 @@ const launchersClient = buildClient(launchersContract);
 const menuClient = buildClient(menuContract);
 const navClient = buildClient(navContract);
 const packageScriptsClient = buildClient(packageScriptsContract);
-const paletteClient = buildClient(paletteContract);
 const portPoolClient = buildClient(portPoolContract);
+const projectLauncherClient = buildClient(projectLauncherContract);
 const projectsClient = buildClient(projectsContract);
 const runtimeClient = buildClient(runtimeContract);
 const scriptsClient = buildClient(scriptsContract);
@@ -118,14 +118,14 @@ export const packageScripts = {
     packageScriptsClient.setSort({ projectId, mode }),
 } as const;
 
-export const palette = {
-  onToggle: paletteClient.toggle,
-  onAddProject: paletteClient.addProject,
-} as const;
-
 export const portPool = {
   isActive: portPoolClient.isActive,
   isInstalled: portPoolClient.isInstalled,
+} as const;
+
+export const projectLauncher = {
+  onToggle: projectLauncherClient.toggle,
+  onAddProject: projectLauncherClient.addProject,
 } as const;
 
 export const projects = {

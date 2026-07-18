@@ -53,7 +53,7 @@
   /* Canvas is lifted one step above pure-black neutral-950 -- matches
      the lighter main panel in apps like Codex, and reads less heavy
      against the vibrancy-blurred sidebar. Card/popover then sit a step
-     above the canvas so dropdowns and the command palette still
+     above the canvas so dropdowns and modal overlays still
      elevate cleanly. */
   --background: var(--color-neutral-900);
   --foreground: var(--color-neutral-50);
