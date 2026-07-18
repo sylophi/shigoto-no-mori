@@ -3,10 +3,10 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 import { router } from "@/router";
 import { Input } from "@/components/ui/input";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { sortProjects } from "@/components/sidebar/sortProjects";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
@@ -18,7 +18,7 @@ import { getRecentWorktree } from "@/lib/recentWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
 import { LauncherTile } from "./LauncherTile";
 
-// Launchpad-style project switcher in a modal: search on top, a grid of
+// Launchpad-style full-screen project switcher: search on top, a grid of
 // project tiles below. Activating a tile jumps to the project's
 // most-recently-used worktree (see lib/recentWorktrees.ts).
 export function ProjectLauncher() {
@@ -33,10 +33,10 @@ export function ProjectLauncher() {
 
   if (!launcherOpen) return null;
 
-  return <LauncherModal onClose={() => setLauncherOpen(false)} />;
+  return <LauncherOverlay onClose={() => setLauncherOpen(false)} />;
 }
 
-function LauncherModal({ onClose }: { onClose: () => void }) {
+function LauncherOverlay({ onClose }: { onClose: () => void }) {
   const { data: projects = [] } = useProjects();
   const { data: sortMode = "manual" } = useProjectSort();
   const [query, setQuery] = useState("");
@@ -139,10 +139,10 @@ function LauncherModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Escape is handled here (not by ModalShell) so it can clear the query
-  // first and only close on a second press. Keydown bubbles up from the
-  // input, so this works no matter where focus ended up.
-  const onContentKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+  // Escape lives on the overlay root so it works no matter where focus
+  // ended up (keydown bubbles up from the input): clear the query first,
+  // close on a second press.
+  const onRootKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Escape") return;
     e.preventDefault();
     if (query) {
@@ -153,14 +153,32 @@ function LauncherModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const closeOnSelfClick = (e: ReactMouseEvent) => {
+    if (e.target === e.currentTarget) onClose();
+  };
+
+  // The root carries data-slot="launcher": doubutsu paints it opaque and
+  // hangs the grass-triangle wallpaper on its ::before. It must not
+  // scroll (the pattern would ride along), so scrolling lives in the
+  // absolute inner layer; overflow-hidden clips the pattern's drift
+  // bleed, matching the main canvas.
   return (
-    <ModalShell
-      onClose={onClose}
-      closeOnEscape={false}
-      popoverClassName="max-w-2xl"
+    <div
+      role="presentation"
+      data-slot="launcher"
+      onKeyDown={onRootKeyDown}
+      className="fixed inset-0 isolate z-50 animate-in overflow-hidden bg-background/80 backdrop-blur-md duration-150 fade-in-0"
     >
-      <div role="presentation" onKeyDown={onContentKeyDown}>
-        <div className="border-b border-border p-3">
+      <div
+        role="presentation"
+        onMouseDown={closeOnSelfClick}
+        className="absolute inset-0 flex flex-col items-center overflow-y-auto"
+      >
+        <div
+          role="presentation"
+          onMouseDown={closeOnSelfClick}
+          className="w-full max-w-3xl px-8 pt-[12vh] pb-16"
+        >
           {/* oxlint-disable-next-line jsx-a11y/interactive-supports-focus -- Input renders a native <input>, which is focusable */}
           <Input
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the search field is the whole point of a launcher
@@ -178,43 +196,38 @@ function LauncherModal({ onClose }: { onClose: () => void }) {
             }}
             onKeyDown={onInputKeyDown}
             placeholder="Search projects…"
-            className="w-full px-3 py-2 text-sm"
+            // Launchpad proportions: a compact centered field above the
+            // grid, not a full-width bar.
+            className="mx-auto block w-full max-w-sm px-4 py-2 text-center text-sm"
           />
-        </div>
-        {/* The pattern surface: doubutsu hangs the leaf wallpaper on this
-            slot (a non-scrolling wrapper, so the pattern holds still while
-            the grid scrolls inside it). */}
-        <div data-slot="launcher" className="relative isolate overflow-hidden">
-          <div className="max-h-[60vh] overflow-y-auto p-3">
-            {projects.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No projects yet — press {shortcutLabel(modKey, "N")} to add one.
-              </p>
-            ) : filtered.length === 0 ? (
-              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No projects match.
-              </p>
-            ) : (
-              <div
-                id="launcher-grid"
-                ref={gridRef}
-                role="listbox"
-                aria-label="Projects"
-                className="grid grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))] gap-2"
-              >
-                {filtered.map((project, i) => (
-                  <LauncherTile
-                    key={project.id}
-                    project={project}
-                    selected={i === clampedIndex}
-                    onActivate={activate}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          {projects.length === 0 ? (
+            <p className="mt-10 text-center text-sm text-muted-foreground">
+              No projects yet — press {shortcutLabel(modKey, "N")} to add one.
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="mt-10 text-center text-sm text-muted-foreground">
+              No projects match.
+            </p>
+          ) : (
+            <div
+              id="launcher-grid"
+              ref={gridRef}
+              role="listbox"
+              aria-label="Projects"
+              className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-3"
+            >
+              {filtered.map((project, i) => (
+                <LauncherTile
+                  key={project.id}
+                  project={project}
+                  selected={i === clampedIndex}
+                  onActivate={activate}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
-    </ModalShell>
+    </div>
   );
 }
