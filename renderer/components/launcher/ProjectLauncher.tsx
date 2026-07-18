@@ -24,12 +24,39 @@ import { LauncherTile } from "./LauncherTile";
 export function ProjectLauncher() {
   const { launcherOpen, setLauncherOpen, toggleLauncher } = useOverlays();
 
-  // The shortcut is wired via a native menu accelerator in main/menu.ts
-  // — View → Project launcher (⌘⇧P).
+  // The menu shortcut is wired via a native accelerator in
+  // main/electron/menu.ts — View → Project launcher (⌘⇧P).
   useEffect(
     () => window.api.projectLauncher.onToggle(toggleLauncher),
     [toggleLauncher],
   );
+
+  // The backtick key (physical Backquote position — e.code keeps it
+  // stable across keyboard layouts, matching DevThemeHotkeys) also
+  // opens the launcher, unless the user is typing in a text field.
+  // Unlike Tab it has no focus-navigation job, so it may fire even
+  // while a button or link is focused. While the launcher is open it
+  // closes it again via onRootKeyDown below, which preventDefaults
+  // first — the defaultPrevented check here keeps that close from
+  // bouncing straight back open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Backquote" || e.repeat || e.defaultPrevented) return;
+      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      setLauncherOpen(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [setLauncherOpen]);
 
   if (!launcherOpen) return null;
 
@@ -145,10 +172,25 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Escape lives on the overlay root so it works no matter where focus
-  // ended up (keydown bubbles up from the input): clear the query first,
-  // close on a second press.
+  // Escape and backtick live on the overlay root so they work no
+  // matter where focus ended up (keydown bubbles up from the input).
+  // Escape clears the query first and closes on a second press;
+  // backtick closes immediately so the key toggles Launchpad-style.
+  // That means a literal ` can't be typed into the query — an
+  // acceptable trade for the toggle feel, since project names don't
+  // contain backticks.
   const onRootKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      e.code === "Backquote" &&
+      !e.shiftKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.metaKey
+    ) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
     if (e.key !== "Escape") return;
     e.preventDefault();
     if (query) {

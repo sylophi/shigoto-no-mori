@@ -18,6 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
   useProjectSort,
@@ -72,40 +73,44 @@ export function SidebarFooter({
   }
   return (
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
-      <button
-        type="button"
-        onClick={() => void navigate({ to: "/settings" })}
-        aria-label={updateReady ? "Settings (update available)" : "Settings"}
-        aria-current={settingsActive ? "page" : undefined}
-        title={updateReady ? "Settings — update available" : "Settings"}
-        className={cn(
-          "relative rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
-          settingsActive
-            ? "bg-accent text-foreground"
-            : "text-muted-foreground",
-        )}
+      <SimpleTooltip
+        tip={updateReady ? "Settings — update available" : "Settings"}
       >
-        <SettingsIcon className="size-3.5" />
-        {updateReady && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
-          />
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/settings" })}
+          aria-label={updateReady ? "Settings (update available)" : "Settings"}
+          aria-current={settingsActive ? "page" : undefined}
+          className={cn(
+            "relative rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
+            settingsActive
+              ? "bg-accent text-foreground"
+              : "text-muted-foreground",
+          )}
+        >
+          <SettingsIcon className="size-3.5" />
+          {updateReady && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
+            />
+          )}
+        </button>
+      </SimpleTooltip>
       <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              aria-label="Sort projects"
-              title="Sort projects"
-              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
-            >
-              <ArrowUpDown className="size-3.5" />
-            </button>
-          }
-        />
+        <SimpleTooltip tip="Sort projects">
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Sort projects"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
+              >
+                <ArrowUpDown className="size-3.5" />
+              </button>
+            }
+          />
+        </SimpleTooltip>
         <DropdownMenuContent align="start" side="top" sideOffset={2}>
           <DropdownMenuGroup>
             <DropdownMenuLabel>Sort by</DropdownMenuLabel>
@@ -131,24 +136,37 @@ export function SidebarFooter({
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="flex-1" />
-      <button
-        type="button"
-        onClick={toggleLauncher}
-        aria-label="Project launcher"
-        title={`Project launcher (${shortcutLabel(modKey, shiftKey, "P")})`}
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      <SimpleTooltip
+        // The backtick renders in the mono font: the rounded doubutsu
+        // fonts draw U+0060 as a narrow accent whose ink overhangs the
+        // following space. The single outer span keeps the tip one flex
+        // item inside TooltipContent so its gap doesn't restyle the text.
+        tip={
+          <span>
+            Project launcher (<span className="font-mono">`</span> or{" "}
+            {shortcutLabel(modKey, shiftKey, "P")})
+          </span>
+        }
       >
-        <LayoutGrid className="size-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={openAddProject}
-        aria-label="Add project"
-        title={`Add project (${shortcutLabel(modKey, "N")})`}
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      >
-        <FolderPlus className="size-3.5" />
-      </button>
+        <button
+          type="button"
+          onClick={toggleLauncher}
+          aria-label="Project launcher"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <LayoutGrid className="size-3.5" />
+        </button>
+      </SimpleTooltip>
+      <SimpleTooltip tip={`Add project (${shortcutLabel(modKey, "N")})`}>
+        <button
+          type="button"
+          onClick={openAddProject}
+          aria-label="Add project"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <FolderPlus className="size-3.5" />
+        </button>
+      </SimpleTooltip>
     </div>
   );
 }

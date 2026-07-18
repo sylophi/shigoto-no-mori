@@ -1,11 +1,15 @@
 "use client";
 
+import type { ReactElement, ReactNode } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { cn } from "@/lib/utils";
 
+// 500ms before the first tooltip shows; once one is open, moving to a
+// neighboring trigger shows its tooltip immediately (Base UI provider
+// grouping), matching native-menu feel.
 function TooltipProvider({
-  delay = 0,
+  delay = 500,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
@@ -63,4 +67,36 @@ function TooltipContent({
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+// Drop-in replacement for a native `title` hint: wraps one element
+// with a styled tooltip without adding DOM (TooltipTrigger merges onto
+// the child via the render prop, so the child needs to accept ref and
+// event props on its root — plain DOM elements always do). A falsy tip
+// renders the child bare, mirroring `title={undefined}`. Newlines in
+// string tips are preserved like multiline titles were.
+function SimpleTooltip({
+  tip,
+  side,
+  children,
+}: {
+  tip: ReactNode;
+  side?: TooltipPrimitive.Positioner.Props["side"];
+  children: ReactElement;
+}) {
+  if (!tip) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={children} />
+      <TooltipContent side={side} className="whitespace-pre-line">
+        {tip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+export {
+  SimpleTooltip,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+};
