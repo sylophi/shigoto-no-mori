@@ -10,7 +10,7 @@ import {
 } from "electron";
 import type { Contract } from "@shared/ipc/contract";
 import { navContract } from "@shared/ipc/modules/nav";
-import { paletteContract } from "@shared/ipc/modules/palette";
+import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import type { BroadcastProducerPayload } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
@@ -126,7 +126,11 @@ export function buildAppMenu(): void {
         {
           label: "Add project…",
           accelerator: "CmdOrCtrl+N",
-          click: clickBroadcast(paletteContract, "addProject", undefined),
+          click: clickBroadcast(
+            projectLauncherContract,
+            "addProject",
+            undefined,
+          ),
         },
         ...launchToolMenuItems(),
         // Without a mac-style app menu, File carries Settings and Exit
@@ -157,26 +161,10 @@ export function buildAppMenu(): void {
       label: "View",
       submenu: [
         {
-          label: "Command palette",
+          label: "Project launcher",
           accelerator: "CmdOrCtrl+Shift+P",
-          click: clickBroadcast(paletteContract, "toggle", undefined),
+          click: clickBroadcast(projectLauncherContract, "toggle", undefined),
         },
-        // Hidden synonym so ⌘P also opens the palette. Electron only keeps
-        // accelerators live for hidden items on macOS, and on other
-        // platforms the behavior is inconsistent -- so the item exists
-        // only on mac, and everywhere else the renderer's Ctrl+P listener
-        // in CommandPalette.tsx owns the shortcut outright (no double
-        // handling).
-        ...(isMac
-          ? ([
-              {
-                label: "Command palette (alt)",
-                accelerator: "CmdOrCtrl+P",
-                visible: false,
-                click: clickBroadcast(paletteContract, "toggle", undefined),
-              },
-            ] satisfies MenuItemConstructorOptions[])
-          : []),
         { type: "separator" },
         { role: "reload" },
         { role: "toggleDevTools" },

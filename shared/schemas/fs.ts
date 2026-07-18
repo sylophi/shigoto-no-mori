@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-// Filesystem browser used by the Add Project palette. Every call here
+// Filesystem browser used by the Add Project modal. Every call here
 // takes the shared PathPayloadSchema.
 
 // Optional copy for the native folder picker. Defaults to the

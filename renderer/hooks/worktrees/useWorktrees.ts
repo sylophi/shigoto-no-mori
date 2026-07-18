@@ -17,7 +17,7 @@ export function useWorktrees(projectId: string | null) {
 }
 
 // One query per project, sharing the per-project cache key with useWorktrees.
-// `enabled` toggles them all off when the consumer isn't visible (palette).
+// `enabled` toggles them all off when the consumer isn't visible (launcher).
 // Skip projects whose path is gone — git would just ENOENT.
 export function useAllProjectWorktrees(projects: Project[], enabled = true) {
   return useQueries({

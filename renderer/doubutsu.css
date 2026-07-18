@@ -29,6 +29,8 @@
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
  *      modal-shell               ui/modal-shell.tsx
+ *      launcher                  launcher/ProjectLauncher.tsx
+ *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
@@ -514,6 +516,53 @@
   z-index: -1;
 }
 
+/* --- Launcher ground pattern ---
+   The full-screen launcher is its own place, so it gets its own
+   wallpaper on a fully opaque surface (no see-through scrim --
+   doubutsu wants color-blocking, not frosted glass): sparse AC ground
+   confetti. One equilateral triangle (defs/use), corners rounded via
+   stroke-linejoin, stamped eight times across a 160px tile -- each
+   stamp with its own rotation and a clearly different size (0.6x to
+   1.4x), scattered off-grid so nothing lines up into rows. All stamps
+   stay clear of the tile edges, so the repeat is seamless by
+   construction.
+
+   The ground drifts up-right on its own keyframes (the 160px tile
+   can't ride the leaves' 80px travel and still loop seamlessly) at
+   the same px/s as the canvas leaves falling down-left -- related
+   rooms, not copies. Leading edges are bottom/left, so the layer
+   grows one travel distance there; the overflow-hidden launcher root
+   clips the bleed. */
+@keyframes ac-ground-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(160px, -160px, 0);
+  }
+}
+.doubutsu [data-slot="launcher"] {
+  isolation: isolate;
+  background-color: var(--background);
+}
+.doubutsu [data-slot="launcher"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -160px -160px;
+  animation: ac-ground-drift 48s linear infinite;
+  will-change: transform;
+  background-color: var(--doubutsu-pattern);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20width%3D%22160%22%20height%3D%22160%22%20viewBox%3D%220%200%20160%20160%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cpath%20id%3D%22t%22%20d%3D%22M0%20-5.2L4.5%202.6L-4.5%202.6Z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2824%2018%29%20rotate%2825%29%20scale%281.4%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2892%2012%29%20rotate%28210%29%20scale%280.7%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28140%2038%29%20rotate%28130%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2858%2066%29%20rotate%28305%29%20scale%280.85%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2814%20108%29%20rotate%28170%29%20scale%281.15%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28108%2096%29%20rotate%2855%29%20scale%280.6%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2874%20138%29%20rotate%28250%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28142%20132%29%20rotate%28340%29%20scale%280.8%29%22%2F%3E%3C%2Fsvg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg%20width%3D%22160%22%20height%3D%22160%22%20viewBox%3D%220%200%20160%20160%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cpath%20id%3D%22t%22%20d%3D%22M0%20-5.2L4.5%202.6L-4.5%202.6Z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2824%2018%29%20rotate%2825%29%20scale%281.4%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2892%2012%29%20rotate%28210%29%20scale%280.7%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28140%2038%29%20rotate%28130%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2858%2066%29%20rotate%28305%29%20scale%280.85%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2814%20108%29%20rotate%28170%29%20scale%281.15%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28108%2096%29%20rotate%2855%29%20scale%280.6%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2874%20138%29%20rotate%28250%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28142%20132%29%20rotate%28340%29%20scale%280.8%29%22%2F%3E%3C%2Fsvg%3E");
+  -webkit-mask-repeat: repeat;
+  mask-repeat: repeat;
+  -webkit-mask-size: 160px 160px;
+  mask-size: 160px 160px;
+  opacity: 0.12;
+  pointer-events: none;
+  z-index: -1;
+}
+
 /* `doubutsu-only` lets components ship the AC-specific overlay/markup
    inline. Hidden in v1, visible when `.doubutsu` lights up. */
 .doubutsu-only {
@@ -550,7 +599,8 @@
 .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
 .doubutsu li[data-row-idx].cursor-pointer:hover,
 .doubutsu [data-highlighted]:not([data-disabled]),
-.doubutsu [cmdk-item][aria-selected="true"] {
+.doubutsu [cmdk-item][aria-selected="true"],
+.doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
   background-image: linear-gradient(
     45deg,
     transparent 25%,
@@ -566,6 +616,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .doubutsu [data-doubutsu-zone="main"]::before,
+  .doubutsu [data-slot="launcher"]::before,
   .doubutsu button:not(:disabled):hover,
   .doubutsu [role="button"]:not([aria-disabled="true"]):hover,
   .doubutsu a[href]:hover,
@@ -573,7 +624,8 @@
   .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
   .doubutsu li[data-row-idx].cursor-pointer:hover,
   .doubutsu [data-highlighted]:not([data-disabled]),
-  .doubutsu [cmdk-item][aria-selected="true"] {
+  .doubutsu [cmdk-item][aria-selected="true"],
+  .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
     animation: none;
   }
 }

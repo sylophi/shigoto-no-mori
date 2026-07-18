@@ -10,7 +10,7 @@ interface ModalShellProps {
   // own Escape handling (e.g. multi-step flows where Escape backs out).
   closeOnEscape?: boolean;
   // Optional override for the popover's class list (sizing, layout).
-  // Defaults to the standard "centered max-w-xl" palette shape.
+  // Defaults to the standard "centered max-w-xl" modal shape.
   popoverClassName?: string;
   children: ReactNode;
 }

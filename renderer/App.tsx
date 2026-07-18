@@ -3,9 +3,10 @@ import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorFallback } from "@/components/ErrorFallback";
-import { CommandPalette } from "@/components/CommandPalette";
+import { AddProjectModal } from "@/components/AddProjectModal";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
-import { CommandPaletteProvider } from "@/hooks/ui/useCommandPalette";
+import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
+import { OverlaysProvider } from "@/hooks/ui/useOverlays";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { useWatchGitRefs } from "@/hooks/git/useBranches";
@@ -51,13 +52,14 @@ export function App() {
     <ThemeProvider>
       <DoubutsuProvider>
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
-          <CommandPaletteProvider>
+          <OverlaysProvider>
             <TooltipProvider>
               <RouterProvider router={router} />
-              <CommandPalette />
+              <ProjectLauncher />
+              <AddProjectModal />
               <DevThemeHotkeys />
             </TooltipProvider>
-          </CommandPaletteProvider>
+          </OverlaysProvider>
         </ErrorBoundary>
       </DoubutsuProvider>
     </ThemeProvider>

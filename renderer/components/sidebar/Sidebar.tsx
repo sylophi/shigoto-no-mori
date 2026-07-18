@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import {
   DndContext,
   DragOverlay,
@@ -77,7 +78,7 @@ export function Sidebar() {
     arrangeMode,
   });
 
-  // The per-project query is silent so the all-projects palette fan-out
+  // The per-project query is silent so the all-projects launcher fan-out
   // doesn't spam toasts; here we coalesce the same observations into one.
   useEffect(() => {
     const id = "worktrees-fanout-error";
@@ -98,6 +99,37 @@ export function Sidebar() {
     estimateSize: (index) => ROW_SIZE_HINTS[rows[index]?.kind ?? "worktree"],
     overscan: 12,
     getItemKey: (index) => rows[index]?.key ?? index,
+  });
+
+  // Reveal the selection when navigation comes from outside the sidebar
+  // (launcher jump, empty-state redirect) by scrolling the virtualized
+  // list to the selected worktree's row. The row can lag the route
+  // (worktree queries still loading), so this retries every render until
+  // it exists; the ref stops repeat scrolls afterwards so the user can
+  // still scroll away freely.
+  const { pathname } = useLocation();
+  const selectedMatch = pathname.match(
+    /^\/projects\/([^/]+)\/worktrees\/([^/]+)$/,
+  );
+  const lastRevealedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const [, projectId, worktreeId] = selectedMatch ?? [];
+    if (!projectId || !worktreeId) {
+      lastRevealedRef.current = null;
+      return;
+    }
+    if (lastRevealedRef.current === worktreeId) return;
+    let index = rows.findIndex((r) => r.key === `w:${worktreeId}`);
+    // Collapsed project: its worktree rows don't exist, so the header is
+    // the closest thing to reveal. Collapse state stays untouched -- the
+    // empty-state redirect runs on every launch, and auto-expanding
+    // would undo the user's pruning.
+    if (index < 0 && collapsed.has(projectId)) {
+      index = rows.findIndex((r) => r.key === `p:${projectId}`);
+    }
+    if (index < 0) return;
+    lastRevealedRef.current = worktreeId;
+    virtualizer.scrollToIndex(index, { align: "auto" });
   });
 
   // distance: 5 lets a quick click still toggle expand; drag activates
