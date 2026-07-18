@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   ArrowUpDown,
   Check,
@@ -7,7 +8,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
-import { modKey, shiftKey, shortcutLabel } from "@/lib/platform";
+import { isMac, modKey, shiftKey, shortcutLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -48,8 +49,12 @@ export function SidebarFooter({
   const { data: sortMode = "manual" } = useProjectSort();
   const setSortMode = useSetProjectSort();
   const { state: updaterState } = useUpdater();
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
+  // aria-keyshortcuts restores the AT-audible shortcut hints the old
+  // native titles carried — Base UI tooltips are visual-only.
+  const modName = isMac ? "Meta" : "Control";
 
   // Dragging only reorders coherently when the displayed order matches the
   // stored order, so arranging forces the manual sort before entering the
@@ -97,19 +102,27 @@ export function SidebarFooter({
           )}
         </button>
       </SimpleTooltip>
-      <DropdownMenu>
-        <SimpleTooltip tip="Sort projects">
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label="Sort projects"
-                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
-              >
-                <ArrowUpDown className="size-3.5" />
-              </button>
-            }
-          />
+      <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
+        {/* The tooltip hangs on a wrapper span, not the trigger button:
+            merged onto the button, the tooltip's attributes would
+            overwrite data-slot="dropdown-menu-trigger" and put
+            data-popup-open next to aria-haspopup, which doubutsu
+            styles as "menu open". Disabled while the menu is open so
+            the tip can't cover the popup. */}
+        <SimpleTooltip tip="Sort projects" disabled={sortMenuOpen}>
+          <span className="inline-flex">
+            <DropdownMenuTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label="Sort projects"
+                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
+                >
+                  <ArrowUpDown className="size-3.5" />
+                </button>
+              }
+            />
+          </span>
         </SimpleTooltip>
         <DropdownMenuContent align="start" side="top" sideOffset={2}>
           <DropdownMenuGroup>
@@ -139,19 +152,19 @@ export function SidebarFooter({
       <SimpleTooltip
         // The backtick renders in the mono font: the rounded doubutsu
         // fonts draw U+0060 as a narrow accent whose ink overhangs the
-        // following space. The single outer span keeps the tip one flex
-        // item inside TooltipContent so its gap doesn't restyle the text.
+        // following space.
         tip={
-          <span>
+          <>
             Project launcher (<span className="font-mono">`</span> or{" "}
             {shortcutLabel(modKey, shiftKey, "P")})
-          </span>
+          </>
         }
       >
         <button
           type="button"
           onClick={toggleLauncher}
           aria-label="Project launcher"
+          aria-keyshortcuts={`\` ${modName}+Shift+P`}
           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <LayoutGrid className="size-3.5" />
@@ -162,6 +175,7 @@ export function SidebarFooter({
           type="button"
           onClick={openAddProject}
           aria-label="Add project"
+          aria-keyshortcuts={`${modName}+N`}
           className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <FolderPlus className="size-3.5" />

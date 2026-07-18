@@ -76,18 +76,24 @@ function TooltipContent({
 function SimpleTooltip({
   tip,
   side,
+  disabled,
   children,
 }: {
   tip: ReactNode;
   side?: TooltipPrimitive.Positioner.Props["side"];
+  disabled?: boolean;
   children: ReactElement;
 }) {
   if (!tip) return children;
   return (
-    <Tooltip>
+    <Tooltip disabled={disabled}>
       <TooltipTrigger render={children} />
-      <TooltipContent side={side} className="whitespace-pre-line">
-        {tip}
+      <TooltipContent side={side}>
+        {/* One wrapper span keeps a mixed text/element tip a single
+            flex item — TooltipContent is inline-flex with a gap, which
+            would otherwise space out every text run. pre-line preserves
+            \n like the native titles this replaces. */}
+        <span className="whitespace-pre-line">{tip}</span>
       </TooltipContent>
     </Tooltip>
   );

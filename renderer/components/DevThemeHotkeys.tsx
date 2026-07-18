@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { isEditableTarget } from "@/lib/dom";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
@@ -28,14 +29,7 @@ export function DevThemeHotkeys() {
       }
       // Ctrl+T/D/R are Emacs-style edit bindings inside macOS text
       // fields (transpose, delete-forward, ...) — let those win.
-      const target = e.target as HTMLElement | null;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-      ) {
-        return;
-      }
+      if (isEditableTarget(e.target)) return;
       if (e.code === "KeyT") {
         e.preventDefault();
         setTheme(resolved === "dark" ? "light" : "dark");

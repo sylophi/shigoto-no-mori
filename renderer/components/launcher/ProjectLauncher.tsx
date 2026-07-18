@@ -7,6 +7,7 @@ import {
 } from "react";
 import { router } from "@/router";
 import { Input } from "@/components/ui/input";
+import { isEditableTarget } from "@/lib/dom";
 import { sortProjects } from "@/components/sidebar/sortProjects";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
@@ -31,32 +32,36 @@ export function ProjectLauncher() {
     [toggleLauncher],
   );
 
-  // The backtick key (physical Backquote position — e.code keeps it
-  // stable across keyboard layouts, matching DevThemeHotkeys) also
-  // opens the launcher, unless the user is typing in a text field.
-  // Unlike Tab it has no focus-navigation job, so it may fire even
-  // while a button or link is focused. While the launcher is open it
-  // closes it again via onRootKeyDown below, which preventDefaults
-  // first — the defaultPrevented check here keeps that close from
-  // bouncing straight back open.
+  // The backtick key toggles the launcher. Matching e.key (the produced
+  // character), not the physical Backquote position, keeps the binding
+  // inert on layouts where that key types a letter (Russian ё), a dead
+  // accent, or an IME toggle — those layouts still have the menu
+  // accelerator. One window listener owns both directions so the toggle
+  // works no matter where focus sits: keydowns targeting document.body
+  // (e.g. after clicking a gap between tiles) never reach React's
+  // delegated handlers, only window. Closing wins everywhere, including
+  // from the launcher's own search field — a literal ` can't be typed
+  // into the query, an acceptable trade for the Launchpad toggle feel.
+  // Opening additionally requires that the user isn't typing and that
+  // no ModalShell overlay is up (they don't trap focus, so the launcher
+  // would otherwise mount underneath and steal their keyboard).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Backquote" || e.repeat || e.defaultPrevented) return;
+      if (e.key !== "`" || e.repeat || e.isComposing) return;
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
-      const target = e.target as HTMLElement | null;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target?.isContentEditable
-      ) {
+      if (launcherOpen) {
+        e.preventDefault();
+        setLauncherOpen(false);
         return;
       }
+      if (isEditableTarget(e.target)) return;
+      if (document.querySelector('[data-slot="modal-shell"]')) return;
       e.preventDefault();
       setLauncherOpen(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setLauncherOpen]);
+  }, [launcherOpen, setLauncherOpen]);
 
   if (!launcherOpen) return null;
 
@@ -172,34 +177,25 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
     }
   };
 
-  // Escape and backtick live on the overlay root so they work no
-  // matter where focus ended up (keydown bubbles up from the input).
-  // Escape clears the query first and closes on a second press;
-  // backtick closes immediately so the key toggles Launchpad-style.
-  // That means a literal ` can't be typed into the query — an
-  // acceptable trade for the toggle feel, since project names don't
-  // contain backticks.
-  const onRootKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (
-      e.code === "Backquote" &&
-      !e.shiftKey &&
-      !e.ctrlKey &&
-      !e.altKey &&
-      !e.metaKey
-    ) {
+  // Escape lives on window, not the overlay root: after clicking a gap
+  // between tiles, focus (and the keydown target) is document.body,
+  // whose events never reach React's delegated handlers. Clear the
+  // query first, close on a second press. (Backtick-close lives in
+  // ProjectLauncher's window listener for the same reason.)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
       e.preventDefault();
-      onClose();
-      return;
-    }
-    if (e.key !== "Escape") return;
-    e.preventDefault();
-    if (query) {
-      setQuery("");
-      setSelectedIndex(0);
-    } else {
-      onClose();
-    }
-  };
+      if (query) {
+        setQuery("");
+        setSelectedIndex(0);
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [query, onClose]);
 
   const closeOnSelfClick = (e: ReactMouseEvent) => {
     if (e.target === e.currentTarget) onClose();
@@ -214,7 +210,6 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
     <div
       role="presentation"
       data-slot="launcher"
-      onKeyDown={onRootKeyDown}
       className="fixed inset-0 isolate z-50 animate-in overflow-hidden bg-background/80 backdrop-blur-md duration-150 fade-in-0"
     >
       <div
