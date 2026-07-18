@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
 const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId");
@@ -16,6 +17,7 @@ export function WorktreeDetail() {
 
   useEffect(() => {
     void window.api.git.refreshProject(projectId);
+    recordRecentWorktree(projectId, worktreeId);
   }, [projectId, worktreeId]);
 
   if (!worktree || !project) {
