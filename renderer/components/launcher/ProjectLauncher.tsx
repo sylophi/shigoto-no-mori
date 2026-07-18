@@ -42,6 +42,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Lazy fan-out: this component only mounts while the launcher is open,
   // and the queries share cache keys with the sidebar so they're warm.
@@ -56,9 +57,14 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
   const selected = clampedIndex >= 0 ? filtered[clampedIndex] : undefined;
   const selectedId = selected?.id;
 
-  // Restore focus to wherever the user was before the launcher opened.
+  // Focus the search field on open, and restore focus on close. The
+  // capture must happen before the input is focused, which rules out an
+  // autoFocus attribute: React applies those during commit, before any
+  // effect runs, so document.activeElement would already be the
+  // launcher's own input.
   useEffect(() => {
     const previous = document.activeElement;
+    inputRef.current?.focus();
     return () => {
       if (previous instanceof HTMLElement) previous.focus();
     };
@@ -181,8 +187,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
         >
           {/* oxlint-disable-next-line jsx-a11y/interactive-supports-focus -- Input renders a native <input>, which is focusable */}
           <Input
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the search field is the whole point of a launcher
-            autoFocus
+            ref={inputRef}
             role="combobox"
             aria-expanded="true"
             aria-controls="launcher-grid"
