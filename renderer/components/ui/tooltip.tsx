@@ -70,7 +70,7 @@ function TooltipContent({
 // Drop-in replacement for a native `title` hint: wraps one element
 // with a styled tooltip without adding DOM (TooltipTrigger merges onto
 // the child via the render prop, so the child needs to accept ref and
-// event props on its root — plain DOM elements always do). A falsy tip
+// event props on its root; plain DOM elements always do). A falsy tip
 // renders the child bare, mirroring `title={undefined}`. Newlines in
 // string tips are preserved like multiline titles were.
 function SimpleTooltip({
@@ -90,7 +90,7 @@ function SimpleTooltip({
       <TooltipTrigger render={children} />
       <TooltipContent side={side}>
         {/* One wrapper span keeps a mixed text/element tip a single
-            flex item — TooltipContent is inline-flex with a gap, which
+            flex item: TooltipContent is inline-flex with a gap, which
             would otherwise space out every text run. pre-line preserves
             \n like the native titles this replaces. */}
         <span className="whitespace-pre-line">{tip}</span>

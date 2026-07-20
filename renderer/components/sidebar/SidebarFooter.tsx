@@ -53,7 +53,7 @@ export function SidebarFooter({
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
-  // native titles carried — Base UI tooltips are visual-only.
+  // native titles carried; Base UI tooltips are visual-only.
   const modName = isMac ? "Meta" : "Control";
 
   // Dragging only reorders coherently when the displayed order matches the

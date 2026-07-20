@@ -26,7 +26,7 @@ export function ProjectLauncher() {
   const { launcherOpen, setLauncherOpen, toggleLauncher } = useOverlays();
 
   // The menu shortcut is wired via a native accelerator in
-  // main/electron/menu.ts — View → Project launcher (⌘⇧P).
+  // main/electron/menu.ts (View → Project launcher, ⌘⇧P).
   useEffect(
     () => window.api.projectLauncher.onToggle(toggleLauncher),
     [toggleLauncher],
@@ -35,12 +35,12 @@ export function ProjectLauncher() {
   // The backtick key toggles the launcher. Matching e.key (the produced
   // character), not the physical Backquote position, keeps the binding
   // inert on layouts where that key types a letter (Russian ё), a dead
-  // accent, or an IME toggle — those layouts still have the menu
+  // accent, or an IME toggle; those layouts still have the menu
   // accelerator. One window listener owns both directions so the toggle
   // works no matter where focus sits: keydowns targeting document.body
   // (e.g. after clicking a gap between tiles) never reach React's
   // delegated handlers, only window. Closing wins everywhere, including
-  // from the launcher's own search field — a literal ` can't be typed
+  // from the launcher's own search field: a literal ` can't be typed
   // into the query, an acceptable trade for the Launchpad toggle feel.
   // Opening additionally requires that the user isn't typing and that
   // no ModalShell overlay is up (they don't trap focus, so the launcher
