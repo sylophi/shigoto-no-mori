@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
@@ -102,11 +101,9 @@ export function ProjectHeader({
   );
 
   return (
-    <TooltipProvider delay={400}>
-      <Tooltip disabled={!isTruncated}>
-        <TooltipTrigger render={trigger} />
-        <TooltipContent>{project.name}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip disabled={!isTruncated}>
+      <TooltipTrigger render={trigger} />
+      <TooltipContent>{project.name}</TooltipContent>
+    </Tooltip>
   );
 }
