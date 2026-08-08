@@ -4,8 +4,8 @@
 // involved) or through the `.cmd` shim as a fallback.
 //
 // macOS-only tools (Xcode, iTerm, Ghostty, Terminal.app, Finder, the
-// Codex app) are deliberately absent -- a Windows user should never see
-// them, not even as "supported but not installed".
+// Codex app, T3 Code) are deliberately absent -- a Windows user should
+// never see them, not even as "supported but not installed".
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isWindowsStyle } from "@shared/worktreeLayout";
