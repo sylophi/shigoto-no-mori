@@ -17,4 +17,4 @@ before relying on the environment.
 **Stay inside.** Run every subsequent command from the worktree.
 
 **Rename the branch once the work has taken shape.** It starts out named
-after the worktree's random animal name; use `/rename-branch`.
+after the worktree's random animal name; use `/sgm-rename-branch`.
