@@ -7,6 +7,7 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
 import { rename } from "node:fs/promises";
 import { config as loadEnv } from "dotenv";
+import { SGM_DIST_DIR, sgmBinaryName } from "./shared/sgmDist.mts";
 
 loadEnv();
 
@@ -46,7 +47,13 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
-    extraResource: ["resources/licenses"],
+    // The sgm binary is compiled by the prePackage hook below into
+    // dist-cli/ and shipped in Resources; main/electron/sgmCli.ts
+    // offers to link it into the user's bin dir on launch.
+    extraResource: [
+      "resources/licenses",
+      `${SGM_DIST_DIR}/${sgmBinaryName("prod", isWindowsTarget)}`,
+    ],
     // The portable zip puts the exe directly in front of the user (no
     // installer-made shortcut), so give it a space-free name: spaces in
     // exe paths are a chronic quoting hazard in Windows shortcuts,
@@ -72,6 +79,19 @@ const config: ForgeConfig = {
       execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
+      });
+      // Compile the sgm CLI (requires Go on the build machine). When
+      // cross-packaging for Windows from another OS, cross-compile via
+      // GOOS/GOARCH.
+      execFileSync("node", ["scripts/build-sgm.mjs"], {
+        cwd: import.meta.dirname,
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          ...(isWindowsTarget && process.platform !== "win32"
+            ? { GOOS: "windows", GOARCH: "amd64" }
+            : {}),
+        },
       });
     },
     // Windows support is experimental; put that in the artifact name so

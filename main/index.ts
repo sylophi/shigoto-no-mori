@@ -21,6 +21,7 @@ import {
 import { initShigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
+import { maybeInstallSgmCli } from "./electron/sgmCli";
 import { applyUserShellPath } from "./electron/shellPath";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
@@ -117,6 +118,10 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
+  // After applyUserShellPath so the PATH advice reflects the real
+  // login-shell PATH. Fire-and-forget: the prompt floats over the
+  // already-open window and must not gate startup.
+  void maybeInstallSgmCli();
 });
 
 app.on("window-all-closed", () => {
