@@ -12,7 +12,7 @@
  *
  * ============================= CONTRACT =============================
  * Everything this file hooks into, so refactors can't silently strip
- * the theme. `pnpm check:theme` (scripts/check-theme-contract.mjs, run
+ * the theme. `pnpm theme:check` (scripts/check-theme-contract.mjs, run
  * in pre-commit) verifies each hook still exists.
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
@@ -41,9 +41,9 @@
  *    data-platform (stamped on <html> via dataset in renderer/index.tsx).
  *    Native chrome counterpart: main/electron/chrome/win32.ts holds
  *    sRGB hexes of the background/card/foreground tokens below;
- *    check:theme recomputes them from this file and fails on drift.
+ *    theme:check recomputes them from this file and fails on drift.
  *
- * 4. Upstream library attributes (re-verify on upgrades; check:theme
+ * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open, cmdk's [cmdk-item] + aria-selected, sonner's
  *    [data-sonner-toast].

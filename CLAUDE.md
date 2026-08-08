@@ -29,7 +29,7 @@ Rules that keep both themes cheap to maintain:
   component's internal utility-class combination — that breaks silently
   when the component is restyled.
 - The full dependency list lives in the CONTRACT header of
-  `renderer/doubutsu.css`; `pnpm check:theme` (run by lefthook
+  `renderer/doubutsu.css`; `pnpm theme:check` (run by lefthook
   pre-commit) verifies every hook still exists. If it fails, either
   restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
