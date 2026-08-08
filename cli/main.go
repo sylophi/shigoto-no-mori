@@ -42,6 +42,8 @@ Commands:
                                   the repo's settings (or --method override)
   adopt [<name>] [-p <project>]   Convert an external worktree to managed:
                                   move it into the layout, run the lifecycle
+  setup [<name>] [-p <project>]   Re-run the setup script (and port-pool
+                                  provision) on an existing worktree
   shelve / unshelve [<name>]      Toggle the app's "out of focus" flag
   project list                    List registered projects
   project add [<path>]            Register the repo containing <path> (default .)
@@ -121,6 +123,8 @@ func run() int {
 		code, err = cmdMerge(ctx, args)
 	case "adopt":
 		code, err = cmdAdopt(ctx, args)
+	case "setup":
+		code, err = cmdSetup(ctx, args)
 	case "shelve":
 		code, err = cmdShelve(ctx, args, true)
 	case "unshelve":

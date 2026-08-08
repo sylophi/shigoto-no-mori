@@ -11,8 +11,8 @@ cd "$(sgm create)"
 
 This runs carry-over and the project's setup script (progress streams to
 stderr) and prints the path. Exit 3 means the worktree exists but its setup
-script failed: read the output and fix that before relying on the
-environment.
+script failed: read the output, fix the cause, then `sgm setup` to retry
+before relying on the environment.
 
 **Stay inside.** Run every subsequent command from the worktree.
 
