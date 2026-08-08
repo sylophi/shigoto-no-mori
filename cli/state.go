@@ -113,19 +113,23 @@ func readShelvedSet() map[string]bool {
 	return shelved
 }
 
-// Removes the id from the shelved map under the cross-process lock
+// Flips the id in the shelved map under the cross-process lock
 // (store.ts writeKey semantics: full-file read-modify-write).
-func dropShelved(worktreeID string) error {
+func setShelved(worktreeID string, shelved bool) error {
 	return withStateLock(func() error {
 		all := readStateFile()
-		var m map[string]bool
+		m := map[string]bool{}
 		if raw, ok := all["shelvedWorktrees"]; ok {
 			_ = json.Unmarshal(raw, &m)
 		}
-		if m == nil || !m[worktreeID] {
+		if m[worktreeID] == shelved {
 			return nil
 		}
-		delete(m, worktreeID)
+		if shelved {
+			m[worktreeID] = true
+		} else {
+			delete(m, worktreeID)
+		}
 		encoded, err := json.Marshal(m)
 		if err != nil {
 			return err
@@ -133,6 +137,10 @@ func dropShelved(worktreeID string) error {
 		all["shelvedWorktrees"] = encoded
 		return atomicWriteJSON(statePath(), all)
 	})
+}
+
+func dropShelved(worktreeID string) error {
+	return setShelved(worktreeID, false)
 }
 
 func readGlobalConfig() globalConfig {

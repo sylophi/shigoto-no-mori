@@ -125,9 +125,11 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 
 // createWorktree ports the createWorktree flow from
 // main/lib/git/worktrees.ts: pick/validate the dirname, resolve the
-// layout base, refresh the remote base ref, `git worktree add -b`, and
+// layout base, refresh the remote base ref, `git worktree add`, and
 // re-read the identity so the returned branch is what git settled on.
-func createWorktree(proj project, requestedName, branchName, base string) (worktreeJSON, error) {
+// checkout=true reuses the existing branch `base` (no -b) -- the adopt
+// path; otherwise a new branch is created (branchName, or the dirname).
+func createWorktree(proj project, requestedName, branchName, base string, checkout bool) (worktreeJSON, error) {
 	existing, err := listWorktreeIdentities(proj)
 	if err != nil {
 		return worktreeJSON{}, err
@@ -158,12 +160,24 @@ func createWorktree(proj project, requestedName, branchName, base string) (workt
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return worktreeJSON{}, err
 	}
-	branch := strings.TrimSpace(branchName)
-	if branch == "" {
-		branch = name
-	}
-	if err := gitWorktreeAdd(proj.Path, worktreePath, branch, base); err != nil {
-		return worktreeJSON{}, err
+	if checkout {
+		if base == "" {
+			return worktreeJSON{}, errf("Checkout mode requires a base ref")
+		}
+		// No -b: reuse the existing branch. git refuses if it's already
+		// checked out in another worktree. `--` keeps a base ref from
+		// being parsed as flags.
+		if _, err := runGit(proj.Path, "worktree", "add", "--", worktreePath, base); err != nil {
+			return worktreeJSON{}, err
+		}
+	} else {
+		branch := strings.TrimSpace(branchName)
+		if branch == "" {
+			branch = name
+		}
+		if err := gitWorktreeAdd(proj.Path, worktreePath, branch, base); err != nil {
+			return worktreeJSON{}, err
+		}
 	}
 
 	fresh, err := listWorktreeIdentities(proj)

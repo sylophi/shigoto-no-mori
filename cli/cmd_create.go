@@ -47,7 +47,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"])
+	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"], false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -56,9 +56,14 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	} else {
 		note(fmt.Sprintf("created %s (branch %s)", worktree.Name, worktree.Branch))
 	}
+	return finishCreateLifecycle(proj, worktree), nil
+}
 
+// Shared tail of create and adopt: run the lifecycle, report script
+// failures, print the path as the stdout result. 0 when everything
+// ran; 3 when the worktree exists but a lifecycle step failed.
+func finishCreateLifecycle(proj project, worktree worktreeJSON) int {
 	failures := runCreateLifecycle(proj, worktree)
-
 	ok := len(failures) == 0
 	if jsonMode {
 		emit(map[string]any{
@@ -76,9 +81,9 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		out(worktree.Path)
 	}
 	if ok {
-		return 0, nil
+		return 0
 	}
-	return 3, nil
+	return 3
 }
 
 func emitPhase(phase string) {

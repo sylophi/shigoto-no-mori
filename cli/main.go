@@ -40,6 +40,9 @@ Commands:
                                   on the primary branch, delete the merged one
   merge [<name>] [-m <method>]    Merge the worktree's PR via gh, method per
                                   the repo's settings (or --method override)
+  adopt [<name>] [-p <project>]   Convert an external worktree to managed:
+                                  move it into the layout, run the lifecycle
+  shelve / unshelve [<name>]      Toggle the app's "out of focus" flag
   project list                    List registered projects
   project add [<path>]            Register the repo containing <path> (default .)
   config [-p <project>] [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]
@@ -116,6 +119,12 @@ func run() int {
 		code, err = cmdDone(ctx, args)
 	case "merge":
 		code, err = cmdMerge(ctx, args)
+	case "adopt":
+		code, err = cmdAdopt(ctx, args)
+	case "shelve":
+		code, err = cmdShelve(ctx, args, true)
+	case "unshelve":
+		code, err = cmdShelve(ctx, args, false)
 	case "project":
 		code, err = cmdProject(ctx, args)
 	case "config":
