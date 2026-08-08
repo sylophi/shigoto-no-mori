@@ -6,6 +6,11 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { promisify } from "node:util";
 import { binaryOnPath } from "../util/binaries";
+import {
+  addProjectViaBundledCli,
+  T3_BUNDLED_CLI_SUBPATH,
+  T3CODE_ID,
+} from "./t3code";
 import type { DetectedApp, PlatformLaunchers } from "./types";
 
 const exec = promisify(execFile);
@@ -75,6 +80,18 @@ const CATALOG: DarwinCatalogEntry[] = [
     id: "claude",
     label: "Claude",
     bundleNames: ["Claude.app"],
+  },
+  // No `cli`: the npm-installable `t3` binary exists, but its root
+  // command starts a server rather than opening a folder, and launching
+  // requires the app bundle anyway (see t3code.ts).
+  {
+    id: T3CODE_ID,
+    label: "T3 Code",
+    bundleNames: [
+      "T3 Code.app",
+      "T3 Code (Alpha).app",
+      "T3 Code (Nightly).app",
+    ],
   },
   {
     id: "sublime",
@@ -206,11 +223,15 @@ const APP_ROOTS = [
 ] as const;
 
 function appExists(bundleName: string): boolean {
-  if (bundleName === "__finder__") return true;
+  return bundleName === "__finder__" || bundlePath(bundleName) !== null;
+}
+
+function bundlePath(bundleName: string): string | null {
   for (const root of APP_ROOTS) {
-    if (existsSync(`${root}/${bundleName}`)) return true;
+    const candidate = `${root}/${bundleName}`;
+    if (existsSync(candidate)) return candidate;
   }
-  return false;
+  return null;
 }
 
 async function detect(): Promise<DetectedApp[]> {
@@ -246,7 +267,38 @@ async function openWithBundle(
   await exec("open", ["-a", appName, worktreePath]);
 }
 
+// T3 Code can't open a folder directly (see t3code.ts): register the
+// worktree via the CLI bundled in the app, then activate the app. On a
+// cold start T3's landing route auto-opens a draft composer for the
+// most recently active project -- the one just added -- so this lands
+// ready to prompt; when already running it can only surface the project
+// and focus the window.
+async function launchT3Code(
+  app: DetectedApp,
+  worktreePath: string,
+): Promise<void> {
+  const bundle = app.bundleNames
+    .map(bundlePath)
+    .find((p): p is string => p !== null);
+  if (!bundle) {
+    throw new Error(`No installed app found for ${app.bundleNames.join(", ")}`);
+  }
+  const appName = bundle.replace(/^.+\//, "").replace(/\.app$/, "");
+  await addProjectViaBundledCli(
+    `${bundle}/Contents/MacOS/${appName}`,
+    [`${bundle}/Contents/Resources`, ...T3_BUNDLED_CLI_SUBPATH].join("/"),
+    worktreePath,
+  );
+  // Activate by full path, not name: with two variants installed (say
+  // stable and Alpha) a name lookup could focus a different copy than
+  // the one whose CLI just registered the project.
+  await exec("open", ["-a", bundle]);
+}
+
 async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
+  if (app.id === T3CODE_ID) {
+    return launchT3Code(app, worktreePath);
+  }
   // `open -a` routes through Launch Services, which ignores in-app window
   // preferences like Zed's "CLI Default Open Behavior" or VS Code's
   // `window.openFoldersInNewWindow`. Prefer the CLI shim so those

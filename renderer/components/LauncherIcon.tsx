@@ -20,6 +20,7 @@ import ghosttyIconUrl from "@/app-icons/ghostty.png";
 import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
 import itermIconUrl from "@/app-icons/iterm.png";
 import sublimeIconUrl from "@/app-icons/sublime.png";
+import t3codeIconUrl from "@/app-icons/t3code.png";
 import terminalIconUrl from "@/app-icons/terminal.png";
 import vscodeIconUrl from "@/app-icons/vscode.png";
 import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png";
@@ -86,6 +87,8 @@ export function LauncherIcon({
       return <AppIcon src={codexIconUrl} className={className} />;
     case "claude":
       return <AppIcon src={claudeIconUrl} className={className} />;
+    case "t3code":
+      return <AppIcon src={t3codeIconUrl} className={className} />;
     case "windsurf":
       return <AppIcon src={windsurfIconUrl} className={className} />;
     case "vscodium":
