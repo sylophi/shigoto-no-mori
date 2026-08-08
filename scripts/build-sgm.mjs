@@ -8,7 +8,7 @@
 // Host platform by default; set GOOS/GOARCH to cross-compile
 // (e.g. GOOS=windows GOARCH=amd64).
 //
-// Run: pnpm build:sgm [--dev]
+// Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
