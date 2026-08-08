@@ -14,7 +14,7 @@ import type { PlatformChrome } from "./types";
 // the caption buttons matches the surface it floats above: the plain
 // main pane in v1, the card-tinted headers in doubutsu. Doubutsu hexes
 // are the renderer/doubutsu.css background/card/foreground tokens
-// converted to sRGB -- `pnpm check:theme` recomputes them from the CSS
+// converted to sRGB -- `pnpm theme:check` recomputes them from the CSS
 // and fails if these drift, printing the expected values. The sidebar
 // surface on top of this shell is painted by the renderer (index.css /
 // doubutsu.css).
