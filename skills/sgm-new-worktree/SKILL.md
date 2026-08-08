@@ -3,11 +3,24 @@ name: sgm-new-worktree
 description: Create a Shigoto no Mori worktree for new work. Use when starting a task that should run in its own worktree, isolated from the primary checkout.
 ---
 
-`cd "$(sgm create)"` — creates the worktree, runs its setup, prints the
-path. Stay in there for all subsequent commands. Exit 3 means the worktree
-was created but its setup script failed — fix that before relying on the
+Create the worktree and move into it:
+
+```sh
+cd "$(sgm create)"
+```
+
+This runs carry-over and the project's setup script (progress streams to
+stderr) and prints the path. Exit 3 means the worktree exists but its setup
+script failed: read the output and fix that before relying on the
 environment.
 
-Once the work has taken shape, the branch still carries the worktree's
-random animal name; rename it to something short and descriptive that fits
-the actual changes with `git branch -m <new-name>`.
+**Stay inside.** Run every subsequent command from the worktree.
+
+**Rename the branch once the work has taken shape.** The branch starts out
+named after the worktree's random animal name. Rename it to something short
+and descriptive that fits the actual changes (e.g.
+"fix-stale-session-cleanup"):
+
+```sh
+git branch -m <new-name>
+```

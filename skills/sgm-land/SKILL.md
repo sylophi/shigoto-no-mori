@@ -3,11 +3,17 @@ name: sgm-land
 description: Merge a Shigoto no Mori worktree's branch into the primary branch and clean up. Use when work in an sgm worktree is finished and should be landed/merged, or when asked to clean up a merged worktree.
 ---
 
-Everything committed (and pushed, if there's a PR) first.
+Land the current worktree's work, then clean up. Commit everything first,
+and push if there is a PR.
 
-Merge: `sgm merge` when there's a PR (method follows the repo's settings).
-Otherwise merge locally:
-`git -C "$(sgm list --json | jq -r '.[]|select(.isPrimary).path')" merge <branch>`
+**Merge.** With a PR, run `sgm merge`: it picks the merge method from the
+repo's settings. Pass `--method merge|squash|rebase` only when asked for a
+specific one. Without a PR, merge locally into the primary checkout:
 
-Clean up: `sgm rm <name>` for a worktree you're finished with, or `sgm done`
-if you're in the primary checkout sitting on the merged branch.
+```sh
+git -C "$(sgm list --json | jq -r '.[]|select(.isPrimary).path')" merge <branch>
+```
+
+**Clean up.** Run `sgm rm <name>` for a worktree you're finished with, or
+`sgm done` when you're in the primary checkout sitting on the merged
+branch.
