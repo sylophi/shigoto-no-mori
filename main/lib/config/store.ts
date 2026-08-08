@@ -1,4 +1,8 @@
 // Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
+// Writes are read-modify-write of the whole file, and both the app and
+// the sgm CLI go through this module -- so every write cycle holds the
+// cross-process lock. Reads stay lock-free: the rename keeps the file
+// itself always consistent.
 import {
   mkdirSync,
   readFileSync,
@@ -8,6 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { tempPathFor } from "../util/jsonFile";
+import { withFileLock } from "../util/lockFile";
 import { shigomoriRoot } from "../util/paths";
 
 const FILE = "state.json";
@@ -51,7 +56,9 @@ export function readKey<T>(key: string, fallback: T): T {
 }
 
 export function writeKey<T>(key: string, value: T): void {
-  const all = readAll();
-  all[key] = value;
-  writeAll(all);
+  withFileLock(`${filePath()}.lock`, () => {
+    const all = readAll();
+    all[key] = value;
+    writeAll(all);
+  });
 }
