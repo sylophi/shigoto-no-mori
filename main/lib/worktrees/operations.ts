@@ -234,9 +234,18 @@ export async function relocateWorktreeToManagedPath(
   }
 }
 
+interface DeleteWorktreeInput {
+  worktreeId: string;
+  force?: boolean;
+  skipCleanup?: boolean;
+  // When true, the local branch survives the removal regardless of the
+  // global deleteBranchOnRemove preference (sgm rm --keep-branch).
+  keepBranch?: boolean;
+}
+
 export async function deleteWorktreeWithCleanup(
   project: Project,
-  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  input: DeleteWorktreeInput,
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteWorktreeResult> {
   const { worktreeId } = input;
@@ -260,7 +269,7 @@ export async function deleteWorktreeWithCleanup(
 
 async function deleteWorktreeWithCleanupInner(
   project: Project,
-  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  input: DeleteWorktreeInput,
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteWorktreeResult> {
   const { worktreeId, force, skipCleanup } = input;
@@ -338,7 +347,7 @@ async function deleteWorktreeWithCleanupInner(
     deleteBranchAfterWorktreeRemoval(
       project.path,
       target,
-      global.deleteBranchOnRemove ?? true,
+      input.keepBranch !== true && (global.deleteBranchOnRemove ?? true),
     ),
     deleteWorktreeData(project.id, worktreeId),
   ]);
