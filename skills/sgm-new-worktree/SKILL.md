@@ -16,11 +16,5 @@ before relying on the environment.
 
 **Stay inside.** Run every subsequent command from the worktree.
 
-**Rename the branch once the work has taken shape.** The branch starts out
-named after the worktree's random animal name. Rename it to something short
-and descriptive that fits the actual changes (e.g.
-"fix-stale-session-cleanup"):
-
-```sh
-git branch -m <new-name>
-```
+**Rename the branch once the work has taken shape.** It starts out named
+after the worktree's random animal name; use `/rename-branch`.
