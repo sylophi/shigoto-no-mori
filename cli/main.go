@@ -124,7 +124,7 @@ func helpText(full bool) string {
 			"From elsewhere, address worktrees as <name>, <project>/<name>, "+
 			"or a path, or pass -p <project>. Omitting the name in the "+
 			"primary checkout opens a menu. Aliases: l list, c cd, o open, "+
-			"new create, wt worktrees, p projects.", width) {
+			"new create, w worktrees, p projects.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -173,7 +173,7 @@ func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string 
 }
 
 func worktreesHelpText() string {
-	return namespaceHelpText("worktrees", "wt",
+	return namespaceHelpText("worktrees", "w or wt",
 		"The worktrees prefix is optional: "+binaryName+" rm == "+binaryName+
 			" wt rm. All commands accept -p <project>.", worktreeItems)
 }
@@ -277,7 +277,7 @@ func colorUsage(usage string) string {
 }
 
 var aliasCanonical = map[string]string{
-	"ls": "list", "l": "list", "c": "cd", "wt": "worktrees",
+	"ls": "list", "l": "list", "c": "cd", "wt": "worktrees", "w": "worktrees",
 	"worktree": "worktrees", "o": "open", "p": "projects",
 	"project": "projects", "new": "create", "remove": "rm",
 	"unshelve": "shelve",
@@ -471,7 +471,7 @@ func run() int {
 		code, err = cmdPath(ctx, args)
 	case "cd", "c":
 		code, err = cmdCd(ctx, args)
-	case "worktrees", "worktree", "wt":
+	case "worktrees", "worktree", "wt", "w":
 		code, err = cmdWorktrees(ctx, args)
 	case "switch":
 		code, err = cmdWorktree(ctx, args)
