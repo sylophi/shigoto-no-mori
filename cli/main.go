@@ -8,10 +8,9 @@ package main
 //
 // Known deltas vs the app: project-usage stats aren't bumped,
 // .worktreeinclude reconciliation doesn't rewrite project.json, the
-// `port` field isn't populated, and `rm` can't reap scripts the app
-// spawned into the worktree -- that registry lives in the app's
-// process, so stop those from the app (or quit it) before removing
-// their worktree from the CLI.
+// `port` field isn't populated, and `rm` / `project remove` can't reap
+// scripts the app spawned into a worktree -- that registry lives in
+// the app's process, so stop those from the app (or quit it) first.
 
 import (
 	"fmt"
@@ -19,42 +18,56 @@ import (
 	"strings"
 )
 
-// Help is data; layout and color are computed. Every worktree command
-// also takes -p <project>, noted once in the prose instead of on every
-// usage line.
+// Help is data; layout and color are computed. Commands are grouped by
+// what they act on; every worktree command also takes -p <project>,
+// noted once in the prose instead of on every usage line.
 type helpItem struct{ usage, desc string }
 
-var helpCommands = []helpItem{
-	{"list [--all]", "List worktrees (all projects when outside one)"},
-	{"path [<name>]", "Print a worktree's directory"},
-	{"create [<name>] [-b <branch>] [--base <ref>]",
-		"Create a worktree: carry-over, setup, port"},
-	{"rm [<name>] [-f] [--keep-branch]",
-		"Remove a worktree: teardown, release port, delete branch per app settings"},
-	{"done [<name>] [-f]",
-		"Post-merge cleanup: land the checkout back on the primary branch, delete the merged one (refuses unmerged branches without -f)"},
-	{"merge [<name>] [-m <method>]",
-		"Merge the worktree's PR via gh, method per the repo's settings (or --method override)"},
-	{"adopt [<name>] [-f]",
-		"Convert an external worktree to managed: move it into the layout, run the lifecycle (refuses dirty worktrees without -f)"},
-	{"setup [<name>]",
-		"Re-run the setup script (and port-pool provision) on an existing worktree"},
-	{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
-	{"project list", "List registered projects"},
-	{"project add [<path>] [--all]",
-		"Register the repo at <path> (default .) or with --all every repo found beneath it (asks first, --yes skips)"},
-	{"config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
-		`Show or set per-project config; "" clears a script (default-branch can't be cleared)`},
+type helpGroup struct {
+	title string
+	items []helpItem
 }
 
-var helpFlags = []helpItem{
-	{"--json", "Machine-readable output (NDJSON progress for create)"},
-	{"--verbose", "Diagnostics on stderr"},
-	{"-h, --help", "Show this help"},
-}
-
-var helpEnv = []helpItem{
-	{"SHIGOMORI_ROOT", "Override the state root directory entirely"},
+var helpGroups = []helpGroup{
+	{"Navigate", []helpItem{
+		{"list [--all]", "List worktrees (all projects when outside one)"},
+		{"path [<name>]", "Print a worktree's directory"},
+		{"cd [<name>]",
+			"Open a subshell inside a worktree, exit it to return (no name picks from a menu)"},
+		{"app", "Open the Shigoto no Mori app"},
+	}},
+	{"Worktree lifecycle", []helpItem{
+		{"create [<name>] [-b <branch>] [--base <ref>]",
+			"Create a worktree: carry-over, setup, port"},
+		{"rm [<name>] [-f] [--keep-branch]",
+			"Remove a worktree: teardown, release port, delete branch per app settings"},
+		{"done [<name>] [-f]",
+			"Post-merge cleanup: land the checkout back on the primary branch, delete the merged one (refuses unmerged branches without -f)"},
+		{"merge [<name>] [-m <method>]",
+			"Merge the worktree's PR via gh, method per the repo's settings (or --method override)"},
+		{"adopt [<name>] [-f]",
+			"Convert an external worktree to managed: move it into the layout, run the lifecycle (refuses dirty worktrees without -f)"},
+		{"setup [<name>]",
+			"Re-run the setup script (and port-pool provision) on an existing worktree"},
+		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
+	}},
+	{"Projects", []helpItem{
+		{"project list", "List registered projects"},
+		{"project add [<path>] [--all]",
+			"Register the repo at <path> (default .) or with --all every repo found beneath it (asks first, --yes skips)"},
+		{"project remove [<name>]",
+			"Unregister a project, worktrees stay on disk (asks first, no name picks from a menu)"},
+		{"config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
+			`Show or set per-project config ("" clears a script, default-branch can't be cleared)`},
+	}},
+	{"Flags", []helpItem{
+		{"--json", "Machine-readable output (NDJSON progress for create)"},
+		{"--verbose", "Diagnostics on stderr"},
+		{"-h, --help", "Show this help"},
+	}},
+	{"Environment", []helpItem{
+		{"SHIGOMORI_ROOT", "Override the state root directory entirely"},
+	}},
 }
 
 func helpText() string {
@@ -62,50 +75,126 @@ func helpText() string {
 	if flavor != "prod" {
 		devNote = " (dev: targets ~/shigomori-dev)"
 	}
-	return binaryName + " -- Shigoto no Mori CLI" + devNote + "\n\n" +
-		boldOut("Usage:") + " " + binaryName + " [--json] [--verbose] <command> [args]\n\n" +
-		"Commands run against the worktree/project containing the current\n" +
-		"directory when possible; from anywhere else, address worktrees as\n" +
-		"<name> or <project>/<name>, or pass -p <project>. From the primary\n" +
-		"checkout, omitting the name picks a worktree interactively.\n\n" +
-		renderHelpSection("Commands", helpCommands) + "\n" +
-		renderHelpSection("Flags", helpFlags) + "\n" +
-		renderHelpSection("Environment", helpEnv) + "\n" +
-		"Exit codes: 0 ok; 1 error; 2 usage; 3 worktree created but a lifecycle\n" +
-		"script failed (create prints the path either way)."
-}
-
-// One aligned description column per section. A usage wider than the
-// column gets its own line with the description below, still at the
-// column; descriptions word-wrap there. Color is applied after all
-// width math, so alignment never depends on it.
-func renderHelpSection(title string, items []helpItem) string {
-	const indent = 2
-	const maxInlineUsage = 30
-	const totalWidth = 78
+	width := helpWidth()
+	var b strings.Builder
+	b.WriteString(boldOut(binaryName+" -- Shigoto no Mori CLI") + devNote + "\n\n")
+	b.WriteString(boldOut("Usage:") + " " + binaryName + " " +
+		colorUsage("[--json] [--verbose] <command> [args]") + "\n\n")
+	for _, line := range wrapText(
+		"Commands run against the worktree/project containing the current "+
+			"directory when possible. From anywhere else, address worktrees as "+
+			"<name> or <project>/<name>, or pass -p <project>. From the primary "+
+			"checkout, omitting the name picks a worktree from a menu.", width) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("\n")
 
 	col := 0
-	for _, item := range items {
-		if n := len([]rune(item.usage)); n <= maxInlineUsage && n > col {
-			col = n
+	for _, group := range helpGroups {
+		for _, item := range group.items {
+			if n := len([]rune(item.usage)); n <= maxInlineUsage && n > col {
+				col = n
+			}
 		}
 	}
-	descCol := indent + col + 2
+	for _, group := range helpGroups {
+		b.WriteString(renderHelpSection(group.title, group.items, col, width))
+		b.WriteString("\n")
+	}
+	for _, line := range wrapText(
+		"Exit codes: 0 ok, 1 error, 2 usage, 3 worktree created but a "+
+			"lifecycle script failed (create prints the path either way).", width) {
+		b.WriteString(line + "\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
 
+const (
+	helpIndent     = 2
+	maxInlineUsage = 34
+)
+
+// The terminal's real width, clamped: hard wrapping below 60 helps
+// nobody, and lines past ~110 columns get hard to scan.
+func helpWidth() int {
+	width := terminalWidth()
+	if width == 0 {
+		width = 80
+	}
+	if width < 60 {
+		width = 60
+	}
+	if width > 110 {
+		width = 110
+	}
+	return width
+}
+
+// One aligned description column shared by all sections. A usage wider
+// than the column gets its own line with the description below, still
+// at the column; descriptions word-wrap there. Color is applied after
+// all width math, so alignment never depends on it.
+func renderHelpSection(title string, items []helpItem, col, width int) string {
+	descCol := helpIndent + col + 2
 	var b strings.Builder
-	b.WriteString(boldOut(title+":") + "\n")
+	b.WriteString(boldOut(title) + "\n")
 	pad := func(n int) string { return strings.Repeat(" ", n) }
 	for _, item := range items {
 		usageWidth := len([]rune(item.usage))
-		lines := wrapText(item.desc, totalWidth-descCol)
+		lines := wrapText(item.desc, width-descCol)
 		if usageWidth <= col {
-			b.WriteString(pad(indent) + cyanOut(item.usage) + pad(col-usageWidth+2) + lines[0] + "\n")
+			b.WriteString(pad(helpIndent) + colorUsage(item.usage) + pad(col-usageWidth+2) + lines[0] + "\n")
 			lines = lines[1:]
 		} else {
-			b.WriteString(pad(indent) + cyanOut(item.usage) + "\n")
+			b.WriteString(pad(helpIndent) + colorUsage(item.usage) + "\n")
 		}
 		for _, line := range lines {
 			b.WriteString(pad(descCol) + line + "\n")
+		}
+	}
+	return b.String()
+}
+
+// Token-type coloring for usage strings: bare words (the command
+// itself and its subcommands) cyan, <placeholders> yellow, flags
+// green, brackets and separators dim. Runs before nothing -- width
+// math strips ANSI, so this is purely cosmetic.
+func colorUsage(usage string) string {
+	var b strings.Builder
+	runes := []rune(usage)
+	for i := 0; i < len(runes); {
+		r := runes[i]
+		switch {
+		case r == '<':
+			j := i
+			for j < len(runes) && runes[j] != '>' {
+				j++
+			}
+			if j < len(runes) {
+				j++
+			}
+			b.WriteString(yellowOut(string(runes[i:j])))
+			i = j
+		case r == '[' || r == ']' || r == '/':
+			b.WriteString(dimOut(string(r)))
+			i++
+		case r == '-':
+			j := i
+			for j < len(runes) && runes[j] != ' ' && runes[j] != ']' && runes[j] != ',' {
+				j++
+			}
+			b.WriteString(greenOut(string(runes[i:j])))
+			i = j
+		case r == ' ' || r == ',':
+			b.WriteRune(r)
+			i++
+		default:
+			j := i
+			for j < len(runes) && runes[j] != ' ' && runes[j] != '[' && runes[j] != ']' && runes[j] != '<' && runes[j] != '/' && runes[j] != ',' {
+				j++
+			}
+			b.WriteString(cyanOut(string(runes[i:j])))
+			i = j
 		}
 	}
 	return b.String()
@@ -192,6 +281,10 @@ func run() int {
 		code, err = cmdList(ctx, args)
 	case "path":
 		code, err = cmdPath(ctx, args)
+	case "cd":
+		code, err = cmdCd(ctx, args)
+	case "app":
+		code, err = cmdApp(ctx, args)
 	case "create":
 		code, err = cmdCreate(ctx, args)
 	case "rm", "remove":

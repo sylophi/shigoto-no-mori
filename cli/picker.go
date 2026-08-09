@@ -27,6 +27,50 @@ func interactiveStdio() bool {
 	return !jsonMode && isTerminal(os.Stdin) && isTerminal(os.Stderr)
 }
 
+// Same shape as pickWorktree, one level up: number or name, blank to
+// cancel.
+func pickProject(ctx cliContext) (project, error) {
+	if len(ctx.projects) == 0 {
+		return project{}, errf("No projects are registered yet.")
+	}
+	note("Select a project:")
+	note("")
+	widest := 0
+	for _, p := range ctx.projects {
+		if n := len([]rune(p.Name)); n > widest {
+			widest = n
+		}
+	}
+	for i, p := range ctx.projects {
+		pad := strings.Repeat(" ", widest-len([]rune(p.Name)))
+		note(fmt.Sprintf("  %s  %s%s  %s",
+			dimErr(strconv.Itoa(i+1)+"."), cyanErr(p.Name), pad, dimErr(p.Path)))
+	}
+	note("")
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Fprintf(os.Stderr, "Project [1-%d]: ", len(ctx.projects))
+		input, err := reader.ReadString('\n')
+		if err != nil {
+			note("")
+			return project{}, errf("Cancelled.")
+		}
+		answer := strings.TrimSpace(input)
+		if answer == "" || strings.EqualFold(answer, "q") {
+			return project{}, errf("Cancelled.")
+		}
+		if n, convErr := strconv.Atoi(answer); convErr == nil && n >= 1 && n <= len(ctx.projects) {
+			return ctx.projects[n-1], nil
+		}
+		for _, p := range ctx.projects {
+			if strings.EqualFold(p.Name, answer) {
+				return p, nil
+			}
+		}
+		note(fmt.Sprintf("Enter a number between 1 and %d, a project name, or blank to cancel.", len(ctx.projects)))
+	}
+}
+
 // Yes/no question on stderr, default no. EOF (ctrl-d) counts as no.
 func confirmPrompt(question string) bool {
 	fmt.Fprintf(os.Stderr, "%s [y/N] ", question)
@@ -39,19 +83,22 @@ func confirmPrompt(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-func pickWorktree(proj project) (located, error) {
+// excludeID drops one worktree from the menu -- the one the caller is
+// already in (for the primary-checkout default that's the primary, for
+// `cd` it's wherever you stand).
+func pickWorktree(proj project, excludeID string) (located, error) {
 	worktrees, err := listWorktrees(proj)
 	if err != nil {
 		return located{}, err
 	}
 	var choices []worktreeJSON
 	for _, w := range worktrees {
-		if !w.IsPrimary {
+		if w.ID != excludeID {
 			choices = append(choices, w)
 		}
 	}
 	if len(choices) == 0 {
-		return located{}, errf("%s has no worktrees besides the primary. Create one with `%s create`.",
+		return located{}, errf("%s has no other worktrees. Create one with `%s create`.",
 			proj.Name, binaryName)
 	}
 

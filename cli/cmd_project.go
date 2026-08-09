@@ -22,16 +22,105 @@ import (
 
 func cmdProject(ctx cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		return 2, usageErrf("Usage: %s project <list|add> [path]", binaryName)
+		return 2, usageErrf("Usage: %s project <list|add|remove> [args]", binaryName)
 	}
 	switch args[0] {
 	case "list", "ls":
 		return cmdProjectList(ctx)
 	case "add":
 		return cmdProjectAdd(ctx, args[1:])
+	case "remove", "rm":
+		return cmdProjectRemove(ctx, args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s project <list|add> [path]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s project <list|add|remove> [args]", args[0], binaryName)
 	}
+}
+
+// Ports the app's projects:remove: drop the registry entry and the
+// per-project state dir (config, shelved marks, worktree data).
+// Worktree checkouts stay on disk -- remove them first with `rm` if
+// that's the intent. Unlike the app, the CLI can't reap scripts the
+// app spawned into this project's worktrees; stop those in the app.
+func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
+	parsed, err := parseCmdArgs(args, argSpec{
+		bools: map[string][]string{"yes": {"y"}},
+	})
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	var proj project
+	switch {
+	case len(parsed.positionals) > 0:
+		proj, err = resolveProject(ctx, parsed.positionals[0])
+	case interactiveStdio():
+		proj, err = pickProject(ctx)
+	default:
+		return 2, usageErrf("Specify a project to remove (see `%s project list`).", binaryName)
+	}
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+
+	remains := "No files are deleted from disk."
+	if identities, idErr := listWorktreeIdentities(proj); idErr == nil {
+		n := 0
+		for _, id := range identities {
+			if !id.IsPrimary {
+				n++
+			}
+		}
+		if n > 0 {
+			remains = fmt.Sprintf("Its %d worktrees stay on disk.", n)
+		}
+	}
+	if !parsed.bools["yes"] {
+		if !interactiveStdio() {
+			return 2, usageErrf(
+				"Refusing to remove %s without confirmation. Re-run with --yes, or interactively.", proj.Name)
+		}
+		if !confirmPrompt(fmt.Sprintf("Remove %s (%s) from Shigoto no Mori? %s", proj.Name, proj.Path, remains)) {
+			return 1, errf("Cancelled.")
+		}
+	}
+
+	err = withStateLock(func() error {
+		all := readStateFile()
+		var projects []project
+		if raw, ok := all["projects"]; ok {
+			_ = json.Unmarshal(raw, &projects)
+		}
+		kept := make([]project, 0, len(projects))
+		found := false
+		for _, p := range projects {
+			if p.ID == proj.ID {
+				found = true
+				continue
+			}
+			kept = append(kept, p)
+		}
+		if !found {
+			return errf("Unknown project: %s", proj.ID)
+		}
+		encoded, err := json.Marshal(kept)
+		if err != nil {
+			return err
+		}
+		all["projects"] = encoded
+		return atomicWriteJSON(statePath(), all)
+	})
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	// Mirrors the app's deleteProjectState; best-effort like the app's
+	// icon-cache cleanup.
+	_ = os.RemoveAll(filepath.Join(shigomoriRoot(), "projects", proj.ID))
+
+	if jsonMode {
+		emit(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path})
+	} else {
+		out("removed " + proj.Name + " (" + proj.Path + ")")
+	}
+	return 0, nil
 }
 
 func cmdProjectList(ctx cliContext) (int, error) {
