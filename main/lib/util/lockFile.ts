@@ -46,15 +46,18 @@ function acquire(lockPath: string): void {
   mkdirSync(dirname(lockPath), { recursive: true });
   const deadline = Date.now() + TIMEOUT_MS;
   while (!tryAcquire(lockPath)) {
+    // Break a leaked lock (holder crashed between create and unlink).
+    // Best effort: the stat can race a concurrent release and the rm
+    // can fail on permissions. Fall through to the deadline check
+    // either way -- every loop iteration must reach it, or an
+    // undeletable lock would spin this (synchronous, main-thread)
+    // loop forever.
     try {
       if (Date.now() - statSync(lockPath).mtimeMs > STALE_MS) {
-        // Leaked by a crashed holder; break it and race for the retake.
         rmSync(lockPath, { force: true });
-        continue;
       }
     } catch {
-      // Holder released between our create attempt and the stat; retry.
-      continue;
+      // See above: the deadline below still bounds the loop.
     }
     if (Date.now() > deadline) {
       throw new Error(`Timed out waiting for file lock: ${lockPath}`);

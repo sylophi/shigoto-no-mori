@@ -222,14 +222,12 @@ func withStateLock(fn func() error) error {
 		if !errors.Is(err, os.ErrExist) {
 			return err
 		}
-		if info, statErr := os.Stat(lockPath); statErr == nil {
-			if time.Since(info.ModTime()) > lockStale {
-				// Leaked by a crashed holder; break it and race for the retake.
-				_ = os.Remove(lockPath)
-				continue
-			}
-		} else {
-			continue // released between create attempt and stat; retry
+		// Break a leaked lock (holder crashed between create and
+		// unlink). Best effort: the stat can race a concurrent release
+		// and the removal can fail; fall through to the deadline check
+		// either way so an undeletable lock can't spin forever.
+		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > lockStale {
+			_ = os.Remove(lockPath)
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timed out waiting for file lock: %s", lockPath)
