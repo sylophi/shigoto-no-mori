@@ -26,11 +26,15 @@ func cmdWorktree(ctx cliContext, args []string) (int, error) {
 
 // sgm worktrees <command> (wt, worktree for short) -- namespace form
 // of the bare worktree commands, mirroring `sgm projects <command>`.
-// `switch` enters a worktree of the current project; bare worktrees
-// (or a worktree name) is its alias. Subcommand words win over
-// worktree names.
+// Bare `sgm worktrees` prints the namespace help; a worktree name
+// enters that worktree (`switch` with the menu). Subcommand words win
+// over worktree names.
 func cmdWorktrees(ctx cliContext, args []string) (int, error) {
-	if len(args) > 0 {
+	if len(args) == 0 {
+		out(worktreesHelpText())
+		return 0, nil
+	}
+	{
 		sub, rest := args[0], args[1:]
 		switch sub {
 		case "switch":

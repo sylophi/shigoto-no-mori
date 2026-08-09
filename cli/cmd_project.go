@@ -22,7 +22,8 @@ import (
 
 func cmdProject(ctx cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		return 2, usageErrf("Usage: %s projects <list|add|remove|config> [args]", binaryName)
+		out(projectsHelpText())
+		return 0, nil
 	}
 	switch args[0] {
 	case "list", "ls":

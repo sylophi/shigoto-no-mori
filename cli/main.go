@@ -30,57 +30,84 @@ type helpGroup struct {
 	items []helpItem
 }
 
-var helpGroups = []helpGroup{
-	{"General", []helpItem{
-		{"list [--all]", "List worktrees",
-			"All projects when outside one, or with --all."},
-		{"cd [<name>]", "Open a subshell in any worktree",
-			"Picks a project, then a worktree. Exit the shell to return."},
-		{"app", "Open the Shigoto no Mori app", ""},
-		{"config", "Open the global config file",
-			"config.json in the state root, via $EDITOR or the OS opener."},
-	}},
-	{"Worktrees", []helpItem{
-		{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
-			"Like cd without the project menu. Bare worktrees (wt) does the same. Exit the shell to return."},
-		{"worktrees path [<name>]", "Print a worktree's directory", ""},
-		{"worktrees create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
-			"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision."},
-		{"worktrees rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
-			"Teardown, release port, delete the branch per app settings."},
-		{"worktrees done [<name>] [-f]", "Post-merge cleanup",
-			"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
-		{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
-			"Method follows the repo's settings unless -m overrides."},
-		{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
-			"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
-		{"worktrees setup [<name>]", "Re-run the setup script",
-			"Also re-provisions the port-pool port."},
-		{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
-		{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
-			"Finder, editors, custom commands. Bare open shows the row as a menu."},
-	}},
-	{"Projects", []helpItem{
-		{"projects list", "List registered projects", ""},
-		{"projects add [<path>] [--all]", "Register a repo",
-			"The repo at <path> (default .). --all registers every repo found beneath it, asking first (--yes skips)."},
-		{"projects remove [<name>]", "Unregister a project",
-			"Worktrees stay on disk. Asks first, no name picks from a menu."},
-		{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
-			"Show or set per-project config",
-			`"" clears a script, default-branch can't be cleared.`},
-	}},
-	{"Flags", []helpItem{
-		{"--json", "Machine-readable output", "NDJSON progress for create."},
-		{"--verbose", "Diagnostics on stderr", ""},
-		{"-h, --help", "Show this help", "After a command, documents that command."},
-	}},
-	{"Environment", []helpItem{
-		{"SHIGOMORI_ROOT", "Override the state root directory entirely", ""},
-	}},
+var generalItems = []helpItem{
+	{"list [--all]", "List worktrees",
+		"All projects when outside one, or with --all."},
+	{"cd [<name>]", "Open a subshell in any worktree",
+		"Picks a project, then a worktree. Exit the shell to return."},
+	{"app", "Open the Shigoto no Mori app", ""},
+	{"config", "Open the global config file",
+		"config.json in the state root, via $EDITOR or the OS opener."},
 }
 
-func helpText() string {
+var worktreeItems = []helpItem{
+	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
+		"Like cd without the project menu. Exit the shell to return."},
+	{"worktrees path [<name>]", "Print a worktree's directory", ""},
+	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
+		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision."},
+	{"worktrees rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
+		"Teardown, release port, delete the branch per app settings."},
+	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
+		"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
+	{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
+		"Method follows the repo's settings unless -m overrides."},
+	{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
+		"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
+	{"worktrees setup [<name>]", "Re-run the setup script",
+		"Also re-provisions the port-pool port."},
+	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
+	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
+		"Finder, editors, custom commands. Bare open shows the row as a menu."},
+}
+
+var projectItems = []helpItem{
+	{"projects list", "List registered projects", ""},
+	{"projects add [<path>] [--all]", "Register a repo",
+		"The repo at <path> (default .). --all registers every repo found beneath it, asking first (--yes skips)."},
+	{"projects remove [<name>]", "Unregister a project",
+		"Worktrees stay on disk. Asks first, no name picks from a menu."},
+	{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
+		"Show or set per-project config",
+		`"" clears a script, default-branch can't be cleared.`},
+}
+
+var flagItems = []helpItem{
+	{"--json", "Machine-readable output", "NDJSON progress for create."},
+	{"--verbose", "Diagnostics on stderr", ""},
+	{"-h, --help", "Show this help", "After a command, documents that command."},
+}
+
+var envItems = []helpItem{
+	{"SHIGOMORI_ROOT", "Override the state root directory entirely", ""},
+}
+
+// The full catalog, used by per-command help matching. The base help
+// page renders only General plus one pointer line per namespace; bare
+// `sgm worktrees` / `sgm projects` print their namespace's page.
+var helpGroups = []helpGroup{
+	{"General", generalItems},
+	{"Worktrees", worktreeItems},
+	{"Projects", projectItems},
+	{"Flags", flagItems},
+	{"Environment", envItems},
+}
+
+func inlineCol(groups []helpGroup) int {
+	col := 0
+	for _, group := range groups {
+		for _, item := range group.items {
+			if n := len([]rune(item.usage)); n <= maxInlineUsage && n > col {
+				col = n
+			}
+		}
+	}
+	return col
+}
+
+// The base page: General plus one pointer line per namespace. --all
+// expands every group in place.
+func helpText(full bool) string {
 	devNote := ""
 	if flavor != "prod" {
 		devNote = " (dev: targets ~/shigomori-dev)"
@@ -95,22 +122,28 @@ func helpText() string {
 			"directory when possible. From anywhere else, address worktrees as "+
 			"<name>, <project>/<name>, or a directory path, or pass -p "+
 			"<project>. From the primary checkout, omitting the name picks a "+
-			"worktree from a menu. worktrees is wt for short, and while "+
-			"nothing collides the bare command works too: sgm rm == sgm wt "+
-			"rm. Aliases: l list, c cd, o open, p projects, new create.", width) {
+			"worktree from a menu. Aliases: l list, c cd, o open, new create. "+
+			"`"+binaryName+" help --all` prints every command at once.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
 
-	col := 0
-	for _, group := range helpGroups {
-		for _, item := range group.items {
-			if n := len([]rune(item.usage)); n <= maxInlineUsage && n > col {
-				col = n
-			}
+	groups := helpGroups
+	if !full {
+		general := append(append([]helpItem{}, generalItems...),
+			helpItem{"worktrees <command>", "Worktree commands",
+				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. wt for short, and bare commands work while nothing collides: " + binaryName + " rm == " + binaryName + " wt rm. Run `" + binaryName + " worktrees` for details."},
+			helpItem{"projects <command>", "Project commands",
+				"list, add, remove, config. p for short. Run `" + binaryName + " projects` for details."},
+		)
+		groups = []helpGroup{
+			{"General", general},
+			{"Flags", flagItems},
+			{"Environment", envItems},
 		}
 	}
-	for _, group := range helpGroups {
+	col := inlineCol(groups)
+	for _, group := range groups {
 		b.WriteString(renderHelpSection(group.title, group.items, col, width))
 		b.WriteString("\n")
 	}
@@ -120,6 +153,34 @@ func helpText() string {
 		b.WriteString(line + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// The namespace pages behind bare `sgm worktrees` / `sgm projects`.
+func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string {
+	width := helpWidth()
+	var b strings.Builder
+	b.WriteString(boldOut(binaryName+" "+name) + " " + dimOut("("+shortAlias+" for short)") + "\n\n")
+	b.WriteString(boldOut("Usage:") + " " + binaryName + " " +
+		colorUsage(name+" <command> [args]") + "\n\n")
+	for _, line := range wrapText(blurb, width) {
+		b.WriteString(line + "\n")
+	}
+	b.WriteString("\n")
+	col := inlineCol([]helpGroup{{"", items}})
+	b.WriteString(renderHelpSection("Commands", items, col, width))
+	return strings.TrimRight(b.String(), "\n")
+}
+
+func worktreesHelpText() string {
+	return namespaceHelpText("worktrees", "wt",
+		"While nothing collides the bare command works too: "+binaryName+
+			" rm == "+binaryName+" wt rm. Every command takes -p <project> "+
+			"to target a project explicitly.", worktreeItems)
+}
+
+func projectsHelpText() string {
+	return namespaceHelpText("projects", "p",
+		"Manage which repos Shigoto no Mori knows about.", projectItems)
 }
 
 const (
@@ -240,6 +301,13 @@ func commandHelp(command string, args []string) string {
 			return commandHelp(args[0], args[1:])
 		}
 	}
+	// Bare namespace help is the namespace page.
+	if name == "worktrees" && len(args) == 0 {
+		return worktreesHelpText()
+	}
+	if name == "projects" && len(args) == 0 {
+		return projectsHelpText()
+	}
 	sub := ""
 	if name == "projects" && len(args) > 0 {
 		switch args[0] {
@@ -287,7 +355,7 @@ func commandHelp(command string, args []string) string {
 		}
 	}
 	if !found {
-		return helpText()
+		return helpText(false)
 	}
 	b.WriteString("\n" + dimOut("Run `"+binaryName+" --help` for the full list."))
 	return b.String()
@@ -355,7 +423,26 @@ func run() int {
 		return 0
 	}
 	if showHelp || len(rest) == 0 || rest[0] == "help" {
-		out(helpText())
+		scanArgs := rest
+		if len(rest) > 0 && rest[0] == "help" {
+			scanArgs = rest[1:]
+		}
+		full := false
+		var topic []string
+		for _, arg := range scanArgs {
+			if arg == "--all" || arg == "-a" {
+				full = true
+			} else {
+				topic = append(topic, arg)
+			}
+		}
+		switch {
+		case len(topic) > 0:
+			// `sgm help rm`, `sgm help worktrees create`, ...
+			out(commandHelp(topic[0], topic[1:]))
+		default:
+			out(helpText(full))
+		}
 		if showHelp || len(rest) > 0 {
 			return 0
 		}
