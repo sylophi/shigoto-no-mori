@@ -7,7 +7,7 @@ import {
 import type { Worktree } from "@shared/schemas";
 
 const KINDS = {
-  primary: { Icon: House, label: "Repo root" },
+  primary: { Icon: House, label: "Primary checkout" },
   external: { Icon: FolderTree, label: "External worktree" },
   shelved: { Icon: Archive, label: "Shelved" },
 } as const;
