@@ -10,11 +10,12 @@
 //
 // macOS-only for now: the Windows portable zip has no stable install
 // location to link from, so Windows keeps the app-only workflow.
-import { lstat, readlink } from "node:fs/promises";
+import { lstat, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import {
   replaceWithSymlinkSync,
+  SGM_DIST_DIR,
   sgmBinaryName,
   sgmUserBinDir,
 } from "@shared/sgmDist.mts";
@@ -52,6 +53,25 @@ function isOnPath(dir: string): boolean {
   return (process.env.PATH ?? "")
     .split(delimiter)
     .some((entry) => comparablePath(entry) === comparablePath(dir));
+}
+
+// "Nuke everything" counterpart: remove this flavor's CLI link when it
+// is recognizably one shigomori created -- the app-bundle link this
+// module installs, or a repo checkout's dist-cli link (pnpm
+// cli:install, pnpm dev). Anything else at the path stays. The prod
+// app removes `sgm`; the dev app removes `sgmd`.
+export async function uninstallSgmCliLink(): Promise<void> {
+  const name = sgmBinaryName(app.isPackaged ? "prod" : "dev");
+  const link = join(sgmUserBinDir(), name);
+  const stat = await lstat(link).catch(() => null);
+  if (stat === null || !stat.isSymbolicLink()) return;
+  const target = await readlink(link).catch(() => null);
+  if (target === null) return;
+  const ours =
+    target.endsWith(`/Contents/Resources/${name}`) ||
+    target.endsWith(`/${SGM_DIST_DIR}/${name}`);
+  if (!ours) return;
+  await rm(link, { force: true }).catch(() => undefined);
 }
 
 // Call after applyUserShellPath so the PATH check sees the login
