@@ -103,3 +103,9 @@ assets/icon.iconset/
 
 # sgm CLI compiled binary
 dist-cli/
+
+# go build artifacts in the module dir (compiled output belongs in dist-cli/)
+cli/sgm
+cli/sgm-d
+cli/sgm.exe
+cli/sgm-d.exe
