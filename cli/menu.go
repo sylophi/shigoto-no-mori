@@ -19,9 +19,9 @@ import (
 	"github.com/charmbracelet/huh"
 )
 
-// Returns the selected index into rows. names feed the fallback
-// prompt's type-a-name matching.
-func menuSelect(title string, rows []string, names []string) (int, error) {
+// Returns the selected index into rows; initial is the row highlighted
+// first. names feed the fallback prompt's type-a-name matching.
+func menuSelect(title string, rows []string, names []string, initial int) (int, error) {
 	if len(rows) == 0 {
 		return -1, errf("Nothing to select from.")
 	}
@@ -30,6 +30,9 @@ func menuSelect(title string, rows []string, names []string) (int, error) {
 		options[i] = huh.NewOption(row, i)
 	}
 	selected := 0
+	if initial >= 0 && initial < len(rows) {
+		selected = initial
+	}
 	sel := huh.NewSelect[int]().
 		Title(title).
 		Options(options...).

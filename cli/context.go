@@ -97,7 +97,7 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 		// explicit-forms error.
 		if interactiveStdio() && len(ctx.projects) > 0 {
 			noteUnregistered(ctx)
-			return pickProject(ctx)
+			return pickProject(ctx, "")
 		}
 		if ctx.unregisteredRepo != "" {
 			return project{}, usageErrf(
@@ -230,7 +230,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 		// menu, scripts get the explicit-forms error.
 		if interactiveStdio() && len(ctx.projects) > 0 {
 			noteUnregistered(ctx)
-			proj, err := pickProject(ctx)
+			proj, err := pickProject(ctx, "")
 			if err != nil {
 				return located{}, err
 			}

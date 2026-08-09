@@ -131,7 +131,7 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 		rows[i] = row
 		names[i] = e.label
 	}
-	idx, err := menuSelect("Open "+worktreeName+" in:", rows, names)
+	idx, err := menuSelect("Open "+worktreeName+" in:", rows, names, 0)
 	if err != nil {
 		return nil, err
 	}

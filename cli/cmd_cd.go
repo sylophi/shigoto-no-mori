@@ -1,12 +1,13 @@
 package main
 
-// sgm cd -- drop into a worktree in a subshell. A child process can't
-// change its parent shell's directory, so this starts $SHELL in the
-// target and exiting it returns you to where you were. With no name it
-// picks interactively: the worktree menu scoped to the current repo
-// (or -p), and from outside any repo a project menu first. Scripts
-// should use `cd "$(sgm path <name>)"` instead; this command requires
-// an interactive terminal.
+// sgm cd / sgm worktree (wt) -- drop into a worktree in a subshell. A
+// child process can't change its parent shell's directory, so these
+// start $SHELL in the target and exiting it returns you to where you
+// were. Both accept an explicit <name>; the difference is the bare
+// form: `cd` navigates anywhere (project menu first, current project
+// preselected), `worktree` stays in the current project and only asks
+// which worktree. Scripts should use `cd "$(sgm path <name>)"`
+// instead; both commands require an interactive terminal.
 
 import (
 	"errors"
@@ -16,6 +17,51 @@ import (
 )
 
 func cmdCd(ctx cliContext, args []string) (int, error) {
+	return cmdEnterWorktree(ctx, args, true)
+}
+
+func cmdWorktree(ctx cliContext, args []string) (int, error) {
+	return cmdEnterWorktree(ctx, args, false)
+}
+
+// sgm worktrees <command> (wt, worktree for short) -- namespace form
+// of the bare worktree commands, mirroring `sgm projects <command>`.
+// With no subcommand (or a worktree name), it enters a worktree of the
+// current project. Subcommand words win over worktree names.
+func cmdWorktrees(ctx cliContext, args []string) (int, error) {
+	if len(args) > 0 {
+		sub, rest := args[0], args[1:]
+		switch sub {
+		case "list", "ls", "l":
+			return cmdList(ctx, rest)
+		case "path":
+			return cmdPath(ctx, rest)
+		case "cd", "c":
+			return cmdCd(ctx, rest)
+		case "open", "o":
+			return cmdOpen(ctx, rest)
+		case "create", "new":
+			return cmdCreate(ctx, rest)
+		case "rm", "remove":
+			return cmdRm(ctx, rest)
+		case "done":
+			return cmdDone(ctx, rest)
+		case "merge":
+			return cmdMerge(ctx, rest)
+		case "adopt":
+			return cmdAdopt(ctx, rest)
+		case "setup":
+			return cmdSetup(ctx, rest)
+		case "shelve":
+			return cmdShelve(ctx, rest, true)
+		case "unshelve":
+			return cmdShelve(ctx, rest, false)
+		}
+	}
+	return cmdWorktree(ctx, args)
+}
+
+func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}},
 	})
@@ -24,7 +70,7 @@ func cmdCd(ctx cliContext, args []string) (int, error) {
 	}
 	if !interactiveStdio() {
 		return 2, usageErrf(
-			`cd opens a subshell and needs an interactive terminal. In scripts use cd "$(%s path <name>)".`,
+			`This command opens a subshell and needs an interactive terminal. In scripts use cd "$(%s path <name>)".`,
 			binaryName)
 	}
 
@@ -36,13 +82,24 @@ func cmdCd(ctx cliContext, args []string) (int, error) {
 	if ref != "" {
 		target, err = resolveWorktree(ctx, ref, parsed.strings["project"])
 	} else {
-		// Always a menu here, even inside a worktree: cd'ing to where
-		// you already are isn't a destination. resolveProject supplies
-		// the project menu when cwd isn't in one. NOTE: assign, don't
-		// `:=` -- a shadowed err here once let a cancelled picker fall
-		// through to a zero-value target.
+		// Always a menu here, even inside a worktree: entering where
+		// you already are isn't a destination. NOTE: assign through the
+		// outer err -- a shadowed err here once let a cancelled picker
+		// fall through to a zero-value target.
 		var proj project
-		proj, err = resolveProject(ctx, parsed.strings["project"])
+		switch {
+		case parsed.strings["project"] != "":
+			proj, err = resolveProject(ctx, parsed.strings["project"])
+		case acrossProjects && len(ctx.projects) > 1:
+			preferred := ""
+			if ctx.current != nil {
+				preferred = ctx.current.proj.ID
+			}
+			proj, err = pickProject(ctx, preferred)
+		default:
+			// Current project when inside one, else the project menu.
+			proj, err = resolveProject(ctx, "")
+		}
 		if err != nil {
 			return exitCodeOf(err), err
 		}

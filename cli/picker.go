@@ -36,7 +36,9 @@ func confirmPrompt(question string) bool {
 	return answer == "y" || answer == "yes"
 }
 
-func pickProject(ctx cliContext) (project, error) {
+// preferredID highlights that project first (e.g. the one containing
+// cwd), so enter alone keeps you where you are.
+func pickProject(ctx cliContext, preferredID string) (project, error) {
 	if len(ctx.projects) == 0 {
 		return project{}, errf("No projects are registered yet.")
 	}
@@ -48,12 +50,16 @@ func pickProject(ctx cliContext) (project, error) {
 	}
 	rows := make([]string, len(ctx.projects))
 	names := make([]string, len(ctx.projects))
+	initial := 0
 	for i, p := range ctx.projects {
 		pad := strings.Repeat(" ", widest-len([]rune(p.Name)))
 		rows[i] = p.Name + pad + "  " + p.Path
 		names[i] = p.Name
+		if p.ID == preferredID {
+			initial = i
+		}
 	}
-	idx, err := menuSelect("Select a project:", rows, names)
+	idx, err := menuSelect("Select a project:", rows, names, initial)
 	if err != nil {
 		return project{}, err
 	}
@@ -108,7 +114,7 @@ func pickWorktree(proj project, excludeID string) (located, error) {
 		names[r] = choices[r].Name
 	}
 
-	idx, err := menuSelect("Select a worktree in "+proj.Name+":", rows, names)
+	idx, err := menuSelect("Select a worktree in "+proj.Name+":", rows, names, 0)
 	if err != nil {
 		return located{}, err
 	}

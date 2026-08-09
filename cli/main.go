@@ -31,13 +31,15 @@ type helpGroup struct {
 var helpGroups = []helpGroup{
 	{"Navigate", []helpItem{
 		{"list [--all]", "List worktrees (all projects when outside one)"},
-		{"path [<name>]", "Print a worktree's directory"},
 		{"cd [<name>]",
-			"Open a subshell inside a worktree, exit it to return (no name picks from a menu)"},
+			"Open a subshell in any worktree: pick a project, then a worktree (exit the shell to return)"},
+		{"worktrees [<name>]",
+			"Open a subshell in a worktree of the current project (exit the shell to return)"},
 		{"app", "Open the Shigoto no Mori app"},
 		{"config", "Open the global config file (config.json in the state root)"},
 	}},
 	{"Worktree", []helpItem{
+		{"path [<name>]", "Print a worktree's directory"},
 		{"create [<name>] [-b <branch-name>] [--base <ref>]",
 			"Create a worktree on a new branch named -b (default: the worktree name), forked from --base (default: the default branch), then carry-over, setup, port"},
 		{"rm [<name>] [-f] [--keep-branch]",
@@ -88,8 +90,9 @@ func helpText() string {
 			"directory when possible. From anywhere else, address worktrees as "+
 			"<name>, <project>/<name>, or a directory path, or pass -p "+
 			"<project>. From the primary checkout, omitting the name picks a "+
-			"worktree from a menu. Aliases: l list, c cd, o open, p projects, "+
-			"new create.", width) {
+			"worktree from a menu. Every worktree command can also be written "+
+			"as worktrees <command>, wt for short. Aliases: l list, c cd, "+
+			"o open, p projects, new create.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -206,9 +209,10 @@ func colorUsage(usage string) string {
 }
 
 var aliasCanonical = map[string]string{
-	"ls": "list", "l": "list", "c": "cd", "o": "open",
-	"p": "projects", "project": "projects", "new": "create",
-	"remove": "rm", "unshelve": "shelve",
+	"ls": "list", "l": "list", "c": "cd", "wt": "worktrees",
+	"worktree": "worktrees", "o": "open", "p": "projects",
+	"project": "projects", "new": "create", "remove": "rm",
+	"unshelve": "shelve",
 }
 
 // Per-command help: the matching usage lines from the catalog, full
@@ -218,6 +222,16 @@ func commandHelp(command string, args []string) string {
 	name := command
 	if canonical, ok := aliasCanonical[name]; ok {
 		name = canonical
+	}
+	// `wt rm --help` documents rm itself; recurse through the namespace.
+	if name == "worktrees" && len(args) > 0 {
+		subName := args[0]
+		if canonical, ok := aliasCanonical[subName]; ok {
+			subName = canonical
+		}
+		if subName != "worktrees" && !strings.HasPrefix(subName, "-") {
+			return commandHelp(args[0], args[1:])
+		}
 	}
 	sub := ""
 	if name == "projects" && len(args) > 0 {
@@ -352,6 +366,8 @@ func run() int {
 		code, err = cmdPath(ctx, args)
 	case "cd", "c":
 		code, err = cmdCd(ctx, args)
+	case "worktrees", "worktree", "wt":
+		code, err = cmdWorktrees(ctx, args)
 	case "open", "o":
 		code, err = cmdOpen(ctx, args)
 	case "app":
