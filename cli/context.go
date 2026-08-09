@@ -7,6 +7,7 @@ package main
 // anywhere.
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -111,6 +112,34 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	}
 }
 
+// nil/nil when ref isn't an existing directory (caller falls back to
+// name resolution); an error when it is one but no registered project
+// owns a worktree there.
+func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
+	abs := toAbsolute(ref)
+	info, err := os.Stat(abs)
+	if err != nil || !info.IsDir() {
+		return nil, nil
+	}
+	// Fold a subdirectory to its worktree toplevel so any path inside
+	// the checkout works.
+	if top, gitErr := runGit(abs, "rev-parse", "--show-toplevel"); gitErr == nil {
+		abs = strings.TrimSpace(top)
+	}
+	for _, proj := range ctx.projects {
+		identities, idErr := listWorktreeIdentities(proj)
+		if idErr != nil {
+			continue
+		}
+		for _, id := range identities {
+			if comparablePath(id.Path) == comparablePath(abs) {
+				return &located{proj: proj, worktree: id}, nil
+			}
+		}
+	}
+	return nil, errf("%s isn't a worktree of any registered project.", abs)
+}
+
 // App plumbing: exact addressing by the ids the app's IPC layer holds.
 // Error strings match shared/errors.ts ("Unknown project:"/"Unknown
 // worktree:") so the renderer's entity-gone matcher recognizes them.
@@ -189,6 +218,22 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 				ctx.unregisteredRepo, binaryName)
 		}
 		return located{}, usageErrf("Not inside a worktree; pass a worktree name (see `%s list`).", binaryName)
+	}
+
+	// A ref that names an existing directory resolves by identity, not
+	// name, so external worktrees with colliding basenames stay
+	// addressable: `sgm adopt ../checkouts/fox`, `sgm rm .`. A
+	// <project>/<name> ref almost never exists as a directory relative
+	// to cwd; when it does, the directory wins as the more explicit
+	// claim.
+	if strings.ContainsAny(ref, `/\`) || ref == "." || ref == ".." {
+		target, err := resolveWorktreeByDir(ctx, ref)
+		if err != nil {
+			return located{}, err
+		}
+		if target != nil {
+			return *target, nil
+		}
 	}
 
 	scope := ctx.projects
