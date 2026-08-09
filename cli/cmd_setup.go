@@ -11,8 +11,6 @@ package main
 // Port-pool provision is skipped for external worktrees: rm skips the
 // matching release for them, so provisioning would leak a port.
 
-import "strings"
-
 func cmdSetup(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}},
@@ -31,13 +29,8 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 	proj, id := target.proj, target.worktree
 
 	config := readProjectConfig(proj.ID)
-	setupCommand := ""
-	if config != nil {
-		setupCommand = strings.TrimSpace(config.Scripts.Setup)
-	}
-	portPoolNeeded := !id.IsExternal && willRunPortPool(id.Path)
-
-	if setupCommand == "" && !portPoolNeeded {
+	failures, ran := runProvisionScripts(proj, id, config)
+	if len(ran) == 0 {
 		if jsonMode {
 			emit(map[string]any{"ok": true, "ran": []string{}})
 		} else {
@@ -45,34 +38,6 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 				" and port-pool isn't active for this worktree"))
 		}
 		return 0, nil
-	}
-
-	envInputs := lifecycleEnvInputs(proj, worktreeJSON{
-		ID: id.ID, ProjectID: id.ProjectID, Name: id.Name,
-		Branch: id.Branch, Path: id.Path,
-		IsPrimary: id.IsPrimary, IsExternal: id.IsExternal, Detached: id.Detached,
-	}, config)
-
-	failures := []scriptFailure{}
-	ran := []string{}
-	if setupCommand != "" {
-		emitPhase("setup")
-		envInputs.scriptName = "setup"
-		ran = append(ran, "setup")
-		if code, _ := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
-			failures = append(failures, scriptFailure{Step: "setup", ExitCode: codeOrNil(code)})
-		}
-	}
-	if portPoolNeeded {
-		emitPhase("portPoolProvision")
-		envInputs.scriptName = "port-pool-provision"
-		ran = append(ran, "port-pool provision")
-		code, _ := runLifecycleScript(
-			portPoolCommand("provision", id.Path), envInputs,
-			scriptSlot{Kind: "portPool", Phase: "provision"})
-		if code != 0 {
-			failures = append(failures, scriptFailure{Step: "port-pool provision", ExitCode: codeOrNil(code)})
-		}
 	}
 	emitPhase("idle")
 

@@ -2,13 +2,14 @@ package main
 
 // The app's launcher row, ported for `sm open`: detected macOS apps,
 // custom launcher commands from global and project config, and the
-// GitHub web entry. The catalog below MIRRORS main/lib/launchers/
-// darwin.ts -- keep the two in sync when adding a tool. Ordering and
-// the rolling 14-day use log are shared with the app through
-// state.json's launcherUseLog key, so launching from the terminal
-// reorders the row in the app and vice versa.
+// GitHub web entry. The tool catalog is one embedded JSON file shared
+// with main/lib/launchers/darwin.ts. Ordering and the rolling 14-day
+// use log are shared with the app through state.json's launcherUseLog
+// key, so launching from the terminal reorders the row in the app and
+// vice versa.
 
 import (
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -31,44 +32,30 @@ type launcherApp struct {
 
 const t3codeID = "t3code"
 
-var launcherCatalog = []launcherApp{
-	// Editors
-	{"cursor", "Cursor", []string{"Cursor.app"}, "cursor"},
-	{"windsurf", "Windsurf", []string{"Windsurf.app"}, "windsurf"},
-	{"vscode", "VS Code", []string{"Visual Studio Code.app"}, "code"},
-	{"vscode-insiders", "VS Code Insiders", []string{"Visual Studio Code - Insiders.app"}, "code-insiders"},
-	{"vscodium", "VSCodium", []string{"VSCodium.app"}, "codium"},
-	{"zed", "Zed", []string{"Zed.app", "Zed Preview.app"}, "zed"},
-	{"antigravity", "Antigravity", []string{"Antigravity.app"}, "agy"},
-	{"codex", "Codex", []string{"Codex.app"}, ""},
-	{"claude", "Claude", []string{"Claude.app"}, ""},
-	{t3codeID, "T3 Code", []string{"T3 Code.app", "T3 Code (Alpha).app", "T3 Code (Nightly).app"}, ""},
-	{"sublime", "Sublime Text", []string{"Sublime Text.app"}, "subl"},
-	// JetBrains family
-	{"intellij", "IntelliJ IDEA", []string{"IntelliJ IDEA.app", "IntelliJ IDEA CE.app"}, "idea"},
-	{"aqua", "Aqua", []string{"Aqua.app"}, "aqua"},
-	{"clion", "CLion", []string{"CLion.app"}, "clion"},
-	{"datagrip", "DataGrip", []string{"DataGrip.app"}, "datagrip"},
-	{"dataspell", "DataSpell", []string{"DataSpell.app"}, "dataspell"},
-	{"goland", "GoLand", []string{"GoLand.app"}, "goland"},
-	{"phpstorm", "PhpStorm", []string{"PhpStorm.app"}, "phpstorm"},
-	{"pycharm", "PyCharm", []string{"PyCharm.app", "PyCharm CE.app"}, "pycharm"},
-	{"rider", "Rider", []string{"Rider.app"}, "rider"},
-	{"rubymine", "RubyMine", []string{"RubyMine.app"}, "rubymine"},
-	{"rustrover", "RustRover", []string{"RustRover.app"}, "rustrover"},
-	{"webstorm", "WebStorm", []string{"WebStorm.app"}, "webstorm"},
-	// Apple
-	{"xcode", "Xcode", []string{"Xcode.app"}, "xed"},
-	// Terminals
-	{"cmux", "cmux", []string{"cmux.app"}, "cmux"},
-	{"ghostty", "Ghostty", []string{"Ghostty.app"}, ""},
-	{"iterm", "iTerm", []string{"iTerm.app"}, ""},
-	{"terminal", "Terminal", []string{"Utilities/Terminal.app"}, ""},
-	// Git clients
-	{"github-desktop", "GitHub Desktop", []string{"GitHub Desktop.app"}, "github"},
-	// Other
-	{"finder", "Finder", []string{"__finder__"}, ""},
-}
+// The tool catalog is embedded from embed/launcher-catalog.json, which
+// main/lib/launchers/darwin.ts imports too -- one list, two consumers.
+// bundleNames resolve against appRoots; "__finder__" is the
+// always-available Finder sentinel.
+//
+//go:embed embed/launcher-catalog.json
+var launcherCatalogJSON []byte
+
+var launcherCatalog = func() []launcherApp {
+	var entries []struct {
+		ID          string   `json:"id"`
+		Label       string   `json:"label"`
+		BundleNames []string `json:"bundleNames"`
+		CLI         string   `json:"cli"`
+	}
+	if err := json.Unmarshal(launcherCatalogJSON, &entries); err != nil {
+		panic("embedded launcher-catalog.json is invalid: " + err.Error())
+	}
+	catalog := make([]launcherApp, len(entries))
+	for i, e := range entries {
+		catalog[i] = launcherApp{id: e.ID, label: e.Label, bundleNames: e.BundleNames, cli: e.CLI}
+	}
+	return catalog
+}()
 
 func appRoots() []string {
 	home, err := os.UserHomeDir()
@@ -182,14 +169,10 @@ func sortLaunchersByUse(entries []launcherEntry) {
 }
 
 func bumpLauncherUse(id string) {
-	err := withStateLock(func() error {
-		all := readStateFile()
-		var log map[string][]int64
-		if raw, ok := all["launcherUseLog"]; ok {
+	err := updateStateKey("launcherUseLog", func(raw json.RawMessage) (any, error) {
+		log := map[string][]int64{}
+		if raw != nil {
 			_ = json.Unmarshal(raw, &log)
-		}
-		if log == nil {
-			log = map[string][]int64{}
 		}
 		now := time.Now().UnixMilli()
 		cutoff := now - useLogWindow.Milliseconds()
@@ -200,12 +183,7 @@ func bumpLauncherUse(id string) {
 			}
 		}
 		log[id] = append(fresh, now)
-		encoded, err := json.Marshal(log)
-		if err != nil {
-			return err
-		}
-		all["launcherUseLog"] = encoded
-		return atomicWriteJSON(statePath(), all)
+		return log, nil
 	})
 	if err != nil {
 		vlog("[open] use log bump failed: %v", err)

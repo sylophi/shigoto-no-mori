@@ -10,8 +10,6 @@ package main
 // else the app may have written.
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,12 +23,12 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 		out(projectsHelpText())
 		return 0, nil
 	}
-	switch args[0] {
-	case "list", "ls":
+	switch canonicalProjectsSub(args[0]) {
+	case "list":
 		return cmdProjectList(ctx)
 	case "add":
 		return cmdProjectAdd(ctx, args[1:])
-	case "remove", "rm":
+	case "remove":
 		return cmdProjectRemove(ctx, args[1:])
 	case "config":
 		return cmdConfig(ctx, args[1:])
@@ -91,10 +89,9 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	err = withStateLock(func() error {
-		all := readStateFile()
+	err = updateStateKey("projects", func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw, ok := all["projects"]; ok {
+		if raw != nil {
 			_ = json.Unmarshal(raw, &projects)
 		}
 		kept := make([]project, 0, len(projects))
@@ -107,14 +104,9 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 			kept = append(kept, p)
 		}
 		if !found {
-			return errf("Unknown project: %s", proj.ID)
+			return nil, unknownProjectErr(proj.ID)
 		}
-		encoded, err := json.Marshal(kept)
-		if err != nil {
-			return err
-		}
-		all["projects"] = encoded
-		return atomicWriteJSON(statePath(), all)
+		return kept, nil
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -152,11 +144,11 @@ func cmdProjectList(ctx cliContext) (int, error) {
 	return 0, nil
 }
 
+// newRunID's format, uppercased. (The TS engine mints lowercase
+// randomUUID ids, so the case incidentally records which engine
+// registered a project.)
 func newProjectID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	h := strings.ToUpper(hex.EncodeToString(b))
-	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
+	return strings.ToUpper(newRunID())
 }
 
 func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
@@ -174,14 +166,16 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 		return cmdProjectAddAll(ctx, toAbsolute(rawPath), parsed.bools["yes"])
 	}
 	// Registering a subdirectory would break primary detection, so fold
-	// whatever was given to its repo toplevel (the app's folder picker
-	// hands over the root already; the CLI accepts `.` from anywhere
-	// inside the repo).
-	toplevelRaw, err := runGit(toAbsolute(rawPath), "rev-parse", "--show-toplevel")
+	// whatever was given to the repo's PRIMARY checkout (the app's
+	// folder picker hands over the root already; the CLI accepts `.`
+	// from anywhere inside the repo). The common dir, not the toplevel:
+	// from inside a linked worktree the toplevel is the worktree
+	// directory, and registering that would leave a dangling project
+	// when the worktree is removed.
+	_, path, err := locateRepo(toAbsolute(rawPath))
 	if err != nil {
 		return 1, errf("%s is not a git repository", toAbsolute(rawPath))
 	}
-	path := strings.TrimSpace(toplevelRaw)
 
 	proj, err := registerProject(path)
 	if err != nil {
@@ -202,23 +196,17 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 // directory can't both land.
 func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
-	err := withStateLock(func() error {
-		all := readStateFile()
+	err := updateStateKey("projects", func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw, ok := all["projects"]; ok {
+		if raw != nil {
 			_ = json.Unmarshal(raw, &projects)
 		}
 		for _, existing := range projects {
 			if comparablePath(existing.Path) == comparablePath(path) {
-				return errf("Project already added: %s", path)
+				return nil, errf("Project already added: %s", path)
 			}
 		}
-		encoded, err := json.Marshal(append(projects, proj))
-		if err != nil {
-			return err
-		}
-		all["projects"] = encoded
-		return atomicWriteJSON(statePath(), all)
+		return append(projects, proj), nil
 	})
 	if err != nil {
 		return project{}, err

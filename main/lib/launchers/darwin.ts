@@ -12,6 +12,7 @@ import {
   T3CODE_ID,
 } from "./t3code";
 import type { DetectedApp, PlatformLaunchers } from "./types";
+import catalogJson from "../../../cli/embed/launcher-catalog.json";
 
 const exec = promisify(execFile);
 
@@ -26,195 +27,13 @@ interface DarwinCatalogEntry {
 
 // The renderer maps each id to a brand SVG (or a lucide fallback).
 // Catalog shape mirrors T3 Code's editor list so any tool worth
-// supporting there is supported here too.
-const CATALOG: DarwinCatalogEntry[] = [
-  // Editors
-  {
-    id: "cursor",
-    label: "Cursor",
-    bundleNames: ["Cursor.app"],
-    cli: "cursor",
-  },
-  {
-    id: "windsurf",
-    label: "Windsurf",
-    bundleNames: ["Windsurf.app"],
-    cli: "windsurf",
-  },
-  {
-    id: "vscode",
-    label: "VS Code",
-    bundleNames: ["Visual Studio Code.app"],
-    cli: "code",
-  },
-  {
-    id: "vscode-insiders",
-    label: "VS Code Insiders",
-    bundleNames: ["Visual Studio Code - Insiders.app"],
-    cli: "code-insiders",
-  },
-  {
-    id: "vscodium",
-    label: "VSCodium",
-    bundleNames: ["VSCodium.app"],
-    cli: "codium",
-  },
-  {
-    id: "zed",
-    label: "Zed",
-    bundleNames: ["Zed.app", "Zed Preview.app"],
-    cli: "zed",
-  },
-  {
-    id: "antigravity",
-    label: "Antigravity",
-    bundleNames: ["Antigravity.app"],
-    cli: "agy",
-  },
-  {
-    id: "codex",
-    label: "Codex",
-    bundleNames: ["Codex.app"],
-  },
-  {
-    id: "claude",
-    label: "Claude",
-    bundleNames: ["Claude.app"],
-  },
-  // No `cli`: the npm-installable `t3` binary exists, but its root
-  // command starts a server rather than opening a folder, and launching
-  // requires the app bundle anyway (see t3code.ts).
-  {
-    id: T3CODE_ID,
-    label: "T3 Code",
-    bundleNames: [
-      "T3 Code.app",
-      "T3 Code (Alpha).app",
-      "T3 Code (Nightly).app",
-    ],
-  },
-  {
-    id: "sublime",
-    label: "Sublime Text",
-    bundleNames: ["Sublime Text.app"],
-    cli: "subl",
-  },
-  // JetBrains family
-  {
-    id: "intellij",
-    label: "IntelliJ IDEA",
-    bundleNames: ["IntelliJ IDEA.app", "IntelliJ IDEA CE.app"],
-    cli: "idea",
-  },
-  {
-    id: "aqua",
-    label: "Aqua",
-    bundleNames: ["Aqua.app"],
-    cli: "aqua",
-  },
-  {
-    id: "clion",
-    label: "CLion",
-    bundleNames: ["CLion.app"],
-    cli: "clion",
-  },
-  {
-    id: "datagrip",
-    label: "DataGrip",
-    bundleNames: ["DataGrip.app"],
-    cli: "datagrip",
-  },
-  {
-    id: "dataspell",
-    label: "DataSpell",
-    bundleNames: ["DataSpell.app"],
-    cli: "dataspell",
-  },
-  {
-    id: "goland",
-    label: "GoLand",
-    bundleNames: ["GoLand.app"],
-    cli: "goland",
-  },
-  {
-    id: "phpstorm",
-    label: "PhpStorm",
-    bundleNames: ["PhpStorm.app"],
-    cli: "phpstorm",
-  },
-  {
-    id: "pycharm",
-    label: "PyCharm",
-    bundleNames: ["PyCharm.app", "PyCharm CE.app"],
-    cli: "pycharm",
-  },
-  {
-    id: "rider",
-    label: "Rider",
-    bundleNames: ["Rider.app"],
-    cli: "rider",
-  },
-  {
-    id: "rubymine",
-    label: "RubyMine",
-    bundleNames: ["RubyMine.app"],
-    cli: "rubymine",
-  },
-  {
-    id: "rustrover",
-    label: "RustRover",
-    bundleNames: ["RustRover.app"],
-    cli: "rustrover",
-  },
-  {
-    id: "webstorm",
-    label: "WebStorm",
-    bundleNames: ["WebStorm.app"],
-    cli: "webstorm",
-  },
-  // Apple
-  {
-    id: "xcode",
-    label: "Xcode",
-    bundleNames: ["Xcode.app"],
-    cli: "xed",
-  },
-  // Terminals (we go further than T3 here)
-  {
-    id: "cmux",
-    label: "cmux",
-    bundleNames: ["cmux.app"],
-    cli: "cmux",
-  },
-  {
-    id: "ghostty",
-    label: "Ghostty",
-    bundleNames: ["Ghostty.app"],
-  },
-  {
-    id: "iterm",
-    label: "iTerm",
-    bundleNames: ["iTerm.app"],
-  },
-  {
-    id: "terminal",
-    label: "Terminal",
-    bundleNames: ["Utilities/Terminal.app"],
-  },
-  // Git clients
-  {
-    id: "github-desktop",
-    label: "GitHub Desktop",
-    bundleNames: ["GitHub Desktop.app"],
-    cli: "github",
-  },
-  // Other
-  {
-    id: "finder",
-    label: "Finder",
-    bundleNames: ["__finder__"],
-  },
-];
+// supporting there is supported here too. The entries live in
+// cli/embed/launcher-catalog.json, embedded into the Go CLI and
+// imported here, so `sm open` and the launcher row offer one list.
+// (T3 Code deliberately has no `cli`: the npm-installable `t3` binary
+// starts a server rather than opening a folder, and launching needs
+// the app bundle anyway -- see t3code.ts.)
+const CATALOG: DarwinCatalogEntry[] = catalogJson;
 
 const APP_ROOTS = [
   "/Applications",

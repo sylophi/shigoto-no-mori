@@ -65,7 +65,17 @@ func toAbsolute(path string) string {
 	return abs
 }
 
-const inProjectSubdir = ".shigomori/worktrees"
+// True when the process's cwd is dir or sits anywhere below it --
+// the "your shell is inside the directory being removed" check.
+func cwdInside(dir string) bool {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	cwdC := comparablePath(cwd)
+	dirC := strings.TrimRight(comparablePath(dir), "/")
+	return cwdC == dirC || strings.HasPrefix(cwdC, dirC+"/")
+}
 
 // Every base directory whose direct children count as "managed" for a
 // project; all layouts included unconditionally (matches

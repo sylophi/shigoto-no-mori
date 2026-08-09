@@ -16,17 +16,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var mergeMethodOrder = []string{"merge", "squash", "rebase"}
-
-var mergeFlag = map[string]string{
-	"merge":  "--merge",
-	"squash": "--squash",
-	"rebase": "--rebase",
-}
 
 func runGh(cwd string, args ...string) (string, error) {
 	if _, err := exec.LookPath("gh"); err != nil {
@@ -107,21 +103,16 @@ func allowedMergeMethods(projectPath string) []string {
 }
 
 func cmdMerge(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project":     {"p"},
-			"method":      {"m"},
-			"project-id":  {}, // app plumbing: exact addressing from IPC
-			"worktree-id": {}, // app plumbing
-			// App plumbing: merge this PR number directly, skipping the
-			// branch -> PR lookup (the app already resolved it).
-			"number": {},
-		},
-	})
+	spec := worktreeTargetSpec()
+	spec.strings["method"] = []string{"m"}
+	// App plumbing: merge this PR number directly, skipping the
+	// branch -> PR lookup (the app already resolved it).
+	spec.strings["number"] = nil
+	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if m := parsed.strings["method"]; m != "" && mergeFlag[m] == "" {
+	if m := parsed.strings["method"]; m != "" && !slices.Contains(mergeMethodOrder, m) {
 		return 2, usageErrf("Invalid --method %q (merge, squash, or rebase).", m)
 	}
 
@@ -134,7 +125,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		method, err := execMerge(proj, number, parsed.strings["method"])
+		method, err := execMerge(proj, number, parsed.strings["method"], allowedMergeMethods(proj.Path))
 		if err != nil {
 			return exitCodeOf(err), err
 		}
@@ -155,9 +146,20 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("No branch checked out to merge")
 	}
 
-	pr, err := findPullRequest(proj.Path, id.Branch)
-	if err != nil {
-		return 1, err
+	// The PR lookup and the repo-settings read are independent gh
+	// round-trips (300-800ms each); overlap them.
+	var (
+		pr      *prSummary
+		prErr   error
+		allowed []string
+		wg      sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() { defer wg.Done(); pr, prErr = findPullRequest(proj.Path, id.Branch) }()
+	go func() { defer wg.Done(); allowed = allowedMergeMethods(proj.Path) }()
+	wg.Wait()
+	if prErr != nil {
+		return 1, prErr
 	}
 	if pr == nil {
 		return 1, errf("No pull request found for branch %s", id.Branch)
@@ -166,7 +168,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("PR #%d for %s is %s, not open", pr.Number, id.Branch, strings.ToLower(pr.State))
 	}
 
-	method, err := execMerge(proj, pr.Number, parsed.strings["method"])
+	method, err := execMerge(proj, pr.Number, parsed.strings["method"], allowed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -186,27 +188,27 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 
 // Resolve the merge method (explicit flag > saved preference > first
 // allowed), run `gh pr merge`, and persist the pick -- shared by the
-// branch-lookup path and the app's --number path.
-func execMerge(proj project, number int, methodFlag string) (string, error) {
-	allowed := allowedMergeMethods(proj.Path)
+// branch-lookup path and the app's --number path. Callers pass the
+// repo's allowed methods so the settings read can overlap other work.
+func execMerge(proj project, number int, methodFlag string, allowed []string) (string, error) {
 	if len(allowed) == 0 {
 		return "", errf("The repo's settings allow no merge method")
 	}
 	method := methodFlag
 	if method != "" {
-		if !contains(allowed, method) {
+		if !slices.Contains(allowed, method) {
 			return "", errf("The repo's settings don't allow %s merges (allowed: %s)",
 				method, strings.Join(allowed, ", "))
 		}
 	} else {
 		method = allowed[0]
 		config := readProjectConfig(proj.ID)
-		if config != nil && contains(allowed, config.LastMergeMethod) {
+		if config != nil && slices.Contains(allowed, config.LastMergeMethod) {
 			method = config.LastMergeMethod
 		}
 	}
 
-	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), mergeFlag[method]); err != nil {
+	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
 		return "", err
 	}
 
@@ -215,13 +217,4 @@ func execMerge(proj project, number int, methodFlag string) (string, error) {
 		vlog("[merge] persist lastMergeMethod: %v", err)
 	}
 	return method, nil
-}
-
-func contains(list []string, item string) bool {
-	for _, entry := range list {
-		if entry == item {
-			return true
-		}
-	}
-	return false
 }

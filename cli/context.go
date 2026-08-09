@@ -28,25 +28,34 @@ type cliContext struct {
 	unregisteredRepo string
 }
 
+// One git spawn resolves both facts about a directory: the toplevel of
+// the worktree containing it, and (via the common dir, which points at
+// the primary repo's .git even from a linked worktree) the owning
+// primary checkout.
+func locateRepo(dir string) (toplevel, primaryPath string, err error) {
+	stdout, err := runGit(dir, "rev-parse", "--path-format=absolute", "--show-toplevel", "--git-common-dir")
+	if err != nil {
+		return "", "", err
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) < 2 {
+		return "", "", errf("unexpected rev-parse output")
+	}
+	toplevel = strings.TrimSpace(lines[0])
+	commonDir := strings.TrimSpace(lines[1])
+	primaryPath = commonDir
+	if filepath.Base(commonDir) == ".git" {
+		primaryPath = filepath.Dir(commonDir)
+	}
+	return toplevel, primaryPath, nil
+}
+
 func resolveContext(cwd string) cliContext {
 	ctx := cliContext{projects: loadProjects()}
 
-	toplevelRaw, err := runGit(cwd, "rev-parse", "--show-toplevel")
+	toplevel, primaryPath, err := locateRepo(cwd)
 	if err != nil {
 		return ctx
-	}
-	toplevel := strings.TrimSpace(toplevelRaw)
-
-	// The common dir points at the primary repo's .git even from a
-	// linked worktree -- one git call to identify the owning project.
-	commonRaw, err := runGit(cwd, "rev-parse", "--path-format=absolute", "--git-common-dir")
-	if err != nil {
-		return ctx
-	}
-	commonDir := strings.TrimSpace(commonRaw)
-	primaryPath := commonDir
-	if filepath.Base(commonDir) == ".git" {
-		primaryPath = filepath.Dir(commonDir)
 	}
 
 	for _, proj := range ctx.projects {
@@ -135,18 +144,23 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 	if err != nil || !info.IsDir() {
 		return nil, nil
 	}
-	// Fold a subdirectory to its worktree toplevel so any path inside
-	// the checkout works.
-	if top, gitErr := runGit(abs, "rev-parse", "--show-toplevel"); gitErr == nil {
-		abs = strings.TrimSpace(top)
+	// One git spawn identifies both the worktree toplevel (so any path
+	// inside the checkout works) and the owning primary checkout, which
+	// narrows the identity scan to the one project that can match.
+	toplevel, primaryPath, gitErr := locateRepo(abs)
+	if gitErr != nil {
+		return nil, errf("%s isn't a worktree of any registered project.", abs)
 	}
 	for _, proj := range ctx.projects {
+		if comparablePath(proj.Path) != comparablePath(primaryPath) {
+			continue
+		}
 		identities, idErr := listWorktreeIdentities(proj)
 		if idErr != nil {
 			continue
 		}
 		for _, id := range identities {
-			if comparablePath(id.Path) == comparablePath(abs) {
+			if comparablePath(id.Path) == comparablePath(toplevel) {
 				return &located{proj: proj, worktree: id}, nil
 			}
 		}
@@ -155,15 +169,24 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 }
 
 // App plumbing: exact addressing by the ids the app's IPC layer holds.
-// Error strings match shared/errors.ts ("Unknown project:"/"Unknown
-// worktree:") so the renderer's entity-gone matcher recognizes them.
+// The --json error document carries a stable code ("unknown-project" /
+// "unknown-worktree") that the delegate maps onto shared/errors.ts's
+// entity-gone constructors, so neither side's prose is load-bearing.
+func unknownProjectErr(id string) error {
+	return codedErrf("unknown-project", "Unknown project: %s", id)
+}
+
+func unknownWorktreeErr(id string) error {
+	return codedErrf("unknown-worktree", "Unknown worktree: %s", id)
+}
+
 func resolveProjectByID(ctx cliContext, id string) (project, error) {
 	for _, p := range ctx.projects {
 		if p.ID == id {
 			return p, nil
 		}
 	}
-	return project{}, errf("Unknown project: %s", id)
+	return project{}, unknownProjectErr(id)
 }
 
 func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located, error) {
@@ -186,7 +209,7 @@ func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located,
 			}
 		}
 	}
-	return located{}, errf("Unknown worktree: %s", worktreeID)
+	return located{}, unknownWorktreeErr(worktreeID)
 }
 
 // Shared front door for commands that target a worktree: --worktree-id

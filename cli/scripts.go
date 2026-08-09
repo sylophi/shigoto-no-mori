@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -169,13 +170,8 @@ func emitExit(runID string, slot scriptSlot, code int) {
 	case code < 0:
 		note(slotMarker(slot) + " failed to run")
 	default:
-		note(slotMarker(slot) + " exited with code " + itoa(code))
+		note(slotMarker(slot) + " exited with code " + strconv.Itoa(code))
 	}
-}
-
-func itoa(n int) string {
-	data, _ := json.Marshal(n)
-	return string(data)
 }
 
 // --- port-pool integration (main/lib/portPool.ts + command.ts) ---

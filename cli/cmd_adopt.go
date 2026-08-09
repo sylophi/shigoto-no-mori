@@ -11,20 +11,12 @@ package main
 // setup, port-pool). Externals never got teardown/port-release on the
 // way out -- the app never provisioned them.
 
-import (
-	"os"
-	"strings"
-)
+import "strings"
 
 func cmdAdopt(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project":     {"p"},
-			"project-id":  {}, // app plumbing: exact addressing from IPC
-			"worktree-id": {}, // app plumbing
-		},
-		bools: map[string][]string{"force": {"f"}},
-	})
+	spec := worktreeTargetSpec()
+	spec.bools["force"] = []string{"f"}
+	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -45,7 +37,13 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	// The app's convert flow carries this in its confirmation dialog;
 	// the CLI needs the guard itself.
 	if !parsed.bools["force"] {
-		if changed := changedCount(id.Path); changed > 0 {
+		// Fail closed: an unreadable status must not pass for clean when
+		// adopting wipes the directory.
+		changed, err := changedCount(id.Path)
+		if err != nil {
+			return 1, errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to adopt anyway.", err)
+		}
+		if changed > 0 {
 			return 1, errf(
 				"Worktree has %d uncommitted change(s) that adopting would destroy. Commit them first, or pass --force.",
 				changed)
@@ -75,15 +73,12 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	// The old directory is about to be removed; if the shell is inside
 	// it, every later git call from this process still works (they run
 	// against proj/new paths), but warn so the user knows to move.
-	cwd, _ := os.Getwd()
-	oldPath := strings.TrimRight(comparablePath(id.Path), "/")
-	wasInside := cwd != "" &&
-		(comparablePath(cwd) == oldPath ||
-			strings.HasPrefix(comparablePath(cwd), oldPath+"/"))
+	wasInside := cwdInside(id.Path)
 
 	if err := removeWorktreeForce(proj.Path, id.Path); err != nil {
 		return 1, err
 	}
+	invalidateWorktreeIdentities(proj.ID)
 	if err := dropShelved(id.ID); err != nil {
 		vlog("[state] drop shelved: %v", err)
 	}

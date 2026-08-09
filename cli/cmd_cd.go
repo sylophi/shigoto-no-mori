@@ -34,36 +34,8 @@ func cmdWorktrees(ctx cliContext, args []string) (int, error) {
 		out(worktreesHelpText())
 		return 0, nil
 	}
-	{
-		sub, rest := args[0], args[1:]
-		switch sub {
-		case "switch":
-			return cmdWorktree(ctx, rest)
-		case "list", "ls", "l":
-			return cmdList(ctx, rest)
-		case "path":
-			return cmdPath(ctx, rest)
-		case "cd", "c":
-			return cmdCd(ctx, rest)
-		case "open", "o":
-			return cmdOpen(ctx, rest)
-		case "create", "new":
-			return cmdCreate(ctx, rest)
-		case "rm", "remove":
-			return cmdRm(ctx, rest)
-		case "done":
-			return cmdDone(ctx, rest)
-		case "merge":
-			return cmdMerge(ctx, rest)
-		case "adopt":
-			return cmdAdopt(ctx, rest)
-		case "setup":
-			return cmdSetup(ctx, rest)
-		case "shelve":
-			return cmdShelve(ctx, rest, true)
-		case "unshelve":
-			return cmdShelve(ctx, rest, false)
-		}
+	if cmd := lookupCommand(args[0]); cmd != nil && cmd.worktree {
+		return cmd.run(ctx, args[1:])
 	}
 	return cmdWorktree(ctx, args)
 }

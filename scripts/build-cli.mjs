@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  APP_BUNDLE_ID,
   CLI_DIST_DIR,
   cliBinaryName,
   cliRootDirName,
@@ -40,6 +41,7 @@ const ldflags = [
   `-X main.flavor=${flavor}`,
   `-X main.rootDirName=${cliRootDirName(flavor)}`,
   `-X main.binaryName=${cliBinaryName(flavor)}`,
+  `-X main.appBundleID=${APP_BUNDLE_ID}`,
   "-s",
   "-w",
 ].join(" ");

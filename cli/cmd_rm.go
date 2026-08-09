@@ -10,26 +10,18 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 )
 
 func cmdRm(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project":     {"p"},
-			"project-id":  {}, // app plumbing: exact addressing from IPC
-			"worktree-id": {}, // app plumbing
-		},
-		bools: map[string][]string{
-			"force":       {"f"},
-			"keep-branch": {},
-			// App plumbing: retry a delete whose cleanup script failed
-			// without re-running the failing cleanup, mirroring the
-			// app's skip-cleanup affordance.
-			"skip-cleanup": {},
-		},
-	})
+	spec := worktreeTargetSpec()
+	spec.bools["force"] = []string{"f"}
+	spec.bools["keep-branch"] = nil
+	// App plumbing: retry a delete whose cleanup script failed without
+	// re-running the failing cleanup, mirroring the app's skip-cleanup
+	// affordance.
+	spec.bools["skip-cleanup"] = nil
+	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -44,7 +36,13 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 		return 1, errf("Cannot delete the project's primary worktree")
 	}
 	if !force {
-		if changed := changedCount(id.Path); changed > 0 {
+		// Fail closed: an unreadable status must not pass for clean when
+		// the next step destroys the directory.
+		changed, err := changedCount(id.Path)
+		if err != nil {
+			return 1, errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to remove anyway.", err)
+		}
+		if changed > 0 {
 			return 1, errf("Worktree has %d uncommitted change(s). Pass --force to remove anyway.", changed)
 		}
 	}
@@ -54,20 +52,7 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 
 	// Cleanup scripts (skip for externals -- no provision ever ran).
 	if !id.IsExternal && !parsed.bools["skip-cleanup"] {
-		envInputs := scriptEnvInputs{worktree: id, proj: proj}
-		if identities, err := listWorktreeIdentities(proj); err == nil {
-			for _, other := range identities {
-				if other.IsPrimary {
-					envInputs.projectBranch = other.Branch
-					break
-				}
-			}
-		}
-		override := ""
-		if config != nil {
-			override = config.DefaultBranch
-		}
-		envInputs.defaultBranch = resolveDefaultBranch(proj.Path, override)
+		envInputs := lifecycleEnvInputs(proj, id, config)
 
 		portPoolEnabled := global.PortPool != nil && *global.PortPool
 		if portPoolEnabled && portPoolInstalled() && portPoolConfigured(id.Path) {
@@ -98,6 +83,7 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 	} else if err := gitWorktreeRemove(proj.Path, id.Path, false); err != nil {
 		return 1, err
 	}
+	invalidateWorktreeIdentities(proj.ID)
 	if !id.IsExternal {
 		pruneEmptyManagedParents(id.Path, proj.Path)
 	}
@@ -111,12 +97,8 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 	deleteWorktreeData(proj.ID, id.ID)
 
 	hint := ""
-	if cwd, err := os.Getwd(); err == nil {
-		cwdC := comparablePath(cwd)
-		targetC := strings.TrimRight(comparablePath(id.Path), "/")
-		if cwdC == targetC || strings.HasPrefix(cwdC, targetC+"/") {
-			hint = proj.Path
-		}
+	if cwdInside(id.Path) {
+		hint = proj.Path
 	}
 	if jsonMode {
 		result := map[string]any{

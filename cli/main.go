@@ -276,27 +276,96 @@ func colorUsage(usage string) string {
 	return b.String()
 }
 
-var aliasCanonical = map[string]string{
-	"ls": "list", "l": "list", "c": "cd", "wt": "worktrees", "w": "worktrees",
-	"worktree": "worktrees", "o": "open", "p": "projects",
-	"project": "projects", "new": "create", "remove": "rm",
-	"unshelve": "shelve",
+// The single command table: names, aliases, worktrees-namespace
+// membership, and handlers in one place. Dispatch (run), the namespace
+// dispatcher (cmdWorktrees), and per-command help all canonicalize
+// through it, so adding or renaming a command is a one-row change.
+type command struct {
+	name    string
+	aliases []string
+	// Also reachable as `sm worktrees <name>`.
+	worktree bool
+	// Never looks at the cwd; run() skips the git context probes.
+	noCwd bool
+	run   func(cliContext, []string) (int, error)
+}
+
+var commands = []command{
+	{name: "list", aliases: []string{"ls", "l"}, worktree: true, run: cmdList},
+	{name: "path", worktree: true, run: cmdPath},
+	{name: "cd", aliases: []string{"c"}, worktree: true, run: cmdCd},
+	{name: "switch", worktree: true, run: cmdWorktree},
+	{name: "open", aliases: []string{"o"}, worktree: true, run: cmdOpen},
+	{name: "create", aliases: []string{"new"}, worktree: true, run: cmdCreate},
+	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},
+	{name: "done", worktree: true, run: cmdDone},
+	{name: "merge", worktree: true, run: cmdMerge},
+	{name: "adopt", worktree: true, run: cmdAdopt},
+	{name: "setup", worktree: true, run: cmdSetup},
+	{name: "shelve", worktree: true,
+		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, true) }},
+	{name: "unshelve", worktree: true,
+		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, false) }},
+	// run assigned in init(): cmdWorktrees dispatches back through this
+	// table, and a direct reference here would be an initialization
+	// cycle.
+	{name: "worktrees", aliases: []string{"worktree", "wt", "w"}},
+	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
+	{name: "app", noCwd: true, run: cmdApp},
+	{name: "config", noCwd: true, run: cmdConfigOpen},
+}
+
+func init() {
+	lookupCommand("worktrees").run = cmdWorktrees
+}
+
+func lookupCommand(name string) *command {
+	for i := range commands {
+		c := &commands[i]
+		if c.name == name {
+			return c
+		}
+		for _, alias := range c.aliases {
+			if alias == name {
+				return c
+			}
+		}
+	}
+	return nil
+}
+
+func canonicalCommandName(name string) string {
+	if cmd := lookupCommand(name); cmd != nil {
+		return cmd.name
+	}
+	return name
+}
+
+// The projects namespace's own alias fold, shared by its dispatcher
+// and per-command help. Separate from the main table on purpose: `rm`
+// here means `projects remove`, while the bare `rm` removes a worktree.
+func canonicalProjectsSub(name string) string {
+	switch name {
+	case "ls":
+		return "list"
+	case "rm":
+		return "remove"
+	}
+	return name
 }
 
 // Per-command help: the matching usage lines from the catalog, full
 // width. `sm projects add --help` narrows to the subcommand; an
 // unknown command falls back to the full help.
 func commandHelp(command string, args []string) string {
-	name := command
-	if canonical, ok := aliasCanonical[name]; ok {
-		name = canonical
+	name := canonicalCommandName(command)
+	// shelve and unshelve share one usage line, keyed on shelve.
+	if name == "unshelve" {
+		name = "shelve"
 	}
 	// `wt rm --help` documents rm itself; recurse through the namespace.
 	if name == "worktrees" && len(args) > 0 {
-		subName := args[0]
-		if canonical, ok := aliasCanonical[subName]; ok {
-			subName = canonical
-		}
+		subName := canonicalCommandName(args[0])
 		if subName != "worktrees" && !strings.HasPrefix(subName, "-") {
 			return commandHelp(args[0], args[1:])
 		}
@@ -310,15 +379,9 @@ func commandHelp(command string, args []string) string {
 	}
 	sub := ""
 	if name == "projects" && len(args) > 0 {
-		switch args[0] {
-		case "list", "ls":
-			sub = "list"
-		case "add":
-			sub = "add"
-		case "remove", "rm":
-			sub = "remove"
-		case "config":
-			sub = "config"
+		switch s := canonicalProjectsSub(args[0]); s {
+		case "list", "add", "remove", "config":
+			sub = s
 		}
 	}
 	width := helpWidth()
@@ -457,57 +520,39 @@ func run() int {
 		}
 	}
 
+	cmd := lookupCommand(command)
+	if cmd == nil {
+		err := usageErrf("Unknown command %q. Run `%s --help`.", command, binaryName)
+		reportError(err)
+		return 2
+	}
+
 	initRoot()
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
-	}
-	ctx := resolveContext(cwd)
-	var code int
-	switch command {
-	case "list", "ls", "l":
-		code, err = cmdList(ctx, args)
-	case "path":
-		code, err = cmdPath(ctx, args)
-	case "cd", "c":
-		code, err = cmdCd(ctx, args)
-	case "worktrees", "worktree", "wt", "w":
-		code, err = cmdWorktrees(ctx, args)
-	case "switch":
-		code, err = cmdWorktree(ctx, args)
-	case "open", "o":
-		code, err = cmdOpen(ctx, args)
-	case "app":
-		code, err = cmdApp(ctx, args)
-	case "create", "new":
-		code, err = cmdCreate(ctx, args)
-	case "rm", "remove":
-		code, err = cmdRm(ctx, args)
-	case "done":
-		code, err = cmdDone(ctx, args)
-	case "merge":
-		code, err = cmdMerge(ctx, args)
-	case "adopt":
-		code, err = cmdAdopt(ctx, args)
-	case "setup":
-		code, err = cmdSetup(ctx, args)
-	case "shelve":
-		code, err = cmdShelve(ctx, args, true)
-	case "unshelve":
-		code, err = cmdShelve(ctx, args, false)
-	case "projects", "project", "p":
-		code, err = cmdProject(ctx, args)
-	case "config":
-		code, err = cmdConfigOpen(ctx, args)
-	default:
-		code, err = 2, usageErrf("Unknown command %q. Run `%s --help`.", command, binaryName)
-	}
-	if err != nil {
-		if jsonMode {
-			emit(map[string]any{"ok": false, "error": err.Error()})
-		} else {
-			fmt.Fprintf(os.Stderr, "%s %s\n", redErr(binaryName+":"), err.Error())
+	ctx := cliContext{projects: loadProjects()}
+	if !cmd.noCwd {
+		cwd, err := os.Getwd()
+		if err != nil {
+			cwd = "."
 		}
+		ctx = resolveContext(cwd)
+	}
+	code, err := cmd.run(ctx, args)
+	if err != nil {
+		reportError(err)
 	}
 	return code
+}
+
+func reportError(err error) {
+	if jsonMode {
+		doc := map[string]any{"ok": false, "error": err.Error()}
+		// Stable machine-readable code so the app maps failures (entity
+		// gone, ...) without matching prose.
+		if kind := errorKindOf(err); kind != "" {
+			doc["code"] = kind
+		}
+		emit(doc)
+	} else {
+		fmt.Fprintf(os.Stderr, "%s %s\n", redErr(binaryName+":"), err.Error())
+	}
 }

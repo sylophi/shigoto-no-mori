@@ -142,21 +142,35 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 		}
 	}
 
+	provisionFailures, _ := runProvisionScripts(proj, identityOf(worktree), config)
+	failures = append(failures, provisionFailures...)
+	emitPhase("idle")
+	return failures
+}
+
+// The provisioning half shared by create/adopt and `sm setup`: the
+// project's setup script, then port-pool provision (skipped for
+// external worktrees -- rm skips the matching release for them, so
+// provisioning would leak a port). Returns the failures and which
+// steps ran; callers own the trailing "idle" phase.
+func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfig) ([]scriptFailure, []string) {
+	failures := []scriptFailure{}
+	ran := []string{}
 	setupCommand := ""
 	if config != nil {
 		setupCommand = strings.TrimSpace(config.Scripts.Setup)
 	}
-	portPoolNeeded := willRunPortPool(worktree.Path)
+	portPoolNeeded := !id.IsExternal && willRunPortPool(id.Path)
 	if setupCommand == "" && !portPoolNeeded {
-		emitPhase("idle")
-		return failures
+		return failures, ran
 	}
 
-	envInputs := lifecycleEnvInputs(proj, worktree, config)
+	envInputs := lifecycleEnvInputs(proj, id, config)
 
 	if setupCommand != "" {
 		emitPhase("setup")
 		envInputs.scriptName = "setup"
+		ran = append(ran, "setup")
 		if code, _ := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
 			failures = append(failures, scriptFailure{Step: "setup", ExitCode: codeOrNil(code)})
 		}
@@ -165,16 +179,16 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 	if portPoolNeeded {
 		emitPhase("portPoolProvision")
 		envInputs.scriptName = "port-pool-provision"
+		ran = append(ran, "port-pool provision")
 		code, _ := runLifecycleScript(
-			portPoolCommand("provision", worktree.Path), envInputs,
+			portPoolCommand("provision", id.Path), envInputs,
 			scriptSlot{Kind: "portPool", Phase: "provision"})
 		if code != 0 {
 			failures = append(failures, scriptFailure{Step: "port-pool provision", ExitCode: codeOrNil(code)})
 		}
 	}
 
-	emitPhase("idle")
-	return failures
+	return failures, ran
 }
 
 func codeOrNil(code int) any {
@@ -185,29 +199,20 @@ func codeOrNil(code int) any {
 }
 
 // $SHIGOMORI_PROJECT_BRANCH + $SHIGOMORI_DEFAULT_BRANCH for scripts.
-func lifecycleEnvInputs(proj project, worktree worktreeJSON, config *projectConfig) scriptEnvInputs {
+func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig) scriptEnvInputs {
 	projectBranch := ""
 	if identities, err := listWorktreeIdentities(proj); err == nil {
-		for _, id := range identities {
-			if id.IsPrimary {
-				projectBranch = id.Branch
+		for _, other := range identities {
+			if other.IsPrimary {
+				projectBranch = other.Branch
 				break
 			}
 		}
 	}
-	override := ""
-	if config != nil {
-		override = config.DefaultBranch
-	}
 	return scriptEnvInputs{
-		worktree: worktreeIdentity{
-			ID: worktree.ID, ProjectID: worktree.ProjectID, Name: worktree.Name,
-			Branch: worktree.Branch, Path: worktree.Path,
-			IsPrimary: worktree.IsPrimary, IsExternal: worktree.IsExternal,
-			Detached: worktree.Detached,
-		},
+		worktree:      id,
 		proj:          proj,
 		projectBranch: projectBranch,
-		defaultBranch: resolveDefaultBranch(proj.Path, override),
+		defaultBranch: primaryRefFor(proj, config),
 	}
 }

@@ -70,6 +70,21 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 	return result, nil
 }
 
+// The arg-spec fragment shared by every command that targets a
+// worktree: -p/--project scoping plus the app-plumbing ids
+// (--project-id / --worktree-id) the IPC layer addresses by. Callers
+// extend the returned maps with their own flags.
+func worktreeTargetSpec() argSpec {
+	return argSpec{
+		strings: map[string][]string{
+			"project":     {"p"},
+			"project-id":  {},
+			"worktree-id": {},
+		},
+		bools: map[string][]string{},
+	}
+}
+
 func exitCodeOf(err error) int {
 	if cliErr, ok := err.(*cliError); ok {
 		return cliErr.code

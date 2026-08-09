@@ -9,10 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 )
-
-const appBundleID = "com.sylophi.shigomori"
 
 func cmdApp(_ cliContext, args []string) (int, error) {
 	if len(args) > 0 {
@@ -61,8 +58,7 @@ func cmdConfigOpen(_ cliContext, args []string) (int, error) {
 		editor = os.Getenv("EDITOR")
 	}
 	if editor != "" && interactiveStdio() {
-		quoted := "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
-		cmd := exec.Command("/bin/sh", "-c", editor+" "+quoted)
+		cmd := exec.Command("/bin/sh", "-c", editor+" "+shellQuote(path))
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

@@ -95,40 +95,17 @@ func pickWorktree(proj project, excludeID string) (located, error) {
 			flagsCell(plainPalette, w),
 		}
 	}
-	widths := make([]int, len(cells[0]))
-	for _, row := range cells {
-		for i, cell := range row {
-			if n := visibleWidth(cell); n > widths[i] {
-				widths[i] = n
-			}
-		}
-	}
-	rows := make([]string, len(choices))
+	rows := alignRows(cells)
 	names := make([]string, len(choices))
-	for r, row := range cells {
-		line := ""
-		for i, cell := range row {
-			line += cell + strings.Repeat(" ", widths[i]-visibleWidth(cell)) + "  "
-		}
-		rows[r] = strings.TrimRight(line, " ")
-		names[r] = choices[r].Name
+	for i, w := range choices {
+		names[i] = w.Name
 	}
 
 	idx, err := menuSelect("Select a worktree in "+proj.Name+":", rows, names, 0)
 	if err != nil {
 		return located{}, err
 	}
-	chosen := choices[idx]
-	// Round-trip through identities so the located carries the same
-	// struct every other resolver hands out.
-	identities, err := listWorktreeIdentities(proj)
-	if err != nil {
-		return located{}, err
-	}
-	for _, id := range identities {
-		if id.ID == chosen.ID {
-			return located{proj: proj, worktree: id}, nil
-		}
-	}
-	return located{}, errf("Worktree %q disappeared while picking.", chosen.Name)
+	// The status object already carries every identity field; no
+	// re-listing round trip needed.
+	return located{proj: proj, worktree: identityOf(choices[idx])}, nil
 }

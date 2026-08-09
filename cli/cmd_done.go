@@ -20,14 +20,9 @@ import (
 )
 
 func cmdDone(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project":     {"p"},
-			"project-id":  {}, // app plumbing: exact addressing from IPC
-			"worktree-id": {}, // app plumbing
-		},
-		bools: map[string][]string{"force": {"f"}},
-	})
+	spec := worktreeTargetSpec()
+	spec.bools["force"] = []string{"f"}
+	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -46,13 +41,16 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 	if config != nil {
 		override = config.DefaultBranch
 	}
-	primaryRef := resolveDefaultBranch(proj.Path, override)
+	// One `git remote` spawn serves the primary-ref resolution, the
+	// local-name split below, and the checkout inside
+	// switchToPrimaryBranch.
+	remotes := listRemotes(proj.Path)
+	primaryRef := resolveDefaultBranchWithRemotes(proj.Path, override, remotes)
 	if primaryRef == "" {
 		return 1, errf("No local branches found in %s", proj.Path)
 	}
 
 	mergedBranch := id.Branch
-	remotes := listRemotes(proj.Path)
 	localPrimary := primaryRef
 	if _, branch := splitRemoteRef(primaryRef, remotes); branch != "" {
 		localPrimary = branch
@@ -71,7 +69,7 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 			mergedBranch, primaryRef)
 	}
 
-	if err := switchToPrimaryBranch(id.Path, proj.Path, primaryRef); err != nil {
+	if err := switchToPrimaryBranch(id.Path, primaryRef, remotes); err != nil {
 		return 1, err
 	}
 	deleted := false
@@ -84,6 +82,7 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 
 	// Fresh description so callers see the landed state, matching the
 	// app's mutateAndDescribe round trip.
+	invalidateWorktreeIdentities(proj.ID)
 	fresh, err := listWorktreeIdentities(proj)
 	if err != nil {
 		return 1, err
@@ -142,8 +141,7 @@ func deletedBranchField(branch string, deleted bool) any {
 // switchToPrimaryBranch ports sync.ts: checkout the primary ref (via
 // the checkoutBranch precedence rules), then --ff-only pull when it
 // resolved to a remote-tracking ref.
-func switchToPrimaryBranch(worktreePath, projectPath, primaryRef string) error {
-	remotes := listRemotes(projectPath)
+func switchToPrimaryBranch(worktreePath, primaryRef string, remotes []string) error {
 	if err := checkoutBranch(worktreePath, primaryRef, remotes); err != nil {
 		return err
 	}

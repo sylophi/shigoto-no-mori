@@ -79,9 +79,13 @@ func visibleWidth(s string) int {
 
 // Usage / operational errors with a chosen exit code. Anything else
 // that escapes a command is an environment failure and exits 1.
+// kind, when set, is a stable machine-readable code carried in the
+// --json error document so the app maps failures without matching
+// prose (see errorKindOf and main/ipc's cliFailureError).
 type cliError struct {
 	msg  string
 	code int
+	kind string
 }
 
 func (e *cliError) Error() string { return e.msg }
@@ -92,6 +96,17 @@ func usageErrf(format string, args ...any) error {
 
 func errf(format string, args ...any) error {
 	return &cliError{msg: fmt.Sprintf(format, args...), code: 1}
+}
+
+func codedErrf(kind, format string, args ...any) error {
+	return &cliError{msg: fmt.Sprintf(format, args...), code: 1, kind: kind}
+}
+
+func errorKindOf(err error) string {
+	if cliErr, ok := err.(*cliError); ok {
+		return cliErr.kind
+	}
+	return ""
 }
 
 func out(line string) { fmt.Fprintln(os.Stdout, line) }
@@ -113,32 +128,34 @@ func vlog(format string, args ...any) {
 	}
 }
 
-func renderTable(header []string, rows [][]string) string {
-	all := append([][]string{header}, rows...)
-	widths := make([]int, len(header))
-	for _, row := range all {
+// alignRows pads every cell to its column's widest entry and joins each
+// row into one line. visibleWidth: cells may carry ANSI, which must not
+// skew column alignment. Shared by renderTable and the picker rows.
+func alignRows(rows [][]string) []string {
+	if len(rows) == 0 {
+		return nil
+	}
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
 		for i, cell := range row {
 			if n := visibleWidth(cell); n > widths[i] {
 				widths[i] = n
 			}
 		}
 	}
-	var b strings.Builder
-	for r, row := range all {
-		if r > 0 {
-			b.WriteByte('\n')
-		}
+	lines := make([]string, len(rows))
+	for r, row := range rows {
 		line := ""
 		for i, cell := range row {
-			// visibleWidth: cells may carry ANSI, which must not skew
-			// column alignment.
 			line += cell + strings.Repeat(" ", widths[i]-visibleWidth(cell)) + "  "
 		}
-		line = strings.TrimRight(line, " ")
-		if r == 0 {
-			line = dimOut(line)
-		}
-		b.WriteString(line)
+		lines[r] = strings.TrimRight(line, " ")
 	}
-	return b.String()
+	return lines
+}
+
+func renderTable(header []string, rows [][]string) string {
+	lines := alignRows(append([][]string{header}, rows...))
+	lines[0] = dimOut(lines[0])
+	return strings.Join(lines, "\n")
 }

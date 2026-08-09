@@ -6,13 +6,7 @@ package main
 // checkout and external worktrees can't be shelved.
 
 func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project":     {"p"},
-			"worktree-id": {}, // app plumbing: exact addressing from IPC
-			"project-id":  {},
-		},
-	})
+	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
 	if err != nil {
 		return exitCodeOf(err), err
 	}

@@ -7,7 +7,11 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
 import { rename } from "node:fs/promises";
 import { config as loadEnv } from "dotenv";
-import { CLI_DIST_DIR, cliBinaryName } from "./shared/cliDist.mts";
+import {
+  APP_BUNDLE_ID,
+  CLI_DIST_DIR,
+  cliBinaryName,
+} from "./shared/cliDist.mts";
 
 loadEnv();
 
@@ -45,7 +49,7 @@ const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
     icon: "assets/icon",
-    appBundleId: "com.sylophi.shigomori",
+    appBundleId: APP_BUNDLE_ID,
     appCopyright: "© 2026 sylophi",
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it

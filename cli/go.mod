@@ -1,4 +1,4 @@
-module sm
+module cli
 
 go 1.26
 

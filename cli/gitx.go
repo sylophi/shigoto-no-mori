@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 const unknownBranch = "(unknown)"
@@ -100,7 +101,40 @@ func deriveBranch(e porcelainEntry) string {
 	return unknownBranch
 }
 
+// Memo for listWorktreeIdentities, keyed by project id. A CLI process
+// resolves context, pickers, and command bodies against the same
+// project within one run, and each un-memoized call costs a git spawn
+// plus a project.json read. Every worktree mutation must call
+// invalidateWorktreeIdentities before re-listing.
+var (
+	identityMemoMu sync.Mutex
+	identityMemo   = map[string][]worktreeIdentity{}
+)
+
+func invalidateWorktreeIdentities(projectID string) {
+	identityMemoMu.Lock()
+	delete(identityMemo, projectID)
+	identityMemoMu.Unlock()
+}
+
 func listWorktreeIdentities(proj project) ([]worktreeIdentity, error) {
+	identityMemoMu.Lock()
+	cached, ok := identityMemo[proj.ID]
+	identityMemoMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	identities, err := listWorktreeIdentitiesUncached(proj)
+	if err != nil {
+		return nil, err
+	}
+	identityMemoMu.Lock()
+	identityMemo[proj.ID] = identities
+	identityMemoMu.Unlock()
+	return identities, nil
+}
+
+func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 	stdout, err := runGit(proj.Path, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
@@ -142,10 +176,13 @@ func lastPathSegment(path string) string {
 
 // --- status probes (buildWorktree parity) ---
 
-func changedCount(worktreePath string) int {
+// The error matters to callers guarding destructive operations: a
+// worktree whose status can't be read (broken gitdir pointer,
+// unreadable index) must NOT count as clean.
+func changedCount(worktreePath string) (int, error) {
 	stdout, err := runGit(worktreePath, "status", "--porcelain=v1")
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	count := 0
 	for _, line := range strings.Split(stdout, "\n") {
@@ -153,7 +190,7 @@ func changedCount(worktreePath string) int {
 			count++
 		}
 	}
-	return count
+	return count, nil
 }
 
 type remoteSync struct {
@@ -278,31 +315,54 @@ func remoteRefExists(projectPath, ref string) bool {
 
 var defaultBranchCandidates = []string{"main", "master", "dev"}
 
-func resolveDefaultBranch(projectPath, override string) string {
+// One for-each-ref spawn replaces the per-candidate show-ref probes:
+// the full local + remote branch list is read once and every existence
+// check happens in memory. Precedence matches remotes.ts: a valid
+// override wins, then each candidate remote-first in `git remote`
+// order, then the first local branch as a fallback.
+func resolveDefaultBranchWithRemotes(projectPath, override string, remotes []string) string {
+	stdout, err := runGit(projectPath, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return ""
+	}
+	var locals []string // ref order, for the first-branch fallback
+	localSet := map[string]bool{}
+	remoteRefs := map[string]bool{}
+	for _, line := range strings.Split(stdout, "\n") {
+		ref := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(ref, "refs/heads/"):
+			name := strings.TrimPrefix(ref, "refs/heads/")
+			locals = append(locals, name)
+			localSet[name] = true
+		case strings.HasPrefix(ref, "refs/remotes/"):
+			remoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = true
+		}
+	}
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
-		if localBranchExists(projectPath, trimmed) || remoteRefExists(projectPath, trimmed) {
+		if localSet[trimmed] || remoteRefs[trimmed] {
 			return trimmed
 		}
 	}
-	remotes := listRemotes(projectPath)
 	for _, candidate := range defaultBranchCandidates {
 		for _, remote := range remotes {
 			ref := remote + "/" + candidate
-			if remoteRefExists(projectPath, ref) {
+			if remoteRefs[ref] {
 				return ref
 			}
 		}
-		if localBranchExists(projectPath, candidate) {
+		if localSet[candidate] {
 			return candidate
 		}
 	}
-	stdout, err := runGit(projectPath, "for-each-ref", "--format=%(refname:short)", "--count=1", "refs/heads/")
-	if err == nil {
-		if first := strings.TrimSpace(stdout); first != "" {
-			return first
-		}
+	if len(locals) > 0 {
+		return locals[0]
 	}
 	return ""
+}
+
+func resolveDefaultBranch(projectPath, override string) string {
+	return resolveDefaultBranchWithRemotes(projectPath, override, listRemotes(projectPath))
 }
 
 // Longest-prefix split of "origin/main" into (remote, branch); nil-ish

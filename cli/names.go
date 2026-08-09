@@ -1,39 +1,33 @@
 package main
 
-// Adjective + animal pairs for naming worktree directories. Must stay
-// in sync with main/lib/worktrees/names.ts (the app-side authority) so
-// both surfaces draw from the same pool.
+// Adjective + animal pairs for naming worktree directories. The word
+// lists are embedded from embed/name-words.json, which the app's
+// main/lib/worktrees/names.ts imports too -- one pool, two consumers,
+// nothing to keep in sync by hand.
 
 import (
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 )
 
-var adjectives = []string{
-	"snuggly", "sleepy", "drowsy", "dreamy", "cozy", "snug", "mellow",
-	"gentle", "quiet", "soft", "fluffy", "fuzzy", "puffy", "floofy",
-	"pillowy", "squishy", "cuddly", "huggy", "tiny", "wee", "dainty",
-	"chubby", "round", "noodly", "wobbly", "zippy", "perky", "peppy",
-	"wiggly", "bouncy", "jazzy", "sparkly", "twinkly", "snappy", "spunky",
-	"scrappy", "breezy", "jolly", "chirpy", "goofy", "giggly", "bubbly",
-	"smiley", "cheery", "happy", "merry", "sunny", "bright", "rosy",
-	"polite", "kind", "brave", "swift", "eager", "lucky", "nimble",
+//go:embed embed/name-words.json
+var nameWordsJSON []byte
+
+var nameWords struct {
+	Adjectives []string `json:"adjectives"`
+	Animals    []string `json:"animals"`
 }
 
-var animals = []string{
-	"otter", "panda", "capybara", "fennec", "koala", "hedgehog", "marmot",
-	"chinchilla", "mouse", "dormouse", "hamster", "chipmunk", "ferret",
-	"meerkat", "lemur", "sloth", "wombat", "quokka", "pangolin",
-	"armadillo", "alpaca", "llama", "fox", "raccoon", "cheetah", "caracal",
-	"marten", "ermine", "tapir", "platypus", "bunny", "puppy", "kitten",
-	"piglet", "duckling", "seal", "narwhal", "beluga", "dolphin",
-	"manatee", "dugong", "axolotl", "nautilus", "seahorse", "jellyfish",
-	"puffin", "kiwi", "hummingbird", "robin", "sparrow", "wren", "owl",
-	"tit", "gecko", "chameleon", "salamander", "tortoise", "snail",
-	"bumblebee", "firefly",
+func init() {
+	if err := json.Unmarshal(nameWordsJSON, &nameWords); err != nil {
+		panic("embedded name-words.json is invalid: " + err.Error())
+	}
 }
 
 func pickWorktreeName(used map[string]bool) string {
+	adjectives, animals := nameWords.Adjectives, nameWords.Animals
 	var candidates []string
 	for _, adj := range adjectives {
 		for _, animal := range animals {

@@ -4,7 +4,6 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"sync"
 )
 
@@ -102,6 +101,8 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	}
 	wg.Wait()
 
+	// results is indexed by scope position, so collected keeps scope
+	// order without any re-sort.
 	var collected []projectResult
 	for _, r := range results {
 		if r.err != nil {
@@ -110,9 +111,6 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		}
 		collected = append(collected, r)
 	}
-	sort.SliceStable(collected, func(a, b int) bool {
-		return indexOfProject(scope, collected[a].proj.ID) < indexOfProject(scope, collected[b].proj.ID)
-	})
 
 	if jsonMode {
 		flat := []worktreeJSON{}
@@ -155,15 +153,6 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	}
 	out(renderTable(header, rows))
 	return 0, nil
-}
-
-func indexOfProject(scope []project, id string) int {
-	for i, p := range scope {
-		if p.ID == id {
-			return i
-		}
-	}
-	return len(scope)
 }
 
 func cmdPath(ctx cliContext, args []string) (int, error) {

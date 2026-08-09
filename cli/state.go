@@ -122,29 +122,46 @@ func readShelvedSet() map[string]bool {
 	return shelved
 }
 
-// Flips the id in the shelved map under the cross-process lock
-// (store.ts writeKey semantics: full-file read-modify-write).
-func setShelved(worktreeID string, shelved bool) error {
+// updateStateKey mirrors store.ts updateKey: read-modify-write of one
+// state.json key with the read under the cross-process lock, so a
+// concurrent app write can't be clobbered. fn receives the key's raw
+// current value (nil when absent) and returns the value to store;
+// returning nil skips the write (no-op detected under the lock).
+func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error {
 	return withStateLock(func() error {
 		all := readStateFile()
+		next, err := fn(all[key])
+		if err != nil {
+			return err
+		}
+		if next == nil {
+			return nil
+		}
+		encoded, err := json.Marshal(next)
+		if err != nil {
+			return err
+		}
+		all[key] = encoded
+		return atomicWriteJSON(statePath(), all)
+	})
+}
+
+// Flips the id in the shelved map (store.ts writeKey semantics).
+func setShelved(worktreeID string, shelved bool) error {
+	return updateStateKey("shelvedWorktrees", func(raw json.RawMessage) (any, error) {
 		m := map[string]bool{}
-		if raw, ok := all["shelvedWorktrees"]; ok {
+		if raw != nil {
 			_ = json.Unmarshal(raw, &m)
 		}
 		if m[worktreeID] == shelved {
-			return nil
+			return nil, nil
 		}
 		if shelved {
 			m[worktreeID] = true
 		} else {
 			delete(m, worktreeID)
 		}
-		encoded, err := json.Marshal(m)
-		if err != nil {
-			return err
-		}
-		all["shelvedWorktrees"] = encoded
-		return atomicWriteJSON(statePath(), all)
+		return m, nil
 	})
 }
 

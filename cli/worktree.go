@@ -42,16 +42,39 @@ type buildContext struct {
 	shelved    map[string]bool
 }
 
+// The project's primary ref, honoring the configured override -- the
+// "read config, apply override, resolve" idiom every consumer shares.
+func primaryRefFor(proj project, config *projectConfig) string {
+	override := ""
+	if config != nil {
+		override = config.DefaultBranch
+	}
+	return resolveDefaultBranch(proj.Path, override)
+}
+
 func loadBuildContext(proj project) buildContext {
 	config := readProjectConfig(proj.ID)
 	override := ""
 	if config != nil {
 		override = config.DefaultBranch
 	}
+	// listRemotes feeds both hasRemote and the default-branch
+	// resolution; one spawn covers both.
+	remotes := listRemotes(proj.Path)
 	return buildContext{
-		hasRemote:  len(listRemotes(proj.Path)) > 0,
-		primaryRef: resolveDefaultBranch(proj.Path, override),
+		hasRemote:  len(remotes) > 0,
+		primaryRef: resolveDefaultBranchWithRemotes(proj.Path, override, remotes),
 		shelved:    readShelvedSet(),
+	}
+}
+
+// The identity fields of a full status object -- for reusing helpers
+// that take a worktreeIdentity when a worktreeJSON is already in hand.
+func identityOf(w worktreeJSON) worktreeIdentity {
+	return worktreeIdentity{
+		ID: w.ID, ProjectID: w.ProjectID, Name: w.Name, Branch: w.Branch,
+		Path: w.Path, IsPrimary: w.IsPrimary, IsExternal: w.IsExternal,
+		Detached: w.Detached,
 	}
 }
 
@@ -64,7 +87,8 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		wg      sync.WaitGroup
 	)
 	wg.Add(4)
-	go func() { defer wg.Done(); changed = changedCount(id.Path) }()
+	// Display probe: an unreadable status just shows as 0 changes.
+	go func() { defer wg.Done(); changed, _ = changedCount(id.Path) }()
 	go func() { defer wg.Done(); commits = listCommits(id.Path, 0, recentCommitsCount) }()
 	go func() { defer wg.Done(); rs = getRemoteSync(id.Path) }()
 	go func() { defer wg.Done(); behind = behindPrimary(id, ctx.primaryRef) }()
@@ -190,6 +214,7 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		}
 	}
 
+	invalidateWorktreeIdentities(proj.ID)
 	fresh, err := listWorktreeIdentities(proj)
 	if err != nil {
 		return worktreeJSON{}, err
