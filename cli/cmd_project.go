@@ -187,6 +187,13 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 
 	fields := map[string]any{}
 	if v, ok := parsed.strings["default-branch"]; ok {
+		// An empty defaultBranch makes the whole config invalid (the
+		// schema requires it), which would silently drop every other
+		// configured field on the next read. Refuse instead of "clear".
+		if strings.TrimSpace(v) == "" {
+			return 2, usageErrf(
+				"--default-branch can't be empty; it's required, so set a ref instead of clearing it.")
+		}
 		fields["defaultBranch"] = v
 	}
 	scriptUpdates := map[string]string{}

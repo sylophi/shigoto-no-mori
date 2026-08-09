@@ -157,6 +157,16 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		}
 	}
 
+	// The name-collision check above only sees THIS project's worktrees;
+	// projects sharing a directory basename share a worktree base too
+	// (layout keys on basename), so a sibling project's worktree can
+	// occupy the path. Check the disk before git errors cryptically.
+	if _, err := os.Lstat(worktreePath); err == nil {
+		return worktreeJSON{}, errf(
+			"Destination already exists: %s (another project with the same folder name may own it)",
+			worktreePath)
+	}
+
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0o755); err != nil {
 		return worktreeJSON{}, err
 	}

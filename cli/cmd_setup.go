@@ -78,11 +78,17 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 
 	ok := len(failures) == 0
 	if jsonMode {
+		// The failures payload IS the error report; returning an error
+		// here too would make main.go emit a second, conflicting
+		// document (same policy as cmd_rm's cleanupFailed).
 		emit(map[string]any{"ok": ok, "ran": ran, "failures": failures})
-	} else if ok {
-		out("setup complete for " + id.Name)
+		if ok {
+			return 0, nil
+		}
+		return 1, nil
 	}
 	if ok {
+		out("setup complete for " + id.Name)
 		return 0, nil
 	}
 	return 1, errf("setup did not complete cleanly for %s", id.Name)
