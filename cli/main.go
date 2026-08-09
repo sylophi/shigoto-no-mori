@@ -60,15 +60,15 @@ var worktreeItems = []helpItem{
 		"Also re-provisions the port-pool port."},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
-		"Finder, editors, custom commands. Bare open shows the row as a menu."},
+		"Finder, editors, custom commands. With no tool, shows the row as a menu."},
 }
 
 var projectItems = []helpItem{
 	{"projects list", "List registered projects", ""},
 	{"projects add [<path>] [--all]", "Register a repo",
-		"The repo at <path> (default .). --all registers every repo found beneath it, asking first (--yes skips)."},
+		"The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips)."},
 	{"projects remove [<name>]", "Unregister a project",
-		"Worktrees stay on disk. Asks first, no name picks from a menu."},
+		"Worktrees stay on disk. Prompts for confirmation (--yes skips)."},
 	{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
 		"Show or set per-project config",
 		`"" clears a script, default-branch can't be cleared.`},
@@ -120,11 +120,11 @@ func helpText(full bool) string {
 	b.WriteString(boldOut("Usage:") + " " + binaryName + " " +
 		colorUsage("[--json] [--verbose] <command> [args]") + "\n\n")
 	for _, line := range wrapText(
-		"Commands run against the worktree/project containing the current "+
-			"directory when possible. From anywhere else, address worktrees as "+
-			"<name>, <project>/<name>, or a directory path, or pass -p "+
-			"<project>. From the primary checkout, omitting the name picks a "+
-			"worktree from a menu. Aliases: l list, c cd, o open, new create.", width) {
+		"Commands target the worktree containing the current directory. "+
+			"From elsewhere, address worktrees as <name>, <project>/<name>, "+
+			"or a path, or pass -p <project>. Omitting the name in the "+
+			"primary checkout opens a menu. Aliases: l list, c cd, o open, "+
+			"new create.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -133,9 +133,9 @@ func helpText(full bool) string {
 	if !full {
 		general := append(append([]helpItem{}, generalItems...),
 			helpItem{"worktrees <command>", "Worktree commands",
-				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. wt for short, and bare commands work while nothing collides: " + binaryName + " rm == " + binaryName + " wt rm. Run `" + binaryName + " worktrees` for details."},
+				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. Short form wt, prefix optional: " + binaryName + " rm == " + binaryName + " wt rm. Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
-				"list, add, remove, config. p for short. Run `" + binaryName + " projects` for details."},
+				"list, add, remove, config. Short form p. Run `" + binaryName + " projects` for details."},
 		)
 		groups = []helpGroup{
 			{"General", general},
@@ -174,14 +174,13 @@ func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string 
 
 func worktreesHelpText() string {
 	return namespaceHelpText("worktrees", "wt",
-		"While nothing collides the bare command works too: "+binaryName+
-			" rm == "+binaryName+" wt rm. Every command takes -p <project> "+
-			"to target a project explicitly.", worktreeItems)
+		"The worktrees prefix is optional: "+binaryName+" rm == "+binaryName+
+			" wt rm. All commands accept -p <project>.", worktreeItems)
 }
 
 func projectsHelpText() string {
 	return namespaceHelpText("projects", "p",
-		"Manage which repos Shigoto no Mori knows about.", projectItems)
+		"Manage registered projects.", projectItems)
 }
 
 const (
