@@ -121,12 +121,12 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 	rows := make([]string, len(visible))
 	names := make([]string, len(visible))
 	for i, e := range visible {
-		row := cyanErr(e.label)
+		row := e.label
 		switch {
 		case e.custom != nil:
-			row += "  " + dimErr("custom")
+			row += "  (custom)"
 		case e.webURL != "":
-			row += "  " + dimErr("web")
+			row += "  (web)"
 		}
 		rows[i] = row
 		names[i] = e.label

@@ -64,7 +64,12 @@ type palette struct {
 var (
 	outPalette = palette{cyanOut, greenOut, yellowOut, dimOut}
 	errPalette = palette{cyanErr, greenErr, yellowErr, dimErr}
+	// For menu option labels: huh styles the highlight itself, and
+	// embedded ANSI resets would break it mid-row.
+	plainPalette = palette{plain, plain, plain, plain}
 )
+
+func plain(s string) string { return s }
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 

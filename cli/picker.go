@@ -50,7 +50,7 @@ func pickProject(ctx cliContext) (project, error) {
 	names := make([]string, len(ctx.projects))
 	for i, p := range ctx.projects {
 		pad := strings.Repeat(" ", widest-len([]rune(p.Name)))
-		rows[i] = cyanErr(p.Name) + pad + "  " + dimErr(p.Path)
+		rows[i] = p.Name + pad + "  " + p.Path
 		names[i] = p.Name
 	}
 	idx, err := menuSelect("Select a project:", rows, names)
@@ -82,11 +82,11 @@ func pickWorktree(proj project, excludeID string) (located, error) {
 	cells := make([][]string, len(choices))
 	for i, w := range choices {
 		cells[i] = []string{
-			cyanErr(w.Name),
+			w.Name,
 			w.Branch,
-			syncCell(errPalette, w),
-			changesCell(errPalette, w),
-			flagsCell(errPalette, w),
+			syncCell(plainPalette, w),
+			changesCell(plainPalette, w),
+			flagsCell(plainPalette, w),
 		}
 	}
 	widths := make([]int, len(cells[0]))
