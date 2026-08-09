@@ -95,9 +95,8 @@ export async function mergePullRequest(opts: {
   } catch {
     // swallow
   }
-  // The merge changes upstream refs (and the sidebar PR cache) -- evict
-  // so the next read sees the merged state.
-  evictProjectPullRequests(cwd);
+  // Cache eviction is the IPC handler's job: it owns the engine choice
+  // (CLI vs TS) and evicts once for whichever path ran.
 }
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles

@@ -18,6 +18,7 @@ import {
   projects,
   runtime,
   scripts,
+  cli,
   shell,
   shigomori,
   updater,
@@ -49,6 +50,7 @@ const api = {
   portPool,
   githubCli,
   scripts,
+  cli,
   updater,
   launchers,
 } as const;

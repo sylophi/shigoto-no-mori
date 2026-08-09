@@ -1,4 +1,8 @@
 // Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
+// Writes are read-modify-write of the whole file, and both the app and
+// the CLI go through this module -- so every write cycle holds the
+// cross-process lock. Reads stay lock-free: the rename keeps the file
+// itself always consistent.
 import {
   mkdirSync,
   readFileSync,
@@ -8,7 +12,9 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { tempPathFor } from "../util/jsonFile";
+import { withFileLock } from "../util/lockFile";
 import { shigomoriRoot } from "../util/paths";
+import { noteSelfWrite } from "../util/selfWrite";
 
 const FILE = "state.json";
 
@@ -42,6 +48,7 @@ function writeAll(data: Record<string, unknown>): void {
     }
     throw error;
   }
+  noteSelfWrite();
 }
 
 export function readKey<T>(key: string, fallback: T): T {
@@ -51,7 +58,31 @@ export function readKey<T>(key: string, fallback: T): T {
 }
 
 export function writeKey<T>(key: string, value: T): void {
-  const all = readAll();
-  all[key] = value;
-  writeAll(all);
+  withFileLock(`${filePath()}.lock`, () => {
+    const all = readAll();
+    all[key] = value;
+    writeAll(all);
+  });
+}
+
+// Read-modify-write of one key with the READ inside the lock. Callers
+// that derive the new value from the current one (append a project,
+// toggle a shelf flag) must use this instead of readKey + writeKey:
+// with the read outside the lock, a concurrent CLI write between the
+// read and the write is silently clobbered. `update` may return
+// undefined to skip the write (no-op detected under the lock). It may
+// also throw (e.g. a duplicate check); the lock is still released.
+export function updateKey<T>(
+  key: string,
+  fallback: T,
+  update: (current: T) => T | undefined,
+): void {
+  withFileLock(`${filePath()}.lock`, () => {
+    const all = readAll();
+    const current = key in all ? (all[key] as T) : fallback;
+    const next = update(current);
+    if (next === undefined) return;
+    all[key] = next;
+    writeAll(all);
+  });
 }

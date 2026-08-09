@@ -25,14 +25,28 @@ import {
 } from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
 import {
+  clearDeleteInflight,
+  getInflightDeleteIds,
+  killScriptsForWorktree,
+  markDeleteInflight,
+} from "../../lib/scripts";
+import {
   convertExternalWorktree,
   createManagedWorktree,
   deleteWorktreeWithCleanup,
   relocateWorktreeToManagedPath,
   setWorktreeShelved,
 } from "../../lib/worktrees/operations";
+import { cliAvailable } from "../../electron/cliRunner";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
+import {
+  adoptViaCli,
+  createViaCli,
+  deleteViaCli,
+  doneViaCli,
+  setShelvedViaCli,
+} from "../cliDelegate";
 
 function notifierFor(sender: WebContents) {
   return {
@@ -55,25 +69,26 @@ export const worktreesHandlers: Handlers<
     return listWorktrees(project.id, project.path);
   },
 
+  // Lifecycle mutations route through the bundled CLI where it
+  // ships (everywhere but Windows), so the app and a terminal run the
+  // same engine; the TS path stays as the Windows fallback.
   create: async (
     { projectId, worktreeName, branchName, base, checkout },
     { event },
   ) => {
     const project = findProjectOrThrow(projectId);
-    return createManagedWorktree(
-      project,
-      {
-        worktreeName,
-        branchName,
-        base,
-        checkout,
-      },
-      notifierFor(event.sender),
-    );
+    const input = { worktreeName, branchName, base, checkout };
+    if (cliAvailable()) {
+      return createViaCli(project, input, notifierFor(event.sender));
+    }
+    return createManagedWorktree(project, input, notifierFor(event.sender));
   },
 
   convertExternal: async ({ projectId, worktreeId }, { event }) => {
     const project = findProjectOrThrow(projectId);
+    if (cliAvailable()) {
+      return adoptViaCli(project, worktreeId, notifierFor(event.sender));
+    }
     return convertExternalWorktree(
       project,
       worktreeId,
@@ -88,6 +103,28 @@ export const worktreesHandlers: Handlers<
 
   delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
     const project = findProjectOrThrow(projectId);
+    if (cliAvailable()) {
+      // The CLI path needs the same guarantees deleteWorktreeWithCleanup
+      // provides around its own removal: refuse a duplicate delete,
+      // tombstone the id so a still-running create lifecycle can't
+      // spawn steps into the vanishing directory, and reap app-spawned
+      // scripts first (the CLI can't see the app's script registry, so
+      // a dev server would otherwise outlive its worktree).
+      if (getInflightDeleteIds().has(worktreeId)) {
+        throw new Error("This worktree is already being removed.");
+      }
+      markDeleteInflight(worktreeId);
+      try {
+        await killScriptsForWorktree(worktreeId);
+        return await deleteViaCli(
+          project,
+          { worktreeId, force, skipCleanup },
+          notifierFor(event.sender),
+        );
+      } finally {
+        clearDeleteInflight(worktreeId);
+      }
+    }
     return deleteWorktreeWithCleanup(
       project,
       { worktreeId, force, skipCleanup },
@@ -97,6 +134,11 @@ export const worktreesHandlers: Handlers<
 
   setShelved: async ({ projectId, worktreeId, shelved }) => {
     const project = findProjectOrThrow(projectId);
+    if (cliAvailable()) {
+      return mutateAndDescribe({ projectId, worktreeId }, () =>
+        setShelvedViaCli(project, worktreeId, shelved),
+      );
+    }
     return setWorktreeShelved(project, worktreeId, shelved);
   },
 
@@ -159,8 +201,12 @@ export const worktreesHandlers: Handlers<
       const primaryRef = await resolvePrimaryRef(target.projectId, pp);
       await syncWithPrimary(wt, pp, primaryRef);
     }),
-  switchToPrimaryAndDeleteBranch: (input) =>
-    mutateAndDescribe(input, async (wt, pp, target) => {
+  switchToPrimaryAndDeleteBranch: async (input) => {
+    if (cliAvailable()) {
+      const project = findProjectOrThrow(input.projectId);
+      return doneViaCli(project, input.worktreeId);
+    }
+    return mutateAndDescribe(input, async (wt, pp, target) => {
       if (!isRealBranch(target.branch)) {
         throw new Error("No branch checked out to clean up");
       }
@@ -169,7 +215,8 @@ export const worktreesHandlers: Handlers<
       // renderer-side race where the switch unmounts the cleanup box and the
       // chained delete gets dropped (see switchToPrimaryAndDeleteBranch).
       await switchToPrimaryAndDeleteBranch(wt, pp, primaryRef, target.branch);
-    }),
+    });
+  },
 };
 
 // Resolve the project's primary ref, honoring the configured override.

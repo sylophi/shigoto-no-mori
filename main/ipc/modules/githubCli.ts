@@ -6,9 +6,12 @@ import {
   setPullRequestDraft,
 } from "../../lib/githubCli/actions";
 import {
+  evictProjectPullRequests,
   getWorktreePullRequest,
   listProjectPullRequests,
 } from "../../lib/githubCli/pullRequests";
+import { cliAvailable } from "../../electron/cliRunner";
+import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "../../lib/githubCli/readiness";
 import { getRepoMergeConfig } from "../../lib/githubCli/repoConfig";
 import { findProjectOrThrow } from "../../lib/projects";
@@ -35,12 +38,22 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
 
   mergePullRequest: async ({ projectId, number, method }) => {
     const project = findProjectOrThrow(projectId);
-    await mergePullRequest({
-      projectId,
-      cwd: project.path,
-      number,
-      method,
-    });
+    if (cliAvailable()) {
+      // The CLI runs the same gh merge and persists lastMergeMethod
+      // itself.
+      await mergeViaCli(project, number, method);
+    } else {
+      await mergePullRequest({
+        projectId,
+        cwd: project.path,
+        number,
+        method,
+      });
+    }
+    // The merge changes upstream refs (and the sidebar PR cache) --
+    // evict once for whichever engine ran so the next read sees the
+    // merged state.
+    evictProjectPullRequests(project.path);
   },
 
   pullRequestDiff: async ({ projectId, number }) => {

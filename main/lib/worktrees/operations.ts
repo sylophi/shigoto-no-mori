@@ -234,9 +234,15 @@ export async function relocateWorktreeToManagedPath(
   }
 }
 
+interface DeleteWorktreeInput {
+  worktreeId: string;
+  force?: boolean;
+  skipCleanup?: boolean;
+}
+
 export async function deleteWorktreeWithCleanup(
   project: Project,
-  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  input: DeleteWorktreeInput,
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteWorktreeResult> {
   const { worktreeId } = input;
@@ -260,7 +266,7 @@ export async function deleteWorktreeWithCleanup(
 
 async function deleteWorktreeWithCleanupInner(
   project: Project,
-  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  input: DeleteWorktreeInput,
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteWorktreeResult> {
   const { worktreeId, force, skipCleanup } = input;

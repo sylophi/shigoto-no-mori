@@ -1,5 +1,6 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
+import { gitContract } from "@shared/ipc/modules/git";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
@@ -10,7 +11,7 @@ import {
 import { readThemeSync } from "./lib/config/global";
 import { registerIpcHandlers } from "./ipc";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { broadcast } from "./ipc/register";
+import { broadcast, broadcastAll } from "./ipc/register";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -21,7 +22,10 @@ import {
 import { initShigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
+import { repairCliLinks } from "./electron/cliInstall";
+import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
+import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
   installUpdaterImpl,
@@ -117,6 +121,18 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
+  // External CLI writes surface in the UI via an explicit invalidation
+  // broadcast. (The focus signal won't do: React Query's focusManager
+  // only refetches on a blur->focus transition, and the window may be
+  // focused the whole time an agent works in a terminal beside it.)
+  startStateWatcher(() => {
+    broadcastAll(gitContract, "externalChange", undefined);
+  });
+  // Installing the CLI link is a Settings action; launch only repairs
+  // an already-installed link whose target moved (app update, other
+  // checkout). After applyUserShellPath so PATH checks see the login
+  // shell's PATH.
+  void repairCliLinks();
 });
 
 app.on("window-all-closed", () => {
@@ -146,6 +162,7 @@ app.on("before-quit", (event) => {
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
+    killAllCli();
     return;
   }
   // The install branch above has already gated its own restart via the
@@ -169,6 +186,10 @@ app.on("before-quit", (event) => {
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);
+  // CLI children (CLI-engine lifecycle operations) get the same reap as
+  // scripts; the CLI's own children share its terminal-style process
+  // group and follow it down.
+  killAllCli();
   const inflight = getInflightDeleteIds();
   // allSettled: one rejected per-worktree kill must not skip the
   // killAllScripts pass for everything else.

@@ -10,6 +10,17 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 Note: This project is still early and in active development. We offer macOS Apple Silicon builds and experimental Windows x64 builds. See [WINDOWS.md](WINDOWS.md) for Windows setup and caveats.
 
+## Agent skills
+
+`skills/` holds instruction snippets that teach coding agents the `sm`
+workflow (create a worktree, switch to one, land and clean up, register a
+project). Install with [Vercel skills](https://github.com/vercel-labs/skills)
+(skills.sh); the installer lets you pick which ones to include:
+
+```sh
+npx skills add https://github.com/sylophi/shigoto-no-mori
+```
+
 ## License
 
 Shigoto no Mori is licensed under the MIT License. See [LICENSE](LICENSE).

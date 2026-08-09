@@ -3,6 +3,7 @@
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { cliRootDirName } from "@shared/cliDist.mts";
 import { isWindows } from "./platform";
 
 let cachedRoot: string | null = null;
@@ -13,10 +14,19 @@ let cachedRoot: string | null = null;
 // from somewhere unexpected fails loudly instead of silently flipping the
 // path under live callers.
 export function initShigomoriRoot(isPackaged: boolean): void {
+  initShigomoriRootAt(
+    join(homedir(), cliRootDirName(isPackaged ? "prod" : "dev")),
+  );
+}
+
+// Explicit-path variant for non-Electron entry points (the CLI, tests)
+// where the root comes from a flag or env var instead of app.isPackaged.
+// Same one-shot guard.
+export function initShigomoriRootAt(root: string): void {
   if (cachedRoot !== null) {
     throw new Error("shigomoriRoot already initialized");
   }
-  cachedRoot = join(homedir(), isPackaged ? "shigomori" : "shigomori-dev");
+  cachedRoot = root;
 }
 
 export function shigomoriRoot(): string {

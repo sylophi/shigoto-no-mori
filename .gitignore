@@ -100,3 +100,11 @@ out/
 
 # App icon intermediates (icon.icns and icon.png are the committed sources)
 assets/icon.iconset/
+
+# sgm CLI compiled binary
+dist-cli/
+
+# go build artifacts in the module dir (compiled output belongs in dist-cli/)
+cli/sm
+cli/smd
+cli/sgm

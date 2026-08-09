@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { setDoubutsu } from "../../electron/appearance";
+import { uninstallCliLinks } from "../../electron/cliInstall";
 import { nukeEverything } from "../../lib/nuke";
 import { broadcastAll } from "../register";
 import { shigomoriRoot } from "../../lib/util/paths";
@@ -28,8 +29,13 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
     setDoubutsu(enabled);
   },
 
-  nuke: () =>
-    nukeEverything((progress) =>
+  nuke: async () => {
+    await nukeEverything((progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
-    ),
+    );
+    // Nuke means "remove everything shigomori put on this machine";
+    // the CLI link in the user's bin dir is part of that. Settings
+    // offers a fresh install afterwards.
+    await uninstallCliLinks();
+  },
 };

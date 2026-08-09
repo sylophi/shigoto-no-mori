@@ -2,6 +2,10 @@
 // while scripts or worktree removals are in flight. Centralizing the
 // copy here keeps the two paths' wording in lock-step.
 import { BrowserWindow, dialog } from "electron";
+// getBusyOperations already includes CLI-engine lifecycle work: the
+// CLI runner registers its child count as an inflight contributor at
+// module load (it is imported by the IPC modules during bootstrap,
+// well before any busy check can run).
 import { type BusyOperations, getBusyOperations } from "../lib/scripts";
 
 type BusyAction = "quit" | "restart";

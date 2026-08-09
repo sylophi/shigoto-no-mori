@@ -9,7 +9,7 @@ import {
   readShigomoriConfig,
   writeShigomoriConfig,
 } from "../../lib/config/project";
-import { writeKey } from "../../lib/config/store";
+import { updateKey } from "../../lib/config/store";
 import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
 import { isGitRepo } from "../../lib/git/core";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
@@ -38,9 +38,15 @@ import {
 } from "../../lib/scripts";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
+import { cliAvailable } from "../../electron/cliRunner";
+import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
-function saveProjects(projects: Project[]): void {
-  writeKey<Project[]>(PROJECTS_KEY, projects);
+// updateKey so the current list is read under the cross-process lock:
+// the CLI appends to this key too (sm projects add), and deriving
+// the new list from a read taken outside the lock would clobber a
+// concurrent CLI write.
+function updateProjects(update: (current: Project[]) => Project[]): void {
+  updateKey<Project[]>(PROJECTS_KEY, [], update);
 }
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {
@@ -53,11 +59,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       throw new Error(`${path} is not a git repository`);
     }
 
-    const existing = loadProjects();
-    // comparablePath: the same directory can arrive as C:/x, C:\x, or
-    // different casing on Windows; one project row per directory.
-    if (existing.some((p) => comparablePath(p.path) === comparablePath(path))) {
-      throw new Error(`Project already added: ${path}`);
+    // Same engine as `sm projects add`: registration and the config
+    // seed run in the CLI where it ships; the TS body below stays as
+    // the Windows fallback.
+    if (cliAvailable()) {
+      return projectsAddViaCli(path);
     }
 
     const project: Project = {
@@ -66,7 +72,18 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       path,
     };
 
-    saveProjects([...existing, project]);
+    // Duplicate check inside the locked update so two concurrent adds
+    // (app + CLI) of the same directory can't both land.
+    // comparablePath: the same directory can arrive as C:/x, C:\x, or
+    // different casing on Windows; one project row per directory.
+    updateProjects((existing) => {
+      if (
+        existing.some((p) => comparablePath(p.path) === comparablePath(path))
+      ) {
+        throw new Error(`Project already added: ${path}`);
+      }
+      return [...existing, project];
+    });
 
     // Best-effort: seed a minimal config so downstream code always has a
     // stable file to work against. Bare repos and unborn HEADs land in the
@@ -90,6 +107,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   remove: async ({ id }) => {
     const projects = loadProjects();
     const removed = projects.find((p) => p.id === id);
+    // One engine decision for the whole removal: cliAvailable()
+    // re-probes on every call, so asking again later in the handler
+    // could disagree with the path taken here and break the "the CLI
+    // already deleted the state dir" bookkeeping below.
+    const useCli = cliAvailable();
     // Reap scripts running in this project's worktrees before dropping
     // the registry entry: once the id is gone the renderer has no UI
     // left to stop them, and the per-worktree delete path (which would
@@ -103,23 +125,34 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       if (removed) {
         await killScriptsForProject(id);
       }
-      saveProjects(projects.filter((p) => p.id !== id));
+      // Registry drop and per-project state deletion run in the CLI
+      // where it ships (same engine as `sm projects remove`); the TS
+      // path stays as the Windows fallback and for unknown ids.
+      if (removed && useCli) {
+        await projectsRemoveViaCli(id);
+      } else {
+        updateProjects((current) => current.filter((p) => p.id !== id));
+      }
     } finally {
       clearProjectDeleteInflight(id);
     }
     // Drop the icon-cache entry and on-disk state so neither leaks across
     // re-adds of the same path. State deletion is a recursive rm keyed
     // on the id, so only run it for an id that matched a real project.
+    // The CLI path already deleted the state dir.
     if (removed) {
       await forgetProjectIcon(removed.path);
-      await deleteProjectState(id);
+      if (!useCli) {
+        await deleteProjectState(id);
+      }
       dropCollapsedProject(id);
     }
   },
 
   reorder: ({ draggedId, targetId, position }) => {
-    const projects = loadProjects();
-    saveProjects(reorderProjects(projects, draggedId, targetId, position));
+    updateProjects((current) =>
+      reorderProjects(current, draggedId, targetId, position),
+    );
   },
 
   getSort: () => readProjectSort(),

@@ -118,6 +118,14 @@ export async function deleteWorktreeData(
   }
 }
 
+// External processes (the CLI) write these files too; the state
+// watcher calls this on any change under the root so the 5s TTL can't
+// serve stale config after a CLI write.
+export function invalidateAllProjectConfigCaches(): void {
+  configCache.invalidateByPrefix("");
+  worktreeCache.invalidateByPrefix("");
+}
+
 export async function deleteProjectState(projectId: string): Promise<void> {
   await rm(projectDir(projectId), { recursive: true, force: true });
   configCache.invalidate(projectId);
