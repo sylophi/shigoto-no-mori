@@ -166,7 +166,11 @@ const config: ForgeConfig = {
       // since ad-hoc signatures differ between builds.
       [FuseV1Options.EnableCookieEncryption]: false,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
-      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      // E2E_FUSES=1 produces a local test build that Playwright's
+      // _electron driver can attach to (it bootstraps over the node
+      // inspector); release builds never set it.
+      [FuseV1Options.EnableNodeCliInspectArguments]:
+        process.env.E2E_FUSES === "1",
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),
