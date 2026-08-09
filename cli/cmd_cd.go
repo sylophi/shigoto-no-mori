@@ -99,18 +99,24 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 		return 0, nil
 	}
 
+	return enterWorktreeShell(target.worktree.Name, target.worktree.Path)
+}
+
+// Start $SHELL in a worktree and pass through its exit code. Shared by
+// cd/switch and create's drop-into-the-new-worktree tail.
+func enterWorktreeShell(name, path string) (int, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
 	note(fmt.Sprintf("Entering %s %s -- exit the shell to return.",
-		cyanErr(target.worktree.Name), dimErr("("+target.worktree.Path+")")))
+		cyanErr(name), dimErr("("+path+")")))
 	cmd := exec.Command(shell)
-	cmd.Dir = target.worktree.Path
+	cmd.Dir = path
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "SHIGOMORI_WORKTREE="+target.worktree.Name)
+	cmd.Env = append(os.Environ(), "SHIGOMORI_WORKTREE="+name)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
