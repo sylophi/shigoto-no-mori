@@ -95,6 +95,14 @@ const queryClient = new QueryClient({
   }),
 });
 
+// State changed on disk under the app (an sgm CLI run in a terminal):
+// invalidate everything so the sidebar reflects it without a focus
+// change. Blunt on purpose -- the main process debounces the signal,
+// and only active queries actually refetch.
+window.api.git.onExternalChange(() => {
+  void queryClient.invalidateQueries();
+});
+
 // Main rewrote project.json (carry-over entries removed in favor of
 // .worktreeinclude); drop the caches that mirror it so open views refresh.
 worktreeLifecycle.start({

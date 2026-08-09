@@ -74,6 +74,7 @@ export const git = {
     gitClient.refreshProject({ projectId }),
   onRefsRefreshed: gitClient.refsRefreshed,
   onFetchActive: gitClient.fetchActive,
+  onExternalChange: gitClient.externalChange,
 } as const;
 
 export const githubCli = {

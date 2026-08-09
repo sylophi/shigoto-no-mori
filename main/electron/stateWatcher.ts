@@ -4,7 +4,7 @@
 // should see the worktree appear in the sidebar within a debounce, not
 // on the next alt-tab. The app's own writes also trip the watcher --
 // harmless, the invalidate + poke is debounced and idempotent.
-import { watch } from "node:fs";
+import { mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "../lib/config/global";
 import { invalidateAllProjectConfigCaches } from "../lib/config/project";
@@ -26,7 +26,7 @@ export function startStateWatcher(poke: () => void): void {
       poke();
     }, DEBOUNCE_MS);
   };
-  const watchDir = (dir: string, recursive: boolean) => {
+  const watchDir = (dir: string, recursive: boolean, maxDepth?: number) => {
     try {
       const watcher = watch(
         dir,
@@ -37,6 +37,16 @@ export function startStateWatcher(poke: () => void): void {
           if (
             file !== null &&
             (file.includes(".tmp") || file.endsWith(".lock"))
+          ) {
+            return;
+          }
+          // Depth cap for the worktrees/ watch: worktree checkouts get
+          // heavy content churn (dev servers, builds) 3+ levels deep;
+          // only project/worktree directory events matter here.
+          if (
+            maxDepth !== undefined &&
+            file !== null &&
+            file.split("/").length > maxDepth
           ) {
             return;
           }
@@ -52,7 +62,19 @@ export function startStateWatcher(poke: () => void): void {
     }
   };
   // state.json + config.json live at the root; per-project config and
-  // worktree data under projects/.
+  // worktree data under projects/. worktrees/ needs its own recursive
+  // watch: an external `sgm create` writes no state file at all -- the
+  // only observable change is the new checkout directory two levels
+  // down (worktrees/<project>/<name>), which a non-recursive root
+  // watch never sees. (In-project and custom layouts sit outside the
+  // root and aren't covered; the managed-root default is.)
   watchDir(shigomoriRoot(), false);
   watchDir(join(shigomoriRoot(), "projects"), true);
+  const worktreesDir = join(shigomoriRoot(), "worktrees");
+  try {
+    mkdirSync(worktreesDir, { recursive: true });
+  } catch {
+    // Best effort; watchDir tolerates a missing dir.
+  }
+  watchDir(worktreesDir, true, 2);
 }

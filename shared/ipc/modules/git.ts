@@ -15,6 +15,11 @@ export const gitContract = {
     "git:fetchActive",
     z.object({ projectId: z.string(), active: z.boolean() }),
   ),
+  // Something outside the app (the sgm CLI) changed worktrees or state
+  // on disk. The renderer invalidates its queries -- refetch-on-focus
+  // can't cover this, since the window may already be focused while an
+  // agent works in a terminal beside it.
+  externalChange: broadcast("git:externalChange", z.void()),
 } as const;
 
 export type GitContract = typeof gitContract;

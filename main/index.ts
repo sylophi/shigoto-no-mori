@@ -1,5 +1,6 @@
 import { app, BrowserWindow, nativeTheme } from "electron";
 import path from "node:path";
+import { gitContract } from "@shared/ipc/modules/git";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
@@ -10,7 +11,7 @@ import {
 import { readThemeSync } from "./lib/config/global";
 import { registerIpcHandlers } from "./ipc";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { broadcast } from "./ipc/register";
+import { broadcast, broadcastAll } from "./ipc/register";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -120,13 +121,12 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
-  // External sgm writes surface in the UI via the same focus signal
-  // React Query already refetches on.
+  // External sgm writes surface in the UI via an explicit invalidation
+  // broadcast. (The focus signal won't do: React Query's focusManager
+  // only refetches on a blur->focus transition, and the window may be
+  // focused the whole time an agent works in a terminal beside it.)
   startStateWatcher(() => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (win.webContents.isDestroyed()) continue;
-      broadcast(windowContract, "focused", undefined, win.webContents);
-    }
+    broadcastAll(gitContract, "externalChange", undefined);
   });
   // After applyUserShellPath so the PATH advice reflects the real
   // login-shell PATH. Fire-and-forget: the prompt floats over the
