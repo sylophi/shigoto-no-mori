@@ -24,6 +24,7 @@ import { platformChrome } from "./electron/chrome";
 import { maybeInstallSgmCli } from "./electron/sgmCli";
 import { killAllSgm } from "./electron/sgmRunner";
 import { applyUserShellPath } from "./electron/shellPath";
+import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
   installUpdaterImpl,
@@ -119,6 +120,14 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
+  // External sgm writes surface in the UI via the same focus signal
+  // React Query already refetches on.
+  startStateWatcher(() => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.webContents.isDestroyed()) continue;
+      broadcast(windowContract, "focused", undefined, win.webContents);
+    }
+  });
   // After applyUserShellPath so the PATH advice reflects the real
   // login-shell PATH. Fire-and-forget: the prompt floats over the
   // already-open window and must not gate startup.
