@@ -62,3 +62,25 @@ export function writeKey<T>(key: string, value: T): void {
     writeAll(all);
   });
 }
+
+// Read-modify-write of one key with the READ inside the lock. Callers
+// that derive the new value from the current one (append a project,
+// toggle a shelf flag) must use this instead of readKey + writeKey:
+// with the read outside the lock, a concurrent sgm write between the
+// read and the write is silently clobbered. `update` may return
+// undefined to skip the write (no-op detected under the lock). It may
+// also throw (e.g. a duplicate check); the lock is still released.
+export function updateKey<T>(
+  key: string,
+  fallback: T,
+  update: (current: T) => T | undefined,
+): void {
+  withFileLock(`${filePath()}.lock`, () => {
+    const all = readAll();
+    const current = key in all ? (all[key] as T) : fallback;
+    const next = update(current);
+    if (next === undefined) return;
+    all[key] = next;
+    writeAll(all);
+  });
+}

@@ -80,18 +80,19 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	}
 	path := strings.TrimSpace(toplevelRaw)
 
-	for _, existing := range ctx.projects {
-		if comparablePath(existing.Path) == comparablePath(path) {
-			return 1, errf("Project already added: %s", path)
-		}
-	}
-
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
+	// Duplicate check inside the locked update so two concurrent adds
+	// (app + CLI) of the same directory can't both land.
 	err = withStateLock(func() error {
 		all := readStateFile()
 		var projects []project
 		if raw, ok := all["projects"]; ok {
 			_ = json.Unmarshal(raw, &projects)
+		}
+		for _, existing := range projects {
+			if comparablePath(existing.Path) == comparablePath(path) {
+				return errf("Project already added: %s", path)
+			}
 		}
 		encoded, err := json.Marshal(append(projects, proj))
 		if err != nil {
@@ -101,7 +102,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 		return atomicWriteJSON(statePath(), all)
 	})
 	if err != nil {
-		return 1, err
+		return exitCodeOf(err), err
 	}
 
 	// Best-effort config seed; bare repos / unborn HEADs just stay

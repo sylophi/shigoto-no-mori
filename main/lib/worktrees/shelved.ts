@@ -5,7 +5,7 @@
 // so it survives across sessions; not in the per-project shigomori
 // config since "what's currently in focus" is a per-user, per-machine
 // thing rather than a property of the repo.
-import { readKey, writeKey } from "../config/store";
+import { readKey, updateKey } from "../config/store";
 
 const KEY = "shelvedWorktrees";
 
@@ -26,16 +26,19 @@ export function readShelvedSet(): Set<string> {
   return new Set(Object.keys(readMap()));
 }
 
+// updateKey so the current map is read under the cross-process lock --
+// the sgm CLI mutates this key too, and a read-outside-the-lock
+// version would clobber a concurrent CLI write.
 export function setShelved(worktreeId: string, shelved: boolean): void {
-  const map = readMap();
-  const has = map[worktreeId] === true;
-  if (has === shelved) return;
-  if (shelved) {
-    map[worktreeId] = true;
-  } else {
-    delete map[worktreeId];
-  }
-  writeKey<ShelvedMap>(KEY, map);
+  updateKey<ShelvedMap>(KEY, {}, (map) => {
+    if ((map[worktreeId] === true) === shelved) return undefined;
+    if (shelved) {
+      map[worktreeId] = true;
+    } else {
+      delete map[worktreeId];
+    }
+    return map;
+  });
 }
 
 export function dropShelved(worktreeId: string): void {

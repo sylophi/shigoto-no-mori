@@ -9,7 +9,7 @@ import {
   readShigomoriConfig,
   writeShigomoriConfig,
 } from "../../lib/config/project";
-import { writeKey } from "../../lib/config/store";
+import { updateKey } from "../../lib/config/store";
 import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
 import { isGitRepo } from "../../lib/git/core";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
@@ -39,8 +39,12 @@ import {
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
 
-function saveProjects(projects: Project[]): void {
-  writeKey<Project[]>(PROJECTS_KEY, projects);
+// updateKey so the current list is read under the cross-process lock:
+// the sgm CLI appends to this key too (sgm project add), and deriving
+// the new list from a read taken outside the lock would clobber a
+// concurrent CLI write.
+function updateProjects(update: (current: Project[]) => Project[]): void {
+  updateKey<Project[]>(PROJECTS_KEY, [], update);
 }
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {
@@ -53,20 +57,24 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       throw new Error(`${path} is not a git repository`);
     }
 
-    const existing = loadProjects();
-    // comparablePath: the same directory can arrive as C:/x, C:\x, or
-    // different casing on Windows; one project row per directory.
-    if (existing.some((p) => comparablePath(p.path) === comparablePath(path))) {
-      throw new Error(`Project already added: ${path}`);
-    }
-
     const project: Project = {
       id: randomUUID(),
       name: deriveProjectName(path),
       path,
     };
 
-    saveProjects([...existing, project]);
+    // Duplicate check inside the locked update so two concurrent adds
+    // (app + CLI) of the same directory can't both land.
+    // comparablePath: the same directory can arrive as C:/x, C:\x, or
+    // different casing on Windows; one project row per directory.
+    updateProjects((existing) => {
+      if (
+        existing.some((p) => comparablePath(p.path) === comparablePath(path))
+      ) {
+        throw new Error(`Project already added: ${path}`);
+      }
+      return [...existing, project];
+    });
 
     // Best-effort: seed a minimal config so downstream code always has a
     // stable file to work against. Bare repos and unborn HEADs land in the
@@ -103,7 +111,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       if (removed) {
         await killScriptsForProject(id);
       }
-      saveProjects(projects.filter((p) => p.id !== id));
+      updateProjects((current) => current.filter((p) => p.id !== id));
     } finally {
       clearProjectDeleteInflight(id);
     }
@@ -118,8 +126,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   },
 
   reorder: ({ draggedId, targetId, position }) => {
-    const projects = loadProjects();
-    saveProjects(reorderProjects(projects, draggedId, targetId, position));
+    updateProjects((current) =>
+      reorderProjects(current, draggedId, targetId, position),
+    );
   },
 
   getSort: () => readProjectSort(),
