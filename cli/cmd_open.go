@@ -38,7 +38,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		target = *ctx.current
 	default:
 		if !interactiveStdio() {
-			return 2, usageErrf("Not inside a worktree; pass one: %s open <tool> <worktree>.", binaryName)
+			return 2, usageErrf("Not inside a worktree; pass one: %s open <tool> <name>.", binaryName)
 		}
 		// resolveProject supplies the project menu when cwd isn't in
 		// one (or honors -p), then the worktree menu picks the target.

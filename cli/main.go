@@ -51,8 +51,8 @@ var helpGroups = []helpGroup{
 		{"setup [<name>]",
 			"Re-run the setup script (and port-pool provision) on an existing worktree"},
 		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
-		{"open [<tool>] [<worktree>]",
-			"Launch a launcher-row tool (Finder, editor, custom command) in the worktree, bare open shows the row as a menu"},
+		{"open [<tool>] [<name>]",
+			"Launch a launcher-row tool (Finder, editor, custom command) in a worktree, bare open shows the row as a menu"},
 	}},
 	{"Projects", []helpItem{
 		{"projects list", "List registered projects"},
