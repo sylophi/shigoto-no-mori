@@ -128,28 +128,3 @@ func renderTable(header []string, rows [][]string) string {
 	}
 	return b.String()
 }
-
-// Help colorizer: section headers bold, each command/flag's leading
-// token cyan. Applied to the plain template so the source stays
-// readable; continuation lines (deep indent) pass through untouched.
-var helpItemRe = regexp.MustCompile(`^(  )(\S[^ ]*(?: [^ ]+)*?)(  +)(.*)$`)
-
-func colorizeHelp(text string) string {
-	if !stdoutColor {
-		return text
-	}
-	lines := strings.Split(text, "\n")
-	for i, line := range lines {
-		switch {
-		case strings.HasSuffix(line, ":") && !strings.HasPrefix(line, " "):
-			lines[i] = boldOut(line)
-		case strings.HasPrefix(line, "Usage: "):
-			lines[i] = boldOut("Usage:") + line[len("Usage:"):]
-		default:
-			if m := helpItemRe.FindStringSubmatch(line); m != nil {
-				lines[i] = m[1] + cyanOut(m[2]) + m[3] + m[4]
-			}
-		}
-	}
-	return strings.Join(lines, "\n")
-}
