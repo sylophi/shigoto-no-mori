@@ -28,7 +28,7 @@
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "extract-icon": "scripts/extract-app-icon.sh",
     "seed": "node scripts/seed-test-data.mts",
-    "sgm": "go run -C cli .",
+    "cli": "go run -C cli .",
     "cli:build": "node scripts/build-sgm.mjs",
     "cli:install": "node scripts/install-sgm.mjs",
     "postinstall": "node scripts/copy-material-icons.mjs"
