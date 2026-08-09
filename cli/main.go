@@ -138,7 +138,7 @@ func helpText(full bool) string {
 				"list, add, remove, config. Short form p. Run `" + binaryName + " projects` for details."},
 		)
 		groups = []helpGroup{
-			{"General", general},
+			{"Commands", general},
 			{"Flags", flagItems},
 			{"Environment", envItems},
 		}
