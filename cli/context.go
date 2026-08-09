@@ -257,14 +257,33 @@ func resolveProjectArgs(ctx cliContext, parsed parsedArgs) (project, error) {
 // to the primary checkout before any worktree name is considered.
 func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (located, error) {
 	if ref == "" {
+		// -p with no name targets that project, never whatever project
+		// the cwd happens to be in: menu for humans, explicit-forms
+		// error for scripts. A cwd inside the named project keeps the
+		// cwd default below.
+		if projectFlag != "" {
+			proj, err := resolveProject(ctx, projectFlag)
+			if err != nil {
+				return located{}, err
+			}
+			if ctx.current == nil || ctx.current.proj.ID != proj.ID {
+				if interactiveStdio() {
+					return pickWorktree(proj, pickOpts{primaryOK: primaryOK})
+				}
+				return located{}, usageErrf(
+					"Pass a worktree name to target in %s (see `%s list -p %s`).",
+					proj.Name, binaryName, proj.Name)
+			}
+		}
 		if ctx.current != nil {
 			// From the primary checkout, silently acting on it surprises
 			// more than a menu: offer the project's worktrees when a human
 			// is on the other end -- with the primary itself on the menu
-			// when the command can act on it. Agents, pipelines, and
-			// --json keep the deterministic primary.
+			// (listed last, so enter-enter picks a real worktree) when the
+			// command can act on it. Agents, pipelines, and --json keep
+			// the deterministic primary.
 			if ctx.current.worktree.IsPrimary && interactiveStdio() {
-				return pickWorktree(ctx.current.proj, "", primaryOK)
+				return pickWorktree(ctx.current.proj, pickOpts{primaryOK: primaryOK, primaryLast: true})
 			}
 			return *ctx.current, nil
 		}
@@ -276,7 +295,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 			if err != nil {
 				return located{}, err
 			}
-			return pickWorktree(proj, "", primaryOK)
+			return pickWorktree(proj, pickOpts{primaryOK: primaryOK})
 		}
 		if ctx.unregisteredRepo != "" {
 			return located{}, usageErrf(

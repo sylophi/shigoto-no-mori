@@ -42,6 +42,11 @@ export function CliSection() {
   const { name, state, onPath } = status;
   const busy = install.isPending || uninstall.isPending;
   const home = runtime?.homedir ?? null;
+  // Older stored statuses may predate foreignPaths; the worst link is
+  // always a truthful fallback.
+  const foreignPaths = status.foreignPaths?.length
+    ? status.foreignPaths
+    : [status.linkPath];
   const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
 
   return (
@@ -110,9 +115,15 @@ export function CliSection() {
       {state === "foreign" && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            <span className="font-mono">{tildify(status.linkPath, home)}</span>{" "}
-            already exists and doesn't point at this app. Installing replaces
-            it.
+            {foreignPaths.map((path, i) => (
+              <span key={path}>
+                {i > 0 && " and "}
+                <span className="font-mono">{tildify(path, home)}</span>
+              </span>
+            ))}{" "}
+            {foreignPaths.length > 1
+              ? "already exist and don't point at this app. Installing replaces both."
+              : "already exists and doesn't point at this app. Installing replaces it."}
           </p>
           <Button
             variant="outline"

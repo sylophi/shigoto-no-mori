@@ -70,16 +70,39 @@ func pickProject(ctx cliContext, preferredID string) (project, error) {
 // wherever you stand, since entering it again isn't a destination.
 // primaryOK=false additionally drops the primary checkout, for
 // commands that would refuse it anyway (rm, adopt, shelve).
-func pickWorktree(proj project, excludeID string, primaryOK bool) (located, error) {
+// primaryLast moves the primary to the bottom so it never sits on the
+// initial highlight -- for menus shown FROM the primary, where a real
+// worktree is the likely target but the primary must stay reachable.
+type pickOpts struct {
+	excludeID   string
+	primaryOK   bool
+	primaryLast bool
+}
+
+func pickWorktree(proj project, opts pickOpts) (located, error) {
 	worktrees, err := listWorktrees(proj)
 	if err != nil {
 		return located{}, err
 	}
 	var choices []worktreeJSON
 	for _, w := range worktrees {
-		if w.ID != excludeID && (primaryOK || !w.IsPrimary) {
+		if w.ID != opts.excludeID && (opts.primaryOK || !w.IsPrimary) {
 			choices = append(choices, w)
 		}
+	}
+	if opts.primaryLast {
+		ordered := make([]worktreeJSON, 0, len(choices))
+		for _, w := range choices {
+			if !w.IsPrimary {
+				ordered = append(ordered, w)
+			}
+		}
+		for _, w := range choices {
+			if w.IsPrimary {
+				ordered = append(ordered, w)
+			}
+		}
+		choices = ordered
 	}
 	if len(choices) == 0 {
 		return located{}, errf("%s has no other worktrees. Create one with `%s create`.",

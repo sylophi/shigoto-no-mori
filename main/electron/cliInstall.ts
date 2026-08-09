@@ -108,6 +108,7 @@ export async function cliLinkStatus(): Promise<CliStatus> {
     aliasName: cliAliasName(cliFlavor()),
     binDir,
     linkPath: linkPath(),
+    foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
   const binary = isWindows ? null : cliBinaryPath();
@@ -132,7 +133,10 @@ export async function cliLinkStatus(): Promise<CliStatus> {
       worstLink = entry.link;
     }
   }
-  return { ...base, linkPath: worstLink, supported: true, state };
+  const foreignPaths = links
+    .filter((entry) => entry.state === "foreign")
+    .map((entry) => entry.link);
+  return { ...base, linkPath: worstLink, foreignPaths, supported: true, state };
 }
 
 function stateOfOwnership(

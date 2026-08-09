@@ -47,7 +47,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		target, err = pickWorktree(proj, "", true)
+		target, err = pickWorktree(proj, pickOpts{primaryOK: true})
 	}
 	if err != nil {
 		return exitCodeOf(err), err

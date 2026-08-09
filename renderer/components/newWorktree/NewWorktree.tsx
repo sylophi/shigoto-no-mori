@@ -84,6 +84,13 @@ export function NewWorktree() {
     folderName.length > 0 &&
     worktrees.some((w) => w.name.toLowerCase() === folderName.toLowerCase());
 
+  // A non-empty source that sanitizes to nothing (reserved words like
+  // root/primary, dot names, DOS device names) would otherwise leave
+  // the form silently unsubmittable: blank folder field, disabled
+  // Create, and no branch to blame.
+  const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
+  const folderUnusable = folderSourceRaw.length > 0 && folderName.length === 0;
+
   const canSubmit =
     base.length > 0 &&
     (mode === "checkout" || branchName.length > 0) &&
@@ -252,6 +259,13 @@ export function NewWorktree() {
               A worktree folder named{" "}
               <span className="font-mono">{folderName}</span> already exists in
               this project.
+            </p>
+          )}
+          {folderUnusable && (
+            <p className="text-xs text-destructive">
+              <span className="font-mono">{folderSourceRaw}</span> can't be used
+              as a folder name (root, primary, dot names, and Windows device
+              names are reserved). Pick a different folder name.
             </p>
           )}
           <p className="text-xs text-muted-foreground">

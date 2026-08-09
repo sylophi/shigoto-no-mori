@@ -86,10 +86,17 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 		if ctx.current != nil && ctx.current.proj.ID == proj.ID {
 			exclude = ctx.current.worktree.ID
 		}
-		target, err = pickWorktree(proj, exclude, true)
+		target, err = pickWorktree(proj, pickOpts{excludeID: exclude, primaryOK: true})
 	}
 	if err != nil {
 		return exitCodeOf(err), err
+	}
+	// The menus exclude the worktree you stand in, but an explicit ref
+	// (`sm cd root` from the primary) can still name it -- a nested
+	// shell in the same directory helps nobody.
+	if ctx.current != nil && target.worktree.ID == ctx.current.worktree.ID {
+		note("Already in " + cyanErr(target.worktree.Name) + " " + dimErr("("+target.worktree.Path+")") + ".")
+		return 0, nil
 	}
 
 	shell := os.Getenv("SHELL")

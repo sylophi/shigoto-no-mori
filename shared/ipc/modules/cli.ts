@@ -16,6 +16,10 @@ export const CliStatusSchema = z.object({
   binDir: z.string(),
   linkPath: z.string(),
   state: z.enum(["installed", "stale", "missing", "foreign"]),
+  // Every link path whose occupant is foreign, so the replace consent
+  // can name each file a force install would overwrite (linkPath only
+  // carries the single worst one).
+  foreignPaths: z.array(z.string()),
   onPath: z.boolean(),
 });
 export type CliStatus = z.infer<typeof CliStatusSchema>;
