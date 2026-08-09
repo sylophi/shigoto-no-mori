@@ -15,7 +15,7 @@ means: stop and tell the user the branch needs a PR first.
 primary checkout so it sees it:
 
 ```sh
-git -C "$(sm list --json | jq -r '.[]|select(.isPrimary).path')" pull --ff-only
+git -C "$(sm path root)" pull --ff-only
 ```
 
 **Clean up.** Run `sm rm <name>` for a worktree you're finished with, or

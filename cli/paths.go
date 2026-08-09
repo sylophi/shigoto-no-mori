@@ -170,13 +170,24 @@ func sanitizeBranchForPath(branch string) string {
 	s = ntfsIllegalRe.ReplaceAllString(s, "-")
 	s = controlCharsRe.ReplaceAllString(s, "")
 	s = edgeTrimRe.ReplaceAllString(s, "")
-	if s == "" || s == "." || s == ".." {
+	if s == "" || s == "." || s == ".." || isPrimaryKeyword(s) {
 		return ""
 	}
 	if dosDeviceRe.MatchString(s) {
 		return ""
 	}
 	return s
+}
+
+// The reserved worktree refs, mirroring RESERVED_NAMES in
+// shared/branches.ts: `sm cd root` / `sm path primary` (and the
+// qualified <project>/root, -p forms) address the project's primary
+// checkout, unconditionally -- a worktree carrying one of these names
+// never resolves by name, only by path or menu. sanitizeBranchForPath
+// above rejects both words so create/adopt can't mint one; external
+// tools still can, which is why the keyword can't be allowed to lose.
+func isPrimaryKeyword(name string) bool {
+	return strings.EqualFold(name, "root") || strings.EqualFold(name, "primary")
 }
 
 func isValidWorktreeDirName(name string) bool {

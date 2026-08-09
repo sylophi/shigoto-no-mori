@@ -7,8 +7,10 @@
 // run. That means path separators and control characters everywhere,
 // plus the characters NTFS refuses (< > : " | ? *) -- applied on every
 // platform so the same branch names the same directory on macOS and
-// Windows. `.`/`..` would collide with the parent-dir references, and
-// Windows reserves the DOS device names (CON, NUL, COM1…) as filenames;
+// Windows. `.`/`..` would collide with the parent-dir references,
+// Windows reserves the DOS device names (CON, NUL, COM1…) as filenames,
+// and `root`/`primary` are the CLI's address keywords for the primary
+// checkout (`sm cd root`) so no managed worktree may carry them;
 // leaving the result empty signals the caller to fall back to an animal
 // name.
 
@@ -16,7 +18,9 @@ const PATH_SEPARATOR = /[\\/]/g;
 // oxlint-disable-next-line no-control-regex -- intentional: strips control bytes
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
 const NTFS_ILLEGAL = /[<>:"|?*]/g;
-const RESERVED_NAMES = new Set([".", ".."]);
+// Checked against the lowercased name -- the CLI matches its keywords
+// case-insensitively, so "Root" must be reserved too.
+const RESERVED_NAMES = new Set([".", "..", "root", "primary"]);
 // Case-insensitive DOS device names, reserved with or without an
 // extension ("con", "con.txt").
 const DOS_DEVICE_NAMES = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)/i;
@@ -27,7 +31,7 @@ export function sanitizeBranchForPath(branch: string): string {
     .replace(NTFS_ILLEGAL, "-")
     .replace(CONTROL_CHARS, "");
   const trimmed = slashed.replace(/^[.\s-]+|[.\s-]+$/g, "");
-  if (!trimmed || RESERVED_NAMES.has(trimmed)) return "";
+  if (!trimmed || RESERVED_NAMES.has(trimmed.toLowerCase())) return "";
   if (DOS_DEVICE_NAMES.test(trimmed)) return "";
   return trimmed;
 }

@@ -47,6 +47,10 @@ export function ConvertExternalWorktrees() {
 
   const proposedPath = (worktree: Worktree): string => {
     if (!runtime) return "";
+    // A branch whose name sanitizes to nothing (reserved words like
+    // root/primary, DOS device names) gets a generated folder name at
+    // convert time; show that honestly instead of a path with an empty
+    // leaf.
     return tildify(
       worktreePathFor(
         {
@@ -55,7 +59,7 @@ export function ConvertExternalWorktrees() {
           shigomoriRoot: runtime.shigomoriRoot,
           customPath: config?.customWorktreePath ?? null,
         },
-        proposedName(worktree),
+        proposedName(worktree) || "(generated name)",
       ),
       home,
     );

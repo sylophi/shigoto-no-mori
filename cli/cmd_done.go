@@ -26,7 +26,7 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	target, err := resolveWorktreeArgs(ctx, parsed)
+	target, err := resolveWorktreeArgs(ctx, parsed, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
