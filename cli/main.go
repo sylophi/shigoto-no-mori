@@ -31,18 +31,18 @@ type helpGroup struct {
 }
 
 var helpGroups = []helpGroup{
-	{"Navigate", []helpItem{
+	{"General", []helpItem{
 		{"list [--all]", "List worktrees",
 			"All projects when outside one, or with --all."},
 		{"cd [<name>]", "Open a subshell in any worktree",
 			"Picks a project, then a worktree. Exit the shell to return."},
-		{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
-			"Like cd without the project menu. Bare worktrees (wt) does the same. Exit the shell to return."},
 		{"app", "Open the Shigoto no Mori app", ""},
 		{"config", "Open the global config file",
 			"config.json in the state root, via $EDITOR or the OS opener."},
 	}},
-	{"Worktree", []helpItem{
+	{"Worktrees", []helpItem{
+		{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
+			"Like cd without the project menu. Bare worktrees (wt) does the same. Exit the shell to return."},
 		{"worktrees path [<name>]", "Print a worktree's directory", ""},
 		{"worktrees create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
 			"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision."},

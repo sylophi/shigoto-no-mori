@@ -57,7 +57,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	case interactiveStdio():
 		proj, err = pickProject(ctx, "")
 	default:
-		return 2, usageErrf("Specify a project to remove (see `%s project list`).", binaryName)
+		return 2, usageErrf("Specify a project to remove (see `%s projects list`).", binaryName)
 	}
 	if err != nil {
 		return exitCodeOf(err), err
