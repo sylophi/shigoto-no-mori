@@ -11,6 +11,13 @@ method from the repo's settings. Pass `--method merge|squash|rebase` only
 when asked for a specific one. If there is no PR, do not merge by other
 means: stop and tell the user the branch needs a PR first.
 
+**Catch up.** The merge landed on the remote; fast-forward the local
+primary checkout so it sees it:
+
+```sh
+git -C "$(sgm list --json | jq -r '.[]|select(.isPrimary).path')" pull --ff-only
+```
+
 **Clean up.** Run `sgm rm <name>` for a worktree you're finished with, or
 `sgm done` when you're in the primary checkout sitting on the merged
 branch.
