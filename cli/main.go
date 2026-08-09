@@ -20,8 +20,10 @@ import (
 
 // Help is data; layout and color are computed. Commands are grouped by
 // what they act on; every worktree command also takes -p <project>,
-// noted once in the prose instead of on every usage line.
-type helpItem struct{ usage, desc string }
+// noted once in the prose instead of on every usage line. desc is the
+// concise one-liner beside the usage; detail is the dim elaboration
+// below it.
+type helpItem struct{ usage, desc, detail string }
 
 type helpGroup struct {
 	title string
@@ -30,48 +32,51 @@ type helpGroup struct {
 
 var helpGroups = []helpGroup{
 	{"Navigate", []helpItem{
-		{"list [--all]", "List worktrees (all projects when outside one)"},
-		{"cd [<name>]",
-			"Open a subshell in any worktree: pick a project, then a worktree (exit the shell to return)"},
-		{"worktrees [<name>]",
-			"Open a subshell in a worktree of the current project (exit the shell to return)"},
-		{"app", "Open the Shigoto no Mori app"},
-		{"config", "Open the global config file (config.json in the state root)"},
+		{"list [--all]", "List worktrees",
+			"All projects when outside one, or with --all."},
+		{"cd [<name>]", "Open a subshell in any worktree",
+			"Picks a project, then a worktree. Exit the shell to return."},
+		{"worktrees [<name>]", "Open a subshell in this project's worktrees",
+			"Like cd without the project menu. Exit the shell to return."},
+		{"app", "Open the Shigoto no Mori app", ""},
+		{"config", "Open the global config file",
+			"config.json in the state root, via $EDITOR or the OS opener."},
 	}},
 	{"Worktree", []helpItem{
-		{"path [<name>]", "Print a worktree's directory"},
-		{"create [<name>] [-b <branch-name>] [--base <ref>]",
-			"Create a worktree on a new branch named -b (default: the worktree name), forked from --base (default: the default branch), then carry-over, setup, port"},
-		{"rm [<name>] [-f] [--keep-branch]",
-			"Remove a worktree: teardown, release port, delete branch per app settings"},
-		{"done [<name>] [-f]",
-			"Post-merge cleanup: land the checkout back on the primary branch, delete the merged one (refuses unmerged branches without -f)"},
-		{"merge [<name>] [-m <method>]",
-			"Merge the worktree's PR via gh, method per the repo's settings (or --method override)"},
-		{"adopt [<name-or-path>] [-f]",
-			"Convert an external worktree to managed: move it into the layout, run the lifecycle (refuses dirty worktrees without -f)"},
-		{"setup [<name>]",
-			"Re-run the setup script (and port-pool provision) on an existing worktree"},
-		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
-		{"open [<tool>] [<name>]",
-			"Launch a launcher-row tool (Finder, editor, custom command) in a worktree, bare open shows the row as a menu"},
+		{"path [<name>]", "Print a worktree's directory", ""},
+		{"create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
+			"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision."},
+		{"rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
+			"Teardown, release port, delete the branch per app settings."},
+		{"done [<name>] [-f]", "Post-merge cleanup",
+			"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
+		{"merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
+			"Method follows the repo's settings unless -m overrides."},
+		{"adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
+			"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
+		{"setup [<name>]", "Re-run the setup script",
+			"Also re-provisions the port-pool port."},
+		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
+		{"open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
+			"Finder, editors, custom commands. Bare open shows the row as a menu."},
 	}},
 	{"Projects", []helpItem{
-		{"projects list", "List registered projects"},
-		{"projects add [<path>] [--all]",
-			"Register the repo at <path> (default .) or with --all every repo found beneath it (asks first, --yes skips)"},
-		{"projects remove [<name>]",
-			"Unregister a project, worktrees stay on disk (asks first, no name picks from a menu)"},
+		{"projects list", "List registered projects", ""},
+		{"projects add [<path>] [--all]", "Register a repo",
+			"The repo at <path> (default .). --all registers every repo found beneath it, asking first (--yes skips)."},
+		{"projects remove [<name>]", "Unregister a project",
+			"Worktrees stay on disk. Asks first, no name picks from a menu."},
 		{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
-			`Show or set per-project config ("" clears a script, default-branch can't be cleared)`},
+			"Show or set per-project config",
+			`"" clears a script, default-branch can't be cleared.`},
 	}},
 	{"Flags", []helpItem{
-		{"--json", "Machine-readable output (NDJSON progress for create)"},
-		{"--verbose", "Diagnostics on stderr"},
-		{"-h, --help", "Show this help"},
+		{"--json", "Machine-readable output", "NDJSON progress for create."},
+		{"--verbose", "Diagnostics on stderr", ""},
+		{"-h, --help", "Show this help", "After a command, documents that command."},
 	}},
 	{"Environment", []helpItem{
-		{"SHIGOMORI_ROOT", "Override the state root directory entirely"},
+		{"SHIGOMORI_ROOT", "Override the state root directory entirely", ""},
 	}},
 }
 
@@ -138,10 +143,11 @@ func helpWidth() int {
 	return width
 }
 
-// One aligned description column shared by all sections. A usage wider
-// than the column gets its own line with the description below, still
-// at the column; descriptions word-wrap there. Color is applied after
-// all width math, so alignment never depends on it.
+// One aligned description column shared by all sections: the concise
+// desc sits beside the usage (below it when the usage is wider than
+// the column), and the detail follows as dim wrapped lines at the same
+// column. Color is applied after all width math, so alignment never
+// depends on it.
 func renderHelpSection(title string, items []helpItem, col, width int) string {
 	descCol := helpIndent + col + 2
 	var b strings.Builder
@@ -149,15 +155,16 @@ func renderHelpSection(title string, items []helpItem, col, width int) string {
 	pad := func(n int) string { return strings.Repeat(" ", n) }
 	for _, item := range items {
 		usageWidth := len([]rune(item.usage))
-		lines := wrapText(item.desc, width-descCol)
 		if usageWidth <= col {
-			b.WriteString(pad(helpIndent) + colorUsage(item.usage) + pad(col-usageWidth+2) + lines[0] + "\n")
-			lines = lines[1:]
+			b.WriteString(pad(helpIndent) + colorUsage(item.usage) + pad(col-usageWidth+2) + item.desc + "\n")
 		} else {
 			b.WriteString(pad(helpIndent) + colorUsage(item.usage) + "\n")
+			b.WriteString(pad(descCol) + item.desc + "\n")
 		}
-		for _, line := range lines {
-			b.WriteString(pad(descCol) + line + "\n")
+		if item.detail != "" {
+			for _, line := range wrapText(item.detail, width-descCol) {
+				b.WriteString(pad(descCol) + dimOut(line) + "\n")
+			}
 		}
 	}
 	return b.String()
@@ -263,8 +270,11 @@ func commandHelp(command string, args []string) string {
 			}
 			found = true
 			b.WriteString(boldOut("Usage:") + " " + binaryName + " " + colorUsage(item.usage) + "\n")
-			for _, line := range wrapText(item.desc, width-2) {
-				b.WriteString("  " + line + "\n")
+			b.WriteString("  " + item.desc + "\n")
+			if item.detail != "" {
+				for _, line := range wrapText(item.detail, width-2) {
+					b.WriteString("  " + dimOut(line) + "\n")
+				}
 			}
 		}
 	}
