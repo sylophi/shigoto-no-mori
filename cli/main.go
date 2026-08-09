@@ -41,7 +41,8 @@ var helpCommands = []helpItem{
 		"Re-run the setup script (and port-pool provision) on an existing worktree"},
 	{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
 	{"project list", "List registered projects"},
-	{"project add [<path>]", "Register the repo at <path> (default .)"},
+	{"project add [<path>] [--all]",
+		"Register the repo at <path> (default .) or with --all every repo found beneath it (asks first, --yes skips)"},
 	{"config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
 		`Show or set per-project config; "" clears a script (default-branch can't be cleared)`},
 }

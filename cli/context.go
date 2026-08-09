@@ -178,7 +178,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 			// almost never the intended target -- offer the project's
 			// worktrees when a human is on the other end. Agents,
 			// pipelines, and --json keep the deterministic primary.
-			if ctx.current.worktree.IsPrimary && canPickInteractively() {
+			if ctx.current.worktree.IsPrimary && interactiveStdio() {
 				return pickWorktree(ctx.current.proj)
 			}
 			return *ctx.current, nil

@@ -23,8 +23,20 @@ func isTerminal(f *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-func canPickInteractively() bool {
+func interactiveStdio() bool {
 	return !jsonMode && isTerminal(os.Stdin) && isTerminal(os.Stderr)
+}
+
+// Yes/no question on stderr, default no. EOF (ctrl-d) counts as no.
+func confirmPrompt(question string) bool {
+	fmt.Fprintf(os.Stderr, "%s [y/N] ", question)
+	input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		note("")
+		return false
+	}
+	answer := strings.ToLower(strings.TrimSpace(input))
+	return answer == "y" || answer == "yes"
 }
 
 func pickWorktree(proj project) (located, error) {

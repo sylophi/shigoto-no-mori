@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -62,13 +63,18 @@ func newProjectID() string {
 }
 
 func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{})
+	parsed, err := parseCmdArgs(args, argSpec{
+		bools: map[string][]string{"all": {"a"}, "yes": {"y"}},
+	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
 	rawPath := "."
 	if len(parsed.positionals) > 0 {
 		rawPath = parsed.positionals[0]
+	}
+	if parsed.bools["all"] {
+		return cmdProjectAddAll(ctx, toAbsolute(rawPath), parsed.bools["yes"])
 	}
 	// Registering a subdirectory would break primary detection, so fold
 	// whatever was given to its repo toplevel (the app's folder picker
@@ -80,10 +86,26 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	}
 	path := strings.TrimSpace(toplevelRaw)
 
+	proj, err := registerProject(path)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	seedProjectConfig(proj)
+
+	if jsonMode {
+		emit(proj)
+	} else {
+		out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
+	}
+	return 0, nil
+}
+
+// Registers a repo toplevel as a project. Duplicate check inside the
+// locked update so two concurrent adds (app + CLI) of the same
+// directory can't both land.
+func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
-	// Duplicate check inside the locked update so two concurrent adds
-	// (app + CLI) of the same directory can't both land.
-	err = withStateLock(func() error {
+	err := withStateLock(func() error {
 		all := readStateFile()
 		var projects []project
 		if raw, ok := all["projects"]; ok {
@@ -102,18 +124,21 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 		return atomicWriteJSON(statePath(), all)
 	})
 	if err != nil {
-		return exitCodeOf(err), err
+		return project{}, err
 	}
+	return proj, nil
+}
 
-	// Best-effort config seed; bare repos / unborn HEADs just stay
-	// unseeded until first configure.
+// Best-effort config seed; bare repos / unborn HEADs just stay
+// unseeded until first configure.
+func seedProjectConfig(proj project) {
 	seeded := map[string]any{}
-	if defaultBranch := resolveDefaultBranch(path, ""); defaultBranch != "" {
+	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
 		seeded["defaultBranch"] = defaultBranch
 	}
 	global := readGlobalConfig()
 	if global.AutoPopulateInstall != nil && *global.AutoPopulateInstall {
-		if pm := detectPackageManager(path); pm != "" {
+		if pm := detectPackageManager(proj.Path); pm != "" {
 			seeded["scripts"] = map[string]string{"setup": pm + " install"}
 		}
 	}
@@ -122,11 +147,130 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 			vlog("[project] config seed failed: %v", err)
 		}
 	}
+}
 
+// Mirrors the app's parent-folder scan (main/ipc/modules/fs.ts
+// scanForGitRepos): outermost repos only, six levels deep, skipping
+// hidden directories, symlinks, and directories that virtually never
+// contain repos but are huge to walk.
+var scanSkipDirs = map[string]bool{
+	"node_modules": true,
+	"target":       true,
+	"dist":         true,
+	"build":        true,
+	"vendor":       true,
+	"venv":         true,
+	".venv":        true,
+	"__pycache__":  true,
+	".next":        true,
+	".nuxt":        true,
+	".turbo":       true,
+	".cache":       true,
+}
+
+const scanMaxDepth = 6
+
+func scanForGitRepos(root string) []string {
+	var results []string
+	var walk func(dir string, depth int)
+	walk = func(dir string, depth int) {
+		if depth > scanMaxDepth {
+			return
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return // permission denied or vanished mid-scan
+		}
+		for _, e := range entries {
+			// Outermost-only: a dir that is itself a repo is recorded and
+			// not descended into. Worktree checkouts (.git file) don't
+			// count, same as the app.
+			if e.IsDir() && e.Name() == ".git" {
+				results = append(results, dir)
+				return
+			}
+		}
+		for _, e := range entries {
+			// DirEntry types come from lstat, so a symlinked dir reports
+			// !IsDir and is skipped, matching the app.
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") || scanSkipDirs[e.Name()] {
+				continue
+			}
+			walk(filepath.Join(dir, e.Name()), depth+1)
+		}
+	}
+	walk(root, 0)
+	sort.Strings(results)
+	return results
+}
+
+func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return 1, errf("%s is not a directory", root)
+	}
+	registered := make(map[string]bool, len(ctx.projects))
+	for _, p := range ctx.projects {
+		registered[comparablePath(p.Path)] = true
+	}
+	var candidates []string
+	known := 0
+	for _, repo := range scanForGitRepos(root) {
+		if registered[comparablePath(repo)] {
+			known++
+			continue
+		}
+		candidates = append(candidates, repo)
+	}
+	if len(candidates) == 0 {
+		suffix := ""
+		if known > 0 {
+			suffix = fmt.Sprintf(" (%d already registered)", known)
+		}
+		note(fmt.Sprintf("No new repos found under %s%s.", root, suffix))
+		if jsonMode {
+			emit([]project{})
+		}
+		return 0, nil
+	}
+
+	if !yes {
+		if !interactiveStdio() {
+			return 2, usageErrf(
+				"Refusing to add %d projects without confirmation. Re-run with --yes, or interactively.",
+				len(candidates))
+		}
+		note(fmt.Sprintf("Found %d new repos under %s:", len(candidates), root))
+		note("")
+		for _, repo := range candidates {
+			note("  " + cyanErr(filepath.Base(repo)) + "  " + dimErr(repo))
+		}
+		note("")
+		if known > 0 {
+			note(dimErr(fmt.Sprintf("(%d already registered)", known)))
+		}
+		if !confirmPrompt(fmt.Sprintf("Add %d projects?", len(candidates))) {
+			return 1, errf("Cancelled.")
+		}
+	}
+
+	var added []project
+	for _, repo := range candidates {
+		proj, err := registerProject(repo)
+		if err != nil {
+			note(fmt.Sprintf("warning: skipping %s: %s", repo, err))
+			continue
+		}
+		seedProjectConfig(proj)
+		added = append(added, proj)
+		if !jsonMode {
+			out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
+		}
+	}
 	if jsonMode {
-		emit(proj)
-	} else {
-		out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
+		if added == nil {
+			added = []project{}
+		}
+		emit(added)
 	}
 	return 0, nil
 }
