@@ -69,6 +69,14 @@ func resolveContext(cwd string) cliContext {
 	return ctx
 }
 
+// Context line above a project menu offered from inside a repo that
+// isn't registered, so the jump to "pick a project" isn't mysterious.
+func noteUnregistered(ctx cliContext) {
+	if ctx.unregisteredRepo != "" {
+		note(dimErr("This repo (" + ctx.unregisteredRepo + ") isn't a registered project."))
+	}
+}
+
 func projectHint(ctx cliContext) string {
 	if len(ctx.projects) == 0 {
 		return "No projects are registered yet -- add the repo in the Shigoto no Mori app first."
@@ -84,6 +92,12 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	if name == "" {
 		if ctx.current != nil {
 			return ctx.current.proj, nil
+		}
+		// No project in cwd: a human gets the menu, scripts get the
+		// explicit-forms error.
+		if interactiveStdio() && len(ctx.projects) > 0 {
+			noteUnregistered(ctx)
+			return pickProject(ctx)
 		}
 		if ctx.unregisteredRepo != "" {
 			return project{}, usageErrf(
@@ -211,6 +225,16 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 				return pickWorktree(ctx.current.proj, ctx.current.worktree.ID)
 			}
 			return *ctx.current, nil
+		}
+		// No worktree in cwd: a human gets project menu then worktree
+		// menu, scripts get the explicit-forms error.
+		if interactiveStdio() && len(ctx.projects) > 0 {
+			noteUnregistered(ctx)
+			proj, err := pickProject(ctx)
+			if err != nil {
+				return located{}, err
+			}
+			return pickWorktree(proj, "")
 		}
 		if ctx.unregisteredRepo != "" {
 			return located{}, usageErrf(

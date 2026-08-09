@@ -34,12 +34,10 @@ var helpGroups = []helpGroup{
 		{"path [<name>]", "Print a worktree's directory"},
 		{"cd [<name>]",
 			"Open a subshell inside a worktree, exit it to return (no name picks from a menu)"},
-		{"open [<tool>] [<worktree>]",
-			"Launch a launcher-row tool (Finder, editor, custom command) in the worktree, bare open shows the row as a menu"},
 		{"app", "Open the Shigoto no Mori app"},
 		{"config", "Open the global config file (config.json in the state root)"},
 	}},
-	{"Worktree lifecycle", []helpItem{
+	{"Worktree", []helpItem{
 		{"create [<name>] [-b <branch>] [--base <ref>]",
 			"Create a worktree: carry-over, setup, port"},
 		{"rm [<name>] [-f] [--keep-branch]",
@@ -53,6 +51,8 @@ var helpGroups = []helpGroup{
 		{"setup [<name>]",
 			"Re-run the setup script (and port-pool provision) on an existing worktree"},
 		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
+		{"open [<tool>] [<worktree>]",
+			"Launch a launcher-row tool (Finder, editor, custom command) in the worktree, bare open shows the row as a menu"},
 	}},
 	{"Projects", []helpItem{
 		{"projects list", "List registered projects"},
