@@ -45,15 +45,14 @@ export function SgmCliSection() {
   return (
     <section className="space-y-3">
       <div>
-        <SectionHeading className="mb-1">Command line</SectionHeading>
+        <SectionHeading className="mb-1">Command line tool</SectionHeading>
         <p className="text-xs text-muted-foreground">
-          <span className="font-mono">{name}</span> drives this app's worktrees
-          from any shell: create, list, merge, remove. It's how coding agents
-          use your projects. Installing links{" "}
-          <span className="font-mono">{name}</span> into{" "}
-          <span className="font-mono">{tildify(status.binDir, home)}</span>; the
-          command runs straight from the app, so it's always in sync. The app
-          itself doesn't need it.
+          The Shigoto no Mori CLI lets you (or a coding agent) create, list,
+          merge, and remove this app's worktrees from any shell. Installing
+          links the <span className="font-mono">{name}</span> command into{" "}
+          <span className="font-mono">{tildify(status.binDir, home)}</span>. It
+          runs straight from the app, so it's always in sync. The app itself
+          doesn't need it.
         </p>
       </div>
 
@@ -103,7 +102,7 @@ export function SgmCliSection() {
           onClick={() => install.mutate()}
         >
           <Download />
-          Install {name}
+          Install the CLI
         </Button>
       )}
 
