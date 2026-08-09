@@ -124,7 +124,7 @@ func helpText(full bool) string {
 			"From elsewhere, address worktrees as <name>, <project>/<name>, "+
 			"or a path, or pass -p <project>. Omitting the name in the "+
 			"primary checkout opens a menu. Aliases: l list, c cd, o open, "+
-			"new create.", width) {
+			"new create, wt worktrees, p projects.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -133,9 +133,9 @@ func helpText(full bool) string {
 	if !full {
 		general := append(append([]helpItem{}, generalItems...),
 			helpItem{"worktrees <command>", "Worktree commands",
-				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. Short form wt, prefix optional: " + binaryName + " rm == " + binaryName + " wt rm. Run `" + binaryName + " worktrees` for details."},
+				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
-				"list, add, remove, config. Short form p. Run `" + binaryName + " projects` for details."},
+				"list, add, remove, config. Run `" + binaryName + " projects` for details."},
 		)
 		groups = []helpGroup{
 			{"Commands", general},
