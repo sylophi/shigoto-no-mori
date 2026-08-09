@@ -155,13 +155,15 @@ function stateOfOwnership(
 // Create (or, from "stale", repoint) the link. Throws with a
 // user-facing message when there's nothing to link, the path is
 // occupied by something that isn't ours, or the app is running from a
-// translocated mount.
-export async function installCliLinks(): Promise<CliStatus> {
+// translocated mount. force is the Settings "Replace and install"
+// consent: it takes over a foreign occupant too, so a command that
+// doesn't point at the app can be fixed without a trip to the shell.
+export async function installCliLinks(force = false): Promise<CliStatus> {
   const status = await cliLinkStatus();
   if (!status.supported) {
     throw new Error("No CLI binary is available to link.");
   }
-  if (status.state === "foreign") {
+  if (status.state === "foreign" && !force) {
     throw new Error(
       `${status.linkPath} already exists and wasn't created by ` +
         "Shigoto no Mori. Remove it first if you want the app to " +
@@ -180,9 +182,9 @@ export async function installCliLinks(): Promise<CliStatus> {
   await Promise.all(
     linkNames().map(async (name) => {
       const link = join(cliUserBinDir(), name);
-      // Never clobber a foreign file; any shigomori-made link (or an
-      // empty slot) gets (re)pointed at the running binary.
-      if ((await linkOwnership(link)) === "foreign") return;
+      // Without force, never clobber a foreign file; any shigomori-made
+      // link (or an empty slot) gets (re)pointed at the running binary.
+      if (!force && (await linkOwnership(link)) === "foreign") return;
       replaceWithSymlinkSync(binary, link);
     }),
   );

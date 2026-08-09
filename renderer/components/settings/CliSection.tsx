@@ -26,7 +26,7 @@ export function CliSection() {
     queryClient.setQueryData(queryKeys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: () => window.api.cli.install(),
+    mutationFn: (force: boolean) => window.api.cli.install({ force }),
     onSuccess: applyStatus,
     onError: (err) => notifyError("Couldn't install the CLI", err),
   });
@@ -53,8 +53,6 @@ export function CliSection() {
           links the <span className="font-mono">{name}</span> and{" "}
           <span className="font-mono">{status.aliasName}</span> commands into{" "}
           <span className="font-mono">{tildify(status.binDir, home)}</span>.
-          They run straight from the app, so they're always in sync. The app
-          itself doesn't need them.
         </p>
       </div>
 
@@ -89,7 +87,7 @@ export function CliSection() {
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => install.mutate()}
+            onClick={() => install.mutate(false)}
           >
             Repair link
           </Button>
@@ -101,7 +99,7 @@ export function CliSection() {
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={() => install.mutate()}
+          onClick={() => install.mutate(false)}
         >
           <Download />
           Install the CLI
@@ -109,11 +107,22 @@ export function CliSection() {
       )}
 
       {state === "foreign" && (
-        <p className="text-xs text-muted-foreground">
-          <span className="font-mono">{tildify(status.linkPath, home)}</span>{" "}
-          already exists and wasn't created by this app, so it's left untouched.
-          Remove it if you want the app to manage the link.
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-mono">{tildify(status.linkPath, home)}</span>{" "}
+            already exists and doesn't point at this app. Installing replaces
+            it.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => install.mutate(true)}
+          >
+            <Download />
+            Replace and install
+          </Button>
+        </div>
       )}
 
       {state !== "missing" && state !== "foreign" && !onPath && (

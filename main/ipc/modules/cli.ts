@@ -8,7 +8,7 @@ import {
 
 export const cliHandlers: Handlers<typeof cliContract> = {
   status: () => cliLinkStatus(),
-  install: () => installCliLinks(),
+  install: ({ force }) => installCliLinks(force),
   // uninstallCliLinks only ever removes a link we own, so a foreign
   // occupant survives this unchanged and the returned status says so.
   uninstall: async () => {
