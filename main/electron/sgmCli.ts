@@ -2,8 +2,10 @@
 // pointing at the binary bundled in the app's Resources -- the VS Code
 // / Docker Desktop pattern. No copy means no version drift: the app
 // updater swaps the bundle and the link stays current. The first offer
-// is a prompt (Install / Not Now / Don't Ask Again); after that, a
-// link we own is silently repaired if the app moved.
+// is a window-modal prompt (Install / Not Now / Don't Ask Again) that
+// blocks the whole UI until answered -- installing never happens
+// without an explicit yes, and the decision can't be clicked past.
+// After that, a link we own is silently repaired if the app moved.
 //
 // Naming and path policy lives in @shared/sgmDist.mts; this module
 // only owns the prompt flow and the "is that link ours?" judgment.
@@ -19,7 +21,7 @@ import {
   sgmBinaryName,
   sgmUserBinDir,
 } from "@shared/sgmDist.mts";
-import { app, dialog } from "electron";
+import { app, type BrowserWindow, dialog } from "electron";
 import { readGlobalConfig, writeGlobalConfig } from "../lib/config/global";
 import { comparablePath, pathExists } from "../lib/util/paths";
 import { isWindows } from "../lib/util/platform";
@@ -75,9 +77,17 @@ export async function uninstallSgmCliLink(): Promise<void> {
 }
 
 // Call after applyUserShellPath so the PATH check sees the login
-// shell's PATH, not launchd's stripped one. Never blocks startup;
-// failures only log.
-export async function maybeInstallSgmCli(): Promise<void> {
+// shell's PATH, not launchd's stripped one. Startup work (watchers,
+// fetch, updater) proceeds underneath; only user interaction is held,
+// as a modal sheet on `win`, until the prompt is answered. Failures
+// only log.
+export async function maybeInstallSgmCli(
+  win: BrowserWindow | null,
+): Promise<void> {
+  const ask = (options: Electron.MessageBoxOptions) =>
+    win === null || win.isDestroyed()
+      ? dialog.showMessageBox(options)
+      : dialog.showMessageBox(win, options);
   // Dev builds carry no bundled binary to link against.
   if (!app.isPackaged || isWindows) return;
   if (!(await pathExists(bundledPath()))) return;
@@ -108,7 +118,10 @@ export async function maybeInstallSgmCli(): Promise<void> {
   const config = await readGlobalConfig();
   if (config.sgmCliPromptDismissed === true) return;
 
-  const { response } = await dialog.showMessageBox({
+  // Window-modal: the app is deliberately unusable until the user
+  // decides. Any answer resolves it -- Install links, Not Now re-asks
+  // next launch, Don't Ask Again persists the opt-out.
+  const { response } = await ask({
     type: "question",
     message: "Install the sgm command-line tool?",
     detail:
@@ -130,7 +143,7 @@ export async function maybeInstallSgmCli(): Promise<void> {
     replaceWithSymlinkSync(bundledPath(), linkPath());
   } catch (err) {
     console.warn("[sgm-cli] install failed", err);
-    await dialog.showMessageBox({
+    await ask({
       type: "error",
       message: "Couldn't install sgm",
       detail: err instanceof Error ? err.message : String(err),
@@ -139,7 +152,7 @@ export async function maybeInstallSgmCli(): Promise<void> {
   }
 
   if (!isOnPath(sgmUserBinDir())) {
-    await dialog.showMessageBox({
+    await ask({
       type: "info",
       message: `sgm installed to ${displayDir(sgmUserBinDir())}`,
       detail:

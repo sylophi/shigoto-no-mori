@@ -129,9 +129,10 @@ app.on("ready", async () => {
     broadcastAll(gitContract, "externalChange", undefined);
   });
   // After applyUserShellPath so the PATH advice reflects the real
-  // login-shell PATH. Fire-and-forget: the prompt floats over the
-  // already-open window and must not gate startup.
-  void maybeInstallSgmCli();
+  // login-shell PATH. Not awaited -- background startup work above
+  // keeps going -- but the prompt is a modal sheet on the main window,
+  // so the UI stays blocked until the user answers it.
+  void maybeInstallSgmCli(mainWindow);
 });
 
 app.on("window-all-closed", () => {
