@@ -5,7 +5,8 @@ package main
 // wants the worktree ready when the command returns). Sequencing
 // mirrors runCreateLifecycle in main/lib/worktrees/lifecycle.ts:
 // carry-over -> setup -> port-pool provision. Human mode streams
-// progress to stderr and prints the path as the only stdout line;
+// progress to stderr, prints the path as the only stdout line, then
+// drops into a subshell in the new worktree (--no-cd skips it);
 // --json streams NDJSON events ending with a "done" record. Exit 3
 // when the worktree was created but a lifecycle step failed.
 
@@ -29,7 +30,8 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		},
 		// checkout: reuse the existing branch `base` instead of creating
 		// one -- the app's "open existing branch" flow. Requires --base.
-		bools: map[string][]string{"checkout": {}},
+		// no-cd: don't open a subshell in the new worktree afterwards.
+		bools: map[string][]string{"checkout": {}, "no-cd": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -63,7 +65,18 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	} else {
 		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
-	return finishCreateLifecycle(proj, worktree), nil
+	code := finishCreateLifecycle(proj, worktree)
+	// Interactive callers land in the new worktree (a subshell, same
+	// as `sm cd`); --no-cd, --json, and scripts skip it. Exit 3 from a
+	// failed lifecycle step outranks the shell's own exit code.
+	if parsed.bools["no-cd"] || jsonMode || !interactiveStdio() {
+		return code, nil
+	}
+	shellCode, err := enterWorktreeShell(worktree.Name, worktree.Path)
+	if code != 0 {
+		return code, err
+	}
+	return shellCode, err
 }
 
 // Shared tail of create and adopt: run the lifecycle, report script
