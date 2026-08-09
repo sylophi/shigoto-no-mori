@@ -3,10 +3,9 @@
 // app's packaged/dev split; naming and root policy come from
 // shared/sgmDist.mts and are injected into the binary via -ldflags so
 // the two languages share one source of truth.
-//   default -> dist-cli/sgm    targets ~/shigomori     (bundled with the app)
-//   --dev   -> dist-cli/sgm-d  targets ~/shigomori-dev (linked by `pnpm dev`)
-// Host platform by default; set GOOS/GOARCH to cross-compile
-// (e.g. GOOS=windows GOARCH=amd64).
+//   default -> dist-cli/sgm   targets ~/shigomori     (bundled with the app)
+//   --dev   -> dist-cli/sgmd  targets ~/shigomori-dev (built by `pnpm dev`)
+// The CLI is not supported on Windows and is never built for it.
 //
 // Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
@@ -27,10 +26,14 @@ const version =
     ? "dev"
     : JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 
-const windows =
+if (
   process.env.GOOS === "windows" ||
-  (process.env.GOOS === undefined && process.platform === "win32");
-const outfile = join(repoRoot, SGM_DIST_DIR, sgmBinaryName(flavor, windows));
+  (process.env.GOOS === undefined && process.platform === "win32")
+) {
+  console.error("[build-sgm] the CLI is not supported on Windows");
+  process.exit(1);
+}
+const outfile = join(repoRoot, SGM_DIST_DIR, sgmBinaryName(flavor));
 
 const ldflags = [
   `-X main.version=${version}`,

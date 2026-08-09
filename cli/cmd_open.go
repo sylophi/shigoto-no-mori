@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 // sgm open -- launch a tool from the app's launcher row in a worktree.

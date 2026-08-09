@@ -48,11 +48,12 @@ const config: ForgeConfig = {
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
     // The sgm binary is compiled by the prePackage hook below into
-    // dist-cli/ and shipped in Resources; main/electron/sgmCli.ts
-    // offers to link it into the user's bin dir on launch.
+    // dist-cli/ and shipped in Resources; Settings offers to link it
+    // into the user's bin dir. The CLI is not supported on Windows:
+    // never built, never bundled, never installed there.
     extraResource: [
       "resources/licenses",
-      `${SGM_DIST_DIR}/${sgmBinaryName("prod", isWindowsTarget)}`,
+      ...(isWindowsTarget ? [] : [`${SGM_DIST_DIR}/${sgmBinaryName("prod")}`]),
     ],
     // The portable zip puts the exe directly in front of the user (no
     // installer-made shortcut), so give it a space-free name: spaces in
@@ -80,19 +81,15 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // Compile the sgm CLI (requires Go on the build machine). When
-      // cross-packaging for Windows from another OS, cross-compile via
-      // GOOS/GOARCH.
-      execFileSync("node", ["scripts/build-sgm.mjs"], {
-        cwd: import.meta.dirname,
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          ...(isWindowsTarget && process.platform !== "win32"
-            ? { GOOS: "windows", GOARCH: "amd64" }
-            : {}),
-        },
-      });
+      // Compile the sgm CLI (requires Go on the build machine).
+      // Windows builds skip it entirely; that platform keeps the
+      // app-only workflow.
+      if (!isWindowsTarget) {
+        execFileSync("node", ["scripts/build-sgm.mjs"], {
+          cwd: import.meta.dirname,
+          stdio: "inherit",
+        });
+      }
     },
     // Windows support is experimental; put that in the artifact name so
     // the download itself carries the caveat. The returned results feed

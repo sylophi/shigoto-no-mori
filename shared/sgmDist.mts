@@ -20,9 +20,10 @@ export type SgmFlavor = "prod" | "dev";
 // Repo-relative directory compiled binaries land in (gitignored).
 export const SGM_DIST_DIR = "dist-cli";
 
-export function sgmBinaryName(flavor: SgmFlavor, windows = false): string {
-  const base = flavor === "prod" ? "sgm" : "sgmd";
-  return windows ? `${base}.exe` : base;
+// The CLI is not supported on Windows (and is never built or bundled
+// there), so there is no .exe variant.
+export function sgmBinaryName(flavor: SgmFlavor): string {
+  return flavor === "prod" ? "sgm" : "sgmd";
 }
 
 // Directory name under $HOME holding the flavor's on-disk state

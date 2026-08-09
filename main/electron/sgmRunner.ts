@@ -25,12 +25,8 @@ export interface SgmDoc {
 
 function candidateBinary(): string {
   return app.isPackaged
-    ? path.join(process.resourcesPath, sgmBinaryName("prod", isWindows))
-    : path.join(
-        app.getAppPath(),
-        SGM_DIST_DIR,
-        sgmBinaryName("dev", isWindows),
-      );
+    ? path.join(process.resourcesPath, sgmBinaryName("prod"))
+    : path.join(app.getAppPath(), SGM_DIST_DIR, sgmBinaryName("dev"));
 }
 
 // Positive result cached (the binary doesn't move); a miss re-probes so

@@ -1,10 +1,9 @@
-//go:build !windows
-
 package main
 
 // Terminal width straight from the kernel, no cgo and no x/term
-// dependency. Checked on stdout then stderr so `sgm --help | less`
-// still sizes to the terminal it renders in.
+// dependency (the CLI only builds for unix; Windows is unsupported).
+// Checked on stdout then stderr so `sgm --help | less` still sizes to
+// the terminal it renders in.
 
 import (
 	"os"

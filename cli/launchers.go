@@ -1,5 +1,3 @@
-//go:build !windows
-
 package main
 
 // The app's launcher row, ported for `sgm open`: detected macOS apps,
