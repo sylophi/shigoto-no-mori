@@ -43,6 +43,9 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		name = parsed.positionals[0]
 	}
 	if name != "" && !isValidWorktreeDirName(name) {
+		if isPrimaryKeyword(name) {
+			return 2, usageErrf("%q is reserved -- it addresses the project's primary checkout.", name)
+		}
 		return 2, usageErrf("%q is not a valid worktree folder name.", name)
 	}
 	for _, refFlag := range []string{"branch", "base"} {

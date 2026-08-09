@@ -176,6 +176,11 @@ func sanitizeBranchForPath(branch string) string {
 	if dosDeviceRe.MatchString(s) {
 		return ""
 	}
+	// The CLI's primary-checkout keywords (shared/branches.ts reserves
+	// them identically).
+	if isPrimaryKeyword(s) {
+		return ""
+	}
 	return s
 }
 

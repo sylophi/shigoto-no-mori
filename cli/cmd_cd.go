@@ -59,7 +59,7 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 	}
 	var target located
 	if ref != "" {
-		target, err = resolveWorktree(ctx, ref, parsed.strings["project"])
+		target, err = resolveWorktree(ctx, ref, parsed.strings["project"], true)
 	} else {
 		// Always a menu here, even inside a worktree: entering where
 		// you already are isn't a destination. NOTE: assign through the
@@ -86,7 +86,7 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 		if ctx.current != nil && ctx.current.proj.ID == proj.ID {
 			exclude = ctx.current.worktree.ID
 		}
-		target, err = pickWorktree(proj, exclude)
+		target, err = pickWorktree(proj, exclude, true)
 	}
 	if err != nil {
 		return exitCodeOf(err), err

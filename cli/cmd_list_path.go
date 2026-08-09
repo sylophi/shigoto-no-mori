@@ -166,7 +166,7 @@ func cmdPath(ctx cliContext, args []string) (int, error) {
 	if len(parsed.positionals) > 0 {
 		ref = parsed.positionals[0]
 	}
-	target, err := resolveWorktree(ctx, ref, parsed.strings["project"])
+	target, err := resolveWorktree(ctx, ref, parsed.strings["project"], true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

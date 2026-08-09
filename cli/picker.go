@@ -66,17 +66,18 @@ func pickProject(ctx cliContext, preferredID string) (project, error) {
 	return ctx.projects[idx], nil
 }
 
-// excludeID drops one worktree from the menu -- the one the caller is
-// already in (for the primary-checkout default that's the primary, for
-// `cd` it's wherever you stand).
-func pickWorktree(proj project, excludeID string) (located, error) {
+// excludeID drops one worktree from the menu -- for `cd` that's
+// wherever you stand, since entering it again isn't a destination.
+// primaryOK=false additionally drops the primary checkout, for
+// commands that would refuse it anyway (rm, adopt, shelve).
+func pickWorktree(proj project, excludeID string, primaryOK bool) (located, error) {
 	worktrees, err := listWorktrees(proj)
 	if err != nil {
 		return located{}, err
 	}
 	var choices []worktreeJSON
 	for _, w := range worktrees {
-		if w.ID != excludeID {
+		if w.ID != excludeID && (primaryOK || !w.IsPrimary) {
 			choices = append(choices, w)
 		}
 	}

@@ -4,7 +4,8 @@ package main
 // the cwd, plus the explicit name / project resolvers every command
 // shares. cwd is only ever a default, never a requirement -- each
 // command has an explicit form (-p, <project>/<name>) that works from
-// anywhere.
+// anywhere. The reserved names "root" and "primary" address a
+// project's primary checkout.
 
 import (
 	"os"
@@ -135,6 +136,29 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	}
 }
 
+// The reserved worktree refs: `sm cd root`, `sm path primary`, and the
+// qualified forms (<project>/root, -p) address the project's primary
+// checkout, unconditionally -- a worktree named "root"/"primary" never
+// resolves by name (only by path or menu). sanitizeBranchForPath
+// rejects both words so create/adopt can't mint one; external tools
+// still can, which is why the keyword can't be allowed to lose.
+func isPrimaryKeyword(name string) bool {
+	return strings.EqualFold(name, "root") || strings.EqualFold(name, "primary")
+}
+
+func primaryOf(proj project) (located, error) {
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return located{}, err
+	}
+	for _, id := range identities {
+		if id.IsPrimary {
+			return located{proj: proj, worktree: id}, nil
+		}
+	}
+	return located{}, errf("%s has no primary checkout.", proj.Name)
+}
+
 // nil/nil when ref isn't an existing directory (caller falls back to
 // name resolution); an error when it is one but no registered project
 // owns a worktree there.
@@ -214,8 +238,11 @@ func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located,
 
 // Shared front door for commands that target a worktree: --worktree-id
 // (with optional --project-id scoping) wins, then the positional
-// name/<project>/<name> forms, then cwd.
-func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs) (located, error) {
+// name/<project>/<name> forms, then cwd. primaryOK declares whether
+// the command can act on the primary checkout; it only shapes the
+// pickers -- explicit refs resolve either way so commands that refuse
+// the primary get to say so themselves.
+func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs, primaryOK bool) (located, error) {
 	if wid := parsed.strings["worktree-id"]; wid != "" {
 		return resolveWorktreeByID(ctx, parsed.strings["project-id"], wid)
 	}
@@ -223,7 +250,7 @@ func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs) (located, error) {
 	if len(parsed.positionals) > 0 {
 		ref = parsed.positionals[0]
 	}
-	return resolveWorktree(ctx, ref, parsed.strings["project"])
+	return resolveWorktree(ctx, ref, parsed.strings["project"], primaryOK)
 }
 
 // Same front door for commands that target a project.
@@ -236,16 +263,21 @@ func resolveProjectArgs(ctx cliContext, parsed parsedArgs) (project, error) {
 
 // Resolves `<name>`, `<project>/<name>`, or (with no ref) the worktree
 // containing cwd. Unqualified names search every registered project
-// and must be unambiguous.
-func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
+// and must be unambiguous. The reserved names "root" and "primary"
+// always resolve to a project's primary checkout -- never to a
+// worktree carrying one of those names (external tools can mint one;
+// it stays reachable by path or through the menus).
+func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (located, error) {
 	if ref == "" {
 		if ctx.current != nil {
-			// From the primary checkout, "the worktree containing cwd" is
-			// almost never the intended target -- offer the project's
-			// worktrees when a human is on the other end. Agents,
-			// pipelines, and --json keep the deterministic primary.
+			// From the primary checkout, silently acting on it surprises
+			// more than a menu: offer the project's worktrees when a human
+			// is on the other end -- with the primary itself listed (and
+			// highlighted, matching the non-interactive default) when the
+			// command can target it. Agents, pipelines, and --json keep
+			// the deterministic primary.
 			if ctx.current.worktree.IsPrimary && interactiveStdio() {
-				return pickWorktree(ctx.current.proj, ctx.current.worktree.ID)
+				return pickWorktree(ctx.current.proj, "", primaryOK)
 			}
 			return *ctx.current, nil
 		}
@@ -257,7 +289,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 			if err != nil {
 				return located{}, err
 			}
-			return pickWorktree(proj, "")
+			return pickWorktree(proj, "", primaryOK)
 		}
 		if ctx.unregisteredRepo != "" {
 			return located{}, usageErrf(
@@ -298,6 +330,21 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 		}
 		scope = []project{proj}
 		name = ref[cut+1:]
+	}
+
+	// Reserved forms beat the name scan: a narrowed scope answers
+	// directly, an unqualified keyword prefers the project containing
+	// cwd.
+	if isPrimaryKeyword(name) {
+		switch {
+		case len(scope) == 1:
+			return primaryOf(scope[0])
+		case ctx.current != nil:
+			return primaryOf(ctx.current.proj)
+		case len(scope) > 1:
+			return located{}, usageErrf(
+				"%q needs a project when outside one -- use <project>/%s or -p <project>.", name, name)
+		}
 	}
 
 	var (

@@ -33,7 +33,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	var target located
 	switch {
 	case len(parsed.positionals) > 1:
-		target, err = resolveWorktree(ctx, parsed.positionals[1], parsed.strings["project"])
+		target, err = resolveWorktree(ctx, parsed.positionals[1], parsed.strings["project"], true)
 	case ctx.current != nil && parsed.strings["project"] == "":
 		target = *ctx.current
 	default:
@@ -47,7 +47,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		target, err = pickWorktree(proj, "")
+		target, err = pickWorktree(proj, "", true)
 	}
 	if err != nil {
 		return exitCodeOf(err), err

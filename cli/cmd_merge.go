@@ -137,7 +137,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 
-	target, err := resolveWorktreeArgs(ctx, parsed)
+	target, err := resolveWorktreeArgs(ctx, parsed, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

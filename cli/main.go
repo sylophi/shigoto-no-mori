@@ -122,8 +122,10 @@ func helpText(full bool) string {
 	for _, line := range wrapText(
 		"Commands target the worktree containing the current directory. "+
 			"From elsewhere, address worktrees as <name>, <project>/<name>, "+
-			"or a path, or pass -p <project>. Omitting the name in the "+
-			"primary checkout opens a menu. Aliases: l list, c cd, o open, "+
+			"or a path, or pass -p <project>. The reserved names root and "+
+			"primary address a project's primary checkout (`"+binaryName+
+			" cd root`). Omitting the name in the primary checkout opens a "+
+			"menu. Aliases: l list, c cd, o open, "+
 			"new create, w worktrees, p projects.", width) {
 		b.WriteString(line + "\n")
 	}

@@ -7,9 +7,10 @@ description: Switch to an existing Shigoto no Mori worktree. Use when asked to c
 wt="$(sm path <name>)" && cd "$wt"
 ```
 
-`sm list` shows what exists (name, branch, sync state). Dev checkouts of
-the app install the CLI as `smd`; if neither exists, stop and tell the
-user. Do not use `sm cd` or `sm wt`: those open interactive subshells
-for humans and refuse to run in scripts.
+`sm list` shows what exists (name, branch, sync state). The reserved
+name `root` (or `primary`) targets the primary checkout: `sm path root`.
+Dev checkouts of the app install the CLI as `smd`; if neither exists,
+stop and tell the user. Do not use `sm cd` or `sm wt`: those open
+interactive subshells for humans and refuse to run in scripts.
 
 **Stay inside.** Run every subsequent command from the worktree.
