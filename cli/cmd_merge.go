@@ -1,6 +1,6 @@
 package main
 
-// sgm merge: merge the worktree's pull request the way the app does
+// sm merge: merge the worktree's pull request the way the app does
 // (main/lib/githubCli/): find the PR for the branch via gh's
 // server-side --head filter, resolve the merge method from the repo's
 // GitHub settings (merge > squash > rebase order, with the project's
@@ -9,7 +9,7 @@ package main
 // to it next time. --method overrides the resolution explicitly.
 //
 // Local cleanup (landing the checkout back on primary, removing the
-// worktree) stays separate: `sgm done` / `sgm rm`.
+// worktree) stays separate: `sm done` / `sm rm`.
 
 import (
 	"bytes"

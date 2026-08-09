@@ -1,6 +1,6 @@
-// Watches the shigomori root so state written by the sgm CLI (or any
+// Watches the shigomori root so state written by the CLI (or any
 // external process) shows up in the app without waiting for window
-// focus or a TTL to lapse: an agent running `sgm create` in a terminal
+// focus or a TTL to lapse: an agent running `sm create` in a terminal
 // should see the worktree appear in the sidebar within a debounce, not
 // on the next alt-tab. The app's own writes also trip the watcher --
 // harmless, the invalidate + poke is debounced and idempotent.
@@ -63,7 +63,7 @@ export function startStateWatcher(poke: () => void): void {
   };
   // state.json + config.json live at the root; per-project config and
   // worktree data under projects/. worktrees/ needs its own recursive
-  // watch: an external `sgm create` writes no state file at all -- the
+  // watch: an external `sm create` writes no state file at all -- the
   // only observable change is the new checkout directory two levels
   // down (worktrees/<project>/<name>), which a non-recursive root
   // watch never sees. (In-project and custom layouts sit outside the

@@ -105,5 +105,5 @@ assets/icon.iconset/
 dist-cli/
 
 # go build artifacts in the module dir (compiled output belongs in dist-cli/)
-cli/sgm
-cli/sgmd
+cli/sm
+cli/smd

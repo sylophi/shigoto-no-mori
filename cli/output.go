@@ -2,7 +2,7 @@ package main
 
 // Output contract (mirrors the app-side conventions): command results
 // on stdout, progress and streamed script output on stderr, so
-// `cd $(sgm path fox)` and agent pipelines stay clean. In --json mode
+// `cd $(sm path fox)` and agent pipelines stay clean. In --json mode
 // stdout carries only JSON: one document for list/path/rm, NDJSON
 // events for create's streamed progress.
 

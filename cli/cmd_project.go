@@ -1,6 +1,6 @@
 package main
 
-// sgm projects <list|add|remove|config> -- manage registered projects
+// sm projects <list|add|remove|config> -- manage registered projects
 // without the app. `add` ports the app's projects:add handler
 // (main/ipc/modules/projects.ts): git-repo check, duplicate-path
 // check, uuid + basename identity, locked state append, then a
@@ -46,6 +46,9 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 // app spawned into this project's worktrees; stop those in the app.
 func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
+		strings: map[string][]string{
+			"project-id": {}, // app plumbing: exact addressing from IPC
+		},
 		bools: map[string][]string{"yes": {"y"}},
 	})
 	if err != nil {
@@ -53,6 +56,8 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	}
 	var proj project
 	switch {
+	case parsed.strings["project-id"] != "":
+		proj, err = resolveProjectByID(ctx, parsed.strings["project-id"])
 	case len(parsed.positionals) > 0:
 		proj, err = resolveProject(ctx, parsed.positionals[0])
 	case interactiveStdio():

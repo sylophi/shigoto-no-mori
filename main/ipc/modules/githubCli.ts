@@ -10,8 +10,8 @@ import {
   getWorktreePullRequest,
   listProjectPullRequests,
 } from "../../lib/githubCli/pullRequests";
-import { sgmAvailable } from "../../electron/sgmRunner";
-import { mergeViaSgm } from "../sgmDelegate";
+import { cliAvailable } from "../../electron/cliRunner";
+import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "../../lib/githubCli/readiness";
 import { getRepoMergeConfig } from "../../lib/githubCli/repoConfig";
 import { findProjectOrThrow } from "../../lib/projects";
@@ -38,10 +38,10 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
 
   mergePullRequest: async ({ projectId, number, method }) => {
     const project = findProjectOrThrow(projectId);
-    if (sgmAvailable()) {
+    if (cliAvailable()) {
       // The CLI runs the same gh merge and persists lastMergeMethod
       // itself; the app-side PR cache still needs evicting here.
-      await mergeViaSgm(project, number, method);
+      await mergeViaCli(project, number, method);
       evictProjectPullRequests(project.path);
       return;
     }

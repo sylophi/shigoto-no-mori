@@ -1,6 +1,6 @@
 package main
 
-// sgm create: new managed worktree, then the create lifecycle awaited
+// sm create: new managed worktree, then the create lifecycle awaited
 // to completion (the app fires it in the background; a CLI caller
 // wants the worktree ready when the command returns). Sequencing
 // mirrors runCreateLifecycle in main/lib/worktrees/lifecycle.ts:

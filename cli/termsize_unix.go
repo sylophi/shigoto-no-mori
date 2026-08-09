@@ -2,7 +2,7 @@ package main
 
 // Terminal width straight from the kernel, no cgo and no x/term
 // dependency (the CLI only builds for unix; Windows is unsupported).
-// Checked on stdout then stderr so `sgm --help | less` still sizes to
+// Checked on stdout then stderr so `sm --help | less` still sizes to
 // the terminal it renders in.
 
 import (

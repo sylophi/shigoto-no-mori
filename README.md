@@ -12,7 +12,7 @@ Note: This project is still early and in active development. We offer macOS Appl
 
 ## Agent skills
 
-`skills/` holds instruction snippets that teach coding agents the `sgm`
+`skills/` holds instruction snippets that teach coding agents the `sm`
 workflow (create a worktree, switch to one, land and clean up, register a
 project). Install with [Vercel skills](https://github.com/vercel-labs/skills)
 (skills.sh); the installer lets you pick which ones to include:

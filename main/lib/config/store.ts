@@ -1,6 +1,6 @@
 // Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
 // Writes are read-modify-write of the whole file, and both the app and
-// the sgm CLI go through this module -- so every write cycle holds the
+// the CLI go through this module -- so every write cycle holds the
 // cross-process lock. Reads stay lock-free: the rename keeps the file
 // itself always consistent.
 import {
@@ -66,7 +66,7 @@ export function writeKey<T>(key: string, value: T): void {
 // Read-modify-write of one key with the READ inside the lock. Callers
 // that derive the new value from the current one (append a project,
 // toggle a shelf flag) must use this instead of readKey + writeKey:
-// with the read outside the lock, a concurrent sgm write between the
+// with the read outside the lock, a concurrent CLI write between the
 // read and the write is silently clobbered. `update` may return
 // undefined to skip the write (no-op detected under the lock). It may
 // also throw (e.g. a duplicate check); the lock is still released.

@@ -27,7 +27,7 @@ export function readShelvedSet(): Set<string> {
 }
 
 // updateKey so the current map is read under the cross-process lock --
-// the sgm CLI mutates this key too, and a read-outside-the-lock
+// the CLI mutates this key too, and a read-outside-the-lock
 // version would clobber a concurrent CLI write.
 export function setShelved(worktreeId: string, shelved: boolean): void {
   updateKey<ShelvedMap>(KEY, {}, (map) => {

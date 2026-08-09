@@ -3,7 +3,7 @@ package main
 // Tiny argument parser that allows flags and positionals to interleave
 // (node's parseArgs behavior, which the TS CLI had) -- stdlib flag
 // stops at the first positional, which would break
-// `sgm create my-name -b my-branch`.
+// `sm create my-name -b my-branch`.
 
 import "strings"
 

@@ -13,7 +13,7 @@
   "private": true,
   "packageManager": "pnpm@11.1.1",
   "scripts": {
-    "start": "node scripts/dev-sgm.mjs && port-pool ensure . && electron-forge start",
+    "start": "node scripts/dev-cli.mjs && port-pool ensure . && electron-forge start",
     "start:win": "electron-forge start",
     "dev": "pnpm run start",
     "package": "electron-forge package",
@@ -29,8 +29,8 @@
     "extract-icon": "scripts/extract-app-icon.sh",
     "seed": "node scripts/seed-test-data.mts",
     "cli": "go run -C cli .",
-    "cli:build": "node scripts/build-sgm.mjs",
-    "cli:install": "node scripts/install-sgm.mjs",
+    "cli:build": "node scripts/build-cli.mjs",
+    "cli:install": "node scripts/install-cli.mjs",
     "postinstall": "node scripts/copy-material-icons.mjs"
   },
   "dependencies": {

@@ -22,8 +22,8 @@ import {
 import { initShigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
-import { repairSgmCliLink } from "./electron/sgmCli";
-import { killAllSgm } from "./electron/sgmRunner";
+import { repairCliLinks } from "./electron/cliInstall";
+import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
@@ -121,7 +121,7 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
-  // External sgm writes surface in the UI via an explicit invalidation
+  // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be
   // focused the whole time an agent works in a terminal beside it.)
@@ -132,7 +132,7 @@ app.on("ready", async () => {
   // an already-installed link whose target moved (app update, other
   // checkout). After applyUserShellPath so PATH checks see the login
   // shell's PATH.
-  void repairSgmCliLink();
+  void repairCliLinks();
 });
 
 app.on("window-all-closed", () => {
@@ -162,7 +162,7 @@ app.on("before-quit", (event) => {
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
-    killAllSgm();
+    killAllCli();
     return;
   }
   // The install branch above has already gated its own restart via the
@@ -186,10 +186,10 @@ app.on("before-quit", (event) => {
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);
-  // sgm children (CLI-engine lifecycle operations) get the same reap as
+  // CLI children (CLI-engine lifecycle operations) get the same reap as
   // scripts; the CLI's own children share its terminal-style process
   // group and follow it down.
-  killAllSgm();
+  killAllCli();
   const inflight = getInflightDeleteIds();
   // allSettled: one rejected per-worktree kill must not skip the
   // killAllScripts pass for everything else.

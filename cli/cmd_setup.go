@@ -1,6 +1,6 @@
 package main
 
-// sgm setup: re-run the provisioning half of the create lifecycle on
+// sm setup: re-run the provisioning half of the create lifecycle on
 // an existing worktree -- the recovery path for create/adopt exit 3
 // (worktree exists, setup failed) and for setup scripts that changed
 // after the worktree was made. Runs the project's setup script, then

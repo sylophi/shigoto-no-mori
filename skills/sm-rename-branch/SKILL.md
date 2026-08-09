@@ -1,5 +1,5 @@
 ---
-name: sgm-rename-branch
+name: sm-rename-branch
 description: Rename the current git branch to a short, descriptive name. Use before opening a PR, or whenever a branch carries a random or placeholder name.
 ---
 

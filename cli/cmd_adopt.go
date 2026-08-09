@@ -1,6 +1,6 @@
 package main
 
-// sgm adopt: convert an external worktree (made with raw git or
+// sm adopt: convert an external worktree (made with raw git or
 // another tool) into a shigomori-managed one, ported from
 // convertExternalWorktree in main/lib/worktrees/operations.ts. The
 // external's branch (or detached short hash) is re-checked-out at the

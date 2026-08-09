@@ -1,10 +1,10 @@
-// Compiles the sgm CLI (a Go module in cli/) into a standalone binary,
+// Compiles the sm CLI (a Go module in cli/) into a standalone binary,
 // same distribution shape as port-pool. Two flavors, mirroring the
 // app's packaged/dev split; naming and root policy come from
-// shared/sgmDist.mts and are injected into the binary via -ldflags so
+// shared/cliDist.mts and are injected into the binary via -ldflags so
 // the two languages share one source of truth.
-//   default -> dist-cli/sgm   targets ~/shigomori     (bundled with the app)
-//   --dev   -> dist-cli/sgmd  targets ~/shigomori-dev (built by `pnpm dev`)
+//   default -> dist-cli/sm   targets ~/shigomori     (bundled with the app)
+//   --dev   -> dist-cli/smd  targets ~/shigomori-dev (built by `pnpm dev`)
 // The CLI is not supported on Windows and is never built for it.
 //
 // Run: pnpm cli:build [--dev]
@@ -13,10 +13,10 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  SGM_DIST_DIR,
-  sgmBinaryName,
-  sgmRootDirName,
-} from "../shared/sgmDist.mts";
+  CLI_DIST_DIR,
+  cliBinaryName,
+  cliRootDirName,
+} from "../shared/cliDist.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const flavor = process.argv.includes("--dev") ? "dev" : "prod";
@@ -30,16 +30,16 @@ if (
   process.env.GOOS === "windows" ||
   (process.env.GOOS === undefined && process.platform === "win32")
 ) {
-  console.error("[build-sgm] the CLI is not supported on Windows");
+  console.error("[build-cli] the CLI is not supported on Windows");
   process.exit(1);
 }
-const outfile = join(repoRoot, SGM_DIST_DIR, sgmBinaryName(flavor));
+const outfile = join(repoRoot, CLI_DIST_DIR, cliBinaryName(flavor));
 
 const ldflags = [
   `-X main.version=${version}`,
   `-X main.flavor=${flavor}`,
-  `-X main.rootDirName=${sgmRootDirName(flavor)}`,
-  `-X main.binaryName=${sgmBinaryName(flavor)}`,
+  `-X main.rootDirName=${cliRootDirName(flavor)}`,
+  `-X main.binaryName=${cliBinaryName(flavor)}`,
   "-s",
   "-w",
 ].join(" ");

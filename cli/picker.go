@@ -4,7 +4,7 @@ package main
 // target: they build the rows and hand them to menuSelect (menu.go)
 // for arrow-key selection. Everything renders on stderr and the answer
 // comes from stdin, so stdout stays clean for the command's result --
-// `cd "$(sgm path)"` opens the picker and still cd's. Nothing here
+// `cd "$(sm path)"` opens the picker and still cd's. Nothing here
 // triggers for --json or when stdin/stderr isn't a terminal, so agents
 // and pipelines keep deterministic behavior.
 

@@ -1,9 +1,9 @@
 package main
 
-// sgm -- the Shigoto no Mori CLI, a Go port of the app's worktree
+// sm -- the Shigoto no Mori CLI, a Go port of the app's worktree
 // engine (main/lib/) with the same on-disk state, ids, lock protocol,
 // and JSON output shapes. The state root follows the compiled-in
-// flavor (sgm -> ~/shigomori, sgmd -> ~/shigomori-dev, see flavor.go);
+// flavor (sm -> ~/shigomori, smd -> ~/shigomori-dev, see flavor.go);
 // SHIGOMORI_ROOT overrides it (tests, sandboxes).
 //
 // Known deltas vs the app: project-usage stats aren't bumped,
@@ -86,7 +86,7 @@ var envItems = []helpItem{
 
 // The full catalog, used by per-command help matching. The base help
 // page renders only General plus one pointer line per namespace; bare
-// `sgm worktrees` / `sgm projects` print their namespace's page.
+// `sm worktrees` / `sm projects` print their namespace's page.
 var helpGroups = []helpGroup{
 	{"General", generalItems},
 	{"Worktrees", worktreeItems},
@@ -156,7 +156,7 @@ func helpText(full bool) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// The namespace pages behind bare `sgm worktrees` / `sgm projects`.
+// The namespace pages behind bare `sm worktrees` / `sm projects`.
 func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string {
 	width := helpWidth()
 	var b strings.Builder
@@ -284,7 +284,7 @@ var aliasCanonical = map[string]string{
 }
 
 // Per-command help: the matching usage lines from the catalog, full
-// width. `sgm projects add --help` narrows to the subcommand; an
+// width. `sm projects add --help` narrows to the subcommand; an
 // unknown command falls back to the full help.
 func commandHelp(command string, args []string) string {
 	name := command
@@ -331,7 +331,7 @@ func commandHelp(command string, args []string) string {
 				continue
 			}
 			// Bare worktree commands match their namespaced entry too:
-			// `sgm rm --help` finds "worktrees rm ...".
+			// `sm rm --help` finds "worktrees rm ...".
 			if fields[0] == "worktrees" && len(fields) > 1 && fields[1] == name {
 				fields = fields[1:]
 			}
@@ -406,7 +406,7 @@ func run() int {
 		case arg == "--verbose":
 			verboseMode = true
 		// Before the command it's the global help; after, it belongs to
-		// the command (`sgm rm --help` documents rm alone).
+		// the command (`sm rm --help` documents rm alone).
 		case (arg == "--help" || arg == "-h") && len(rest) == 0:
 			showHelp = true
 		case arg == "--version" || arg == "-V":
@@ -438,7 +438,7 @@ func run() int {
 		}
 		switch {
 		case len(topic) > 0:
-			// `sgm help rm`, `sgm help worktrees create`, ...
+			// `sm help rm`, `sm help worktrees create`, ...
 			out(commandHelp(topic[0], topic[1:]))
 		default:
 			out(helpText(full))

@@ -246,7 +246,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 
 	// A ref that names an existing directory resolves by identity, not
 	// name, so external worktrees with colliding basenames stay
-	// addressable: `sgm adopt ../checkouts/fox`, `sgm rm .`. A
+	// addressable: `sm adopt ../checkouts/fox`, `sm rm .`. A
 	// <project>/<name> ref almost never exists as a directory relative
 	// to cwd; when it does, the directory wins as the more explicit
 	// claim.

@@ -38,9 +38,11 @@ import {
 } from "../../lib/scripts";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { comparablePath, expandHome } from "../../lib/util/paths";
+import { cliAvailable } from "../../electron/cliRunner";
+import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
 // updateKey so the current list is read under the cross-process lock:
-// the sgm CLI appends to this key too (sgm project add), and deriving
+// the CLI appends to this key too (sm projects add), and deriving
 // the new list from a read taken outside the lock would clobber a
 // concurrent CLI write.
 function updateProjects(update: (current: Project[]) => Project[]): void {
@@ -55,6 +57,13 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
     if (!(await isGitRepo(path))) {
       throw new Error(`${path} is not a git repository`);
+    }
+
+    // Same engine as `sm projects add`: registration and the config
+    // seed run in the CLI where it ships; the TS body below stays as
+    // the Windows fallback.
+    if (cliAvailable()) {
+      return projectsAddViaCli(path);
     }
 
     const project: Project = {
@@ -111,16 +120,26 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       if (removed) {
         await killScriptsForProject(id);
       }
-      updateProjects((current) => current.filter((p) => p.id !== id));
+      // Registry drop and per-project state deletion run in the CLI
+      // where it ships (same engine as `sm projects remove`); the TS
+      // path stays as the Windows fallback and for unknown ids.
+      if (removed && cliAvailable()) {
+        await projectsRemoveViaCli(id);
+      } else {
+        updateProjects((current) => current.filter((p) => p.id !== id));
+      }
     } finally {
       clearProjectDeleteInflight(id);
     }
     // Drop the icon-cache entry and on-disk state so neither leaks across
     // re-adds of the same path. State deletion is a recursive rm keyed
     // on the id, so only run it for an id that matched a real project.
+    // The CLI path already deleted the state dir.
     if (removed) {
       await forgetProjectIcon(removed.path);
-      await deleteProjectState(id);
+      if (!cliAvailable()) {
+        await deleteProjectState(id);
+      }
       dropCollapsedProject(id);
     }
   },

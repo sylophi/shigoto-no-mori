@@ -3,7 +3,7 @@
 import { lstat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { sgmRootDirName } from "@shared/sgmDist.mts";
+import { cliRootDirName } from "@shared/cliDist.mts";
 import { isWindows } from "./platform";
 
 let cachedRoot: string | null = null;
@@ -15,11 +15,11 @@ let cachedRoot: string | null = null;
 // path under live callers.
 export function initShigomoriRoot(isPackaged: boolean): void {
   initShigomoriRootAt(
-    join(homedir(), sgmRootDirName(isPackaged ? "prod" : "dev")),
+    join(homedir(), cliRootDirName(isPackaged ? "prod" : "dev")),
   );
 }
 
-// Explicit-path variant for non-Electron entry points (the sgm CLI, tests)
+// Explicit-path variant for non-Electron entry points (the CLI, tests)
 // where the root comes from a flag or env var instead of app.isPackaged.
 // Same one-shot guard.
 export function initShigomoriRootAt(root: string): void {

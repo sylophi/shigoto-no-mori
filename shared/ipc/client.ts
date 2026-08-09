@@ -14,7 +14,7 @@ import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
-import { sgmCliContract } from "@shared/ipc/modules/sgmCli";
+import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -45,7 +45,7 @@ const projectLauncherClient = buildClient(projectLauncherContract);
 const projectsClient = buildClient(projectsContract);
 const runtimeClient = buildClient(runtimeContract);
 const scriptsClient = buildClient(scriptsContract);
-const sgmCliClient = buildClient(sgmCliContract);
+const cliClient = buildClient(cliContract);
 const shellClient = buildClient(shellContract);
 const shigomoriClient = buildClient(shigomoriContract);
 const updaterClient = buildClient(updaterContract);
@@ -173,10 +173,10 @@ export const scripts = {
   onEvent: scriptsClient.event,
 } as const;
 
-export const sgmCli = {
-  status: sgmCliClient.status,
-  install: sgmCliClient.install,
-  uninstall: sgmCliClient.uninstall,
+export const cli = {
+  status: cliClient.status,
+  install: cliClient.install,
+  uninstall: cliClient.uninstall,
 } as const;
 
 export const shell = {

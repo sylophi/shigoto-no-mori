@@ -1,6 +1,6 @@
 package main
 
-// sgm rm: remove a worktree through the same cleanup pipeline as the
+// sm rm: remove a worktree through the same cleanup pipeline as the
 // app (deleteWorktreeWithCleanup in main/lib/worktrees/operations.ts):
 // port-pool release -> teardown -> `git worktree remove` -> branch
 // delete per settings -> state cleanup. Cleanup runs even on --force

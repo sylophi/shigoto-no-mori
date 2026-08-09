@@ -1,8 +1,8 @@
 package main
 
-// sgm open -- launch a tool from the app's launcher row in a worktree.
-// `sgm open finder` (label or id, case-insensitive) launches directly;
-// bare `sgm open` shows the row as a menu, ordered like the app (by
+// sm open -- launch a tool from the app's launcher row in a worktree.
+// `sm open finder` (label or id, case-insensitive) launches directly;
+// bare `sm open` shows the row as a menu, ordered like the app (by
 // recent use, then label). The target worktree is the one containing
 // cwd (the primary counts -- opening the primary in Finder is a normal
 // thing to want), a second positional names one explicitly, and from

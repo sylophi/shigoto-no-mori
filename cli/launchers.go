@@ -1,6 +1,6 @@
 package main
 
-// The app's launcher row, ported for `sgm open`: detected macOS apps,
+// The app's launcher row, ported for `sm open`: detected macOS apps,
 // custom launcher commands from global and project config, and the
 // GitHub web entry. The catalog below MIRRORS main/lib/launchers/
 // darwin.ts -- keep the two in sync when adding a tool. Ordering and

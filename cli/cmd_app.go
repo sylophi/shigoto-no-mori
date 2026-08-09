@@ -1,6 +1,6 @@
 package main
 
-// sgm app -- open (or focus) the Shigoto no Mori app. Addressed by
+// sm app -- open (or focus) the Shigoto no Mori app. Addressed by
 // bundle id so a renamed or moved bundle still resolves. The dev CLI
 // refuses: the dev app isn't installed, it runs from a checkout.
 
@@ -35,10 +35,10 @@ func cmdApp(_ cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-// sgm config -- open the global config file. $VISUAL/$EDITOR in an
+// sm config -- open the global config file. $VISUAL/$EDITOR in an
 // interactive terminal, the OS opener otherwise; --json (and
 // editor-less non-darwin) just reports the path. Per-project config
-// lives under `sgm projects config`.
+// lives under `sm projects config`.
 func cmdConfigOpen(_ cliContext, args []string) (int, error) {
 	if len(args) > 0 {
 		return 2, usageErrf(

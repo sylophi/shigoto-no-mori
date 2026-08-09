@@ -1,6 +1,6 @@
 package main
 
-// sgm done: post-merge cleanup, ported from
+// sm done: post-merge cleanup, ported from
 // switchToPrimaryAndDeleteBranch in main/lib/git/sync.ts and its IPC
 // handler -- land the worktree back on the project's primary branch
 // (creating a local tracking branch from the remote ref when needed,
@@ -12,7 +12,7 @@ package main
 // Note: git refuses to check out a branch already checked out in
 // another worktree, so this flow fits a checkout sitting on a merged
 // feature branch -- classically the primary checkout. For a managed
-// worktree you're done with entirely, `sgm rm` is the cleanup.
+// worktree you're done with entirely, `sm rm` is the cleanup.
 
 import (
 	"encoding/json"

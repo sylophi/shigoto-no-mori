@@ -18,7 +18,7 @@ import {
   projects,
   runtime,
   scripts,
-  sgmCli,
+  cli,
   shell,
   shigomori,
   updater,
@@ -50,7 +50,7 @@ const api = {
   portPool,
   githubCli,
   scripts,
-  sgmCli,
+  cli,
   updater,
   launchers,
 } as const;

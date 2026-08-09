@@ -31,15 +31,16 @@ import {
   relocateWorktreeToManagedPath,
   setWorktreeShelved,
 } from "../../lib/worktrees/operations";
-import { sgmAvailable } from "../../electron/sgmRunner";
+import { cliAvailable } from "../../electron/cliRunner";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
 import {
-  adoptViaSgm,
-  createViaSgm,
-  deleteViaSgm,
-  doneViaSgm,
-} from "../sgmDelegate";
+  adoptViaCli,
+  createViaCli,
+  deleteViaCli,
+  doneViaCli,
+  setShelvedViaCli,
+} from "../cliDelegate";
 
 function notifierFor(sender: WebContents) {
   return {
@@ -62,7 +63,7 @@ export const worktreesHandlers: Handlers<
     return listWorktrees(project.id, project.path);
   },
 
-  // Lifecycle mutations route through the bundled sgm CLI where it
+  // Lifecycle mutations route through the bundled CLI where it
   // ships (everywhere but Windows), so the app and a terminal run the
   // same engine; the TS path stays as the Windows fallback.
   create: async (
@@ -71,16 +72,16 @@ export const worktreesHandlers: Handlers<
   ) => {
     const project = findProjectOrThrow(projectId);
     const input = { worktreeName, branchName, base, checkout };
-    if (sgmAvailable()) {
-      return createViaSgm(project, input, notifierFor(event.sender));
+    if (cliAvailable()) {
+      return createViaCli(project, input, notifierFor(event.sender));
     }
     return createManagedWorktree(project, input, notifierFor(event.sender));
   },
 
   convertExternal: async ({ projectId, worktreeId }, { event }) => {
     const project = findProjectOrThrow(projectId);
-    if (sgmAvailable()) {
-      return adoptViaSgm(project, worktreeId, notifierFor(event.sender));
+    if (cliAvailable()) {
+      return adoptViaCli(project, worktreeId, notifierFor(event.sender));
     }
     return convertExternalWorktree(
       project,
@@ -96,8 +97,8 @@ export const worktreesHandlers: Handlers<
 
   delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
     const project = findProjectOrThrow(projectId);
-    if (sgmAvailable()) {
-      return deleteViaSgm(
+    if (cliAvailable()) {
+      return deleteViaCli(
         project,
         { worktreeId, force, skipCleanup },
         notifierFor(event.sender),
@@ -112,6 +113,11 @@ export const worktreesHandlers: Handlers<
 
   setShelved: async ({ projectId, worktreeId, shelved }) => {
     const project = findProjectOrThrow(projectId);
+    if (cliAvailable()) {
+      return mutateAndDescribe({ projectId, worktreeId }, () =>
+        setShelvedViaCli(project, worktreeId, shelved),
+      );
+    }
     return setWorktreeShelved(project, worktreeId, shelved);
   },
 
@@ -175,9 +181,9 @@ export const worktreesHandlers: Handlers<
       await syncWithPrimary(wt, pp, primaryRef);
     }),
   switchToPrimaryAndDeleteBranch: async (input) => {
-    if (sgmAvailable()) {
+    if (cliAvailable()) {
       const project = findProjectOrThrow(input.projectId);
-      return doneViaSgm(project, input.worktreeId);
+      return doneViaCli(project, input.worktreeId);
     }
     return mutateAndDescribe(input, async (wt, pp, target) => {
       if (!isRealBranch(target.branch)) {

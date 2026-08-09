@@ -5,32 +5,32 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
-import type { SgmCliStatus } from "@shared/ipc/modules/sgmCli";
+import type { CliStatus } from "@shared/ipc/modules/cli";
 
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
 // Hidden entirely when there's nothing to link (Windows, dev run
 // without a built binary).
-export function SgmCliSection() {
+export function CliSection() {
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
-  const { data: status } = useQuery<SgmCliStatus>({
-    queryKey: queryKeys.sgmCli(),
-    queryFn: () => window.api.sgmCli.status(),
+  const { data: status } = useQuery<CliStatus>({
+    queryKey: queryKeys.cli(),
+    queryFn: () => window.api.cli.status(),
     meta: { errorTitle: "Couldn't check the CLI install" },
   });
 
-  const applyStatus = (next: SgmCliStatus) => {
-    queryClient.setQueryData(queryKeys.sgmCli(), next);
+  const applyStatus = (next: CliStatus) => {
+    queryClient.setQueryData(queryKeys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: () => window.api.sgmCli.install(),
+    mutationFn: () => window.api.cli.install(),
     onSuccess: applyStatus,
     onError: (err) => notifyError("Couldn't install the CLI", err),
   });
   const uninstall = useMutation({
-    mutationFn: () => window.api.sgmCli.uninstall(),
+    mutationFn: () => window.api.cli.uninstall(),
     onSuccess: applyStatus,
     onError: (err) => notifyError("Couldn't uninstall the CLI", err),
   });
@@ -49,10 +49,11 @@ export function SgmCliSection() {
         <p className="text-xs text-muted-foreground">
           The Shigoto no Mori CLI lets you (or a coding agent) create, list,
           merge, and remove this app's worktrees from any shell. Installing
-          links the <span className="font-mono">{name}</span> command into{" "}
-          <span className="font-mono">{tildify(status.binDir, home)}</span>. It
-          runs straight from the app, so it's always in sync. The app itself
-          doesn't need it.
+          links the <span className="font-mono">{name}</span> and{" "}
+          <span className="font-mono">{status.aliasName}</span> commands into{" "}
+          <span className="font-mono">{tildify(status.binDir, home)}</span>.
+          They run straight from the app, so they're always in sync. The app
+          itself doesn't need them.
         </p>
       </div>
 

@@ -6,22 +6,23 @@ import { invoke } from "@shared/ipc/contract";
 // - stale: our link, pointing at another copy (moved app, other checkout)
 // - missing: nothing at the link path
 // - foreign: something we didn't create; never touched
-export const SgmCliStatusSchema = z.object({
+export const CliStatusSchema = z.object({
   // False when there's nothing to link: Windows, or a dev run without a
   // built dist-cli binary. The settings section hides itself then.
   supported: z.boolean(),
   name: z.string(),
+  aliasName: z.string(),
   binDir: z.string(),
   linkPath: z.string(),
   state: z.enum(["installed", "stale", "missing", "foreign"]),
   onPath: z.boolean(),
 });
-export type SgmCliStatus = z.infer<typeof SgmCliStatusSchema>;
+export type CliStatus = z.infer<typeof CliStatusSchema>;
 
-export const sgmCliContract = {
-  status: invoke("sgmCli:status", z.void(), SgmCliStatusSchema),
-  install: invoke("sgmCli:install", z.void(), SgmCliStatusSchema),
-  uninstall: invoke("sgmCli:uninstall", z.void(), SgmCliStatusSchema),
+export const cliContract = {
+  status: invoke("cli:status", z.void(), CliStatusSchema),
+  install: invoke("cli:install", z.void(), CliStatusSchema),
+  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema),
 } as const;
 
-export type SgmCliContract = typeof sgmCliContract;
+export type CliContract = typeof cliContract;

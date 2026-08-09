@@ -1,11 +1,12 @@
-// Routes the five lifecycle mutations through the bundled sgm CLI so
-// the app and a terminal run the exact same engine (the user's core
-// requirement: deterministic behavior across surfaces). Each function
-// mirrors its TS-engine counterpart's IPC contract -- same return
-// shapes, same renderer notifications -- translating sgm's NDJSON
-// stream into the notifier calls the renderer already understands.
-// Callers gate on sgmAvailable(); Windows (no CLI) stays on the TS
-// engine.
+// Routes the app's state mutations through the bundled CLI so the app
+// and a terminal run the exact same engine (the user's core
+// requirement: deterministic behavior across surfaces): worktree
+// create/adopt/delete/done/merge, the shelved flag, and project
+// add/remove. Each function mirrors its TS-engine counterpart's IPC
+// contract -- same return shapes, same renderer notifications --
+// translating the CLI's NDJSON stream into the notifier calls the
+// renderer already understands. Callers gate on cliAvailable();
+// Windows (no CLI) stays on the TS engine.
 import type {
   CarryOverReport,
   CleanupError,
@@ -16,7 +17,7 @@ import type {
   ScriptEvent,
   Worktree,
 } from "@shared/schemas";
-import { runSgm, type SgmDoc, sgmFailureMessage } from "../electron/sgmRunner";
+import { runCli, type CliDoc, cliFailureMessage } from "../electron/cliRunner";
 import type { WorktreeOperationNotifiers } from "../lib/worktrees/operations";
 
 // Streamed create/adopt: resolve the IPC promise on the "created"
@@ -31,7 +32,7 @@ function runStreamingCreate(
 ): Promise<CreateWorktreeResult> {
   return new Promise((resolve, reject) => {
     let created: Worktree | null = null;
-    const onDoc = (doc: SgmDoc) => {
+    const onDoc = (doc: CliDoc) => {
       switch (doc.event) {
         case "created": {
           created = doc["worktree"] as Worktree;
@@ -63,15 +64,15 @@ function runStreamingCreate(
         }
       }
     };
-    runSgm(args, onDoc).then((result) => {
+    runCli(args, onDoc).then((result) => {
       if (created === null) {
-        reject(new Error(sgmFailureMessage(result, failureLabel)));
+        reject(new Error(cliFailureMessage(result, failureLabel)));
       }
     }, reject);
   });
 }
 
-export function createViaSgm(
+export function createViaCli(
   project: Project,
   input: {
     worktreeName?: string;
@@ -86,10 +87,10 @@ export function createViaSgm(
   if (input.branchName) args.push("--branch", input.branchName);
   if (input.base) args.push("--base", input.base);
   if (input.checkout) args.push("--checkout");
-  return runStreamingCreate(args, project, notify, "sgm create failed");
+  return runStreamingCreate(args, project, notify, "sm create failed");
 }
 
-export function adoptViaSgm(
+export function adoptViaCli(
   project: Project,
   worktreeId: string,
   notify: WorktreeOperationNotifiers,
@@ -104,10 +105,10 @@ export function adoptViaSgm(
     worktreeId,
     "--force",
   ];
-  return runStreamingCreate(args, project, notify, "sgm adopt failed");
+  return runStreamingCreate(args, project, notify, "sm adopt failed");
 }
 
-export async function deleteViaSgm(
+export async function deleteViaCli(
   project: Project,
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
@@ -121,7 +122,7 @@ export async function deleteViaSgm(
   ];
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
-  const result = await runSgm(args, (doc) => {
+  const result = await runCli(args, (doc) => {
     if (doc.event === "script") {
       const { event: _event, ...scriptEvent } = doc;
       notify.notifyScript(scriptEvent as ScriptEvent);
@@ -132,17 +133,17 @@ export async function deleteViaSgm(
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return { ok: false, cleanupError: final["cleanupError"] as CleanupError };
   }
-  throw new Error(sgmFailureMessage(result, "sgm rm failed"));
+  throw new Error(cliFailureMessage(result, "sm rm failed"));
 }
 
-export async function doneViaSgm(
+export async function doneViaCli(
   project: Project,
   worktreeId: string,
 ): Promise<Worktree> {
   // --force: the app's cleanup box appears in merged-PR context, so the
   // UI has already gated mergedness -- matching the TS engine, which
   // performs no ancestor check of its own.
-  const result = await runSgm([
+  const result = await runCli([
     "done",
     "--project-id",
     project.id,
@@ -154,15 +155,15 @@ export async function doneViaSgm(
   if (final?.["ok"] === true && final["worktree"] !== undefined) {
     return final["worktree"] as Worktree;
   }
-  throw new Error(sgmFailureMessage(result, "sgm done failed"));
+  throw new Error(cliFailureMessage(result, "sm done failed"));
 }
 
-export async function mergeViaSgm(
+export async function mergeViaCli(
   project: Project,
   number: number,
   method: string,
 ): Promise<void> {
-  const result = await runSgm([
+  const result = await runCli([
     "merge",
     "--project-id",
     project.id,
@@ -173,6 +174,56 @@ export async function mergeViaSgm(
   ]);
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
   if (final?.["ok"] !== true) {
-    throw new Error(sgmFailureMessage(result, "sgm merge failed"));
+    throw new Error(cliFailureMessage(result, "sm merge failed"));
+  }
+}
+
+export async function setShelvedViaCli(
+  project: Project,
+  worktreeId: string,
+  shelved: boolean,
+): Promise<void> {
+  const result = await runCli([
+    shelved ? "shelve" : "unshelve",
+    "--project-id",
+    project.id,
+    "--worktree-id",
+    worktreeId,
+  ]);
+  const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
+  if (final?.["ok"] !== true) {
+    throw new Error(cliFailureMessage(result, "sm shelve failed"));
+  }
+}
+
+export async function projectsAddViaCli(path: string): Promise<Project> {
+  const result = await runCli(["projects", "add", path]);
+  const doc = result.docs.findLast(
+    (d) => typeof d["id"] === "string" && typeof d["path"] === "string",
+  );
+  if (result.code !== 0 || doc === undefined) {
+    throw new Error(cliFailureMessage(result, "sm projects add failed"));
+  }
+  return {
+    id: doc["id"] as string,
+    name: doc["name"] as string,
+    path: doc["path"] as string,
+  };
+}
+
+// Registry removal and per-project state deletion only; the app-side
+// extras (script reaping, icon cache, collapsed prefs) stay with the
+// caller because those registries live in the app's process.
+export async function projectsRemoveViaCli(projectId: string): Promise<void> {
+  const result = await runCli([
+    "projects",
+    "remove",
+    "--project-id",
+    projectId,
+    "--yes",
+  ]);
+  const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
+  if (final?.["ok"] !== true) {
+    throw new Error(cliFailureMessage(result, "sm projects remove failed"));
   }
 }

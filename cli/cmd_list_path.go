@@ -1,6 +1,6 @@
 package main
 
-// sgm list + sgm path.
+// sm list + sm path.
 
 import (
 	"fmt"

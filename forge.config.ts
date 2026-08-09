@@ -7,7 +7,7 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
 import { rename } from "node:fs/promises";
 import { config as loadEnv } from "dotenv";
-import { SGM_DIST_DIR, sgmBinaryName } from "./shared/sgmDist.mts";
+import { CLI_DIST_DIR, cliBinaryName } from "./shared/cliDist.mts";
 
 loadEnv();
 
@@ -47,13 +47,13 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: "com.sylophi.shigomori",
     appCopyright: "© 2026 sylophi",
-    // The sgm binary is compiled by the prePackage hook below into
+    // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
     // into the user's bin dir. The CLI is not supported on Windows:
     // never built, never bundled, never installed there.
     extraResource: [
       "resources/licenses",
-      ...(isWindowsTarget ? [] : [`${SGM_DIST_DIR}/${sgmBinaryName("prod")}`]),
+      ...(isWindowsTarget ? [] : [`${CLI_DIST_DIR}/${cliBinaryName("prod")}`]),
     ],
     // The portable zip puts the exe directly in front of the user (no
     // installer-made shortcut), so give it a space-free name: spaces in
@@ -81,11 +81,11 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
-      // Compile the sgm CLI (requires Go on the build machine).
+      // Compile the CLI (requires Go on the build machine).
       // Windows builds skip it entirely; that platform keeps the
       // app-only workflow.
       if (!isWindowsTarget) {
-        execFileSync("node", ["scripts/build-sgm.mjs"], {
+        execFileSync("node", ["scripts/build-cli.mjs"], {
           cwd: import.meta.dirname,
           stdio: "inherit",
         });

@@ -3,7 +3,7 @@ package main
 // The selection menu behind every picker, rendered by charmbracelet's
 // huh: arrow keys or j/k, enter to select, esc/ctrl-c to cancel, with
 // scrolling on long lists. Output goes to stderr so command results
-// (stdout) stay clean -- `cd "$(sgm path)"` opens the menu and still
+// (stdout) stay clean -- `cd "$(sm path)"` opens the menu and still
 // cd's. Option labels are plain text (huh owns the highlight styling).
 // Terminals huh can't drive fall back to a numbered prompt, which also
 // keeps `printf '2\n' | ...`-style scripting meaningful.

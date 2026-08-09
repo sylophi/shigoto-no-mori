@@ -1,4 +1,4 @@
-module sgm
+module sm
 
 go 1.26
 

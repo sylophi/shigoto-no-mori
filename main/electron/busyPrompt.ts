@@ -3,16 +3,16 @@
 // copy here keeps the two paths' wording in lock-step.
 import { BrowserWindow, dialog } from "electron";
 import { type BusyOperations, getBusyOperations } from "../lib/scripts";
-import { sgmChildCount } from "./sgmRunner";
+import { cliChildCount } from "./cliRunner";
 
-// sgm children are lifecycle operations in flight (create/delete via
+// CLI children are lifecycle operations in flight (create/delete via
 // the CLI engine); count them like the TS engine's inflight deletes so
 // quitting mid-operation still prompts.
-function busyIncludingSgm(): BusyOperations {
+function busyIncludingCli(): BusyOperations {
   const busy = getBusyOperations();
   return {
     runningScripts: busy.runningScripts,
-    inflightDeletes: busy.inflightDeletes + sgmChildCount(),
+    inflightDeletes: busy.inflightDeletes + cliChildCount(),
   };
 }
 
@@ -79,7 +79,7 @@ function isBusy(busy: BusyOperations): boolean {
 }
 
 export function confirmBusyActionSync(action: BusyAction): boolean {
-  const busy = busyIncludingSgm();
+  const busy = busyIncludingCli();
   if (!isBusy(busy)) return true;
   const parent = parentWindow();
   const opts = buildDialogOptions(action, busy);
@@ -90,7 +90,7 @@ export function confirmBusyActionSync(action: BusyAction): boolean {
 }
 
 export async function confirmBusyAction(action: BusyAction): Promise<boolean> {
-  const busy = busyIncludingSgm();
+  const busy = busyIncludingCli();
   if (!isBusy(busy)) return true;
   const parent = parentWindow();
   const opts = buildDialogOptions(action, busy);

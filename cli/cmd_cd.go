@@ -1,12 +1,12 @@
 package main
 
-// sgm cd / sgm worktree (wt) -- drop into a worktree in a subshell. A
+// sm cd / sm worktree (wt) -- drop into a worktree in a subshell. A
 // child process can't change its parent shell's directory, so these
 // start $SHELL in the target and exiting it returns you to where you
 // were. Both accept an explicit <name>; the difference is the bare
 // form: `cd` navigates anywhere (project menu first, current project
 // preselected), `worktree` stays in the current project and only asks
-// which worktree. Scripts should use `cd "$(sgm path <name>)"`
+// which worktree. Scripts should use `cd "$(sm path <name>)"`
 // instead; both commands require an interactive terminal.
 
 import (
@@ -24,9 +24,9 @@ func cmdWorktree(ctx cliContext, args []string) (int, error) {
 	return cmdEnterWorktree(ctx, args, false)
 }
 
-// sgm worktrees <command> (wt, worktree for short) -- namespace form
-// of the bare worktree commands, mirroring `sgm projects <command>`.
-// Bare `sgm worktrees` prints the namespace help; a worktree name
+// sm worktrees <command> (wt, worktree for short) -- namespace form
+// of the bare worktree commands, mirroring `sm projects <command>`.
+// Bare `sm worktrees` prints the namespace help; a worktree name
 // enters that worktree (`switch` with the menu). Subcommand words win
 // over worktree names.
 func cmdWorktrees(ctx cliContext, args []string) (int, error) {
@@ -131,7 +131,7 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "SGM_WORKTREE="+target.worktree.Name)
+	cmd.Env = append(os.Environ(), "SHIGOMORI_WORKTREE="+target.worktree.Name)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

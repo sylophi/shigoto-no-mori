@@ -239,7 +239,7 @@ interface DeleteWorktreeInput {
   force?: boolean;
   skipCleanup?: boolean;
   // When true, the local branch survives the removal regardless of the
-  // global deleteBranchOnRemove preference (sgm rm --keep-branch).
+  // global deleteBranchOnRemove preference (sm rm --keep-branch).
   keepBranch?: boolean;
 }
 

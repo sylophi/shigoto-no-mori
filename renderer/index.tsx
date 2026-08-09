@@ -95,7 +95,7 @@ const queryClient = new QueryClient({
   }),
 });
 
-// State changed on disk under the app (an sgm CLI run in a terminal):
+// State changed on disk under the app (an CLI run in a terminal):
 // invalidate everything so the sidebar reflects it without a focus
 // change. Blunt on purpose -- the main process debounces the signal,
 // and only active queries actually refetch.
