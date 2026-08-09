@@ -38,7 +38,7 @@ var helpGroups = []helpGroup{
 		{"config", "Open the global config file (config.json in the state root)"},
 	}},
 	{"Worktree", []helpItem{
-		{"create [<name>] [-b <branch>] [--base <ref>]",
+		{"create [<name>] [-b <branch-name>] [--base <ref>]",
 			"Create a worktree on a new branch named -b (default: the worktree name), forked from --base (default: the default branch), then carry-over, setup, port"},
 		{"rm [<name>] [-f] [--keep-branch]",
 			"Remove a worktree: teardown, release port, delete branch per app settings"},
