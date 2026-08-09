@@ -57,12 +57,13 @@ type projectConfig struct {
 		Setup    string `json:"setup"`
 		Teardown string `json:"teardown"`
 	} `json:"scripts"`
-	DefaultBranch      string           `json:"defaultBranch"`
-	LastMergeMethod    string           `json:"lastMergeMethod"`
-	CarryOver          []carryOverEntry `json:"carryOver"`
-	UseWorktreeInclude *bool            `json:"useWorktreeInclude"`
-	WorktreeLayout     string           `json:"worktreeLayout"`
-	CustomWorktreePath string           `json:"customWorktreePath"`
+	DefaultBranch      string            `json:"defaultBranch"`
+	LastMergeMethod    string            `json:"lastMergeMethod"`
+	CarryOver          []carryOverEntry  `json:"carryOver"`
+	UseWorktreeInclude *bool             `json:"useWorktreeInclude"`
+	WorktreeLayout     string            `json:"worktreeLayout"`
+	CustomWorktreePath string            `json:"customWorktreePath"`
+	Launchers          []launcherCommand `json:"launchers"`
 }
 
 type carryOverEntry struct {
@@ -71,9 +72,17 @@ type carryOverEntry struct {
 }
 
 type globalConfig struct {
-	DeleteBranchOnRemove *bool `json:"deleteBranchOnRemove"`
-	PortPool             *bool `json:"portPool"`
-	AutoPopulateInstall  *bool `json:"autoPopulateInstall"`
+	DeleteBranchOnRemove *bool             `json:"deleteBranchOnRemove"`
+	PortPool             *bool             `json:"portPool"`
+	AutoPopulateInstall  *bool             `json:"autoPopulateInstall"`
+	Launchers            []launcherCommand `json:"launchers"`
+	HiddenLaunchers      []string          `json:"hiddenLaunchers"`
+}
+
+type launcherCommand struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	Command string `json:"command"`
 }
 
 func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }

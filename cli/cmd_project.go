@@ -1,13 +1,13 @@
 package main
 
-// sgm project add/list + sgm config -- register a repo without the app
-// and set the per-project fields the golden loop uses. `add` ports the
-// app's projects:add handler (main/ipc/modules/projects.ts): git-repo
-// check, duplicate-path check, uuid + basename identity, locked state
-// append, then a best-effort project.json seed (defaultBranch, plus a
-// `<pm> install` setup script when the global autoPopulateInstall
-// toggle is on). `config` rewrites only the fields it's given,
-// preserving everything else the app may have written.
+// sgm projects <list|add|remove|config> -- manage registered projects
+// without the app. `add` ports the app's projects:add handler
+// (main/ipc/modules/projects.ts): git-repo check, duplicate-path
+// check, uuid + basename identity, locked state append, then a
+// best-effort project.json seed (defaultBranch, plus a `<pm> install`
+// setup script when the global autoPopulateInstall toggle is on).
+// `config` rewrites only the fields it's given, preserving everything
+// else the app may have written.
 
 import (
 	"crypto/rand"
@@ -22,7 +22,7 @@ import (
 
 func cmdProject(ctx cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		return 2, usageErrf("Usage: %s project <list|add|remove> [args]", binaryName)
+		return 2, usageErrf("Usage: %s projects <list|add|remove|config> [args]", binaryName)
 	}
 	switch args[0] {
 	case "list", "ls":
@@ -31,8 +31,10 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 		return cmdProjectAdd(ctx, args[1:])
 	case "remove", "rm":
 		return cmdProjectRemove(ctx, args[1:])
+	case "config":
+		return cmdConfig(ctx, args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s project <list|add|remove> [args]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|config> [args]", args[0], binaryName)
 	}
 }
 

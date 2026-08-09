@@ -34,6 +34,8 @@ var helpGroups = []helpGroup{
 		{"path [<name>]", "Print a worktree's directory"},
 		{"cd [<name>]",
 			"Open a subshell inside a worktree, exit it to return (no name picks from a menu)"},
+		{"open [<tool>] [<worktree>]",
+			"Launch a launcher-row tool (Finder, editor, custom command) in the worktree, bare open shows the row as a menu"},
 		{"app", "Open the Shigoto no Mori app"},
 	}},
 	{"Worktree lifecycle", []helpItem{
@@ -45,19 +47,19 @@ var helpGroups = []helpGroup{
 			"Post-merge cleanup: land the checkout back on the primary branch, delete the merged one (refuses unmerged branches without -f)"},
 		{"merge [<name>] [-m <method>]",
 			"Merge the worktree's PR via gh, method per the repo's settings (or --method override)"},
-		{"adopt [<name>] [-f]",
+		{"adopt [<name-or-path>] [-f]",
 			"Convert an external worktree to managed: move it into the layout, run the lifecycle (refuses dirty worktrees without -f)"},
 		{"setup [<name>]",
 			"Re-run the setup script (and port-pool provision) on an existing worktree"},
 		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`},
 	}},
 	{"Projects", []helpItem{
-		{"project list", "List registered projects"},
-		{"project add [<path>] [--all]",
+		{"projects list", "List registered projects"},
+		{"projects add [<path>] [--all]",
 			"Register the repo at <path> (default .) or with --all every repo found beneath it (asks first, --yes skips)"},
-		{"project remove [<name>]",
+		{"projects remove [<name>]",
 			"Unregister a project, worktrees stay on disk (asks first, no name picks from a menu)"},
-		{"config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
+		{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
 			`Show or set per-project config ("" clears a script, default-branch can't be cleared)`},
 	}},
 	{"Flags", []helpItem{
@@ -83,8 +85,10 @@ func helpText() string {
 	for _, line := range wrapText(
 		"Commands run against the worktree/project containing the current "+
 			"directory when possible. From anywhere else, address worktrees as "+
-			"<name> or <project>/<name>, or pass -p <project>. From the primary "+
-			"checkout, omitting the name picks a worktree from a menu.", width) {
+			"<name>, <project>/<name>, or a directory path, or pass -p "+
+			"<project>. From the primary checkout, omitting the name picks a "+
+			"worktree from a menu. Aliases: l list, c cd, o open, p projects, "+
+			"new create.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -277,15 +281,17 @@ func run() int {
 	command, args := rest[0], rest[1:]
 	var code int
 	switch command {
-	case "list", "ls":
+	case "list", "ls", "l":
 		code, err = cmdList(ctx, args)
 	case "path":
 		code, err = cmdPath(ctx, args)
-	case "cd":
+	case "cd", "c":
 		code, err = cmdCd(ctx, args)
+	case "open", "o":
+		code, err = cmdOpen(ctx, args)
 	case "app":
 		code, err = cmdApp(ctx, args)
-	case "create":
+	case "create", "new":
 		code, err = cmdCreate(ctx, args)
 	case "rm", "remove":
 		code, err = cmdRm(ctx, args)
@@ -301,9 +307,10 @@ func run() int {
 		code, err = cmdShelve(ctx, args, true)
 	case "unshelve":
 		code, err = cmdShelve(ctx, args, false)
-	case "project":
+	case "projects", "project", "p":
 		code, err = cmdProject(ctx, args)
 	case "config":
+		// Compat spelling of `projects config`.
 		code, err = cmdConfig(ctx, args)
 	default:
 		code, err = 2, usageErrf("Unknown command %q. Run `%s --help`.", command, binaryName)
