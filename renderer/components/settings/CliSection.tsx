@@ -26,7 +26,8 @@ export function CliSection() {
     queryClient.setQueryData(queryKeys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: (force: boolean) => window.api.cli.install({ force }),
+    mutationFn: (payload: { force: boolean }) =>
+      window.api.cli.install(payload),
     onSuccess: applyStatus,
     onError: (err) => notifyError("Couldn't install the CLI", err),
   });
@@ -87,7 +88,7 @@ export function CliSection() {
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => install.mutate(false)}
+            onClick={() => install.mutate({ force: false })}
           >
             Repair link
           </Button>
@@ -99,7 +100,7 @@ export function CliSection() {
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={() => install.mutate(false)}
+          onClick={() => install.mutate({ force: false })}
         >
           <Download />
           Install the CLI
@@ -117,7 +118,7 @@ export function CliSection() {
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => install.mutate(true)}
+            onClick={() => install.mutate({ force: true })}
           >
             <Download />
             Replace and install

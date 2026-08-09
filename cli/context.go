@@ -136,16 +136,6 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	}
 }
 
-// The reserved worktree refs: `sm cd root`, `sm path primary`, and the
-// qualified forms (<project>/root, -p) address the project's primary
-// checkout, unconditionally -- a worktree named "root"/"primary" never
-// resolves by name (only by path or menu). sanitizeBranchForPath
-// rejects both words so create/adopt can't mint one; external tools
-// still can, which is why the keyword can't be allowed to lose.
-func isPrimaryKeyword(name string) bool {
-	return strings.EqualFold(name, "root") || strings.EqualFold(name, "primary")
-}
-
 func primaryOf(proj project) (located, error) {
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
@@ -263,19 +253,16 @@ func resolveProjectArgs(ctx cliContext, parsed parsedArgs) (project, error) {
 
 // Resolves `<name>`, `<project>/<name>`, or (with no ref) the worktree
 // containing cwd. Unqualified names search every registered project
-// and must be unambiguous. The reserved names "root" and "primary"
-// always resolve to a project's primary checkout -- never to a
-// worktree carrying one of those names (external tools can mint one;
-// it stays reachable by path or through the menus).
+// and must be unambiguous. Reserved names (isPrimaryKeyword) resolve
+// to the primary checkout before any worktree name is considered.
 func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (located, error) {
 	if ref == "" {
 		if ctx.current != nil {
 			// From the primary checkout, silently acting on it surprises
 			// more than a menu: offer the project's worktrees when a human
-			// is on the other end -- with the primary itself listed (and
-			// highlighted, matching the non-interactive default) when the
-			// command can target it. Agents, pipelines, and --json keep
-			// the deterministic primary.
+			// is on the other end -- with the primary itself on the menu
+			// when the command can act on it. Agents, pipelines, and
+			// --json keep the deterministic primary.
 			if ctx.current.worktree.IsPrimary && interactiveStdio() {
 				return pickWorktree(ctx.current.proj, "", primaryOK)
 			}

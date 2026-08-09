@@ -42,10 +42,10 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if len(parsed.positionals) > 0 {
 		name = parsed.positionals[0]
 	}
+	if isPrimaryKeyword(name) {
+		return 2, usageErrf("%q is reserved -- it addresses the project's primary checkout.", name)
+	}
 	if name != "" && !isValidWorktreeDirName(name) {
-		if isPrimaryKeyword(name) {
-			return 2, usageErrf("%q is reserved -- it addresses the project's primary checkout.", name)
-		}
 		return 2, usageErrf("%q is not a valid worktree folder name.", name)
 	}
 	for _, refFlag := range []string{"branch", "base"} {
@@ -204,13 +204,8 @@ func codeOrNil(code int) any {
 // $SHIGOMORI_PROJECT_BRANCH + $SHIGOMORI_DEFAULT_BRANCH for scripts.
 func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig) scriptEnvInputs {
 	projectBranch := ""
-	if identities, err := listWorktreeIdentities(proj); err == nil {
-		for _, other := range identities {
-			if other.IsPrimary {
-				projectBranch = other.Branch
-				break
-			}
-		}
+	if primary, err := primaryOf(proj); err == nil {
+		projectBranch = primary.worktree.Branch
 	}
 	return scriptEnvInputs{
 		worktree:      id,
