@@ -36,28 +36,28 @@ var helpGroups = []helpGroup{
 			"All projects when outside one, or with --all."},
 		{"cd [<name>]", "Open a subshell in any worktree",
 			"Picks a project, then a worktree. Exit the shell to return."},
-		{"worktrees [<name>]", "Open a subshell in this project's worktrees",
-			"Like cd without the project menu. Exit the shell to return."},
+		{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
+			"Like cd without the project menu. Bare worktrees (wt) does the same. Exit the shell to return."},
 		{"app", "Open the Shigoto no Mori app", ""},
 		{"config", "Open the global config file",
 			"config.json in the state root, via $EDITOR or the OS opener."},
 	}},
 	{"Worktree", []helpItem{
-		{"path [<name>]", "Print a worktree's directory", ""},
-		{"create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
+		{"worktrees path [<name>]", "Print a worktree's directory", ""},
+		{"worktrees create [<name>] [-b <branch-name>] [--base <ref>]", "Create a worktree",
 			"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision."},
-		{"rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
+		{"worktrees rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
 			"Teardown, release port, delete the branch per app settings."},
-		{"done [<name>] [-f]", "Post-merge cleanup",
+		{"worktrees done [<name>] [-f]", "Post-merge cleanup",
 			"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
-		{"merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
+		{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
 			"Method follows the repo's settings unless -m overrides."},
-		{"adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
+		{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
 			"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
-		{"setup [<name>]", "Re-run the setup script",
+		{"worktrees setup [<name>]", "Re-run the setup script",
 			"Also re-provisions the port-pool port."},
-		{"shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
-		{"open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
+		{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
+		{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 			"Finder, editors, custom commands. Bare open shows the row as a menu."},
 	}},
 	{"Projects", []helpItem{
@@ -95,9 +95,9 @@ func helpText() string {
 			"directory when possible. From anywhere else, address worktrees as "+
 			"<name>, <project>/<name>, or a directory path, or pass -p "+
 			"<project>. From the primary checkout, omitting the name picks a "+
-			"worktree from a menu. Every worktree command can also be written "+
-			"as worktrees <command>, wt for short. Aliases: l list, c cd, "+
-			"o open, p projects, new create.", width) {
+			"worktree from a menu. worktrees is wt for short, and while "+
+			"nothing collides the bare command works too: sgm rm == sgm wt "+
+			"rm. Aliases: l list, c cd, o open, p projects, new create.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -259,7 +259,15 @@ func commandHelp(command string, args []string) string {
 	for _, group := range helpGroups {
 		for _, item := range group.items {
 			fields := strings.Fields(item.usage)
-			if len(fields) == 0 || fields[0] != name {
+			if len(fields) == 0 {
+				continue
+			}
+			// Bare worktree commands match their namespaced entry too:
+			// `sgm rm --help` finds "worktrees rm ...".
+			if fields[0] == "worktrees" && len(fields) > 1 && fields[1] == name {
+				fields = fields[1:]
+			}
+			if fields[0] != name {
 				continue
 			}
 			if sub != "" && (len(fields) < 2 || fields[1] != sub) {
@@ -378,6 +386,8 @@ func run() int {
 		code, err = cmdCd(ctx, args)
 	case "worktrees", "worktree", "wt":
 		code, err = cmdWorktrees(ctx, args)
+	case "switch":
+		code, err = cmdWorktree(ctx, args)
 	case "open", "o":
 		code, err = cmdOpen(ctx, args)
 	case "app":
