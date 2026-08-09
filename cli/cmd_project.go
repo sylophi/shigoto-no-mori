@@ -126,7 +126,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	if jsonMode {
 		emit(proj)
 	} else {
-		out(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path))
+		out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
 	}
 	return 0, nil
 }
@@ -260,7 +260,7 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 	if jsonMode {
 		emit(map[string]any{"ok": true, "project": proj.Name})
 	} else {
-		out("configured " + proj.Name)
+		out(greenOut("configured " + proj.Name))
 	}
 	return 0, nil
 }

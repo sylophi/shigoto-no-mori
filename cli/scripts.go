@@ -68,7 +68,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	emitScriptEvent(map[string]any{
 		"event": "script", "runId": runID, "kind": "started",
 		"projectId": in.proj.ID, "worktreeId": in.worktree.ID, "slot": slot,
-	}, "["+slot.label()+"] running")
+	}, slotMarker(slot)+" running")
 
 	shell, shellArgs := resolveShell()
 	cmd := exec.Command(shell, append(shellArgs, command)...)
@@ -122,7 +122,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 		wg.Wait()
 		emitScriptEvent(map[string]any{
 			"event": "script", "runId": runID, "kind": "error", "data": err.Error(),
-		}, "["+slot.label()+"] "+err.Error())
+		}, slotMarker(slot)+" "+err.Error())
 		emitExit(runID, slot, -1)
 		return -1, runID
 	}
@@ -148,6 +148,12 @@ func emitScriptEvent(event map[string]any, humanLine string) {
 	}
 }
 
+// Dim the [label] marker so streamed script output stands out from the
+// CLI's own framing lines.
+func slotMarker(slot scriptSlot) string {
+	return dimErr("[" + slot.label() + "]")
+}
+
 func emitExit(runID string, slot scriptSlot, code int) {
 	if jsonMode {
 		var codeField any
@@ -159,11 +165,11 @@ func emitExit(runID string, slot scriptSlot, code int) {
 	}
 	switch {
 	case code == 0:
-		note("[" + slot.label() + "] done")
+		note(slotMarker(slot) + " done")
 	case code < 0:
-		note("[" + slot.label() + "] failed to run")
+		note(slotMarker(slot) + " failed to run")
 	default:
-		note("[" + slot.label() + "] exited with code " + itoa(code))
+		note(slotMarker(slot) + " exited with code " + itoa(code))
 	}
 }
 

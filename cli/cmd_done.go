@@ -100,9 +100,9 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 				"deletedBranch": deletedBranchField(mergedBranch, deleted),
 			})
 		} else {
-			line := fmt.Sprintf("%s is now on %s", w.Name, w.Branch)
+			line := greenOut(fmt.Sprintf("%s is now on %s", w.Name, w.Branch))
 			if deleted {
-				line += fmt.Sprintf(" (deleted branch %s)", mergedBranch)
+				line += dimOut(fmt.Sprintf(" (deleted branch %s)", mergedBranch))
 			}
 			out(line)
 		}

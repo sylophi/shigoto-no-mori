@@ -37,7 +37,7 @@ func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {
 	if jsonMode {
 		emit(map[string]any{"ok": true, "name": id.Name, "id": id.ID, "shelved": shelved})
 	} else {
-		out(verb + " " + id.Name)
+		out(greenOut(verb + " " + id.Name))
 	}
 	return 0, nil
 }

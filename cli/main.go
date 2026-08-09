@@ -3,7 +3,7 @@ package main
 // sgm -- the Shigoto no Mori CLI, a Go port of the app's worktree
 // engine (main/lib/) with the same on-disk state, ids, lock protocol,
 // and JSON output shapes. The state root follows the compiled-in
-// flavor (sgm -> ~/shigomori, sgm-d -> ~/shigomori-dev, see flavor.go);
+// flavor (sgm -> ~/shigomori, sgmd -> ~/shigomori-dev, see flavor.go);
 // SHIGOMORI_ROOT overrides it (tests, sandboxes).
 //
 // Known deltas vs the app: project-usage stats aren't bumped,
@@ -93,12 +93,14 @@ func run() int {
 		}
 	}
 
+	initColor()
+
 	if showVer {
 		out(version)
 		return 0
 	}
 	if showHelp || len(rest) == 0 || rest[0] == "help" {
-		out(helpText())
+		out(colorizeHelp(helpText()))
 		if showHelp || len(rest) > 0 {
 			return 0
 		}
@@ -146,7 +148,7 @@ func run() int {
 		if jsonMode {
 			emit(map[string]any{"ok": false, "error": err.Error()})
 		} else {
-			fmt.Fprintf(os.Stderr, "%s: %s\n", binaryName, err.Error())
+			fmt.Fprintf(os.Stderr, "%s %s\n", redErr(binaryName+":"), err.Error())
 		}
 	}
 	return code

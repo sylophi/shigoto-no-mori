@@ -131,9 +131,9 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 		}
 		emit(result)
 	} else {
-		out("removed " + id.Name)
+		out(greenOut("removed " + id.Name))
 		if hint != "" {
-			note("note: your shell is inside the removed worktree -- cd " + hint)
+			note(dimErr("note: your shell is inside the removed worktree -- cd " + hint))
 		}
 	}
 	return 0, nil

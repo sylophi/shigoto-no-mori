@@ -58,7 +58,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if jsonMode {
 		emit(map[string]any{"event": "created", "worktree": worktree})
 	} else {
-		note(fmt.Sprintf("created %s (branch %s)", worktree.Name, worktree.Branch))
+		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
 	return finishCreateLifecycle(proj, worktree), nil
 }
@@ -77,9 +77,9 @@ func finishCreateLifecycle(proj project, worktree worktreeJSON) int {
 	} else {
 		for _, f := range failures {
 			if f.ExitCode == nil {
-				note(fmt.Sprintf("warning: %s failed to run", f.Step))
+				note(yellowErr("warning:") + fmt.Sprintf(" %s failed to run", f.Step))
 			} else {
-				note(fmt.Sprintf("warning: %s exited with code %v", f.Step, f.ExitCode))
+				note(yellowErr("warning:") + fmt.Sprintf(" %s exited with code %v", f.Step, f.ExitCode))
 			}
 		}
 		out(worktree.Path)
@@ -99,7 +99,7 @@ func emitPhase(phase string) {
 			"setup":             "setup",
 			"portPoolProvision": "port-pool provision",
 		}
-		note("[" + labels[phase] + "] …")
+		note(dimErr("["+labels[phase]+"]") + " …")
 	}
 }
 
@@ -131,13 +131,13 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 		if jsonMode {
 			emit(map[string]any{"event": "carryOver", "report": report})
 		} else {
-			line := fmt.Sprintf("[carry-over] %d applied", report.Applied)
+			line := dimErr("[carry-over]") + fmt.Sprintf(" %d applied", report.Applied)
 			if len(report.Failures) > 0 {
 				line += fmt.Sprintf(", %d failed", len(report.Failures))
 			}
 			note(line)
 			for _, f := range append(report.Failures, report.IncludeFailures...) {
-				note(fmt.Sprintf("[carry-over] %s: %s", f.Path, f.Reason))
+				note(dimErr("[carry-over]") + fmt.Sprintf(" %s: %s", f.Path, f.Reason))
 			}
 		}
 	}

@@ -8,25 +8,28 @@ import (
 	"sync"
 )
 
+// Cell colors follow the app's semantic families (emerald=success,
+// amber=warning, sky=info); the words alone carry the meaning when
+// color is off.
 func syncCell(w worktreeJSON) string {
 	if w.Detached {
-		return "detached"
+		return yellowOut("detached")
 	}
 	if !w.HasUpstream {
-		return "local"
+		return dimOut("local")
 	}
 	if w.Ahead == 0 && w.Behind == 0 {
-		return "synced"
+		return greenOut("synced")
 	}
 	cell := ""
 	if w.Ahead > 0 {
-		cell = fmt.Sprintf("↑%d", w.Ahead)
+		cell = cyanOut(fmt.Sprintf("↑%d", w.Ahead))
 	}
 	if w.Behind > 0 {
 		if cell != "" {
 			cell += " "
 		}
-		cell += fmt.Sprintf("↓%d", w.Behind)
+		cell += yellowOut(fmt.Sprintf("↓%d", w.Behind))
 	}
 	return cell
 }
@@ -44,7 +47,7 @@ func flagsCell(w worktreeJSON) string {
 		}
 		flags += "shelved"
 	}
-	return flags
+	return dimOut(flags)
 }
 
 func cmdList(ctx cliContext, args []string) (int, error) {
@@ -126,11 +129,11 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		for _, w := range r.worktrees {
 			marker := ""
 			if w.ID == currentID {
-				marker = "@"
+				marker = cyanOut("@")
 			}
-			changes := "clean"
+			changes := dimOut("clean")
 			if w.ChangedCount > 0 {
-				changes = fmt.Sprintf("%d changed", w.ChangedCount)
+				changes = yellowOut(fmt.Sprintf("%d changed", w.ChangedCount))
 			}
 			row := []string{marker, w.Name, w.Branch, syncCell(w), changes, flagsCell(w)}
 			if multi {

@@ -141,7 +141,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if jsonMode {
 			emit(map[string]any{"ok": true, "number": number, "method": method})
 		} else {
-			out(fmt.Sprintf("merged PR #%d (%s)", number, method))
+			out(greenOut(fmt.Sprintf("merged PR #%d (%s)", number, method)))
 		}
 		return 0, nil
 	}
@@ -177,9 +177,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 			"method": method, "branch": id.Branch, "url": pr.URL,
 		})
 	} else {
-		out(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title))
-		note(fmt.Sprintf("next: `%s done` (primary checkout) or `%s rm %s` (managed worktree)",
-			binaryName, binaryName, id.Name))
+		out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
+		note(dimErr(fmt.Sprintf("next: `%s done` (primary checkout) or `%s rm %s` (managed worktree)",
+			binaryName, binaryName, id.Name)))
 	}
 	return 0, nil
 }

@@ -41,8 +41,8 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 		if jsonMode {
 			emit(map[string]any{"ok": true, "ran": []string{}})
 		} else {
-			note("nothing to run: no setup script configured" +
-				" and port-pool isn't active for this worktree")
+			note(dimErr("nothing to run: no setup script configured" +
+				" and port-pool isn't active for this worktree"))
 		}
 		return 0, nil
 	}
@@ -88,7 +88,7 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 		return 1, nil
 	}
 	if ok {
-		out("setup complete for " + id.Name)
+		out(greenOut("setup complete for " + id.Name))
 		return 0, nil
 	}
 	return 1, errf("setup did not complete cleanly for %s", id.Name)

@@ -12,7 +12,6 @@ package main
 // way out -- the app never provisioned them.
 
 import (
-	"fmt"
 	"os"
 	"strings"
 )
@@ -96,11 +95,11 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if jsonMode {
 		emit(map[string]any{"event": "created", "worktree": worktree})
 	} else {
-		note(fmt.Sprintf("adopted %s as %s (branch %s)", id.Path, worktree.Name, worktree.Branch))
+		note("adopted " + id.Path + " as " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
 	code := finishCreateLifecycle(proj, worktree)
 	if wasInside && !jsonMode {
-		note("note: your shell is inside the old location -- cd " + worktree.Path)
+		note(dimErr("note: your shell is inside the old location -- cd " + worktree.Path))
 	}
 	return code, nil
 }

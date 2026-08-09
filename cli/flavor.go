@@ -8,5 +8,5 @@ var (
 	version     = "dev"
 	flavor      = "dev" // "prod" | "dev"; mirrors app.isPackaged
 	rootDirName = "shigomori-dev"
-	binaryName  = "sgm-d"
+	binaryName  = "sgmd"
 )
