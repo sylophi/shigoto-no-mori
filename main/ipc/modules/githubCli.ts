@@ -40,17 +40,20 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
     const project = findProjectOrThrow(projectId);
     if (cliAvailable()) {
       // The CLI runs the same gh merge and persists lastMergeMethod
-      // itself; the app-side PR cache still needs evicting here.
+      // itself.
       await mergeViaCli(project, number, method);
-      evictProjectPullRequests(project.path);
-      return;
+    } else {
+      await mergePullRequest({
+        projectId,
+        cwd: project.path,
+        number,
+        method,
+      });
     }
-    await mergePullRequest({
-      projectId,
-      cwd: project.path,
-      number,
-      method,
-    });
+    // The merge changes upstream refs (and the sidebar PR cache) --
+    // evict once for whichever engine ran so the next read sees the
+    // merged state.
+    evictProjectPullRequests(project.path);
   },
 
   pullRequestDiff: async ({ projectId, number }) => {

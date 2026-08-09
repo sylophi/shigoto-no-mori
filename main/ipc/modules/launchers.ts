@@ -13,7 +13,7 @@ import {
 } from "@shared/schemas";
 import { readGlobalConfig } from "../../lib/config/global";
 import { readShigomoriConfig } from "../../lib/config/project";
-import { readKey, writeKey } from "../../lib/config/store";
+import { readKey, updateKey } from "../../lib/config/store";
 import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import {
   deepLinkFor,
@@ -119,9 +119,13 @@ async function getLaunchersForProject(
 }
 
 function bumpUseCount(launcherId: string): void {
-  const log = readKey<UseLogMap>(USE_LOG_KEY, {});
-  log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
-  writeKey<UseLogMap>(USE_LOG_KEY, log);
+  // updateKey, not readKey + writeKey: the CLI (`sm open`) bumps the
+  // same key under the state lock, and a read taken outside it would
+  // silently clobber a concurrent terminal-side bump.
+  updateKey<UseLogMap>(USE_LOG_KEY, {}, (log) => {
+    log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
+    return log;
+  });
 }
 
 export const launchersHandlers: Handlers<typeof launchersContract> = {

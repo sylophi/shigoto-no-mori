@@ -126,13 +126,26 @@ export interface BusyOperations {
   inflightDeletes: number;
 }
 
+// Extra sources of in-flight lifecycle work that live outside this
+// module (the CLI runner registers its child count). Aggregating here
+// means every getBusyOperations caller sees the full picture instead
+// of each consumer patching the count locally.
+const inflightContributors: Array<() => number> = [];
+
+export function registerInflightContributor(count: () => number): void {
+  inflightContributors.push(count);
+}
+
 // Lifecycle scripts (setup, teardown, port-pool) all spawn through
 // startScript, so runningScripts covers package scripts plus the
 // create/delete lifecycles in a single count.
 export function getBusyOperations(): BusyOperations {
+  let contributed = 0;
+  for (const count of inflightContributors) contributed += count();
   return {
     runningScripts: runningScripts.size,
-    inflightDeletes: inflightDeleteCounts.size + inflightProjectDeleteIds.size,
+    inflightDeletes:
+      inflightDeleteCounts.size + inflightProjectDeleteIds.size + contributed,
   };
 }
 

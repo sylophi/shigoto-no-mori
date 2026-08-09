@@ -45,6 +45,23 @@ function targetPlatform(): string {
 }
 const isWindowsTarget = targetPlatform() === "win32";
 
+// Whether this build weakens the inspect-arguments fuse for the e2e
+// driver. Only `electron-forge package` may do so; a make or publish
+// with E2E_FUSES set fails loudly instead of shipping a distributable
+// that any local process could relaunch with --inspect.
+function e2eFuses(): boolean {
+  if (process.env.E2E_FUSES !== "1") return false;
+  const distributable = process.argv.some(
+    (arg) => arg === "make" || arg === "publish",
+  );
+  if (distributable) {
+    throw new Error(
+      "E2E_FUSES=1 is set while building a distributable; unset it before make/publish.",
+    );
+  }
+  return true;
+}
+
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
@@ -167,11 +184,13 @@ const config: ForgeConfig = {
       // since ad-hoc signatures differ between builds.
       [FuseV1Options.EnableCookieEncryption]: false,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
-      // E2E_FUSES=1 produces a local test build that Playwright's
-      // _electron driver can attach to (it bootstraps over the node
-      // inspector); release builds never set it.
-      [FuseV1Options.EnableNodeCliInspectArguments]:
-        process.env.E2E_FUSES === "1",
+      // E2E_FUSES=1 produces a local `package` test build that
+      // Playwright's _electron driver can attach to (it bootstraps
+      // over the node inspector). Distributables must never honor it:
+      // a stray export in the shell would otherwise ship an app any
+      // local process can relaunch with --inspect. e2eFuses() throws
+      // on make/publish rather than silently building either way.
+      [FuseV1Options.EnableNodeCliInspectArguments]: e2eFuses(),
       [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
       [FuseV1Options.OnlyLoadAppFromAsar]: true,
     }),

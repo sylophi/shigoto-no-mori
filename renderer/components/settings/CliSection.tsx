@@ -3,6 +3,7 @@ import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { tildify } from "@/lib/projectPaths";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import type { CliStatus } from "@shared/ipc/modules/cli";
@@ -126,8 +127,4 @@ export function CliSection() {
       )}
     </section>
   );
-}
-
-function tildify(path: string, home: string | null): string {
-  return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
 }

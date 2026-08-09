@@ -107,6 +107,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   remove: async ({ id }) => {
     const projects = loadProjects();
     const removed = projects.find((p) => p.id === id);
+    // One engine decision for the whole removal: cliAvailable()
+    // re-probes on every call, so asking again later in the handler
+    // could disagree with the path taken here and break the "the CLI
+    // already deleted the state dir" bookkeeping below.
+    const useCli = cliAvailable();
     // Reap scripts running in this project's worktrees before dropping
     // the registry entry: once the id is gone the renderer has no UI
     // left to stop them, and the per-worktree delete path (which would
@@ -123,7 +128,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       // Registry drop and per-project state deletion run in the CLI
       // where it ships (same engine as `sm projects remove`); the TS
       // path stays as the Windows fallback and for unknown ids.
-      if (removed && cliAvailable()) {
+      if (removed && useCli) {
         await projectsRemoveViaCli(id);
       } else {
         updateProjects((current) => current.filter((p) => p.id !== id));
@@ -137,7 +142,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // The CLI path already deleted the state dir.
     if (removed) {
       await forgetProjectIcon(removed.path);
-      if (!cliAvailable()) {
+      if (!useCli) {
         await deleteProjectState(id);
       }
       dropCollapsedProject(id);

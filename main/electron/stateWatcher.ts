@@ -2,15 +2,25 @@
 // external process) shows up in the app without waiting for window
 // focus or a TTL to lapse: an agent running `sm create` in a terminal
 // should see the worktree appear in the sidebar within a debounce, not
-// on the next alt-tab. The app's own writes also trip the watcher --
-// harmless, the invalidate + poke is debounced and idempotent.
+// on the next alt-tab.
+//
+// The app's own writes echo through the same watcher, and reacting to
+// them turns every usage bump or launcher-log write into an app-wide
+// refetch (git spawns per worktree, gh network calls) that targeted
+// mutation invalidation already covered. Events are dropped while a
+// delegated CLI child runs and within a short window of any app-side
+// root write; a genuinely external write in that window is picked up
+// by the next focus refetch instead.
 import { mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "../lib/config/global";
 import { invalidateAllProjectConfigCaches } from "../lib/config/project";
 import { shigomoriRoot } from "../lib/util/paths";
+import { selfWroteWithin } from "../lib/util/selfWrite";
+import { cliChildCount } from "./cliRunner";
 
 const DEBOUNCE_MS = 300;
+const SELF_ECHO_MS = 1000;
 
 // `poke` should nudge the renderer to refetch (the caller broadcasts
 // the same signal window focus does, which drives React Query's
@@ -18,6 +28,10 @@ const DEBOUNCE_MS = 300;
 export function startStateWatcher(poke: () => void): void {
   let timer: NodeJS.Timeout | null = null;
   const changed = () => {
+    // Self-echo check at event time, not timer time: a self-write
+    // arriving after an external event must not cancel the pending
+    // refresh that external event deserves.
+    if (cliChildCount() > 0 || selfWroteWithin(SELF_ECHO_MS)) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;

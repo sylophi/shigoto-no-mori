@@ -15,8 +15,10 @@ app install the CLI as `smd`; if neither exists, stop and tell the user.)
 
 This runs carry-over and the project's setup script (progress streams to
 stderr) and prints the path. Exit 3 means the worktree exists but its setup
-script failed: read the output, fix the cause, then `sm setup` to retry
-before relying on the environment.
+script failed, and the `cd` never ran so you are still in the primary
+checkout: read the output, fix the cause, then retry with the worktree named
+explicitly (`sm setup "$wt"`, or cd in first). A bare `sm setup` from the
+primary would provision the wrong checkout.
 
 **Stay inside.** Run every subsequent command from the worktree.
 

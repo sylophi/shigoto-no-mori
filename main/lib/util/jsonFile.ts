@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { z } from "zod";
 import { isENOENT } from "./paths";
+import { noteSelfWrite } from "./selfWrite";
 
 // Best-effort delete: callers fire this on lifecycle events and shouldn't
 // fail just because the file never existed. Used by both the worktree-state
@@ -54,4 +55,5 @@ export async function atomicWriteJson(
     await unlink(temp).catch(() => undefined);
     throw error;
   }
+  noteSelfWrite();
 }

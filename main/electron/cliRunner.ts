@@ -11,8 +11,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
+import { registerInflightContributor } from "../lib/scripts";
 import { shigomoriRoot } from "../lib/util/paths";
 import { isWindows } from "../lib/util/platform";
+import { noteSelfWrite } from "../lib/util/selfWrite";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -55,14 +57,23 @@ export function cliChildCount(): number {
   return children.size;
 }
 
+// CLI children are lifecycle operations in flight (create/delete via
+// the CLI engine); registering them with the busy aggregate means
+// every getBusyOperations consumer counts them, so quitting
+// mid-operation still prompts.
+registerInflightContributor(cliChildCount);
+
 // Quit-time reap, mirroring killAllScripts for the TS engine: an CLI
-// child mid-create/delete must not outlive the app unnoticed. The CLI
-// forwards cleanup to its own children (scripts run in its process
-// group via the shared terminal group).
+// child mid-create/delete must not outlive the app unnoticed. Each CLI
+// child is spawned detached (its own process group), and the SIGTERM
+// goes to the whole group: the Go process doesn't forward signals, so
+// signalling only its pid would orphan a running lifecycle script
+// (`sh -lc "pnpm install"`) to keep mutating the worktree after quit.
 export function killAllCli(): void {
   for (const child of children) {
     try {
-      child.kill("SIGTERM");
+      if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+      else child.kill("SIGTERM");
     } catch {
       // Already gone.
     }
@@ -95,6 +106,9 @@ export function runCli(
     const child = spawn(binary, ["--json", ...args], {
       env: { ...process.env, SHIGOMORI_ROOT: shigomoriRoot() },
       windowsHide: true,
+      // Own process group so killAllCli can signal the CLI and any
+      // lifecycle script it spawned as one unit (see killAllCli).
+      detached: true,
     });
     children.add(child);
 
@@ -132,6 +146,10 @@ export function runCli(
     });
     child.on("close", (code) => {
       children.delete(child);
+      // The CLI's writes into the root are the app's own doing; mark
+      // them so the state watcher doesn't refetch-storm on the echo.
+      // (While the child runs, the watcher checks cliChildCount().)
+      noteSelfWrite();
       resolve({ code: code ?? -1, docs, stderrTail });
     });
   });

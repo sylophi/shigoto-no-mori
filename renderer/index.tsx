@@ -96,11 +96,17 @@ const queryClient = new QueryClient({
 });
 
 // State changed on disk under the app (an CLI run in a terminal):
-// invalidate everything so the sidebar reflects it without a focus
-// change. Blunt on purpose -- the main process debounces the signal,
-// and only active queries actually refetch.
+// invalidate the disk-derived queries so the sidebar reflects it
+// without a focus change. Deliberately broad within that scope (the
+// main process debounces the signal, and only active queries actually
+// refetch), but network-backed and static domains sit it out: a disk
+// change says nothing about GitHub or the updater, and refetching PR
+// lists here turns every external write into a burst of gh calls.
+const externalChangeExempt = new Set(["githubCli", "runtime", "updater"]);
 window.api.git.onExternalChange(() => {
-  void queryClient.invalidateQueries();
+  void queryClient.invalidateQueries({
+    predicate: (query) => !externalChangeExempt.has(String(query.queryKey[0])),
+  });
 });
 
 // Main rewrote project.json (carry-over entries removed in favor of

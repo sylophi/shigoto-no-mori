@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { tempPathFor } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { shigomoriRoot } from "../util/paths";
+import { noteSelfWrite } from "../util/selfWrite";
 
 const FILE = "state.json";
 
@@ -47,6 +48,7 @@ function writeAll(data: Record<string, unknown>): void {
     }
     throw error;
   }
+  noteSelfWrite();
 }
 
 export function readKey<T>(key: string, fallback: T): T {

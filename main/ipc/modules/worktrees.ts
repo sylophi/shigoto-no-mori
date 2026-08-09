@@ -25,6 +25,12 @@ import {
 } from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
 import {
+  clearDeleteInflight,
+  getInflightDeleteIds,
+  killScriptsForWorktree,
+  markDeleteInflight,
+} from "../../lib/scripts";
+import {
   convertExternalWorktree,
   createManagedWorktree,
   deleteWorktreeWithCleanup,
@@ -98,11 +104,26 @@ export const worktreesHandlers: Handlers<
   delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
     const project = findProjectOrThrow(projectId);
     if (cliAvailable()) {
-      return deleteViaCli(
-        project,
-        { worktreeId, force, skipCleanup },
-        notifierFor(event.sender),
-      );
+      // The CLI path needs the same guarantees deleteWorktreeWithCleanup
+      // provides around its own removal: refuse a duplicate delete,
+      // tombstone the id so a still-running create lifecycle can't
+      // spawn steps into the vanishing directory, and reap app-spawned
+      // scripts first (the CLI can't see the app's script registry, so
+      // a dev server would otherwise outlive its worktree).
+      if (getInflightDeleteIds().has(worktreeId)) {
+        throw new Error("This worktree is already being removed.");
+      }
+      markDeleteInflight(worktreeId);
+      try {
+        await killScriptsForWorktree(worktreeId);
+        return await deleteViaCli(
+          project,
+          { worktreeId, force, skipCleanup },
+          notifierFor(event.sender),
+        );
+      } finally {
+        clearDeleteInflight(worktreeId);
+      }
     }
     return deleteWorktreeWithCleanup(
       project,

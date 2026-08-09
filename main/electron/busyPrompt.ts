@@ -2,19 +2,11 @@
 // while scripts or worktree removals are in flight. Centralizing the
 // copy here keeps the two paths' wording in lock-step.
 import { BrowserWindow, dialog } from "electron";
+// getBusyOperations already includes CLI-engine lifecycle work: the
+// CLI runner registers its child count as an inflight contributor at
+// module load (it is imported by the IPC modules during bootstrap,
+// well before any busy check can run).
 import { type BusyOperations, getBusyOperations } from "../lib/scripts";
-import { cliChildCount } from "./cliRunner";
-
-// CLI children are lifecycle operations in flight (create/delete via
-// the CLI engine); count them like the TS engine's inflight deletes so
-// quitting mid-operation still prompts.
-function busyIncludingCli(): BusyOperations {
-  const busy = getBusyOperations();
-  return {
-    runningScripts: busy.runningScripts,
-    inflightDeletes: busy.inflightDeletes + cliChildCount(),
-  };
-}
 
 type BusyAction = "quit" | "restart";
 
@@ -79,7 +71,7 @@ function isBusy(busy: BusyOperations): boolean {
 }
 
 export function confirmBusyActionSync(action: BusyAction): boolean {
-  const busy = busyIncludingCli();
+  const busy = getBusyOperations();
   if (!isBusy(busy)) return true;
   const parent = parentWindow();
   const opts = buildDialogOptions(action, busy);
@@ -90,7 +82,7 @@ export function confirmBusyActionSync(action: BusyAction): boolean {
 }
 
 export async function confirmBusyAction(action: BusyAction): Promise<boolean> {
-  const busy = busyIncludingCli();
+  const busy = getBusyOperations();
   if (!isBusy(busy)) return true;
   const parent = parentWindow();
   const opts = buildDialogOptions(action, busy);

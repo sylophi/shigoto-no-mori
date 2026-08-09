@@ -49,19 +49,43 @@ function linkPath(): string {
   return join(cliUserBinDir(), cliName());
 }
 
-// A link target is "ours" when it points at this flavor's binary in
-// its expected home: some app bundle's Resources for `CLI`, some
-// checkout's dist-cli for `smd` -- including a previous install from
-// a location that has since moved. Anything else at the link path was
-// put there by the user (their own build, another tool) and is never
-// touched. Notably the prod app leaves a `CLI -> <checkout>/dist-cli`
-// link (pnpm cli:install) alone: that was a deliberate choice to run
-// the checkout's build.
-function isOurTarget(target: string): boolean {
+// What a link path points at, in decreasing closeness to "the binary
+// this app runs":
+//   missing      nothing at the path
+//   this-binary  resolves to the running app's own binary
+//   this-flavor  this flavor's binary in its expected home (an app
+//                bundle's Resources when packaged, a checkout's
+//                dist-cli in dev) at a location that has since moved
+//   our-family   a shigomori-made link of the other kind -- notably
+//                the `sm -> <checkout>/dist-cli` link (pnpm
+//                cli:install) that the prod app deliberately leaves to
+//                keep running the checkout's build
+//   foreign      anything else (a regular file, someone else's link);
+//                never touched
+// Call sites express strictness by which levels they accept.
+type LinkOwnership =
+  | "missing"
+  | "this-binary"
+  | "this-flavor"
+  | "our-family"
+  | "foreign";
+
+async function linkOwnership(link: string): Promise<LinkOwnership> {
+  const stat = await lstat(link).catch(() => null);
+  if (stat === null) return "missing";
+  if (!stat.isSymbolicLink()) return "foreign";
+  const target = await readlink(link).catch(() => null);
+  if (target === null) return "foreign";
+  const binary = isWindows ? null : cliBinaryPath();
+  if (binary !== null && comparablePath(target) === comparablePath(binary)) {
+    return "this-binary";
+  }
   const name = cliName();
-  return app.isPackaged
-    ? target.endsWith(`/Contents/Resources/${name}`)
-    : target.endsWith(`/${CLI_DIST_DIR}/${name}`);
+  const bundleTarget = target.endsWith(`/Contents/Resources/${name}`);
+  const distTarget = target.endsWith(`/${CLI_DIST_DIR}/${name}`);
+  if (app.isPackaged ? bundleTarget : distTarget) return "this-flavor";
+  if (bundleTarget || distTarget) return "our-family";
+  return "foreign";
 }
 
 function isOnPath(dir: string): boolean {
@@ -90,20 +114,42 @@ export async function cliLinkStatus(): Promise<CliStatus> {
   if (binary === null) {
     return { ...base, supported: false, state: "missing" };
   }
-  const stat = await lstat(base.linkPath).catch(() => null);
-  if (stat === null) return { ...base, supported: true, state: "missing" };
-  if (!stat.isSymbolicLink()) {
-    return { ...base, supported: true, state: "foreign" };
+  // Both links must be healthy before Settings claims "Installed":
+  // inspect each and report the worst state, with linkPath pointing at
+  // the offending link so the foreign/stale copy names the right path.
+  const severity = { installed: 0, missing: 1, stale: 2, foreign: 3 } as const;
+  const links = await Promise.all(
+    linkNames().map(async (name) => {
+      const link = join(binDir, name);
+      return { link, state: stateOfOwnership(await linkOwnership(link)) };
+    }),
+  );
+  let state: keyof typeof severity = "installed";
+  let worstLink = base.linkPath;
+  for (const entry of links) {
+    if (severity[entry.state] > severity[state]) {
+      state = entry.state;
+      worstLink = entry.link;
+    }
   }
-  const target = await readlink(base.linkPath).catch(() => null);
-  if (target === null) return { ...base, supported: true, state: "foreign" };
-  if (comparablePath(target) === comparablePath(binary)) {
-    return { ...base, supported: true, state: "installed" };
+  return { ...base, linkPath: worstLink, supported: true, state };
+}
+
+function stateOfOwnership(
+  ownership: LinkOwnership,
+): "installed" | "missing" | "stale" | "foreign" {
+  switch (ownership) {
+    case "missing":
+      return "missing";
+    case "this-binary":
+      return "installed";
+    case "this-flavor":
+      return "stale";
+    default:
+      // our-family counts as foreign for the state machine: the prod
+      // app reports (and refuses to manage) a checkout link.
+      return "foreign";
   }
-  if (isOurTarget(target)) {
-    return { ...base, supported: true, state: "stale" };
-  }
-  return { ...base, supported: true, state: "foreign" };
 }
 
 // Create (or, from "stale", repoint) the link. Throws with a
@@ -134,48 +180,26 @@ export async function installCliLinks(): Promise<CliStatus> {
   await Promise.all(
     linkNames().map(async (name) => {
       const link = join(cliUserBinDir(), name);
-      if (await linkIsForeign(link)) return; // never clobber a foreign file
+      // Never clobber a foreign file; any shigomori-made link (or an
+      // empty slot) gets (re)pointed at the running binary.
+      if ((await linkOwnership(link)) === "foreign") return;
       replaceWithSymlinkSync(binary, link);
     }),
   );
   return cliLinkStatus();
 }
 
-// True when something occupies the path that this app didn't create: a
-// regular file, or a symlink pointing outside any of our binaries.
-async function linkIsForeign(link: string): Promise<boolean> {
-  const stat = await lstat(link).catch(() => null);
-  if (stat === null) return false;
-  if (!stat.isSymbolicLink()) return true;
-  const target = await readlink(link).catch(() => null);
-  if (target === null) return true;
-  const binary = cliName();
-  return !(
-    target.endsWith(`/Contents/Resources/${binary}`) ||
-    target.endsWith(`/${CLI_DIST_DIR}/${binary}`)
-  );
-}
-
-// Remove this flavor's link when it is recognizably one shigomori
-// created -- the app-bundle link, or a checkout's dist-cli link (pnpm
-// cli:install, settings install in dev). Anything else at the path
-// stays. Shared by the Settings uninstall action and "Nuke
-// everything". The suffix set here is broader than isOurTarget on
-// purpose: nuke should also take the checkout link the prod app
-// otherwise refuses to manage.
+// Remove this flavor's links when they are recognizably shigomori-made.
+// Anything else at the path stays. Shared by the Settings uninstall
+// action and "Nuke everything". Accepts our-family on purpose: nuke
+// should also take the checkout link the prod app otherwise refuses to
+// manage.
 export async function uninstallCliLinks(): Promise<void> {
-  const binary = cliName();
   await Promise.all(
     linkNames().map(async (name) => {
       const link = join(cliUserBinDir(), name);
-      const stat = await lstat(link).catch(() => null);
-      if (stat === null || !stat.isSymbolicLink()) return;
-      const target = await readlink(link).catch(() => null);
-      if (target === null) return;
-      const ours =
-        target.endsWith(`/Contents/Resources/${binary}`) ||
-        target.endsWith(`/${CLI_DIST_DIR}/${binary}`);
-      if (!ours) return;
+      const ownership = await linkOwnership(link);
+      if (ownership === "missing" || ownership === "foreign") return;
       await rm(link, { force: true }).catch(() => undefined);
     }),
   );
@@ -195,7 +219,7 @@ export async function repairCliLinks(): Promise<void> {
     await Promise.all(
       linkNames().map(async (name) => {
         const link = join(cliUserBinDir(), name);
-        if (await linkIsForeign(link)) return;
+        if ((await linkOwnership(link)) === "foreign") return;
         replaceWithSymlinkSync(binary, link);
       }),
     );

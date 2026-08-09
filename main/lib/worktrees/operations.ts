@@ -238,9 +238,6 @@ interface DeleteWorktreeInput {
   worktreeId: string;
   force?: boolean;
   skipCleanup?: boolean;
-  // When true, the local branch survives the removal regardless of the
-  // global deleteBranchOnRemove preference (sm rm --keep-branch).
-  keepBranch?: boolean;
 }
 
 export async function deleteWorktreeWithCleanup(
@@ -347,7 +344,7 @@ async function deleteWorktreeWithCleanupInner(
     deleteBranchAfterWorktreeRemoval(
       project.path,
       target,
-      input.keepBranch !== true && (global.deleteBranchOnRemove ?? true),
+      global.deleteBranchOnRemove ?? true,
     ),
     deleteWorktreeData(project.id, worktreeId),
   ]);
