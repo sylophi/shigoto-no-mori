@@ -20,6 +20,7 @@ import (
 func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}},
+		bools:   map[string][]string{"force": {"f"}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -39,6 +40,17 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	}
 	if !id.IsExternal {
 		return 1, errf("Worktree is already shigomori-managed")
+	}
+	// Adopting wipes the old directory and re-checks-out the branch
+	// tip, so anything uncommitted (or untracked) there is destroyed.
+	// The app's convert flow carries this in its confirmation dialog;
+	// the CLI needs the guard itself.
+	if !parsed.bools["force"] {
+		if changed := changedCount(id.Path); changed > 0 {
+			return 1, errf(
+				"Worktree has %d uncommitted change(s) that adopting would destroy. Commit them first, or pass --force.",
+				changed)
+		}
 	}
 
 	branchOrSha := id.Branch

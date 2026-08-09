@@ -6,9 +6,12 @@ package main
 // flavor (sgm -> ~/shigomori, sgm-d -> ~/shigomori-dev, see flavor.go);
 // SHIGOMORI_ROOT overrides it (tests, sandboxes).
 //
-// Known deltas vs the app, all invisible to the worktree itself:
-// project-usage stats aren't bumped, .worktreeinclude reconciliation
-// doesn't rewrite project.json, and the `port` field isn't populated.
+// Known deltas vs the app: project-usage stats aren't bumped,
+// .worktreeinclude reconciliation doesn't rewrite project.json, the
+// `port` field isn't populated, and `rm` can't reap scripts the app
+// spawned into the worktree -- that registry lives in the app's
+// process, so stop those from the app (or quit it) before removing
+// their worktree from the CLI.
 
 import (
 	"fmt"
@@ -36,19 +39,22 @@ Commands:
   rm [<name>] [-f] [--keep-branch]
                                   Remove a worktree: teardown, release port,
                                   delete branch per app settings
-  done [<name>] [-p <project>]    Post-merge cleanup: land the checkout back
-                                  on the primary branch, delete the merged one
+  done [<name>] [-f]              Post-merge cleanup: land the checkout back
+                                  on the primary branch, delete the merged
+                                  one (refuses unmerged branches without -f)
   merge [<name>] [-m <method>]    Merge the worktree's PR via gh, method per
                                   the repo's settings (or --method override)
-  adopt [<name>] [-p <project>]   Convert an external worktree to managed:
+  adopt [<name>] [-f]             Convert an external worktree to managed:
                                   move it into the layout, run the lifecycle
+                                  (refuses dirty worktrees without -f)
   setup [<name>] [-p <project>]   Re-run the setup script (and port-pool
                                   provision) on an existing worktree
   shelve / unshelve [<name>]      Toggle the app's "out of focus" flag
   project list                    List registered projects
   project add [<path>]            Register the repo containing <path> (default .)
   config [-p <project>] [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]
-                                  Show or set per-project config ("" clears)
+                                  Show or set per-project config; "" clears
+                                  a script (default-branch can't be cleared)
 
 Flags:
   --json      Machine-readable output (NDJSON progress for create)

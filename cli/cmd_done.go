@@ -14,11 +14,15 @@ package main
 // feature branch -- classically the primary checkout. For a managed
 // worktree you're done with entirely, `sgm rm` is the cleanup.
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 func cmdDone(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}},
+		bools:   map[string][]string{"force": {"f"}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -48,13 +52,27 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 	}
 
 	mergedBranch := id.Branch
-	if err := switchToPrimaryBranch(id.Path, proj.Path, primaryRef); err != nil {
-		return 1, err
-	}
 	remotes := listRemotes(proj.Path)
 	localPrimary := primaryRef
 	if _, branch := splitRemoteRef(primaryRef, remotes); branch != "" {
 		localPrimary = branch
+	}
+
+	// The delete below is `branch -D`, so refuse before mutating
+	// anything unless the branch is verifiably merged: an ancestor of
+	// the primary ref (merge/rebase merges), or the head of a merged PR
+	// (squash merges leave no ancestor relationship). --force covers
+	// intentional discards.
+	if mergedBranch != localPrimary && !parsed.bools["force"] &&
+		!isAncestor(proj.Path, mergedBranch, primaryRef) &&
+		!branchHasMergedPR(proj.Path, mergedBranch) {
+		return 1, errf(
+			"Branch %s isn't merged into %s (no merge found, no merged PR). Merge it first, or pass --force to discard it.",
+			mergedBranch, primaryRef)
+	}
+
+	if err := switchToPrimaryBranch(id.Path, proj.Path, primaryRef); err != nil {
+		return 1, err
 	}
 	deleted := false
 	if mergedBranch != localPrimary {
@@ -91,6 +109,27 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 	return 1, errf("worktree disappeared after switching branches")
+}
+
+func isAncestor(cwd, ancestor, ref string) bool {
+	_, err := runGit(cwd, "merge-base", "--is-ancestor", ancestor, ref)
+	return err == nil
+}
+
+// True when gh reports a merged PR whose head is the branch. False on
+// any gh failure (not installed, not a GitHub repo): the caller then
+// requires --force rather than guessing.
+func branchHasMergedPR(projectPath, branch string) bool {
+	stdout, err := runGh(projectPath,
+		"pr", "list", "--state", "merged", "--head", branch, "--limit", "1",
+		"--json", "number")
+	if err != nil {
+		return false
+	}
+	var prs []struct {
+		Number int `json:"number"`
+	}
+	return json.Unmarshal([]byte(stdout), &prs) == nil && len(prs) > 0
 }
 
 func deletedBranchField(branch string, deleted bool) any {
