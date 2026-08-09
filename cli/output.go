@@ -32,12 +32,8 @@ func initColor() {
 	if jsonMode || os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
 		return
 	}
-	isTTY := func(f *os.File) bool {
-		info, err := f.Stat()
-		return err == nil && info.Mode()&os.ModeCharDevice != 0
-	}
-	stdoutColor = isTTY(os.Stdout)
-	stderrColor = isTTY(os.Stderr)
+	stdoutColor = isTerminal(os.Stdout)
+	stderrColor = isTerminal(os.Stderr)
 }
 
 func paint(s, code string, enabled bool) string {
@@ -53,9 +49,22 @@ func greenOut(s string) string  { return paint(s, "32", stdoutColor) }
 func yellowOut(s string) string { return paint(s, "33", stdoutColor) }
 func dimOut(s string) string    { return paint(s, "2", stdoutColor) }
 func cyanErr(s string) string   { return paint(s, "36", stderrColor) }
+func greenErr(s string) string  { return paint(s, "32", stderrColor) }
 func yellowErr(s string) string { return paint(s, "33", stderrColor) }
 func dimErr(s string) string    { return paint(s, "2", stderrColor) }
 func redErr(s string) string    { return paint(s, "31", stderrColor) }
+
+// Cells built for one stream keep their colors right on the other too:
+// a palette bundles the painters so shared renderers (worktree rows in
+// `list` on stdout, the picker on stderr) stay in one place.
+type palette struct {
+	cyan, green, yellow, dim func(string) string
+}
+
+var (
+	outPalette = palette{cyanOut, greenOut, yellowOut, dimOut}
+	errPalette = palette{cyanErr, greenErr, yellowErr, dimErr}
+)
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 

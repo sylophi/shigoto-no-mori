@@ -174,6 +174,13 @@ func resolveProjectArgs(ctx cliContext, parsed parsedArgs) (project, error) {
 func resolveWorktree(ctx cliContext, ref, projectFlag string) (located, error) {
 	if ref == "" {
 		if ctx.current != nil {
+			// From the primary checkout, "the worktree containing cwd" is
+			// almost never the intended target -- offer the project's
+			// worktrees when a human is on the other end. Agents,
+			// pipelines, and --json keep the deterministic primary.
+			if ctx.current.worktree.IsPrimary && canPickInteractively() {
+				return pickWorktree(ctx.current.proj)
+			}
 			return *ctx.current, nil
 		}
 		if ctx.unregisteredRepo != "" {

@@ -65,7 +65,8 @@ func helpText() string {
 		boldOut("Usage:") + " " + binaryName + " [--json] [--verbose] <command> [args]\n\n" +
 		"Commands run against the worktree/project containing the current\n" +
 		"directory when possible; from anywhere else, address worktrees as\n" +
-		"<name> or <project>/<name>, or pass -p <project>.\n\n" +
+		"<name> or <project>/<name>, or pass -p <project>. From the primary\n" +
+		"checkout, omitting the name picks a worktree interactively.\n\n" +
 		renderHelpSection("Commands", helpCommands) + "\n" +
 		renderHelpSection("Flags", helpFlags) + "\n" +
 		renderHelpSection("Environment", helpEnv) + "\n" +

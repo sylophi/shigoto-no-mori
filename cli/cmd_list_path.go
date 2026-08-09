@@ -10,31 +10,32 @@ import (
 
 // Cell colors follow the app's semantic families (emerald=success,
 // amber=warning, sky=info); the words alone carry the meaning when
-// color is off.
-func syncCell(w worktreeJSON) string {
+// color is off. Palette-parameterized because the picker renders the
+// same cells on stderr.
+func syncCell(p palette, w worktreeJSON) string {
 	if w.Detached {
-		return yellowOut("detached")
+		return p.yellow("detached")
 	}
 	if !w.HasUpstream {
-		return dimOut("local")
+		return p.dim("local")
 	}
 	if w.Ahead == 0 && w.Behind == 0 {
-		return greenOut("synced")
+		return p.green("synced")
 	}
 	cell := ""
 	if w.Ahead > 0 {
-		cell = cyanOut(fmt.Sprintf("↑%d", w.Ahead))
+		cell = p.cyan(fmt.Sprintf("↑%d", w.Ahead))
 	}
 	if w.Behind > 0 {
 		if cell != "" {
 			cell += " "
 		}
-		cell += yellowOut(fmt.Sprintf("↓%d", w.Behind))
+		cell += p.yellow(fmt.Sprintf("↓%d", w.Behind))
 	}
 	return cell
 }
 
-func flagsCell(w worktreeJSON) string {
+func flagsCell(p palette, w worktreeJSON) string {
 	flags := ""
 	if w.IsPrimary {
 		flags = "primary"
@@ -47,7 +48,14 @@ func flagsCell(w worktreeJSON) string {
 		}
 		flags += "shelved"
 	}
-	return dimOut(flags)
+	return p.dim(flags)
+}
+
+func changesCell(p palette, w worktreeJSON) string {
+	if w.ChangedCount > 0 {
+		return p.yellow(fmt.Sprintf("%d changed", w.ChangedCount))
+	}
+	return p.dim("clean")
 }
 
 func cmdList(ctx cliContext, args []string) (int, error) {
@@ -131,11 +139,10 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 			if w.ID == currentID {
 				marker = cyanOut("@")
 			}
-			changes := dimOut("clean")
-			if w.ChangedCount > 0 {
-				changes = yellowOut(fmt.Sprintf("%d changed", w.ChangedCount))
+			row := []string{
+				marker, w.Name, w.Branch,
+				syncCell(outPalette, w), changesCell(outPalette, w), flagsCell(outPalette, w),
 			}
-			row := []string{marker, w.Name, w.Branch, syncCell(w), changes, flagsCell(w)}
 			if multi {
 				row = append([]string{marker, r.proj.Name}, row[1:]...)
 			}
