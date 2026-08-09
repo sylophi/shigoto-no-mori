@@ -31,8 +31,15 @@ import {
   relocateWorktreeToManagedPath,
   setWorktreeShelved,
 } from "../../lib/worktrees/operations";
+import { sgmAvailable } from "../../electron/sgmRunner";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
+import {
+  adoptViaSgm,
+  createViaSgm,
+  deleteViaSgm,
+  doneViaSgm,
+} from "../sgmDelegate";
 
 function notifierFor(sender: WebContents) {
   return {
@@ -55,25 +62,26 @@ export const worktreesHandlers: Handlers<
     return listWorktrees(project.id, project.path);
   },
 
+  // Lifecycle mutations route through the bundled sgm CLI where it
+  // ships (everywhere but Windows), so the app and a terminal run the
+  // same engine; the TS path stays as the Windows fallback.
   create: async (
     { projectId, worktreeName, branchName, base, checkout },
     { event },
   ) => {
     const project = findProjectOrThrow(projectId);
-    return createManagedWorktree(
-      project,
-      {
-        worktreeName,
-        branchName,
-        base,
-        checkout,
-      },
-      notifierFor(event.sender),
-    );
+    const input = { worktreeName, branchName, base, checkout };
+    if (sgmAvailable()) {
+      return createViaSgm(project, input, notifierFor(event.sender));
+    }
+    return createManagedWorktree(project, input, notifierFor(event.sender));
   },
 
   convertExternal: async ({ projectId, worktreeId }, { event }) => {
     const project = findProjectOrThrow(projectId);
+    if (sgmAvailable()) {
+      return adoptViaSgm(project, worktreeId, notifierFor(event.sender));
+    }
     return convertExternalWorktree(
       project,
       worktreeId,
@@ -88,6 +96,13 @@ export const worktreesHandlers: Handlers<
 
   delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
     const project = findProjectOrThrow(projectId);
+    if (sgmAvailable()) {
+      return deleteViaSgm(
+        project,
+        { worktreeId, force, skipCleanup },
+        notifierFor(event.sender),
+      );
+    }
     return deleteWorktreeWithCleanup(
       project,
       { worktreeId, force, skipCleanup },
@@ -159,8 +174,12 @@ export const worktreesHandlers: Handlers<
       const primaryRef = await resolvePrimaryRef(target.projectId, pp);
       await syncWithPrimary(wt, pp, primaryRef);
     }),
-  switchToPrimaryAndDeleteBranch: (input) =>
-    mutateAndDescribe(input, async (wt, pp, target) => {
+  switchToPrimaryAndDeleteBranch: async (input) => {
+    if (sgmAvailable()) {
+      const project = findProjectOrThrow(input.projectId);
+      return doneViaSgm(project, input.worktreeId);
+    }
+    return mutateAndDescribe(input, async (wt, pp, target) => {
       if (!isRealBranch(target.branch)) {
         throw new Error("No branch checked out to clean up");
       }
@@ -169,7 +188,8 @@ export const worktreesHandlers: Handlers<
       // renderer-side race where the switch unmounts the cleanup box and the
       // chained delete gets dropped (see switchToPrimaryAndDeleteBranch).
       await switchToPrimaryAndDeleteBranch(wt, pp, primaryRef, target.branch);
-    }),
+    });
+  },
 };
 
 // Resolve the project's primary ref, honoring the configured override.

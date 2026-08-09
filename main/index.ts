@@ -22,6 +22,7 @@ import { initShigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
 import { maybeInstallSgmCli } from "./electron/sgmCli";
+import { killAllSgm } from "./electron/sgmRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import {
@@ -151,6 +152,7 @@ app.on("before-quit", (event) => {
   if (isInstallingUpdate()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
+    killAllSgm();
     return;
   }
   // The install branch above has already gated its own restart via the
@@ -174,6 +176,10 @@ app.on("before-quit", (event) => {
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);
+  // sgm children (CLI-engine lifecycle operations) get the same reap as
+  // scripts; the CLI's own children share its terminal-style process
+  // group and follow it down.
+  killAllSgm();
   const inflight = getInflightDeleteIds();
   // allSettled: one rejected per-worktree kill must not skip the
   // killAllScripts pass for everything else.
