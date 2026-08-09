@@ -38,6 +38,8 @@ var generalItems = []helpItem{
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"config", "Open the global config file",
 		"config.json in the state root, via $EDITOR or the OS opener."},
+	{"help [<command>] [--all]", "Show help",
+		"help <command> documents one command, --all prints every command at once."},
 }
 
 var worktreeItems = []helpItem{
@@ -122,8 +124,7 @@ func helpText(full bool) string {
 			"directory when possible. From anywhere else, address worktrees as "+
 			"<name>, <project>/<name>, or a directory path, or pass -p "+
 			"<project>. From the primary checkout, omitting the name picks a "+
-			"worktree from a menu. Aliases: l list, c cd, o open, new create. "+
-			"`"+binaryName+" help --all` prints every command at once.", width) {
+			"worktree from a menu. Aliases: l list, c cd, o open, new create.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
