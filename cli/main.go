@@ -37,6 +37,7 @@ var helpGroups = []helpGroup{
 		{"open [<tool>] [<worktree>]",
 			"Launch a launcher-row tool (Finder, editor, custom command) in the worktree, bare open shows the row as a menu"},
 		{"app", "Open the Shigoto no Mori app"},
+		{"config", "Open the global config file (config.json in the state root)"},
 	}},
 	{"Worktree lifecycle", []helpItem{
 		{"create [<name>] [-b <branch>] [--base <ref>]",
@@ -204,6 +205,62 @@ func colorUsage(usage string) string {
 	return b.String()
 }
 
+var aliasCanonical = map[string]string{
+	"ls": "list", "l": "list", "c": "cd", "o": "open",
+	"p": "projects", "project": "projects", "new": "create",
+	"remove": "rm", "unshelve": "shelve",
+}
+
+// Per-command help: the matching usage lines from the catalog, full
+// width. `sgm projects add --help` narrows to the subcommand; an
+// unknown command falls back to the full help.
+func commandHelp(command string, args []string) string {
+	name := command
+	if canonical, ok := aliasCanonical[name]; ok {
+		name = canonical
+	}
+	sub := ""
+	if name == "projects" && len(args) > 0 {
+		switch args[0] {
+		case "list", "ls":
+			sub = "list"
+		case "add":
+			sub = "add"
+		case "remove", "rm":
+			sub = "remove"
+		case "config":
+			sub = "config"
+		}
+	}
+	width := helpWidth()
+	var b strings.Builder
+	found := false
+	for _, group := range helpGroups {
+		for _, item := range group.items {
+			fields := strings.Fields(item.usage)
+			if len(fields) == 0 || fields[0] != name {
+				continue
+			}
+			if sub != "" && (len(fields) < 2 || fields[1] != sub) {
+				continue
+			}
+			if found {
+				b.WriteString("\n")
+			}
+			found = true
+			b.WriteString(boldOut("Usage:") + " " + binaryName + " " + colorUsage(item.usage) + "\n")
+			for _, line := range wrapText(item.desc, width-2) {
+				b.WriteString("  " + line + "\n")
+			}
+		}
+	}
+	if !found {
+		return helpText()
+	}
+	b.WriteString("\n" + dimOut("Run `"+binaryName+" --help` for the full list."))
+	return b.String()
+}
+
 func wrapText(text string, width int) []string {
 	if width < 20 {
 		width = 20
@@ -243,14 +300,16 @@ func run() int {
 		showVer  bool
 	)
 	for _, arg := range os.Args[1:] {
-		switch arg {
-		case "--json":
+		switch {
+		case arg == "--json":
 			jsonMode = true
-		case "--verbose":
+		case arg == "--verbose":
 			verboseMode = true
-		case "--help", "-h":
+		// Before the command it's the global help; after, it belongs to
+		// the command (`sgm rm --help` documents rm alone).
+		case (arg == "--help" || arg == "-h") && len(rest) == 0:
 			showHelp = true
-		case "--version", "-V":
+		case arg == "--version" || arg == "-V":
 			showVer = true
 		default:
 			rest = append(rest, arg)
@@ -271,14 +330,20 @@ func run() int {
 		return 2
 	}
 
+	command, args := rest[0], rest[1:]
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			out(commandHelp(command, args))
+			return 0
+		}
+	}
+
 	initRoot()
 	cwd, err := os.Getwd()
 	if err != nil {
 		cwd = "."
 	}
 	ctx := resolveContext(cwd)
-
-	command, args := rest[0], rest[1:]
 	var code int
 	switch command {
 	case "list", "ls", "l":
@@ -310,8 +375,7 @@ func run() int {
 	case "projects", "project", "p":
 		code, err = cmdProject(ctx, args)
 	case "config":
-		// Compat spelling of `projects config`.
-		code, err = cmdConfig(ctx, args)
+		code, err = cmdConfigOpen(ctx, args)
 	default:
 		code, err = 2, usageErrf("Unknown command %q. Run `%s --help`.", command, binaryName)
 	}
