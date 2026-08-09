@@ -34,9 +34,8 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
       broadcastAll(runtimeContract, "nukeProgress", progress),
     );
     // Nuke means "remove everything shigomori put on this machine";
-    // the CLI link in the user's bin dir is part of that. The wiped
-    // config also cleared the don't-ask-again flag, so a later launch
-    // offers the install fresh.
+    // the CLI link in the user's bin dir is part of that. Settings
+    // offers a fresh install afterwards.
     await uninstallSgmCliLink();
   },
 };

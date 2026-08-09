@@ -22,7 +22,7 @@ import {
 import { initShigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
-import { maybeInstallSgmCli } from "./electron/sgmCli";
+import { repairSgmCliLink } from "./electron/sgmCli";
 import { killAllSgm } from "./electron/sgmRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -128,11 +128,11 @@ app.on("ready", async () => {
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
   });
-  // After applyUserShellPath so the PATH advice reflects the real
-  // login-shell PATH. Not awaited -- background startup work above
-  // keeps going -- but the prompt is a modal sheet on the main window,
-  // so the UI stays blocked until the user answers it.
-  void maybeInstallSgmCli(mainWindow);
+  // Installing the CLI link is a Settings action; launch only repairs
+  // an already-installed link whose target moved (app update, other
+  // checkout). After applyUserShellPath so PATH checks see the login
+  // shell's PATH.
+  void repairSgmCliLink();
 });
 
 app.on("window-all-closed", () => {

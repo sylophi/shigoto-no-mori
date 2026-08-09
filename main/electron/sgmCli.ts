@@ -1,22 +1,22 @@
-// Launch-time install of the CLI as a symlink into a PATH bin dir,
-// pointing at the binary the app itself runs -- the VS Code / Docker
-// Desktop pattern. No copy means no version drift: when the binary
-// updates, the link stays current. Flavor-aware: the packaged app
-// offers `sgm` linking its Resources binary; a dev run offers `sgmd`
-// linking the checkout's dist-cli build (made by `pnpm dev`). The
-// first offer is a window-modal prompt (Install / Not Now / Don't Ask
-// Again) that blocks the whole UI until answered -- installing never
-// happens without an explicit yes, and the decision can't be clicked
-// past. After that, a link we own is silently repaired if its target
-// moved.
+// Install of the CLI as a symlink into a PATH bin dir, pointing at the
+// binary the app itself runs -- the VS Code / Docker Desktop pattern.
+// No copy means no version drift: when the binary updates, the link
+// stays current. Flavor-aware: the packaged app manages `sgm` linking
+// its Resources binary; a dev run manages `sgmd` linking the
+// checkout's dist-cli build (made by `pnpm dev`).
+//
+// Install and uninstall are user actions in Settings (the sgmCli IPC
+// module); the app never installs on its own. The only launch-time
+// behavior is repairSgmCliLink: silently repointing a link the user
+// already installed when its target moved, so an existing install
+// keeps working across app updates and relocations.
 //
 // Naming and path policy lives in @shared/sgmDist.mts; this module
-// only owns the prompt flow and the "is that link ours?" judgment.
+// owns the link state machine and the "is that link ours?" judgment.
 //
 // Not on Windows: the portable zip has no stable install location to
 // link from, so Windows keeps the app-only workflow.
 import { lstat, readlink, rm } from "node:fs/promises";
-import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import {
   replaceWithSymlinkSync,
@@ -24,20 +24,14 @@ import {
   sgmBinaryName,
   sgmUserBinDir,
 } from "@shared/sgmDist.mts";
-import { app, type BrowserWindow, dialog } from "electron";
-import { readGlobalConfig, writeGlobalConfig } from "../lib/config/global";
+import type { SgmCliStatus } from "@shared/ipc/modules/sgmCli";
+import { app } from "electron";
 import { comparablePath } from "../lib/util/paths";
 import { isWindows } from "../lib/util/platform";
 import { sgmBinaryPath } from "./sgmRunner";
 
 function cliName(): string {
   return sgmBinaryName(app.isPackaged ? "prod" : "dev");
-}
-
-// ~-abbreviated form for dialog text.
-function displayDir(dir: string): string {
-  const home = homedir();
-  return dir.startsWith(home) ? `~${dir.slice(home.length)}` : dir;
 }
 
 function linkPath(): string {
@@ -65,13 +59,79 @@ function isOnPath(dir: string): boolean {
     .some((entry) => comparablePath(entry) === comparablePath(dir));
 }
 
-// "Nuke everything" counterpart: remove this flavor's CLI link when it
-// is recognizably one shigomori created -- the app-bundle link this
-// module installs, or a repo checkout's dist-cli link (pnpm
-// cli:install, pnpm dev). Anything else at the path stays. The prod
-// app removes `sgm`; the dev app removes `sgmd`.
+// Gatekeeper app translocation (quarantined app run from ~/Downloads)
+// mounts the bundle at a randomized read-only path that dies with the
+// process -- a link to it would dangle immediately.
+function isTranslocated(): boolean {
+  return app.isPackaged && process.resourcesPath.includes("/AppTranslocation/");
+}
+
+export async function sgmCliStatus(): Promise<SgmCliStatus> {
+  const binDir = sgmUserBinDir();
+  const base = {
+    name: cliName(),
+    binDir,
+    linkPath: linkPath(),
+    onPath: isOnPath(binDir),
+  };
+  const binary = isWindows ? null : sgmBinaryPath();
+  if (binary === null) {
+    return { ...base, supported: false, state: "missing" };
+  }
+  const stat = await lstat(base.linkPath).catch(() => null);
+  if (stat === null) return { ...base, supported: true, state: "missing" };
+  if (!stat.isSymbolicLink()) {
+    return { ...base, supported: true, state: "foreign" };
+  }
+  const target = await readlink(base.linkPath).catch(() => null);
+  if (target === null) return { ...base, supported: true, state: "foreign" };
+  if (comparablePath(target) === comparablePath(binary)) {
+    return { ...base, supported: true, state: "installed" };
+  }
+  if (isOurTarget(target)) {
+    return { ...base, supported: true, state: "stale" };
+  }
+  return { ...base, supported: true, state: "foreign" };
+}
+
+// Create (or, from "stale", repoint) the link. Throws with a
+// user-facing message when there's nothing to link, the path is
+// occupied by something that isn't ours, or the app is running from a
+// translocated mount.
+export async function installSgmCliLink(): Promise<SgmCliStatus> {
+  const status = await sgmCliStatus();
+  if (!status.supported) {
+    throw new Error("No CLI binary is available to link.");
+  }
+  if (status.state === "foreign") {
+    throw new Error(
+      `${status.linkPath} already exists and wasn't created by ` +
+        "Shigoto no Mori. Remove it first if you want the app to " +
+        "manage the link.",
+    );
+  }
+  if (isTranslocated()) {
+    throw new Error(
+      "macOS is running this app from a temporary location (App " +
+        "Translocation). Move it to Applications and relaunch, then " +
+        "install.",
+    );
+  }
+  const binary = sgmBinaryPath();
+  if (binary === null) throw new Error("No CLI binary is available to link.");
+  replaceWithSymlinkSync(binary, linkPath());
+  return sgmCliStatus();
+}
+
+// Remove this flavor's link when it is recognizably one shigomori
+// created -- the app-bundle link, or a checkout's dist-cli link (pnpm
+// cli:install, settings install in dev). Anything else at the path
+// stays. Shared by the Settings uninstall action and "Nuke
+// everything". The suffix set here is broader than isOurTarget on
+// purpose: nuke should also take the checkout link the prod app
+// otherwise refuses to manage.
 export async function uninstallSgmCliLink(): Promise<void> {
-  const name = sgmBinaryName(app.isPackaged ? "prod" : "dev");
+  const name = cliName();
   const link = join(sgmUserBinDir(), name);
   const stat = await lstat(link).catch(() => null);
   if (stat === null || !stat.isSymbolicLink()) return;
@@ -84,94 +144,19 @@ export async function uninstallSgmCliLink(): Promise<void> {
   await rm(link, { force: true }).catch(() => undefined);
 }
 
-// Call after applyUserShellPath so the PATH check sees the login
-// shell's PATH, not launchd's stripped one. Startup work (watchers,
-// fetch, updater) proceeds underneath; only user interaction is held,
-// as a modal sheet on `win`, until the prompt is answered. Failures
-// only log.
-export async function maybeInstallSgmCli(
-  win: BrowserWindow | null,
-): Promise<void> {
-  const ask = (options: Electron.MessageBoxOptions) =>
-    win === null || win.isDestroyed()
-      ? dialog.showMessageBox(options)
-      : dialog.showMessageBox(win, options);
-  if (isWindows) return;
-  // Resources/sgm when packaged, dist-cli/sgmd in dev; null means
-  // there's no binary to link (dev run without a `pnpm dev` build).
+// Launch-time maintenance, never an install: when a link the user
+// installed points at a copy of the app that is no longer the one
+// running (updated bundle path, another checkout's dev build), repoint
+// it. Consent was given at install time; failures only log.
+export async function repairSgmCliLink(): Promise<void> {
+  if (isTranslocated()) return;
+  const status = await sgmCliStatus();
+  if (!status.supported || status.state !== "stale") return;
   const binary = sgmBinaryPath();
   if (binary === null) return;
-  // Gatekeeper app translocation (quarantined app run from ~/Downloads)
-  // mounts the bundle at a randomized read-only path that dies with the
-  // process -- a link to it would dangle immediately. The prompt will
-  // fire on a later launch once the app lives somewhere real.
-  if (app.isPackaged && process.resourcesPath.includes("/AppTranslocation/"))
-    return;
-
-  const existing = await lstat(linkPath()).catch(() => null);
-  if (existing !== null) {
-    if (!existing.isSymbolicLink()) return; // user's own binary; hands off
-    const target = await readlink(linkPath()).catch(() => null);
-    if (target === null) return;
-    if (comparablePath(target) === comparablePath(binary)) return;
-    if (isOurTarget(target)) {
-      // Our link, stale target (app moved, was renamed, or sgmd points
-      // at another checkout). Consent was given at install time; repair
-      // silently to the binary this app actually runs.
-      try {
-        replaceWithSymlinkSync(binary, linkPath());
-      } catch (err) {
-        console.warn("[sgm-cli] link repair failed", err);
-      }
-    }
-    return;
-  }
-
-  const config = await readGlobalConfig();
-  if (config.sgmCliPromptDismissed === true) return;
-
-  // Window-modal: the app is deliberately unusable until the user
-  // decides. Any answer resolves it -- Install links, Not Now re-asks
-  // next launch, Don't Ask Again persists the opt-out.
-  const name = cliName();
-  const { response } = await ask({
-    type: "question",
-    message: `Install the ${name} command-line tool?`,
-    detail:
-      `${name} is Shigoto no Mori's terminal companion: you (or a ` +
-      "coding agent) can create, list, and remove this app's worktrees " +
-      `from any shell. This links ${name} into ` +
-      `${displayDir(sgmUserBinDir())}; it runs straight from the app, ` +
-      "so it's always in sync.",
-    buttons: ["Install", "Not Now", "Don't Ask Again"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (response === 2) {
-    await writeGlobalConfig({ ...config, sgmCliPromptDismissed: true });
-    return;
-  }
-  if (response !== 0) return;
-
   try {
     replaceWithSymlinkSync(binary, linkPath());
   } catch (err) {
-    console.warn("[sgm-cli] install failed", err);
-    await ask({
-      type: "error",
-      message: `Couldn't install ${name}`,
-      detail: err instanceof Error ? err.message : String(err),
-    });
-    return;
-  }
-
-  if (!isOnPath(sgmUserBinDir())) {
-    await ask({
-      type: "info",
-      message: `${name} installed to ${displayDir(sgmUserBinDir())}`,
-      detail:
-        "That directory isn't on your PATH yet. Add this line to your " +
-        `shell profile:\n\nexport PATH="${displayDir(sgmUserBinDir()).replace("~", "$HOME")}:$PATH"`,
-    });
+    console.warn("[sgm-cli] link repair failed", err);
   }
 }

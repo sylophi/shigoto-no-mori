@@ -29,6 +29,7 @@ import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
+import { SgmCliSection } from "./SgmCliSection";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
 
@@ -279,6 +280,8 @@ export function SettingsForm({
               />
             )}
           </section>
+
+          <SgmCliSection />
 
           <section className="space-y-3">
             <SectionHeading className="mb-1">Launch</SectionHeading>

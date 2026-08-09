@@ -1,0 +1,133 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Download, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { queryKeys } from "@/lib/queryKeys";
+import { notifyError } from "@/lib/toast";
+import type { SgmCliStatus } from "@shared/ipc/modules/sgmCli";
+
+// Install/uninstall of the CLI symlink lives here, not in a launch
+// prompt: the app runs its bundled binary directly and never needs the
+// link, so this is purely "do you want the command in your shell".
+// Hidden entirely when there's nothing to link (Windows, dev run
+// without a built binary).
+export function SgmCliSection() {
+  const queryClient = useQueryClient();
+  const { data: runtime } = useRuntimeInfo();
+  const { data: status } = useQuery<SgmCliStatus>({
+    queryKey: queryKeys.sgmCli(),
+    queryFn: () => window.api.sgmCli.status(),
+    meta: { errorTitle: "Couldn't check the CLI install" },
+  });
+
+  const applyStatus = (next: SgmCliStatus) => {
+    queryClient.setQueryData(queryKeys.sgmCli(), next);
+  };
+  const install = useMutation({
+    mutationFn: () => window.api.sgmCli.install(),
+    onSuccess: applyStatus,
+    onError: (err) => notifyError("Couldn't install the CLI", err),
+  });
+  const uninstall = useMutation({
+    mutationFn: () => window.api.sgmCli.uninstall(),
+    onSuccess: applyStatus,
+    onError: (err) => notifyError("Couldn't uninstall the CLI", err),
+  });
+
+  if (!status?.supported) return null;
+
+  const { name, state, onPath } = status;
+  const busy = install.isPending || uninstall.isPending;
+  const home = runtime?.homedir ?? null;
+  const pathLine = `export PATH="${home && status.binDir.startsWith(home) ? `$HOME${status.binDir.slice(home.length)}` : status.binDir}:$PATH"`;
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <SectionHeading className="mb-1">Command line</SectionHeading>
+        <p className="text-xs text-muted-foreground">
+          <span className="font-mono">{name}</span> drives this app's worktrees
+          from any shell: create, list, merge, remove. It's how coding agents
+          use your projects. Installing links{" "}
+          <span className="font-mono">{name}</span> into{" "}
+          <span className="font-mono">{tildify(status.binDir, home)}</span>; the
+          command runs straight from the app, so it's always in sync. The app
+          itself doesn't need it.
+        </p>
+      </div>
+
+      {state === "installed" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            Installed
+          </span>
+          <span className="font-mono text-sm text-muted-foreground select-text">
+            {tildify(status.linkPath, home)}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => uninstall.mutate()}
+          >
+            <Trash2 />
+            Uninstall
+          </Button>
+        </div>
+      )}
+
+      {state === "stale" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className="size-1.5 rounded-full bg-amber-500" />
+            Installed, but pointing at another copy of the app
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => install.mutate()}
+          >
+            Repair link
+          </Button>
+        </div>
+      )}
+
+      {state === "missing" && (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => install.mutate()}
+        >
+          <Download />
+          Install {name}
+        </Button>
+      )}
+
+      {state === "foreign" && (
+        <p className="text-xs text-muted-foreground">
+          <span className="font-mono">{tildify(status.linkPath, home)}</span>{" "}
+          already exists and wasn't created by this app, so it's left untouched.
+          Remove it if you want the app to manage the link.
+        </p>
+      )}
+
+      {state !== "missing" && state !== "foreign" && !onPath && (
+        <p className="text-xs text-muted-foreground">
+          <span className="text-amber-500">
+            That directory isn't on your PATH yet.
+          </span>{" "}
+          Add this to your shell profile:{" "}
+          <span className="font-mono select-text">{pathLine}</span>
+        </p>
+      )}
+    </section>
+  );
+}
+
+function tildify(path: string, home: string | null): string {
+  return home && path.startsWith(home) ? `~${path.slice(home.length)}` : path;
+}

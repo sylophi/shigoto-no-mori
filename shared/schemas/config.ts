@@ -132,11 +132,6 @@ export const GlobalConfigSchema = z.object({
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
   githubCli: z.boolean().optional(),
-  // When true, the launch-time "Install the sgm command-line tool?"
-  // prompt is never shown again ("Don't Ask Again"). An existing
-  // install still gets silent version refreshes -- this only mutes the
-  // initial offer.
-  sgmCliPromptDismissed: z.boolean().optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 

@@ -11,6 +11,7 @@ import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { sgmCliContract } from "@shared/ipc/modules/sgmCli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -28,6 +29,7 @@ import { portPoolHandlers } from "./modules/portPool";
 import { projectsHandlers } from "./modules/projects";
 import { runtimeHandlers } from "./modules/runtime";
 import { scriptsHandlers } from "./modules/scripts";
+import { sgmCliHandlers } from "./modules/sgmCli";
 import { shellHandlers } from "./modules/shell";
 import { shigomoriHandlers } from "./modules/shigomori";
 import { updaterHandlers } from "./modules/updater";
@@ -50,6 +52,7 @@ export function registerIpcHandlers(): void {
   registerContract(githubCliContract, githubCliHandlers);
   registerContract(worktreesContract, worktreesHandlers);
   registerContract(scriptsContract, scriptsHandlers);
+  registerContract(sgmCliContract, sgmCliHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(updaterContract, updaterHandlers);
 }
