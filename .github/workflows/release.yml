@@ -33,6 +33,15 @@ jobs:
           node-version: "22"
           cache: pnpm
 
+      # The forge prePackage hook compiles the bundled sm CLI (a Go
+      # module in cli/), and the macOS runner image doesn't ship Go.
+      # The Windows job doesn't need this: forge.config.ts skips the
+      # CLI build on Windows targets.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: cli/go.sum
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
