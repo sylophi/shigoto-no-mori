@@ -1,5 +1,5 @@
 // Runs before `pnpm dev`: compiles the dev-flavor CLI and symlinks it
-// into the user's bin dir as `sgm-d` -- the dev counterpart of the
+// into the user's bin dir as `sgmd` -- the dev counterpart of the
 // app's launch-time prod-sgm install (naming and path policy in
 // shared/sgmDist.mts). Fail-soft: a missing bun or an unwritable bin
 // dir warns and lets the app start anyway.

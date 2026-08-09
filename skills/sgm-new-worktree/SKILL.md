@@ -11,7 +11,7 @@ wt="$(sgm create)" && cd "$wt"
 
 (The `&&` matters: if `sgm` fails or is missing, a bare `cd "$(...)"` can
 succeed silently and leave you in the primary checkout. Dev checkouts of the
-app install the CLI as `sgm-d`; if neither exists, stop and tell the user.)
+app install the CLI as `sgmd`; if neither exists, stop and tell the user.)
 
 This runs carry-over and the project's setup script (progress streams to
 stderr) and prints the path. Exit 3 means the worktree exists but its setup

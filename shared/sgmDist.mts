@@ -21,7 +21,7 @@ export type SgmFlavor = "prod" | "dev";
 export const SGM_DIST_DIR = "dist-cli";
 
 export function sgmBinaryName(flavor: SgmFlavor, windows = false): string {
-  const base = flavor === "prod" ? "sgm" : "sgm-d";
+  const base = flavor === "prod" ? "sgm" : "sgmd";
   return windows ? `${base}.exe` : base;
 }
 

@@ -8,7 +8,7 @@ wt="$(sgm path <name>)" && cd "$wt"
 ```
 
 `sgm list` shows what exists (name, branch, sync state). Dev checkouts of
-the app install the CLI as `sgm-d`; if neither exists, stop and tell the
+the app install the CLI as `sgmd`; if neither exists, stop and tell the
 user.
 
 **Stay inside.** Run every subsequent command from the worktree.
