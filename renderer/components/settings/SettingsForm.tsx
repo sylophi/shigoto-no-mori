@@ -169,54 +169,6 @@ export function SettingsForm({
         <div className="flex max-w-3xl flex-col gap-10">
           <VersionSection />
 
-          <section className="space-y-3">
-            <SectionHeading className="mb-1">Location</SectionHeading>
-            {root && (
-              <div className="flex font-mono text-sm select-text">
-                <PathSpan
-                  path={configFilePath ?? root}
-                  home={home}
-                  className="min-w-0 flex-1 truncate"
-                />
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!root}
-                onClick={() => {
-                  if (root) {
-                    window.api.shell
-                      .showItemInFolder(root)
-                      .catch((err) =>
-                        notifyError("Couldn't reveal folder", err),
-                      );
-                  }
-                }}
-              >
-                <FolderOpen />
-                Reveal in {fileManagerName}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!configFilePath}
-                onClick={() => {
-                  if (configFilePath) {
-                    window.api.shell
-                      .openPath(configFilePath)
-                      .catch((err) => notifyError("Couldn't open file", err));
-                  }
-                }}
-                title={configFilePath ?? undefined}
-              >
-                <ExternalLink />
-                Open config file
-              </Button>
-            </div>
-          </section>
-
           <AppearanceSection
             theme={form.theme}
             onPick={pickTheme}
@@ -281,8 +233,6 @@ export function SettingsForm({
             )}
           </section>
 
-          <CliSection />
-
           <section className="space-y-3">
             <SectionHeading className="mb-1">Launch</SectionHeading>
             <ToggleRow
@@ -294,6 +244,8 @@ export function SettingsForm({
               description="Adds a row of the worktree's package.json scripts under the launch tools. Shows as many as fit on one line, ordered the same way the Scripts section sorts them."
             />
           </section>
+
+          <CliSection />
 
           <DetectedToolsSection
             tools={availableTools}
@@ -354,6 +306,54 @@ export function SettingsForm({
               <Plus />
               Add global launcher
             </Button>
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading className="mb-1">Config</SectionHeading>
+            {root && (
+              <div className="flex font-mono text-sm select-text">
+                <PathSpan
+                  path={configFilePath ?? root}
+                  home={home}
+                  className="min-w-0 flex-1 truncate"
+                />
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!root}
+                onClick={() => {
+                  if (root) {
+                    window.api.shell
+                      .showItemInFolder(root)
+                      .catch((err) =>
+                        notifyError("Couldn't reveal folder", err),
+                      );
+                  }
+                }}
+              >
+                <FolderOpen />
+                Reveal in {fileManagerName}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!configFilePath}
+                onClick={() => {
+                  if (configFilePath) {
+                    window.api.shell
+                      .openPath(configFilePath)
+                      .catch((err) => notifyError("Couldn't open file", err));
+                  }
+                }}
+                title={configFilePath ?? undefined}
+              >
+                <ExternalLink />
+                Open config file
+              </Button>
+            </div>
           </section>
 
           <DangerZone />
