@@ -59,7 +59,7 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 		emitPhase("setup")
 		envInputs.scriptName = "setup"
 		ran = append(ran, "setup")
-		if code := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
+		if code, _ := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
 			failures = append(failures, scriptFailure{Step: "setup", ExitCode: codeOrNil(code)})
 		}
 	}
@@ -67,7 +67,7 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 		emitPhase("portPoolProvision")
 		envInputs.scriptName = "port-pool-provision"
 		ran = append(ran, "port-pool provision")
-		code := runLifecycleScript(
+		code, _ := runLifecycleScript(
 			portPoolCommand("provision", id.Path), envInputs,
 			scriptSlot{Kind: "portPool", Phase: "provision"})
 		if code != 0 {

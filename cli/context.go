@@ -111,6 +111,63 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	}
 }
 
+// App plumbing: exact addressing by the ids the app's IPC layer holds.
+// Error strings match shared/errors.ts ("Unknown project:"/"Unknown
+// worktree:") so the renderer's entity-gone matcher recognizes them.
+func resolveProjectByID(ctx cliContext, id string) (project, error) {
+	for _, p := range ctx.projects {
+		if p.ID == id {
+			return p, nil
+		}
+	}
+	return project{}, errf("Unknown project: %s", id)
+}
+
+func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located, error) {
+	scope := ctx.projects
+	if projectID != "" {
+		proj, err := resolveProjectByID(ctx, projectID)
+		if err != nil {
+			return located{}, err
+		}
+		scope = []project{proj}
+	}
+	for _, proj := range scope {
+		identities, err := listWorktreeIdentities(proj)
+		if err != nil {
+			continue
+		}
+		for _, id := range identities {
+			if id.ID == worktreeID {
+				return located{proj: proj, worktree: id}, nil
+			}
+		}
+	}
+	return located{}, errf("Unknown worktree: %s", worktreeID)
+}
+
+// Shared front door for commands that target a worktree: --worktree-id
+// (with optional --project-id scoping) wins, then the positional
+// name/<project>/<name> forms, then cwd.
+func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs) (located, error) {
+	if wid := parsed.strings["worktree-id"]; wid != "" {
+		return resolveWorktreeByID(ctx, parsed.strings["project-id"], wid)
+	}
+	ref := ""
+	if len(parsed.positionals) > 0 {
+		ref = parsed.positionals[0]
+	}
+	return resolveWorktree(ctx, ref, parsed.strings["project"])
+}
+
+// Same front door for commands that target a project.
+func resolveProjectArgs(ctx cliContext, parsed parsedArgs) (project, error) {
+	if pid := parsed.strings["project-id"]; pid != "" {
+		return resolveProjectByID(ctx, pid)
+	}
+	return resolveProject(ctx, parsed.strings["project"])
+}
+
 // Resolves `<name>`, `<project>/<name>`, or (with no ref) the worktree
 // containing cwd. Unqualified names search every registered project
 // and must be unambiguous.

@@ -22,15 +22,19 @@ type scriptFailure struct {
 func cmdCreate(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{
-			"project": {"p"},
-			"branch":  {"b"},
-			"base":    {},
+			"project":    {"p"},
+			"branch":     {"b"},
+			"base":       {},
+			"project-id": {}, // app plumbing: exact addressing from IPC
 		},
+		// checkout: reuse the existing branch `base` instead of creating
+		// one -- the app's "open existing branch" flow. Requires --base.
+		bools: map[string][]string{"checkout": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	proj, err := resolveProject(ctx, parsed.strings["project"])
+	proj, err := resolveProjectArgs(ctx, parsed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -47,7 +51,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"], false)
+	worktree, err := createWorktree(proj, name, parsed.strings["branch"], parsed.strings["base"], parsed.bools["checkout"])
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -153,7 +157,7 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 	if setupCommand != "" {
 		emitPhase("setup")
 		envInputs.scriptName = "setup"
-		if code := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
+		if code, _ := runLifecycleScript(setupCommand, envInputs, scriptSlot{Kind: "setup"}); code != 0 {
 			failures = append(failures, scriptFailure{Step: "setup", ExitCode: codeOrNil(code)})
 		}
 	}
@@ -161,7 +165,7 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 	if portPoolNeeded {
 		emitPhase("portPoolProvision")
 		envInputs.scriptName = "port-pool-provision"
-		code := runLifecycleScript(
+		code, _ := runLifecycleScript(
 			portPoolCommand("provision", worktree.Path), envInputs,
 			scriptSlot{Kind: "portPool", Phase: "provision"})
 		if code != 0 {

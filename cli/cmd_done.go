@@ -21,17 +21,17 @@ import (
 
 func cmdDone(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}},
-		bools:   map[string][]string{"force": {"f"}},
+		strings: map[string][]string{
+			"project":     {"p"},
+			"project-id":  {}, // app plumbing: exact addressing from IPC
+			"worktree-id": {}, // app plumbing
+		},
+		bools: map[string][]string{"force": {"f"}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
-	target, err := resolveWorktree(ctx, ref, parsed.strings["project"])
+	target, err := resolveWorktreeArgs(ctx, parsed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

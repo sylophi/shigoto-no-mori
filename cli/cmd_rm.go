@@ -16,20 +16,24 @@ import (
 
 func cmdRm(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}},
+		strings: map[string][]string{
+			"project":     {"p"},
+			"project-id":  {}, // app plumbing: exact addressing from IPC
+			"worktree-id": {}, // app plumbing
+		},
 		bools: map[string][]string{
 			"force":       {"f"},
 			"keep-branch": {},
+			// App plumbing: retry a delete whose cleanup script failed
+			// without re-running the failing cleanup, mirroring the
+			// app's skip-cleanup affordance.
+			"skip-cleanup": {},
 		},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
-	target, err := resolveWorktree(ctx, ref, parsed.strings["project"])
+	target, err := resolveWorktreeArgs(ctx, parsed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -49,7 +53,7 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 	config := readProjectConfig(proj.ID)
 
 	// Cleanup scripts (skip for externals -- no provision ever ran).
-	if !id.IsExternal {
+	if !id.IsExternal && !parsed.bools["skip-cleanup"] {
 		envInputs := scriptEnvInputs{worktree: id, proj: proj}
 		if identities, err := listWorktreeIdentities(proj); err == nil {
 			for _, other := range identities {
@@ -68,11 +72,11 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 		portPoolEnabled := global.PortPool != nil && *global.PortPool
 		if portPoolEnabled && portPoolInstalled() && portPoolConfigured(id.Path) {
 			envInputs.scriptName = "port-pool-release"
-			code := runLifecycleScript(
+			code, runID := runLifecycleScript(
 				portPoolCommand("release", id.Path), envInputs,
 				scriptSlot{Kind: "portPool", Phase: "release"})
 			if code != 0 {
-				return cleanupFailed("portPoolRelease", code)
+				return cleanupFailed("portPoolRelease", code, runID)
 			}
 		}
 		teardown := ""
@@ -81,8 +85,8 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 		}
 		if teardown != "" {
 			envInputs.scriptName = "teardown"
-			if code := runLifecycleScript(teardown, envInputs, scriptSlot{Kind: "teardown"}); code != 0 {
-				return cleanupFailed("teardown", code)
+			if code, runID := runLifecycleScript(teardown, envInputs, scriptSlot{Kind: "teardown"}); code != 0 {
+				return cleanupFailed("teardown", code, runID)
 			}
 		}
 	}
@@ -135,12 +139,14 @@ func cmdRm(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-func cleanupFailed(phase string, code int) (int, error) {
+// runID rides along so JSON consumers (the app's DeleteWorktreeResult
+// schema requires it) can correlate the failing script's output.
+func cleanupFailed(phase string, code int, runID string) (int, error) {
 	if jsonMode {
 		emit(map[string]any{
 			"ok": false,
 			"cleanupError": map[string]any{
-				"phase": phase, "exitCode": codeOrNil(code),
+				"phase": phase, "exitCode": codeOrNil(code), "runId": runID,
 			},
 		})
 		return 1, nil

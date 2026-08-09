@@ -60,9 +60,10 @@ func newRunID() string {
 
 // runLifecycleScript executes one script to completion, streaming
 // output (stderr passthrough in human mode, NDJSON script events in
-// --json). Returns the exit code; -1 means it never ran or died to a
-// signal (the TS side's `null`).
-func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) int {
+// --json). Returns the exit code (-1 means it never ran or died to a
+// signal, the TS side's `null`) and the run's id, which cleanup-error
+// reports reference so consumers can correlate the failing output.
+func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (int, string) {
 	runID := newRunID()
 	emitScriptEvent(map[string]any{
 		"event": "script", "runId": runID, "kind": "started",
@@ -123,7 +124,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) int
 			"event": "script", "runId": runID, "kind": "error", "data": err.Error(),
 		}, "["+slot.label()+"] "+err.Error())
 		emitExit(runID, slot, -1)
-		return -1
+		return -1, runID
 	}
 	err := cmd.Wait()
 	pipeW.Close()
@@ -136,7 +137,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) int
 		}
 	}
 	emitExit(runID, slot, code)
-	return code
+	return code, runID
 }
 
 func emitScriptEvent(event map[string]any, humanLine string) {

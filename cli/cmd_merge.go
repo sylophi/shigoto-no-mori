@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -108,21 +109,44 @@ func allowedMergeMethods(projectPath string) []string {
 func cmdMerge(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{
-			"project": {"p"},
-			"method":  {"m"},
+			"project":     {"p"},
+			"method":      {"m"},
+			"project-id":  {}, // app plumbing: exact addressing from IPC
+			"worktree-id": {}, // app plumbing
+			// App plumbing: merge this PR number directly, skipping the
+			// branch -> PR lookup (the app already resolved it).
+			"number": {},
 		},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
 	if m := parsed.strings["method"]; m != "" && mergeFlag[m] == "" {
 		return 2, usageErrf("Invalid --method %q (merge, squash, or rebase).", m)
 	}
-	target, err := resolveWorktree(ctx, ref, parsed.strings["project"])
+
+	if numberFlag := parsed.strings["number"]; numberFlag != "" {
+		number, err := strconv.Atoi(numberFlag)
+		if err != nil || number <= 0 {
+			return 2, usageErrf("Invalid --number %q.", numberFlag)
+		}
+		proj, err := resolveProjectArgs(ctx, parsed)
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		method, err := execMerge(proj, number, parsed.strings["method"])
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		if jsonMode {
+			emit(map[string]any{"ok": true, "number": number, "method": method})
+		} else {
+			out(fmt.Sprintf("merged PR #%d (%s)", number, method))
+		}
+		return 0, nil
+	}
+
+	target, err := resolveWorktreeArgs(ctx, parsed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -142,30 +166,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("PR #%d for %s is %s, not open", pr.Number, id.Branch, strings.ToLower(pr.State))
 	}
 
-	allowed := allowedMergeMethods(proj.Path)
-	if len(allowed) == 0 {
-		return 1, errf("The repo's settings allow no merge method")
-	}
-	method := parsed.strings["method"]
-	if method != "" {
-		if !contains(allowed, method) {
-			return 1, errf("The repo's settings don't allow %s merges (allowed: %s)", method, strings.Join(allowed, ", "))
-		}
-	} else {
-		method = allowed[0]
-		config := readProjectConfig(proj.ID)
-		if config != nil && contains(allowed, config.LastMergeMethod) {
-			method = config.LastMergeMethod
-		}
-	}
-
-	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(pr.Number), mergeFlag[method]); err != nil {
-		return 1, err
-	}
-
-	// Best-effort preference persist, same as the app.
-	if err := writeProjectConfigFields(proj.ID, map[string]any{"lastMergeMethod": method}); err != nil {
-		vlog("[merge] persist lastMergeMethod: %v", err)
+	method, err := execMerge(proj, pr.Number, parsed.strings["method"])
+	if err != nil {
+		return exitCodeOf(err), err
 	}
 
 	if jsonMode {
@@ -179,6 +182,39 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 			binaryName, binaryName, id.Name))
 	}
 	return 0, nil
+}
+
+// Resolve the merge method (explicit flag > saved preference > first
+// allowed), run `gh pr merge`, and persist the pick -- shared by the
+// branch-lookup path and the app's --number path.
+func execMerge(proj project, number int, methodFlag string) (string, error) {
+	allowed := allowedMergeMethods(proj.Path)
+	if len(allowed) == 0 {
+		return "", errf("The repo's settings allow no merge method")
+	}
+	method := methodFlag
+	if method != "" {
+		if !contains(allowed, method) {
+			return "", errf("The repo's settings don't allow %s merges (allowed: %s)",
+				method, strings.Join(allowed, ", "))
+		}
+	} else {
+		method = allowed[0]
+		config := readProjectConfig(proj.ID)
+		if config != nil && contains(allowed, config.LastMergeMethod) {
+			method = config.LastMergeMethod
+		}
+	}
+
+	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), mergeFlag[method]); err != nil {
+		return "", err
+	}
+
+	// Best-effort preference persist, same as the app.
+	if err := writeProjectConfigFields(proj.ID, map[string]any{"lastMergeMethod": method}); err != nil {
+		vlog("[merge] persist lastMergeMethod: %v", err)
+	}
+	return method, nil
 }
 
 func contains(list []string, item string) bool {
