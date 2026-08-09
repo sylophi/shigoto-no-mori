@@ -38,8 +38,11 @@ func cmdCd(ctx cliContext, args []string) (int, error) {
 	} else {
 		// Always a menu here, even inside a worktree: cd'ing to where
 		// you already are isn't a destination. resolveProject supplies
-		// the project menu when cwd isn't in one.
-		proj, err := resolveProject(ctx, parsed.strings["project"])
+		// the project menu when cwd isn't in one. NOTE: assign, don't
+		// `:=` -- a shadowed err here once let a cancelled picker fall
+		// through to a zero-value target.
+		var proj project
+		proj, err = resolveProject(ctx, parsed.strings["project"])
 		if err != nil {
 			return exitCodeOf(err), err
 		}
