@@ -118,22 +118,22 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 	}
 	sortLaunchersByUse(visible)
 
-	note("Open " + worktreeName + " in:")
-	note("")
+	rows := make([]string, len(visible))
+	names := make([]string, len(visible))
 	for i, e := range visible {
-		kind := ""
+		row := cyanErr(e.label)
 		switch {
 		case e.custom != nil:
-			kind = dimErr("custom")
+			row += "  " + dimErr("custom")
 		case e.webURL != "":
-			kind = dimErr("web")
+			row += "  " + dimErr("web")
 		}
-		line := fmt.Sprintf("  %s  %s", dimErr(fmt.Sprintf("%d.", i+1)), cyanErr(e.label))
-		if kind != "" {
-			line += "  " + kind
-		}
-		note(line)
+		rows[i] = row
+		names[i] = e.label
 	}
-	note("")
-	return promptChoice(visible, "Tool", func(e launcherEntry) string { return e.label })
+	idx, err := menuSelect("Open "+worktreeName+" in:", rows, names)
+	if err != nil {
+		return nil, err
+	}
+	return &visible[idx], nil
 }
