@@ -11,6 +11,11 @@ var (
 	binaryName  = "smd"
 	aliasName   = "shigomori-dev"
 	appBundleID = "com.sylophi.shigomori"
+	// GitHub repo behind the update feed (shared/cliDist.mts
+	// UPDATE_FEED_REPO). Only `sm update` reads it, and the dev CLI
+	// refuses that command, but the default keeps `go run ./cli`
+	// pointing somewhere real.
+	updateFeedRepo = "sylophi/shigoto-no-mori"
 )
 
 // CFBundleExecutable of the installed app: stable across bundle moves

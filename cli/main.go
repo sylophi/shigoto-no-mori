@@ -35,7 +35,7 @@ var generalItems = []helpItem{
 		"Picks a project, then a worktree. Exit the shell to return. With shell integration (see `shell`), your current shell cd's instead."},
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
-		"Drives the app's auto-updater: checks GitHub releases, downloads, and restarts the app into the new version (the linked CLI updates with it). --check only reports what it finds, though it may start the app to ask."},
+		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
 	{"config", "Open the global config file",
 		"config.json in the state root, via $EDITOR or the OS opener."},
 	{"help [<command>] [--all]", "Show help",

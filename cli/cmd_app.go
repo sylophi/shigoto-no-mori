@@ -12,14 +12,10 @@ import (
 )
 
 // Launch (or activate) the installed app by bundle id, so a renamed or
-// moved bundle still resolves. Background (open -g) keeps focus in the
-// terminal. Shared with `sm update`.
-func openAppBundle(background bool) error {
-	openArgs := []string{"-b", appBundleID}
-	if background {
-		openArgs = append([]string{"-g"}, openArgs...)
-	}
-	if err := exec.Command("open", openArgs...).Run(); err != nil {
+// moved bundle still resolves. (The update installer relaunches by
+// path instead -- see cmdUpdateFinishInstall.)
+func openAppBundle() error {
+	if err := exec.Command("open", "-b", appBundleID).Run(); err != nil {
 		return errf("Couldn't open Shigoto no Mori -- is the app installed?")
 	}
 	return nil
@@ -35,7 +31,7 @@ func cmdApp(_ cliContext, args []string) (int, error) {
 	if flavor != "prod" {
 		return 1, errf("This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.")
 	}
-	if err := openAppBundle(false); err != nil {
+	if err := openAppBundle(); err != nil {
 		return 1, err
 	}
 	if jsonMode {

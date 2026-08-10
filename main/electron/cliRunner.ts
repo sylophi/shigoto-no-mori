@@ -53,15 +53,29 @@ export function cliAvailable(): boolean {
 
 const children = new Set<ChildProcess>();
 
+// Children doing invisible housekeeping (the updater's staging
+// download): still reaped at quit like every other child, but excluded
+// from the busy aggregate -- a background download must not trigger
+// the "tasks are running" quit prompt.
+let backgroundChildren = 0;
+
+// Every live child, background or not. stateWatcher.ts reads this to
+// suppress the fs echo of a CLI child's own writes into the state
+// root -- background children churn the root too, so they must count
+// here even though they are exempt from the busy aggregate below.
 export function cliChildCount(): number {
   return children.size;
+}
+
+function cliBusyChildCount(): number {
+  return children.size - backgroundChildren;
 }
 
 // CLI children are lifecycle operations in flight (create/delete via
 // the CLI engine); registering them with the busy aggregate means
 // every getBusyOperations consumer counts them, so quitting
 // mid-operation still prompts.
-registerInflightContributor(cliChildCount);
+registerInflightContributor(cliBusyChildCount);
 
 // Quit-time reap, mirroring killAllScripts for the TS engine: an CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
@@ -69,6 +83,8 @@ registerInflightContributor(cliChildCount);
 // goes to the whole group: the Go process doesn't forward signals, so
 // signalling only its pid would orphan a running lifecycle script
 // (`sh -lc "pnpm install"`) to keep mutating the worktree after quit.
+// One CLI child deliberately escapes this reap: the update installer
+// (spawnCliDetached), whose whole job starts after we exit.
 export function killAllCli(): void {
   for (const child of children) {
     try {
@@ -78,6 +94,37 @@ export function killAllCli(): void {
       // Already gone.
     }
   }
+}
+
+// Spawn a CLI command that must outlive this process (the update
+// installer waits for our pid to exit before swapping bundles).
+// Deliberately NOT tracked in `children`: killAllCli reaping it at
+// quit would defeat its purpose. Lives here so the SHIGOMORI_ROOT pin
+// -- the invariant keeping the flavor split from diverging -- has one
+// owner. Settles only once the child actually spawned (or failed to):
+// spawn errors arrive asynchronously, and an unhandled 'error' event
+// on a ChildProcess is an uncaught exception in the main process --
+// the caller is about to quit on success, so it must not do that on a
+// child that never started.
+export function spawnCliDetached(args: string[]): Promise<void> {
+  const binary = cliBinaryPath();
+  if (binary === null) {
+    return Promise.reject(
+      new Error("The CLI binary is missing. Reinstall the app."),
+    );
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn(binary, args, {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, SHIGOMORI_ROOT: shigomoriRoot() },
+    });
+    child.once("error", reject);
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
+  });
 }
 
 export interface CliResult {
@@ -92,10 +139,16 @@ export interface CliResult {
 // exits resolve normally since the error payload is in the documents.
 // extraEnv overlays the app's environment (used by cliShell.ts to pass
 // the user's real shell-config env vars, which launchd strips).
+// opts.background exempts the child from the busy aggregate (see
+// backgroundChildren). opts.timeoutMs SIGKILLs the child's process
+// group when it runs that long, so a wedged child (a stuck subprocess
+// on the Go side) can't hold the returned promise open forever -- the
+// kill surfaces as a normal non-zero close.
 export function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
   extraEnv?: Record<string, string>,
+  opts?: { background?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
   const binary = cliBinaryPath();
   if (binary === null) {
@@ -114,6 +167,23 @@ export function runCli(
       detached: true,
     });
     children.add(child);
+    if (opts?.background) backgroundChildren++;
+    const killTimer =
+      opts?.timeoutMs !== undefined
+        ? setTimeout(() => {
+            try {
+              if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+              else child.kill("SIGKILL");
+            } catch {
+              // Already gone.
+            }
+          }, opts.timeoutMs)
+        : null;
+    // error and close can both fire for one child, so release runs once.
+    const release = () => {
+      if (killTimer !== null) clearTimeout(killTimer);
+      if (children.delete(child) && opts?.background) backgroundChildren--;
+    };
 
     const docs: CliDoc[] = [];
     let buffer = "";
@@ -144,11 +214,11 @@ export function runCli(
     });
 
     child.on("error", (error) => {
-      children.delete(child);
+      release();
       reject(error);
     });
     child.on("close", (code) => {
-      children.delete(child);
+      release();
       // The CLI's writes into the root are the app's own doing; mark
       // them so the state watcher doesn't refetch-storm on the echo.
       // (While the child runs, the watcher checks cliChildCount().)
