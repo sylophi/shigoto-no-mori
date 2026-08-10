@@ -18,15 +18,22 @@
 // build. Ignored in dev mode (autoUpdater refuses dev builds anyway).
 import { app, autoUpdater } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
-import type { UpdaterState } from "@shared/schemas";
+import type { UpdateRequest, UpdaterState } from "@shared/schemas";
 import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { isMac } from "../lib/util/platform";
 import { confirmBusyAction } from "./busyPrompt";
+import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
+// A check older than this is treated as abandoned: autoUpdater can go
+// silent without a terminal event (captive portal, blackholed DNS),
+// and "checking" must not become an absorbing state that disables
+// every later check.
+const CHECKING_STALE_MS = 5 * 60 * 1000;
 
 let state: UpdaterState = { kind: "idle" };
+let checkingSince = 0;
 let started = false;
 let installing = false;
 
@@ -40,8 +47,13 @@ export function isInstallingUpdate(): boolean {
 }
 
 function setState(next: UpdaterState): void {
+  if (next.kind === "checking") checkingSince = Date.now();
   state = next;
   broadcastAll(updaterContract, "state", state);
+  // Mirror every state to disk so `sm update` can follow along
+  // (updaterBridge.ts). Fire-and-forget: transitions are seconds apart,
+  // and a lost write only stales the CLI's view until the next one.
+  void publishUpdaterState(state);
 }
 
 export function getUpdaterState(): UpdaterState {
@@ -61,8 +73,19 @@ function stripVPrefix(name: string): string {
 
 export function checkForUpdates(): void {
   if (!started) return;
-  // No-op once an update is ready -- the only useful action left is install.
-  if (state.kind === "ready" || state.kind === "downloading") return;
+  // No-op while a fresh check is in flight, since Squirrel.Mac
+  // mishandles overlapping checkForUpdates calls (a stale one is the
+  // watchdog case above and the retry goes through), and once an update
+  // is downloading or ready -- the only useful action left then is
+  // install.
+  if (
+    (state.kind === "checking" &&
+      Date.now() - checkingSince < CHECKING_STALE_MS) ||
+    state.kind === "downloading" ||
+    state.kind === "ready"
+  ) {
+    return;
+  }
   setState({ kind: "checking" });
   try {
     autoUpdater.checkForUpdates();
@@ -98,6 +121,16 @@ export function installUpdaterImpl(): void {
     check: checkForUpdates,
     install: installUpdate,
   });
+}
+
+// A CLI request pushes the same two buttons Settings has. Both no-op
+// when they don't apply -- install unless an update is staged (the CLI
+// only sends it after seeing "ready", but a stale request must not
+// restart anything), check while one is already in flight -- so
+// requests are safe to forward unconditionally.
+function handleUpdateRequest(action: UpdateRequest["action"]): void {
+  if (action === "install") void installUpdate();
+  else checkForUpdates();
 }
 
 export function startUpdater(): void {
@@ -159,6 +192,11 @@ export function startUpdater(): void {
 
   started = true;
   checkForUpdates();
+  // The bridge starts only on this supported path: where the updater
+  // can't run (dev, Windows), setState("unsupported") above still
+  // published the state file, so the CLI reads "unsupported" and never
+  // sends a request worth consuming.
+  startUpdaterBridge(handleUpdateRequest);
   // Runs for the app's lifetime; quit tears the interval down with the
   // process, so there's no stop path.
   setInterval(checkForUpdates, CHECK_INTERVAL_MS);

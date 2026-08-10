@@ -34,6 +34,8 @@ var generalItems = []helpItem{
 	{"cd [<name>]", "Open a subshell in any worktree",
 		"Picks a project, then a worktree. Exit the shell to return."},
 	{"app", "Open the Shigoto no Mori app", ""},
+	{"update [--check]", "Update the app to the latest release",
+		"Drives the app's auto-updater: checks GitHub releases, downloads, and restarts the app into the new version (the linked CLI updates with it). --check only reports what it finds, though it may start the app to ask."},
 	{"config", "Open the global config file",
 		"config.json in the state root, via $EDITOR or the OS opener."},
 	{"help [<command>] [--all]", "Show help",
@@ -332,6 +334,7 @@ var commands = []command{
 	{name: "worktrees", aliases: []string{"worktree", "wt", "w"}},
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
 	{name: "app", noCwd: true, run: cmdApp},
+	{name: "update", noCwd: true, run: cmdUpdate},
 	{name: "config", noCwd: true, run: cmdConfigOpen},
 }
 

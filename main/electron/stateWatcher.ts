@@ -54,6 +54,17 @@ export function startStateWatcher(poke: () => void): void {
           ) {
             return;
           }
+          // The updater bridge's control files (updaterBridge.ts) are
+          // app<->CLI plumbing, not user state: reacting to them would
+          // turn every updater transition and every `sm update` run
+          // into an app-wide refetch. Prefix match: the request file
+          // spawns a `.consuming` sibling while being claimed.
+          if (
+            file === "updater.json" ||
+            file?.startsWith("updater-request.json")
+          ) {
+            return;
+          }
           // Depth cap for the worktrees/ watch: worktree checkouts get
           // heavy content churn (dev servers, builds) 3+ levels deep;
           // only project/worktree directory events matter here.

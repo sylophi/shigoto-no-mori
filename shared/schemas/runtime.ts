@@ -42,3 +42,27 @@ export const UpdaterStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("error"), message: z.string() }),
 ]);
 export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
+
+// `sm update` drives the updater over the state root (the CLI has no
+// IPC channel into the app): the app publishes updater.json
+// (UpdaterStatus, written on boot and on every state change) and
+// consumes updater-request.json (UpdateRequest) dropped by the CLI,
+// invoking the same check/install the Settings buttons use. Both sides
+// of the bridge live in main/electron/updaterBridge.ts. The only
+// reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
+// to pin the published shape -- cli/cmd_update.go mirrors both.
+export const UpdaterStatusSchema = z.object({
+  pid: z.number().int().positive(),
+  appVersion: z.string(),
+  state: UpdaterStateSchema,
+});
+export type UpdaterStatus = z.infer<typeof UpdaterStatusSchema>;
+
+export const UpdateRequestSchema = z.object({
+  action: z.enum(["check", "install"]),
+  // Unix ms. Requests older than a couple of minutes are dropped as
+  // leftovers of an interrupted CLI run: acting on one later would
+  // restart the app under the user out of nowhere.
+  requestedAt: z.number(),
+});
+export type UpdateRequest = z.infer<typeof UpdateRequestSchema>;

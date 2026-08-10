@@ -11,3 +11,8 @@ var (
 	binaryName  = "smd"
 	appBundleID = "com.sylophi.shigomori"
 )
+
+// CFBundleExecutable of the installed app: stable across bundle moves
+// and renames, which makes it the check that a published pid really is
+// the app and not a recycled pid (cmd_update.go appProcessAlive).
+const appExecutableName = "Shigoto no Mori"
