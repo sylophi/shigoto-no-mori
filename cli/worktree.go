@@ -42,29 +42,29 @@ type buildContext struct {
 	shelved    map[string]bool
 }
 
-// The project's primary ref, honoring the configured override -- the
-// "read config, apply override, resolve" idiom every consumer shares.
-func primaryRefFor(proj project, config *projectConfig) string {
-	override := ""
-	if config != nil {
-		override = config.DefaultBranch
+// The configured default-branch override, or "" -- the nil-config
+// unwrap every default-branch resolver shares.
+func defaultBranchOverride(config *projectConfig) string {
+	if config == nil {
+		return ""
 	}
-	return resolveDefaultBranch(proj.Path, override)
+	return config.DefaultBranch
+}
+
+// The project's primary ref, honoring the configured override.
+func primaryRefFor(proj project, config *projectConfig) string {
+	return resolveDefaultBranch(proj.Path, defaultBranchOverride(config))
 }
 
 func loadBuildContext(proj project) buildContext {
-	config := readProjectConfig(proj.ID)
-	override := ""
-	if config != nil {
-		override = config.DefaultBranch
-	}
 	// listRemotes feeds both hasRemote and the default-branch
 	// resolution; one spawn covers both.
 	remotes := listRemotes(proj.Path)
 	return buildContext{
-		hasRemote:  len(remotes) > 0,
-		primaryRef: resolveDefaultBranchWithRemotes(proj.Path, override, remotes),
-		shelved:    readShelvedSet(),
+		hasRemote: len(remotes) > 0,
+		primaryRef: resolveDefaultBranchWithRemotes(proj.Path,
+			defaultBranchOverride(readProjectConfig(proj.ID)), remotes),
+		shelved: readShelvedSet(),
 	}
 }
 
