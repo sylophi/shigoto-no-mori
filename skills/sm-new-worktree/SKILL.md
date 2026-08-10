@@ -6,7 +6,7 @@ description: Create a Shigoto no Mori worktree for new work. Use when starting a
 Create the worktree and move into it:
 
 ```sh
-wt="$(sm create)" && cd "$wt"
+wt="$(sm worktrees create)" && cd "$wt"
 ```
 
 (The `&&` matters: if `sm` fails or is missing, a bare `cd "$(...)"` can
@@ -17,8 +17,9 @@ This runs carry-over and the project's setup script (progress streams to
 stderr) and prints the path. Exit 3 means the worktree exists but its setup
 script failed, and the `cd` never ran so you are still in the primary
 checkout: read the output, fix the cause, then retry with the worktree named
-explicitly (`sm setup "$wt"`, or cd in first). A bare `sm setup` from the
-primary would provision the wrong checkout.
+explicitly (`sm worktrees setup "$wt"`, or cd in first). Running
+`sm worktrees setup` without a name from the primary would provision the
+wrong checkout.
 
 **Stay inside.** Run every subsequent command from the worktree.
 

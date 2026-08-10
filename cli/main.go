@@ -31,8 +31,6 @@ type helpGroup struct {
 }
 
 var generalItems = []helpItem{
-	{"list [--all]", "List worktrees",
-		"All projects when outside one, or with --all."},
 	{"cd [<name>]", "Open a subshell in any worktree",
 		"Picks a project, then a worktree. Exit the shell to return."},
 	{"app", "Open the Shigoto no Mori app", ""},
@@ -43,6 +41,8 @@ var generalItems = []helpItem{
 }
 
 var worktreeItems = []helpItem{
+	{"worktrees list [--all]", "List worktrees",
+		"All projects when outside one, or with --all."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
@@ -127,8 +127,7 @@ func helpText(full bool) string {
 			"or a path, or pass -p <project>. The reserved names root and "+
 			"primary address a project's primary checkout (`"+binaryName+
 			" cd root`). Omitting the name in the primary checkout opens a "+
-			"menu. Aliases: l list, c cd, o open, "+
-			"new create, w worktrees, p projects.", width) {
+			"menu. Aliases: c cd, w worktrees, p projects.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -137,7 +136,7 @@ func helpText(full bool) string {
 	if !full {
 		general := append(append([]helpItem{}, generalItems...),
 			helpItem{"worktrees <command>", "Worktree commands",
-				"switch, path, create, rm, done, merge, land, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
+				"list, switch, path, create, rm, done, merge, land, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
 				"list, add, remove, config. Run `" + binaryName + " projects` for details."},
 		)
@@ -179,7 +178,8 @@ func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string 
 func worktreesHelpText() string {
 	return namespaceHelpText("worktrees", "w or wt",
 		"The worktrees prefix is optional: "+binaryName+" rm == "+binaryName+
-			" wt rm. All commands accept -p <project>.", worktreeItems)
+			" wt rm. All commands accept -p <project>. "+
+			"Aliases: l list, new create, o open.", worktreeItems)
 }
 
 func projectsHelpText() string {
