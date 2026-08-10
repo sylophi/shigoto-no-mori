@@ -11,7 +11,11 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
+
+	"github.com/muesli/termenv"
 )
 
 var (
@@ -36,11 +40,15 @@ func initColor() {
 	stderrColor = isTerminal(os.Stderr)
 }
 
+// The exact reset paint emits is load-bearing: selectedRow (menu.go)
+// rewrites it to keep the selection bar alive across painted cells.
+const ansiReset = "\x1b[0m"
+
 func paint(s, code string, enabled bool) string {
-	if !enabled || s == "" {
+	if !enabled || s == "" || code == "" {
 		return s
 	}
-	return "\x1b[" + code + "m" + s + "\x1b[0m"
+	return "\x1b[" + code + "m" + s + ansiReset
 }
 
 func boldOut(s string) string   { return paint(s, "1", stdoutColor) }
@@ -48,11 +56,36 @@ func cyanOut(s string) string   { return paint(s, "36", stdoutColor) }
 func greenOut(s string) string  { return paint(s, "32", stdoutColor) }
 func yellowOut(s string) string { return paint(s, "33", stdoutColor) }
 func dimOut(s string) string    { return paint(s, "2", stdoutColor) }
+func boldErr(s string) string   { return paint(s, "1", stderrColor) }
 func cyanErr(s string) string   { return paint(s, "36", stderrColor) }
 func greenErr(s string) string  { return paint(s, "32", stderrColor) }
 func yellowErr(s string) string { return paint(s, "33", stderrColor) }
 func dimErr(s string) string    { return paint(s, "2", stderrColor) }
 func redErr(s string) string    { return paint(s, "31", stderrColor) }
+
+// Arbitrary SGR codes (the per-project accent colors from hue.go);
+// an empty code means "no accent" and leaves the text untouched.
+func codeOut(s, code string) string { return paint(s, code, stdoutColor) }
+func codeErr(s, code string) string { return paint(s, code, stderrColor) }
+
+// Whether the terminal background is dark: COLORFGBG ("fg;bg", set by
+// konsole/rxvt and friends) when present, else assume dark, the more
+// common terminal theme. Deliberately NOT an OSC 11 query -- that
+// requires a competing reader on the tty, which eats type-ahead
+// keystrokes and stalls for seconds on terminals that never answer.
+var darkBackground = sync.OnceValue(func() bool {
+	parts := strings.Split(os.Getenv("COLORFGBG"), ";")
+	if len(parts) >= 2 {
+		if bg, err := strconv.Atoi(parts[len(parts)-1]); err == nil {
+			return bg <= 6 || bg == 8
+		}
+	}
+	return true
+})
+
+// Terminal color depth from the environment (COLORTERM/TERM/NO_COLOR),
+// for rendering arbitrary RGB accents at the best supported depth.
+var colorProfile = sync.OnceValue(termenv.EnvColorProfile)
 
 // Cells built for one stream keep their colors right on the other too:
 // a palette bundles the painters so shared renderers (worktree rows in
@@ -64,17 +97,16 @@ type palette struct {
 var (
 	outPalette = palette{cyanOut, greenOut, yellowOut, dimOut}
 	errPalette = palette{cyanErr, greenErr, yellowErr, dimErr}
-	// For menu option labels: huh styles the highlight itself, and
-	// embedded ANSI resets would break it mid-row.
-	plainPalette = palette{plain, plain, plain, plain}
 )
-
-func plain(s string) string { return s }
 
 var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
+func stripANSI(s string) string {
+	return ansiRe.ReplaceAllString(s, "")
+}
+
 func visibleWidth(s string) int {
-	return len([]rune(ansiRe.ReplaceAllString(s, "")))
+	return len([]rune(stripANSI(s)))
 }
 
 // Usage / operational errors with a chosen exit code. Anything else
@@ -135,21 +167,26 @@ func alignRows(rows [][]string) []string {
 	if len(rows) == 0 {
 		return nil
 	}
+	cellWidths := make([][]int, len(rows))
 	widths := make([]int, len(rows[0]))
-	for _, row := range rows {
+	for r, row := range rows {
+		cellWidths[r] = make([]int, len(row))
 		for i, cell := range row {
-			if n := visibleWidth(cell); n > widths[i] {
+			n := visibleWidth(cell)
+			cellWidths[r][i] = n
+			if n > widths[i] {
 				widths[i] = n
 			}
 		}
 	}
 	lines := make([]string, len(rows))
 	for r, row := range rows {
-		line := ""
+		var line strings.Builder
 		for i, cell := range row {
-			line += cell + strings.Repeat(" ", widths[i]-visibleWidth(cell)) + "  "
+			line.WriteString(cell)
+			line.WriteString(strings.Repeat(" ", widths[i]-cellWidths[r][i]+2))
 		}
-		lines[r] = strings.TrimRight(line, " ")
+		lines[r] = strings.TrimRight(line.String(), " ")
 	}
 	return lines
 }

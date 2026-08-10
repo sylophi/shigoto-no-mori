@@ -53,6 +53,22 @@ func expandHome(path string) string {
 	return path
 }
 
+// expandHome's display-side inverse: long absolute paths read better
+// as ~/... in menus. Never fed back into file operations.
+func collapseHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+		return "~" + path[len(home):]
+	}
+	return path
+}
+
 func toAbsolute(path string) string {
 	expanded := expandHome(path)
 	if filepath.IsAbs(expanded) {

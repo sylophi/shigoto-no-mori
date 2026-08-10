@@ -42,24 +42,27 @@ func pickProject(ctx cliContext, preferredID string) (project, error) {
 	if len(ctx.projects) == 0 {
 		return project{}, errf("No projects are registered yet.")
 	}
-	widest := 0
-	for _, p := range ctx.projects {
-		if n := len([]rune(p.Name)); n > widest {
-			widest = n
-		}
+	// Accent resolution shells out per project; skip it entirely when
+	// the colors would be painted away.
+	if stderrColor {
+		prefetchProjectColors(ctx.projects)
 	}
-	rows := make([]string, len(ctx.projects))
+	cells := make([][]string, len(ctx.projects))
 	names := make([]string, len(ctx.projects))
 	initial := 0
 	for i, p := range ctx.projects {
-		pad := strings.Repeat(" ", widest-len([]rune(p.Name)))
-		rows[i] = p.Name + pad + "  " + p.Path
+		name := p.Name
+		if stderrColor {
+			name = codeErr(p.Name, projectColorCode(p))
+		}
+		cells[i] = []string{name, dimErr(collapseHome(p.Path))}
 		names[i] = p.Name
 		if p.ID == preferredID {
 			initial = i
 		}
 	}
-	idx, err := menuSelect("Select a project:", rows, names, initial)
+	header, rows := buildMenu([]string{"PROJECT", "PATH"}, cells)
+	idx, err := menuSelect("Select a project:", header, rows, names, initial)
 	if err != nil {
 		return project{}, err
 	}
@@ -110,22 +113,20 @@ func pickWorktree(proj project, opts pickOpts) (located, error) {
 	}
 
 	cells := make([][]string, len(choices))
+	names := make([]string, len(choices))
 	for i, w := range choices {
 		cells[i] = []string{
 			w.Name,
 			w.Branch,
-			syncCell(plainPalette, w),
-			changesCell(plainPalette, w),
-			flagsCell(plainPalette, w),
+			syncCell(errPalette, w),
+			changesCell(errPalette, w),
+			flagsCell(errPalette, w),
 		}
-	}
-	rows := alignRows(cells)
-	names := make([]string, len(choices))
-	for i, w := range choices {
 		names[i] = w.Name
 	}
+	header, rows := buildMenu([]string{"NAME", "BRANCH", "SYNC", "CHANGES", ""}, cells)
 
-	idx, err := menuSelect("Select a worktree in "+proj.Name+":", rows, names, 0)
+	idx, err := menuSelect("Select a worktree in "+proj.Name+":", header, rows, names, 0)
 	if err != nil {
 		return located{}, err
 	}

@@ -3,13 +3,16 @@
    either do unnecessary work or pick a lower-priority winner. */
 /* react-doctor-disable react-doctor/async-await-in-loop -- same reason as oxlint above. */
 import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
-import { isAbsolute, join, posix, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import type { ProjectIcon } from "@shared/schemas";
 import { listProjectFiles } from "../git/files";
-import { atomicWriteJson } from "../util/jsonFile";
+import { tempPathFor } from "../util/jsonFile";
+import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
+import { noteSelfWrite } from "../util/selfWrite";
 
 // Icon candidates per location bucket. Bucket priority roughly tracks
 // how canonical each location is for "the project's primary icon":
@@ -305,6 +308,14 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+// Shared with the CLI (cli/iconcache.go mirrors this shape, so change
+// them together). Two kinds of entry only the CLI writes: negative
+// markers (sourcePath "" + updatedAt, "scanned, no icon", which the
+// app skips on read so a freshly added icon still shows immediately),
+// and the `hue` field (the accent color of the icon's dominant
+// chroma; -1 = achromatic, absent = not computed). Every
+// read-modify-write of the index holds index.json.lock, the same
+// protocol as state.json.
 interface IconCacheEntry {
   sourcePath: string;
   sourceHash: string;
@@ -314,12 +325,17 @@ interface IconCacheEntry {
   sourceMtimeMs: number;
   mime: string;
   updatedAt: number;
+  // Written by the CLI; kept on touch-only revalidation, dropped when
+  // the content hash changes so a recolored logo re-derives it.
+  hue?: number;
 }
 
-// We don't persist "no icon" results. Re-resolving an icon-less project
-// is cheap (~50 stats on SSD) and React Query memoizes the null per
-// session; persisting it would block users who add an icon to an
+// The app doesn't persist "no icon" results. Re-resolving an icon-less
+// project is cheap (~50 stats on SSD) and React Query memoizes the null
+// per session; persisting it would block users who add an icon to an
 // existing project from ever seeing it without a manual cache reset.
+// (The CLI does write negative markers with its own TTL. They are
+// skipped on read here and preserved on write by the dirty-key merge.)
 const indexPath = (): string =>
   join(shigomoriRoot(), "iconCache", "index.json");
 
@@ -350,11 +366,75 @@ async function loadCache(): Promise<Map<string, IconCacheEntry>> {
   return loadPromise;
 }
 
+// Keys this process changed since the last persist. The index is also
+// written by the CLI, so persisting merges only these keys into a
+// fresh read of the file instead of clobbering it with this process's
+// whole map. Otherwise every app persist would erase entries and hues
+// the CLI wrote since the app loaded its copy.
+const dirtyKeys = new Set<string>();
+const deletedKeys = new Set<string>();
+
+function setEntry(
+  cache: Map<string, IconCacheEntry>,
+  key: string,
+  entry: IconCacheEntry,
+): void {
+  cache.set(key, entry);
+  dirtyKeys.add(key);
+  deletedKeys.delete(key);
+}
+
+function deleteEntry(cache: Map<string, IconCacheEntry>, key: string): void {
+  cache.delete(key);
+  deletedKeys.add(key);
+  dirtyKeys.delete(key);
+}
+
+// Merge the dirty keys into the index under its file lock (the CLI
+// takes the same lock). Sync IO while holding it, matching lockFile's
+// design: the hold is one small JSON read + write.
+function persistDirtySync(map: Map<string, IconCacheEntry>): void {
+  const dirty = [...dirtyKeys];
+  const deleted = [...deletedKeys];
+  if (dirty.length === 0 && deleted.length === 0) return;
+  dirtyKeys.clear();
+  deletedKeys.clear();
+  try {
+    withFileLock(`${indexPath()}.lock`, () => {
+      let disk: Record<string, IconCacheEntry> = {};
+      try {
+        disk = JSON.parse(readFileSync(indexPath(), "utf8")) as Record<
+          string,
+          IconCacheEntry
+        >;
+      } catch {
+        // Missing or corrupt index: rebuild from our keys alone.
+      }
+      for (const key of dirty) {
+        const entry = map.get(key);
+        if (entry) disk[key] = entry;
+      }
+      for (const key of deleted) delete disk[key];
+      mkdirSync(dirname(indexPath()), { recursive: true });
+      const temp = tempPathFor(indexPath());
+      writeFileSync(temp, `${JSON.stringify(disk, null, 2)}\n`, "utf8");
+      renameSync(temp, indexPath());
+      noteSelfWrite();
+    });
+  } catch (error) {
+    // Put the keys back so the next persist retries them; a key
+    // changed again in the meantime keeps its newer classification.
+    for (const key of dirty) if (!deletedKeys.has(key)) dirtyKeys.add(key);
+    for (const key of deleted) if (!dirtyKeys.has(key)) deletedKeys.add(key);
+    throw error;
+  }
+}
+
 // Coalesce parallel persists: a single in-flight write covers any
 // number of additional callers because they all mutate the shared
-// memoryCache before we serialize. Without this, the fan-out of N
-// parallel IPCs from the sidebar's first render races itself on the
-// index.json tmp + rename and surfaces ENOENT.
+// memoryCache (and dirty sets) before we serialize. Without this, the
+// fan-out of N parallel IPCs from the sidebar's first render would
+// contend on the file lock once per entry.
 //
 // Errors are logged and swallowed inside the loop because every
 // coalesced caller awaits the same promise: an inner-loop rejection
@@ -374,8 +454,7 @@ function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
       do {
         persistPending = false;
         try {
-          // react-doctor-disable-next-line react-doctor/async-await-in-loop -- do/while coalesces concurrent persists into one in-flight write
-          await atomicWriteJson(indexPath(), Object.fromEntries(map));
+          persistDirtySync(map);
         } catch (error) {
           console.warn("[icon-cache] failed to persist index:", error);
         }
@@ -487,11 +566,15 @@ async function readProjectIconInner(
   const cache = await loadCache();
   const cached = cache.get(projectPath);
 
-  if (cached) {
+  // sourcePath "" is the CLI's negative marker ("scanned, no icon").
+  // The app ignores it (a freshly added icon must show up immediately)
+  // but leaves it in place for the CLI's TTL. Resolving an icon below
+  // overwrites it.
+  if (cached && cached.sourcePath !== "") {
     const revalidated = await revalidateAndRead(cached);
     if (revalidated) {
       if (revalidated.dirty) {
-        cache.set(projectPath, revalidated.entry);
+        setEntry(cache, projectPath, revalidated.entry);
         await persistCache(cache);
       }
       return {
@@ -501,7 +584,7 @@ async function readProjectIconInner(
     }
     // Source vanished — drop the stale entry and fall through to
     // re-resolve in case the project now has a different icon.
-    cache.delete(projectPath);
+    deleteEntry(cache, projectPath);
     await persistCache(cache);
   }
 
@@ -510,7 +593,7 @@ async function readProjectIconInner(
 
   const built = await buildEntry(resolved);
   if (!built) return null;
-  cache.set(projectPath, built.entry);
+  setEntry(cache, projectPath, built.entry);
   await persistCache(cache);
   return { mime: built.entry.mime, base64: built.bytes.toString("base64") };
 }
@@ -518,6 +601,6 @@ async function readProjectIconInner(
 export async function forgetProjectIcon(projectPath: string): Promise<void> {
   const cache = await loadCache();
   if (!cache.has(projectPath)) return;
-  cache.delete(projectPath);
+  deleteEntry(cache, projectPath);
   await persistCache(cache);
 }
