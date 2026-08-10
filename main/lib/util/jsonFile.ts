@@ -42,9 +42,14 @@ export function tempPathFor(filePath: string): string {
   return `${filePath}.tmp.${process.pid}.${Date.now()}.${tempCounter++}`;
 }
 
+// selfWrite: false is for control-plane files the state watcher ignores
+// anyway (the updater bridge) -- claiming a self-write there would
+// blind the watcher to genuine external state writes for the echo
+// window around every updater transition.
 export async function atomicWriteJson(
   filePath: string,
   value: unknown,
+  { selfWrite = true }: { selfWrite?: boolean } = {},
 ): Promise<void> {
   await mkdir(dirname(filePath), { recursive: true });
   const temp = tempPathFor(filePath);
@@ -55,5 +60,5 @@ export async function atomicWriteJson(
     await unlink(temp).catch(() => undefined);
     throw error;
   }
-  noteSelfWrite();
+  if (selfWrite) noteSelfWrite();
 }
