@@ -9,10 +9,9 @@ wt="$(sm worktrees path <name>)" && cd "$wt"
 
 `sm worktrees list` shows what exists (name, branch, sync state). The
 reserved name `root` (or `primary`) targets the primary checkout:
-`sm worktrees path root`.
-Dev checkouts of the app install the CLI as `smd`; if neither exists,
-stop and tell the user. Do not use `sm cd` or `sm worktrees switch`:
-those open interactive subshells for humans and refuse to run in
-scripts.
+`sm worktrees path root`. Dev checkouts of the app install the CLI as
+`smd`; if neither exists, stop and tell the user. Do not use `sm cd`
+or `sm worktrees switch`: those open interactive subshells for humans
+and refuse to run in scripts.
 
 **Stay inside.** Run every subsequent command from the worktree.

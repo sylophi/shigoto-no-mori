@@ -127,7 +127,8 @@ func helpText(full bool) string {
 			"or a path, or pass -p <project>. The reserved names root and "+
 			"primary address a project's primary checkout (`"+binaryName+
 			" cd root`). Omitting the name in the primary checkout opens a "+
-			"menu. Aliases: c cd, w worktrees, p projects.", width) {
+			"menu. Aliases: c cd, o open, new create, w worktrees, "+
+			"p projects.", width) {
 		b.WriteString(line + "\n")
 	}
 	b.WriteString("\n")
@@ -178,8 +179,7 @@ func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string 
 func worktreesHelpText() string {
 	return namespaceHelpText("worktrees", "w or wt",
 		"The worktrees prefix is optional: "+binaryName+" rm == "+binaryName+
-			" wt rm. All commands accept -p <project>. "+
-			"Aliases: l list, new create, o open.", worktreeItems)
+			" wt rm. All commands accept -p <project>.", worktreeItems)
 }
 
 func projectsHelpText() string {
