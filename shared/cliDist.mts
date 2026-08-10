@@ -25,6 +25,11 @@ export const CLI_DIST_DIR = "dist-cli";
 // app by bundle id), so the two can never disagree.
 export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
+// GitHub repo the update feed serves releases from. The CLI owns the
+// whole update pipeline (cli/updater.go): build-cli.mjs injects this so
+// the feed can never point at a different repo than the app came from.
+export const UPDATE_FEED_REPO = "sylophi/shigoto-no-mori";
+
 // The CLI is not supported on Windows (and is never built or bundled
 // there), so there is no .exe variant.
 export function cliBinaryName(flavor: CliFlavor): string {

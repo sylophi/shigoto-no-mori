@@ -3,10 +3,10 @@
 // every other app<->CLI feature: the app publishes its updater state to
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
-// written by the CLI -- picked up at boot (the CLI may start the app
-// and write the request while boot is still in flight) and via an fs
-// watch afterwards. Everything here is best-effort: a failed write or a
-// malformed request degrades `sm update`, never the updater itself.
+// written by the CLI -- picked up at boot (a request can land in the
+// gap around a restart) and via an fs watch afterwards. Everything
+// here is best-effort: a failed write or a malformed request degrades
+// `sm update`, never the updater itself.
 import { watch } from "node:fs";
 import { rename } from "node:fs/promises";
 import { join } from "node:path";

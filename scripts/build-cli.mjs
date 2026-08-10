@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   APP_BUNDLE_ID,
+  UPDATE_FEED_REPO,
   CLI_DIST_DIR,
   cliAliasName,
   cliBinaryName,
@@ -44,6 +45,7 @@ const ldflags = [
   `-X main.binaryName=${cliBinaryName(flavor)}`,
   `-X main.aliasName=${cliAliasName(flavor)}`,
   `-X main.appBundleID=${APP_BUNDLE_ID}`,
+  `-X main.updateFeedRepo=${UPDATE_FEED_REPO}`,
   "-s",
   "-w",
 ].join(" ");

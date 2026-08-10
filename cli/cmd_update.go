@@ -1,16 +1,30 @@
 package main
 
 // sm update -- update the app (and with it this CLI, a symlink into
-// the bundle) from the terminal. The CLI never downloads anything
-// itself: it drives the app's own auto-updater over the on-disk bridge
-// in the state root, mirroring main/electron/updaterBridge.ts:
-//   updater.json          app -> CLI   { pid, appVersion, state }
-//   updater-request.json  CLI -> app   { action, requestedAt }
-// The app consumes requests at boot and via an fs watch, so the flow
-// is: read state -> (launch the app hidden if needed) -> request a
-// check -> follow updater.json until it settles -> request the install
-// and wait for the app to come back under a new pid. macOS-only, like
-// the updater itself. The dev CLI refuses -- dev builds run from a
+// the bundle) from the terminal. The CLI owns the whole pipeline
+// (updater.go): it queries the release feed, downloads and verifies
+// the new bundle, and swaps /Applications itself. The app is only
+// involved when it's already running -- a bundle swap under a live
+// instance would leave it executing a deleted version -- and even then
+// it is never launched: the CLI stages the update, asks the running
+// app to restart over the on-disk bridge (updaterBridge.ts), and the
+// app confirms with the user if it's busy, spawns a detached
+// `sm update --finish-install`, and quits. That installer waits for
+// the pid to exit, swaps, and relaunches.
+//
+// Modes:
+//   (default)         check + stage, then install (directly, or via
+//                     the running app's restart handoff).
+//   --check           query the feed and report. Touches nothing.
+//   --stage           check + download + verify into updates/staged,
+//                     no install. The app's own periodic check runs
+//                     this, so Settings and the CLI share one pipeline.
+//   --finish-install --pid <n>
+//                     internal: spawned detached by the app right
+//                     before it quits. Waits for <n> to exit, swaps
+//                     the staged bundle in, relaunches the app.
+//
+// macOS-only, and the dev CLI refuses -- dev builds run from a
 // checkout and have no update channel.
 
 import (
@@ -27,41 +41,35 @@ import (
 	"time"
 )
 
-// Mirrors UpdaterState (shared/schemas/runtime.ts), flattened: kind
-// tags which of the optional fields are meaningful.
-type updaterState struct {
-	Kind    string `json:"kind"`
-	Version string `json:"version,omitempty"`
-	Message string `json:"message,omitempty"`
-}
-
+// The subset of UpdaterStatus (shared/schemas/runtime.ts) the CLI
+// reads: pid/appVersion to tell whether a live instance has to be
+// restarted around the swap, and the state's error kind so an
+// app-side install failure surfaces immediately (waitForRestart)
+// instead of as a timeout.
 type updaterStatus struct {
-	Pid        int          `json:"pid"`
-	AppVersion string       `json:"appVersion"`
-	State      updaterState `json:"state"`
+	Pid        int    `json:"pid"`
+	AppVersion string `json:"appVersion"`
+	State      struct {
+		Kind    string `json:"kind"`
+		Message string `json:"message"`
+	} `json:"state"`
 }
 
 func updaterStatusPath() string { return filepath.Join(shigomoriRoot(), "updater.json") }
 func updateRequestPath() string { return filepath.Join(shigomoriRoot(), "updater-request.json") }
 
-// Stat before read: a write landing between the two syscalls then
-// yields content newer than the mtime, which at worst delays a verdict
-// by one poll -- the reverse order could stamp a stale read as fresh
-// and misreport "up to date" mid-check.
-func readUpdaterStatus() (*updaterStatus, time.Time) {
-	var modTime time.Time
-	if info, err := os.Stat(updaterStatusPath()); err == nil {
-		modTime = info.ModTime()
-	}
+// nil when the file is absent or malformed -- every caller treats
+// those the same way ("no reachable app").
+func readUpdaterStatus() *updaterStatus {
 	raw, err := os.ReadFile(updaterStatusPath())
 	if err != nil {
-		return nil, modTime
+		return nil
 	}
 	var status updaterStatus
 	if json.Unmarshal(raw, &status) != nil || status.Pid <= 0 {
-		return nil, modTime
+		return nil
 	}
-	return &status, modTime
+	return &status
 }
 
 // Liveness probe: signal 0 delivers nothing but still checks
@@ -72,15 +80,34 @@ func pidAlive(pid int) bool {
 }
 
 // A live pid alone isn't "the app is running" -- pids recycle across
-// reboots, and trusting a recycled one would skip the launch and leave
-// the CLI talking to nobody. The executable name (CFBundleExecutable)
-// survives bundle moves and renames, so require it to match too.
+// reboots, and trusting a recycled one would hand the install off to a
+// process that will never restart. The executable name
+// (CFBundleExecutable) survives bundle moves and renames, so require
+// it to match too.
 func appProcessAlive(pid int) bool {
 	if !pidAlive(pid) {
 		return false
 	}
 	comm, err := exec.Command("ps", "-o", "comm=", "-p", strconv.Itoa(pid)).Output()
 	return err == nil && strings.Contains(string(comm), appExecutableName)
+}
+
+// True when any process carries the app's executable name, even one
+// that hasn't published updater.json yet: a freshly launched instance
+// publishes only once its updater starts, and during that window the
+// file still holds the previous run's dead pid. -x is an exact match,
+// so the "... Helper" renderer processes don't count.
+func appProcessRunning() bool {
+	return exec.Command("pgrep", "-x", appExecutableName).Run() == nil
+}
+
+// The running app instance, when there is one.
+func runningApp() *updaterStatus {
+	status := readUpdaterStatus()
+	if status == nil || !appProcessAlive(status.Pid) {
+		return nil
+	}
+	return status
 }
 
 func writeUpdateRequest(action string) error {
@@ -91,17 +118,28 @@ func writeUpdateRequest(action string) error {
 }
 
 const (
-	appLaunchTimeout = 20 * time.Second
-	checkTimeout     = 90 * time.Second
-	// A slow connection can hold "downloading" for a while, so the
-	// check deadline stretches to this once a download is observed.
-	downloadTimeout = 10 * time.Minute
-	restartTimeout  = 2 * time.Minute
-	pollInterval    = 200 * time.Millisecond
+	restartTimeout = 2 * time.Minute
+	// How long a running-but-unpublished app gets to write updater.json
+	// before the CLI gives up (it never swaps under a live instance).
+	appPublishTimeout = 20 * time.Second
+	pollInterval      = 200 * time.Millisecond
 )
 
+// NDJSON phase events for --json consumers, pinned by
+// UpdateStageEventSchema (shared/schemas/runtime.ts) -- the app's
+// check parses these as they stream. A no-op for humans, whose
+// progress is the spinner.
+func emitEvent(name string) {
+	if jsonMode {
+		emit(map[string]any{"event": name})
+	}
+}
+
 func cmdUpdate(_ cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{bools: map[string][]string{"check": {}}})
+	parsed, err := parseCmdArgs(args, argSpec{
+		bools:   map[string][]string{"check": {}, "stage": {}, "finish-install": {}},
+		strings: map[string][]string{"pid": {}},
+	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -114,174 +152,234 @@ func cmdUpdate(_ cliContext, args []string) (int, error) {
 	if flavor != "prod" {
 		return 1, errf("This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.")
 	}
-	checkOnly := parsed.bools["check"]
 
-	spin := newSpinner()
-	defer spin.stop()
-
-	// Baseline for waitForOutcome's mtime heuristic: any updater.json
-	// write after this instant is post-sample activity, whether it came
-	// from our request, the launched app's boot check, or an in-flight
-	// check we happened to sample mid-run.
-	since := time.Now()
-	status, _ := readUpdaterStatus()
-	launchedApp := false
-	if status == nil || !appProcessAlive(status.Pid) {
-		// Background launch: an update check shouldn't yank focus away
-		// from the terminal.
-		spin.set("starting Shigoto no Mori")
-		if err := openAppBundle(true); err != nil {
-			return 1, err
-		}
-		launchedApp = true
-		if status, err = waitForApp(); err != nil {
-			return 1, err
-		}
-	}
-	installedVersion, appPid := status.AppVersion, status.Pid
-
-	state := status.State
-	if state.Kind == "unsupported" {
-		return 1, errf("This app build has no update channel.")
-	}
-	// Anything but a staged update warrants a fresh check. The request
-	// is safe to send unconditionally: the app no-ops when a check or
-	// download is already in flight, and the outcome is followed the
-	// same way either way.
-	if state.Kind != "ready" {
-		if err := writeUpdateRequest("check"); err != nil {
-			return 1, errf("Couldn't write the update request: %v", err)
-		}
-		if state, err = waitForOutcome(spin, since); err != nil {
-			return 1, err
-		}
-	}
-
-	switch state.Kind {
-	case "error":
-		return 1, errf("Update check failed: %s", state.Message)
-	case "idle":
-		spin.stop()
-		if jsonMode {
-			emit(map[string]any{"ok": true, "status": "up-to-date", "version": installedVersion})
-		} else {
-			out("already up to date " + dimOut("("+installedVersion+")"))
-			noteAppLaunched(launchedApp)
-		}
-		return 0, nil
-	case "ready":
+	switch {
+	case parsed.bools["finish-install"]:
+		return cmdUpdateFinishInstall(parsed.strings["pid"])
+	case parsed.bools["check"]:
+		return cmdUpdateCheck()
+	case parsed.bools["stage"]:
+		return cmdUpdateStage()
 	default:
-		return 1, errf("Unexpected updater state %q.", state.Kind)
+		return cmdUpdateInstall()
 	}
+}
 
-	if checkOnly {
-		spin.stop()
-		if jsonMode {
-			emit(map[string]any{
-				"ok": true, "status": "update-ready",
-				"version": state.Version, "installed": installedVersion,
-			})
-		} else {
-			out(greenOut("update ready: ") + cyanOut(state.Version) +
-				dimOut(" (installed "+installedVersion+")"))
-			note(dimErr("Run `" + binaryName + " update` to install."))
-			noteAppLaunched(launchedApp)
-		}
-		return 0, nil
-	}
-
-	if err := writeUpdateRequest("install"); err != nil {
-		return 1, errf("Couldn't write the update request: %v", err)
-	}
-	spin.set("restarting Shigoto no Mori to install " + state.Version)
-	newStatus, err := waitForRestart(spin, appPid, installedVersion)
+// --check: one feed request, no download, nothing touched on disk.
+func cmdUpdateCheck() (int, error) {
+	spin := newSpinner()
+	spin.set("checking for updates")
+	release, err := queryFeed()
+	spin.stop()
 	if err != nil {
 		return 1, err
 	}
-	spin.stop()
+	if release == nil {
+		reportUpToDate()
+		return 0, nil
+	}
 	if jsonMode {
 		emit(map[string]any{
-			"ok": true, "status": "updated",
-			"from": installedVersion, "to": newStatus.AppVersion,
+			"ok": true, "status": "update-available",
+			"version": release.Version, "installed": version,
 		})
 	} else {
-		out("updated " + cyanOut(installedVersion) + dimOut(" -> ") +
-			boldOut(greenOut(newStatus.AppVersion)))
+		out(greenOut("update available: ") + cyanOut(release.Version) +
+			dimOut(" (installed "+version+")"))
+		note(dimErr("Run `" + binaryName + " update` to install."))
 	}
 	return 0, nil
 }
 
-// The app is reachable once updater.json carries a live pid. A stale
-// file from a previous run may sit there while the fresh instance
-// boots, but requests are consumed at bridge start either way, so an
-// early return with slightly stale state only costs one extra check.
-func waitForApp() (*updaterStatus, error) {
-	deadline := time.Now().Add(appLaunchTimeout)
-	for {
-		if status, _ := readUpdaterStatus(); status != nil && appProcessAlive(status.Pid) {
-			return status, nil
-		}
-		if time.Now().After(deadline) {
-			return nil, errf("The app started but never published updater state. " +
-				"Try updating from the app: Settings -> General.")
-		}
-		time.Sleep(pollInterval)
+// The shared front half of --stage and the full update: resolve the
+// bundle and run the staging pipeline (which sweeps earlier runs'
+// debris under its lock) with progress wired to the spinner and the
+// --json event stream. A nil manifest with a nil error means already
+// up to date.
+func stageForCommand(spin *spinner) (*stagedManifest, string, error) {
+	bundle, err := installedBundlePath()
+	if err != nil {
+		return nil, "", err
 	}
-}
-
-// Follow updater.json until the check settles: ready, or a
-// fresh-enough idle (up to date) / error. Idle and error are only
-// trusted once the state file was written after `since` -- the app
-// always writes "checking" before a verdict, so any post-`since` write
-// of either means a whole check ran, whether or not the intermediate
-// states landed between two polls. An older one is last run's result
-// still sitting there (a leftover error must not be reported as the
-// outcome of the check we just requested). Ready needs no guard: a
-// staged update stays actionable regardless of when it was found.
-func waitForOutcome(spin *spinner, since time.Time) (updaterState, error) {
 	spin.set("checking for updates")
-	deadline := time.Now().Add(checkTimeout)
-	downloadSeen := false
-	for {
-		if status, modTime := readUpdaterStatus(); status != nil {
-			switch status.State.Kind {
-			case "downloading":
-				if !downloadSeen {
-					downloadSeen = true
-					deadline = time.Now().Add(downloadTimeout)
-				}
-				spin.set("downloading update")
-			case "ready":
-				return status.State, nil
-			case "idle", "error":
-				if modTime.After(since) {
-					return status.State, nil
-				}
-			}
-		}
-		if time.Now().After(deadline) {
-			return updaterState{}, errf("Timed out waiting for the app's updater. " +
-				"Try updating from the app: Settings -> General.")
-		}
-		time.Sleep(pollInterval)
+	man, err := stageUpdate(bundle, func(phase, newVersion string) {
+		spin.set(phase + " " + newVersion)
+		emitEvent(phase)
+	})
+	return man, bundle, err
+}
+
+func reportUpToDate() {
+	if jsonMode {
+		emit(map[string]any{"ok": true, "status": "up-to-date", "version": version})
+	} else {
+		out("already up to date " + dimOut("("+version+")"))
 	}
 }
 
-// The install restarts the app. Success is updater.json reappearing
-// under a new pid AND a new version -- a failed Squirrel swap
-// relaunches the old bundle under a new pid, which must not be
-// reported as "updated X -> X". If the app is busy (running scripts),
-// it asks for confirmation in a dialog the CLI can't see -- hence the
-// hint -- and a decline simply times out here with the old pid still
-// alive. The timeout message stays tentative because a late
-// confirmation still installs after the CLI has given up.
-func waitForRestart(spin *spinner, oldPid int, oldVersion string) (*updaterStatus, error) {
+// --stage: check + download + verify, stop short of installing. The
+// app's periodic check shells out to this with --json and mirrors the
+// event stream into its Settings state machine. The result document is
+// pinned by UpdateStageResultSchema (shared/schemas/runtime.ts).
+func cmdUpdateStage() (int, error) {
+	spin := newSpinner()
+	defer spin.stop()
+	man, _, err := stageForCommand(spin)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	spin.stop()
+	if man == nil {
+		reportUpToDate()
+		return 0, nil
+	}
+	if jsonMode {
+		doc := map[string]any{
+			"ok": true, "status": "staged",
+			"version": man.Version, "installed": version,
+		}
+		if man.Notes != "" {
+			doc["notes"] = man.Notes
+		}
+		if man.ReleaseDate != "" {
+			doc["releaseDate"] = man.ReleaseDate
+		}
+		emit(doc)
+	} else {
+		out(greenOut("update staged: ") + cyanOut(man.Version) +
+			dimOut(" (installed "+version+")"))
+		note(dimErr("Run `" + binaryName + " update` to install."))
+	}
+	return 0, nil
+}
+
+// The full ride: stage, then install. With no app running the CLI
+// swaps the bundle itself and never launches anything. With a live app
+// the install is handed to it so the restart (and the "scripts are
+// running" confirmation) happens where the user can see it.
+func cmdUpdateInstall() (int, error) {
+	spin := newSpinner()
+	defer spin.stop()
+	man, bundle, err := stageForCommand(spin)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	if man == nil {
+		spin.stop()
+		reportUpToDate()
+		return 0, nil
+	}
+
+	app := runningApp()
+	if app == nil && appProcessRunning() {
+		// A live instance that hasn't published its state yet (fresh
+		// launch, updater.json still naming a previous run's pid).
+		// Swapping now would leave it running a deleted bundle, so
+		// wait for it to publish rather than treating it as absent.
+		spin.set("waiting for the running app")
+		deadline := time.Now().Add(appPublishTimeout)
+		for app == nil && time.Now().Before(deadline) {
+			time.Sleep(pollInterval)
+			app = runningApp()
+		}
+		if app == nil {
+			return 1, errf("The app is running but hasn't published its updater state. "+
+				"Wait for it to finish starting (or quit it) and rerun `%s update`.", binaryName)
+		}
+	}
+	if app == nil {
+		spin.set("installing " + man.Version)
+		if err := installStaged(man, bundle); err != nil {
+			return 1, err
+		}
+		spin.stop()
+		reportUpdated(version, man.Version)
+		return 0, nil
+	}
+
+	// Hand off to the running instance: it confirms (if busy), spawns
+	// the detached installer, and quits. The relaunched app publishes a
+	// fresh updater.json, which is our success signal.
+	requestedAt := time.Now()
+	if err := writeUpdateRequest("install"); err != nil {
+		return 1, errf("Couldn't write the update request: %v", err)
+	}
+	spin.set("restarting Shigoto no Mori to install " + man.Version)
+	newStatus, err := waitForRestart(spin, app.Pid, app.AppVersion, requestedAt)
+	if err != nil {
+		return 1, err
+	}
+	spin.stop()
+	reportUpdated(app.AppVersion, newStatus.AppVersion)
+	return 0, nil
+}
+
+func reportUpdated(from, to string) {
+	if jsonMode {
+		emit(map[string]any{"ok": true, "status": "updated", "from": from, "to": to})
+	} else {
+		out("updated " + cyanOut(from) + dimOut(" -> ") + boldOut(greenOut(to)))
+	}
+}
+
+// --finish-install: the detached installer the app spawns just before
+// quitting. Headless -- outcomes go to updates/install.log, and the
+// relaunched app (or its absence) is what the user sees.
+func cmdUpdateFinishInstall(pidArg string) (int, error) {
+	pid, err := strconv.Atoi(strings.TrimSpace(pidArg))
+	if err != nil || pid <= 0 {
+		return 2, usageErrf("--finish-install requires --pid <app pid>.")
+	}
+	bundle, bundleErr := installedBundlePath()
+	if bundleErr != nil {
+		appendInstallLog("finish-install: %v", bundleErr)
+		return 1, bundleErr
+	}
+	man := readStagedManifest()
+	if man == nil {
+		appendInstallLog("finish-install: no staged update to install")
+		return 1, errf("No staged update to install.")
+	}
+	appendInstallLog("finish-install: waiting for app pid %d to exit (installing %s)", pid, man.Version)
+	if err := waitForPidExit(pid); err != nil {
+		appendInstallLog("finish-install: %v (aborting)", err)
+		return 1, err
+	}
+	if err := installStaged(man, bundle); err != nil {
+		appendInstallLog("finish-install: %v", err)
+		return 1, err
+	}
+	// Relaunch by path, foreground: the user asked the app to restart.
+	// (`open -b` could still resolve a stale LaunchServices entry for
+	// the just-deleted aside bundle.)
+	if err := exec.Command("open", bundle).Run(); err != nil {
+		appendInstallLog("finish-install: installed %s but relaunch failed: %v", man.Version, err)
+		return 1, errf("Installed %s but couldn't relaunch the app: %v", man.Version, err)
+	}
+	appendInstallLog("finish-install: installed %s and relaunched", man.Version)
+	return 0, nil
+}
+
+// The handed-off install restarts the app. Success is updater.json
+// reappearing under a new pid AND a new version -- a failed swap
+// relaunching the old bundle must not be reported as "updated X -> X".
+// An error the old pid publishes after our request (its installer
+// spawn failed) is reported immediately with its message. The mtime
+// guard keeps a leftover error from an earlier failed check -- which
+// the app never clears on this path -- from being blamed on this
+// install. If the app is busy (running scripts), it asks for
+// confirmation in a dialog the CLI can't see -- hence the hint -- and
+// a decline simply times out here with the old pid still alive. The
+// timeout message stays tentative because a late confirmation still
+// installs after the CLI has given up: the staged update survives
+// until it's consumed.
+func waitForRestart(spin *spinner, oldPid int, oldVersion string, requestedAt time.Time) (*updaterStatus, error) {
 	start := time.Now()
 	deadline := start.Add(restartTimeout)
 	hinted := false
 	sameVersion := false
 	for {
-		status, _ := readUpdaterStatus()
+		status := readUpdaterStatus()
 		if status != nil && status.Pid != oldPid && appProcessAlive(status.Pid) {
 			if status.AppVersion != oldVersion {
 				return status, nil
@@ -289,7 +387,9 @@ func waitForRestart(spin *spinner, oldPid int, oldVersion string) (*updaterStatu
 			sameVersion = true
 		}
 		if status != nil && status.Pid == oldPid && status.State.Kind == "error" {
-			return nil, errf("Install failed: %s", status.State.Message)
+			if info, err := os.Stat(updaterStatusPath()); err == nil && info.ModTime().After(requestedAt) {
+				return nil, errf("Install failed: %s", status.State.Message)
+			}
 		}
 		if !hinted && time.Since(start) > 15*time.Second {
 			hinted = true
@@ -298,7 +398,7 @@ func waitForRestart(spin *spinner, oldPid int, oldVersion string) (*updaterStatu
 		if time.Now().After(deadline) {
 			if sameVersion {
 				return nil, errf("The app restarted but is still on %s -- the install "+
-					"may have failed. Check the app.", oldVersion)
+					"may have failed. Check %s.", oldVersion, filepath.Join(updatesDir(), "install.log"))
 			}
 			return nil, errf("The app hasn't restarted yet -- it may still be waiting on a " +
 				"confirmation in the app (confirming there will still install the update), " +
@@ -308,21 +408,12 @@ func waitForRestart(spin *spinner, oldPid int, oldVersion string) (*updaterStatu
 	}
 }
 
-// Stderr postscript for read-only outcomes that had to boot the app:
-// leaving a full app running is worth a mention when the user only
-// asked a question.
-func noteAppLaunched(launched bool) {
-	if launched {
-		note(dimErr("Started Shigoto no Mori to run the check. It's still running."))
-	}
-}
-
 // --- progress spinner (stderr) ---
 
 // Animated on an interactive terminal. Elsewhere it degrades to one
 // stderr note per label change (and stays silent in --json, where the
-// final document is the whole story). The stdout result line never
-// goes through here.
+// event stream is the whole story). The stdout result line never goes
+// through here.
 type spinner struct {
 	mu       sync.Mutex
 	label    string
@@ -380,7 +471,7 @@ func (s *spinner) set(label string) {
 	}
 }
 
-// Idempotent: cmdUpdate defers a stop and also stops before printing
+// Idempotent: commands defer a stop and also stop before printing
 // results, so the success path clears the line before stdout writes.
 func (s *spinner) stop() {
 	if !s.animated {

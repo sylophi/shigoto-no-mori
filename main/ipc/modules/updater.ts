@@ -2,9 +2,10 @@ import { updaterContract } from "@shared/ipc/modules/updater";
 import type { Handlers } from "@shared/ipc/types";
 import type { UpdaterState } from "@shared/schemas";
 
-// The electron layer owns the autoUpdater wiring and injects the
-// concrete state machine at boot. Keeping these as setters lets the
-// handler module stay free of Electron imports.
+// The electron layer owns the updater wiring (the CLI-driven pipeline
+// in electron/updater.ts) and injects the concrete state machine at
+// boot. Keeping these as setters lets the handler module stay free of
+// Electron imports.
 type UpdaterImpl = {
   getState: () => UpdaterState;
   check: () => void;

@@ -151,9 +151,10 @@ app.on("before-quit", (event) => {
   if (isQuitting) return;
   // An update-triggered quit (macOS-only: the portable Windows build
   // has no auto-updater) has to flow through Electron's natural quit so
-  // Squirrel.Mac's ShipIt helper detects the parent PID exit and swaps
-  // bundles. Awaiting the full kill chain here would block that handoff
-  // for up to ~1.5s (grace + SIGKILL); instead we fire a synchronous
+  // the detached `sm update --finish-install` installer sees this pid
+  // exit and swaps bundles. Awaiting the full kill chain here would
+  // block that handoff for up to ~1.5s (grace + SIGKILL). Instead we
+  // fire a synchronous
   // best-effort SIGTERM to each process group, so well-behaved scripts
   // get the natural quit window ~100ms to clean up. The trade-off vs
   // the normal-quit path: children that survive the best-effort pass
