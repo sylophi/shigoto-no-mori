@@ -1,28 +1,22 @@
 package main
 
 // Project icon resolution, ported from main/lib/projects/icon.ts so
-// the CLI can color projects by logo without the app having run.
-// Cache-first: the app persists every icon it resolves in
-// iconCache/index.json under the state root, and an existing entry
-// whose file is still on disk wins (keeping both surfaces on the same
-// icon, including the app's monorepo descent). On a miss the same
-// git-driven candidate scan runs here: every package root (repo top
-// level plus each package.json directory, shallowest first) is probed
-// for the conventional icon files, then for a <link rel="icon"> href
-// in the usual source files. The candidate lists must stay in sync
-// with icon.ts. Read-only: the CLI never writes the app's cache (it
-// has no lock), so a miss re-scans -- listing git's view of a repo is
-// cheap enough for a picker.
+// the CLI can color projects by logo without the app having run. The
+// shared cache in front of this scan lives in iconcache.go; what's
+// here is the resolution itself, and it must produce the same answer
+// as the app's: every package root (repo top level plus each
+// package.json directory, shallowest first) is probed for the
+// conventional icon files, then for a <link rel="icon"> href in the
+// usual source files. The candidate lists must stay in sync with
+// icon.ts.
 
 import (
-	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 )
 
 var iconCandidates = []string{
@@ -244,33 +238,10 @@ func scanRootForIcon(cwd, root string, files map[string]bool) string {
 	return ""
 }
 
-// --- The app's persisted cache ---
-
-var appIconCache = sync.OnceValue(func() map[string]string {
-	raw, err := os.ReadFile(filepath.Join(shigomoriRoot(), "iconCache", "index.json"))
-	if err != nil {
-		return nil
-	}
-	var index map[string]struct {
-		SourcePath string `json:"sourcePath"`
-	}
-	if json.Unmarshal(raw, &index) != nil {
-		return nil
-	}
-	// Keyed by comparablePath so the CLI's stored project path matches
-	// however the app spelled the same directory.
-	byPath := make(map[string]string, len(index))
-	for projectPath, entry := range index {
-		byPath[comparablePath(projectPath)] = entry.SourcePath
-	}
-	return byPath
-})
-
-// Absolute path of the project's icon, or "" when it has none.
-func resolveProjectIcon(projectPath string) string {
-	if cached := appIconCache()[comparablePath(projectPath)]; cached != "" && fileExists(cached) {
-		return cached
-	}
+// Absolute path of the project's icon straight from the repo scan, or
+// "" when it has none. Callers go through projectHue (iconcache.go),
+// which consults the shared cache first.
+func resolveIconPath(projectPath string) string {
 	files := listProjectFiles(projectPath)
 	if len(files) == 0 {
 		return scanRootForIcon(projectPath, "", nil)

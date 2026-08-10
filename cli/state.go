@@ -224,7 +224,7 @@ func atomicWriteJSON(path string, value any) error {
 	return nil
 }
 
-// --- state.json lock (main/lib/util/lockFile.ts protocol) ---
+// --- cross-process file locks (main/lib/util/lockFile.ts protocol) ---
 
 const (
 	lockStale   = 10 * time.Second
@@ -233,7 +233,13 @@ const (
 )
 
 func withStateLock(fn func() error) error {
-	lockPath := statePath() + ".lock"
+	return withFileLock(statePath(), fn)
+}
+
+// Guards a read-modify-write of `path` against the app doing the same:
+// both sides take the sibling `<path>.lock` before touching the file.
+func withFileLock(path string, fn func() error) error {
+	lockPath := path + ".lock"
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		return err
 	}

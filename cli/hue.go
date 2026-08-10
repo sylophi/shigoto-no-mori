@@ -29,7 +29,6 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"math"
-	"os"
 	"regexp"
 	"strconv"
 	"sync"
@@ -296,13 +295,8 @@ func icoLargestPNG(data []byte) []byte {
 
 // Sniffed by content, not extension -- plenty of favicon.ico files are
 // really PNGs.
-func iconHue(iconPath string) (float64, bool) {
-	info, err := os.Stat(iconPath)
-	if err != nil || info.Size() > 2<<20 {
-		return 0, false
-	}
-	data, err := os.ReadFile(iconPath)
-	if err != nil {
+func iconHueBytes(data []byte) (float64, bool) {
+	if len(data) == 0 {
 		return 0, false
 	}
 	switch {
@@ -339,10 +333,8 @@ func projectColorCode(proj project) string {
 		return code.(string)
 	}
 	code := ""
-	if iconPath := resolveProjectIcon(proj.Path); iconPath != "" {
-		if hue, ok := iconHue(iconPath); ok {
-			code = hueToCode(hue)
-		}
+	if hue, ok := projectHue(proj); ok {
+		code = hueToCode(hue)
 	}
 	projectColorMemo.Store(proj.ID, code)
 	return code
@@ -364,4 +356,5 @@ func prefetchProjectColors(projects []project) {
 		}()
 	}
 	wg.Wait()
+	flushIconCache()
 }
