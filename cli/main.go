@@ -54,6 +54,8 @@ var worktreeItems = []helpItem{
 		"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
 	{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
 		"Method follows the repo's settings unless -m overrides."},
+	{"worktrees land [<name>] [-m <method>] [-f] [--keep-branch]", "Merge the PR, then clean up",
+		"merge + rm in one step (done when landing the primary checkout), fast-forwarding the primary branch in between. An already-merged PR skips straight to cleanup."},
 	{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
 		"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
 	{"worktrees setup [<name>]", "Re-run the setup script",
@@ -135,7 +137,7 @@ func helpText(full bool) string {
 	if !full {
 		general := append(append([]helpItem{}, generalItems...),
 			helpItem{"worktrees <command>", "Worktree commands",
-				"switch, path, create, rm, done, merge, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
+				"switch, path, create, rm, done, merge, land, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
 				"list, add, remove, config. Run `" + binaryName + " projects` for details."},
 		)
@@ -302,6 +304,7 @@ var commands = []command{
 	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},
 	{name: "done", worktree: true, run: cmdDone},
 	{name: "merge", worktree: true, run: cmdMerge},
+	{name: "land", worktree: true, run: cmdLand},
 	{name: "adopt", worktree: true, run: cmdAdopt},
 	{name: "setup", worktree: true, run: cmdSetup},
 	{name: "shelve", worktree: true,

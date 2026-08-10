@@ -19,6 +19,95 @@ import (
 	"fmt"
 )
 
+// The project's primary branch in every form the flows below need:
+// the resolved ref (possibly remote-qualified), the bare local branch
+// name, and the remotes list that fed the resolution -- one `git
+// remote` spawn serves the ref resolution, the local-name split, and
+// the checkout inside switchToPrimaryBranch.
+type primaryTarget struct {
+	remotes      []string
+	primaryRef   string
+	localPrimary string
+}
+
+func resolvePrimaryTarget(proj project) (primaryTarget, error) {
+	remotes := listRemotes(proj.Path)
+	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
+		defaultBranchOverride(readProjectConfig(proj.ID)), remotes)
+	if primaryRef == "" {
+		return primaryTarget{}, errf("No local branches found in %s", proj.Path)
+	}
+	localPrimary := primaryRef
+	if _, branch := splitRemoteRef(primaryRef, remotes); branch != "" {
+		localPrimary = branch
+	}
+	return primaryTarget{remotes: remotes, primaryRef: primaryRef, localPrimary: localPrimary}, nil
+}
+
+// execDone lands the checkout back on the primary branch and (when
+// deleteBranch is set) deletes the branch it was sitting on. Returns
+// whether a branch was deleted. Order matters: the checkout frees the
+// merged branch (git refuses to delete a checked-out branch). The
+// branch just landed on is never deleted.
+func execDone(proj project, pt primaryTarget, id worktreeIdentity, deleteBranch bool) (bool, error) {
+	if err := switchToPrimaryBranch(id.Path, pt.primaryRef, pt.remotes); err != nil {
+		return false, err
+	}
+	if deleteBranch && id.Branch != pt.localPrimary {
+		if _, err := runGit(proj.Path, "branch", "-D", "--", id.Branch); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// Fresh description so callers see the landed state, matching the
+// app's mutateAndDescribe round trip. pt already holds what
+// loadBuildContext would re-spawn git for.
+func describeAfterDone(proj project, pt primaryTarget, id worktreeIdentity) (worktreeJSON, error) {
+	invalidateWorktreeIdentities(proj.ID)
+	fresh, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return worktreeJSON{}, err
+	}
+	ctx := buildContext{
+		hasRemote:  len(pt.remotes) > 0,
+		primaryRef: pt.primaryRef,
+		shelved:    readShelvedSet(),
+	}
+	for _, freshID := range fresh {
+		if freshID.ID != id.ID {
+			continue
+		}
+		w := buildWorktree(proj, freshID, ctx)
+		w.ProjectName = proj.Name
+		return w, nil
+	}
+	return worktreeJSON{}, errf("worktree disappeared after switching branches")
+}
+
+// Shared result report for done and land's primary path. extra adds
+// top-level keys to the JSON document (land's "merged").
+func reportDone(w worktreeJSON, mergedBranch string, deleted bool, extra map[string]any) {
+	if jsonMode {
+		doc := map[string]any{
+			"ok": true, "worktree": w,
+			"deletedBranch": deletedBranchField(mergedBranch, deleted),
+		}
+		for key, value := range extra {
+			doc[key] = value
+		}
+		emit(doc)
+	} else {
+		line := greenOut(fmt.Sprintf("%s is now on %s", w.Name, w.Branch))
+		if deleted {
+			line += dimOut(fmt.Sprintf(" (deleted branch %s)", mergedBranch))
+		}
+		out(line)
+	}
+}
+
 func cmdDone(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["force"] = []string{"f"}
@@ -36,24 +125,9 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 		return 1, errf("No branch checked out to clean up")
 	}
 
-	config := readProjectConfig(proj.ID)
-	override := ""
-	if config != nil {
-		override = config.DefaultBranch
-	}
-	// One `git remote` spawn serves the primary-ref resolution, the
-	// local-name split below, and the checkout inside
-	// switchToPrimaryBranch.
-	remotes := listRemotes(proj.Path)
-	primaryRef := resolveDefaultBranchWithRemotes(proj.Path, override, remotes)
-	if primaryRef == "" {
-		return 1, errf("No local branches found in %s", proj.Path)
-	}
-
-	mergedBranch := id.Branch
-	localPrimary := primaryRef
-	if _, branch := splitRemoteRef(primaryRef, remotes); branch != "" {
-		localPrimary = branch
+	pt, err := resolvePrimaryTarget(proj)
+	if err != nil {
+		return 1, err
 	}
 
 	// The delete below is `branch -D`, so refuse before mutating
@@ -61,53 +135,25 @@ func cmdDone(ctx cliContext, args []string) (int, error) {
 	// the primary ref (merge/rebase merges), or the head of a merged PR
 	// (squash merges leave no ancestor relationship). --force covers
 	// intentional discards.
-	if mergedBranch != localPrimary && !parsed.bools["force"] &&
-		!isAncestor(proj.Path, mergedBranch, primaryRef) &&
-		!branchHasMergedPR(proj.Path, mergedBranch) {
+	if id.Branch != pt.localPrimary && !parsed.bools["force"] &&
+		!isAncestor(proj.Path, id.Branch, pt.primaryRef) &&
+		!branchHasMergedPR(proj.Path, id.Branch) {
 		return 1, errf(
 			"Branch %s isn't merged into %s (no merge found, no merged PR). Merge it first, or pass --force to discard it.",
-			mergedBranch, primaryRef)
+			id.Branch, pt.primaryRef)
 	}
 
-	if err := switchToPrimaryBranch(id.Path, primaryRef, remotes); err != nil {
-		return 1, err
-	}
-	deleted := false
-	if mergedBranch != localPrimary {
-		if _, err := runGit(proj.Path, "branch", "-D", "--", mergedBranch); err != nil {
-			return 1, err
-		}
-		deleted = true
-	}
-
-	// Fresh description so callers see the landed state, matching the
-	// app's mutateAndDescribe round trip.
-	invalidateWorktreeIdentities(proj.ID)
-	fresh, err := listWorktreeIdentities(proj)
+	deleted, err := execDone(proj, pt, id, true)
 	if err != nil {
 		return 1, err
 	}
-	for _, freshID := range fresh {
-		if freshID.ID != id.ID {
-			continue
-		}
-		w := buildWorktree(proj, freshID, loadBuildContext(proj))
-		w.ProjectName = proj.Name
-		if jsonMode {
-			emit(map[string]any{
-				"ok": true, "worktree": w,
-				"deletedBranch": deletedBranchField(mergedBranch, deleted),
-			})
-		} else {
-			line := greenOut(fmt.Sprintf("%s is now on %s", w.Name, w.Branch))
-			if deleted {
-				line += dimOut(fmt.Sprintf(" (deleted branch %s)", mergedBranch))
-			}
-			out(line)
-		}
-		return 0, nil
+
+	w, err := describeAfterDone(proj, pt, id)
+	if err != nil {
+		return 1, err
 	}
-	return 1, errf("worktree disappeared after switching branches")
+	reportDone(w, id.Branch, deleted, nil)
+	return 0, nil
 }
 
 func isAncestor(cwd, ancestor, ref string) bool {
@@ -145,12 +191,19 @@ func switchToPrimaryBranch(worktreePath, primaryRef string, remotes []string) er
 	if err := checkoutBranch(worktreePath, primaryRef, remotes); err != nil {
 		return err
 	}
-	if remote, branch := splitRemoteRef(primaryRef, remotes); remote != "" {
-		if _, err := runGit(worktreePath, "pull", "--ff-only", remote, branch); err != nil {
-			return err
-		}
+	_, err := ffPullPrimary(worktreePath, primaryRef, remotes)
+	return err
+}
+
+// Fast-forward worktreePath from the remote side of primaryRef; a
+// local-only ref is a no-op. Reports whether a pull actually ran.
+func ffPullPrimary(worktreePath, primaryRef string, remotes []string) (bool, error) {
+	remote, branch := splitRemoteRef(primaryRef, remotes)
+	if remote == "" {
+		return false, nil
 	}
-	return nil
+	_, err := runGit(worktreePath, "pull", "--ff-only", remote, branch)
+	return err == nil, err
 }
 
 // checkoutBranch ports branches.ts: an exact local branch wins; a

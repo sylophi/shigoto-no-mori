@@ -102,6 +102,42 @@ func allowedMergeMethods(projectPath string) []string {
 	return allowed
 }
 
+// The PR lookup and the repo-settings read are independent gh
+// round-trips (300-800ms each); overlap them -- shared by merge and
+// land. pr is nil when the branch has no PR at all.
+func resolveMergeTarget(projectPath, branch string) (pr *prSummary, allowed []string, err error) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); pr, err = findPullRequest(projectPath, branch) }()
+	go func() { defer wg.Done(); allowed = allowedMergeMethods(projectPath) }()
+	wg.Wait()
+	return pr, allowed, err
+}
+
+// The validated -m/--method flag value -- shared by merge and land.
+func mergeMethodOf(parsed parsedArgs) (string, error) {
+	m := parsed.strings["method"]
+	if m != "" && !slices.Contains(mergeMethodOrder, m) {
+		return "", usageErrf("Invalid --method %q (merge, squash, or rebase).", m)
+	}
+	return m, nil
+}
+
+// The merge result's JSON fields -- merge's document and land's
+// nested "merged" object, so the key set can't drift. method == ""
+// means the PR was already merged before the command ran.
+func mergeResultFields(pr *prSummary, branch, method string) map[string]any {
+	doc := map[string]any{
+		"number": pr.Number, "title": pr.Title, "branch": branch, "url": pr.URL,
+	}
+	if method != "" {
+		doc["method"] = method
+	} else {
+		doc["alreadyMerged"] = true
+	}
+	return doc
+}
+
 func cmdMerge(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.strings["method"] = []string{"m"}
@@ -112,8 +148,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if m := parsed.strings["method"]; m != "" && !slices.Contains(mergeMethodOrder, m) {
-		return 2, usageErrf("Invalid --method %q (merge, squash, or rebase).", m)
+	methodFlag, err := mergeMethodOf(parsed)
+	if err != nil {
+		return exitCodeOf(err), err
 	}
 
 	if numberFlag := parsed.strings["number"]; numberFlag != "" {
@@ -125,7 +162,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		method, err := execMerge(proj, number, parsed.strings["method"], allowedMergeMethods(proj.Path))
+		method, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
 		if err != nil {
 			return exitCodeOf(err), err
 		}
@@ -146,20 +183,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("No branch checked out to merge")
 	}
 
-	// The PR lookup and the repo-settings read are independent gh
-	// round-trips (300-800ms each); overlap them.
-	var (
-		pr      *prSummary
-		prErr   error
-		allowed []string
-		wg      sync.WaitGroup
-	)
-	wg.Add(2)
-	go func() { defer wg.Done(); pr, prErr = findPullRequest(proj.Path, id.Branch) }()
-	go func() { defer wg.Done(); allowed = allowedMergeMethods(proj.Path) }()
-	wg.Wait()
-	if prErr != nil {
-		return 1, prErr
+	pr, allowed, err := resolveMergeTarget(proj.Path, id.Branch)
+	if err != nil {
+		return 1, err
 	}
 	if pr == nil {
 		return 1, errf("No pull request found for branch %s", id.Branch)
@@ -168,16 +194,15 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("PR #%d for %s is %s, not open", pr.Number, id.Branch, strings.ToLower(pr.State))
 	}
 
-	method, err := execMerge(proj, pr.Number, parsed.strings["method"], allowed)
+	method, err := execMerge(proj, pr.Number, methodFlag, allowed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
 
 	if jsonMode {
-		emit(map[string]any{
-			"ok": true, "number": pr.Number, "title": pr.Title,
-			"method": method, "branch": id.Branch, "url": pr.URL,
-		})
+		doc := mergeResultFields(pr, id.Branch, method)
+		doc["ok"] = true
+		emit(doc)
 	} else {
 		out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
 		note(dimErr(fmt.Sprintf("next: `%s done` (primary checkout) or `%s rm %s` (managed worktree)",

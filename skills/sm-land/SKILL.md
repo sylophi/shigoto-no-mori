@@ -6,18 +6,18 @@ description: Merge a Shigoto no Mori worktree's branch into the primary branch a
 Land the current worktree's work, then clean up. Commit everything first,
 and push if there is a PR.
 
-**Merge.** Run `sm merge`: it merges the branch's PR and picks the merge
-method from the repo's settings. Pass `--method merge|squash|rebase` only
-when asked for a specific one. If there is no PR, do not merge by other
-means: stop and tell the user the branch needs a PR first.
+**Run `sm land`.** One command does the whole finish line: it merges the
+branch's PR (the merge method follows the repo's settings; pass
+`--method merge|squash|rebase` only when asked for a specific one),
+fast-forwards the local primary checkout so it sees the merge, and
+removes the worktree. When run from the primary checkout sitting on the
+merged branch, it lands the checkout back on the primary branch instead
+of removing anything.
 
-**Catch up.** The merge landed on the remote; fast-forward the local
-primary checkout so it sees it:
+If there is no PR, `sm land` stops. Do not merge by other means: tell
+the user the branch needs a PR first.
 
-```sh
-git -C "$(sm path root)" pull --ff-only
-```
-
-**Clean up.** Run `sm rm <name>` for a worktree you're finished with, or
-`sm done` when you're in the primary checkout sitting on the merged
-branch.
+**Partial failures resume.** If cleanup fails after the merge (a
+teardown script, say), fix the cause and re-run `sm land`: an
+already-merged PR skips straight to cleanup. If your shell ends up
+inside the removed directory, `cd` to the path the command prints.
