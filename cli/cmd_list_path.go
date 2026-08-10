@@ -1,6 +1,6 @@
 package main
 
-// sm list + sm path.
+// sm worktrees list + sm worktrees path.
 
 import (
 	"fmt"
