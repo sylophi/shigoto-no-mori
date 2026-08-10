@@ -308,7 +308,7 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-// Shared with the CLI (cli/iconcache.go mirrors this shape — change
+// Shared with the CLI (cli/iconcache.go mirrors this shape, so change
 // them together). Two kinds of entry only the CLI writes: negative
 // markers (sourcePath "" + updatedAt, "scanned, no icon", which the
 // app skips on read so a freshly added icon still shows immediately),
@@ -334,8 +334,8 @@ interface IconCacheEntry {
 // project is cheap (~50 stats on SSD) and React Query memoizes the null
 // per session; persisting it would block users who add an icon to an
 // existing project from ever seeing it without a manual cache reset.
-// (The CLI does write negative markers with its own TTL — skipped on
-// read here, preserved on write by the dirty-key merge.)
+// (The CLI does write negative markers with its own TTL. They are
+// skipped on read here and preserved on write by the dirty-key merge.)
 const indexPath = (): string =>
   join(shigomoriRoot(), "iconCache", "index.json");
 
@@ -369,8 +369,8 @@ async function loadCache(): Promise<Map<string, IconCacheEntry>> {
 // Keys this process changed since the last persist. The index is also
 // written by the CLI, so persisting merges only these keys into a
 // fresh read of the file instead of clobbering it with this process's
-// whole map — otherwise every app persist would erase entries and
-// hues the CLI wrote since the app loaded its copy.
+// whole map. Otherwise every app persist would erase entries and hues
+// the CLI wrote since the app loaded its copy.
 const dirtyKeys = new Set<string>();
 const deletedKeys = new Set<string>();
 
@@ -567,9 +567,9 @@ async function readProjectIconInner(
   const cached = cache.get(projectPath);
 
   // sourcePath "" is the CLI's negative marker ("scanned, no icon").
-  // The app ignores it — a freshly added icon must show up
-  // immediately — but leaves it in place for the CLI's TTL; resolving
-  // an icon below overwrites it.
+  // The app ignores it (a freshly added icon must show up immediately)
+  // but leaves it in place for the CLI's TTL. Resolving an icon below
+  // overwrites it.
   if (cached && cached.sourcePath !== "") {
     const revalidated = await revalidateAndRead(cached);
     if (revalidated) {

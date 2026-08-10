@@ -94,10 +94,16 @@ func (m *menuModel) applyFilter() {
 }
 
 func (m *menuModel) setHeight(height int) {
-	// Title, help line, and up to two clip indicators surround the
-	// rows (plus the filter line); keep a few rows even in tiny
+	// Title, help line, filter line, and up to two clip indicators
+	// surround the rows, plus the header when there is one; an
+	// undercounted frame gets trimmed from the top by bubbletea's
+	// renderer, clipping the title. Keep a few rows even in tiny
 	// terminals.
-	m.maxRows = height - 5
+	overhead := 5
+	if m.header != "" {
+		overhead++
+	}
+	m.maxRows = height - overhead
 	if m.maxRows < 3 {
 		m.maxRows = 3
 	}
@@ -188,6 +194,11 @@ func (m *menuModel) handleFilterKey(msg tea.KeyMsg) {
 		}
 		runes := []rune(m.query)
 		m.query = string(runes[:len(runes)-1])
+		m.applyFilter()
+	case msg.Type == tea.KeySpace:
+		// A lone space arrives as KeySpace, not KeyRunes; project
+		// names can contain spaces.
+		m.query += " "
 		m.applyFilter()
 	case msg.Type == tea.KeyRunes:
 		m.query += string(msg.Runes)
