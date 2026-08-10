@@ -15,6 +15,7 @@ import { fileURLToPath } from "node:url";
 import {
   APP_BUNDLE_ID,
   CLI_DIST_DIR,
+  cliAliasName,
   cliBinaryName,
   cliRootDirName,
 } from "../shared/cliDist.mts";
@@ -41,6 +42,7 @@ const ldflags = [
   `-X main.flavor=${flavor}`,
   `-X main.rootDirName=${cliRootDirName(flavor)}`,
   `-X main.binaryName=${cliBinaryName(flavor)}`,
+  `-X main.aliasName=${cliAliasName(flavor)}`,
   `-X main.appBundleID=${APP_BUNDLE_ID}`,
   "-s",
   "-w",

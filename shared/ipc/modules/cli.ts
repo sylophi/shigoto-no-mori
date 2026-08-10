@@ -24,6 +24,33 @@ export const CliStatusSchema = z.object({
 });
 export type CliStatus = z.infer<typeof CliStatusSchema>;
 
+// One shell's integration hook (the guarded eval line the CLI's
+// `shell install` writes into that shell's config):
+// - installed: present and recognizably ours
+// - missing: not installed (or no config file at all)
+// - modified: our markers with content we didn't write. The CLI never
+//   touches those, mirroring the foreign-link policy above
+export const ShellHookStateSchema = z.object({
+  shell: z.string(),
+  path: z.string(),
+  state: z.enum(["installed", "missing", "modified"]),
+});
+export type ShellHookState = z.infer<typeof ShellHookStateSchema>;
+
+export const ShellIntegrationStatusSchema = z.object({
+  // False when the CLI binary can't run (Windows, dev run without a
+  // built dist-cli binary).
+  supported: z.boolean(),
+  // The user's login shell when integration supports it, else null
+  // (installs target this shell, resolved app-side since a
+  // Finder-launched app may not have $SHELL).
+  loginShell: z.string().nullable(),
+  shells: z.array(ShellHookStateSchema),
+});
+export type ShellIntegrationStatus = z.infer<
+  typeof ShellIntegrationStatusSchema
+>;
+
 export const cliContract = {
   status: invoke("cli:status", z.void(), CliStatusSchema),
   install: invoke(
@@ -32,6 +59,21 @@ export const cliContract = {
     CliStatusSchema,
   ),
   uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema),
+  shellStatus: invoke(
+    "cli:shellStatus",
+    z.void(),
+    ShellIntegrationStatusSchema,
+  ),
+  shellInstall: invoke(
+    "cli:shellInstall",
+    z.void(),
+    ShellIntegrationStatusSchema,
+  ),
+  shellUninstall: invoke(
+    "cli:shellUninstall",
+    z.void(),
+    ShellIntegrationStatusSchema,
+  ),
 } as const;
 
 export type CliContract = typeof cliContract;

@@ -90,9 +90,12 @@ export interface CliResult {
 // forwarding it to onDoc as it arrives. Resolves with every document
 // once the process exits; rejects only on spawn failure -- non-zero
 // exits resolve normally since the error payload is in the documents.
+// extraEnv overlays the app's environment (used by cliShell.ts to pass
+// the user's real shell-config env vars, which launchd strips).
 export function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
+  extraEnv?: Record<string, string>,
 ): Promise<CliResult> {
   const binary = cliBinaryPath();
   if (binary === null) {
@@ -104,7 +107,7 @@ export function runCli(
   }
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
-      env: { ...process.env, SHIGOMORI_ROOT: shigomoriRoot() },
+      env: { ...process.env, ...extraEnv, SHIGOMORI_ROOT: shigomoriRoot() },
       windowsHide: true,
       // Own process group so killAllCli can signal the CLI and any
       // lifecycle script it spawned as one unit (see killAllCli).

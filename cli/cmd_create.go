@@ -66,10 +66,12 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
 	code := finishCreateLifecycle(proj, worktree)
-	// Interactive callers land in the new worktree (a subshell, same
-	// as `sm cd`); --no-cd, --json, and scripts skip it. Exit 3 from a
+	// Callers who can be moved land in the new worktree (a subshell,
+	// or their own shell via the integration directive, same as
+	// `sm cd`). --no-cd, --json, and scripts skip it. Exit 3 from a
 	// failed lifecycle step outranks the shell's own exit code.
-	if parsed.bools["no-cd"] || jsonMode || !interactiveStdio() {
+	if parsed.bools["no-cd"] || jsonMode ||
+		(!interactiveStdio() && cdDirectiveFile() == "") {
 		return code, nil
 	}
 	shellCode, err := enterWorktreeShell(worktree.Name, worktree.Path)

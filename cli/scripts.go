@@ -74,7 +74,9 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	shell, shellArgs := resolveShell()
 	cmd := exec.Command(shell, append(shellArgs, command)...)
 	cmd.Dir = in.worktree.Path
-	cmd.Env = append(os.Environ(),
+	// envWithoutCdFile: a script that shells out to `sm cd` must not be
+	// able to retarget the outer wrapper's directive file.
+	cmd.Env = append(envWithoutCdFile(),
 		"FORCE_COLOR=1",
 		"TERM=xterm-256color",
 		"COLUMNS=120",

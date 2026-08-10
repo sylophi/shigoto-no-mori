@@ -43,6 +43,7 @@ export const queryKeys = {
 
   portPoolInstalled: () => ["portPoolInstalled"] as const,
   cli: () => ["cli"] as const,
+  cliShell: () => ["cliShell"] as const,
   portPoolActive: (projectId: string, worktreeId: string) =>
     ["portPoolActive", projectId, worktreeId] as const,
 
