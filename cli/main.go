@@ -141,7 +141,7 @@ func helpText(full bool) string {
 			"or a path, or pass -p <project>. The reserved names root and "+
 			"primary address a project's primary checkout (`"+binaryName+
 			" cd root`). Omitting the name in the primary checkout opens a "+
-			"menu. Aliases: c cd, o open, new create, w worktrees, "+
+			"menu. Aliases: c cd, o open, new/n create, w worktrees, "+
 			"p projects.", width) {
 		b.WriteString(line + "\n")
 	}
@@ -314,7 +314,7 @@ var commands = []command{
 	{name: "cd", aliases: []string{"c"}, worktree: true, run: cmdCd},
 	{name: "switch", worktree: true, run: cmdWorktree},
 	{name: "open", aliases: []string{"o"}, worktree: true, run: cmdOpen},
-	{name: "create", aliases: []string{"new"}, worktree: true, run: cmdCreate},
+	{name: "create", aliases: []string{"new", "n"}, worktree: true, run: cmdCreate},
 	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},
 	{name: "done", worktree: true, run: cmdDone},
 	{name: "pr", worktree: true, run: cmdPr},
