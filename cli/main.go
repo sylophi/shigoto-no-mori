@@ -52,6 +52,8 @@ var worktreeItems = []helpItem{
 		"Teardown, release port, delete the branch per app settings."},
 	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
 		"Lands the checkout back on the primary branch and deletes the merged one. Refuses unmerged branches without -f."},
+	{"worktrees pr [<name>]", "Open the worktree's PR in the browser",
+		"The PR for the worktree's branch, any state. Errors when the branch has none."},
 	{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
 		"Method follows the repo's settings unless -m overrides."},
 	{"worktrees land [<name>] [-m <method>] [-f] [--keep-branch]", "Merge the PR, then clean up",
@@ -97,6 +99,18 @@ var helpGroups = []helpGroup{
 	{"Environment", envItems},
 }
 
+// The comma-separated subcommand names for a namespace's pointer line
+// on the base help page, derived from the catalog so the two can't
+// drift. Field 1 of each usage is the subcommand; combined lines like
+// "worktrees shelve / unshelve" collapse to their first name.
+func subcommandList(items []helpItem) string {
+	names := make([]string, len(items))
+	for i, item := range items {
+		names[i] = strings.Fields(item.usage)[1]
+	}
+	return strings.Join(names, ", ")
+}
+
 func inlineCol(groups []helpGroup) int {
 	col := 0
 	for _, group := range groups {
@@ -137,9 +151,9 @@ func helpText(full bool) string {
 	if !full {
 		general := append(append([]helpItem{}, generalItems...),
 			helpItem{"worktrees <command>", "Worktree commands",
-				"list, switch, path, create, rm, done, merge, land, adopt, setup, shelve, open. Run `" + binaryName + " worktrees` for details."},
+				subcommandList(worktreeItems) + ". Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
-				"list, add, remove, config. Run `" + binaryName + " projects` for details."},
+				subcommandList(projectItems) + ". Run `" + binaryName + " projects` for details."},
 		)
 		groups = []helpGroup{
 			{"Commands", general},
@@ -303,6 +317,7 @@ var commands = []command{
 	{name: "create", aliases: []string{"new"}, worktree: true, run: cmdCreate},
 	{name: "rm", aliases: []string{"remove"}, worktree: true, run: cmdRm},
 	{name: "done", worktree: true, run: cmdDone},
+	{name: "pr", worktree: true, run: cmdPr},
 	{name: "merge", worktree: true, run: cmdMerge},
 	{name: "land", worktree: true, run: cmdLand},
 	{name: "adopt", worktree: true, run: cmdAdopt},
