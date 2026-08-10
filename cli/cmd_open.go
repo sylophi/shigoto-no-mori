@@ -118,20 +118,21 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 	}
 	sortLaunchersByUse(visible)
 
-	rows := make([]string, len(visible))
+	cells := make([][]string, len(visible))
 	names := make([]string, len(visible))
 	for i, e := range visible {
-		row := e.label
+		kind := ""
 		switch {
 		case e.custom != nil:
-			row += "  (custom)"
+			kind = "(custom)"
 		case e.webURL != "":
-			row += "  (web)"
+			kind = "(web)"
 		}
-		rows[i] = row
+		cells[i] = []string{e.label, dimErr(kind)}
 		names[i] = e.label
 	}
-	idx, err := menuSelect("Open "+worktreeName+" in:", rows, names, 0)
+	_, rows := buildMenu(nil, cells)
+	idx, err := menuSelect("Open "+worktreeName+" in:", "", rows, names, 0)
 	if err != nil {
 		return nil, err
 	}

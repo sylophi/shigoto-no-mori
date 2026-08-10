@@ -84,6 +84,20 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		scope = ctx.projects
 	}
 
+	// Accent colors need per-project git+icon work; overlap it with
+	// the worktree listing fan-out. Skipped when the colors would be
+	// painted away (piped stdout, --json, NO_COLOR) or the PROJECT
+	// column won't render (single-project scope).
+	accentsReady := make(chan struct{})
+	if !jsonMode && stdoutColor && len(scope) > 1 {
+		go func() {
+			prefetchProjectColors(scope)
+			close(accentsReady)
+		}()
+	} else {
+		close(accentsReady)
+	}
+
 	type projectResult struct {
 		proj      project
 		worktrees []worktreeJSON
@@ -122,6 +136,12 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	}
 
 	multi := len(collected) > 1
+	// Only block on the accent fan-out when its result will actually
+	// paint something -- multi can come up false (errors, empty
+	// projects) even though the prefetch was started.
+	if multi && stdoutColor {
+		<-accentsReady
+	}
 	currentID := ""
 	if ctx.current != nil {
 		currentID = ctx.current.worktree.ID
@@ -142,7 +162,11 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 				syncCell(outPalette, w), changesCell(outPalette, w), flagsCell(outPalette, w),
 			}
 			if multi {
-				row = append([]string{marker, r.proj.Name}, row[1:]...)
+				projectCell := r.proj.Name
+				if stdoutColor {
+					projectCell = codeOut(projectCell, projectColorCode(r.proj))
+				}
+				row = append([]string{marker, projectCell}, row[1:]...)
 			}
 			rows = append(rows, row)
 		}

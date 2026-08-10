@@ -16,7 +16,7 @@ type winsize struct {
 	rows, cols, xpixel, ypixel uint16
 }
 
-func terminalWidth() int {
+func terminalSize() (int, int) {
 	tiocgwinsz := uintptr(0x5413) // linux
 	if runtime.GOOS == "darwin" {
 		tiocgwinsz = 0x40087468
@@ -25,8 +25,13 @@ func terminalWidth() int {
 	for _, f := range []*os.File{os.Stdout, os.Stderr} {
 		_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), tiocgwinsz, uintptr(unsafe.Pointer(&ws)))
 		if errno == 0 && ws.cols > 0 {
-			return int(ws.cols)
+			return int(ws.cols), int(ws.rows)
 		}
 	}
-	return 0
+	return 0, 0
+}
+
+func terminalWidth() int {
+	width, _ := terminalSize()
+	return width
 }
