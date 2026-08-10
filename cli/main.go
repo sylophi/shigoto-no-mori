@@ -32,7 +32,7 @@ type helpGroup struct {
 
 var generalItems = []helpItem{
 	{"cd [<name>]", "Open a subshell in any worktree",
-		"Picks a project, then a worktree. Exit the shell to return."},
+		"Picks a project, then a worktree. Exit the shell to return. With shell integration (see `shell`), your current shell cd's instead."},
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"config", "Open the global config file",
 		"config.json in the state root, via $EDITOR or the OS opener."},
@@ -44,10 +44,10 @@ var worktreeItems = []helpItem{
 	{"worktrees list [--all]", "List worktrees",
 		"All projects when outside one, or with --all."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
-		"Like cd without the project menu. Exit the shell to return."},
+		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
 	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd]", "Create a worktree",
-		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision, then opens a subshell in the new worktree (--no-cd, --json, and scripts skip it)."},
+		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision, then drops into the new worktree -- a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
 	{"worktrees rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
 		"Teardown, release port, delete the branch per app settings."},
 	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
@@ -78,6 +78,16 @@ var projectItems = []helpItem{
 		`"" clears a script, default-branch can't be cleared.`},
 }
 
+var shellItems = []helpItem{
+	{"shell install [<shell>]", "Hook shell integration into your shell config",
+		"A guarded eval line in .zshrc/.bashrc (marker-fenced) or a fish conf.d drop-in. Defaults to your login shell."},
+	{"shell uninstall", "Remove the hook from every shell's config",
+		"Only removes hooks it recognizably wrote. Edited blocks are reported and left alone."},
+	{"shell status", "Show hook and session state", ""},
+	{"shell init <zsh|bash|fish>", "Print the wrapper the hook evals",
+		"A function shadowing the command: it runs the real binary, then cd's to the path the binary reports."},
+}
+
 var flagItems = []helpItem{
 	{"--json", "Machine-readable output", "NDJSON progress for create."},
 	{"--verbose", "Diagnostics on stderr", ""},
@@ -95,6 +105,7 @@ var helpGroups = []helpGroup{
 	{"General", generalItems},
 	{"Worktrees", worktreeItems},
 	{"Projects", projectItems},
+	{"Shell integration", shellItems},
 	{"Flags", flagItems},
 	{"Environment", envItems},
 }
@@ -154,6 +165,8 @@ func helpText(full bool) string {
 				subcommandList(worktreeItems) + ". Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
 				subcommandList(projectItems) + ". Run `" + binaryName + " projects` for details."},
+			helpItem{"shell <command>", "Shell integration: cd without subshells",
+				subcommandList(shellItems) + ". Run `" + binaryName + " shell` for details."},
 		)
 		groups = []helpGroup{
 			{"Commands", general},
@@ -174,11 +187,16 @@ func helpText(full bool) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// The namespace pages behind bare `sm worktrees` / `sm projects`.
+// The namespace pages behind bare `sm worktrees` / `sm projects` /
+// `sm shell`. An empty shortAlias omits the tag.
 func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string {
 	width := helpWidth()
 	var b strings.Builder
-	b.WriteString(boldOut(binaryName+" "+name) + " " + dimOut("("+shortAlias+" for short)") + "\n\n")
+	title := boldOut(binaryName + " " + name)
+	if shortAlias != "" {
+		title += " " + dimOut("("+shortAlias+" for short)")
+	}
+	b.WriteString(title + "\n\n")
 	b.WriteString(boldOut("Usage:") + " " + binaryName + " " +
 		colorUsage(name+" <command> [args]") + "\n\n")
 	for _, line := range wrapText(blurb, width) {
@@ -199,6 +217,16 @@ func worktreesHelpText() string {
 func projectsHelpText() string {
 	return namespaceHelpText("projects", "p",
 		"Manage registered projects.", projectItems)
+}
+
+func shellHelpText() string {
+	return namespaceHelpText("shell", "",
+		"Shell integration makes cd and create move your current shell "+
+			"into the worktree instead of nesting a subshell. install "+
+			"hooks it into your shell config. The hook evals `"+binaryName+
+			" shell init <shell>`, whose wrapper function runs the real "+
+			"binary and cd's to the path it reports. Without the hook, "+
+			"those commands keep opening a subshell.", shellItems)
 }
 
 const (
@@ -333,6 +361,7 @@ var commands = []command{
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
 	{name: "app", noCwd: true, run: cmdApp},
 	{name: "config", noCwd: true, run: cmdConfigOpen},
+	{name: "shell", noCwd: true, run: cmdShell},
 }
 
 func init() {
@@ -397,11 +426,24 @@ func commandHelp(command string, args []string) string {
 	if name == "projects" && len(args) == 0 {
 		return projectsHelpText()
 	}
+	if name == "shell" && len(args) == 0 {
+		return shellHelpText()
+	}
 	sub := ""
 	if name == "projects" && len(args) > 0 {
 		switch s := canonicalProjectsSub(args[0]); s {
 		case "list", "add", "remove", "config":
 			sub = s
+		}
+	}
+	// Derived from the catalog, like subcommandList, so a new shell
+	// subcommand is help-addressable without touching this switch.
+	if name == "shell" && len(args) > 0 {
+		for _, item := range shellItems {
+			if strings.Fields(item.usage)[1] == args[0] {
+				sub = args[0]
+				break
+			}
 		}
 	}
 	width := helpWidth()

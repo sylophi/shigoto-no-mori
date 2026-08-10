@@ -1,13 +1,14 @@
 package main
 
-// sm cd / sm worktree (wt) -- drop into a worktree in a subshell. A
-// child process can't change its parent shell's directory, so these
-// start $SHELL in the target and exiting it returns you to where you
-// were. Both accept an explicit <name>; the difference is the bare
-// form: `cd` navigates anywhere (project menu first, current project
+// sm cd / sm worktree (wt) -- drop into a worktree. A child process
+// can't change its parent shell's directory, so by default these start
+// $SHELL in the target and exiting it returns you to where you were.
+// With shell integration active (cmd_shell.go), the wrapper's
+// directive file lets the calling shell cd instead -- no nesting.
+// Both accept an explicit <name>. The difference is the bare form:
+// `cd` navigates anywhere (project menu first, current project
 // preselected), `worktree` stays in the current project and only asks
-// which worktree. Scripts should use `cd "$(sm path <name>)"`
-// instead; both commands require an interactive terminal.
+// which worktree. Scripts should use `cd "$(sm path <name>)"` instead.
 
 import (
 	"errors"
@@ -47,15 +48,18 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if !interactiveStdio() {
-		return 2, usageErrf(
-			`This command opens a subshell and needs an interactive terminal. In scripts use cd "$(%s path <name>)".`,
-			binaryName)
-	}
-
 	ref := ""
 	if len(parsed.positionals) > 0 {
 		ref = parsed.positionals[0]
+	}
+	// The subshell and the menus need a terminal. A wrapper-provided
+	// directive file with an explicit name needs neither. --json stays
+	// refused outright: a cd that emits no documents yet moves the
+	// caller's shell would break every NDJSON consumer.
+	if jsonMode || (!interactiveStdio() && (cdDirectiveFile() == "" || ref == "")) {
+		return 2, usageErrf(
+			`This command opens a subshell and needs an interactive terminal. In scripts use cd "$(%s path <name>)".`,
+			binaryName)
 	}
 	var target located
 	if ref != "" {
@@ -102,9 +106,19 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 	return enterWorktreeShell(target.worktree.Name, target.worktree.Path)
 }
 
-// Start $SHELL in a worktree and pass through its exit code. Shared by
-// cd/switch and create's drop-into-the-new-worktree tail.
+// Move the user's shell into a worktree: through the shell-integration
+// directive file when the wrapper provided one, else by starting
+// $SHELL there and passing through its exit code. Shared by cd/switch
+// and create's drop-into-the-new-worktree tail.
 func enterWorktreeShell(name, path string) (int, error) {
+	if cdFile := cdDirectiveFile(); cdFile != "" {
+		// A raw path only -- the wrapper never parses this as shell.
+		if err := os.WriteFile(cdFile, []byte(path+"\n"), 0o600); err == nil {
+			note("Entering " + cyanErr(name) + " " + dimErr("("+path+")") + ".")
+			return 0, nil
+		}
+		// Couldn't write the directive, so the subshell still gets them there.
+	}
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
@@ -116,7 +130,7 @@ func enterWorktreeShell(name, path string) (int, error) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "SHIGOMORI_WORKTREE="+name)
+	cmd.Env = append(envWithoutCdFile(), "SHIGOMORI_WORKTREE="+name)
 	if err := cmd.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {

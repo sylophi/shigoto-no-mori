@@ -6,7 +6,10 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
-import type { CliStatus } from "@shared/ipc/modules/cli";
+import type {
+  CliStatus,
+  ShellIntegrationStatus,
+} from "@shared/ipc/modules/cli";
 
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
@@ -33,7 +36,11 @@ export function CliSection() {
   });
   const uninstall = useMutation({
     mutationFn: () => window.api.cli.uninstall(),
-    onSuccess: applyStatus,
+    onSuccess: (next) => {
+      applyStatus(next);
+      // CLI uninstall sweeps the shell hooks too.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cliShell() });
+    },
     onError: (err) => notifyError("Couldn't uninstall the CLI", err),
   });
 
@@ -146,6 +153,119 @@ export function CliSection() {
           <span className="font-mono select-text">{pathLine}</span>
         </p>
       )}
+
+      {/* onPath gates it: the hook's `command -v` guard can never fire
+          while the bin dir is off PATH, so offering Enable would
+          install something inert and report it green. */}
+      {state === "installed" && onPath && <ShellIntegrationBlock name={name} />}
     </section>
+  );
+}
+
+// Shell integration, the optional second step after the link install:
+// a hook in the user's shell config that makes cd/create move the
+// calling shell instead of opening a nested subshell. All rc-file
+// mechanics live in the CLI (`sm shell ...`), so the app only triggers
+// them, so a terminal user and this section always agree.
+function ShellIntegrationBlock({ name }: { name: string }) {
+  const queryClient = useQueryClient();
+  const { data: runtime } = useRuntimeInfo();
+  const home = runtime?.homedir ?? null;
+  const { data: status } = useQuery<ShellIntegrationStatus>({
+    queryKey: queryKeys.cliShell(),
+    queryFn: () => window.api.cli.shellStatus(),
+    meta: { errorTitle: "Couldn't check shell integration" },
+  });
+
+  const applyStatus = (next: ShellIntegrationStatus) => {
+    queryClient.setQueryData(queryKeys.cliShell(), next);
+  };
+  const enable = useMutation({
+    mutationFn: () => window.api.cli.shellInstall(),
+    onSuccess: applyStatus,
+    onError: (err) => notifyError("Couldn't enable shell integration", err),
+  });
+  const remove = useMutation({
+    mutationFn: () => window.api.cli.shellUninstall(),
+    onSuccess: applyStatus,
+    onError: (err) => notifyError("Couldn't remove shell integration", err),
+  });
+
+  if (!status?.supported) return null;
+
+  const busy = enable.isPending || remove.isPending;
+  const login = status.shells.find((s) => s.shell === status.loginShell);
+  const enabledAnywhere = status.shells.some((s) => s.state === "installed");
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <p className="text-xs text-muted-foreground">
+        Shell integration makes <span className="font-mono">{name} cd</span> and{" "}
+        <span className="font-mono">{name} new</span> move your shell into the
+        worktree directly instead of opening a nested subshell. Enabling adds a
+        removable block to your shell&apos;s config file.
+      </p>
+
+      {status.loginShell === null ? (
+        <p className="text-xs text-muted-foreground">
+          Your login shell isn&apos;t one integration supports (
+          {status.shells.map((s) => s.shell).join(", ")}). Run{" "}
+          <span className="font-mono select-text">{name} shell install</span>{" "}
+          from the shell you use.
+        </p>
+      ) : login?.state === "installed" ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="inline-flex items-center gap-1.5 text-sm">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            Enabled for {login.shell}
+          </span>
+          <span className="font-mono text-sm text-muted-foreground select-text">
+            {tildify(login.path, home)}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => remove.mutate()}
+          >
+            <Trash2 />
+            Remove
+          </Button>
+        </div>
+      ) : login?.state === "modified" ? (
+        <p className="text-xs text-muted-foreground">
+          <span className="text-amber-500">
+            The integration block in{" "}
+            <span className="font-mono">{tildify(login.path, home)}</span> was
+            edited,
+          </span>{" "}
+          so it won&apos;t be touched from here. Restore or remove it, then
+          enable again.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => enable.mutate()}
+          >
+            <Download />
+            Enable for {status.loginShell}
+          </Button>
+          {enabledAnywhere && (
+            <span className="text-xs text-muted-foreground">
+              Enabled for another shell. This adds your login shell.
+            </span>
+          )}
+        </div>
+      )}
+
+      {(enable.isSuccess || remove.isSuccess) && (
+        <p className="text-xs text-muted-foreground">
+          Terminals already open keep the previous behavior until restarted.
+        </p>
+      )}
+    </div>
   );
 }

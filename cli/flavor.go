@@ -9,5 +9,6 @@ var (
 	flavor      = "dev" // "prod" | "dev"; mirrors app.isPackaged
 	rootDirName = "shigomori-dev"
 	binaryName  = "smd"
+	aliasName   = "shigomori-dev"
 	appBundleID = "com.sylophi.shigomori"
 )

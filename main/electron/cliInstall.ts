@@ -29,7 +29,8 @@ import type { CliStatus } from "@shared/ipc/modules/cli";
 import { app } from "electron";
 import { comparablePath } from "../lib/util/paths";
 import { isWindows } from "../lib/util/platform";
-import { cliBinaryPath } from "./cliRunner";
+import { cliAvailable, cliBinaryPath } from "./cliRunner";
+import { uninstallShellIntegration } from "./cliShell";
 
 function cliFlavor(): "prod" | "dev" {
   return app.isPackaged ? "prod" : "dev";
@@ -214,6 +215,27 @@ export async function uninstallCliLinks(): Promise<void> {
       await rm(link, { force: true }).catch(() => undefined);
     }),
   );
+}
+
+// The whole teardown, shared by the Settings uninstall action and
+// "Nuke everything": shell hooks first, while the binary is still
+// reachable, then the links. A hook failure must not strand the links,
+// so unlinking always runs. The failure then surfaces afterwards
+// rather than being swallowed: a hook left behind is inert (its guard
+// line no-ops once the command is gone), yet the user should hear it
+// stayed. Skipped when the binary can't run at all (Windows, missing
+// dev build), where there are no hooks to remove.
+export async function uninstallCliEverything(): Promise<void> {
+  let hookFailure: unknown;
+  if (cliAvailable()) {
+    try {
+      await uninstallShellIntegration();
+    } catch (err) {
+      hookFailure = err;
+    }
+  }
+  await uninstallCliLinks();
+  if (hookFailure !== undefined) throw hookFailure;
 }
 
 // Launch-time maintenance, never an install: when a link the user

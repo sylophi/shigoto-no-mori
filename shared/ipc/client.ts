@@ -177,6 +177,9 @@ export const cli = {
   status: cliClient.status,
   install: cliClient.install,
   uninstall: cliClient.uninstall,
+  shellStatus: cliClient.shellStatus,
+  shellInstall: cliClient.shellInstall,
+  shellUninstall: cliClient.shellUninstall,
 } as const;
 
 export const shell = {
