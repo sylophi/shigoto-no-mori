@@ -25,11 +25,15 @@ import {
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import {
+  cliAvailable,
+  cliBinaryPath,
+  cliSpawnEnv,
   runCli,
   type CliDoc,
   type CliResult,
   cliFailureMessage,
 } from "../electron/cliRunner";
+import { shellQuote } from "../lib/scripts/packageScripts";
 import type { WorktreeOperationNotifiers } from "../lib/worktrees/operations";
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
@@ -267,6 +271,51 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
     throw cliFailure(result, "sm projects add failed");
   }
   return ProjectSchema.parse(doc);
+}
+
+// The command (plus env overlay) that runs a package.json script
+// through the CLI engine, or null when the CLI isn't available
+// (Windows, missing binary). Unlike the functions above this doesn't
+// spawn anything: package-script runs go through startScript so the
+// app's registry keeps owning streaming, cancel, and quit-time
+// reaping -- the CLI contributes manager detection and the
+// SHIGOMORI_* env. The branches ride along so the CLI reuses the
+// resolution the IPC handler already performed instead of re-spawning
+// git for it, --skip-use-log keeps the use-log bump in the app's own
+// process (whose state watcher suppresses it as a self-write), and
+// `--` guards a script name that looks like a flag.
+export interface CliRunScriptSpawn {
+  command: string;
+  env: Record<string, string>;
+}
+
+export function cliRunScriptSpawn(args: {
+  projectId: string;
+  worktreeId: string;
+  scriptName: string;
+  projectBranch: string;
+  defaultBranch: string;
+}): CliRunScriptSpawn | null {
+  const binary = cliAvailable() ? cliBinaryPath() : null;
+  if (binary === null) return null;
+  return {
+    command: [
+      shellQuote(binary),
+      "run",
+      "--project-id",
+      shellQuote(args.projectId),
+      "--worktree-id",
+      shellQuote(args.worktreeId),
+      "--project-branch",
+      shellQuote(args.projectBranch),
+      "--default-branch",
+      shellQuote(args.defaultBranch),
+      "--skip-use-log",
+      "--",
+      shellQuote(args.scriptName),
+    ].join(" "),
+    env: cliSpawnEnv(),
+  };
 }
 
 // Registry removal and per-project state deletion only; the app-side

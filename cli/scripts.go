@@ -52,6 +52,45 @@ func resolveShell() (string, []string) {
 	return "/bin/sh", []string{"-c"}
 }
 
+// The SHIGOMORI_* contract vars (shared/scriptEnv.ts) on top of the
+// ambient env. Base is envWithoutCdFile: a script that shells out to
+// `sm cd` must not be able to retarget the outer wrapper's directive
+// file. Stale SHIGOMORI_* values are dropped first so a script that
+// itself invokes sm (or the app delegating a run through the CLI)
+// can't leak a parent run's identity into this one. SHIGOMORI_ROOT
+// isn't part of the contract and passes through untouched.
+func scriptEnv(in scriptEnvInputs) []string {
+	pairs := []string{
+		"SHIGOMORI_SCRIPT_NAME=" + in.scriptName,
+		"SHIGOMORI_WORKTREE_PATH=" + in.worktree.Path,
+		"SHIGOMORI_WORKTREE_NAME=" + in.worktree.Name,
+		"SHIGOMORI_WORKTREE_BRANCH=" + in.worktree.Branch,
+		"SHIGOMORI_WORKTREE_ID=" + in.worktree.ID,
+		"SHIGOMORI_PROJECT_PATH=" + in.proj.Path,
+		"SHIGOMORI_PROJECT_NAME=" + in.proj.Name,
+		"SHIGOMORI_PROJECT_BRANCH=" + in.projectBranch,
+		"SHIGOMORI_DEFAULT_BRANCH=" + in.defaultBranch,
+	}
+	keys := make([]string, len(pairs))
+	for i, pair := range pairs {
+		keys[i] = pair[:strings.IndexByte(pair, '=')+1]
+	}
+	var env []string
+	for _, kv := range envWithoutCdFile() {
+		stale := false
+		for _, key := range keys {
+			if strings.HasPrefix(kv, key) {
+				stale = true
+				break
+			}
+		}
+		if !stale {
+			env = append(env, kv)
+		}
+	}
+	return append(env, pairs...)
+}
+
 func newRunID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
@@ -74,21 +113,14 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	shell, shellArgs := resolveShell()
 	cmd := exec.Command(shell, append(shellArgs, command)...)
 	cmd.Dir = in.worktree.Path
-	// envWithoutCdFile: a script that shells out to `sm cd` must not be
-	// able to retarget the outer wrapper's directive file.
-	cmd.Env = append(envWithoutCdFile(),
+	// The terminal-faking trio on top of the contract env: lifecycle
+	// output is piped (through the CLI or the app's console), so tools
+	// need convincing to emit ANSI. `sm run` deliberately skips these --
+	// its script inherits the real terminal.
+	cmd.Env = append(scriptEnv(in),
 		"FORCE_COLOR=1",
 		"TERM=xterm-256color",
 		"COLUMNS=120",
-		"SHIGOMORI_SCRIPT_NAME="+in.scriptName,
-		"SHIGOMORI_WORKTREE_PATH="+in.worktree.Path,
-		"SHIGOMORI_WORKTREE_NAME="+in.worktree.Name,
-		"SHIGOMORI_WORKTREE_BRANCH="+in.worktree.Branch,
-		"SHIGOMORI_WORKTREE_ID="+in.worktree.ID,
-		"SHIGOMORI_PROJECT_PATH="+in.proj.Path,
-		"SHIGOMORI_PROJECT_NAME="+in.proj.Name,
-		"SHIGOMORI_PROJECT_BRANCH="+in.projectBranch,
-		"SHIGOMORI_DEFAULT_BRANCH="+in.defaultBranch,
 	)
 
 	// Merge stdout+stderr into one ordered stream like the app does.

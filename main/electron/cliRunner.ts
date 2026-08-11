@@ -96,12 +96,20 @@ export function killAllCli(): void {
   }
 }
 
+// The env overlay every CLI spawn gets: SHIGOMORI_ROOT pinned to the
+// app's own root -- the invariant keeping the flavor split from
+// diverging. Every path that launches the CLI (the two spawn sites
+// below, and the package-script delegation that hands its command to
+// startScript) must route through this so the pin has one owner.
+export function cliSpawnEnv(): Record<string, string> {
+  return { SHIGOMORI_ROOT: shigomoriRoot() };
+}
+
 // Spawn a CLI command that must outlive this process (the update
 // installer waits for our pid to exit before swapping bundles).
 // Deliberately NOT tracked in `children`: killAllCli reaping it at
-// quit would defeat its purpose. Lives here so the SHIGOMORI_ROOT pin
-// -- the invariant keeping the flavor split from diverging -- has one
-// owner. Settles only once the child actually spawned (or failed to):
+// quit would defeat its purpose. Settles only once the child actually
+// spawned (or failed to):
 // spawn errors arrive asynchronously, and an unhandled 'error' event
 // on a ChildProcess is an uncaught exception in the main process --
 // the caller is about to quit on success, so it must not do that on a
@@ -117,7 +125,7 @@ export function spawnCliDetached(args: string[]): Promise<void> {
     const child = spawn(binary, args, {
       detached: true,
       stdio: "ignore",
-      env: { ...process.env, SHIGOMORI_ROOT: shigomoriRoot() },
+      env: { ...process.env, ...cliSpawnEnv() },
     });
     child.once("error", reject);
     child.once("spawn", () => {
@@ -160,7 +168,7 @@ export function runCli(
   }
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
-      env: { ...process.env, ...extraEnv, SHIGOMORI_ROOT: shigomoriRoot() },
+      env: { ...process.env, ...extraEnv, ...cliSpawnEnv() },
       windowsHide: true,
       // Own process group so killAllCli can signal the CLI and any
       // lifecycle script it spawned as one unit (see killAllCli).

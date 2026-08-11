@@ -41,6 +41,9 @@ interface RunArgs {
   project: Pick<Project, "id" | "path" | "name">;
   projectBranch: string;
   defaultBranch: string;
+  // Overlaid on the standard script environment last. The CLI
+  // delegation pins SHIGOMORI_ROOT through this (see cliSpawnEnv).
+  extraEnv?: Record<string, string>;
   notify: NotifyScriptEvent;
   // When set, main is the initiator (lifecycle orchestration) and
   // we emit a "started" event so the renderer binds runId to slot.
@@ -279,6 +282,7 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
     [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.projectBranch,
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
+    ...args.extraEnv,
   };
 
   const child: ChildProcess = scriptPlatform.spawnScript({

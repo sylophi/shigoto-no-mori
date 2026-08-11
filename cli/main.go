@@ -33,6 +33,8 @@ type helpGroup struct {
 var generalItems = []helpItem{
 	{"cd [<name>]", "Open a subshell in any worktree",
 		"Picks a project, then a worktree. Exit the shell to return. With shell integration (see `shell`), your current shell cd's instead."},
+	{"run [<script>] [<args>...]", "Run a package.json script here",
+		"Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm) and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them."},
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
 		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
@@ -356,9 +358,10 @@ var commands = []command{
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, true) }},
 	{name: "unshelve", worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, false) }},
-	// run assigned in init(): cmdWorktrees dispatches back through this
-	// table, and a direct reference here would be an initialization
-	// cycle.
+	{name: "run", run: cmdRun},
+	// Handler assigned in init(): cmdWorktrees dispatches back through
+	// this table, and a direct reference here would be an
+	// initialization cycle.
 	{name: "worktrees", aliases: []string{"worktree", "wt", "w"}},
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
 	{name: "app", noCwd: true, run: cmdApp},
@@ -527,7 +530,17 @@ func run() int {
 		showHelp bool
 		showVer  bool
 	)
-	for _, arg := range os.Args[1:] {
+	cliArgs := os.Args[1:]
+	for i := 0; i < len(cliArgs); i++ {
+		arg := cliArgs[i]
+		// `--` ends the global scan: everything after it belongs to the
+		// command verbatim (`sm run test -- --json` must hand --json to
+		// the test script, not flip jsonMode). The terminator itself is
+		// kept for the command's own parser.
+		if arg == "--" {
+			rest = append(rest, cliArgs[i:]...)
+			break
+		}
 		switch {
 		case arg == "--json":
 			jsonMode = true
@@ -579,6 +592,10 @@ func run() int {
 
 	command, args := rest[0], rest[1:]
 	for _, arg := range args {
+		// Past `--` a help flag is script cargo, not a help request.
+		if arg == "--" {
+			break
+		}
 		if arg == "-h" || arg == "--help" {
 			out(commandHelp(command, args))
 			return 0

@@ -168,21 +168,29 @@ func sortLaunchersByUse(entries []launcherEntry) {
 	})
 }
 
+// One rolling-window bump step, shared by every use log: launchers
+// here, package scripts in cmd_run.go. Ports pruneAndPush from
+// main/lib/util/useLog.ts: drop timestamps older than the window,
+// append now.
+func pruneAndAppendUse(times []int64) []int64 {
+	now := time.Now().UnixMilli()
+	cutoff := now - useLogWindow.Milliseconds()
+	fresh := []int64{}
+	for _, t := range times {
+		if t >= cutoff {
+			fresh = append(fresh, t)
+		}
+	}
+	return append(fresh, now)
+}
+
 func bumpLauncherUse(id string) {
 	err := updateStateKey("launcherUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string][]int64{}
 		if raw != nil {
 			_ = json.Unmarshal(raw, &log)
 		}
-		now := time.Now().UnixMilli()
-		cutoff := now - useLogWindow.Milliseconds()
-		var fresh []int64
-		for _, t := range log[id] {
-			if t >= cutoff {
-				fresh = append(fresh, t)
-			}
-		}
-		log[id] = append(fresh, now)
+		log[id] = pruneAndAppendUse(log[id])
 		return log, nil
 	})
 	if err != nil {
