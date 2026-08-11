@@ -62,7 +62,9 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 		if takesValue[name] {
 			if !hasInline {
 				i++
-				if i >= len(args) {
+				// The terminator is never a value: `--flag --` means the
+				// flag's value is missing, not the literal string "--".
+				if i >= len(args) || args[i] == "--" {
 					return result, usageErrf("Option %q requires a value.", arg)
 				}
 				value = args[i]

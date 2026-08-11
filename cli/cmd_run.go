@@ -39,6 +39,11 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 			"project-branch": {},
 			"default-branch": {},
 		},
+		// App plumbing: the app records the use itself, in-process, so
+		// its state watcher can suppress the write as a self-echo. A
+		// bump from this child would look like an external state.json
+		// change and trigger a full refetch on every panel run.
+		bools: map[string][]string{"skip-use-log": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -89,31 +94,38 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 	if err := os.Chdir(target.worktree.Path); err != nil {
 		return 1, errf("cannot enter %s: %v", target.worktree.Path, err)
 	}
-	bumpPackageScriptUse(target.proj.ID, name)
+	if !parsed.bools["skip-use-log"] {
+		bumpPackageScriptUse(target.proj.ID, name)
+	}
 	execErr := syscall.Exec(managerPath, runArgv(manager, name, positionals[1:]), scriptEnv(in))
 	return 1, errf("failed to exec %s: %v", managerPath, execErr)
 }
 
-// The env-contract values for the run, mirroring lifecycleEnvInputs
-// but honoring the app-plumbing branch flags: a delegated run's IPC
-// handler resolved both branches moments earlier, so recomputing them
-// here would only re-spawn git for answers the caller already has.
-// Terminal runs (no flags) compute them like the lifecycle scripts do.
+// The env-contract values for the run. The app-plumbing branch flags
+// win when present: a delegated run's IPC handler resolved both
+// branches moments earlier, so recomputing them here would only
+// re-spawn git for answers the caller already has. Anything not
+// supplied comes from lifecycleEnvInputs, the same resolver the
+// lifecycle scripts use, so the two paths can't drift.
 func runEnvInputs(target located, parsed parsedArgs, scriptName string) scriptEnvInputs {
+	projectBranch, haveProject := parsed.strings["project-branch"]
+	defaultBranch, haveDefault := parsed.strings["default-branch"]
 	in := scriptEnvInputs{
-		worktree:   target.worktree,
-		proj:       target.proj,
-		scriptName: scriptName,
+		worktree:      target.worktree,
+		proj:          target.proj,
+		scriptName:    scriptName,
+		projectBranch: projectBranch,
+		defaultBranch: defaultBranch,
 	}
-	if branch, ok := parsed.strings["project-branch"]; ok {
-		in.projectBranch = branch
-	} else if primary, err := primaryOf(target.proj); err == nil {
-		in.projectBranch = primary.worktree.Branch
+	if haveProject && haveDefault {
+		return in
 	}
-	if branch, ok := parsed.strings["default-branch"]; ok {
-		in.defaultBranch = branch
-	} else {
-		in.defaultBranch = primaryRefFor(target.proj, readProjectConfig(target.proj.ID))
+	computed := lifecycleEnvInputs(target.proj, target.worktree, readProjectConfig(target.proj.ID))
+	if !haveProject {
+		in.projectBranch = computed.projectBranch
+	}
+	if !haveDefault {
+		in.defaultBranch = computed.defaultBranch
 	}
 	return in
 }

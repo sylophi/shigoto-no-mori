@@ -530,7 +530,17 @@ func run() int {
 		showHelp bool
 		showVer  bool
 	)
-	for _, arg := range os.Args[1:] {
+	cliArgs := os.Args[1:]
+	for i := 0; i < len(cliArgs); i++ {
+		arg := cliArgs[i]
+		// `--` ends the global scan: everything after it belongs to the
+		// command verbatim (`sm run test -- --json` must hand --json to
+		// the test script, not flip jsonMode). The terminator itself is
+		// kept for the command's own parser.
+		if arg == "--" {
+			rest = append(rest, cliArgs[i:]...)
+			break
+		}
 		switch {
 		case arg == "--json":
 			jsonMode = true
@@ -582,6 +592,10 @@ func run() int {
 
 	command, args := rest[0], rest[1:]
 	for _, arg := range args {
+		// Past `--` a help flag is script cargo, not a help request.
+		if arg == "--" {
+			break
+		}
 		if arg == "-h" || arg == "--help" {
 			out(commandHelp(command, args))
 			return 0

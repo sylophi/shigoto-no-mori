@@ -25,6 +25,7 @@ import {
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import {
+  cliAvailable,
   cliBinaryPath,
   cliSpawnEnv,
   runCli,
@@ -33,7 +34,6 @@ import {
   cliFailureMessage,
 } from "../electron/cliRunner";
 import { shellQuote } from "../lib/scripts/packageScripts";
-import { isWindows } from "../lib/util/platform";
 import type { WorktreeOperationNotifiers } from "../lib/worktrees/operations";
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
@@ -278,11 +278,12 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 // (Windows, missing binary). Unlike the functions above this doesn't
 // spawn anything: package-script runs go through startScript so the
 // app's registry keeps owning streaming, cancel, and quit-time
-// reaping -- the CLI contributes manager detection, the SHIGOMORI_*
-// env, and the shared use-log bump. The branches ride along so the
-// CLI reuses the resolution the IPC handler already performed instead
-// of re-spawning git for it; `--` guards a script name that looks
-// like a flag.
+// reaping -- the CLI contributes manager detection and the
+// SHIGOMORI_* env. The branches ride along so the CLI reuses the
+// resolution the IPC handler already performed instead of re-spawning
+// git for it, --skip-use-log keeps the use-log bump in the app's own
+// process (whose state watcher suppresses it as a self-write), and
+// `--` guards a script name that looks like a flag.
 export interface CliRunScriptSpawn {
   command: string;
   env: Record<string, string>;
@@ -295,8 +296,7 @@ export function cliRunScriptSpawn(args: {
   projectBranch: string;
   defaultBranch: string;
 }): CliRunScriptSpawn | null {
-  if (isWindows) return null;
-  const binary = cliBinaryPath();
+  const binary = cliAvailable() ? cliBinaryPath() : null;
   if (binary === null) return null;
   return {
     command: [
@@ -310,6 +310,7 @@ export function cliRunScriptSpawn(args: {
       shellQuote(args.projectBranch),
       "--default-branch",
       shellQuote(args.defaultBranch),
+      "--skip-use-log",
       "--",
       shellQuote(args.scriptName),
     ].join(" "),

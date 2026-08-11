@@ -21,6 +21,13 @@ func TestParseCmdArgsDoubleDash(t *testing.T) {
 	}
 }
 
+func TestParseCmdArgsDoubleDashIsNeverAValue(t *testing.T) {
+	spec := argSpec{strings: map[string][]string{"flag": {}}}
+	if _, err := parseCmdArgs([]string{"--flag", "--", "x"}, spec); err == nil {
+		t.Fatal("expected `--flag --` to error, not consume the terminator as a value")
+	}
+}
+
 func TestParseCmdArgsDoubleDashOnly(t *testing.T) {
 	parsed, err := parseCmdArgs([]string{"--"}, argSpec{})
 	if err != nil {

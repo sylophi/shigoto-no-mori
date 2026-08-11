@@ -58,9 +58,12 @@ export const packageScriptsHandlers: Handlers<
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 
-    // `sm run` is the engine when the CLI is available -- it detects
-    // the manager, injects the script env, and bumps the shared use
-    // log itself. Windows / missing binary fall back to the TS builder.
+    // `sm run` is the engine when the CLI is available: it detects the
+    // manager and injects the script env. Windows / missing binary
+    // fall back to the TS builder. The use log is always bumped here,
+    // in-process (the CLI child is told --skip-use-log), so the state
+    // watcher sees a suppressible self-write instead of an external
+    // state.json change on every run.
     const viaCli = cliRunScriptSpawn({
       projectId,
       worktreeId,
@@ -79,7 +82,7 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
       notify: scriptEventNotifier(event.sender),
     });
-    if (viaCli === null) bumpScriptUseCount(project.id, scriptName);
+    bumpScriptUseCount(project.id, scriptName);
     return { runId };
   },
 };
