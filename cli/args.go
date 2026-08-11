@@ -36,6 +36,14 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+		// `--` ends option parsing: the rest is positional, matching
+		// the node parseArgs behavior this parser mirrors. Lets a
+		// command take passthrough args (`sm run dev -- --port 3000`)
+		// or a positional that looks like a flag.
+		if arg == "--" {
+			result.positionals = append(result.positionals, args[i+1:]...)
+			break
+		}
 		if !strings.HasPrefix(arg, "-") || arg == "-" {
 			result.positionals = append(result.positionals, arg)
 			continue

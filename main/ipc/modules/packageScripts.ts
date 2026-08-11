@@ -13,6 +13,7 @@ import {
   buildScriptCommand,
   readPackageScripts,
 } from "../../lib/scripts/packageScripts";
+import { cliRunScriptSpawn } from "../cliDelegate";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
 
@@ -49,13 +50,28 @@ export const packageScriptsHandlers: Handlers<
     const project = findProjectOrThrow(projectId);
     const ctx = await prepareScriptRun(project, worktreeId);
 
+    // Validated here even though the CLI validates again: a missing
+    // script should fail this IPC call, not surface as error output in
+    // an already-opened console run.
     const pkg = await readPackageScripts(ctx.worktree.path);
     if (!pkg || !(scriptName in pkg.scripts)) {
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 
+    // `sm run` is the engine when the CLI is available -- it detects
+    // the manager, injects the script env, and bumps the shared use
+    // log itself. Windows / missing binary fall back to the TS builder.
+    const viaCli = cliRunScriptSpawn({
+      projectId,
+      worktreeId,
+      scriptName,
+      projectBranch: ctx.projectBranch,
+      defaultBranch: ctx.defaultBranch,
+    });
     const runId = startScript({
-      command: buildScriptCommand(pkg.packageManager, scriptName),
+      command:
+        viaCli?.command ?? buildScriptCommand(pkg.packageManager, scriptName),
+      extraEnv: viaCli?.env,
       scriptName,
       worktree: ctx.worktree,
       project,
@@ -63,7 +79,7 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
       notify: scriptEventNotifier(event.sender),
     });
-    bumpScriptUseCount(project.id, scriptName);
+    if (viaCli === null) bumpScriptUseCount(project.id, scriptName);
     return { runId };
   },
 };
