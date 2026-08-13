@@ -31,9 +31,11 @@ export function useAddProject() {
   const queryClient = useQueryClient();
   return useMutation<Project, Error, string>({
     mutationFn: (path) => window.api.projects.add(path),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
-    },
+    // Returned (not void-ed) so mutateAsync resolves only after the
+    // projects list is fresh: callers navigate into the new project right
+    // away, and routes render "not found" against a stale list.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() }),
     meta: { errorTitle: "Couldn't add project" },
   });
 }

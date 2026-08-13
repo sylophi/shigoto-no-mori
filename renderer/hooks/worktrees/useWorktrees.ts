@@ -1,9 +1,12 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
-export function useWorktrees(projectId: string | null) {
-  return useQuery<Worktree[]>({
+// Single source of truth for the worktrees-list query, so imperative
+// fetches (e.g. queryClient.ensureQueryData) hit the same cache entry
+// and config as the hooks below.
+export function worktreesQueryOptions(projectId: string | null) {
+  return queryOptions<Worktree[]>({
     queryKey: queryKeys.worktrees(projectId),
     queryFn: () => {
       if (!projectId) return [];
@@ -16,16 +19,18 @@ export function useWorktrees(projectId: string | null) {
   });
 }
 
+export function useWorktrees(projectId: string | null) {
+  return useQuery(worktreesQueryOptions(projectId));
+}
+
 // One query per project, sharing the per-project cache key with useWorktrees.
 // `enabled` toggles them all off when the consumer isn't visible (launcher).
 // Skip projects whose path is gone — git would just ENOENT.
 export function useAllProjectWorktrees(projects: Project[], enabled = true) {
   return useQueries({
     queries: projects.map((project) => ({
-      queryKey: queryKeys.worktrees(project.id),
-      queryFn: () => window.api.worktrees.list(project.id),
+      ...worktreesQueryOptions(project.id),
       enabled: enabled && project.pathExists !== false,
-      meta: { silentError: true },
     })),
   });
 }
