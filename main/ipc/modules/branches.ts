@@ -18,8 +18,8 @@ export const branchesHandlers: Handlers<typeof branchesContract> = {
     await renameAnyLocalBranch(project.path, oldName, newName);
   },
 
-  delete: async ({ projectId, name }) => {
+  delete: async ({ projectId, name, force }) => {
     const project = findProjectOrThrow(projectId);
-    await deleteAnyLocalBranch(project.path, name);
+    await deleteAnyLocalBranch(project.path, name, force ?? false);
   },
 };

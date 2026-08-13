@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Check, ExternalLink, House, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { cn } from "@/lib/utils";
 import { sanitizeBranchName } from "@shared/branches";
+import { isBranchNotMergedError } from "@shared/errors";
 import type { Worktree } from "@shared/schemas";
 
 export function BranchRow({
@@ -30,6 +32,20 @@ export function BranchRow({
   const [draft, setDraft] = useState<string | null>(null);
   const editing = draft !== null;
   const checkedOut = !!worktree;
+
+  // A safe delete refused for unmerged commits swaps the modal into its
+  // force-delete stage until it closes (sticky, so a transient force
+  // failure doesn't drop back to the safe stage). Any other failure
+  // keeps a plain retry. Close is ignored while a delete is in flight --
+  // the mutation's toast is silenced in favor of the inline banner, so
+  // dismissing mid-delete would swallow the failure entirely.
+  const [needsForce, setNeedsForce] = useState(false);
+  const closeDelete = () => {
+    if (del.isPending) return;
+    setConfirmingDelete(false);
+    setNeedsForce(false);
+    del.reset();
+  };
 
   const commitRename = () => {
     const next = (draft ?? "").trim();
@@ -150,24 +166,35 @@ export function BranchRow({
       )}
 
       {confirmingDelete && (
-        <ModalShell
-          onClose={() => setConfirmingDelete(false)}
-          popoverClassName="max-w-md"
-        >
+        <ModalShell onClose={closeDelete} popoverClassName="max-w-md">
           <div className="p-5">
             <h2 className="text-base font-semibold">Delete branch</h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Permanently delete the local branch{" "}
-              <span className="font-mono text-foreground">{name}</span>? Any
-              commits not merged elsewhere will be lost. This cannot be undone.
+              Delete the local branch{" "}
+              <span className="font-mono text-foreground">{name}</span>?{" "}
+              {needsForce
+                ? "Force deleting cannot be undone."
+                : "You'll be asked again if it has commits that aren't " +
+                  "merged elsewhere."}
             </p>
+            {del.isError && (
+              <ErrorBanner className="mt-3 whitespace-pre-line">
+                {isBranchNotMergedError(del.error)
+                  ? "This branch has commits that aren't on any other " +
+                    "branch. You can force delete it, but those commits " +
+                    "are discarded permanently. If the branch was " +
+                    "squash-merged, its changes already landed and nothing " +
+                    "is lost."
+                  : del.error.message}
+              </ErrorBanner>
+            )}
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 variant="outline"
                 size="sm"
                 // oxlint-disable-next-line jsx-a11y/no-autofocus -- focus the safe action so a stray Enter cancels
                 autoFocus
-                onClick={() => setConfirmingDelete(false)}
+                onClick={closeDelete}
                 disabled={del.isPending}
               >
                 Cancel
@@ -178,12 +205,21 @@ export function BranchRow({
                 disabled={del.isPending}
                 onClick={() =>
                   del.mutate(
-                    { projectId, name },
-                    { onSuccess: () => setConfirmingDelete(false) },
+                    { projectId, name, force: needsForce },
+                    {
+                      onSuccess: closeDelete,
+                      onError: (err) => {
+                        if (isBranchNotMergedError(err)) setNeedsForce(true);
+                      },
+                    },
                   )
                 }
               >
-                {del.isPending ? "Deleting…" : "Delete"}
+                {del.isPending
+                  ? "Deleting…"
+                  : needsForce
+                    ? "Force delete"
+                    : "Delete"}
               </Button>
             </div>
           </div>
