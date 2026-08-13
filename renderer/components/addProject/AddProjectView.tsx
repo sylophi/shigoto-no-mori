@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
   ArrowDown,
@@ -21,8 +22,10 @@ import { fileManagerName } from "@/lib/platform";
 import { modKey, shortcutLabel } from "@/lib/platform";
 import { comparablePath } from "@shared/worktreeLayout";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
+import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { router } from "@/router";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ITEM_CLASS } from "./cmdkClasses";
 import { ScanningPanel } from "./ScanningPanel";
@@ -42,6 +45,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   const [query, setQuery] = useState<string>("~/");
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
+  const queryClient = useQueryClient();
   const { data: existingProjects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
@@ -74,26 +78,52 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     browseUp,
   } = browse;
 
-  const submit = async (raw?: string) => {
-    const target = normalizeForSubmit(raw ?? query);
-    if (target.length === 0) return;
+  // Land on the just-added project's primary checkout so the flow ends
+  // somewhere useful instead of wherever the app happened to be.
+  // ensureQueryData reuses a warm cache entry (e.g. the always-mounted
+  // sidebar already listed this project mid-bulk-add) over re-listing.
+  // Best-effort: if listing fails, the project is added either way. Uses
+  // the module-level router because this view is rendered as a sibling of
+  // RouterProvider, where `useNavigate` has no context (see ProjectLauncher).
+  const selectPrimary = async (projectId: string) => {
     try {
-      await addProject.mutateAsync(target);
+      const worktrees = await queryClient.ensureQueryData(
+        worktreesQueryOptions(projectId),
+      );
+      const primary = worktrees.find((w) => w.isPrimary);
+      // A bare repo registers fine but has no primary checkout, so
+      // offer worktree creation instead (same fallback as ProjectLauncher).
+      await router.navigate(
+        primary
+          ? {
+              to: "/projects/$projectId/worktrees/$worktreeId",
+              params: { projectId, worktreeId: primary.id },
+            }
+          : { to: "/projects/$projectId/new", params: { projectId } },
+      );
+    } catch {
+      // Stay wherever we are. The add itself already succeeded.
+    }
+  };
+
+  const addAndOpen = async (path: string) => {
+    try {
+      const project = await addProject.mutateAsync(path);
       onClose();
+      void selectPrimary(project.id);
     } catch {
       // useAddProject surfaces the error via toast.
     }
   };
 
+  const submit = async (raw?: string) => {
+    const target = normalizeForSubmit(raw ?? query);
+    if (target.length > 0) await addAndOpen(target);
+  };
+
   const pickViaDialog = async () => {
     const picked = await window.api.dialog.pickFolder();
-    if (!picked) return;
-    try {
-      await addProject.mutateAsync(picked);
-      onClose();
-    } catch {
-      // useAddProject surfaces the error via toast.
-    }
+    if (picked) await addAndOpen(picked);
   };
 
   // ---------- Scan mode ----------
@@ -141,16 +171,19 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     const toAdd = [...selected];
     if (toAdd.length === 0 || bulkAdding) return;
     setBulkAdding(true);
+    let firstAddedId: string | null = null;
     for (const path of toAdd) {
       try {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the state.json write
-        await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the state.json write
+        const project = await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the state.json write
+        firstAddedId ??= project.id;
       } catch {
         // Skip individual failures; user can retry by re-scanning.
       }
     }
     setBulkAdding(false);
     onClose();
+    if (firstAddedId) void selectPrimary(firstAddedId);
   };
 
   // ---------- Keyboard handling ----------
