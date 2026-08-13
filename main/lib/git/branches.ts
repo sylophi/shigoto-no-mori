@@ -1,3 +1,4 @@
+import { branchNotMergedError, errorMessageOf } from "@shared/errors";
 import { type BranchList, isRealBranch } from "@shared/schemas";
 import { run } from "./core";
 import {
@@ -67,7 +68,7 @@ export async function deleteBranchAfterWorktreeRemoval(
   if (identity.isExternal) return;
   if (!isRealBranch(identity.branch)) return;
   try {
-    await deleteAnyLocalBranch(projectPath, identity.branch);
+    await deleteAnyLocalBranch(projectPath, identity.branch, true);
   } catch {
     // see comment above
   }
@@ -107,13 +108,25 @@ export async function renameAnyLocalBranch(
   await run(projectPath, ["branch", "-m", "--", oldName, newName]);
 }
 
-// Force-delete a local branch. Git still refuses if the branch is
-// checked out in any worktree, which is the safety we care about.
+// Delete a local branch. Without `force` this is git's safe delete
+// (`-d`), whose "not fully merged" refusal is rethrown as the shared
+// branchNotMergedError so the renderer can offer a force retry. With
+// `force` (`-D`), git still refuses if the branch is checked out in any
+// worktree, which is the safety we care about.
 export async function deleteAnyLocalBranch(
   projectPath: string,
   name: string,
+  force: boolean,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-D", "--", name]);
+  try {
+    await run(projectPath, ["branch", force ? "-D" : "-d", "--", name]);
+  } catch (err) {
+    // git's stderr wording is stable here because core.ts pins LC_ALL=C.
+    if (!force && /not fully merged/.test(errorMessageOf(err))) {
+      throw branchNotMergedError(name);
+    }
+    throw err;
+  }
 }
 
 // `--directory` collapses fully-ignored directories into a single

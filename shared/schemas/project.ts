@@ -97,4 +97,5 @@ export const RenameAnyBranchPayloadSchema = ProjectScopedPayloadSchema.extend({
 
 export const DeleteBranchPayloadSchema = ProjectScopedPayloadSchema.extend({
   name: GitRefNameSchema,
+  force: z.boolean().optional(),
 });

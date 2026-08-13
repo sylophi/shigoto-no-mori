@@ -134,6 +134,8 @@ export async function switchToPrimaryAndDeleteBranch(
   const localPrimary =
     splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef;
   if (mergedBranch !== localPrimary) {
-    await deleteAnyLocalBranch(projectPath, mergedBranch);
+    // Force: after a squash merge the branch's own commits are never
+    // reachable from the primary, so safe delete would always refuse.
+    await deleteAnyLocalBranch(projectPath, mergedBranch, true);
   }
 }

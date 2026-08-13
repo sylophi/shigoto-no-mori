@@ -7,7 +7,7 @@
 //   - gitignored carry-over candidates
 //   - path shapes (spaces, unicode, deeply nested)
 //
-// Run:   pnpm seed <dest-dir> [--keep]
+// Run:   pnpm seed <dest-dir> [--keep] [--only=<name>[,<name>...]]
 // The destination directory is required so worktree `.git` pointers are
 // always self-contained at the chosen location — previously hard-coding
 // /tmp/shigomori-seed meant a second seeding could cross-link external
@@ -29,6 +29,9 @@ let REPOS = "";
 let REMOTES = "";
 let EXTERNAL = "";
 let SIDECAR = "";
+// Set for --only runs: recreate each selected seeder's repo and remote
+// in place instead of relying on the full-tree wipe.
+let RECREATE = false;
 
 interface Manifest {
   name: string;
@@ -66,6 +69,7 @@ async function writeAt(
 }
 
 async function initRepo(path: string, defaultBranch = "main"): Promise<void> {
+  if (RECREATE) await rm(path, { recursive: true, force: true });
   await mkdir(path, { recursive: true });
   await git(path, ["init", "-b", defaultBranch, "-q"]);
   await git(path, ["config", "user.name", "Seed Bot"]);
@@ -90,6 +94,11 @@ async function bareRemote(
   name: string,
   defaultBranch = "main",
 ): Promise<string> {
+  // A surviving remote would reject the recreated repo's fresh history
+  // as a non-fast-forward push.
+  if (RECREATE) {
+    await rm(join(REMOTES, `${name}.git`), { recursive: true, force: true });
+  }
   await mkdir(REMOTES, { recursive: true });
   await git(REMOTES, [
     "init",
@@ -805,6 +814,63 @@ async function seedManyBranches(): Promise<Manifest> {
       "Long branch name truncates with ellipsis; unicode branch renders.",
       "Manage Branches lets you delete a non-current branch.",
       'Icon detection: pink \'mb\' tile parsed out of index.html\'s <link rel="icon" href="/brand/logo.svg">, resolved against public/.',
+    ],
+  };
+}
+
+// Exercises the two-stage delete in Manage Branches: safe delete
+// (`git branch -d`) first, then the force prompt when git refuses.
+async function seedBranchDeleteStates(): Promise<Manifest> {
+  const repo = join(REPOS, "branch-delete-states");
+  await initRepo(repo);
+  await commit(
+    repo,
+    {
+      "README.md":
+        "# branch-delete-states\n\nBranches in every mergedness state the delete flow distinguishes.\n",
+      "base.txt": "base\n",
+    },
+    "Base commit",
+  );
+  const baseSha = (await git(repo, ["rev-parse", "HEAD"])).trim();
+
+  // Unique commits reachable from nowhere else -- `-d` refuses and the
+  // force prompt shows the not-fully-merged banner.
+  await git(repo, ["checkout", "-q", "-b", "unmerged-commits"]);
+  await commit(
+    repo,
+    { "unmerged.txt": "only on this branch\n" },
+    "Work that never landed",
+  );
+
+  // Squash-merge false positive: the branch's changes DO land on main,
+  // but as a rewritten squash commit, so the branch's own commits stay
+  // unreachable and `-d` still refuses.
+  await git(repo, ["checkout", "-q", "-b", "squash-merged", baseSha]);
+  await commit(repo, { "feature.txt": "squashed feature\n" }, "Feature work A");
+  await commit(
+    repo,
+    { "feature.txt": "squashed feature\npolish\n" },
+    "Feature work B",
+  );
+  await git(repo, ["checkout", "-q", "main"]);
+  await git(repo, ["merge", "-q", "--squash", "squash-merged"]);
+  await git(repo, ["commit", "-q", "-m", "Squash-merge feature (#1)"]);
+
+  // Fully merged: ancestors of main -- safe delete succeeds outright.
+  await git(repo, ["branch", "merged-at-tip"]);
+  await git(repo, ["branch", "merged-behind", baseSha]);
+
+  return {
+    name: "branch-delete-states",
+    path: repo,
+    purpose:
+      "Branches covering every safe-vs-force delete state in Manage Branches",
+    tests: [
+      "Manage Branches: `main` row's delete button is disabled (checked out in the primary).",
+      "Delete `merged-at-tip`, then `merged-behind`: each deletes on the first confirm with no force prompt.",
+      "Delete `unmerged-commits`: safe delete refuses, the modal shows the not-fully-merged banner, and the button flips to Force delete. Cancel and reopen: back at the safe stage. Force delete removes it and the list refreshes.",
+      "Delete `squash-merged`: trips the same force prompt even though feature.txt landed on main via the squash commit -- the banner's squash-merge caveat in action.",
     ],
   };
 }
@@ -1545,18 +1611,27 @@ function printSummary(manifests: Manifest[], elapsedMs: number): void {
 
 function usage(): never {
   console.error(
-    "Usage: pnpm seed <dest-dir> [--keep]\n" +
+    "Usage: pnpm seed <dest-dir> [--keep] [--only=<name>[,<name>...]]\n" +
       "\n" +
-      "  <dest-dir>  Absolute or relative path where the seed tree will live.\n" +
-      "              Required so worktree `.git` pointers stay self-contained.\n" +
-      "  --keep      Skip wiping <dest-dir> before seeding.",
+      "  <dest-dir>      Absolute or relative path where the seed tree will live.\n" +
+      "                  Required so worktree `.git` pointers stay self-contained.\n" +
+      "  --keep          Skip wiping <dest-dir> before seeding.\n" +
+      "  --only=<names>  Run just the named seeder(s), recreating their repos\n" +
+      "                  and remotes in place. Implies --keep and leaves\n" +
+      "                  README.md untouched. Seeders that create external\n" +
+      "                  worktrees still need external/ cleaned up by hand.",
   );
   process.exit(2);
 }
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const keep = argv.includes("--keep");
+  const only = argv
+    .filter((a) => a.startsWith("--only="))
+    .flatMap((a) => a.slice("--only=".length).split(","))
+    .filter((n) => n.length > 0);
+  // --only adds to an existing tree, so it implies --keep.
+  const keep = argv.includes("--keep") || only.length > 0;
   const positional = argv.filter((a) => !a.startsWith("--"));
   if (positional.length !== 1) usage();
   const dest = isAbsolute(positional[0])
@@ -1573,6 +1648,12 @@ async function main(): Promise<void> {
 
   if (!keep) {
     await rm(ROOT, { recursive: true, force: true });
+  }
+  if (only.length > 0) {
+    RECREATE = true;
+    // Sidecar clones are build-time scratch (git clone needs an empty
+    // destination), so they are safe to clear wholesale.
+    await rm(SIDECAR, { recursive: true, force: true });
   }
   await mkdir(REPOS, { recursive: true });
   await mkdir(REMOTES, { recursive: true });
@@ -1597,6 +1678,7 @@ async function main(): Promise<void> {
     { name: "diverged-conflicts", run: seedDivergedConflicts },
     { name: "behind-primary", run: seedBehindPrimary },
     { name: "many-branches", run: seedManyBranches },
+    { name: "branch-delete-states", run: seedBranchDeleteStates },
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
     { name: "convertible-externals", run: seedConvertibleExternals },
@@ -1612,12 +1694,26 @@ async function main(): Promise<void> {
     { name: "many-scripts", run: seedManyScripts },
   ];
 
-  const results = await Promise.allSettled(seeders.map((s) => s.run()));
+  if (only.length > 0) {
+    const known = new Set(seeders.map((s) => s.name));
+    const unknown = only.filter((n) => !known.has(n));
+    if (unknown.length > 0) {
+      console.error(
+        `✖ Unknown seeder(s): ${unknown.join(", ")}\n` +
+          `  Available: ${seeders.map((s) => s.name).join(", ")}`,
+      );
+      process.exit(2);
+    }
+  }
+  const selected =
+    only.length > 0 ? seeders.filter((s) => only.includes(s.name)) : seeders;
+
+  const results = await Promise.allSettled(selected.map((s) => s.run()));
   const manifests: Manifest[] = [];
   const failures: Array<{ name: string; error: Error }> = [];
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
-    const s = seeders[i];
+    const s = selected[i];
     if (r.status === "fulfilled") manifests.push(r.value);
     else
       failures.push({
@@ -1627,7 +1723,8 @@ async function main(): Promise<void> {
       });
   }
 
-  if (manifests.length > 0) await writeReadme(manifests);
+  // A partial run would clobber the full README with just its own repos.
+  if (only.length === 0 && manifests.length > 0) await writeReadme(manifests);
   printSummary(manifests, Date.now() - started);
 
   if (failures.length > 0) {

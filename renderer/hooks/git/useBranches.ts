@@ -1,5 +1,10 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type MutationMeta,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -53,7 +58,7 @@ export function useWatchGitRefs(): void {
 // refresh everything derived from refs via invalidateBranchState.
 function useBranchMutation<Input extends { projectId: string }>(
   mutationFn: (input: Input) => Promise<void>,
-  errorTitle: string,
+  meta: MutationMeta,
 ) {
   const queryClient = useQueryClient();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
@@ -61,7 +66,7 @@ function useBranchMutation<Input extends { projectId: string }>(
     mutationFn,
     onSuccess: (_data, vars) =>
       invalidateBranchState(queryClient, vars.projectId),
-    meta: { errorTitle },
+    meta,
   });
 }
 
@@ -74,7 +79,7 @@ interface CreateBranchInput {
 export function useCreateBranch() {
   return useBranchMutation<CreateBranchInput>(
     (input) => window.api.branches.create(input),
-    "Couldn't create branch",
+    { errorTitle: "Couldn't create branch" },
   );
 }
 
@@ -87,18 +92,21 @@ interface RenameAnyBranchInput {
 export function useRenameAnyBranch() {
   return useBranchMutation<RenameAnyBranchInput>(
     (input) => window.api.branches.rename(input),
-    "Couldn't rename branch",
+    { errorTitle: "Couldn't rename branch" },
   );
 }
 
 interface DeleteBranchInput {
   projectId: string;
   name: string;
+  force?: boolean;
 }
 
 export function useDeleteBranch() {
+  // BranchRow's confirm modal swaps into a force-delete prompt on
+  // failure -- a toast on top would be noise.
   return useBranchMutation<DeleteBranchInput>(
     (input) => window.api.branches.delete(input),
-    "Couldn't delete branch",
+    { silentError: true },
   );
 }
