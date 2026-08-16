@@ -13,6 +13,7 @@ import { App } from "./App";
 import { platform } from "./lib/platform";
 import { queryKeys } from "./lib/queryKeys";
 import { notifyError } from "./lib/toast";
+import { autoLaunchOnCreate } from "./store/autoLaunchOnCreate";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
@@ -120,6 +121,9 @@ worktreeLifecycle.start({
       queryKey: queryKeys.worktreeIncludeStatus(projectId),
     });
   },
+  // Opt-in per project: a no-op for anyone who hasn't nominated a
+  // launch set in Configure.
+  onCreateSettled: (evt) => void autoLaunchOnCreate(evt),
 });
 
 const rootElement = document.getElementById("root");

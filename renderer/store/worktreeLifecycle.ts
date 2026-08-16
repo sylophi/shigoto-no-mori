@@ -22,6 +22,12 @@ interface StartDeps {
   // .worktreeinclude now covers them, so caches over project.json can be
   // invalidated.
   onCarryOverReconciled?: (projectId: string) => void;
+  // Fired when a create lifecycle reaches its terminal "idle" phase.
+  // Main emits exactly one of those per create, from a `finally`, even
+  // when no phase before it had any work to do -- so it's the signal to
+  // hang post-create work off, rather than a timer or the create IPC's
+  // early return.
+  onCreateSettled?: (evt: { projectId: string; worktreeId: string }) => void;
 }
 
 function clippedLines(lines: string[], max: number): string {
@@ -39,6 +45,7 @@ class WorktreeLifecycleStore {
   private warn: NotifyFn;
   private info: NotifyFn;
   private onCarryOverReconciled: ((projectId: string) => void) | null = null;
+  private onCreateSettled: StartDeps["onCreateSettled"] | null = null;
 
   constructor(api: WorktreesApi, warn: NotifyFn, info: NotifyFn) {
     this.api = api;
@@ -49,8 +56,14 @@ class WorktreeLifecycleStore {
   start(deps?: StartDeps): void {
     if (this.unsubscribePhase) return;
     this.onCarryOverReconciled = deps?.onCarryOverReconciled ?? null;
+    this.onCreateSettled = deps?.onCreateSettled ?? null;
     this.unsubscribePhase = this.api.onLifecyclePhase((evt) => {
       this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
+      if (evt.phase !== "idle") return;
+      this.onCreateSettled?.({
+        projectId: evt.projectId,
+        worktreeId: evt.worktreeId,
+      });
     });
     this.unsubscribeCarryOver = this.api.onCarryOverComplete((evt) => {
       const removed = evt.removedCarryOverPaths ?? [];
@@ -92,6 +105,7 @@ class WorktreeLifecycleStore {
   }
 
   dispose(): void {
+    this.onCreateSettled = null;
     this.unsubscribePhase?.();
     this.unsubscribePhase = null;
     this.unsubscribeCarryOver?.();
