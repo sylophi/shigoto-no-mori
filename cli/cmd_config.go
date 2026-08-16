@@ -49,6 +49,10 @@ type configKey struct {
 	// serialization.
 	def  any
 	desc string
+	// For jsonKind keys: the element-verb command (without the binary
+	// name) that `set` points at instead. Empty falls back to "edit or
+	// the app".
+	hint string
 }
 
 // Mirrors GlobalConfigSchema (shared/schemas/config.ts); defaults from
@@ -69,7 +73,8 @@ var globalConfigKeys = []configKey{
 	{name: "githubCli", kind: boolKind, def: true,
 		desc: "GitHub CLI integration"},
 	{name: "launchers", kind: jsonKind, def: []any{},
-		desc: "Global custom launchers (via edit or the app)"},
+		desc: "Global custom launchers (`config launcher`)",
+		hint: "config launcher add/rm"},
 	{name: "hiddenLaunchers", kind: jsonKind, def: []any{},
 		desc: "Hidden launcher ids (via edit or the app)"},
 }
@@ -96,9 +101,11 @@ var projectConfigKeys = []configKey{
 	{name: "lastMergeMethod", kind: enumKind, enum: []string{"merge", "squash", "rebase"},
 		desc: "Preferred PR merge method"},
 	{name: "carryOver", kind: jsonKind, def: []any{},
-		desc: "Files carried into new worktrees (via edit or the app)"},
+		desc: "Files carried into new worktrees (`carryover` verbs)",
+		hint: "projects config carryover add/rm"},
 	{name: "launchers", kind: jsonKind, def: []any{},
-		desc: "Per-project launchers (via edit or the app)"},
+		desc: "Per-project launchers (`launcher` verbs)",
+		hint: "projects config launcher add/rm"},
 }
 
 func lookupConfigKey(keys []configKey, name string) (configKey, error) {
@@ -436,15 +443,27 @@ func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
 		return globalConfigUnset(parsed.positionals[1])
 	case "edit":
 		return openConfigFileInEditor(configJSONPath())
+	case "launcher", "launchers":
+		return runLauncherVerb(globalConfigScope(), parsed.positionals[1:])
 	case "write":
 		// App plumbing: whole-document replace, mirroring the TS
 		// engine's writeGlobalConfig (zod already stripped/validated on
 		// the way in; the shape check guards engine drift).
 		return configWriteDoc(configJSONPath(), globalConfigKeys, parsed.strings["data"], nil)
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s config <list|get|set|unset|edit> [args]",
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s config <list|get|set|unset|edit|launcher> [args]",
 			sub, binaryName)
 	}
+}
+
+// The refusal for `set` on a structured key, pointing at the element
+// verbs where they exist.
+func structuredKeyErr(key configKey, editCmd string) error {
+	hint := "`" + binaryName + " " + editCmd + "` or the app"
+	if key.hint != "" {
+		hint = "`" + binaryName + " " + key.hint + "`"
+	}
+	return usageErrf("%s is structured; use %s.", key.name, hint)
 }
 
 func globalConfigSet(name, raw string) (int, error) {
@@ -453,7 +472,7 @@ func globalConfigSet(name, raw string) (int, error) {
 		return exitCodeOf(err), err
 	}
 	if key.kind == jsonKind {
-		return 2, usageErrf("%s is structured; use `%s config edit` or the app.", key.name, binaryName)
+		return 2, structuredKeyErr(key, "config edit")
 	}
 	value, err := parseConfigValue(key, raw)
 	if err != nil {
@@ -529,6 +548,186 @@ func configWriteDoc(path string, keys []configKey, data string, extraCheck func(
 	}
 	emit(map[string]any{"ok": true})
 	return 0, nil
+}
+
+// --- structured lists: element verbs (launcher here, carry-over in
+// cmd_project.go) ---
+
+// Scope plumbing for verbs shared by `sm config` and `sm projects
+// config`: where the document lives, how human output and usage lines
+// are suffixed/prefixed, what rides along in --json documents, and
+// what runs before each write (the project scope's defaultBranch
+// backfill).
+type configDocScope struct {
+	path        string
+	usagePrefix string         // "config" | "projects config"
+	suffix      string         // "" | " for <project>"
+	extra       map[string]any // nil | {"project": <name>}
+	beforeWrite func(doc map[string]any)
+}
+
+func globalConfigScope() configDocScope {
+	return configDocScope{path: configJSONPath(), usagePrefix: "config"}
+}
+
+func (s configDocScope) update(fn func(doc map[string]any) error) error {
+	return updateConfigDoc(s.path, func(doc map[string]any) error {
+		if err := fn(doc); err != nil {
+			return err
+		}
+		if s.beforeWrite != nil {
+			s.beforeWrite(doc)
+		}
+		return nil
+	})
+}
+
+func (s configDocScope) emitOK(fields map[string]any) {
+	result := map[string]any{"ok": true}
+	for k, v := range s.extra {
+		result[k] = v
+	}
+	for k, v := range fields {
+		result[k] = v
+	}
+	emit(result)
+}
+
+func (s configDocScope) usageErr(usage string) error {
+	return usageErrf("Usage: %s %s %s", binaryName, s.usagePrefix, usage)
+}
+
+// sm [projects] config launcher [add <label> <command> | rm <ref>] --
+// element verbs over the launchers array. Ids are minted like the
+// app's (a lowercase uuid; the launcher row shows the entry as
+// custom:<id>). rm takes the id or an unambiguous label. Entries are
+// kept as raw maps so fields this CLI doesn't model survive.
+func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
+	verb := "list"
+	if len(rest) > 0 {
+		verb = rest[0]
+	}
+	switch verb {
+	case "list":
+		launchers, _ := readConfigDoc(scope.path)["launchers"].([]any)
+		if jsonMode {
+			if launchers == nil {
+				launchers = []any{}
+			}
+			scope.emitOK(map[string]any{"launchers": launchers})
+			return 0, nil
+		}
+		if len(launchers) == 0 {
+			note("No custom launchers configured.")
+			return 0, nil
+		}
+		var rows [][]string
+		for _, entry := range launchers {
+			m, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			label, _ := m["label"].(string)
+			command, _ := m["command"].(string)
+			id, _ := m["id"].(string)
+			rows = append(rows, []string{label, command, dimOut(id)})
+		}
+		out(renderTable([]string{"LABEL", "COMMAND", "ID"}, rows))
+		return 0, nil
+	case "add":
+		if len(rest) != 3 {
+			return 2, scope.usageErr("launcher add <label> <command>")
+		}
+		label, command := rest[1], rest[2]
+		// The schema requires both non-empty (LauncherCommandSchema);
+		// the app additionally drops half-filled rows on save.
+		if strings.TrimSpace(label) == "" || strings.TrimSpace(command) == "" {
+			return 2, usageErrf("Label and command can't be empty.")
+		}
+		launcher := map[string]any{"id": newRunID(), "label": label, "command": command}
+		err := scope.update(func(doc map[string]any) error {
+			launchers, _ := doc["launchers"].([]any)
+			doc["launchers"] = append(launchers, launcher)
+			return nil
+		})
+		if err != nil {
+			return 1, err
+		}
+		if jsonMode {
+			scope.emitOK(map[string]any{"launcher": launcher})
+		} else {
+			out(greenOut("added launcher " + label + scope.suffix))
+		}
+		return 0, nil
+	case "rm", "remove":
+		if len(rest) != 2 {
+			return 2, scope.usageErr("launcher rm <label-or-id>")
+		}
+		ref := rest[1]
+		var removed map[string]any
+		err := scope.update(func(doc map[string]any) error {
+			launchers, _ := doc["launchers"].([]any)
+			// Exact id match wins; otherwise the label must identify a
+			// single entry (labels aren't unique, ids are).
+			matches := launcherMatches(launchers, ref)
+			switch len(matches) {
+			case 0:
+				return errf("No launcher matches %q.%s", ref, scope.suffix)
+			case 1:
+				removed = matches[0]
+			default:
+				ids := make([]string, len(matches))
+				for i, m := range matches {
+					ids[i], _ = m["id"].(string)
+				}
+				return errf("%d launchers are labeled %q; rm by id: %s.",
+					len(matches), ref, strings.Join(ids, ", "))
+			}
+			kept := make([]any, 0, len(launchers))
+			for _, entry := range launchers {
+				if m, ok := entry.(map[string]any); ok && m["id"] == removed["id"] {
+					continue
+				}
+				kept = append(kept, entry)
+			}
+			if len(kept) == 0 {
+				// Omit-when-empty, like the app's serialization.
+				delete(doc, "launchers")
+			} else {
+				doc["launchers"] = kept
+			}
+			return nil
+		})
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		label, _ := removed["label"].(string)
+		if jsonMode {
+			scope.emitOK(map[string]any{"removed": removed})
+		} else {
+			out(greenOut("removed launcher " + label + scope.suffix))
+		}
+		return 0, nil
+	default:
+		return 2, scope.usageErr("launcher [add <label> <command> | rm <label-or-id>]")
+	}
+}
+
+func launcherMatches(launchers []any, ref string) []map[string]any {
+	var byLabel []map[string]any
+	for _, entry := range launchers {
+		m, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id, _ := m["id"].(string); id == ref {
+			return []map[string]any{m}
+		}
+		if label, _ := m["label"].(string); strings.EqualFold(label, ref) {
+			byLabel = append(byLabel, m)
+		}
+	}
+	return byLabel
 }
 
 // Opens a config file in $VISUAL/$EDITOR in an interactive terminal,

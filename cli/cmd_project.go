@@ -411,6 +411,10 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 			"default-branch": {},
 			"data":           {}, // app plumbing: `write` payload
 		},
+		bools: map[string][]string{
+			"copy":    {}, // carryover add's mode pick
+			"symlink": {},
+		},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -553,6 +557,10 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 			return 2, err
 		}
 		return projectConfigUnset(proj, parsed.positionals[1])
+	case "launcher", "launchers":
+		return runLauncherVerb(projectConfigScope(proj), parsed.positionals[1:])
+	case "carryover", "carry-over":
+		return projectCarryOverVerb(proj, parsed)
 	case "edit":
 		path := projectConfigJSONPath(proj.ID)
 		if _, err := os.Stat(path); err != nil {
@@ -584,9 +592,170 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 		return code, err
 	default:
 		return 2, usageErrf(
-			"Unknown subcommand %q. Usage: %s projects config <list|get|set|unset|edit> [args]",
+			"Unknown subcommand %q. Usage: %s projects config <list|get|set|unset|edit|launcher|carryover> [args]",
 			sub, binaryName)
 	}
+}
+
+func projectConfigScope(proj project) configDocScope {
+	return configDocScope{
+		path:        projectConfigJSONPath(proj.ID),
+		usagePrefix: "projects config",
+		suffix:      " for " + proj.Name,
+		extra:       map[string]any{"project": proj.Name},
+		beforeWrite: func(doc map[string]any) { ensureDefaultBranchField(doc, proj) },
+	}
+}
+
+// sm projects config carryover [add <path> [--copy|--symlink] | rm
+// <path>] -- element verbs over the carryOver array. Paths are
+// project-relative (absolute paths inside the project are folded);
+// add upserts, so re-adding a path just switches its mode.
+func projectCarryOverVerb(proj project, parsed parsedArgs) (int, error) {
+	scope := projectConfigScope(proj)
+	rest := parsed.positionals[1:]
+	verb := "list"
+	if len(rest) > 0 {
+		verb = rest[0]
+	}
+	switch verb {
+	case "list":
+		entries, _ := readConfigDoc(scope.path)["carryOver"].([]any)
+		if jsonMode {
+			if entries == nil {
+				entries = []any{}
+			}
+			scope.emitOK(map[string]any{"carryOver": entries})
+			return 0, nil
+		}
+		if len(entries) == 0 {
+			note("No carry-over entries for " + proj.Name + ".")
+			return 0, nil
+		}
+		var rows [][]string
+		for _, entry := range entries {
+			m, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			path, _ := m["path"].(string)
+			mode, _ := m["mode"].(string)
+			rows = append(rows, []string{path, mode})
+		}
+		out(renderTable([]string{"PATH", "MODE"}, rows))
+		return 0, nil
+	case "add":
+		if len(rest) != 2 {
+			return 2, scope.usageErr("carryover add <path> [--copy|--symlink]")
+		}
+		if parsed.bools["copy"] && parsed.bools["symlink"] {
+			return 2, usageErrf("Pick one of --copy and --symlink.")
+		}
+		// symlink is the default: carry-over's headline use is sharing
+		// gitignored state (env files, node_modules) across worktrees;
+		// --copy snapshots instead.
+		mode := "symlink"
+		if parsed.bools["copy"] {
+			mode = "copy"
+		}
+		path, err := normalizeCarryOverPath(proj, rest[1])
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		if _, statErr := os.Stat(filepath.Join(proj.Path, path)); statErr != nil {
+			// Not fatal: gitignored sources may come and go, and the
+			// entry only acts at worktree creation.
+			note("warning: " + path + " doesn't currently exist in the primary checkout")
+		}
+		updated := false
+		err = scope.update(func(doc map[string]any) error {
+			entries, _ := doc["carryOver"].([]any)
+			for _, entry := range entries {
+				if m, ok := entry.(map[string]any); ok && m["path"] == path {
+					m["mode"] = mode
+					updated = true
+				}
+			}
+			if !updated {
+				entries = append(entries, map[string]any{"path": path, "mode": mode})
+			}
+			doc["carryOver"] = entries
+			return nil
+		})
+		if err != nil {
+			return 1, err
+		}
+		if jsonMode {
+			scope.emitOK(map[string]any{"entry": map[string]any{"path": path, "mode": mode}})
+			return 0, nil
+		}
+		verbed := "added"
+		if updated {
+			verbed = "updated"
+		}
+		out(greenOut(verbed + " carry-over " + path + " (" + mode + ")" + scope.suffix))
+		return 0, nil
+	case "rm", "remove":
+		if len(rest) != 2 {
+			return 2, scope.usageErr("carryover rm <path>")
+		}
+		path, err := normalizeCarryOverPath(proj, rest[1])
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		err = scope.update(func(doc map[string]any) error {
+			entries, _ := doc["carryOver"].([]any)
+			kept := make([]any, 0, len(entries))
+			for _, entry := range entries {
+				if m, ok := entry.(map[string]any); ok && m["path"] == path {
+					continue
+				}
+				kept = append(kept, entry)
+			}
+			if len(kept) == len(entries) {
+				return errf("No carry-over entry for %q.%s", path, scope.suffix)
+			}
+			if len(kept) == 0 {
+				// Omit-when-empty, like the app's serialization.
+				delete(doc, "carryOver")
+			} else {
+				doc["carryOver"] = kept
+			}
+			return nil
+		})
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		if jsonMode {
+			scope.emitOK(map[string]any{"removed": path})
+		} else {
+			out(greenOut("removed carry-over " + path + scope.suffix))
+		}
+		return 0, nil
+	default:
+		return 2, scope.usageErr("carryover [add <path> [--copy|--symlink] | rm <path>]")
+	}
+}
+
+// Folds whatever the user gave -- ./-prefixed, trailing-slashed, or
+// absolute-inside-the-project -- to the project-relative
+// forward-slash form the schema stores, and applies its
+// stay-within-the-root refinement (isSafeRelPath).
+func normalizeCarryOverPath(proj project, raw string) (string, error) {
+	p := strings.TrimSpace(raw)
+	if filepath.IsAbs(p) {
+		rel, err := filepath.Rel(proj.Path, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", usageErrf("%s is outside the project (%s).", p, proj.Path)
+		}
+		p = rel
+	}
+	p = strings.TrimPrefix(p, "./")
+	p = strings.TrimRight(p, "/")
+	if p == "" || p == "." || !isSafeRelPath(p) {
+		return "", usageErrf("Carry-over paths must stay within the project root.")
+	}
+	return filepath.ToSlash(p), nil
 }
 
 func projectConfigSet(proj project, name, raw string) (int, error) {
@@ -595,8 +764,7 @@ func projectConfigSet(proj project, name, raw string) (int, error) {
 		return exitCodeOf(err), err
 	}
 	if key.kind == jsonKind {
-		return 2, usageErrf("%s is structured; use `%s projects config edit` or the app.",
-			key.name, binaryName)
+		return 2, structuredKeyErr(key, "projects config edit")
 	}
 	if key.name == "defaultBranch" && strings.TrimSpace(raw) == "" {
 		// An empty defaultBranch makes the whole config invalid (the

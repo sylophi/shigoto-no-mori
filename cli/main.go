@@ -80,9 +80,11 @@ var projectItems = []helpItem{
 		"Show or set per-project config",
 		"Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
 			"list, get <key>, set <key> <value>, unset <key>, edit. Keys: `" + binaryName +
-			" projects config list`. The flags --setup <cmd>, --teardown <cmd>, and " +
-			`--default-branch <ref> remain as shorthands; "" clears a script, ` +
-			"default-branch can't be cleared."},
+			" projects config list`. Structured lists get element verbs: launcher add " +
+			"<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
+			"/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
+			`--teardown <cmd>, and --default-branch <ref> remain as shorthands; "" clears a ` +
+			"script, default-branch can't be cleared."},
 }
 
 var configItems = []helpItem{
@@ -93,6 +95,9 @@ var configItems = []helpItem{
 		"Booleans accept true/false, on/off, yes/no, 1/0. Setting a key to its default removes " +
 			"it from the file, same as the app."},
 	{"config unset <key>", "Reset a setting to its default", ""},
+	{"config launcher [<command>]", "Manage global custom launchers",
+		"add <label> <command> adds one, rm <label-or-id> removes one, bare lists them. " +
+			"Per-project launchers: `" + binaryName + " projects config launcher`."},
 	{"config edit", "Open config.json in your editor",
 		"$VISUAL/$EDITOR in a terminal, the OS opener otherwise."},
 }
