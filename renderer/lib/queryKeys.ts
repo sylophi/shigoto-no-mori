@@ -10,6 +10,7 @@ export const queryKeys = {
   projectsSort: () => ["projectsSort"] as const,
   projectsCollapsed: () => ["projectsCollapsed"] as const,
   sidebarView: () => ["sidebarView"] as const,
+  forestSort: () => ["forestSort"] as const,
   projectIcon: (projectId: string) => ["projectIcon", projectId] as const,
 
   shigomoriConfig: (projectId: string | null) =>

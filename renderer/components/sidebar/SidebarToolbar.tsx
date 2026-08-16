@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowUpDown, Check, LayoutGrid } from "lucide-react";
+import { ArrowUpDown, Check, LayoutGrid, Trees } from "lucide-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
 import { cn } from "@/lib/utils";
 import {
@@ -36,12 +37,18 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 // projects, and hopping between them. Neither has an answer in the inbox
 // -- it's one list in one fixed order -- so they live above the tree
 // rather than in the footer, where they'd have to blink in and out as
-// the view changes. The footer keeps what both views share.
+// the view changes. The forest sits with them because it answers the
+// same question the tree does, one level up: the inbox is already a
+// cross-project list, so the jump only earns its pixels here. The footer
+// keeps what both views share.
 export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { toggleLauncher } = useOverlays();
   const { data: sortMode = "manual" } = useProjectSort();
   const setSortMode = useSetProjectSort();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const forestActive = location.pathname === "/forest";
 
   // Dragging only reorders coherently when the displayed order matches the
   // stored order, so arranging forces the manual sort before entering the
@@ -105,6 +112,21 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="flex-1" />
+      <SimpleTooltip tip="The forest (⌘⇧F)">
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/forest" })}
+          aria-label="The forest"
+          aria-current={forestActive ? "page" : undefined}
+          aria-keyshortcuts="Meta+Shift+F"
+          className={cn(
+            SIDEBAR_ICON_BUTTON,
+            forestActive && "bg-accent text-foreground",
+          )}
+        >
+          <Trees className="size-3.5" />
+        </button>
+      </SimpleTooltip>
       <SimpleTooltip
         // The backtick renders in the mono font: the rounded doubutsu
         // fonts draw U+0060 as a narrow accent whose ink overhangs the

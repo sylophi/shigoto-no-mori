@@ -22,6 +22,7 @@ import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type {
+  ForestSort,
   GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
@@ -124,6 +125,7 @@ export const menu = {
 
 export const nav = {
   onOpenSettings: navClient.openSettings,
+  onOpenForest: navClient.openForest,
   onLaunchById: navClient.launchById,
 } as const;
 
@@ -159,6 +161,8 @@ export const projects = {
   getSidebarView: projectsClient.getSidebarView,
   setSidebarView: (view: SidebarView) =>
     projectsClient.setSidebarView({ view }),
+  getForestSort: projectsClient.getForestSort,
+  setForestSort: (sort: ForestSort) => projectsClient.setForestSort({ sort }),
   getCollapsed: projectsClient.getCollapsed,
   toggleCollapsed: (projectId: string) =>
     projectsClient.toggleCollapsed({ projectId }),

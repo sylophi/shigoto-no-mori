@@ -63,6 +63,17 @@ export const SetSidebarViewPayloadSchema = z.object({
   view: SidebarViewSchema,
 });
 
+// How the forest overview orders each project's worktrees. "activity" is
+// the implicit default and the only one that answers "what was I last
+// doing". "age" reads by worktree birthday, and "branch" alphabetically
+// for when you know the name and just want to find it.
+export const ForestSortSchema = z.enum(["activity", "age", "branch"]);
+export type ForestSort = z.infer<typeof ForestSortSchema>;
+
+export const SetForestSortPayloadSchema = z.object({
+  sort: ForestSortSchema,
+});
+
 // Sidebar collapse state: toggles one project id in the persisted
 // collapsed set. A toggle (rather than a whole-list write) keeps the
 // read-modify-write in the main process, so a stale renderer cache

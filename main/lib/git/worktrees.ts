@@ -123,6 +123,22 @@ async function getWorkingTreeChanges(
   }
 }
 
+// Git records nothing about when a worktree was created, so the
+// directory's own birthtime stands in for its age. Filesystems that
+// don't track birthtime report 0 (common on Linux ext4 via older
+// kernels), so fall back to ctime -- for a directory nobody chmods,
+// that's still creation time. Undefined when neither is usable and the
+// UI drops the age rather than inventing one.
+async function getCreatedAt(worktreePath: string): Promise<number | undefined> {
+  try {
+    const info = await stat(worktreePath);
+    const ms = info.birthtimeMs || info.ctimeMs;
+    return ms > 0 ? Math.round(ms) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 interface RemoteSync {
   ahead: number;
   behind: number;
@@ -460,12 +476,14 @@ async function buildWorktree(
   identity: WorktreeIdentity,
   ctx: BuildContext,
 ): Promise<Worktree> {
-  const [changes, recentCommits, remoteSync, primary] = await Promise.all([
-    getWorkingTreeChanges(identity.path),
-    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-    getRemoteSync(identity.path),
-    getPrimaryRelation(identity, ctx),
-  ]);
+  const [changes, recentCommits, remoteSync, primary, createdAt] =
+    await Promise.all([
+      getWorkingTreeChanges(identity.path),
+      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
+      getRemoteSync(identity.path),
+      getPrimaryRelation(identity, ctx),
+      getCreatedAt(identity.path),
+    ]);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -483,6 +501,7 @@ async function buildWorktree(
     changedCount: changes.count,
     lastChangeAt: changes.lastChangeAt,
     recentCommits,
+    createdAt,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
     detached: identity.detached,

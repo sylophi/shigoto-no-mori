@@ -94,6 +94,12 @@ export const WorktreeSchema = z.object({
   // small: 3 for the teaser plus 1 extra to signal "more available".
   recentCommits: z.array(CommitSummarySchema),
   port: z.number().int().positive().optional(),
+  // When the checkout directory appeared on disk, in epoch ms, read from
+  // its filesystem birthtime. The closest honest proxy for "how old is
+  // this worktree" -- git itself records no creation time. Absent when
+  // the stat fails or the filesystem tracks no usable timestamp, in
+  // which case the UI just omits the age.
+  createdAt: z.number().int().positive().optional(),
   // The repo's primary checkout. Shown in the UI for context but never
   // removable — deleting it would mean detaching the project itself.
   isPrimary: z.boolean(),
