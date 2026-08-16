@@ -22,7 +22,13 @@ function readBootHint(): boolean {
   return window.localStorage.getItem(DOUBUTSU_STORAGE_KEY) !== "false";
 }
 
-export function DoubutsuProvider({ children }: { children: ReactNode }) {
+export function DoubutsuProvider({
+  children,
+  // See ThemeProvider: the menu bar popover reads the appearance but
+  // never writes it back to main.
+}: {
+  children: ReactNode;
+}) {
   const { data: config, isLoading } = useGlobalConfig();
   // Avoid a one-frame v1-look flash while globalConfig fetches by trusting
   // the last cached value. Config wins as soon as it arrives.

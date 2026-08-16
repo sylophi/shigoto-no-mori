@@ -17,6 +17,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
+import { trayContract } from "@shared/ipc/modules/tray";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
@@ -49,6 +50,7 @@ const scriptsClient = buildClient(scriptsContract);
 const cliClient = buildClient(cliContract);
 const shellClient = buildClient(shellContract);
 const shigomoriClient = buildClient(shigomoriContract);
+const trayClient = buildClient(trayContract);
 const updaterClient = buildClient(updaterContract);
 const windowClient = buildClient(windowContract);
 const worktreesClient = buildClient(worktreesContract);
@@ -117,6 +119,8 @@ export const menu = {
 export const nav = {
   onOpenSettings: navClient.openSettings,
   onLaunchById: navClient.launchById,
+  onOpenWorktree: navClient.openWorktree,
+  onNewWorktree: navClient.newWorktree,
 } as const;
 
 export const packageScripts = {
@@ -207,6 +211,18 @@ export const worktreeData = {
     shigomoriClient.worktreeDataRead({ projectId, worktreeId }),
   write: (projectId: string, worktreeId: string, data: ShigomoriWorktreeData) =>
     shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
+} as const;
+
+export const tray = {
+  resize: (height: number) => trayClient.resize({ height }),
+  close: trayClient.close,
+  revealWorktree: (projectId: string, worktreeId: string) =>
+    trayClient.revealWorktree({ projectId, worktreeId }),
+  revealNewWorktree: (projectId: string) =>
+    trayClient.revealNewWorktree({ projectId }),
+  toggleMainWindow: trayClient.toggleMainWindow,
+  mainWindowVisible: trayClient.mainWindowVisible,
+  onShown: trayClient.shown,
 } as const;
 
 export const updater = {

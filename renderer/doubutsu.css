@@ -37,6 +37,7 @@
  *      diff-index                diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
+ *      tray-panel                tray/TrayPanel.tsx, tray/TrayApp.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
@@ -309,20 +310,22 @@
     [data-slot="combobox-popup"],
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],
+    [data-slot="tray-panel"],
     [data-sonner-toast]
   ) {
   box-shadow: var(--doubutsu-sticker-shadow) !important;
 }
 
 /* Hairline separators inside those surfaces (the combobox search row,
-   modal header/footer rows, the diff rail's filter and match-count
-   rows) went transparent with --border; replace them with the same
-   chunky muted band as the dropdown separator. */
+   modal header/footer rows, the diff rail's filter and match-count rows,
+   the tray popover's footer) went transparent with --border; replace
+   them with the same chunky muted band as the dropdown separator. */
 .doubutsu
   :is(
     [data-slot="modal-shell"],
     [data-slot="combobox-popup"],
-    [data-slot="diff-index"]
+    [data-slot="diff-index"],
+    [data-slot="tray-panel"]
   )
   .border-b,
 .doubutsu [data-slot="combobox-search"] {
@@ -332,7 +335,8 @@
   :is(
     [data-slot="modal-shell"],
     [data-slot="combobox-popup"],
-    [data-slot="diff-index"]
+    [data-slot="diff-index"],
+    [data-slot="tray-panel"]
   )
   .border-t {
   box-shadow: inset 0 2px 0 0 var(--muted);
