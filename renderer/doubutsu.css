@@ -34,6 +34,7 @@
  *      launcher                  launcher/ProjectLauncher.tsx
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
+ *      diff-index                diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *
@@ -385,6 +386,21 @@
    outranks that utility and the pair stays in sync. */
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer) {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
+}
+
+/* The diff file index is bounded by a border-r in v1, which goes
+   transparent here. Give it the same lifted band as the header/footer
+   above, so the rail reads as its own panel and the drifting leaves
+   still carry through it. Its internal hairlines (the filter row, the
+   match count) take the chunky muted bar used everywhere else. */
+.doubutsu [data-slot="diff-index"] {
+  background-color: color-mix(in oklab, var(--card) 70%, transparent);
+}
+.doubutsu [data-slot="diff-index"] .border-b {
+  box-shadow: inset 0 -2px 0 0 var(--muted);
+}
+.doubutsu [data-slot="diff-index"] .border-t {
+  box-shadow: inset 0 2px 0 0 var(--muted);
 }
 
 /* --- Typography: AC chunky-by-default ---
