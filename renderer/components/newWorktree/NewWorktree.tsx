@@ -10,16 +10,30 @@ import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
+import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import {
+  useCreateWorktree,
+  useCreateWorktreeFromPullRequest,
+} from "@/hooks/worktrees/useWorktreeMutations";
 import { tildify } from "@/lib/projectPaths";
+import {
+  PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
+  pullRequestFolderName,
+} from "@/lib/pullRequest";
 import {
   sanitizeBranchForPath,
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
 } from "@shared/branches";
-import { isRealBranch } from "@shared/schemas";
+import {
+  isRealBranch,
+  type CreateWorktreeResult,
+  type PullRequestCandidate,
+  type Worktree,
+} from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
+import { PullRequestPicker } from "./PullRequestPicker";
 
 const route = getRouteApi("/projects/$projectId/new");
 
@@ -37,10 +51,13 @@ export function NewWorktree() {
   const { data: branches } = useBranches(projectId);
   const project = projects.find((p) => p.id === projectId);
   // git refuses to check out a branch that's already a HEAD elsewhere.
-  const occupiedBranches = worktrees.reduce<string[]>((acc, w) => {
-    if (isRealBranch(w.branch)) acc.push(w.branch);
+  // Keyed by branch so the PR picker can name the worktree holding it,
+  // not just grey the row out.
+  const worktreeByBranch = worktrees.reduce<Map<string, Worktree>>((acc, w) => {
+    if (isRealBranch(w.branch)) acc.set(w.branch, w);
     return acc;
-  }, []);
+  }, new Map());
+  const occupiedBranches = [...worktreeByBranch.keys()];
   const [mode, setMode] = useState<Mode>("branch-from");
   // The branch name and base are seeded from async reads (the picked
   // animal name and the resolved default branch), so state holds only
@@ -54,11 +71,28 @@ export function NewWorktree() {
   const base = baseInput ?? defaultBranch ?? "";
   const [worktreeName, setWorktreeName] = useState("");
   const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
+  const [selectedPr, setSelectedPr] = useState<PullRequestCandidate | null>(
+    null,
+  );
+  const prMode = mode === "pull-request";
+  const candidates = usePullRequestCandidates(projectId, prMode);
   const create = useCreateWorktree();
+  const createFromPr = useCreateWorktreeFromPullRequest();
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
   }
+
+  // Only the "unavailable" verdict is worth greying the option over, and
+  // only once we've heard it -- while the query is in flight or errored
+  // the mode stays offered. Never greyed while it's the selected mode,
+  // so the user can't get stuck on a segment they can't click off of.
+  const prUnavailable =
+    candidates.data?.status === "unavailable"
+      ? PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[candidates.data.reason]
+      : undefined;
+  const prList =
+    candidates.data?.status === "ok" ? candidates.data.pullRequests : [];
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in — block submit and surface why.
@@ -71,10 +105,22 @@ export function NewWorktree() {
     branchName.length > 0 &&
     (branches?.local.includes(branchName) ?? false);
 
+  // The PR's head branch is what actually gets checked out, so an
+  // existing worktree on it blocks the create the same way an occupied
+  // base does in checkout mode.
+  const prHeadOccupied =
+    selectedPr !== null && worktreeByBranch.has(selectedPr.headRefName);
+
   // Raw `worktreeName` is held separately from the sanitized `folderName`
   // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
   // be unreachable — the trailing `-` would be trimmed before the `2`).
-  const folderSource = mode === "checkout" ? base : branchName;
+  const folderSource = prMode
+    ? selectedPr
+      ? pullRequestFolderName(selectedPr)
+      : ""
+    : mode === "checkout"
+      ? base
+      : branchName;
   const folderName = sanitizeBranchForPath(
     useBranchAsFolder ? folderSource : worktreeName,
   );
@@ -91,15 +137,35 @@ export function NewWorktree() {
   const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
   const folderUnusable = folderSourceRaw.length > 0 && folderName.length === 0;
 
-  const canSubmit =
-    base.length > 0 &&
-    (mode === "checkout" || branchName.length > 0) &&
-    folderName.length > 0 &&
-    !folderTaken &&
-    !branchTaken &&
-    !baseOccupied;
+  const sourceReady = prMode
+    ? selectedPr !== null && !prHeadOccupied
+    : base.length > 0 &&
+      (mode === "checkout" || branchName.length > 0) &&
+      !branchTaken &&
+      !baseOccupied;
+
+  const canSubmit = sourceReady && folderName.length > 0 && !folderTaken;
+
+  const onCreated = ({ worktree }: CreateWorktreeResult) => {
+    void navigate({
+      to: "/projects/$projectId/worktrees/$worktreeId",
+      params: { projectId: worktree.projectId, worktreeId: worktree.id },
+    });
+  };
 
   const handleCreate = () => {
+    if (prMode) {
+      if (!selectedPr) return;
+      createFromPr.mutate(
+        {
+          projectId: project.id,
+          worktreeName: folderName,
+          number: selectedPr.number,
+        },
+        { onSuccess: onCreated },
+      );
+      return;
+    }
     create.mutate(
       mode === "checkout"
         ? {
@@ -114,36 +180,28 @@ export function NewWorktree() {
             branchName,
             base: base || undefined,
           },
-      {
-        onSuccess: ({ worktree }) => {
-          void navigate({
-            to: "/projects/$projectId/worktrees/$worktreeId",
-            params: {
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-            },
-          });
-        },
-      },
+      { onSuccess: onCreated },
     );
   };
 
+  const busy = create.isPending || createFromPr.isPending;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (canSubmit && !create.isPending) {
+    if (canSubmit && !busy) {
       handleCreate();
     }
   };
 
-  const busy = create.isPending;
-  const errorMessage = create.error ? create.error.message : null;
+  const errorMessage = (create.error ?? createFromPr.error)?.message ?? null;
   const home = runtime?.homedir ?? null;
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
   const destPath = `${root}/worktrees/${project.name}/${folderName || "…"}`;
-  const destLead =
-    mode === "branch-from"
+  const destLead = prMode
+    ? "Check out the pull request's head into"
+    : mode === "branch-from"
       ? "A new branch created off the source. Checked out into"
       : "Check out the source branch into";
   const destTrail =
@@ -166,53 +224,102 @@ export function NewWorktree() {
         className="flex max-w-xl flex-col gap-7 p-6"
         onSubmit={handleSubmit}
       >
-        <div className="space-y-2">
-          <label htmlFor="branch-base" className="block text-sm font-medium">
-            Source
-          </label>
-          <BranchCombobox
-            id="branch-base"
-            projectId={projectId}
-            value={base}
-            onChange={setBaseInput}
-            placeholder={defaultBranch ?? "main"}
-            disabled={busy || !defaultBranch}
-            excludeBranches={mode === "checkout" ? occupiedBranches : undefined}
-          />
-          {baseOccupied && (
-            <p className="text-xs text-destructive">
-              <span className="font-mono">{base}</span> is already checked out
-              in another worktree.
-            </p>
-          )}
-        </div>
+        {!prMode && (
+          <div className="space-y-2">
+            <label htmlFor="branch-base" className="block text-sm font-medium">
+              Source
+            </label>
+            <BranchCombobox
+              id="branch-base"
+              projectId={projectId}
+              value={base}
+              onChange={setBaseInput}
+              placeholder={defaultBranch ?? "main"}
+              disabled={busy || !defaultBranch}
+              excludeBranches={
+                mode === "checkout" ? occupiedBranches : undefined
+              }
+            />
+            {baseOccupied && (
+              <p className="text-xs text-destructive">
+                <span className="font-mono">{base}</span> is already checked out
+                in another worktree.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
-          <ModeToggle mode={mode} onChange={setMode} disabled={busy} />
-          <label
-            htmlFor="branch-name"
-            className="block pt-2 text-sm font-medium"
-          >
-            Branch name
-          </label>
-          <Input
-            id="branch-name"
-            type="text"
-            value={mode === "checkout" ? base : branchName}
-            onChange={(e) =>
-              setBranchNameInput(sanitizeBranchName(e.target.value))
-            }
-            placeholder="feat/new-thing"
-            disabled={busy || mode === "checkout"}
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
-            autoFocus
-            className={TEXT_INPUT_CLASS}
+          <ModeToggle
+            mode={mode}
+            onChange={setMode}
+            disabled={busy}
+            pullRequestUnavailable={prMode ? undefined : prUnavailable}
           />
-          {branchTaken && (
-            <p className="text-xs text-destructive">
-              A branch named <span className="font-mono">{branchName}</span>{" "}
-              already exists in this project.
-            </p>
+          {prMode ? (
+            <>
+              <span className="block pt-2 text-sm font-medium">
+                Pull request
+              </span>
+              {candidates.isPending ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  Loading pull requests…
+                </p>
+              ) : candidates.isError ? (
+                <ErrorBanner>{candidates.error.message}</ErrorBanner>
+              ) : prUnavailable ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {prUnavailable}
+                </p>
+              ) : (
+                <PullRequestPicker
+                  pullRequests={prList}
+                  selected={selectedPr}
+                  onSelect={setSelectedPr}
+                  worktreeByBranch={worktreeByBranch}
+                  disabled={busy}
+                />
+              )}
+              {selectedPr && (
+                <p className="text-xs text-muted-foreground">
+                  Checks out{" "}
+                  <span className="font-mono text-foreground/80">
+                    {selectedPr.headRefName}
+                  </span>
+                  {selectedPr.headRepo
+                    ? `, fetched from refs/pull/${selectedPr.number}/head because the head lives in a fork. Nothing is configured to push back to it.`
+                    : ", tracking the branch on the remote."}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <label
+                htmlFor="branch-name"
+                className="block pt-2 text-sm font-medium"
+              >
+                Branch name
+              </label>
+              <Input
+                id="branch-name"
+                type="text"
+                value={mode === "checkout" ? base : branchName}
+                onChange={(e) =>
+                  setBranchNameInput(sanitizeBranchName(e.target.value))
+                }
+                placeholder="feat/new-thing"
+                disabled={busy || mode === "checkout"}
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- focused subpage
+                autoFocus
+                className={TEXT_INPUT_CLASS}
+              />
+              {branchTaken && (
+                <p className="text-xs text-destructive">
+                  A branch named <span className="font-mono">{branchName}</span>{" "}
+                  already exists in this project.
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -240,7 +347,8 @@ export function NewWorktree() {
                 disabled={busy}
                 className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
               />
-              Use {mode === "checkout" ? "source" : "branch"} name
+              Use {prMode ? "PR" : mode === "checkout" ? "source" : "branch"}{" "}
+              name
             </label>
           </div>
           <Input

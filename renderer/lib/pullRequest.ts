@@ -9,8 +9,10 @@ import {
   MergeMethodSchema,
   type MergeMethod,
   type PullRequest,
+  type PullRequestCandidate,
   type PullRequestChecksSummary,
   type PullRequestMergeState,
+  type PullRequestSourceUnavailable,
   type RepoMergeConfig,
 } from "@shared/schemas";
 
@@ -33,6 +35,38 @@ export function describePullRequest(pr: PullRequest): PullRequestDescriptor {
     return { Icon: GitPullRequestDraft, tone: "slate", label: "Draft PR" };
   }
   return { Icon: GitPullRequest, tone: "emerald", label: "Open PR" };
+}
+
+// Why the new-worktree form can't offer the pull request source. Each
+// line names the thing to fix; none of them are recoverable from inside
+// the form, so there's no action attached.
+export const PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT: Record<
+  PullRequestSourceUnavailable,
+  string
+> = {
+  "integration-off": "The GitHub integration is off in Settings.",
+  "gh-missing": "The GitHub CLI (gh) isn't installed.",
+  "gh-signed-out": "The GitHub CLI isn't signed in. Run gh auth login.",
+  "no-github-remote": "This project has no GitHub remote.",
+  "gh-failed": "Couldn't reach GitHub.",
+};
+
+const FOLDER_SLUG_WORDS = 4;
+const FOLDER_SLUG_MAX = 28;
+
+// Folder name for a PR checkout: "pr-142-adds-a-thing". The number
+// leads because that's how PRs get talked about; the slug is the first
+// few title words, only there so the folder is recognizable at a glance
+// in a list of ten worktrees. Callers still run it through
+// sanitizeBranchForPath -- this only decides the shape.
+export function pullRequestFolderName(pr: PullRequestCandidate): string {
+  const words = pr.title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .slice(0, FOLDER_SLUG_WORDS);
+  const slug = words.join("-").slice(0, FOLDER_SLUG_MAX).replace(/-+$/, "");
+  return slug ? `pr-${pr.number}-${slug}` : `pr-${pr.number}`;
 }
 
 export interface MergeStateDescriptor {

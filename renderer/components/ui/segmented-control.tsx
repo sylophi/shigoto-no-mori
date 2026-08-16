@@ -6,6 +6,10 @@ export interface SegmentedOption<T extends string> {
   label: ReactNode;
   // Shown as a native tooltip on the option button.
   title?: string;
+  // Greys out this option alone (the control-level `disabled` greys out
+  // all of them). For choices that exist but aren't available right now
+  // -- pair it with `title`, and say why somewhere the eye will land.
+  disabled?: boolean;
 }
 
 // The house few-way toggle: pill options on an inset track (new-worktree
@@ -46,7 +50,7 @@ export function SegmentedControl<T extends string>({
           key={opt.value}
           type="button"
           onClick={() => onChange(opt.value)}
-          disabled={disabled}
+          disabled={disabled || opt.disabled}
           title={opt.title}
           aria-pressed={value === opt.value}
           className={cn(
@@ -59,7 +63,7 @@ export function SegmentedControl<T extends string>({
             value === opt.value
               ? "bg-accent text-accent-foreground"
               : "text-muted-foreground hover:text-foreground",
-            disabled && "cursor-not-allowed opacity-50",
+            (disabled || opt.disabled) && "cursor-not-allowed opacity-50",
           )}
         >
           {opt.label}

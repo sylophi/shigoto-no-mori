@@ -32,6 +32,51 @@ export function useCreateWorktree() {
   });
 }
 
+interface CreateWorktreeFromPullRequestInput {
+  projectId: string;
+  worktreeName?: string;
+  number: number;
+}
+
+// Two calls behind one mutation: land the PR head on a local branch,
+// then create the worktree on it through the ordinary checkout path.
+// Splitting it this way keeps the create itself on the bundled CLI --
+// only the ref resolution is PR-aware. The branch survives a failed
+// create, which is fine: it's the same branch `gh pr checkout` would
+// have left, and a retry reuses it.
+export function useCreateWorktreeFromPullRequest() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    CreateWorktreeResult,
+    Error,
+    CreateWorktreeFromPullRequestInput
+  >({
+    mutationFn: async ({ projectId, worktreeName, number }) => {
+      const { branch } = await window.api.githubCli.resolvePullRequestCheckout({
+        projectId,
+        number,
+      });
+      return window.api.worktrees.create({
+        projectId,
+        worktreeName,
+        base: branch,
+        checkout: true,
+      });
+    },
+    onSuccess: (_result, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.worktrees(vars.projectId),
+      });
+      // The resolve step created a local branch, so the branch list and
+      // the "already checked out" bookkeeping behind it are both stale.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.branches(vars.projectId),
+      });
+    },
+    meta: { errorTitle: "Couldn't check out pull request" },
+  });
+}
+
 interface ConvertExternalWorktreeInput {
   projectId: string;
   worktreeId: string;
