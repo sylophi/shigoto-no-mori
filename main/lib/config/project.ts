@@ -118,6 +118,12 @@ export async function deleteWorktreeData(
   }
 }
 
+// For delegated CLI writes of project.json, which the state watcher
+// suppresses as self-writes -- the handler drops the cache itself.
+export function invalidateProjectConfigCache(projectId: string): void {
+  configCache.invalidate(projectId);
+}
+
 // External processes (the CLI) write these files too; the state
 // watcher calls this on any change under the root so the 5s TTL can't
 // serve stale config after a CLI write.

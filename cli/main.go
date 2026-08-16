@@ -39,8 +39,6 @@ var generalItems = []helpItem{
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
 		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
-	{"config", "Open the global config file",
-		"config.json in the state root, via $EDITOR or the OS opener."},
 	{"help [<command>] [--all]", "Show help",
 		"help <command> documents one command, --all prints every command at once."},
 }
@@ -78,9 +76,25 @@ var projectItems = []helpItem{
 		"The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips)."},
 	{"projects remove [<name>]", "Unregister a project",
 		"Worktrees stay on disk. Prompts for confirmation (--yes skips)."},
-	{"projects config [--setup <cmd>] [--teardown <cmd>] [--default-branch <ref>]",
+	{"projects config [<command>] [args]",
 		"Show or set per-project config",
-		`"" clears a script, default-branch can't be cleared.`},
+		"Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
+			"list, get <key>, set <key> <value>, unset <key>, edit. Keys: `" + binaryName +
+			" projects config list`. The flags --setup <cmd>, --teardown <cmd>, and " +
+			`--default-branch <ref> remain as shorthands; "" clears a script, ` +
+			"default-branch can't be cleared."},
+}
+
+var configItems = []helpItem{
+	{"config list", "Show every setting",
+		"Effective values; (default) marks keys not present in config.json."},
+	{"config get <key>", "Print one setting's effective value", ""},
+	{"config set <key> <value>", "Change a setting",
+		"Booleans accept true/false, on/off, yes/no, 1/0. Setting a key to its default removes " +
+			"it from the file, same as the app."},
+	{"config unset <key>", "Reset a setting to its default", ""},
+	{"config edit", "Open config.json in your editor",
+		"$VISUAL/$EDITOR in a terminal, the OS opener otherwise."},
 }
 
 var shellItems = []helpItem{
@@ -111,6 +125,7 @@ var helpGroups = []helpGroup{
 	{"General", generalItems},
 	{"Worktrees", worktreeItems},
 	{"Projects", projectItems},
+	{"Config", configItems},
 	{"Shell integration", shellItems},
 	{"Flags", flagItems},
 	{"Environment", envItems},
@@ -171,6 +186,8 @@ func helpText(full bool) string {
 				subcommandList(worktreeItems) + ". Run `" + binaryName + " worktrees` for details."},
 			helpItem{"projects <command>", "Project commands",
 				subcommandList(projectItems) + ". Run `" + binaryName + " projects` for details."},
+			helpItem{"config <command>", "Global settings",
+				subcommandList(configItems) + ". Run `" + binaryName + " config` for details."},
 			helpItem{"shell <command>", "Shell integration: cd without subshells",
 				subcommandList(shellItems) + ". Run `" + binaryName + " shell` for details."},
 		)
@@ -223,6 +240,13 @@ func worktreesHelpText() string {
 func projectsHelpText() string {
 	return namespaceHelpText("projects", "p",
 		"Manage registered projects.", projectItems)
+}
+
+func configHelpText() string {
+	return namespaceHelpText("config", "",
+		"Global settings, stored in config.json in the state root. Keys "+
+			"and current values: `"+binaryName+" config list`. Per-project "+
+			"settings live under `"+binaryName+" projects config`.", configItems)
 }
 
 func shellHelpText() string {
@@ -368,7 +392,7 @@ var commands = []command{
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
 	{name: "app", noCwd: true, run: cmdApp},
 	{name: "update", noCwd: true, run: cmdUpdate},
-	{name: "config", noCwd: true, run: cmdConfigOpen},
+	{name: "config", noCwd: true, run: cmdConfigGlobal},
 	{name: "shell", noCwd: true, run: cmdShell},
 }
 
@@ -434,6 +458,9 @@ func commandHelp(command string, args []string) string {
 	if name == "projects" && len(args) == 0 {
 		return projectsHelpText()
 	}
+	if name == "config" && len(args) == 0 {
+		return configHelpText()
+	}
 	if name == "shell" && len(args) == 0 {
 		return shellHelpText()
 	}
@@ -444,10 +471,18 @@ func commandHelp(command string, args []string) string {
 			sub = s
 		}
 	}
-	// Derived from the catalog, like subcommandList, so a new shell
-	// subcommand is help-addressable without touching this switch.
+	// Derived from the catalog, like subcommandList, so a new shell or
+	// config subcommand is help-addressable without touching this switch.
 	if name == "shell" && len(args) > 0 {
 		for _, item := range shellItems {
+			if strings.Fields(item.usage)[1] == args[0] {
+				sub = args[0]
+				break
+			}
+		}
+	}
+	if name == "config" && len(args) > 0 {
+		for _, item := range configItems {
 			if strings.Fields(item.usage)[1] == args[0] {
 				sub = args[0]
 				break

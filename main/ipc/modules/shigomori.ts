@@ -1,7 +1,9 @@
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import type { Handlers } from "@shared/ipc/types";
 import { IN_PROJECT_ROOT_DIR } from "@shared/worktreeLayout";
+import { cliAvailable } from "../../electron/cliRunner";
 import {
+  invalidateProjectConfigCache,
   readShigomoriConfig,
   readWorktreeData,
   writeShigomoriConfig,
@@ -9,6 +11,7 @@ import {
 } from "../../lib/config/project";
 import { appendExcludes } from "../../lib/git/exclude";
 import { findProjectOrThrow } from "../../lib/projects";
+import { shigomoriWriteViaCli } from "../cliDelegate";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   read: async ({ projectId }) => {
@@ -18,6 +21,16 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
 
   write: async ({ projectId, config }) => {
     const project = findProjectOrThrow(projectId);
+    // Same engine rule as the other mutations: delegate to the CLI when
+    // available (it also performs the in-project exclude side effect);
+    // Windows stays on the TS path below.
+    if (cliAvailable()) {
+      await shigomoriWriteViaCli(projectId, config);
+      // The watcher treats the delegated spawn as a self-write, so the
+      // TTL cache must be dropped here rather than by the fs event.
+      invalidateProjectConfigCache(projectId);
+      return;
+    }
     await writeShigomoriConfig(projectId, config);
     // Hide `.shigomori/` from the primary's `git status` whenever the
     // project opts into the in-project layout. Idempotent: appendExcludes

@@ -5,9 +5,7 @@ package main
 // refuses: the dev app isn't installed, it runs from a checkout.
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 )
 
@@ -39,51 +37,5 @@ func cmdApp(_ cliContext, args []string) (int, error) {
 	} else {
 		out("opened Shigoto no Mori")
 	}
-	return 0, nil
-}
-
-// sm config -- open the global config file. $VISUAL/$EDITOR in an
-// interactive terminal, the OS opener otherwise; --json (and
-// editor-less non-darwin) just reports the path. Per-project config
-// lives under `sm projects config`.
-func cmdConfigOpen(_ cliContext, args []string) (int, error) {
-	if len(args) > 0 {
-		return 2, usageErrf(
-			"config takes no arguments. Per-project config is `%s projects config`.", binaryName)
-	}
-	path := filepath.Join(shigomoriRoot(), "config.json")
-	if _, err := os.Stat(path); err != nil {
-		// Give the editor a real file so a save round-trips.
-		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		if writeErr := os.WriteFile(path, []byte("{}\n"), 0o644); writeErr != nil {
-			return 1, errf("Couldn't create %s: %v", path, writeErr)
-		}
-	}
-	if jsonMode {
-		emit(map[string]any{"path": path})
-		return 0, nil
-	}
-	editor := os.Getenv("VISUAL")
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor != "" && interactiveStdio() {
-		cmd := exec.Command("/bin/sh", "-c", editor+" "+shellQuote(path))
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return 1, errf("%s failed: %v", editor, err)
-		}
-		return 0, nil
-	}
-	if runtime.GOOS == "darwin" {
-		if err := exec.Command("open", path).Run(); err != nil {
-			return 1, errf("Couldn't open %s: %v", path, err)
-		}
-		out("opened " + path)
-		return 0, nil
-	}
-	out(path)
 	return 0, nil
 }
