@@ -9,6 +9,7 @@ import {
   type BrowserWindow,
 } from "electron";
 import type { Contract } from "@shared/ipc/contract";
+import { commandPaletteContract } from "@shared/ipc/modules/commandPalette";
 import { navContract } from "@shared/ipc/modules/nav";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import type { BroadcastProducerPayload } from "@shared/ipc/types";
@@ -142,6 +143,11 @@ export function buildAppMenu(): void {
     {
       label: "View",
       submenu: [
+        {
+          label: "Command palette",
+          accelerator: "CmdOrCtrl+K",
+          click: clickBroadcast(commandPaletteContract, "toggle", undefined),
+        },
         {
           label: "Project launcher",
           accelerator: "Cmd+Shift+P",

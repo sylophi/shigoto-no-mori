@@ -1,5 +1,6 @@
 import { buildClient } from "@shared/ipc/buildClient";
 import { branchesContract } from "@shared/ipc/modules/branches";
+import { commandPaletteContract } from "@shared/ipc/modules/commandPalette";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -32,6 +33,7 @@ import type {
 } from "@shared/schemas";
 
 const branchesClient = buildClient(branchesContract);
+const commandPaletteClient = buildClient(commandPaletteContract);
 const dialogClient = buildClient(dialogContract);
 const fsClient = buildClient(fsContract);
 const gitClient = buildClient(gitContract);
@@ -57,6 +59,10 @@ export const branches = {
   create: branchesClient.create,
   rename: branchesClient.rename,
   delete: branchesClient.delete,
+} as const;
+
+export const commandPalette = {
+  onToggle: commandPaletteClient.toggle,
 } as const;
 
 export const dialog = {

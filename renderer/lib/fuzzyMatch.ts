@@ -22,6 +22,21 @@ export function scoreMatch(query: string, target: string): number {
   return Math.max(1, 80 - gaps);
 }
 
+// Best scoreMatch across several candidate strings. For rows that are
+// findable by more than one name (a worktree by its branch, its
+// directory, or its project), scoring each field separately and taking
+// the winner beats concatenating them: a joined string dilutes the
+// length-ratio bonus and lets the subsequence fallback match across
+// field boundaries.
+export function bestScore(query: string, targets: readonly string[]): number {
+  let best = 0;
+  for (const target of targets) {
+    const score = scoreMatch(query, target);
+    if (score > best) best = score;
+  }
+  return best;
+}
+
 // Filter + rank items by scoreMatch, best match first. An empty query
 // returns the list as-is so callers keep their existing order (matches
 // scoreMatch's "empty query = stable sort" contract).
