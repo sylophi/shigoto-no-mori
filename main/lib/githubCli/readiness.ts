@@ -1,4 +1,7 @@
-import type { GithubCliReadiness } from "@shared/schemas";
+import type {
+  GithubCliReadiness,
+  PullRequestSourceUnavailable,
+} from "@shared/schemas";
 import { readGlobalConfig } from "../config/global";
 import { binaryOnPath } from "../util/binaries";
 import { ttlValueCache } from "../util/ttlCache";
@@ -34,8 +37,20 @@ async function isAuthed(): Promise<boolean> {
 // false when the integration is off or gh isn't ready, so callers can
 // short-circuit before doing IO.
 export async function ghReady(): Promise<boolean> {
+  return (await ghUnavailableReason()) === null;
+}
+
+// Same gate, but says which check failed. Surfaces that explain
+// themselves instead of just hiding (the new-worktree PR mode) use this;
+// everything else takes the boolean.
+export async function ghUnavailableReason(): Promise<Exclude<
+  PullRequestSourceUnavailable,
+  "no-github-remote" | "gh-failed"
+> | null> {
   const config = await readGlobalConfig();
-  if (config.githubCli === false) return false;
+  if (config.githubCli === false) return "integration-off";
   const { installed, authed } = await getGithubCliReadiness();
-  return installed && authed;
+  if (!installed) return "gh-missing";
+  if (!authed) return "gh-signed-out";
+  return null;
 }

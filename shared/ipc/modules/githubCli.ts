@@ -6,9 +6,12 @@ import {
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
   ProjectScopedPayloadSchema,
+  PullRequestCandidateListSchema,
+  PullRequestCheckoutRefSchema,
   PullRequestDetailSchema,
   PullRequestSchema,
   RepoMergeConfigSchema,
+  ResolvePullRequestCheckoutPayloadSchema,
   SetPullRequestDraftPayloadSchema,
 } from "@shared/schemas";
 
@@ -23,6 +26,23 @@ export const githubCliContract = {
     "githubCli:worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
     PullRequestDetailSchema.nullable(),
+  ),
+  // Open PRs offered as a source in the new-worktree form. Uncached and
+  // fired only when the user picks that mode, so opening the form stays
+  // free of a gh round trip.
+  pullRequestCandidates: invoke(
+    "githubCli:pullRequestCandidates",
+    ProjectScopedPayloadSchema,
+    PullRequestCandidateListSchema,
+  ),
+  // Fetches the PR head and lands it on a local branch. Separate from
+  // worktrees.create so the create itself still runs through the bundled
+  // CLI, which knows nothing about PRs.
+  resolvePullRequestCheckout: invoke(
+    "githubCli:resolvePullRequestCheckout",
+    ResolvePullRequestCheckoutPayloadSchema,
+    PullRequestCheckoutRefSchema,
+    { tracksProjectUsage: true },
   ),
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",

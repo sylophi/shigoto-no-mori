@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listRemoteUrls } from "../git/remotes";
+import { listRemoteEntries, listRemoteUrls } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
 
@@ -123,6 +123,28 @@ const githubRepoCache = ttlMapCache<string, GithubRepoInfo | null>(
 
 export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
   return githubRepoCache.get(cwd);
+}
+
+// The remote name that points at the repo getGithubRepoInfo resolved.
+// Fetching a PR head needs a name, not a URL, and "origin" isn't a safe
+// assumption (forks in the wild use upstream / github / a personal
+// alias). Uncached: only the PR checkout action calls it, and the
+// underlying repo probe is already cached.
+export async function githubRemoteName(cwd: string): Promise<string | null> {
+  const info = await getGithubRepoInfo(cwd);
+  if (!info) return null;
+  for (const entry of await listRemoteEntries(cwd)) {
+    const parsed = parseRemoteUrl(entry.url);
+    if (
+      parsed &&
+      parsed.host === info.host &&
+      parsed.owner === info.owner &&
+      parsed.repo === info.repo
+    ) {
+      return entry.name;
+    }
+  }
+  return null;
 }
 
 export function githubRepoUrl(info: GithubRepoInfo): string {

@@ -124,6 +124,75 @@ export const GithubCliReadinessSchema = z.object({
 });
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 
+// One open PR offered as a worktree source in the create form. Slimmer
+// than PullRequestDetail on purpose: the picker only needs enough to
+// recognize the PR and resolve its head, and statusCheckRollup is the
+// field that makes `gh pr list` materially slower (same reason the
+// sidebar sweep skips it).
+export const PullRequestCandidateSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.url(),
+  title: z.string(),
+  isDraft: z.boolean(),
+  headRefName: z.string().min(1),
+  authorLogin: z.string(),
+  // "owner/repo" when the head lives in a fork, null for same-repo PRs.
+  // Fork heads exist locally only as refs/pull/<n>/head, so the resolver
+  // takes a different path for them.
+  headRepo: z.string().nullable(),
+  updatedAt: z.string(),
+});
+export type PullRequestCandidate = z.infer<typeof PullRequestCandidateSchema>;
+
+// Why the PR source is unavailable for a project. Kept as codes rather
+// than prose so the renderer owns the wording (and can point at the
+// setting that fixes it).
+export const PullRequestSourceUnavailableSchema = z.enum([
+  "integration-off",
+  "gh-missing",
+  "gh-signed-out",
+  "no-github-remote",
+  "gh-failed",
+]);
+export type PullRequestSourceUnavailable = z.infer<
+  typeof PullRequestSourceUnavailableSchema
+>;
+
+// "no open PRs" (ok + empty list) is a different answer from "we can't
+// ask" -- the form disables the whole mode for the latter, so the two
+// can't collapse into an empty array.
+export const PullRequestCandidateListSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ok"),
+    pullRequests: z.array(PullRequestCandidateSchema),
+  }),
+  z.object({
+    status: z.literal("unavailable"),
+    reason: PullRequestSourceUnavailableSchema,
+  }),
+]);
+export type PullRequestCandidateList = z.infer<
+  typeof PullRequestCandidateListSchema
+>;
+
+export const ResolvePullRequestCheckoutPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    number: z.number().int().positive(),
+  });
+
+export const PullRequestCheckoutRefSchema = z.object({
+  // Local branch the PR head now sits on. Feed it to worktrees.create as
+  // `base` with `checkout: true` -- from there it's an ordinary
+  // check-out-existing-branch create.
+  branch: z.string().min(1),
+  // True when the head came from a fork (fetched via refs/pull/<n>/head).
+  // The form uses it to explain why the branch has no upstream.
+  fromFork: z.boolean(),
+});
+export type PullRequestCheckoutRef = z.infer<
+  typeof PullRequestCheckoutRefSchema
+>;
+
 export const GithubCliWorktreePullRequestPayloadSchema =
   ProjectScopedPayloadSchema.extend({
     branch: z.string().min(1),
