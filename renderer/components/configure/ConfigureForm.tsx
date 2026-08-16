@@ -9,6 +9,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
+import { useLaunchSetEditor } from "@/hooks/launchers/useLaunchSetEditor";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { fileManagerName } from "@/lib/platform";
@@ -16,11 +17,13 @@ import { notifyError } from "@/lib/toast";
 import type {
   CarryOverEntry,
   LauncherCommand,
+  LaunchSet,
   ShigomoriConfig,
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
+import { LaunchSetsSection } from "./LaunchSetsSection";
 import { ScriptField } from "./ScriptField";
 
 interface FormState {
@@ -28,6 +31,8 @@ interface FormState {
   setup: string;
   teardown: string;
   launchers: LauncherCommand[];
+  launchSets: LaunchSet[];
+  autoLaunchSetId: string | null;
   carryOver: CarryOverEntry[];
   useWorktreeInclude: boolean;
 }
@@ -41,6 +46,8 @@ function fromConfig(
     setup: config?.scripts?.setup ?? "",
     teardown: config?.scripts?.teardown ?? "",
     launchers: config?.launchers ?? [],
+    launchSets: config?.launchSets ?? [],
+    autoLaunchSetId: config?.autoLaunchSetId ?? null,
     carryOver: config?.carryOver ?? [],
     useWorktreeInclude: config?.useWorktreeInclude !== false,
   };
@@ -58,11 +65,28 @@ function toConfig(
     (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
   );
 
+  // A set needs a name and at least one tool to mean anything; half-built
+  // ones are dropped the same way half-filled launcher rows are. The
+  // auto-launch pick follows -- pointing it at a set that didn't survive
+  // would silently do nothing on the next create.
+  const validSets = state.launchSets
+    .filter((s) => s.label.trim().length > 0 && s.launcherIds.length > 0)
+    .map((s) => ({
+      id: s.id,
+      label: s.label.trim(),
+      launcherIds: s.launcherIds,
+    }));
+  const autoLaunchSetId = validSets.some((s) => s.id === state.autoLaunchSetId)
+    ? (state.autoLaunchSetId ?? undefined)
+    : undefined;
+
   return {
     ...original,
     defaultBranch: state.defaultBranch.trim(),
     scripts: Object.keys(scripts).length > 0 ? scripts : undefined,
     launchers: validLaunchers.length > 0 ? validLaunchers : undefined,
+    launchSets: validSets.length > 0 ? validSets : undefined,
+    autoLaunchSetId,
     carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
     // Enabled is the default; only persist the opt-out.
     useWorktreeInclude: state.useWorktreeInclude ? undefined : false,
@@ -130,6 +154,16 @@ export function ConfigureForm({
 
   const { addLauncher, updateLauncher, removeLauncher } =
     useLauncherListEditor(setForm);
+
+  const {
+    addSet,
+    renameSet,
+    removeSet,
+    addMember,
+    removeMember,
+    moveMember,
+    setAutoLaunch,
+  } = useLaunchSetEditor(setForm);
 
   const addCarryOver = (entry: CarryOverEntry) => {
     setForm((prev) =>
@@ -300,6 +334,19 @@ export function ConfigureForm({
               Add project tool
             </Button>
           </section>
+
+          <LaunchSetsSection
+            projectId={projectId}
+            sets={form.launchSets}
+            autoLaunchSetId={form.autoLaunchSetId}
+            onAdd={addSet}
+            onRename={renameSet}
+            onRemove={removeSet}
+            onAddMember={addMember}
+            onRemoveMember={removeMember}
+            onMoveMember={moveMember}
+            onToggleAutoLaunch={setAutoLaunch}
+          />
 
           {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
         </div>

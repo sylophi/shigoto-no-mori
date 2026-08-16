@@ -13,6 +13,20 @@ export const LauncherCommandSchema = z.object({
 });
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 
+// A named, ordered group of launcher ids ("Editor + Terminal + Claude").
+// The Launch row fires the whole group from a single pill, and a project
+// can nominate one set to run on a freshly created worktree. Members are
+// the same ids the row uses (`app:cursor`, `web:github`,
+// `custom:<uuid>`); an id that stops resolving -- an app the user
+// uninstalled -- is reported once at launch time rather than pruned
+// here, so the set survives the app coming back.
+export const LaunchSetSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  launcherIds: z.array(z.string().min(1)),
+});
+export type LaunchSet = z.infer<typeof LaunchSetSchema>;
+
 // Files/folders to carry over from the primary checkout into newly-created
 // worktrees. `path` is relative to the project root; gitignored entries are
 // the expected source. `symlink` keeps state shared; `copy` snapshots.
@@ -51,6 +65,13 @@ export const ShigomoriConfigSchema = z.object({
     .partial()
     .optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
+  // Named launcher groups, each shown as one extra pill in the Launch
+  // row. Absent = no sets, which is every project until it opts in.
+  launchSets: z.array(LaunchSetSchema).optional(),
+  // The set to fire once a newly created worktree has finished carry-
+  // over and setup. Absent = nothing auto-launches; opting in is the
+  // only way a create ever spawns an app on its own.
+  autoLaunchSetId: z.string().optional(),
   portBase: z.number().int().positive().optional(),
   defaultBranch: z.string().min(1),
   carryOver: z.array(CarryOverEntrySchema).optional(),

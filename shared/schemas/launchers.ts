@@ -42,6 +42,23 @@ export const LaunchPayloadSchema = WorktreeScopedPayloadSchema.extend({
   launcherId: z.string().min(1),
 });
 
+// Launch sets ride the same id space as launchers through the File
+// menu's ⌘1..⌘9 entries (the menu only echoes ids back at the
+// renderer), so they carry a prefix that can't collide with `app:` /
+// `web:` / `custom:`. Main's `launchers:launch` never sees one: the
+// renderer expands a set into its member ids first.
+const LAUNCH_SET_ID_PREFIX = "set:";
+
+export function launchSetMenuId(setId: string): string {
+  return `${LAUNCH_SET_ID_PREFIX}${setId}`;
+}
+
+// The set id behind a menu id, or null when it's a plain launcher.
+export function launchSetIdFromMenuId(menuId: string): string | null {
+  if (!menuId.startsWith(LAUNCH_SET_ID_PREFIX)) return null;
+  return menuId.slice(LAUNCH_SET_ID_PREFIX.length);
+}
+
 export const LaunchToolMenuEntrySchema = z.object({
   id: z.string(),
   label: z.string(),
