@@ -11,7 +11,7 @@
 // delegated CLI child runs and within a short window of any app-side
 // root write; a genuinely external write in that window is picked up
 // by the next focus refetch instead.
-import { mkdirSync, watch } from "node:fs";
+import { type FSWatcher, mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "../lib/config/global";
 import { invalidateAllProjectConfigCaches } from "../lib/config/project";
@@ -21,6 +21,16 @@ import { cliChildCount } from "./cliRunner";
 
 const DEBOUNCE_MS = 300;
 const SELF_ECHO_MS = 1000;
+
+const activeWatchers: FSWatcher[] = [];
+
+// Close every watch on the root. Called before the data-folder move
+// renames the root out from under them: open directory handles can
+// block the rename on Windows, and the app relaunches right after the
+// move anyway, so nothing needs re-watching this session.
+export function stopStateWatcher(): void {
+  for (const watcher of activeWatchers.splice(0)) watcher.close();
+}
 
 // `poke` should nudge the renderer to refetch (the caller broadcasts
 // the same signal window focus does, which drives React Query's
@@ -81,6 +91,7 @@ export function startStateWatcher(poke: () => void): void {
       watcher.on("error", () => {
         // A vanished directory (nuke) just stops this watcher.
       });
+      activeWatchers.push(watcher);
     } catch {
       // Directory missing (fresh root); bootstrap creates it before
       // anything writes, so nothing to observe yet is fine.

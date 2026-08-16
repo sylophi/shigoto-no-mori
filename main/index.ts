@@ -1,9 +1,11 @@
-import { app, BrowserWindow, nativeTheme } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme } from "electron";
 import path from "node:path";
+import { cliRootDirName } from "@shared/cliDist.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
+import { enableDevCdpPort } from "./electron/devCdp";
 import {
   refreshAllProjectGitRefs,
   startBackgroundFetch,
@@ -19,7 +21,7 @@ import {
   markShuttingDown,
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
-import { initShigomoriRoot } from "./lib/util/paths";
+import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
 import { isWindows } from "./lib/util/platform";
 import { platformChrome } from "./electron/chrome";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -27,6 +29,7 @@ import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
+import { isRelaunching } from "./electron/relaunch";
 import {
   installUpdaterImpl,
   isInstallingUpdate,
@@ -41,6 +44,7 @@ if (isWindows) {
   app.setAppUserModelId("com.sylophi.shigomori");
 }
 
+enableDevCdpPort();
 initShigomoriRoot(app.isPackaged);
 
 // Electron-layer impls must be wired before registerIpcHandlers runs so
@@ -116,7 +120,25 @@ app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start
   // from the user's terminal and already have the right one.
   if (app.isPackaged) await applyUserShellPath();
-  await ensureShigomoriRoot();
+  try {
+    await ensureShigomoriRoot();
+  } catch (err) {
+    // A pointer file can aim the root somewhere that isn't reachable
+    // right now (external drive unplugged, permissions changed). A
+    // silent unhandled rejection here would leave the app running with
+    // no window. Say what's wrong and how to recover instead.
+    dialog.showErrorBox(
+      "Shigoto no Mori can't access its data folder",
+      `${shigomoriRoot()} could not be created or accessed.\n\n` +
+        "If you moved the data folder to an external drive, reconnect " +
+        "it and relaunch. To fall back to the default location, delete " +
+        "the pointer file at ~/.config/" +
+        `${cliRootDirName(app.isPackaged ? "prod" : "dev")}/root.\n\n` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+    app.exit(1);
+    return;
+  }
   buildAppMenu();
   createWindow();
   startBackgroundFetch();
@@ -160,7 +182,7 @@ app.on("before-quit", (event) => {
   // the normal-quit path: children that survive the best-effort pass
   // don't get the escalation fallback and may end up orphaned.
   // Acceptable for an explicit, user-initiated update.
-  if (isInstallingUpdate()) {
+  if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();

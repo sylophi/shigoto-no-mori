@@ -1,16 +1,22 @@
 import { app, nativeTheme } from "electron";
 import { homedir } from "node:os";
+import { basename } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { setDoubutsu } from "../../electron/appearance";
 import { uninstallCliEverything } from "../../electron/cliInstall";
+import { relaunchApp } from "../../electron/relaunch";
+import { stopStateWatcher } from "../../electron/stateWatcher";
+import { stopUpdaterBridge } from "../../electron/updaterBridge";
 import { nukeEverything } from "../../lib/nuke";
+import { moveShigomoriRoot } from "../../lib/rootMove";
 import { broadcastAll } from "../register";
 import { shigomoriRoot } from "../../lib/util/paths";
 
 export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   info: () => ({
     shigomoriRoot: shigomoriRoot(),
+    rootDirName: basename(shigomoriRoot()),
     homedir: homedir(),
     isDev: !app.isPackaged,
   }),
@@ -27,6 +33,22 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   // overlay and window background) follows the applied value.
   setDoubutsu: ({ enabled }) => {
     setDoubutsu(enabled);
+  },
+
+  moveRoot: async ({ parentDir }) => {
+    await moveShigomoriRoot(parentDir, {
+      beforeMove: () => {
+        stopStateWatcher();
+        stopUpdaterBridge();
+      },
+    });
+    // The root is a boot-time constant (initShigomoriRoot's one-shot
+    // guard exists precisely so it can't change under live callers).
+    // The renderer calls `relaunch` once this reply lands.
+  },
+
+  relaunch: () => {
+    relaunchApp();
   },
 
   nuke: async () => {

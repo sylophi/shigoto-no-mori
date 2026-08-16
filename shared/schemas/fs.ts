@@ -9,8 +9,12 @@ export const PickFolderPayloadSchema = z
   .object({
     title: z.string().min(1).optional(),
     buttonLabel: z.string().min(1).optional(),
+    // macOS shows this above the file browser (`title` has been ignored
+    // on open panels since 10.11). Other platforms ignore it harmlessly.
+    message: z.string().min(1).optional(),
   })
   .optional();
+export type PickFolderPayload = z.infer<typeof PickFolderPayloadSchema>;
 
 // Slim subset of fs.Stats; "exists: false" means the path is missing or
 // unreadable. Used by the carry-over row to render a missing warning and

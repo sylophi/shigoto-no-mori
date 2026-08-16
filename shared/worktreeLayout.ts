@@ -52,6 +52,17 @@ export function comparablePath(path: string): string {
   return path.replaceAll("\\", "/").toLowerCase();
 }
 
+// Containment test on comparablePath's folded form: true when `path` IS
+// `ancestor` or sits anywhere beneath it. Prefix matching by intent --
+// callers guarding destructive flows (nuke, root move) want the whole
+// subtree. Contrast isManagedPath (main/lib/worktrees/paths.ts), which
+// deliberately uses parent equality instead.
+export function isSameOrInside(path: string, ancestor: string): boolean {
+  const folded = comparablePath(path).replace(/\/+$/, "");
+  const base = comparablePath(ancestor).replace(/\/+$/, "");
+  return folded === base || folded.startsWith(`${base}/`);
+}
+
 function sepFor(base: string): "/" | "\\" {
   return isWindowsStyle(base) && base.includes("\\") ? "\\" : "/";
 }

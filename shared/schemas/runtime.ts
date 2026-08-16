@@ -2,10 +2,23 @@ import { z } from "zod";
 
 export const RuntimeInfoSchema = z.object({
   shigomoriRoot: z.string().min(1),
+  // The root's folder basename ("shigomori-dev", or whatever a
+  // hand-edited pointer file named it) so renderer copy never has to
+  // parse the path.
+  rootDirName: z.string().min(1),
   homedir: z.string().min(1),
   isDev: z.boolean(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
+
+// Move the state root: the picked directory becomes the new parent of
+// the root folder (which keeps its name). The app relaunches right
+// after a successful move -- the root is a boot-time constant -- so
+// the invoke returns nothing the renderer could outlive.
+export const MoveRootPayloadSchema = z.object({
+  parentDir: z.string().min(1),
+});
+export type MoveRootPayload = z.infer<typeof MoveRootPayloadSchema>;
 
 // Progress broadcast while `runtime:nuke` runs, driving the renderer's
 // blocking overlay: reap scripts → remove worktrees (with a counter) →

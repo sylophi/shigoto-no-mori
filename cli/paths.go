@@ -41,6 +41,20 @@ func worktreeIDFromPath(path string) string {
 	return hex.EncodeToString(sum[:])[:12]
 }
 
+// XDG config directory: $XDG_CONFIG_HOME, default ~/.config. Empty
+// string when the home directory can't be resolved. Shared by the fish
+// shell hook (cmd_shell.go) and the root pointer file (state.go).
+func configHomeDir() string {
+	if cfg := os.Getenv("XDG_CONFIG_HOME"); cfg != "" {
+		return cfg
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config")
+}
+
 func expandHome(path string) string {
 	if path == "~" {
 		home, _ := os.UserHomeDir()
