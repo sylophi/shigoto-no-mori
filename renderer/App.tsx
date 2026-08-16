@@ -48,6 +48,14 @@ export function App() {
     [],
   );
 
+  useEffect(
+    () =>
+      window.api.nav.onOpenForest(() => {
+        void router.navigate({ to: "/forest" });
+      }),
+    [],
+  );
+
   return (
     <ThemeProvider>
       <DoubutsuProvider>

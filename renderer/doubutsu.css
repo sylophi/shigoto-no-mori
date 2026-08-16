@@ -35,6 +35,7 @@
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
  *      diff-index                diff/DiffFileIndex.tsx
+ *      forest-row                forest/ForestWorktreeCard.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
@@ -402,6 +403,22 @@
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
 .doubutsu [data-slot="diff-index"] {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
+}
+
+/* --- Forest tiles keep their edge ---
+   The forest overview is a stack of bg-card rows on the cream canvas.
+   Everywhere else a card sits alone and the fill step reads as
+   elevation on its own, but light mode has only 0.018 of lightness
+   between --card and --background, and ten of them in a column blur
+   into one slab. Borrow the floating-surface sticker outline (the edge
+   line, not the drop -- these sit in a list, they don't float) so ten
+   worktrees still read as ten separate things.
+
+   :not(:focus-visible) both outranks the ambient-depth strip's
+   `box-shadow: none` and stands aside for the row's own focus ring, so
+   keyboard focus still lands visibly. */
+.doubutsu [data-slot="forest-row"]:not(:focus-visible) {
+  box-shadow: 0 0 0 1px var(--doubutsu-edge-line);
 }
 
 /* --- Typography: AC chunky-by-default ---

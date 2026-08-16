@@ -13,6 +13,7 @@ import { ConfigureProject } from "@/components/configure/ConfigureProject";
 import { ConvertExternalWorktrees } from "@/components/convertExternal/ConvertExternalWorktrees";
 import { WorktreeLocation } from "@/components/worktreeLocation/WorktreeLocation";
 import { EmptyState } from "@/components/EmptyState";
+import { ForestOverview } from "@/components/forest/ForestOverview";
 import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
@@ -106,6 +107,12 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: EmptyState,
+});
+
+const forestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forest",
+  component: ForestOverview,
 });
 
 const settingsRoute = createRoute({
@@ -208,6 +215,7 @@ const commitDiffRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  forestRoute,
   settingsRoute,
   newWorktreeRoute,
   configureProjectRoute,

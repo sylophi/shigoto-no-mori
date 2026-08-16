@@ -143,6 +143,11 @@ export function buildAppMenu(): void {
       label: "View",
       submenu: [
         {
+          label: "The forest",
+          accelerator: "Cmd+Shift+F",
+          click: clickBroadcast(navContract, "openForest", undefined),
+        },
+        {
           label: "Project launcher",
           accelerator: "Cmd+Shift+P",
           click: clickBroadcast(projectLauncherContract, "toggle", undefined),

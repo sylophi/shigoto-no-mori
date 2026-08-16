@@ -23,6 +23,7 @@ import {
   readSidebarView,
   writeSidebarView,
 } from "../../lib/projects/sidebarView";
+import { readForestSort, writeForestSort } from "../../lib/projects/forestSort";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
 import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
 import {
@@ -92,6 +93,10 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   getSidebarView: () => readSidebarView(),
 
   setSidebarView: ({ view }) => writeSidebarView(view),
+
+  getForestSort: () => readForestSort(),
+
+  setForestSort: ({ sort }) => writeForestSort(sort),
 
   getCollapsed: () => readCollapsedProjects(),
 
