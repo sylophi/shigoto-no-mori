@@ -18,20 +18,7 @@ func syncCell(p palette, w worktreeJSON) string {
 	if !w.HasUpstream {
 		return p.dim("local")
 	}
-	if w.Ahead == 0 && w.Behind == 0 {
-		return p.green("synced")
-	}
-	cell := ""
-	if w.Ahead > 0 {
-		cell = p.cyan(fmt.Sprintf("↑%d", w.Ahead))
-	}
-	if w.Behind > 0 {
-		if cell != "" {
-			cell += " "
-		}
-		cell += p.yellow(fmt.Sprintf("↓%d", w.Behind))
-	}
-	return cell
+	return divergenceCell(p, w.Ahead, w.Behind, "synced")
 }
 
 func flagsCell(p palette, w worktreeJSON) string {
