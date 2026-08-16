@@ -240,11 +240,9 @@ func hookPath(kind string) string {
 		}
 		return filepath.Join(home, ".bashrc")
 	default: // fish
-		cfg := os.Getenv("XDG_CONFIG_HOME")
-		if cfg == "" {
-			cfg = filepath.Join(home, ".config")
-		}
-		return filepath.Join(cfg, "fish", "conf.d", rootDirName+".fish")
+		// configHomeDir is "" only when the home dir is unresolvable,
+		// in which case `home` above is too -- no fallback can help.
+		return filepath.Join(configHomeDir(), "fish", "conf.d", rootDirName+".fish")
 	}
 }
 

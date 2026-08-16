@@ -30,11 +30,65 @@ func initRoot() {
 		cachedRoot = toAbsolute(envRoot)
 		return
 	}
+	if pointed := readRootPointer(); pointed != "" {
+		cachedRoot = pointed
+		return
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
 	cachedRoot = filepath.Join(home, rootDirName)
+}
+
+// The root pointer file relocates the state root without an env var:
+// $XDG_CONFIG_HOME/<rootDirName>/root, one line holding an absolute
+// path (~/ allowed). Go mirror of the policy in shared/cliDist.mts
+// (the app reads and writes the same file). SHIGOMORI_ROOT still beats
+// it, and the app pins that var on every delegated spawn. Missing,
+// empty, or non-absolute content falls through to the flavor default
+// -- initRoot runs before every command, so a malformed file must not
+// be fatal.
+func readRootPointer() string {
+	cfg := configHomeDir()
+	if cfg == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(cfg, rootDirName, "root"))
+	if err != nil {
+		return ""
+	}
+	target := expandHome(strings.TrimSpace(string(data)))
+	if target == "" || !filepath.IsAbs(target) {
+		return ""
+	}
+	if !looksLikeRootTarget(target) {
+		return ""
+	}
+	return target
+}
+
+// Guard on what a hand-edited pointer may aim the root at: a directory
+// that doesn't exist yet, is empty, or already holds shigomori state.
+// A pointer at ~/Documents must fall back to the default rather than
+// adopt a directory full of unrelated files as the state root. Mirror
+// of main/lib/util/paths.ts looksLikeRootTarget -- keep in sync.
+func looksLikeRootTarget(target string) bool {
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		// Nonexistent is fine (created on first write). A file or an
+		// unreadable path is not a usable root.
+		return errors.Is(err, os.ErrNotExist)
+	}
+	if len(entries) == 0 {
+		return true
+	}
+	for _, entry := range entries {
+		if entry.Name() == "state.json" || entry.Name() == "config.json" {
+			return true
+		}
+	}
+	return false
 }
 
 func shigomoriRoot() string {

@@ -14,27 +14,22 @@ import {
   pruneStaleWorktrees,
   removeWorktreeForce,
 } from "./git/worktrees";
-import { loadProjects } from "./projects";
+import { findProjectInsideRoot, loadProjects } from "./projects";
 import {
   clearDeleteInflight,
   killAllScripts,
   markDeleteInflight,
 } from "./scripts";
-import { comparablePath, shigomoriRoot, toAbsolute } from "./util/paths";
+import { shigomoriRoot } from "./util/paths";
 
 export async function nukeEverything(
   onProgress: (progress: NukeProgress) => void = () => {},
 ): Promise<void> {
   const projects = loadProjects();
-  // The final step rm -rf's the shigomori root. A project repo the user
-  // keeps INSIDE that root (nothing stops projects.add from accepting
-  // one) would be wiped with it -- .git, uncommitted work, everything.
+  // The final step rm -rf's the shigomori root. A trapped project repo
+  // would be wiped with it -- .git, uncommitted work, everything.
   // Refuse up front, before any script kill or worktree removal.
-  const root = comparablePath(shigomoriRoot()).replace(/\/+$/, "");
-  const trapped = projects.find((p) => {
-    const folded = comparablePath(toAbsolute(p.path)).replace(/\/+$/, "");
-    return folded === root || folded.startsWith(`${root}/`);
-  });
+  const trapped = findProjectInsideRoot(projects);
   if (trapped) {
     throw new Error(
       `Refusing to nuke: project "${trapped.name}" lives inside ` +

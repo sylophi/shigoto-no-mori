@@ -4,7 +4,8 @@ package main
 // engine (main/lib/) with the same on-disk state, ids, lock protocol,
 // and JSON output shapes. The state root follows the compiled-in
 // flavor (sm -> ~/shigomori, smd -> ~/shigomori-dev, see flavor.go);
-// SHIGOMORI_ROOT overrides it (tests, sandboxes).
+// a ~/.config/<flavor-name>/root pointer file relocates it (state.go),
+// and SHIGOMORI_ROOT overrides both (tests, sandboxes).
 //
 // Known deltas vs the app: project-usage stats aren't bumped,
 // .worktreeinclude reconciliation doesn't rewrite project.json, the
@@ -99,7 +100,8 @@ var flagItems = []helpItem{
 }
 
 var envItems = []helpItem{
-	{"SHIGOMORI_ROOT", "Override the state root directory entirely", ""},
+	{"SHIGOMORI_ROOT", "Override the state root directory entirely",
+		"Without it, the root comes from ~/.config/" + rootDirName + "/root when that file exists (one line holding an absolute path, honoring $XDG_CONFIG_HOME), else ~/" + rootDirName + "."},
 }
 
 // The full catalog, used by per-command help matching. The base help

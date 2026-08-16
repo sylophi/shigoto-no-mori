@@ -24,6 +24,7 @@ import type {
   GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
+  PickFolderPayload,
   ProjectSortMode,
   ShigomoriConfig,
   ShigomoriWorktreeData,
@@ -59,8 +60,10 @@ export const branches = {
 } as const;
 
 export const dialog = {
-  pickFolder: (options?: { title?: string; buttonLabel?: string }) =>
-    dialogClient.pickFolder(options),
+  // Optional-arg ergonomics on top of the contract client. The payload
+  // type comes from PickFolderPayloadSchema, so new options never need
+  // re-declaring here.
+  pickFolder: (options?: PickFolderPayload) => dialogClient.pickFolder(options),
 } as const;
 
 export const fs = {
@@ -164,6 +167,8 @@ export const runtime = {
   setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
   setDoubutsu: (enabled: boolean) => runtimeClient.setDoubutsu({ enabled }),
   nuke: runtimeClient.nuke,
+  moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
+  relaunch: runtimeClient.relaunch,
   onNukeProgress: runtimeClient.nukeProgress,
 } as const;
 

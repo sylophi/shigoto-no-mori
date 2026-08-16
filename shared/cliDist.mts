@@ -49,6 +49,19 @@ export function cliRootDirName(flavor: CliFlavor): string {
   return flavor === "prod" ? "shigomori" : "shigomori-dev";
 }
 
+// The root pointer file: one line holding an absolute path that
+// relocates the flavor's state root away from ~/<rootDirName>. Lives
+// outside the root (the root's own config.json can't say where the
+// root is), under $XDG_CONFIG_HOME (default ~/.config), keyed by the
+// flavor's dir name so prod and dev move independently. Read at boot
+// by app main (lib/util/paths.ts) and the CLI (state.go, which
+// mirrors this policy), and written by the app when the user moves
+// the data folder. SHIGOMORI_ROOT beats it on both sides.
+export function rootPointerPath(flavor: CliFlavor): string {
+  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  return join(configHome, cliRootDirName(flavor), "root");
+}
+
 // Where user-facing executables get linked. The XDG spec's location
 // for user executables is ~/.local/bin (it defines no env var for it);
 // honor the de-facto XDG_BIN_HOME override when set. Caveat: a

@@ -105,17 +105,27 @@ export function startUpdaterBridge(
   };
   void consume();
   try {
-    const watcher = watch(
+    bridgeWatcher = watch(
       shigomoriRoot(),
       { persistent: false },
       (_eventType, file) => {
         if (file === "updater-request.json") void consume();
       },
     );
-    watcher.on("error", () => {
+    bridgeWatcher.on("error", () => {
       // Root vanished (nuke). The next launch starts a fresh watch.
     });
   } catch {
     // Root missing entirely. Boot creates it, the next launch watches.
   }
+}
+
+let bridgeWatcher: ReturnType<typeof watch> | null = null;
+
+// Same contract as stopStateWatcher: released before the data-folder
+// move renames the root (Windows watch handles can block the rename).
+// The post-move relaunch starts a fresh bridge.
+export function stopUpdaterBridge(): void {
+  bridgeWatcher?.close();
+  bridgeWatcher = null;
 }

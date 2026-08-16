@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Flame, Loader2 } from "lucide-react";
+import { Flame } from "lucide-react";
 import type { NukeProgress } from "@shared/schemas";
+import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
@@ -64,7 +65,9 @@ export function DangerZone() {
 
   return (
     <section className="space-y-3">
-      {nuking && <NukeOverlay progress={progress} />}
+      {nuking && (
+        <BlockingOverlay>{describeNukeProgress(progress)}</BlockingOverlay>
+      )}
       <SectionHeading className="mb-1">Danger zone</SectionHeading>
       <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 px-4 py-3">
         <div className="space-y-1">
@@ -101,21 +104,11 @@ export function DangerZone() {
   );
 }
 
-// Blocking overlay while the nuke IPC runs: force-removing worktrees and
-// reaping scripts takes seconds, and letting the user keep clicking
-// around (starting scripts, deleting worktrees) mid-wipe invites the
-// races the delete-inflight guards exist to catch.
-function NukeOverlay({ progress }: { progress: NukeProgress | null }) {
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm">
-      <Loader2 className="size-6 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">
-        {describeNukeProgress(progress)}
-      </p>
-    </div>
-  );
-}
-
+// Shown under the BlockingOverlay while the nuke IPC runs:
+// force-removing worktrees and reaping scripts takes seconds, and
+// letting the user keep clicking around (starting scripts, deleting
+// worktrees) mid-wipe invites the races the delete-inflight guards
+// exist to catch.
 function describeNukeProgress(progress: NukeProgress | null): string {
   if (!progress) return "Preparing…";
   switch (progress.phase) {

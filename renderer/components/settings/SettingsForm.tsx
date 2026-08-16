@@ -1,10 +1,9 @@
 import { useEffect } from "react";
-import { ExternalLink, FolderOpen, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { LauncherIcon } from "@/components/LauncherIcon";
-import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
@@ -13,11 +12,8 @@ import { useGlobalConfigWrite } from "@/hooks/config/useGlobalConfig";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { fileManagerName } from "@/lib/platform";
 import { isMac } from "@/lib/platform";
-import { notifyError } from "@/lib/toast";
 import type {
   DetectedLauncher,
   GlobalConfig,
@@ -27,6 +23,7 @@ import type {
 import { AppearanceSection } from "./AppearanceSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
+import { DataLocationSection } from "./DataLocationSection";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
 import { CliSection } from "./CliSection";
@@ -97,7 +94,6 @@ export function SettingsForm({
 }: {
   initialConfig: GlobalConfig;
 }) {
-  const { data: runtime } = useRuntimeInfo();
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const { data: githubCliReadiness } = useGithubCliReadiness();
@@ -158,10 +154,6 @@ export function SettingsForm({
 
   const { addLauncher, updateLauncher, removeLauncher } =
     useLauncherListEditor(setForm);
-
-  const home = runtime?.homedir ?? null;
-  const root = runtime?.shigomoriRoot ?? null;
-  const configFilePath = root ? `${root}/config.json` : null;
 
   return (
     <>
@@ -308,53 +300,7 @@ export function SettingsForm({
             </Button>
           </section>
 
-          <section className="space-y-3">
-            <SectionHeading className="mb-1">Config</SectionHeading>
-            {root && (
-              <div className="flex font-mono text-sm select-text">
-                <PathSpan
-                  path={configFilePath ?? root}
-                  home={home}
-                  className="min-w-0 flex-1 truncate"
-                />
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!root}
-                onClick={() => {
-                  if (root) {
-                    window.api.shell
-                      .showItemInFolder(root)
-                      .catch((err) =>
-                        notifyError("Couldn't reveal folder", err),
-                      );
-                  }
-                }}
-              >
-                <FolderOpen />
-                Reveal in {fileManagerName}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!configFilePath}
-                onClick={() => {
-                  if (configFilePath) {
-                    window.api.shell
-                      .openPath(configFilePath)
-                      .catch((err) => notifyError("Couldn't open file", err));
-                  }
-                }}
-                title={configFilePath ?? undefined}
-              >
-                <ExternalLink />
-                Open config file
-              </Button>
-            </div>
-          </section>
+          <DataLocationSection />
 
           <DangerZone />
 
