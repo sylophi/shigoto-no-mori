@@ -17,9 +17,11 @@ import {
   CreatePhaseSchema,
   type CreateWorktreeResult,
   type DeleteWorktreeResult,
+  type GlobalConfig,
   type Project,
   ProjectSchema,
   ScriptEventSchema,
+  type ShigomoriConfig,
   type Worktree,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -316,6 +318,41 @@ export function cliRunScriptSpawn(args: {
     ].join(" "),
     env: cliSpawnEnv(),
   };
+}
+
+// Whole-document config writes through the CLI's plumbing `write
+// --data` verbs, so both surfaces run one write path (validation,
+// lock+atomic replace, and -- for project config -- the in-project
+// exclude side effect). The payloads were already zod-parsed at the
+// IPC boundary. The CLI re-checks the shape so engine drift fails
+// loudly. Callers must invalidate the TTL caches themselves: runCli's
+// self-write note suppresses the state watcher for these writes.
+export async function globalConfigWriteViaCli(
+  config: GlobalConfig,
+): Promise<void> {
+  const result = await runCli([
+    "config",
+    "write",
+    "--data",
+    JSON.stringify(config),
+  ]);
+  finalOkDoc(result, "sm config write failed");
+}
+
+export async function shigomoriWriteViaCli(
+  projectId: string,
+  config: ShigomoriConfig,
+): Promise<void> {
+  const result = await runCli([
+    "projects",
+    "config",
+    "write",
+    "--project-id",
+    projectId,
+    "--data",
+    JSON.stringify(config),
+  ]);
+  finalOkDoc(result, "sm projects config write failed", { projectId });
 }
 
 // Registry removal and per-project state deletion only; the app-side

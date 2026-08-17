@@ -4,7 +4,7 @@ package main
 // PR for the worktree's branch the same way merge does (gh's
 // server-side --head filter, any state -- looking at a merged PR is
 // normal). --json just reports the PR, and non-darwin prints the URL
-// instead of opening it (cmdConfigOpen parity).
+// instead of opening it (openConfigFileInEditor parity).
 
 import (
 	"fmt"
