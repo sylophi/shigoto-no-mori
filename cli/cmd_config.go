@@ -59,6 +59,9 @@ type configKey struct {
 	// Folds the raw value before parsing (customWorktreePath's
 	// home-expansion + absolute check).
 	normalize func(raw string) (string, error)
+	// For jsonKind keys: validates each array element on `write`, so a
+	// drifted payload can't land a file the app's schema then rejects.
+	elem func(value any) error
 	// For jsonKind keys: the element-verb command (without the binary
 	// name) that `set` points at instead. Empty falls back to "edit or
 	// the app".
@@ -82,15 +85,15 @@ var globalConfigKeys = []configKey{
 		desc: "Provision/release port-pool ports with worktrees"},
 	{name: "githubCli", kind: boolKind, def: true,
 		desc: "GitHub CLI integration"},
-	{name: "launchers", kind: jsonKind, def: []any{},
+	{name: "launchers", kind: jsonKind, def: []any{}, elem: validLauncherEntry,
 		desc: "Global custom launchers (`config launcher`)",
 		hint: "config launcher add/rm"},
-	{name: "hiddenLaunchers", kind: jsonKind, def: []any{},
+	{name: "hiddenLaunchers", kind: jsonKind, def: []any{}, elem: validStringEntry,
 		desc: "Hidden launcher ids (via edit or the app)"},
 }
 
 // Mirrors ShigomoriConfigSchema. defaultBranch is required there -- a
-// document without it reads as absent on both engines.
+// document without it fails the app's schema read outright.
 var projectConfigKeys = []configKey{
 	{name: "defaultBranch", kind: stringKind, required: true,
 		desc: "Branch new worktrees fork from (required)"},
@@ -109,10 +112,10 @@ var projectConfigKeys = []configKey{
 		desc: "port-pool base port"},
 	{name: "lastMergeMethod", kind: enumKind, enum: []string{"merge", "squash", "rebase"},
 		desc: "Preferred PR merge method"},
-	{name: "carryOver", kind: jsonKind, def: []any{},
+	{name: "carryOver", kind: jsonKind, def: []any{}, elem: validCarryOverEntry,
 		desc: "Files carried into new worktrees (`carryover` verbs)",
 		hint: "projects config carryover add/rm"},
-	{name: "launchers", kind: jsonKind, def: []any{},
+	{name: "launchers", kind: jsonKind, def: []any{}, elem: validLauncherEntry,
 		desc: "Per-project launchers (`launcher` verbs)",
 		hint: "projects config launcher add/rm"},
 }
@@ -123,6 +126,43 @@ func normalizeAbsolutePath(raw string) (string, error) {
 		return "", usageErrf("customWorktreePath must be an absolute path.")
 	}
 	return abs, nil
+}
+
+// Element validators for `write` payloads, mirroring the zod element
+// schemas (LauncherCommandSchema, CarryOverEntrySchema).
+func validLauncherEntry(value any) error {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return errf("entries must be objects")
+	}
+	for _, field := range []string{"id", "label", "command"} {
+		if s, ok := m[field].(string); !ok || strings.TrimSpace(s) == "" {
+			return errf("entries need a non-empty %s", field)
+		}
+	}
+	return nil
+}
+
+func validStringEntry(value any) error {
+	if _, ok := value.(string); !ok {
+		return errf("entries must be strings")
+	}
+	return nil
+}
+
+func validCarryOverEntry(value any) error {
+	m, ok := value.(map[string]any)
+	if !ok {
+		return errf("entries must be objects")
+	}
+	path, ok := m["path"].(string)
+	if !ok || path == "" || !isSafeRelPath(path) {
+		return errf("entries need a path inside the project root")
+	}
+	if mode, ok := m["mode"].(string); !ok || (mode != "copy" && mode != "symlink") {
+		return errf("entries need mode copy or symlink")
+	}
+	return nil
 }
 
 func lookupConfigKey(keys []configKey, name string) (configKey, error) {
@@ -174,6 +214,14 @@ func equalsConfigDefault(key configKey, value any) bool {
 	case string:
 		s, ok := value.(string)
 		return ok && s == def
+	case int:
+		switch v := value.(type) {
+		case int:
+			return v == def
+		case json.Number:
+			n, err := v.Int64()
+			return err == nil && n == int64(def)
+		}
 	}
 	return false
 }
@@ -202,7 +250,9 @@ func renderConfigValue(value any) string {
 // --- raw JSON documents with dotted-path access ---
 
 // Numbers decode as json.Number so an untouched value re-serializes
-// byte-identical instead of round-tripping through float64.
+// byte-identical instead of round-tripping through float64. A JSON
+// `null` (or any non-object) is an error -- callers that tolerate it
+// map the error to an empty document themselves.
 func decodeConfigDoc(raw []byte) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
@@ -211,13 +261,14 @@ func decodeConfigDoc(raw []byte) (map[string]any, error) {
 		return nil, err
 	}
 	if doc == nil {
-		doc = map[string]any{}
+		return nil, errf("not a JSON object")
 	}
 	return doc, nil
 }
 
-// Missing or malformed files read as empty, same as the app's
-// null-tolerant readers; the following write replaces them.
+// Read-only tolerance: missing or malformed files read as empty so
+// list/get always work. Writes go through updateConfigDoc, which
+// refuses malformed content instead of clobbering it.
 func readConfigDoc(path string) map[string]any {
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -231,12 +282,34 @@ func readConfigDoc(path string) map[string]any {
 }
 
 // Read-modify-write under the sibling .lock (withFileLock), so two CLI
-// invocations can't clobber each other's fields.
+// invocations can't clobber each other's fields. A no-op mutation
+// skips the write entirely -- no watcher poke, no mtime churn.
 func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 	return withFileLock(path, func() error {
-		doc := readConfigDoc(path)
+		doc := map[string]any{}
+		if raw, readErr := os.ReadFile(path); readErr == nil {
+			var decodeErr error
+			if doc, decodeErr = decodeConfigDoc(raw); decodeErr != nil {
+				// A hand-edit gone wrong: merging into the {} fallback
+				// would atomically discard every other setting. The app
+				// errors on such files too; make the user fix it first.
+				return errf("%s is not valid JSON (%v); fix it (e.g. via `%s config edit`) and retry.",
+					path, decodeErr, binaryName)
+			}
+		}
+		before, err := json.Marshal(doc)
+		if err != nil {
+			return err
+		}
 		if err := fn(doc); err != nil {
 			return err
+		}
+		after, err := json.Marshal(doc)
+		if err != nil {
+			return err
+		}
+		if bytes.Equal(before, after) {
+			return nil
 		}
 		return atomicWriteJSON(path, doc)
 	})
@@ -293,15 +366,45 @@ func configDocDelete(doc map[string]any, name string) {
 	}
 }
 
+// Omit-when-empty, like the app's serialization of every config array.
+func setConfigList(doc map[string]any, name string, entries []any) {
+	if len(entries) == 0 {
+		delete(doc, name)
+	} else {
+		doc[name] = entries
+	}
+}
+
+// Like configDocGet, but a wrong-typed intermediate ({"scripts":
+// "oops"}) is an error rather than "absent" -- the distinction
+// validateConfigDoc needs to reject such documents.
+func configDocLookup(doc map[string]any, name string) (any, bool, error) {
+	var cur any = doc
+	parts := strings.Split(name, ".")
+	for i, part := range parts {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil, false, errf("%s must be an object.", strings.Join(parts[:i], "."))
+		}
+		if cur, ok = m[part]; !ok {
+			return nil, false, nil
+		}
+	}
+	return cur, true, nil
+}
+
 // Shape check for `write --data` payloads: required keys must be
 // present, and every registry key that is present must carry its
-// schema'd type, so engine drift fails loudly here instead of
-// surfacing as a document zod later rejects wholesale. Unknown keys
-// pass through untouched (forward compatibility).
+// schema'd type (elements included), so engine drift fails loudly here
+// instead of surfacing as a document zod later rejects wholesale.
+// Unknown keys pass through untouched (forward compatibility).
 func validateConfigDoc(keys []configKey, doc map[string]any) error {
 	for _, key := range keys {
-		value, ok := configDocGet(doc, key.name)
-		if !ok {
+		value, present, err := configDocLookup(doc, key.name)
+		if err != nil {
+			return err
+		}
+		if !present {
 			if key.required {
 				return errf("%s is required.", key.name)
 			}
@@ -337,8 +440,16 @@ func validateConfigDoc(keys []configKey, doc map[string]any) error {
 				return errf("%s must be a positive integer.", key.name)
 			}
 		case jsonKind:
-			if _, ok := value.([]any); !ok {
+			arr, ok := value.([]any)
+			if !ok {
 				return errf("%s must be an array.", key.name)
+			}
+			if key.elem != nil {
+				for _, entry := range arr {
+					if err := key.elem(entry); err != nil {
+						return errf("%s: %v.", key.name, err)
+					}
+				}
 			}
 		}
 	}
@@ -354,14 +465,15 @@ func validateConfigDoc(keys []configKey, doc map[string]any) error {
 type configDocScope struct {
 	path        string
 	keys        []configKey
-	usagePrefix string         // "config" | "projects config"
-	usageSuffix string         // "" | " [-p <project>]"
-	suffix      string         // "" | " for <project>"
-	extra       map[string]any // nil | {"project": <name>}
-	// Runs inside the lock before each read-modify-write lands (the
-	// project scope's defaultBranch backfill).
-	beforeWrite func(doc map[string]any)
-	// Runs after any successful write with the document that landed
+	usagePrefix string // "config" | "projects config"
+	usageSuffix string // "" | " [-p <project>]"
+	suffix      string // "" | " for <project>"
+	project     string // rides along in --json documents when set
+	// Runs inside the lock before each read-modify-write lands; an
+	// error aborts the write (the project scope's defaultBranch
+	// backfill, which refuses to produce a schema-invalid document).
+	beforeWrite func(doc map[string]any) error
+	// Runs after any successful update with the document that landed
 	// (the project scope's in-project exclude side effect).
 	afterWrite func(doc map[string]any)
 }
@@ -385,7 +497,9 @@ func (s configDocScope) update(fn func(doc map[string]any) error) error {
 			return err
 		}
 		if s.beforeWrite != nil {
-			s.beforeWrite(doc)
+			if err := s.beforeWrite(doc); err != nil {
+				return err
+			}
 		}
 		final = doc
 		return nil
@@ -398,8 +512,8 @@ func (s configDocScope) update(fn func(doc map[string]any) error) error {
 
 func (s configDocScope) emitOK(fields map[string]any) {
 	result := map[string]any{"ok": true}
-	for k, v := range s.extra {
-		result[k] = v
+	if s.project != "" {
+		result["project"] = s.project
 	}
 	for k, v := range fields {
 		result[k] = v
@@ -439,23 +553,19 @@ func configListEntries(keys []configKey, doc map[string]any) []configListEntry {
 }
 
 func runConfigList(scope configDocScope) (int, error) {
-	doc := readConfigDoc(scope.path)
+	entries := configListEntries(scope.keys, readConfigDoc(scope.path))
 	if jsonMode {
-		scope.emitOK(map[string]any{"settings": configListEntries(scope.keys, doc)})
+		scope.emitOK(map[string]any{"settings": entries})
 		return 0, nil
 	}
-	rows := make([][]string, len(scope.keys))
-	for i, key := range scope.keys {
-		value, set := configDocGet(doc, key.name)
-		if !set {
-			value = key.def
-		}
-		cell := renderConfigValue(value)
-		if !set {
+	rows := make([][]string, len(entries))
+	for i, entry := range entries {
+		cell := renderConfigValue(entry.Value)
+		if !entry.Set {
 			// The marker is text, not just dimming: meaning must survive
 			// pipes and --json-less scripting.
 			marker := "(default)"
-			if key.def == nil {
+			if scope.keys[i].def == nil {
 				marker = "(unset)"
 			}
 			if cell == "" {
@@ -464,7 +574,7 @@ func runConfigList(scope configDocScope) (int, error) {
 				cell += " " + dimOut(marker)
 			}
 		}
-		rows[i] = []string{key.name, cell, dimOut(key.desc)}
+		rows[i] = []string{entry.Key, cell, dimOut(scope.keys[i].desc)}
 	}
 	out(renderTable([]string{"KEY", "VALUE", "DESCRIPTION"}, rows))
 	return 0, nil
@@ -528,7 +638,7 @@ func runConfigSet(scope configDocScope, name, raw string) (int, error) {
 		return nil
 	})
 	if err != nil {
-		return 1, err
+		return exitCodeOf(err), err
 	}
 	if jsonMode {
 		scope.emitOK(map[string]any{"key": key.name, "value": value})
@@ -552,7 +662,7 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 		return nil
 	})
 	if err != nil {
-		return 1, err
+		return exitCodeOf(err), err
 	}
 	if jsonMode {
 		scope.emitOK(map[string]any{"key": key.name})
@@ -593,6 +703,41 @@ func runConfigWrite(scope configDocScope, data string) (int, error) {
 	return 0, nil
 }
 
+// The verbs both dispatchers share; handled=false means the verb
+// belongs to the caller (bare/edit/carryover/unknown).
+func runSharedConfigVerb(scope configDocScope, parsed parsedArgs) (bool, int, error) {
+	code, err := 0, error(nil)
+	switch parsed.positionals[0] {
+	case "list":
+		code, err = runConfigList(scope)
+	case "get":
+		if err = scope.wantPositionals(parsed.positionals, 2, "get <key>"); err == nil {
+			code, err = runConfigGet(scope, parsed.positionals[1])
+		} else {
+			code = 2
+		}
+	case "set":
+		if err = scope.wantPositionals(parsed.positionals, 3, "set <key> <value>"); err == nil {
+			code, err = runConfigSet(scope, parsed.positionals[1], parsed.positionals[2])
+		} else {
+			code = 2
+		}
+	case "unset":
+		if err = scope.wantPositionals(parsed.positionals, 2, "unset <key>"); err == nil {
+			code, err = runConfigUnset(scope, parsed.positionals[1])
+		} else {
+			code = 2
+		}
+	case "launcher", "launchers":
+		code, err = runLauncherVerb(scope, parsed.positionals[1:])
+	case "write":
+		code, err = runConfigWrite(scope, parsed.strings["data"])
+	default:
+		return false, 0, nil
+	}
+	return true, code, err
+}
+
 // The refusal for `set` on a structured key, pointing at the element
 // verbs where they exist.
 func structuredKeyErr(key configKey, editCmd string) error {
@@ -612,38 +757,17 @@ func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	scope := globalConfigScope()
-	sub := ""
-	if len(parsed.positionals) > 0 {
-		sub = parsed.positionals[0]
-	}
-	switch sub {
-	case "":
+	if len(parsed.positionals) == 0 {
 		out(configHelpText())
 		return 0, nil
-	case "list":
-		return runConfigList(scope)
-	case "get":
-		if err := scope.wantPositionals(parsed.positionals, 2, "get <key>"); err != nil {
-			return 2, err
-		}
-		return runConfigGet(scope, parsed.positionals[1])
-	case "set":
-		if err := scope.wantPositionals(parsed.positionals, 3, "set <key> <value>"); err != nil {
-			return 2, err
-		}
-		return runConfigSet(scope, parsed.positionals[1], parsed.positionals[2])
-	case "unset":
-		if err := scope.wantPositionals(parsed.positionals, 2, "unset <key>"); err != nil {
-			return 2, err
-		}
-		return runConfigUnset(scope, parsed.positionals[1])
+	}
+	scope := globalConfigScope()
+	if handled, code, err := runSharedConfigVerb(scope, parsed); handled {
+		return code, err
+	}
+	switch sub := parsed.positionals[0]; sub {
 	case "edit":
 		return openConfigFileInEditor(scope.path)
-	case "launcher", "launchers":
-		return runLauncherVerb(scope, parsed.positionals[1:])
-	case "write":
-		return runConfigWrite(scope, parsed.strings["data"])
 	default:
 		return 2, usageErrf("Unknown subcommand %q. Usage: %s config <list|get|set|unset|edit|launcher> [args]",
 			sub, binaryName)
@@ -707,7 +831,7 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 			return nil
 		})
 		if err != nil {
-			return 1, err
+			return exitCodeOf(err), err
 		}
 		if jsonMode {
 			scope.emitOK(map[string]any{"launcher": launcher})
@@ -724,34 +848,30 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 		err := scope.update(func(doc map[string]any) error {
 			launchers, _ := doc["launchers"].([]any)
 			// Exact id match wins; otherwise the label must identify a
-			// single entry (labels aren't unique, ids are).
+			// single entry (labels aren't unique, ids are). Removal is
+			// by index so an id-less entry (hand-edited file) can't
+			// drag its id-less siblings along.
 			matches := launcherMatches(launchers, ref)
 			switch len(matches) {
 			case 0:
 				return errf("No launcher matches %q.%s", ref, scope.suffix)
 			case 1:
-				removed = matches[0]
+				// Deliberate index removal below.
 			default:
-				ids := make([]string, len(matches))
-				for i, m := range matches {
-					ids[i], _ = m["id"].(string)
+				refs := make([]string, len(matches))
+				for i, idx := range matches {
+					if id, _ := launchers[idx].(map[string]any)["id"].(string); id != "" {
+						refs[i] = id
+					} else {
+						refs[i] = "(no id; use `edit`)"
+					}
 				}
 				return errf("%d launchers are labeled %q; rm by id: %s.",
-					len(matches), ref, strings.Join(ids, ", "))
+					len(matches), ref, strings.Join(refs, ", "))
 			}
-			kept := make([]any, 0, len(launchers))
-			for _, entry := range launchers {
-				if m, ok := entry.(map[string]any); ok && m["id"] == removed["id"] {
-					continue
-				}
-				kept = append(kept, entry)
-			}
-			if len(kept) == 0 {
-				// Omit-when-empty, like the app's serialization.
-				delete(doc, "launchers")
-			} else {
-				doc["launchers"] = kept
-			}
+			idx := matches[0]
+			removed = launchers[idx].(map[string]any)
+			setConfigList(doc, "launchers", append(append([]any{}, launchers[:idx]...), launchers[idx+1:]...))
 			return nil
 		})
 		if err != nil {
@@ -769,18 +889,23 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 	}
 }
 
-func launcherMatches(launchers []any, ref string) []map[string]any {
-	var byLabel []map[string]any
-	for _, entry := range launchers {
+// Indices of the entries matching a launcher reference. Matching
+// follows cmd_open's matchLauncher: ids and labels case-insensitively,
+// plus the row-entry spelling custom:<id>. An id match is unique by
+// construction and returns alone.
+func launcherMatches(launchers []any, ref string) []int {
+	var byLabel []int
+	for i, entry := range launchers {
 		m, ok := entry.(map[string]any)
 		if !ok {
 			continue
 		}
-		if id, _ := m["id"].(string); id == ref {
-			return []map[string]any{m}
+		if id, _ := m["id"].(string); id != "" &&
+			(strings.EqualFold(id, ref) || strings.EqualFold("custom:"+id, ref)) {
+			return []int{i}
 		}
 		if label, _ := m["label"].(string); strings.EqualFold(label, ref) {
-			byLabel = append(byLabel, m)
+			byLabel = append(byLabel, i)
 		}
 	}
 	return byLabel

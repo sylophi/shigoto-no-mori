@@ -29,6 +29,18 @@ func testProject(t *testing.T) project {
 	return project{ID: "TESTPROJECT", Name: "fox", Path: t.TempDir()}
 }
 
+// The scope refuses to write a defaultBranch-less document, and the
+// test project's dir isn't a repo to backfill from -- seed the branch
+// so tests can exercise the other keys.
+func seededProject(t *testing.T) project {
+	t.Helper()
+	proj := testProject(t)
+	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", "main"); code != 0 || err != nil {
+		t.Fatalf("seed defaultBranch: %d, %v", code, err)
+	}
+	return proj
+}
+
 func readDoc(t *testing.T, path string) map[string]any {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -145,7 +157,7 @@ func TestGlobalConfigSetRejects(t *testing.T) {
 
 func TestProjectConfigScriptsNesting(t *testing.T) {
 	sandboxConfigRoot(t)
-	proj := testProject(t)
+	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	if code, err := runConfigSet(projectConfigScope(proj), "scripts.setup", "pnpm install"); code != 0 || err != nil {
 		t.Fatalf("set scripts.setup: %d, %v", code, err)
@@ -196,7 +208,7 @@ func TestProjectConfigDefaultBranchGuards(t *testing.T) {
 
 func TestProjectConfigBoolAndPathKeys(t *testing.T) {
 	sandboxConfigRoot(t)
-	proj := testProject(t)
+	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	// Default true: explicit true stays out of the file, false is the
 	// stored opt-out -- the app's serialization exactly.
@@ -288,7 +300,7 @@ func TestLauncherRmAmbiguousLabel(t *testing.T) {
 
 func TestCarryOverVerbs(t *testing.T) {
 	sandboxConfigRoot(t)
-	proj := testProject(t)
+	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	add := func(args parsedArgs) (int, error) { return projectCarryOverVerb(proj, projectConfigScope(proj), args) }
 	pos := func(p ...string) parsedArgs {
@@ -345,6 +357,88 @@ func TestCarryOverVerbs(t *testing.T) {
 	}
 }
 
+func TestProjectConfigRefusesBranchlessWrite(t *testing.T) {
+	sandboxConfigRoot(t)
+	// Unseeded project in a non-repo dir: the backfill resolves nothing,
+	// so a write that would land a defaultBranch-less document (which
+	// the app's schema read throws on) must be refused, not written.
+	proj := testProject(t)
+	if code, err := runConfigSet(projectConfigScope(proj), "portBase", "5170"); code != 1 || err == nil {
+		t.Errorf("branchless set = %d, %v; want refusal", code, err)
+	}
+	if _, err := os.Stat(projectConfigJSONPath(proj.ID)); err == nil {
+		t.Error("refused write still created project.json")
+	}
+}
+
+func TestUpdateRefusesMalformedFile(t *testing.T) {
+	sandboxConfigRoot(t)
+	broken := `{"theme": "dark",}` // trailing comma
+	if err := os.WriteFile(configJSONPath(), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runConfigSet(globalConfigScope(), "portPool", "on"); code != 1 || err == nil {
+		t.Errorf("set on malformed file = %d, %v; want error", code, err)
+	}
+	raw, err := os.ReadFile(configJSONPath())
+	if err != nil || string(raw) != broken {
+		t.Errorf("malformed file was rewritten to %q", raw)
+	}
+}
+
+func TestNoopMutationSkipsWrite(t *testing.T) {
+	sandboxConfigRoot(t)
+	// Unsetting an absent key must not conjure the file into existence.
+	if code, err := runConfigUnset(globalConfigScope(), "theme"); code != 0 || err != nil {
+		t.Fatalf("noop unset: %d, %v", code, err)
+	}
+	if _, err := os.Stat(configJSONPath()); err == nil {
+		t.Error("noop unset created config.json")
+	}
+}
+
+func TestLauncherRmIdlessEntry(t *testing.T) {
+	sandboxConfigRoot(t)
+	// Hand-written entries without ids: removal must be positional, not
+	// a nil == nil id sweep that deletes every id-less sibling.
+	seed := `{"launchers": [{"label": "A", "command": "a"}, {"label": "B", "command": "b"}]}` + "\n"
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runLauncherVerb(globalConfigScope(), []string{"rm", "A"}); code != 0 || err != nil {
+		t.Fatalf("rm A: %d, %v", code, err)
+	}
+	launchers, _ := readDoc(t, configJSONPath())["launchers"].([]any)
+	if len(launchers) != 1 {
+		t.Fatalf("launchers after rm = %v, want B alone", launchers)
+	}
+	if label, _ := launchers[0].(map[string]any)["label"].(string); label != "B" {
+		t.Errorf("survivor = %v, want B", label)
+	}
+}
+
+func TestCarryOverPathCanonicalization(t *testing.T) {
+	sandboxConfigRoot(t)
+	proj := seededProject(t)
+	pos := func(p ...string) parsedArgs {
+		return parsedArgs{positionals: append([]string{"carryover"}, p...), bools: map[string]bool{}}
+	}
+	scope := projectConfigScope(proj)
+	if code, err := projectCarryOverVerb(proj, scope, pos("add", ".env")); code != 0 || err != nil {
+		t.Fatalf("add .env: %d, %v", code, err)
+	}
+	// Alternate spellings of the same path upsert instead of duplicating.
+	for _, spelling := range []string{"././.env", ".//.env", "./.env"} {
+		if code, err := projectCarryOverVerb(proj, scope, pos("add", spelling)); code != 0 || err != nil {
+			t.Fatalf("add %q: %d, %v", spelling, code, err)
+		}
+	}
+	entries, _ := readDoc(t, projectConfigJSONPath(proj.ID))["carryOver"].([]any)
+	if len(entries) != 1 {
+		t.Errorf("entries = %v, want a single canonical .env", entries)
+	}
+}
+
 func TestConfigWriteValidates(t *testing.T) {
 	sandboxConfigRoot(t)
 	scope := globalConfigScope()
@@ -361,12 +455,25 @@ func TestConfigWriteValidates(t *testing.T) {
 	if doc["theme"] != "dark" || doc["portPool"] != true {
 		t.Errorf("written doc = %v", doc)
 	}
+	// A JSON null decodes to a nil map; it must be refused, not treated
+	// as {} and used to wipe the file.
+	if code, _ := runConfigWrite(scope, `null`); code != 2 {
+		t.Errorf("write null accepted: code %d", code)
+	}
 	// The project registry marks defaultBranch required: a payload
-	// without it must be refused, not written.
+	// without it must be refused, not written. Same for wrong-typed
+	// containers and invalid array elements, which the app's schema
+	// would reject wholesale on read.
 	proj := testProject(t)
-	for _, data := range []string{`{}`, `{"defaultBranch": "  "}`} {
+	for _, data := range []string{
+		`{}`,
+		`{"defaultBranch": "  "}`,
+		`{"defaultBranch": "main", "scripts": "oops"}`,
+		`{"defaultBranch": "main", "launchers": [{"label": "x"}]}`,
+		`{"defaultBranch": "main", "carryOver": [{"path": "../out", "mode": "copy"}]}`,
+	} {
 		if code, _ := runConfigWrite(projectConfigScope(proj), data); code != 1 {
-			t.Errorf("write %s accepted despite missing defaultBranch: code %d", data, code)
+			t.Errorf("write %s accepted despite invalid payload: code %d", data, code)
 		}
 	}
 	if _, err := os.Stat(projectConfigJSONPath(proj.ID)); err == nil {

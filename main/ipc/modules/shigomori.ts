@@ -20,10 +20,10 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   },
 
   write: async ({ projectId, config }) => {
-    const project = findProjectOrThrow(projectId);
     // Same engine rule as the other mutations: delegate to the CLI when
-    // available (it also performs the in-project exclude side effect);
-    // Windows stays on the TS path below.
+    // available (it also performs the in-project exclude side effect
+    // and validates projectId, mapping onto the same unknown-project
+    // error); Windows stays on the TS path below.
     if (cliAvailable()) {
       await shigomoriWriteViaCli(projectId, config);
       // The watcher treats the delegated spawn as a self-write, so the
@@ -31,6 +31,7 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
       invalidateProjectConfigCache(projectId);
       return;
     }
+    const project = findProjectOrThrow(projectId);
     await writeShigomoriConfig(projectId, config);
     // Hide `.shigomori/` from the primary's `git status` whenever the
     // project opts into the in-project layout. Idempotent: appendExcludes

@@ -215,7 +215,8 @@ func registerProject(path string) (project, error) {
 }
 
 // Best-effort config seed; bare repos / unborn HEADs just stay
-// unseeded until first configure.
+// unseeded until first configure (the scope's beforeWrite refuses to
+// write a defaultBranch-less document, which vlogs below).
 func seedProjectConfig(proj project) {
 	seeded := map[string]any{}
 	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
@@ -224,11 +225,17 @@ func seedProjectConfig(proj project) {
 	global := readGlobalConfig()
 	if global.AutoPopulateInstall != nil && *global.AutoPopulateInstall {
 		if pm := detectPackageManager(proj.Path); pm != "" {
-			seeded["scripts"] = map[string]string{"setup": pm + " install"}
+			seeded["scripts.setup"] = pm + " install"
 		}
 	}
 	if len(seeded) > 0 {
-		if err := writeProjectConfigFields(proj.ID, seeded); err != nil {
+		err := projectConfigScope(proj).update(func(doc map[string]any) error {
+			for key, value := range seeded {
+				configDocSet(doc, key, value)
+			}
+			return nil
+		})
+		if err != nil {
 			vlog("[project] config seed failed: %v", err)
 		}
 	}
@@ -383,24 +390,6 @@ func projectConfigJSONPath(projectID string) string {
 	return filepath.Join(shigomoriRoot(), "projects", projectID, "project.json")
 }
 
-// Merge the given fields into project.json without disturbing anything
-// else the app wrote (carry-over entries, layout, merge method, ...).
-func writeProjectConfigFields(projectID string, fields map[string]any) error {
-	path := projectConfigJSONPath(projectID)
-	existing := map[string]json.RawMessage{}
-	if raw, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(raw, &existing)
-	}
-	for key, value := range fields {
-		encoded, err := json.Marshal(value)
-		if err != nil {
-			return err
-		}
-		existing[key] = encoded
-	}
-	return atomicWriteJSON(path, existing)
-}
-
 func cmdConfig(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{
@@ -505,26 +494,10 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 // config` only through the scope below.
 func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 	scope := projectConfigScope(proj)
+	if handled, code, err := runSharedConfigVerb(scope, parsed); handled {
+		return code, err
+	}
 	switch sub := parsed.positionals[0]; sub {
-	case "list":
-		return runConfigList(scope)
-	case "get":
-		if err := scope.wantPositionals(parsed.positionals, 2, "get <key>"); err != nil {
-			return 2, err
-		}
-		return runConfigGet(scope, parsed.positionals[1])
-	case "set":
-		if err := scope.wantPositionals(parsed.positionals, 3, "set <key> <value>"); err != nil {
-			return 2, err
-		}
-		return runConfigSet(scope, parsed.positionals[1], parsed.positionals[2])
-	case "unset":
-		if err := scope.wantPositionals(parsed.positionals, 2, "unset <key>"); err != nil {
-			return 2, err
-		}
-		return runConfigUnset(scope, parsed.positionals[1])
-	case "launcher", "launchers":
-		return runLauncherVerb(scope, parsed.positionals[1:])
 	case "carryover", "carry-over":
 		return projectCarryOverVerb(proj, scope, parsed)
 	case "edit":
@@ -534,12 +507,10 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 			// hand-edited save doesn't start from a document the schema
 			// rejects.
 			if seedErr := scope.update(func(map[string]any) error { return nil }); seedErr != nil {
-				return 1, seedErr
+				return exitCodeOf(seedErr), seedErr
 			}
 		}
 		return openConfigFileInEditor(scope.path)
-	case "write":
-		return runConfigWrite(scope, parsed.strings["data"])
 	default:
 		return 2, usageErrf(
 			"Unknown subcommand %q. Usage: %s projects config <list|get|set|unset|edit|launcher|carryover> [args]",
@@ -554,8 +525,8 @@ func projectConfigScope(proj project) configDocScope {
 		usagePrefix: "projects config",
 		usageSuffix: " [-p <project>]",
 		suffix:      " for " + proj.Name,
-		extra:       map[string]any{"project": proj.Name},
-		beforeWrite: func(doc map[string]any) { ensureDefaultBranchField(doc, proj) },
+		project:     proj.Name,
+		beforeWrite: func(doc map[string]any) error { return ensureDefaultBranchField(doc, proj) },
 		afterWrite:  func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
 	}
 }
@@ -667,12 +638,7 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 			if len(kept) == len(entries) {
 				return errf("No carry-over entry for %q.%s", path, scope.suffix)
 			}
-			if len(kept) == 0 {
-				// Omit-when-empty, like the app's serialization.
-				delete(doc, "carryOver")
-			} else {
-				doc["carryOver"] = kept
-			}
+			setConfigList(doc, "carryOver", kept)
 			return nil
 		})
 		if err != nil {
@@ -689,9 +655,10 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 	}
 }
 
-// Folds whatever the user gave -- ./-prefixed, trailing-slashed, or
-// absolute-inside-the-project -- to the project-relative
-// forward-slash form the schema stores, and applies its
+// Folds whatever the user gave -- ./-prefixed, duplicated or trailing
+// separators, or absolute-inside-the-project -- to one canonical
+// project-relative forward-slash form, so the upsert and rm compares
+// can't miss an existing entry over spelling. Applies the schema's
 // stay-within-the-root refinement (isSafeRelPath).
 func normalizeCarryOverPath(proj project, raw string) (string, error) {
 	p := strings.TrimSpace(raw)
@@ -702,27 +669,40 @@ func normalizeCarryOverPath(proj project, raw string) (string, error) {
 		}
 		p = rel
 	}
-	p = strings.TrimPrefix(p, "./")
-	p = strings.TrimRight(p, "/")
-	if p == "" || p == "." || !isSafeRelPath(p) {
+	if !isSafeRelPath(p) {
 		return "", usageErrf("Carry-over paths must stay within the project root.")
 	}
-	return filepath.ToSlash(p), nil
+	// normalizeRelPath's separator fold plus dropping "." segments, so
+	// ././x, ./x, and sub//dir all land on the same stored form.
+	var parts []string
+	for _, seg := range strings.FieldsFunc(p, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if seg != "." {
+			parts = append(parts, seg)
+		}
+	}
+	if len(parts) == 0 {
+		return "", usageErrf("Carry-over paths must stay within the project root.")
+	}
+	return strings.Join(parts, "/"), nil
 }
 
-// The zod schema requires defaultBranch; make sure a write on an
-// unseeded project doesn't produce a config the app (and this CLI)
-// would treat as absent. Bare repos / unborn HEADs stay unseeded, same
-// as seedProjectConfig.
-func ensureDefaultBranchField(doc map[string]any, proj project) {
+// The zod schema requires defaultBranch, and the app's reader throws
+// on a document missing it (readJsonOrNull is null only for a missing
+// file) -- so backfill it from the repo, and when that fails (bare
+// repo, unborn HEAD, moved path) refuse the write rather than land a
+// file that breaks every shigomori:read for the project.
+func ensureDefaultBranchField(doc map[string]any, proj project) error {
 	if branch, ok := configDocGet(doc, "defaultBranch"); ok {
 		if s, isString := branch.(string); isString && strings.TrimSpace(s) != "" {
-			return
+			return nil
 		}
 	}
 	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
 		configDocSet(doc, "defaultBranch", defaultBranch)
+		return nil
 	}
+	return errf("Can't determine %s's default branch; set it first: %s projects config set defaultBranch <ref> -p %s",
+		proj.Name, binaryName, proj.Name)
 }
 
 // Hide `.shigomori/` from the primary's `git status` whenever the
