@@ -2,7 +2,7 @@
 // https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees):
 // gitignore-syntax patterns
 // whose matches, when also gitignored, are copied into new worktrees.
-// Creation-time application lives in the CLI engine; this module only
+// Creation-time application lives in the CLI engine. This module only
 // backs the Configure view's read.
 
 import { join } from "node:path";

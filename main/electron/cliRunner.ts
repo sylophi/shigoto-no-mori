@@ -43,13 +43,13 @@ export function cliBinaryPath(): string | null {
   return null;
 }
 
-// The CLI is the app's only engine; a missing binary (a dev run before
+// The CLI is the app's only engine. A missing binary (a dev run before
 // `pnpm cli:build --dev`) is a hard, actionable error.
 export function requireCliBinary(): string {
   const binary = cliBinaryPath();
   if (binary === null) {
     throw new Error(
-      "The CLI binary is missing; run `pnpm cli:build --dev` (dev) or reinstall the app.",
+      "The CLI binary is missing. Run `pnpm cli:build --dev` (dev) or reinstall the app.",
     );
   }
   return binary;
