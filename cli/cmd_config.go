@@ -1,8 +1,8 @@
 package main
 
-// sm config <list|get|set|unset|edit> -- global settings from the
-// terminal, plus the shared key engine `sm projects config` reuses for
-// its per-project verbs (cmd_project.go). Keys are the JSON field
+// sm config <list|get|set|unset|edit|launcher> -- global settings from
+// the terminal, plus the shared key engine `sm projects config` reuses
+// for its per-project verbs (cmd_project.go). Keys are the JSON field
 // names (dotted for nesting: scripts.setup), values are validated
 // against the same shapes the app's zod schemas enforce, and writes
 // are read-modify-write under the file lock so nothing else in the
@@ -10,6 +10,10 @@ package main
 // (SettingsForm.toConfig): a value equal to its default is stored by
 // deleting the key, so config files stay tidy no matter which surface
 // wrote them.
+//
+// The two scopes differ only in what configDocScope models -- file
+// path, output decoration, key registry, and write hooks -- so every
+// verb body lives here once and cmd_project.go contributes hooks.
 //
 // `write --data '<json>'` is plumbing for the app: the delegated
 // globalConfig:write / shigomori:write IPC handlers replace the whole
@@ -34,7 +38,7 @@ const (
 	enumKind
 	intKind
 	// Arrays the CLI shows but doesn't set key-by-value; point users at
-	// `edit` or the app.
+	// the element verbs or `edit`.
 	jsonKind
 )
 
@@ -49,6 +53,12 @@ type configKey struct {
 	// serialization.
 	def  any
 	desc string
+	// The schema requires this key: set refuses empty values, unset
+	// refuses entirely, and whole-document writes must include it.
+	required bool
+	// Folds the raw value before parsing (customWorktreePath's
+	// home-expansion + absolute check).
+	normalize func(raw string) (string, error)
 	// For jsonKind keys: the element-verb command (without the binary
 	// name) that `set` points at instead. Empty falls back to "edit or
 	// the app".
@@ -80,10 +90,9 @@ var globalConfigKeys = []configKey{
 }
 
 // Mirrors ShigomoriConfigSchema. defaultBranch is required there -- a
-// document without it reads as absent on both engines -- so set/unset
-// guard it specially (projectConfig verbs in cmd_project.go).
+// document without it reads as absent on both engines.
 var projectConfigKeys = []configKey{
-	{name: "defaultBranch", kind: stringKind,
+	{name: "defaultBranch", kind: stringKind, required: true,
 		desc: "Branch new worktrees fork from (required)"},
 	{name: "scripts.setup", kind: stringKind,
 		desc: "Runs after creating a worktree"},
@@ -92,7 +101,7 @@ var projectConfigKeys = []configKey{
 	{name: "worktreeLayout", kind: enumKind, enum: []string{"managed-root", "in-project", "custom"},
 		def:  "managed-root",
 		desc: "Where managed worktrees live"},
-	{name: "customWorktreePath", kind: stringKind,
+	{name: "customWorktreePath", kind: stringKind, normalize: normalizeAbsolutePath,
 		desc: "Absolute base dir for the custom layout"},
 	{name: "useWorktreeInclude", kind: boolKind, def: true,
 		desc: "Honor the repo's .worktreeinclude file"},
@@ -106,6 +115,14 @@ var projectConfigKeys = []configKey{
 	{name: "launchers", kind: jsonKind, def: []any{},
 		desc: "Per-project launchers (`launcher` verbs)",
 		hint: "projects config launcher add/rm"},
+}
+
+func normalizeAbsolutePath(raw string) (string, error) {
+	abs := expandHome(raw)
+	if !filepath.IsAbs(abs) {
+		return "", usageErrf("customWorktreePath must be an absolute path.")
+	}
+	return abs, nil
 }
 
 func lookupConfigKey(keys []configKey, name string) (configKey, error) {
@@ -276,14 +293,18 @@ func configDocDelete(doc map[string]any, name string) {
 	}
 }
 
-// Shape check for `write --data` payloads: every registry key that is
-// present must carry its schema'd type, so engine drift fails loudly
-// here instead of surfacing as a document zod later rejects wholesale.
-// Unknown keys pass through untouched (forward compatibility).
+// Shape check for `write --data` payloads: required keys must be
+// present, and every registry key that is present must carry its
+// schema'd type, so engine drift fails loudly here instead of
+// surfacing as a document zod later rejects wholesale. Unknown keys
+// pass through untouched (forward compatibility).
 func validateConfigDoc(keys []configKey, doc map[string]any) error {
 	for _, key := range keys {
 		value, ok := configDocGet(doc, key.name)
 		if !ok {
+			if key.required {
+				return errf("%s is required.", key.name)
+			}
 			continue
 		}
 		switch key.kind {
@@ -292,8 +313,12 @@ func validateConfigDoc(keys []configKey, doc map[string]any) error {
 				return errf("%s must be a boolean.", key.name)
 			}
 		case stringKind:
-			if _, ok := value.(string); !ok {
+			s, ok := value.(string)
+			if !ok {
 				return errf("%s must be a string.", key.name)
+			}
+			if key.required && strings.TrimSpace(s) == "" {
+				return errf("%s is required.", key.name)
 			}
 		case enumKind:
 			s, ok := value.(string)
@@ -320,7 +345,80 @@ func validateConfigDoc(keys []configKey, doc map[string]any) error {
 	return nil
 }
 
-// --- shared verb bodies (global and projects config) ---
+// --- scopes ---
+
+// Everything that differs between `sm config` and `sm projects
+// config`: the document's location, its key registry, output
+// decoration, and the write hooks. Every verb below is written once
+// against this.
+type configDocScope struct {
+	path        string
+	keys        []configKey
+	usagePrefix string         // "config" | "projects config"
+	usageSuffix string         // "" | " [-p <project>]"
+	suffix      string         // "" | " for <project>"
+	extra       map[string]any // nil | {"project": <name>}
+	// Runs inside the lock before each read-modify-write lands (the
+	// project scope's defaultBranch backfill).
+	beforeWrite func(doc map[string]any)
+	// Runs after any successful write with the document that landed
+	// (the project scope's in-project exclude side effect).
+	afterWrite func(doc map[string]any)
+}
+
+func globalConfigScope() configDocScope {
+	return configDocScope{
+		path:        configJSONPath(),
+		keys:        globalConfigKeys,
+		usagePrefix: "config",
+	}
+}
+
+func configJSONPath() string {
+	return filepath.Join(shigomoriRoot(), "config.json")
+}
+
+func (s configDocScope) update(fn func(doc map[string]any) error) error {
+	var final map[string]any
+	err := updateConfigDoc(s.path, func(doc map[string]any) error {
+		if err := fn(doc); err != nil {
+			return err
+		}
+		if s.beforeWrite != nil {
+			s.beforeWrite(doc)
+		}
+		final = doc
+		return nil
+	})
+	if err == nil && s.afterWrite != nil {
+		s.afterWrite(final)
+	}
+	return err
+}
+
+func (s configDocScope) emitOK(fields map[string]any) {
+	result := map[string]any{"ok": true}
+	for k, v := range s.extra {
+		result[k] = v
+	}
+	for k, v := range fields {
+		result[k] = v
+	}
+	emit(result)
+}
+
+func (s configDocScope) usageErr(usage string) error {
+	return usageErrf("Usage: %s %s %s%s", binaryName, s.usagePrefix, usage, s.usageSuffix)
+}
+
+func (s configDocScope) wantPositionals(positionals []string, n int, usage string) error {
+	if len(positionals) != n {
+		return s.usageErr(usage)
+	}
+	return nil
+}
+
+// --- the shared verbs ---
 
 type configListEntry struct {
 	Key   string `json:"key"`
@@ -340,9 +438,14 @@ func configListEntries(keys []configKey, doc map[string]any) []configListEntry {
 	return entries
 }
 
-func renderConfigList(keys []configKey, doc map[string]any) string {
-	rows := make([][]string, len(keys))
-	for i, key := range keys {
+func runConfigList(scope configDocScope) (int, error) {
+	doc := readConfigDoc(scope.path)
+	if jsonMode {
+		scope.emitOK(map[string]any{"settings": configListEntries(scope.keys, doc)})
+		return 0, nil
+	}
+	rows := make([][]string, len(scope.keys))
+	for i, key := range scope.keys {
 		value, set := configDocGet(doc, key.name)
 		if !set {
 			value = key.def
@@ -363,26 +466,23 @@ func renderConfigList(keys []configKey, doc map[string]any) string {
 		}
 		rows[i] = []string{key.name, cell, dimOut(key.desc)}
 	}
-	return renderTable([]string{"KEY", "VALUE", "DESCRIPTION"}, rows)
+	out(renderTable([]string{"KEY", "VALUE", "DESCRIPTION"}, rows))
+	return 0, nil
 }
 
 // get prints the effective value bare on stdout (nothing when the key
 // is unset and has no default), so command substitution stays clean.
-func runConfigGet(keys []configKey, doc map[string]any, name string, extra map[string]any) (int, error) {
-	key, err := lookupConfigKey(keys, name)
+func runConfigGet(scope configDocScope, name string) (int, error) {
+	key, err := lookupConfigKey(scope.keys, name)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	value, set := configDocGet(doc, key.name)
+	value, set := configDocGet(readConfigDoc(scope.path), key.name)
 	if !set {
 		value = key.def
 	}
 	if jsonMode {
-		result := map[string]any{"ok": true, "key": key.name, "value": value, "set": set}
-		for k, v := range extra {
-			result[k] = v
-		}
-		emit(result)
+		scope.emitOK(map[string]any{"key": key.name, "value": value, "set": set})
 		return 0, nil
 	}
 	if value != nil {
@@ -391,69 +491,106 @@ func runConfigGet(keys []configKey, doc map[string]any, name string, extra map[s
 	return 0, nil
 }
 
-// --- sm config (global) ---
-
-func configJSONPath() string {
-	return filepath.Join(shigomoriRoot(), "config.json")
-}
-
-func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"data": {}},
-	})
+func runConfigSet(scope configDocScope, name, raw string) (int, error) {
+	key, err := lookupConfigKey(scope.keys, name)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	sub := ""
-	if len(parsed.positionals) > 0 {
-		sub = parsed.positionals[0]
+	if key.kind == jsonKind {
+		return 2, structuredKeyErr(key, scope.usagePrefix+" edit")
 	}
-	wantPositionals := func(n int, usage string) error {
-		if len(parsed.positionals) != n {
-			return usageErrf("Usage: %s config %s", binaryName, usage)
+	if key.required && strings.TrimSpace(raw) == "" {
+		// An empty required value makes the whole document invalid to
+		// the schema, which would silently drop every other configured
+		// field on the next read. Refuse instead of "clear".
+		return 2, usageErrf(
+			"%s can't be empty; it's required, so set a value instead of clearing it.", key.name)
+	}
+	if key.kind == stringKind && raw == "" {
+		// "" clears, matching the long-standing `--setup ''` behavior.
+		return runConfigUnset(scope, name)
+	}
+	if key.normalize != nil {
+		if raw, err = key.normalize(raw); err != nil {
+			return exitCodeOf(err), err
+		}
+	}
+	value, err := parseConfigValue(key, raw)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	err = scope.update(func(doc map[string]any) error {
+		if equalsConfigDefault(key, value) {
+			configDocDelete(doc, key.name)
+		} else {
+			configDocSet(doc, key.name, value)
 		}
 		return nil
+	})
+	if err != nil {
+		return 1, err
 	}
-	switch sub {
-	case "":
-		out(configHelpText())
-		return 0, nil
-	case "list":
-		doc := readConfigDoc(configJSONPath())
-		if jsonMode {
-			emit(map[string]any{"ok": true, "settings": configListEntries(globalConfigKeys, doc)})
-			return 0, nil
-		}
-		out(renderConfigList(globalConfigKeys, doc))
-		return 0, nil
-	case "get":
-		if err := wantPositionals(2, "get <key>"); err != nil {
-			return 2, err
-		}
-		return runConfigGet(globalConfigKeys, readConfigDoc(configJSONPath()), parsed.positionals[1], nil)
-	case "set":
-		if err := wantPositionals(3, "set <key> <value>"); err != nil {
-			return 2, err
-		}
-		return globalConfigSet(parsed.positionals[1], parsed.positionals[2])
-	case "unset":
-		if err := wantPositionals(2, "unset <key>"); err != nil {
-			return 2, err
-		}
-		return globalConfigUnset(parsed.positionals[1])
-	case "edit":
-		return openConfigFileInEditor(configJSONPath())
-	case "launcher", "launchers":
-		return runLauncherVerb(globalConfigScope(), parsed.positionals[1:])
-	case "write":
-		// App plumbing: whole-document replace, mirroring the TS
-		// engine's writeGlobalConfig (zod already stripped/validated on
-		// the way in; the shape check guards engine drift).
-		return configWriteDoc(configJSONPath(), globalConfigKeys, parsed.strings["data"], nil)
-	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s config <list|get|set|unset|edit|launcher> [args]",
-			sub, binaryName)
+	if jsonMode {
+		scope.emitOK(map[string]any{"key": key.name, "value": value})
+	} else {
+		out(greenOut("set " + key.name + " = " + renderConfigValue(value) + scope.suffix))
 	}
+	return 0, nil
+}
+
+func runConfigUnset(scope configDocScope, name string) (int, error) {
+	key, err := lookupConfigKey(scope.keys, name)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	if key.required {
+		return 2, usageErrf(
+			"%s can't be cleared; it's required, so set a different value instead.", key.name)
+	}
+	err = scope.update(func(doc map[string]any) error {
+		configDocDelete(doc, key.name)
+		return nil
+	})
+	if err != nil {
+		return 1, err
+	}
+	if jsonMode {
+		scope.emitOK(map[string]any{"key": key.name})
+	} else {
+		suffix := ""
+		if key.def != nil {
+			suffix = " (default: " + renderConfigValue(key.def) + ")"
+		}
+		out(greenOut("unset " + key.name + suffix + scope.suffix))
+	}
+	return 0, nil
+}
+
+// Whole-document replace for the plumbing `write --data` verb. The
+// payload was already zod-parsed app-side; validateConfigDoc re-checks
+// the shape (including required keys) so engine drift fails loudly.
+func runConfigWrite(scope configDocScope, data string) (int, error) {
+	if data == "" {
+		return 2, usageErrf("write requires --data '<json>'.")
+	}
+	doc, err := decodeConfigDoc([]byte(data))
+	if err != nil {
+		return 2, usageErrf("--data must be a JSON object: %v", err)
+	}
+	if err := validateConfigDoc(scope.keys, doc); err != nil {
+		return 1, err
+	}
+	err = withFileLock(scope.path, func() error {
+		return atomicWriteJSON(scope.path, doc)
+	})
+	if err != nil {
+		return 1, err
+	}
+	if scope.afterWrite != nil {
+		scope.afterWrite(doc)
+	}
+	emit(map[string]any{"ok": true})
+	return 0, nil
 }
 
 // The refusal for `set` on a structured key, pointing at the element
@@ -466,136 +603,55 @@ func structuredKeyErr(key configKey, editCmd string) error {
 	return usageErrf("%s is structured; use %s.", key.name, hint)
 }
 
-func globalConfigSet(name, raw string) (int, error) {
-	key, err := lookupConfigKey(globalConfigKeys, name)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	if key.kind == jsonKind {
-		return 2, structuredKeyErr(key, "config edit")
-	}
-	value, err := parseConfigValue(key, raw)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	err = updateConfigDoc(configJSONPath(), func(doc map[string]any) error {
-		if equalsConfigDefault(key, value) {
-			configDocDelete(doc, key.name)
-		} else {
-			configDocSet(doc, key.name, value)
-		}
-		return nil
-	})
-	if err != nil {
-		return 1, err
-	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "key": key.name, "value": value})
-	} else {
-		out(greenOut("set " + key.name + " = " + renderConfigValue(value)))
-	}
-	return 0, nil
-}
+// --- sm config (global) ---
 
-func globalConfigUnset(name string) (int, error) {
-	key, err := lookupConfigKey(globalConfigKeys, name)
+func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
+	parsed, err := parseCmdArgs(args, argSpec{
+		strings: map[string][]string{"data": {}},
+	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	err = updateConfigDoc(configJSONPath(), func(doc map[string]any) error {
-		configDocDelete(doc, key.name)
-		return nil
-	})
-	if err != nil {
-		return 1, err
+	scope := globalConfigScope()
+	sub := ""
+	if len(parsed.positionals) > 0 {
+		sub = parsed.positionals[0]
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "key": key.name})
-	} else {
-		suffix := ""
-		if key.def != nil {
-			suffix = " (default: " + renderConfigValue(key.def) + ")"
+	switch sub {
+	case "":
+		out(configHelpText())
+		return 0, nil
+	case "list":
+		return runConfigList(scope)
+	case "get":
+		if err := scope.wantPositionals(parsed.positionals, 2, "get <key>"); err != nil {
+			return 2, err
 		}
-		out(greenOut("unset " + key.name + suffix))
-	}
-	return 0, nil
-}
-
-// Whole-document replace for `write --data`, shared by both scopes.
-// extraCheck runs on the decoded document before the write (project
-// config's defaultBranch requirement).
-func configWriteDoc(path string, keys []configKey, data string, extraCheck func(doc map[string]any) error) (int, error) {
-	if data == "" {
-		return 2, usageErrf("write requires --data '<json>'.")
-	}
-	doc, err := decodeConfigDoc([]byte(data))
-	if err != nil {
-		return 2, usageErrf("--data must be a JSON object: %v", err)
-	}
-	if err := validateConfigDoc(keys, doc); err != nil {
-		return 1, err
-	}
-	if extraCheck != nil {
-		if err := extraCheck(doc); err != nil {
-			return exitCodeOf(err), err
+		return runConfigGet(scope, parsed.positionals[1])
+	case "set":
+		if err := scope.wantPositionals(parsed.positionals, 3, "set <key> <value>"); err != nil {
+			return 2, err
 		}
+		return runConfigSet(scope, parsed.positionals[1], parsed.positionals[2])
+	case "unset":
+		if err := scope.wantPositionals(parsed.positionals, 2, "unset <key>"); err != nil {
+			return 2, err
+		}
+		return runConfigUnset(scope, parsed.positionals[1])
+	case "edit":
+		return openConfigFileInEditor(scope.path)
+	case "launcher", "launchers":
+		return runLauncherVerb(scope, parsed.positionals[1:])
+	case "write":
+		return runConfigWrite(scope, parsed.strings["data"])
+	default:
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s config <list|get|set|unset|edit|launcher> [args]",
+			sub, binaryName)
 	}
-	err = withFileLock(path, func() error {
-		return atomicWriteJSON(path, doc)
-	})
-	if err != nil {
-		return 1, err
-	}
-	emit(map[string]any{"ok": true})
-	return 0, nil
 }
 
 // --- structured lists: element verbs (launcher here, carry-over in
 // cmd_project.go) ---
-
-// Scope plumbing for verbs shared by `sm config` and `sm projects
-// config`: where the document lives, how human output and usage lines
-// are suffixed/prefixed, what rides along in --json documents, and
-// what runs before each write (the project scope's defaultBranch
-// backfill).
-type configDocScope struct {
-	path        string
-	usagePrefix string         // "config" | "projects config"
-	suffix      string         // "" | " for <project>"
-	extra       map[string]any // nil | {"project": <name>}
-	beforeWrite func(doc map[string]any)
-}
-
-func globalConfigScope() configDocScope {
-	return configDocScope{path: configJSONPath(), usagePrefix: "config"}
-}
-
-func (s configDocScope) update(fn func(doc map[string]any) error) error {
-	return updateConfigDoc(s.path, func(doc map[string]any) error {
-		if err := fn(doc); err != nil {
-			return err
-		}
-		if s.beforeWrite != nil {
-			s.beforeWrite(doc)
-		}
-		return nil
-	})
-}
-
-func (s configDocScope) emitOK(fields map[string]any) {
-	result := map[string]any{"ok": true}
-	for k, v := range s.extra {
-		result[k] = v
-	}
-	for k, v := range fields {
-		result[k] = v
-	}
-	emit(result)
-}
-
-func (s configDocScope) usageErr(usage string) error {
-	return usageErrf("Usage: %s %s %s", binaryName, s.usagePrefix, usage)
-}
 
 // sm [projects] config launcher [add <label> <command> | rm <ref>] --
 // element verbs over the launchers array. Ids are minted like the

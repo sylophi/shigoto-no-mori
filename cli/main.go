@@ -123,6 +123,22 @@ var envItems = []helpItem{
 		"Without it, the root comes from ~/.config/" + rootDirName + "/root when that file exists (one line holding an absolute path, honoring $XDG_CONFIG_HOME), else ~/" + rootDirName + "."},
 }
 
+// One row per namespace: the items its subcommands resolve against,
+// the bare-page renderer, and the namespace-local alias fold (nil =
+// none). commandHelp derives both the bare page and per-subcommand
+// addressability from this, so a new namespace is a one-row change.
+var helpNamespaces = []struct {
+	name  string
+	items []helpItem
+	page  func() string
+	canon func(string) string
+}{
+	{"worktrees", worktreeItems, worktreesHelpText, nil},
+	{"projects", projectItems, projectsHelpText, canonicalProjectsSub},
+	{"config", configItems, configHelpText, nil},
+	{"shell", shellItems, shellHelpText, nil},
+}
+
 // The full catalog, used by per-command help matching. The base help
 // page renders only General plus one pointer line per namespace; bare
 // `sm worktrees` / `sm projects` print their namespace's page.
@@ -456,43 +472,28 @@ func commandHelp(command string, args []string) string {
 			return commandHelp(args[0], args[1:])
 		}
 	}
-	// Bare namespace help is the namespace page.
-	if name == "worktrees" && len(args) == 0 {
-		return worktreesHelpText()
-	}
-	if name == "projects" && len(args) == 0 {
-		return projectsHelpText()
-	}
-	if name == "config" && len(args) == 0 {
-		return configHelpText()
-	}
-	if name == "shell" && len(args) == 0 {
-		return shellHelpText()
-	}
 	sub := ""
-	if name == "projects" && len(args) > 0 {
-		switch s := canonicalProjectsSub(args[0]); s {
-		case "list", "add", "remove", "config":
-			sub = s
+	for _, ns := range helpNamespaces {
+		if name != ns.name {
+			continue
 		}
-	}
-	// Derived from the catalog, like subcommandList, so a new shell or
-	// config subcommand is help-addressable without touching this switch.
-	if name == "shell" && len(args) > 0 {
-		for _, item := range shellItems {
-			if strings.Fields(item.usage)[1] == args[0] {
-				sub = args[0]
+		// Bare namespace help is the namespace page.
+		if len(args) == 0 {
+			return ns.page()
+		}
+		// Subcommands derive from the catalog, like subcommandList, so
+		// a new one is help-addressable without touching this loop.
+		cand := args[0]
+		if ns.canon != nil {
+			cand = ns.canon(cand)
+		}
+		for _, item := range ns.items {
+			if strings.Fields(item.usage)[1] == cand {
+				sub = cand
 				break
 			}
 		}
-	}
-	if name == "config" && len(args) > 0 {
-		for _, item := range configItems {
-			if strings.Fields(item.usage)[1] == args[0] {
-				sub = args[0]
-				break
-			}
-		}
+		break
 	}
 	width := helpWidth()
 	var b strings.Builder

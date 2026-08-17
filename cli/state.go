@@ -227,7 +227,7 @@ func dropShelved(worktreeID string) error {
 
 func readGlobalConfig() globalConfig {
 	var cfg globalConfig
-	raw, err := os.ReadFile(filepath.Join(shigomoriRoot(), "config.json"))
+	raw, err := os.ReadFile(configJSONPath())
 	if err == nil {
 		_ = json.Unmarshal(raw, &cfg)
 	}
@@ -237,7 +237,7 @@ func readGlobalConfig() globalConfig {
 // nil when the file is missing, unreadable, or fails the schema's
 // required-field check -- matching the app's null-on-invalid behavior.
 func readProjectConfig(projectID string) *projectConfig {
-	raw, err := os.ReadFile(filepath.Join(shigomoriRoot(), "projects", projectID, "project.json"))
+	raw, err := os.ReadFile(projectConfigJSONPath(projectID))
 	if err != nil {
 		return nil
 	}

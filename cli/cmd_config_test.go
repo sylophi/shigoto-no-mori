@@ -79,7 +79,7 @@ func TestParseConfigValueEnumAndInt(t *testing.T) {
 
 func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 	sandboxConfigRoot(t)
-	if code, err := globalConfigSet("theme", "dark"); code != 0 || err != nil {
+	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
 		t.Fatalf("set theme dark: %d, %v", code, err)
 	}
 	doc := readDoc(t, configJSONPath())
@@ -88,19 +88,19 @@ func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 	}
 	// Setting the default removes the key, matching the app's
 	// omit-on-default serialization.
-	if code, err := globalConfigSet("theme", "system"); code != 0 || err != nil {
+	if code, err := runConfigSet(globalConfigScope(), "theme", "system"); code != 0 || err != nil {
 		t.Fatalf("set theme system: %d, %v", code, err)
 	}
 	if _, ok := readDoc(t, configJSONPath())["theme"]; ok {
 		t.Error("theme still present after being set to its default")
 	}
-	if code, err := globalConfigSet("doubutsu", "off"); code != 0 || err != nil {
+	if code, err := runConfigSet(globalConfigScope(), "doubutsu", "off"); code != 0 || err != nil {
 		t.Fatalf("set doubutsu off: %d, %v", code, err)
 	}
 	if got := readDoc(t, configJSONPath())["doubutsu"]; got != false {
 		t.Errorf("doubutsu = %v, want false", got)
 	}
-	if code, err := globalConfigUnset("doubutsu"); code != 0 || err != nil {
+	if code, err := runConfigUnset(globalConfigScope(), "doubutsu"); code != 0 || err != nil {
 		t.Fatalf("unset doubutsu: %d, %v", code, err)
 	}
 	if _, ok := readDoc(t, configJSONPath())["doubutsu"]; ok {
@@ -114,7 +114,7 @@ func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := globalConfigSet("theme", "light"); code != 0 || err != nil {
+	if code, err := runConfigSet(globalConfigScope(), "theme", "light"); code != 0 || err != nil {
 		t.Fatalf("set theme light: %d, %v", code, err)
 	}
 	doc := readDoc(t, configJSONPath())
@@ -137,7 +137,7 @@ func TestGlobalConfigSetRejects(t *testing.T) {
 		"theme":     "sepia", // bad enum
 		"launchers": "[]",    // structured
 	} {
-		if code, err := globalConfigSet(name, raw); code != 2 || err == nil {
+		if code, err := runConfigSet(globalConfigScope(), name, raw); code != 2 || err == nil {
 			t.Errorf("set %s %q = %d, %v; want usage error", name, raw, code, err)
 		}
 	}
@@ -147,10 +147,10 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 	sandboxConfigRoot(t)
 	proj := testProject(t)
 	path := projectConfigJSONPath(proj.ID)
-	if code, err := projectConfigSet(proj, "scripts.setup", "pnpm install"); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "scripts.setup", "pnpm install"); code != 0 || err != nil {
 		t.Fatalf("set scripts.setup: %d, %v", code, err)
 	}
-	if code, err := projectConfigSet(proj, "scripts.teardown", "pnpm down"); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "scripts.teardown", "pnpm down"); code != 0 || err != nil {
 		t.Fatalf("set scripts.teardown: %d, %v", code, err)
 	}
 	if got, _ := configDocGet(readDoc(t, path), "scripts.setup"); got != "pnpm install" {
@@ -158,7 +158,7 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 	}
 	// "" clears, like the long-standing --setup '' behavior; the sibling
 	// stays put.
-	if code, err := projectConfigSet(proj, "scripts.setup", ""); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "scripts.setup", ""); code != 0 || err != nil {
 		t.Fatalf("clear scripts.setup: %d, %v", code, err)
 	}
 	doc := readDoc(t, path)
@@ -169,7 +169,7 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 		t.Errorf("scripts.teardown = %v, want pnpm down", got)
 	}
 	// Removing the last script prunes the emptied scripts object.
-	if code, err := projectConfigUnset(proj, "scripts.teardown"); code != 0 || err != nil {
+	if code, err := runConfigUnset(projectConfigScope(proj), "scripts.teardown"); code != 0 || err != nil {
 		t.Fatalf("unset scripts.teardown: %d, %v", code, err)
 	}
 	if _, ok := readDoc(t, path)["scripts"]; ok {
@@ -180,13 +180,13 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 func TestProjectConfigDefaultBranchGuards(t *testing.T) {
 	sandboxConfigRoot(t)
 	proj := testProject(t)
-	if code, err := projectConfigSet(proj, "defaultBranch", ""); code != 2 || err == nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", ""); code != 2 || err == nil {
 		t.Errorf("set defaultBranch \"\" = %d, %v; want usage error", code, err)
 	}
-	if code, err := projectConfigUnset(proj, "defaultBranch"); code != 2 || err == nil {
+	if code, err := runConfigUnset(projectConfigScope(proj), "defaultBranch"); code != 2 || err == nil {
 		t.Errorf("unset defaultBranch = %d, %v; want usage error", code, err)
 	}
-	if code, err := projectConfigSet(proj, "defaultBranch", "main"); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", "main"); code != 0 || err != nil {
 		t.Fatalf("set defaultBranch main: %d, %v", code, err)
 	}
 	if got := readDoc(t, projectConfigJSONPath(proj.ID))["defaultBranch"]; got != "main" {
@@ -200,23 +200,23 @@ func TestProjectConfigBoolAndPathKeys(t *testing.T) {
 	path := projectConfigJSONPath(proj.ID)
 	// Default true: explicit true stays out of the file, false is the
 	// stored opt-out -- the app's serialization exactly.
-	if code, err := projectConfigSet(proj, "useWorktreeInclude", "true"); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "useWorktreeInclude", "true"); code != 0 || err != nil {
 		t.Fatalf("set useWorktreeInclude true: %d, %v", code, err)
 	}
 	if _, ok := readDoc(t, path)["useWorktreeInclude"]; ok {
 		t.Error("useWorktreeInclude stored despite matching its default")
 	}
-	if code, err := projectConfigSet(proj, "useWorktreeInclude", "false"); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "useWorktreeInclude", "false"); code != 0 || err != nil {
 		t.Fatalf("set useWorktreeInclude false: %d, %v", code, err)
 	}
 	if got := readDoc(t, path)["useWorktreeInclude"]; got != false {
 		t.Errorf("useWorktreeInclude = %v, want false", got)
 	}
-	if code, err := projectConfigSet(proj, "customWorktreePath", "relative/dir"); code != 2 || err == nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "customWorktreePath", "relative/dir"); code != 2 || err == nil {
 		t.Errorf("relative customWorktreePath accepted: %d, %v", code, err)
 	}
 	abs := t.TempDir()
-	if code, err := projectConfigSet(proj, "customWorktreePath", abs); code != 0 || err != nil {
+	if code, err := runConfigSet(projectConfigScope(proj), "customWorktreePath", abs); code != 0 || err != nil {
 		t.Fatalf("set customWorktreePath: %d, %v", code, err)
 	}
 	if got := readDoc(t, path)["customWorktreePath"]; got != abs {
@@ -290,7 +290,7 @@ func TestCarryOverVerbs(t *testing.T) {
 	sandboxConfigRoot(t)
 	proj := testProject(t)
 	path := projectConfigJSONPath(proj.ID)
-	add := func(args parsedArgs) (int, error) { return projectCarryOverVerb(proj, args) }
+	add := func(args parsedArgs) (int, error) { return projectCarryOverVerb(proj, projectConfigScope(proj), args) }
 	pos := func(p ...string) parsedArgs {
 		return parsedArgs{positionals: append([]string{"carryover"}, p...), bools: map[string]bool{}}
 	}
@@ -345,29 +345,31 @@ func TestCarryOverVerbs(t *testing.T) {
 	}
 }
 
-func TestConfigWriteDocValidates(t *testing.T) {
+func TestConfigWriteValidates(t *testing.T) {
 	sandboxConfigRoot(t)
-	path := configJSONPath()
-	if code, _ := configWriteDoc(path, globalConfigKeys, `{"doubutsu": "nope"}`, nil); code != 1 {
+	scope := globalConfigScope()
+	if code, _ := runConfigWrite(scope, `{"doubutsu": "nope"}`); code != 1 {
 		t.Errorf("mistyped doubutsu accepted: code %d", code)
 	}
-	if code, _ := configWriteDoc(path, globalConfigKeys, `not json`, nil); code != 2 {
+	if code, _ := runConfigWrite(scope, `not json`); code != 2 {
 		t.Errorf("malformed data accepted: code %d", code)
 	}
-	if code, err := configWriteDoc(path, globalConfigKeys,
-		`{"theme": "dark", "portPool": true}`, nil); code != 0 || err != nil {
+	if code, err := runConfigWrite(scope, `{"theme": "dark", "portPool": true}`); code != 0 || err != nil {
 		t.Fatalf("valid write: %d, %v", code, err)
 	}
-	doc := readDoc(t, path)
+	doc := readDoc(t, scope.path)
 	if doc["theme"] != "dark" || doc["portPool"] != true {
 		t.Errorf("written doc = %v", doc)
 	}
-	// The project scope's extra check: a payload without defaultBranch
-	// must be refused, not written.
-	missingBranch := func(doc map[string]any) error {
-		return errf("defaultBranch is required.")
+	// The project registry marks defaultBranch required: a payload
+	// without it must be refused, not written.
+	proj := testProject(t)
+	for _, data := range []string{`{}`, `{"defaultBranch": "  "}`} {
+		if code, _ := runConfigWrite(projectConfigScope(proj), data); code != 1 {
+			t.Errorf("write %s accepted despite missing defaultBranch: code %d", data, code)
+		}
 	}
-	if code, _ := configWriteDoc(path, projectConfigKeys, `{}`, missingBranch); code != 1 {
-		t.Errorf("extraCheck failure not propagated: code %d", code)
+	if _, err := os.Stat(projectConfigJSONPath(proj.ID)); err == nil {
+		t.Error("refused write still created project.json")
 	}
 }

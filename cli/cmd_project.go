@@ -437,25 +437,27 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 		return cmdConfigVerb(proj, parsed)
 	}
 
-	fields := map[string]any{}
-	if v, ok := parsed.strings["default-branch"]; ok {
+	// The long-standing flag shorthands, folded onto the key engine:
+	// one locked write for all flags given, defaultBranch backfill via
+	// the scope's beforeWrite.
+	if v, ok := parsed.strings["default-branch"]; ok && strings.TrimSpace(v) == "" {
 		// An empty defaultBranch makes the whole config invalid (the
 		// schema requires it), which would silently drop every other
 		// configured field on the next read. Refuse instead of "clear".
-		if strings.TrimSpace(v) == "" {
-			return 2, usageErrf(
-				"--default-branch can't be empty; it's required, so set a ref instead of clearing it.")
-		}
-		fields["defaultBranch"] = v
+		return 2, usageErrf(
+			"--default-branch can't be empty; it's required, so set a ref instead of clearing it.")
 	}
-	scriptUpdates := map[string]string{}
+	updates := map[string]string{}
+	if v, ok := parsed.strings["default-branch"]; ok {
+		updates["defaultBranch"] = v
+	}
 	for _, key := range []string{"setup", "teardown"} {
 		if v, ok := parsed.strings[key]; ok {
-			scriptUpdates[key] = v
+			updates["scripts."+key] = v
 		}
 	}
 
-	if len(fields) == 0 && len(scriptUpdates) == 0 {
+	if len(updates) == 0 {
 		// No updates: print the current config.
 		raw, err := os.ReadFile(projectConfigJSONPath(proj.ID))
 		if jsonMode {
@@ -475,38 +477,19 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 
-	if len(scriptUpdates) > 0 {
-		// Scripts nest under one key; merge against the current object
-		// so --setup doesn't wipe an existing teardown.
-		current := map[string]string{}
-		if config := readProjectConfig(proj.ID); config != nil {
-			if config.Scripts.Setup != "" {
-				current["setup"] = config.Scripts.Setup
-			}
-			if config.Scripts.Teardown != "" {
-				current["teardown"] = config.Scripts.Teardown
-			}
-		}
-		for key, value := range scriptUpdates {
+	err = projectConfigScope(proj).update(func(doc map[string]any) error {
+		for name, value := range updates {
 			if value == "" {
-				delete(current, key)
+				// "" clears a script (an empty defaultBranch was refused
+				// above).
+				configDocDelete(doc, name)
 			} else {
-				current[key] = value
+				configDocSet(doc, name, value)
 			}
 		}
-		fields["scripts"] = current
-	}
-
-	// The zod schema requires defaultBranch; make sure a scripts-only
-	// configure on an unseeded project doesn't produce a config the app
-	// (and this CLI) would treat as absent.
-	if _, ok := fields["defaultBranch"]; !ok && readProjectConfig(proj.ID) == nil {
-		if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
-			fields["defaultBranch"] = defaultBranch
-		}
-	}
-
-	if err := writeProjectConfigFields(proj.ID, fields); err != nil {
+		return nil
+	})
+	if err != nil {
 		return 1, err
 	}
 	if jsonMode {
@@ -517,79 +500,46 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-// The key-based verbs (`sm projects config set defaultBranch main`),
-// sharing the engine and registries in cmd_config.go with the global
-// `sm config`.
+// The key-based verbs (`sm projects config set defaultBranch main`):
+// the shared engine in cmd_config.go, differing from the global `sm
+// config` only through the scope below.
 func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
-	sub := parsed.positionals[0]
-	wantPositionals := func(n int, usage string) error {
-		if len(parsed.positionals) != n {
-			return usageErrf("Usage: %s projects config %s [-p <project>]", binaryName, usage)
-		}
-		return nil
-	}
-	switch sub {
+	scope := projectConfigScope(proj)
+	switch sub := parsed.positionals[0]; sub {
 	case "list":
-		doc := readConfigDoc(projectConfigJSONPath(proj.ID))
-		if jsonMode {
-			emit(map[string]any{
-				"ok": true, "project": proj.Name,
-				"settings": configListEntries(projectConfigKeys, doc),
-			})
-			return 0, nil
-		}
-		out(renderConfigList(projectConfigKeys, doc))
-		return 0, nil
+		return runConfigList(scope)
 	case "get":
-		if err := wantPositionals(2, "get <key>"); err != nil {
+		if err := scope.wantPositionals(parsed.positionals, 2, "get <key>"); err != nil {
 			return 2, err
 		}
-		doc := readConfigDoc(projectConfigJSONPath(proj.ID))
-		return runConfigGet(projectConfigKeys, doc, parsed.positionals[1],
-			map[string]any{"project": proj.Name})
+		return runConfigGet(scope, parsed.positionals[1])
 	case "set":
-		if err := wantPositionals(3, "set <key> <value>"); err != nil {
+		if err := scope.wantPositionals(parsed.positionals, 3, "set <key> <value>"); err != nil {
 			return 2, err
 		}
-		return projectConfigSet(proj, parsed.positionals[1], parsed.positionals[2])
+		return runConfigSet(scope, parsed.positionals[1], parsed.positionals[2])
 	case "unset":
-		if err := wantPositionals(2, "unset <key>"); err != nil {
+		if err := scope.wantPositionals(parsed.positionals, 2, "unset <key>"); err != nil {
 			return 2, err
 		}
-		return projectConfigUnset(proj, parsed.positionals[1])
+		return runConfigUnset(scope, parsed.positionals[1])
 	case "launcher", "launchers":
-		return runLauncherVerb(projectConfigScope(proj), parsed.positionals[1:])
+		return runLauncherVerb(scope, parsed.positionals[1:])
 	case "carryover", "carry-over":
-		return projectCarryOverVerb(proj, parsed)
+		return projectCarryOverVerb(proj, scope, parsed)
 	case "edit":
-		path := projectConfigJSONPath(proj.ID)
-		if _, err := os.Stat(path); err != nil {
-			// Seed the required defaultBranch so a hand-edited save
-			// doesn't start from a document the schema rejects.
-			seed := map[string]any{}
-			if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
-				seed["defaultBranch"] = defaultBranch
-			}
-			if writeErr := writeProjectConfigFields(proj.ID, seed); writeErr != nil {
-				return 1, writeErr
+		if _, err := os.Stat(scope.path); err != nil {
+			// Seed through the engine so the required defaultBranch is
+			// backfilled (locked, like every other write here) and a
+			// hand-edited save doesn't start from a document the schema
+			// rejects.
+			if seedErr := scope.update(func(map[string]any) error { return nil }); seedErr != nil {
+				return 1, seedErr
 			}
 		}
-		return openConfigFileInEditor(path)
+		return openConfigFileInEditor(scope.path)
 	case "write":
-		// App plumbing: whole-document replace for the delegated
-		// shigomori:write, including the in-project exclude side effect.
-		code, err := configWriteDoc(projectConfigJSONPath(proj.ID), projectConfigKeys,
-			parsed.strings["data"], func(doc map[string]any) error {
-				branch, _ := configDocGet(doc, "defaultBranch")
-				if s, ok := branch.(string); !ok || strings.TrimSpace(s) == "" {
-					return errf("defaultBranch is required.")
-				}
-				return nil
-			})
-		if err == nil && code == 0 {
-			maybeExcludeInProjectDir(proj, readConfigDoc(projectConfigJSONPath(proj.ID)))
-		}
-		return code, err
+		return runConfigWrite(scope, parsed.strings["data"])
 	default:
 		return 2, usageErrf(
 			"Unknown subcommand %q. Usage: %s projects config <list|get|set|unset|edit|launcher|carryover> [args]",
@@ -600,10 +550,13 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 func projectConfigScope(proj project) configDocScope {
 	return configDocScope{
 		path:        projectConfigJSONPath(proj.ID),
+		keys:        projectConfigKeys,
 		usagePrefix: "projects config",
+		usageSuffix: " [-p <project>]",
 		suffix:      " for " + proj.Name,
 		extra:       map[string]any{"project": proj.Name},
 		beforeWrite: func(doc map[string]any) { ensureDefaultBranchField(doc, proj) },
+		afterWrite:  func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
 	}
 }
 
@@ -611,8 +564,7 @@ func projectConfigScope(proj project) configDocScope {
 // <path>] -- element verbs over the carryOver array. Paths are
 // project-relative (absolute paths inside the project are folded);
 // add upserts, so re-adding a path just switches its mode.
-func projectCarryOverVerb(proj project, parsed parsedArgs) (int, error) {
-	scope := projectConfigScope(proj)
+func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs) (int, error) {
 	rest := parsed.positionals[1:]
 	verb := "list"
 	if len(rest) > 0 {
@@ -756,84 +708,6 @@ func normalizeCarryOverPath(proj project, raw string) (string, error) {
 		return "", usageErrf("Carry-over paths must stay within the project root.")
 	}
 	return filepath.ToSlash(p), nil
-}
-
-func projectConfigSet(proj project, name, raw string) (int, error) {
-	key, err := lookupConfigKey(projectConfigKeys, name)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	if key.kind == jsonKind {
-		return 2, structuredKeyErr(key, "projects config edit")
-	}
-	if key.name == "defaultBranch" && strings.TrimSpace(raw) == "" {
-		// An empty defaultBranch makes the whole config invalid (the
-		// schema requires it), which would silently drop every other
-		// configured field on the next read. Refuse instead of "clear".
-		return 2, usageErrf(
-			"defaultBranch can't be empty; it's required, so set a ref instead of clearing it.")
-	}
-	if key.kind == stringKind && raw == "" {
-		// "" clears, matching the long-standing `--setup ''` behavior.
-		return projectConfigUnset(proj, name)
-	}
-	value, err := parseConfigValue(key, raw)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	if key.name == "customWorktreePath" {
-		abs := expandHome(raw)
-		if !filepath.IsAbs(abs) {
-			return 2, usageErrf("customWorktreePath must be an absolute path.")
-		}
-		value = abs
-	}
-	err = updateConfigDoc(projectConfigJSONPath(proj.ID), func(doc map[string]any) error {
-		if equalsConfigDefault(key, value) {
-			configDocDelete(doc, key.name)
-		} else {
-			configDocSet(doc, key.name, value)
-		}
-		ensureDefaultBranchField(doc, proj)
-		return nil
-	})
-	if err != nil {
-		return 1, err
-	}
-	if key.name == "worktreeLayout" && value == "in-project" {
-		maybeExcludeInProjectDir(proj, map[string]any{"worktreeLayout": value})
-	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "project": proj.Name, "key": key.name, "value": value})
-	} else {
-		out(greenOut("set " + key.name + " = " + renderConfigValue(value) + " for " + proj.Name))
-	}
-	return 0, nil
-}
-
-func projectConfigUnset(proj project, name string) (int, error) {
-	key, err := lookupConfigKey(projectConfigKeys, name)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	if key.name == "defaultBranch" {
-		return 2, usageErrf(
-			"defaultBranch can't be cleared; it's required, so set a different ref instead.")
-	}
-	err = updateConfigDoc(projectConfigJSONPath(proj.ID), func(doc map[string]any) error {
-		configDocDelete(doc, key.name)
-		ensureDefaultBranchField(doc, proj)
-		return nil
-	})
-	if err != nil {
-		return 1, err
-	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "project": proj.Name, "key": key.name})
-	} else {
-		out(greenOut("unset " + key.name + " for " + proj.Name))
-	}
-	return 0, nil
 }
 
 // The zod schema requires defaultBranch; make sure a write on an
