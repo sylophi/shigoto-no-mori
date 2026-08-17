@@ -39,9 +39,8 @@ export type NukeProgress = z.infer<typeof NukeProgressSchema>;
 // `downloading` covers both "found an update" and "still pulling
 // bytes" -- the CLI streams no byte progress, so we collapse them.
 // `ready` carries the version we'll restart into. `unsupported` means
-// this build has no update channel at all (dev builds, and the
-// portable Windows zip): the renderer hides the check button rather
-// than offering a dead one.
+// this build has no update channel at all (dev builds): the renderer
+// hides the check button rather than offering a dead one.
 export const UpdaterStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("unsupported") }),
   z.object({ kind: z.literal("idle") }),

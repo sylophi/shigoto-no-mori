@@ -8,7 +8,6 @@ import {
   cliRootDirName,
   rootPointerPath as pointerPathFor,
 } from "@shared/cliDist.mts";
-import { isWindows } from "./platform";
 
 let cachedRoot: string | null = null;
 let cachedPointerPath: string | null = null;
@@ -111,32 +110,15 @@ export function shigomoriRoot(): string {
 
 export function expandHome(path: string): string {
   if (path === "~") return homedir();
-  // On Windows both separator styles work after "~"; on POSIX a
-  // backslash is an ordinary filename character, not a separator.
-  if (path.startsWith("~/") || (isWindows && path.startsWith("~\\"))) {
+  if (path.startsWith("~/")) {
     return join(homedir(), path.slice(2));
   }
   return path;
 }
 
-// Comparison form for path equality and prefix checks; the
-// implementation lives in shared/worktreeLayout.ts (shape-keyed, so the
-// renderer folds identically) and is re-exported here for main-side
-// callers.
-export { comparablePath, isSameOrInside } from "@shared/worktreeLayout";
-
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
   return isAbsolute(expanded) ? expanded : resolve(expanded);
-}
-
-// Fold to the OS-native separator before handing a path to anything
-// outside the app. Git porcelain reports forward slashes even on
-// Windows; explorer.exe rejects those outright and other shell targets
-// merely tolerate them. No-op on POSIX, where backslash is a filename
-// character.
-export function toNativePath(path: string): string {
-  return isWindows ? path.replaceAll("/", "\\") : path;
 }
 
 export async function pathExists(target: string): Promise<boolean> {

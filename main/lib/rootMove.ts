@@ -11,6 +11,7 @@
 // are git's own worktree links, which `git worktree repair` fixes.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { isSameOrInside } from "@shared/worktreeLayout";
 import { run } from "./git/core";
 import { listWorktreeIdentities } from "./git/worktrees";
 import { findProjectInsideRoot, loadProjects } from "./projects";
@@ -21,19 +22,13 @@ import {
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/jsonFile";
-import {
-  comparablePath,
-  isSameOrInside,
-  rootPointerPath,
-  shigomoriRoot,
-  toAbsolute,
-} from "./util/paths";
+import { rootPointerPath, shigomoriRoot, toAbsolute } from "./util/paths";
 
 export async function moveShigomoriRoot(
   parentDir: string,
   // Electron-side pre-rename hook: the caller closes its fs watchers on
-  // the root here. Windows watch handles can block the rename, and the
-  // watchers are moot anyway -- the app relaunches after the move.
+  // the root here -- they're moot anyway, the app relaunches after the
+  // move.
   opts: { beforeMove?: () => void } = {},
 ): Promise<void> {
   const oldRoot = shigomoriRoot();
@@ -42,7 +37,7 @@ export async function moveShigomoriRoot(
 
   if (isSameOrInside(newRoot, oldRoot)) {
     throw new Error(
-      comparablePath(newRoot) === comparablePath(oldRoot)
+      newRoot === oldRoot
         ? `The data folder is already at ${oldRoot}.`
         : `Can't move the data folder inside itself (${oldRoot}).`,
     );
@@ -69,9 +64,8 @@ export async function moveShigomoriRoot(
     );
   }
   await mkdir(parent, { recursive: true });
-  // rename() onto an existing empty directory is fine on POSIX but not
-  // on Windows. Clearing the placeholder first behaves the same
-  // everywhere. A non-empty directory is refused, never merged into.
+  // Clear an existing empty placeholder before the rename. A non-empty
+  // directory is refused, never merged into.
   await rmdir(newRoot).catch((err) => {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
       throw new Error(`${newRoot} already exists and is not empty.`);

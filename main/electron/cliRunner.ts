@@ -1,8 +1,7 @@
 // Spawns the bundled CLI as the app's worktree engine. The five
 // lifecycle mutations (create, delete, adopt, done, merge) route
-// through here on platforms that ship the CLI, so the app and a
-// terminal produce byte-identical behavior; Windows (no CLI) keeps the
-// TS engine. The binary is addressed directly -- Resources/ when
+// through here, so the app and a terminal produce byte-identical
+// behavior. The binary is addressed directly -- Resources/ when
 // packaged, dist-cli/smd in dev (built by `pnpm dev`) -- so no PATH
 // install is involved, and SHIGOMORI_ROOT is pinned to the app's own
 // root so the flavor split can never diverge.
@@ -13,7 +12,6 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "../lib/scripts";
 import { shigomoriRoot } from "../lib/util/paths";
-import { isWindows } from "../lib/util/platform";
 import { noteSelfWrite } from "../lib/util/selfWrite";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
@@ -45,10 +43,16 @@ export function cliBinaryPath(): string | null {
   return null;
 }
 
-// The CLI's script runner assumes a POSIX shell; Windows keeps the TS
-// engine (per-platform behavior there is the TS code's job).
-export function cliAvailable(): boolean {
-  return !isWindows && cliBinaryPath() !== null;
+// The CLI is the app's only engine. A missing binary (a dev run before
+// `pnpm cli:build --dev`) is a hard, actionable error.
+export function requireCliBinary(): string {
+  const binary = cliBinaryPath();
+  if (binary === null) {
+    throw new Error(
+      "The CLI binary is missing. Run `pnpm cli:build --dev` (dev) or reinstall the app.",
+    );
+  }
+  return binary;
 }
 
 const children = new Set<ChildProcess>();
@@ -77,7 +81,7 @@ function cliBusyChildCount(): number {
 // mid-operation still prompts.
 registerInflightContributor(cliBusyChildCount);
 
-// Quit-time reap, mirroring killAllScripts for the TS engine: an CLI
+// Quit-time reap, mirroring killAllScripts for package scripts: a CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
 // child is spawned detached (its own process group), and the SIGTERM
 // goes to the whole group: the Go process doesn't forward signals, so
@@ -114,13 +118,8 @@ export function cliSpawnEnv(): Record<string, string> {
 // on a ChildProcess is an uncaught exception in the main process --
 // the caller is about to quit on success, so it must not do that on a
 // child that never started.
-export function spawnCliDetached(args: string[]): Promise<void> {
-  const binary = cliBinaryPath();
-  if (binary === null) {
-    return Promise.reject(
-      new Error("The CLI binary is missing. Reinstall the app."),
-    );
-  }
+export async function spawnCliDetached(args: string[]): Promise<void> {
+  const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, {
       detached: true,
@@ -152,24 +151,16 @@ export interface CliResult {
 // group when it runs that long, so a wedged child (a stuck subprocess
 // on the Go side) can't hold the returned promise open forever -- the
 // kill surfaces as a normal non-zero close.
-export function runCli(
+export async function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
   extraEnv?: Record<string, string>,
   opts?: { background?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
-  const binary = cliBinaryPath();
-  if (binary === null) {
-    return Promise.reject(
-      new Error(
-        "The CLI binary is missing; run `pnpm cli:build --dev` (dev) or reinstall the app.",
-      ),
-    );
-  }
+  const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
       env: { ...process.env, ...extraEnv, ...cliSpawnEnv() },
-      windowsHide: true,
       // Own process group so killAllCli can signal the CLI and any
       // lifecycle script it spawned as one unit (see killAllCli).
       detached: true,

@@ -18,9 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
-import { fileManagerName } from "@/lib/platform";
-import { modKey, shortcutLabel } from "@/lib/platform";
-import { comparablePath } from "@shared/worktreeLayout";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import { notifyError } from "@/lib/toast";
@@ -135,12 +132,8 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     setStage("scanning");
     try {
       const results = await window.api.fs.scanForGitRepos(browseDir);
-      const existingPaths = new Set(
-        existingProjects.map((p) => comparablePath(p.path)),
-      );
-      const newOnly = results.filter(
-        (p) => !existingPaths.has(comparablePath(p)),
-      );
+      const existingPaths = new Set(existingProjects.map((p) => p.path));
+      const newOnly = results.filter((p) => !existingPaths.has(p));
       setScanResults(newOnly);
       setSelected(new Set(newOnly));
       setHighlighted("");
@@ -199,7 +192,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
       primaryAction();
@@ -230,7 +223,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   };
 
   const onResultsKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
       void bulkAdd();
@@ -273,7 +266,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
 
   // Browse stage.
   const submitLabel = targetIsGitRepo ? "Add" : "Scan for repos in folder";
-  const submitKbd = hasHighlighted ? shortcutLabel(modKey, "↩") : "↩";
+  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
   const canBrowseUp = canNavigateUp(query);
   const canPrimary = targetIsGitRepo
     ? submitTarget.length > 0
@@ -413,7 +406,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
         </div>
         <ChipButton onClick={() => void pickViaDialog()}>
           <FileManagerIcon />
-          Open in {fileManagerName}
+          Open in Finder
         </ChipButton>
       </div>
     </Command>

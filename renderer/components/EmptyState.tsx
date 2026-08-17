@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { modKey, shiftKey } from "@/lib/platform";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -95,7 +94,7 @@ function FirstRun({ onAdd }: { onAdd: () => void }) {
           <span className="text-xs text-muted-foreground">
             or{" "}
             <KbdGroup className="mx-0.5 inline-flex">
-              <Kbd>{modKey}</Kbd>
+              <Kbd>⌘</Kbd>
               <Kbd>N</Kbd>
             </KbdGroup>{" "}
             from anywhere
@@ -114,8 +113,8 @@ function BetweenWorktrees() {
         <p className="text-xs text-muted-foreground/70">
           Pick a worktree from the sidebar, or press{" "}
           <KbdGroup className="mx-0.5 inline-flex">
-            <Kbd>{modKey}</Kbd>
-            <Kbd>{shiftKey}</Kbd>
+            <Kbd>⌘</Kbd>
+            <Kbd>⇧</Kbd>
             <Kbd>P</Kbd>
           </KbdGroup>{" "}
           for the project launcher.

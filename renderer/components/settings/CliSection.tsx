@@ -14,8 +14,6 @@ import type {
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
-// Hidden entirely when there's nothing to link (Windows, dev run
-// without a built binary).
 export function CliSection() {
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
@@ -44,7 +42,7 @@ export function CliSection() {
     onError: (err) => notifyError("Couldn't uninstall the CLI", err),
   });
 
-  if (!status?.supported) return null;
+  if (!status) return null;
 
   const { name, state, onPath } = status;
   const busy = install.isPending || uninstall.isPending;
@@ -191,7 +189,7 @@ function ShellIntegrationBlock({ name }: { name: string }) {
     onError: (err) => notifyError("Couldn't remove shell integration", err),
   });
 
-  if (!status?.supported) return null;
+  if (!status) return null;
 
   const busy = enable.isPending || remove.isPending;
   const login = status.shells.find((s) => s.shell === status.loginShell);

@@ -30,8 +30,6 @@ export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 // the feed can never point at a different repo than the app came from.
 export const UPDATE_FEED_REPO = "sylophi/shigoto-no-mori";
 
-// The CLI is not supported on Windows (and is never built or bundled
-// there), so there is no .exe variant.
 export function cliBinaryName(flavor: CliFlavor): string {
   return flavor === "prod" ? "sm" : "smd";
 }

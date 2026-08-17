@@ -4,18 +4,12 @@ import {
   MoveRootPayloadSchema,
   NukeProgressSchema,
   RuntimeInfoSchema,
-  SetDoubutsuPayloadSchema,
   SetThemePayloadSchema,
 } from "@shared/schemas";
 
 export const runtimeContract = {
   info: invoke("runtime:info", z.void(), RuntimeInfoSchema),
   setTheme: invoke("runtime:setTheme", SetThemePayloadSchema, z.void()),
-  setDoubutsu: invoke(
-    "runtime:setDoubutsu",
-    SetDoubutsuPayloadSchema,
-    z.void(),
-  ),
   nuke: invoke("runtime:nuke", z.void(), z.void()),
   moveRoot: invoke("runtime:moveRoot", MoveRootPayloadSchema, z.void()),
   // Renderer-acknowledged restart after a successful moveRoot: firing

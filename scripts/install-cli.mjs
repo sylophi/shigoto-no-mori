@@ -17,11 +17,6 @@ import {
   cliUserBinDir,
 } from "../shared/cliDist.mts";
 
-if (process.platform === "win32") {
-  console.error("The Shigoto no Mori CLI isn't supported on Windows.");
-  process.exit(1);
-}
-
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const binary = join(repoRoot, CLI_DIST_DIR, cliBinaryName("prod"));
 

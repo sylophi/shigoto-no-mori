@@ -1,10 +1,10 @@
 package main
 
 // Path math ported from shared/worktreeLayout.ts and
-// main/lib/worktrees/paths.ts: comparable form for equality checks,
-// path-derived worktree ids, and the managed-layout bases. Must stay
-// behavior-identical to the TS side -- both compute the same ids and
-// "is this managed?" answers over the same state.
+// main/lib/worktrees/paths.ts: path-derived worktree ids and the
+// managed-layout bases. Must stay behavior-identical to the TS side --
+// both compute the same ids and "is this managed?" answers over the
+// same state.
 
 import (
 	"crypto/sha256"
@@ -15,29 +15,11 @@ import (
 	"strings"
 )
 
-var (
-	windowsDrivePrefix = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
-	uncPrefix          = regexp.MustCompile(`^[\\/]{2}`)
-)
-
-func isWindowsStyle(path string) bool {
-	return windowsDrivePrefix.MatchString(path) || uncPrefix.MatchString(path)
-}
-
-// Keyed off the path's own shape, not the host OS, matching
-// shared/worktreeLayout.ts comparablePath.
-func comparablePath(path string) string {
-	if !isWindowsStyle(path) {
-		return path
-	}
-	return strings.ToLower(strings.ReplaceAll(path, "\\", "/"))
-}
-
-// sha256(comparablePath)[:12], identical to worktreeIdFromPath in
+// sha256(path)[:12], identical to worktreeIdFromPath in
 // main/lib/git/worktrees.ts -- the same path must hash to the same id
 // from the app and the CLI.
 func worktreeIDFromPath(path string) string {
-	sum := sha256.Sum256([]byte(comparablePath(path)))
+	sum := sha256.Sum256([]byte(path))
 	return hex.EncodeToString(sum[:])[:12]
 }
 
@@ -77,7 +59,7 @@ func collapseHome(path string) string {
 	if path == home {
 		return "~"
 	}
-	if strings.HasPrefix(path, home+string(os.PathSeparator)) {
+	if strings.HasPrefix(path, home+"/") {
 		return "~" + path[len(home):]
 	}
 	return path
@@ -102,9 +84,8 @@ func cwdInside(dir string) bool {
 	if err != nil {
 		return false
 	}
-	cwdC := comparablePath(cwd)
-	dirC := strings.TrimRight(comparablePath(dir), "/")
-	return cwdC == dirC || strings.HasPrefix(cwdC, dirC+"/")
+	dirTrimmed := strings.TrimRight(dir, "/")
+	return cwd == dirTrimmed || strings.HasPrefix(cwd, dirTrimmed+"/")
 }
 
 // Every base directory whose direct children count as "managed" for a
@@ -127,14 +108,14 @@ func managedBasesFor(projectPath string, config *projectConfig) []string {
 // Parent equality, not prefix matching (a root base would otherwise
 // claim every worktree on the volume); matches isManagedPath.
 func isManagedPath(worktreePath string, bases []string) bool {
-	folded := strings.TrimRight(comparablePath(worktreePath), "/")
+	folded := strings.TrimRight(worktreePath, "/")
 	cut := strings.LastIndex(folded, "/")
 	if cut < 0 {
 		return false
 	}
 	parent := folded[:cut]
 	for _, base := range bases {
-		if parent == strings.TrimRight(comparablePath(base), "/") {
+		if parent == strings.TrimRight(base, "/") {
 			return true
 		}
 	}
@@ -168,12 +149,12 @@ func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 	parent := filepath.Dir(oldWorktreePath)
 	managedRootBase := filepath.Join(shigomoriRoot(), "worktrees", filepath.Base(projectPath))
-	if comparablePath(parent) == comparablePath(managedRootBase) {
+	if parent == managedRootBase {
 		_ = removeIfEmptyDir(parent)
 		return
 	}
 	inProjectBase := filepath.Join(projectPath, ".shigomori", "worktrees")
-	if comparablePath(parent) == comparablePath(inProjectBase) {
+	if parent == inProjectBase {
 		if removeIfEmptyDir(parent) == nil {
 			_ = removeIfEmptyDir(filepath.Dir(parent))
 		}
@@ -188,22 +169,16 @@ func removeIfEmptyDir(path string) error {
 // --- worktree dir name validation (shared/branches.ts port) ---
 
 var (
-	pathSeparatorRe = regexp.MustCompile(`[\\/]`)
-	ntfsIllegalRe   = regexp.MustCompile(`[<>:"|?*]`)
+	pathSeparatorRe = regexp.MustCompile(`[/:]`)
 	controlCharsRe  = regexp.MustCompile("[\x00-\x1f\x7f]")
 	edgeTrimRe      = regexp.MustCompile(`^[.\s-]+|[.\s-]+$`)
-	dosDeviceRe     = regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|$)`)
 )
 
 func sanitizeBranchForPath(branch string) string {
 	s := pathSeparatorRe.ReplaceAllString(branch, "-")
-	s = ntfsIllegalRe.ReplaceAllString(s, "-")
 	s = controlCharsRe.ReplaceAllString(s, "")
 	s = edgeTrimRe.ReplaceAllString(s, "")
 	if s == "" || s == "." || s == ".." || isPrimaryKeyword(s) {
-		return ""
-	}
-	if dosDeviceRe.MatchString(s) {
 		return ""
 	}
 	return s

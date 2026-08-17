@@ -2,14 +2,11 @@
 // and a terminal run the exact same engine (the user's core
 // requirement: deterministic behavior across surfaces): worktree
 // create/adopt/delete/done/merge, the shelved flag, and project
-// add/remove. Each function mirrors its TS-engine counterpart's IPC
-// contract -- same return shapes, same renderer notifications --
-// translating the CLI's NDJSON stream into the notifier calls the
-// renderer already understands. Every document crossing the Go/TS
-// boundary is validated against the shared zod schemas, so drift
-// between the two engines fails loudly here instead of surfacing as
-// undefined-flavored breakage in the renderer. Callers gate on
-// cliAvailable(); Windows (no CLI) stays on the TS engine.
+// add/remove. Each function translates the CLI's NDJSON stream into
+// the notifier calls the renderer already understands. Every document
+// crossing the Go/TS boundary is validated against the shared zod
+// schemas, so drift fails loudly here instead of surfacing as
+// undefined-flavored breakage in the renderer.
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -20,23 +17,32 @@ import {
   type GlobalConfig,
   type Project,
   ProjectSchema,
+  type ScriptEvent,
   ScriptEventSchema,
   type ShigomoriConfig,
   type Worktree,
+  type WorktreeCarryOverComplete,
+  type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import {
-  cliAvailable,
-  cliBinaryPath,
   cliSpawnEnv,
+  requireCliBinary,
   runCli,
   type CliDoc,
   type CliResult,
   cliFailureMessage,
 } from "../electron/cliRunner";
-import { shellQuote } from "../lib/scripts/packageScripts";
-import type { WorktreeOperationNotifiers } from "../lib/worktrees/operations";
+import { shellQuote } from "../lib/scripts/process";
+
+// Renderer-bound emit callbacks supplied by the IPC handler, fed from
+// the CLI's streamed lifecycle documents.
+interface WorktreeOperationNotifiers {
+  notifyPhase: (payload: WorktreeLifecyclePhase) => void;
+  notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
+  notifyScript: (payload: ScriptEvent) => void;
+}
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
 
@@ -72,9 +78,8 @@ function finalOkDoc(
 }
 
 // Streamed create/adopt: resolve the IPC promise on the "created"
-// document (the app navigates immediately, like the TS engine's
-// fire-and-forget lifecycle) and keep forwarding lifecycle events to
-// the renderer until the process exits.
+// document (the app navigates immediately) and keep forwarding
+// lifecycle events to the renderer until the process exits.
 function runStreamingCreate(
   args: string[],
   project: Project,
@@ -164,7 +169,7 @@ export function adoptViaCli(
   notify: WorktreeOperationNotifiers,
 ): Promise<CreateWorktreeResult> {
   // --force: the app's convert flow already confirmed the wipe in its
-  // dialog, matching the TS engine's unconditional force-remove.
+  // dialog.
   const args = [
     "adopt",
     "--project-id",
@@ -218,8 +223,7 @@ export async function doneViaCli(
   worktreeId: string,
 ): Promise<Worktree> {
   // --force: the app's cleanup box appears in merged-PR context, so the
-  // UI has already gated mergedness -- matching the TS engine, which
-  // performs no ancestor check of its own.
+  // UI has already gated mergedness.
   const result = await runCli([
     "done",
     "--project-id",
@@ -276,8 +280,7 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 }
 
 // The command (plus env overlay) that runs a package.json script
-// through the CLI engine, or null when the CLI isn't available
-// (Windows, missing binary). Unlike the functions above this doesn't
+// through the CLI engine. Unlike the functions above this doesn't
 // spawn anything: package-script runs go through startScript so the
 // app's registry keeps owning streaming, cancel, and quit-time
 // reaping -- the CLI contributes manager detection and the
@@ -297,9 +300,8 @@ export function cliRunScriptSpawn(args: {
   scriptName: string;
   projectBranch: string;
   defaultBranch: string;
-}): CliRunScriptSpawn | null {
-  const binary = cliAvailable() ? cliBinaryPath() : null;
-  if (binary === null) return null;
+}): CliRunScriptSpawn {
+  const binary = requireCliBinary();
   return {
     command: [
       shellQuote(binary),

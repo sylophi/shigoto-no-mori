@@ -13,7 +13,6 @@ import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { isMac } from "@/lib/platform";
 import type {
   DetectedLauncher,
   GlobalConfig,
@@ -199,30 +198,26 @@ export function SettingsForm({
               label="Auto-populate install command"
               description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
             />
-            {/* port-pool only ships for macOS; the row is absent (not
-                disabled) on other platforms. */}
-            {isMac && (
-              <ToggleRow
-                checked={form.portPool && portPoolInstalled}
-                onCheckedChange={(v) =>
-                  setForm((prev) => ({ ...prev, portPool: v }))
-                }
-                disabled={!portPoolInstalled}
-                label="Automatically use port-pool"
-                description={
-                  <>
-                    Allocates ports for new worktrees and releases them on
-                    delete. Activates when a project has a{" "}
-                    <span className="font-mono">port-pool.config.json</span>.{" "}
-                    <PortPoolLink>
-                      {portPoolInstalled
-                        ? "Learn more"
-                        : "Install port-pool to enable this integration."}
-                    </PortPoolLink>
-                  </>
-                }
-              />
-            )}
+            <ToggleRow
+              checked={form.portPool && portPoolInstalled}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, portPool: v }))
+              }
+              disabled={!portPoolInstalled}
+              label="Automatically use port-pool"
+              description={
+                <>
+                  Allocates ports for new worktrees and releases them on delete.
+                  Activates when a project has a{" "}
+                  <span className="font-mono">port-pool.config.json</span>.{" "}
+                  <PortPoolLink>
+                    {portPoolInstalled
+                      ? "Learn more"
+                      : "Install port-pool to enable this integration."}
+                  </PortPoolLink>
+                </>
+              }
+            />
           </section>
 
           <section className="space-y-3">
@@ -271,9 +266,7 @@ export function SettingsForm({
                 Custom commands available in every worktree (e.g.{" "}
                 <span className="font-mono">claude</span>,{" "}
                 <span className="font-mono">tmux new-session</span>,{" "}
-                <span className="font-mono">
-                  {isMac ? "open ." : "start ."}
-                </span>
+                <span className="font-mono">open .</span>
                 ).
               </p>
             </div>

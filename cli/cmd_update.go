@@ -33,7 +33,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -145,9 +144,6 @@ func cmdUpdate(_ cliContext, args []string) (int, error) {
 	}
 	if len(parsed.positionals) > 0 {
 		return 2, usageErrf("update takes no arguments (flags: --check).")
-	}
-	if runtime.GOOS != "darwin" {
-		return 1, errf("Updating the app is only supported on macOS.")
 	}
 	if flavor != "prod" {
 		return 1, errf("This is the dev CLI. Dev builds have no update channel. Pull the checkout instead.")

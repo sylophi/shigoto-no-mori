@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
-import { isMac, modKey, shiftKey, shortcutLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -54,7 +53,7 @@ export function SidebarFooter({
   const settingsActive = location.pathname === "/settings";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
-  const modName = isMac ? "Meta" : "Control";
+  const modName = "Meta";
 
   // Dragging only reorders coherently when the displayed order matches the
   // stored order, so arranging forces the manual sort before entering the
@@ -155,8 +154,7 @@ export function SidebarFooter({
         // following space.
         tip={
           <>
-            Project launcher (<span className="font-mono">`</span> or{" "}
-            {shortcutLabel(modKey, shiftKey, "P")})
+            Project launcher (<span className="font-mono">`</span> or ⌘⇧P)
           </>
         }
       >
@@ -170,7 +168,7 @@ export function SidebarFooter({
           <LayoutGrid className="size-3.5" />
         </button>
       </SimpleTooltip>
-      <SimpleTooltip tip={`Add project (${shortcutLabel(modKey, "N")})`}>
+      <SimpleTooltip tip="Add project (⌘N)">
         <button
           type="button"
           onClick={openAddProject}

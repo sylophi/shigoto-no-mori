@@ -53,8 +53,8 @@ export async function checkoutBranch(
   await run(worktreePath, ["checkout", split ? split.branch : branch]);
 }
 
-// Centralizes the "delete the local branch after the worktree is gone"
-// policy shared by per-worktree delete and the nuke-everything path:
+// The "delete the local branch after the worktree is gone" policy for
+// the nuke-everything path (per-worktree deletes run the CLI's port):
 // honor the global toggle, never touch externals (we didn't create the
 // branch), skip placeholder branches, and swallow failures since the
 // branch may be shared with another worktree or be the primary's HEAD --

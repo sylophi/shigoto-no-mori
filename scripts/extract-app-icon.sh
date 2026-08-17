@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Extract a macOS .app's icon to a 128px PNG under renderer/assets/app-icons/.
+# Extract a macOS .app's icon to a 128px PNG under renderer/app-icons/.
 # Usage: scripts/extract-app-icon.sh <path-to-.app> [output-name]
 # Output name defaults to the app's basename, lowercased + hyphenated.
 set -euo pipefail
@@ -42,7 +42,7 @@ if [ -z "$NAME" ]; then
   NAME=$(echo "$BASE" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
 fi
 
-OUT="renderer/assets/app-icons/$NAME.png"
+OUT="renderer/app-icons/$NAME.png"
 mkdir -p "$(dirname "$OUT")"
 sips -s format png "$ICNS" --out "$OUT" -Z 128 > /dev/null
 echo "wrote $OUT"

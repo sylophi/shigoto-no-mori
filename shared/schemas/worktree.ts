@@ -131,9 +131,8 @@ export function deriveRemoteSyncState(
 export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
-  // The refine backstops the renderer's sanitizing: reserved device
-  // names ("con") or trailing dots ("foo.") break as directory names on
-  // Windows, so they never reach `git worktree add`.
+  // The refine backstops the renderer's sanitizing so reserved names
+  // ("root", "..") never reach `git worktree add`.
   worktreeName: z
     .string()
     .min(1)
@@ -149,11 +148,10 @@ export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   checkout: z.boolean().optional(),
 });
 
-export const CarryOverFailureSchema = z.object({
+const CarryOverFailureSchema = z.object({
   path: z.string(),
   reason: z.string(),
 });
-export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;
 
 export const CarryOverReportSchema = z.object({
   applied: z.number().int().nonnegative(),
@@ -162,7 +160,6 @@ export const CarryOverReportSchema = z.object({
   // are reported separately from the per-entry failures above.
   includeFailures: z.array(CarryOverFailureSchema).optional(),
 });
-export type CarryOverReport = z.infer<typeof CarryOverReportSchema>;
 
 export const CreateWorktreeResultSchema = z.object({
   worktree: WorktreeSchema,

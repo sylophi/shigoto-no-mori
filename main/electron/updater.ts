@@ -12,9 +12,8 @@
 // without this process's state machine ever leaving idle -- so boot
 // seeds from the manifest and the install path re-checks it.
 //
-// macOS-only: the Windows build is a portable zip with no install
-// location to swap, and dev builds run from a checkout. Both report
-// `unsupported` so the renderer hides the check button.
+// Dev builds run from a checkout, so they report `unsupported` and the
+// renderer hides the check button.
 //
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
 // testing of a signed build -- the CLI child inherits it from our
@@ -33,14 +32,8 @@ import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "../lib/util/jsonFile";
 import { shigomoriRoot } from "../lib/util/paths";
-import { isMac } from "../lib/util/platform";
 import { confirmBusyAction } from "./busyPrompt";
-import {
-  cliAvailable,
-  cliFailureMessage,
-  runCli,
-  spawnCliDetached,
-} from "./cliRunner";
+import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -244,7 +237,7 @@ export function installUpdaterImpl(): void {
 
 export function startUpdater(): void {
   if (started) return;
-  if (!isMac || !app.isPackaged || !cliAvailable()) {
+  if (!app.isPackaged) {
     // Publishes the state file too, so `sm update` reads "unsupported"
     // instead of waiting on a bridge that will never start.
     setState({ kind: "unsupported" });

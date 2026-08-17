@@ -1,15 +1,12 @@
 // Thin wrappers around Electron's shell API so the renderer can open files
-// in the user's default app and reveal items in the OS file manager.
-// toNativePath: paths arrive in git's forward-slash form, which
-// explorer.exe rejects.
+// in the user's default app and reveal items in Finder.
 import { shell } from "electron";
 import { shellContract } from "@shared/ipc/modules/shell";
 import type { Handlers } from "@shared/ipc/types";
-import { toNativePath } from "../../lib/util/paths";
 
 export const shellHandlers: Handlers<typeof shellContract> = {
   openPath: async ({ path }) => {
-    const message = await shell.openPath(toNativePath(path));
+    const message = await shell.openPath(path);
     if (message) throw new Error(message);
   },
 
@@ -18,6 +15,6 @@ export const shellHandlers: Handlers<typeof shellContract> = {
   },
 
   showItemInFolder: ({ path }) => {
-    shell.showItemInFolder(toNativePath(path));
+    shell.showItemInFolder(path);
   },
 };

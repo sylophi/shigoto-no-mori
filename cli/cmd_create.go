@@ -1,10 +1,9 @@
 package main
 
 // sm create: new managed worktree, then the create lifecycle awaited
-// to completion (the app fires it in the background; a CLI caller
-// wants the worktree ready when the command returns). Sequencing
-// mirrors runCreateLifecycle in main/lib/worktrees/lifecycle.ts:
-// carry-over -> setup -> port-pool provision. Human mode streams
+// to completion (the app fires it in the background via --json; a CLI
+// caller wants the worktree ready when the command returns).
+// Sequencing: carry-over -> setup -> port-pool provision. Human mode streams
 // progress to stderr, prints the path as the only stdout line, then
 // drops into a subshell in the new worktree (--no-cd skips it);
 // --json streams NDJSON events ending with a "done" record. Exit 3

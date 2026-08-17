@@ -4,26 +4,10 @@
 // matching "is this path one we manage?" check.
 
 import { rmdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
+import { dirname } from "node:path";
+import type { ShigomoriConfig } from "@shared/schemas";
 import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
-import { comparablePath, shigomoriRoot } from "../util/paths";
-
-export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
-  return config?.worktreeLayout ?? "managed-root";
-}
-
-export function resolveWorktreeBase(
-  projectPath: string,
-  config: ShigomoriConfig | null,
-): string {
-  return worktreeBaseFor({
-    layout: layoutOf(config),
-    projectPath,
-    shigomoriRoot: shigomoriRoot(),
-    customPath: config?.customWorktreePath ?? null,
-  });
-}
+import { shigomoriRoot } from "../util/paths";
 
 // Every base directory whose direct children count as "managed" for
 // this project. All known layouts are included unconditionally so
@@ -50,19 +34,17 @@ export function managedBasesFor(
 // A worktree is managed when it sits DIRECTLY under one of the bases --
 // the app only ever creates worktrees as `<base>/<name>`. Parent
 // equality, not prefix matching: a prefix check would let a root base
-// ("C:\", "/") claim every worktree on the volume, and managed status
-// feeds destructive flows (nuke, delete cleanup).
+// ("/") claim every worktree on the volume, and managed status feeds
+// destructive flows (nuke, delete cleanup).
 export function isManagedPath(
   worktreePath: string,
   managedBases: string[],
 ): boolean {
-  const folded = comparablePath(worktreePath).replace(/\/+$/, "");
+  const folded = worktreePath.replace(/\/+$/, "");
   const cut = folded.lastIndexOf("/");
   if (cut < 0) return false;
   const parent = folded.slice(0, cut);
-  return managedBases.some(
-    (base) => parent === comparablePath(base).replace(/\/+$/, ""),
-  );
+  return managedBases.some((base) => parent === base.replace(/\/+$/, ""));
 }
 
 // Best-effort cleanup of the empty parent directory a worktree just
@@ -79,19 +61,20 @@ export async function pruneEmptyManagedParents(
   projectPath: string,
 ): Promise<void> {
   const parent = dirname(oldWorktreePath);
+  const baseFor = (layout: "managed-root" | "in-project"): string =>
+    worktreeBaseFor({
+      layout,
+      projectPath,
+      shigomoriRoot: shigomoriRoot(),
+      customPath: null,
+    });
 
-  const managedRootBase = join(
-    shigomoriRoot(),
-    "worktrees",
-    basename(projectPath),
-  );
-  if (comparablePath(parent) === comparablePath(managedRootBase)) {
+  if (parent === baseFor("managed-root")) {
     await tryRmdir(parent);
     return;
   }
 
-  const inProjectBase = join(projectPath, ".shigomori", "worktrees");
-  if (comparablePath(parent) === comparablePath(inProjectBase)) {
+  if (parent === baseFor("in-project")) {
     const removed = await tryRmdir(parent);
     if (removed) {
       await tryRmdir(dirname(parent));

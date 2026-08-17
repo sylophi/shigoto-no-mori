@@ -5,7 +5,8 @@
 // components.
 //
 // The word lists live in cli/embed/name-words.json, embedded into the
-// Go CLI and imported here, so both engines draw from one pool.
+// Go CLI (which does the picking at create time) and imported here for
+// the New Worktree form's pre-pick, so both draw from one pool.
 import nameWords from "../../../cli/embed/name-words.json";
 
 const ADJECTIVES: readonly string[] = nameWords.adjectives;

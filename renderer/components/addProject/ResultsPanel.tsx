@@ -3,7 +3,6 @@ import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { modKey, shortcutLabel } from "@/lib/platform";
 import { ResultRow } from "./ResultRow";
 
 interface ResultsPanelProps {
@@ -104,7 +103,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
                 : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`}
             </span>
             <KbdGroup className="pointer-events-none">
-              <Kbd>{shortcutLabel(modKey, "↩")}</Kbd>
+              <Kbd>⌘↩</Kbd>
             </KbdGroup>
           </button>
         </div>

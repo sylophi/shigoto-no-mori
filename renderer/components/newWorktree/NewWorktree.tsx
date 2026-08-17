@@ -264,8 +264,8 @@ export function NewWorktree() {
           {folderUnusable && (
             <p className="text-xs text-destructive">
               <span className="font-mono">{folderSourceRaw}</span> can't be used
-              as a folder name (root, primary, dot names, and Windows device
-              names are reserved). Pick a different folder name.
+              as a folder name (root, primary, and dot names are reserved). Pick
+              a different folder name.
             </p>
           )}
           <p className="text-xs text-muted-foreground">

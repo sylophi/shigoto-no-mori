@@ -1,9 +1,8 @@
 package main
 
 // sm shelve / unshelve: the app's "out of focus" flag. Pure UI state
-// in state.json -- nothing on disk changes. Same guards as
-// setWorktreeShelved in main/lib/worktrees/operations.ts: the primary
-// checkout and external worktrees can't be shelved.
+// in state.json -- nothing on disk changes. The primary checkout and
+// external worktrees can't be shelved.
 
 func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {
 	parsed, err := parseCmdArgs(args, worktreeTargetSpec())

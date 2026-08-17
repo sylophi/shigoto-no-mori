@@ -2,9 +2,8 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
-import { checkoutBranch, deleteAnyLocalBranch } from "./branches";
 import { run, runLenient } from "./core";
-import { fetchAllRemotes, listRemotes, splitRemoteRefSync } from "./remotes";
+import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -87,55 +86,4 @@ export async function syncWithPrimary(
 ): Promise<void> {
   await fetchAllRemotes(projectPath);
   await rebaseOrMergeAgainst(worktreePath, primaryRef);
-}
-
-// Switch a worktree onto the primary branch and bring it up to date with
-// the remote. Used by the "delete branch and switch to <primary>" cleanup
-// on the repo root after a PR merges: the local primary is typically behind
-// the just-merged remote tip. When the primary tracks a remote we
-// fast-forward the local branch onto it with `pull --ff-only`, which is
-// non-destructive — it refuses (surfacing git's error in the UI) rather
-// than discarding local commits or uncommitted work when a clean
-// fast-forward isn't possible. A purely local primary has no remote to sync
-// to, so we just check it out.
-export async function switchToPrimaryBranch(
-  worktreePath: string,
-  projectPath: string,
-  primaryRef: string,
-): Promise<void> {
-  const remotes = await listRemotes(projectPath);
-  // Checking out the qualified ref creates/lands on the local tracking
-  // branch (never a detached HEAD); a local primaryRef is checked out as-is.
-  await checkoutBranch(worktreePath, primaryRef, remotes);
-  const split = splitRemoteRefSync(primaryRef, remotes);
-  if (split) {
-    // `pull` fetches the ref itself, so no separate fetch is needed.
-    await run(worktreePath, ["pull", "--ff-only", split.remote, split.branch]);
-  }
-}
-
-// Post-merge cleanup for the repo root: land it back on the primary branch
-// and delete the now-merged branch it was sitting on. This MUST be one
-// main-side operation rather than two chained renderer mutations: the switch
-// flips the root's branch to the primary, which unmounts the cleanup box,
-// and React Query silently drops a `mutate()` callback whose component has
-// unmounted — so a renderer-chained delete is lost to that race. The
-// checkout frees the merged branch (git refuses to delete a checked-out
-// branch), so order matters: switch first, then delete. We never delete the
-// branch we just landed on.
-export async function switchToPrimaryAndDeleteBranch(
-  worktreePath: string,
-  projectPath: string,
-  primaryRef: string,
-  mergedBranch: string,
-): Promise<void> {
-  await switchToPrimaryBranch(worktreePath, projectPath, primaryRef);
-  const remotes = await listRemotes(projectPath);
-  const localPrimary =
-    splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef;
-  if (mergedBranch !== localPrimary) {
-    // Force: after a squash merge the branch's own commits are never
-    // reachable from the primary, so safe delete would always refuse.
-    await deleteAnyLocalBranch(projectPath, mergedBranch, true);
-  }
 }

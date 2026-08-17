@@ -11,9 +11,7 @@ import { useTheme } from "@/hooks/ui/useTheme";
 //   Ctrl+R  drop both previews back to the saved appearance
 // They stage the same non-persisted overrides the Settings page uses,
 // so nothing is written to config.json; a window reload also resets.
-// Bare Ctrl (not Cmd) keeps clear of the real menu accelerators on
-// macOS; on Windows dev builds the menu's reload accelerator may claim
-// Ctrl+R first, which is fine -- a reload also resets the previews.
+// Bare Ctrl (not Cmd) keeps clear of the real menu accelerators.
 // e.code keeps the physical key stable across keyboard layouts.
 export function DevThemeHotkeys() {
   const { data: runtime } = useRuntimeInfo();

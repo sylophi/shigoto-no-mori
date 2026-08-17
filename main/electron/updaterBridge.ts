@@ -123,8 +123,7 @@ export function startUpdaterBridge(
 let bridgeWatcher: ReturnType<typeof watch> | null = null;
 
 // Same contract as stopStateWatcher: released before the data-folder
-// move renames the root (Windows watch handles can block the rename).
-// The post-move relaunch starts a fresh bridge.
+// move renames the root. The post-move relaunch starts a fresh bridge.
 export function stopUpdaterBridge(): void {
   bridgeWatcher?.close();
   bridgeWatcher = null;

@@ -17,7 +17,7 @@ import type {
   ShellIntegrationStatus,
 } from "@shared/ipc/modules/cli";
 import { ShellHookStateSchema } from "@shared/ipc/modules/cli";
-import { cliAvailable, cliFailureMessage, runCli } from "./cliRunner";
+import { cliFailureMessage, runCli } from "./cliRunner";
 
 const execFileP = promisify(execFile);
 
@@ -94,13 +94,10 @@ function statusFrom(shells: ShellHookState[]): ShellIntegrationStatus {
   const base = loginShellBase();
   const loginShell =
     base !== null && shells.some((s) => s.shell === base) ? base : null;
-  return { supported: true, loginShell, shells };
+  return { loginShell, shells };
 }
 
 export async function shellIntegrationStatus(): Promise<ShellIntegrationStatus> {
-  if (!cliAvailable()) {
-    return { supported: false, loginShell: null, shells: [] };
-  }
   const result = await runShellCli(["shell", "status"]);
   const shells = shellsFromDocs(result.docs);
   if (result.code !== 0 || shells.length === 0) {

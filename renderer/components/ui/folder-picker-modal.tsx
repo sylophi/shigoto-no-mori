@@ -10,11 +10,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
-import { fileManagerName } from "@/lib/platform";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
-import { modKey, shortcutLabel } from "@/lib/platform";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -99,7 +97,7 @@ export function FolderPickerModal({
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
       confirm();
@@ -130,7 +128,7 @@ export function FolderPickerModal({
   };
 
   const canBrowseUp = canNavigateUp(query);
-  const confirmKbd = hasHighlighted ? shortcutLabel(modKey, "↩") : "↩";
+  const confirmKbd = hasHighlighted ? "⌘↩" : "↩";
 
   return (
     // Escape is owned by the Command.Input handler so it can also exit
@@ -254,7 +252,7 @@ export function FolderPickerModal({
             }}
           >
             <FileManagerIcon />
-            Open in {fileManagerName}
+            Open in Finder
           </ChipButton>
         </div>
       </Command>

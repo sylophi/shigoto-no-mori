@@ -11,10 +11,7 @@ const execFileP = promisify(execFile);
 // timeout.
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-// Every gh spawn funnels through here. windowsHide: gh.exe is a
-// console-subsystem binary, and spawning it from the windowless packaged
-// app would otherwise flash a conhost window on every background PR
-// sweep.
+// Every gh spawn funnels through here.
 export function execGh(
   args: string[],
   options: { cwd?: string; maxBuffer?: number; timeout?: number } = {},
@@ -23,7 +20,6 @@ export function execGh(
   // override (and disable) the default -- spread own-properties win
   // even when undefined.
   return execFileP("gh", args, {
-    windowsHide: true,
     timeout: options.timeout ?? DEFAULT_TIMEOUT_MS,
     cwd: options.cwd,
     maxBuffer: options.maxBuffer,

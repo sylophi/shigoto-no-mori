@@ -1,29 +1,154 @@
-// App detection + launching, platform-selected once here. Each platform
-// owns its own catalog and launch mechanics (darwin.ts / win32.ts); this
-// module adds the pieces that are genuinely shared -- the detection
-// cache, custom launchers, and protocol deep links -- so callers never
-// branch on platform themselves.
-import { spawn } from "node:child_process";
-import { isUncPath } from "@shared/worktreeLayout";
-import { isWindows } from "../util/platform";
+// App detection + launching: the catalog of supported tools, detected
+// via .app bundle presence OR a CLI shim on PATH and launched through
+// the shim (preferred) or `open -a`, plus the detection cache, custom
+// launchers, and protocol deep links.
+import { execFile, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename } from "node:path";
+import { promisify } from "node:util";
+import { binaryOnPath } from "../util/binaries";
+import {
+  addProjectViaBundledCli,
+  T3_BUNDLED_CLI_SUBPATH,
+  T3CODE_ID,
+} from "./t3code";
 import { ttlValueCache } from "../util/ttlCache";
-import { darwinLaunchers } from "./darwin";
-import type { DetectedApp, PlatformLaunchers } from "./types";
-import { win32Launchers } from "./win32";
+import catalogJson from "../../../cli/embed/launcher-catalog.json";
 
-export type { DetectedApp } from "./types";
+const exec = promisify(execFile);
 
-const impl: PlatformLaunchers = isWindows ? win32Launchers : darwinLaunchers;
+interface CatalogEntry {
+  id: string;
+  label: string;
+  // Resolved against APP_ROOTS. `__finder__` is the always-available
+  // Finder sentinel.
+  bundleNames: string[];
+  cli?: string;
+}
 
-// Detection is expensive (a dozen `which`/`where` shell-outs plus
-// filesystem checks). Cache briefly so a single user action that needs
-// the list a few times doesn't re-shell each time. Refreshes when the
-// user opens the launcher row again after the TTL.
+export interface DetectedApp extends CatalogEntry {
+  available: boolean;
+}
+
+// The renderer maps each id to a brand SVG (or a lucide fallback).
+// Catalog shape mirrors T3 Code's editor list so any tool worth
+// supporting there is supported here too. The entries live in
+// cli/embed/launcher-catalog.json, embedded into the Go CLI and
+// imported here, so `sm open` and the launcher row offer one list.
+// (T3 Code deliberately has no `cli`: the npm-installable `t3` binary
+// starts a server rather than opening a folder, and launching needs
+// the app bundle anyway -- see t3code.ts.)
+const CATALOG: CatalogEntry[] = catalogJson;
+
+const APP_ROOTS = [
+  "/Applications",
+  `${homedir()}/Applications`,
+  "/System/Applications",
+] as const;
+
+function appExists(bundleName: string): boolean {
+  return bundleName === "__finder__" || bundlePath(bundleName) !== null;
+}
+
+function bundlePath(bundleName: string): string | null {
+  for (const root of APP_ROOTS) {
+    const candidate = `${root}/${bundleName}`;
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+async function detect(): Promise<DetectedApp[]> {
+  return Promise.all(
+    CATALOG.map(async (entry) => {
+      const bundleHit = entry.bundleNames.some(appExists);
+      const cliHit = entry.cli ? await binaryOnPath(entry.cli) : false;
+      // Object.assign onto a fresh object, not a spread: CATALOG is
+      // module-level and detect() re-runs behind the TTL cache, so the
+      // entry itself must never be mutated.
+      return Object.assign({}, entry, { available: bundleHit || cliHit });
+    }),
+  );
+}
+
+function resolveInstalledBundle(bundleNames: string[]): {
+  bundle: string;
+  appName: string;
+} {
+  const bundle = bundleNames
+    .map(bundlePath)
+    .find((p): p is string => p !== null);
+  if (!bundle) {
+    throw new Error(`No installed app found for ${bundleNames.join(", ")}`);
+  }
+  return { bundle, appName: basename(bundle, ".app") };
+}
+
+async function openWithBundle(
+  bundleNames: string[],
+  worktreePath: string,
+): Promise<void> {
+  if (bundleNames.includes("__finder__")) {
+    await exec("open", [worktreePath]);
+    return;
+  }
+  const { appName } = resolveInstalledBundle(bundleNames);
+  await exec("open", ["-a", appName, worktreePath]);
+}
+
+// T3 Code can't open a folder directly (see t3code.ts): register the
+// worktree via the CLI bundled in the app, then activate the app. On a
+// cold start T3's landing route auto-opens a draft composer for the
+// most recently active project -- the one just added -- so this lands
+// ready to prompt; when already running it can only surface the project
+// and focus the window.
+async function launchT3Code(
+  app: DetectedApp,
+  worktreePath: string,
+): Promise<void> {
+  const { bundle, appName } = resolveInstalledBundle(app.bundleNames);
+  await addProjectViaBundledCli(
+    `${bundle}/Contents/MacOS/${appName}`,
+    [`${bundle}/Contents/Resources`, ...T3_BUNDLED_CLI_SUBPATH].join("/"),
+    worktreePath,
+  );
+  // Activate by full path, not name: with two variants installed (say
+  // stable and Alpha) a name lookup could focus a different copy than
+  // the one whose CLI just registered the project.
+  await exec("open", ["-a", bundle]);
+}
+
+export async function launchDetected(
+  app: DetectedApp,
+  worktreePath: string,
+): Promise<void> {
+  if (app.id === T3CODE_ID) {
+    return launchT3Code(app, worktreePath);
+  }
+  // `open -a` routes through Launch Services, which ignores in-app window
+  // preferences like Zed's "CLI Default Open Behavior" or VS Code's
+  // `window.openFoldersInNewWindow`. Prefer the CLI shim so those
+  // settings are honored; fall back to the bundle if the shim is missing
+  // or broken.
+  if (app.cli) {
+    try {
+      await exec(app.cli, [worktreePath]);
+      return;
+    } catch {
+      // Fall through.
+    }
+  }
+  await openWithBundle(app.bundleNames, worktreePath);
+}
+
+// Detection is expensive (a dozen `which` shell-outs plus filesystem
+// checks). Cache briefly so a single user action that needs the list a
+// few times doesn't re-shell each time. Refreshes when the user opens
+// the launcher row again after the TTL.
 const DETECT_TTL_MS = 5_000;
 
-const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
-  impl.detect(),
-);
+const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, detect);
 
 export function detectApps(): Promise<DetectedApp[]> {
   return detectionCache.get();
@@ -36,23 +161,14 @@ export function findDetected(
   return all.find((a) => a.id === id);
 }
 
-export function launchDetected(
-  app: DetectedApp,
-  worktreePath: string,
-): Promise<void> {
-  return impl.launch(app, worktreePath);
-}
-
 // Deep-link URL for launchers whose app opens via a custom protocol
-// rather than an exe/bundle invocation. These deliberately bypass the
-// detected exe even when one exists: the protocol URL is the only API
-// these apps expose for "open this folder" -- spawning the exe with a
+// rather than a bundle invocation. These deliberately bypass the
+// detected app even when one exists: the protocol URL is the only API
+// these apps expose for "open this folder" -- launching the app with a
 // path argument just opens the app. Detection still gates visibility
 // (the launcher only shows when the app is installed, and installers
 // register their scheme). The IPC layer opens the URL with Electron's
-// shell.openExternal -- routing it through a shell would expose it to
-// cmd.exe's %VAR% expansion on Windows. Ids a platform's catalog
-// doesn't include (codex is macOS-only) are simply never asked for.
+// shell.openExternal.
 export function deepLinkFor(
   appId: string,
   worktreePath: string,
@@ -71,30 +187,19 @@ export function deepLinkFor(
 }
 
 export function launchCustom(command: string, worktreePath: string): void {
-  // Same cmd.exe limitation as the script runner: a UNC cwd silently
-  // falls back to %windir%, so the user's command would run in
-  // C:\Windows instead of the worktree.
-  if (isWindows && isUncPath(worktreePath)) {
-    throw new Error(
-      "Custom launchers can't run in a network (UNC) worktree on " +
-        "Windows; map the share to a drive letter first.",
-    );
-  }
   const env = {
     ...process.env,
     SHIGOMORI_WORKSPACE_PATH: worktreePath,
   };
   // Detached + unref so the spawned process outlives this main process,
   // which matches "fire and forget launcher" semantics. `shell: true`
-  // runs the user's command through /bin/sh on POSIX and cmd.exe on
-  // Windows, so commands are authored in the platform's native syntax.
+  // runs the user's command through /bin/sh.
   const child = spawn(command, [], {
     cwd: worktreePath,
     env,
     shell: true,
     detached: true,
     stdio: "ignore",
-    windowsHide: true,
   });
   child.unref();
 }

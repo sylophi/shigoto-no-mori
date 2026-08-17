@@ -13,9 +13,6 @@
 //
 // Naming and path policy lives in @shared/cliDist.mts; this module
 // owns the link state machine and the "is that link ours?" judgment.
-//
-// Not on Windows: the portable zip has no stable install location to
-// link from, so Windows keeps the app-only workflow.
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -27,9 +24,7 @@ import {
 } from "@shared/cliDist.mts";
 import type { CliStatus } from "@shared/ipc/modules/cli";
 import { app } from "electron";
-import { comparablePath } from "../lib/util/paths";
-import { isWindows } from "../lib/util/platform";
-import { cliAvailable, cliBinaryPath } from "./cliRunner";
+import { cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";
 
 function cliFlavor(): "prod" | "dev" {
@@ -77,8 +72,8 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
   if (!stat.isSymbolicLink()) return "foreign";
   const target = await readlink(link).catch(() => null);
   if (target === null) return "foreign";
-  const binary = isWindows ? null : cliBinaryPath();
-  if (binary !== null && comparablePath(target) === comparablePath(binary)) {
+  const binary = cliBinaryPath();
+  if (binary !== null && target === binary) {
     return "this-binary";
   }
   const name = cliName();
@@ -92,7 +87,7 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
 function isOnPath(dir: string): boolean {
   return (process.env.PATH ?? "")
     .split(delimiter)
-    .some((entry) => comparablePath(entry) === comparablePath(dir));
+    .some((entry) => entry === dir);
 }
 
 // Gatekeeper app translocation (quarantined app run from ~/Downloads)
@@ -112,10 +107,6 @@ export async function cliLinkStatus(): Promise<CliStatus> {
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
-  const binary = isWindows ? null : cliBinaryPath();
-  if (binary === null) {
-    return { ...base, supported: false, state: "missing" };
-  }
   // Both links must be healthy before Settings claims "Installed":
   // inspect each and report the worst state, with linkPath pointing at
   // the offending link so the foreign/stale copy names the right path.
@@ -137,7 +128,7 @@ export async function cliLinkStatus(): Promise<CliStatus> {
   const foreignPaths = links
     .filter((entry) => entry.state === "foreign")
     .map((entry) => entry.link);
-  return { ...base, linkPath: worstLink, foreignPaths, supported: true, state };
+  return { ...base, linkPath: worstLink, foreignPaths, state };
 }
 
 function stateOfOwnership(
@@ -178,9 +169,6 @@ async function pointLinksAt(binary: string, force: boolean): Promise<void> {
 // doesn't point at the app can be fixed without a trip to the shell.
 export async function installCliLinks(force: boolean): Promise<CliStatus> {
   const status = await cliLinkStatus();
-  if (!status.supported) {
-    throw new Error("No CLI binary is available to link.");
-  }
   if (status.state === "foreign" && !force) {
     throw new Error(
       `${status.linkPath} already exists and wasn't created by ` +
@@ -202,11 +190,10 @@ export async function installCliLinks(force: boolean): Promise<CliStatus> {
 }
 
 // Remove this flavor's links when they are recognizably shigomori-made.
-// Anything else at the path stays. Shared by the Settings uninstall
-// action and "Nuke everything". Accepts our-family on purpose: nuke
+// Anything else at the path stays. Accepts our-family on purpose: nuke
 // should also take the checkout link the prod app otherwise refuses to
 // manage.
-export async function uninstallCliLinks(): Promise<void> {
+async function uninstallCliLinks(): Promise<void> {
   await Promise.all(
     linkNames().map(async (name) => {
       const link = join(cliUserBinDir(), name);
@@ -223,11 +210,13 @@ export async function uninstallCliLinks(): Promise<void> {
 // so unlinking always runs. The failure then surfaces afterwards
 // rather than being swallowed: a hook left behind is inert (its guard
 // line no-ops once the command is gone), yet the user should hear it
-// stayed. Skipped when the binary can't run at all (Windows, missing
-// dev build), where there are no hooks to remove.
+// stayed.
 export async function uninstallCliEverything(): Promise<void> {
   let hookFailure: unknown;
-  if (cliAvailable()) {
+  // No binary means the hook-removal spawn can't run -- and the guarded
+  // hook line is inert without the command anyway, so skipping is not a
+  // failure worth reporting.
+  if (cliBinaryPath() !== null) {
     try {
       await uninstallShellIntegration();
     } catch (err) {
@@ -245,7 +234,7 @@ export async function uninstallCliEverything(): Promise<void> {
 export async function repairCliLinks(): Promise<void> {
   if (isTranslocated()) return;
   const status = await cliLinkStatus();
-  if (!status.supported || status.state !== "stale") return;
+  if (status.state !== "stale") return;
   const binary = cliBinaryPath();
   if (binary === null) return;
   try {

@@ -5,7 +5,6 @@
 // the two languages share one source of truth.
 //   default -> dist-cli/sm   targets ~/shigomori     (bundled with the app)
 //   --dev   -> dist-cli/smd  targets ~/shigomori-dev (built by `pnpm dev`)
-// The CLI is not supported on Windows and is never built for it.
 //
 // Run: pnpm cli:build [--dev]
 import { execFileSync } from "node:child_process";
@@ -29,13 +28,6 @@ const version =
     ? "dev"
     : JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 
-if (
-  process.env.GOOS === "windows" ||
-  (process.env.GOOS === undefined && process.platform === "win32")
-) {
-  console.error("[build-cli] the CLI is not supported on Windows");
-  process.exit(1);
-}
 const outfile = join(repoRoot, CLI_DIST_DIR, cliBinaryName(flavor));
 
 const ldflags = [

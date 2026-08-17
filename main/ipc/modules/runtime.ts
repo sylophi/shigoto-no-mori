@@ -3,7 +3,6 @@ import { homedir } from "node:os";
 import { basename } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
-import { setDoubutsu } from "../../electron/appearance";
 import { uninstallCliEverything } from "../../electron/cliInstall";
 import { relaunchApp } from "../../electron/relaunch";
 import { stopStateWatcher } from "../../electron/stateWatcher";
@@ -27,12 +26,6 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   // and is written by the renderer through the globalConfig IPC.
   setTheme: ({ theme }) => {
     nativeTheme.themeSource = theme;
-  },
-
-  // Same contract for doubutsu: native chrome (the win32 caption
-  // overlay and window background) follows the applied value.
-  setDoubutsu: ({ enabled }) => {
-    setDoubutsu(enabled);
   },
 
   moveRoot: async ({ parentDir }) => {

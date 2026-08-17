@@ -2,34 +2,19 @@
 // https://code.claude.com/docs/en/worktrees#copy-gitignored-files-into-worktrees):
 // gitignore-syntax patterns
 // whose matches, when also gitignored, are copied into new worktrees.
-// Always copy mode, resolved fresh per worktree creation, never persisted.
+// Creation-time application lives in the CLI engine. This module only
+// backs the Configure view's read.
 
 import { join } from "node:path";
-import {
-  isSafeRelPath,
-  makeIgnoreMatcher,
-  normalizeRelPath,
-} from "@shared/gitPaths";
+import { makeIgnoreMatcher } from "@shared/gitPaths";
 import { pathExists } from "../util/paths";
-import type {
-  CarryOverEntry,
-  ShigomoriConfig,
-  WorktreeIncludeStatus,
-} from "@shared/schemas";
+import type { WorktreeIncludeStatus } from "@shared/schemas";
 import {
   listIgnoredPaths,
   listUntrackedMatchingExcludeFile,
 } from "../git/branches";
 
-export const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
-
-export interface WorktreeIncludeResolution {
-  // Copy-mode entries to apply, trailing slashes stripped.
-  entries: CarryOverEntry[];
-  // Raw matched paths (directories keep their trailing slash) so callers
-  // can build a coverage matcher over the same shape git emitted.
-  matchedPaths: string[];
-}
+const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 
 // Spec: a path is copied when it matches a .worktreeinclude pattern AND is
 // gitignored. `--others` already excludes tracked files; the intersection
@@ -52,66 +37,6 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
 
 function stripTrailingSlash(p: string): string {
   return p.endsWith("/") ? p.slice(0, -1) : p;
-}
-
-// null = nothing to do (toggle off, or no .worktreeinclude in the repo).
-// Git/fs errors propagate; the caller owns the best-effort policy.
-export async function resolveWorktreeInclude(
-  projectPath: string,
-  config: ShigomoriConfig | null,
-): Promise<WorktreeIncludeResolution | null> {
-  if (config?.useWorktreeInclude === false) return null;
-  if (!(await pathExists(join(projectPath, WORKTREE_INCLUDE_FILE)))) {
-    return null;
-  }
-  const matchedPaths = await resolveMatchedPaths(projectPath);
-  const entries: CarryOverEntry[] = [];
-  for (const matched of matchedPaths) {
-    const path = stripTrailingSlash(matched);
-    if (path.length > 0 && isSafeRelPath(path)) {
-      entries.push({ path, mode: "copy" });
-    }
-  }
-  return { entries, matchedPaths };
-}
-
-// Manual entries now covered by .worktreeinclude are auto-removed (user
-// decision: the file wins, regardless of the entry's mode).
-export function reconcileManualEntries(
-  manual: CarryOverEntry[],
-  matchedPaths: string[],
-): { kept: CarryOverEntry[]; removedPaths: string[] } {
-  const covered = makeIgnoreMatcher(matchedPaths);
-  const kept: CarryOverEntry[] = [];
-  const removedPaths: string[] = [];
-  for (const entry of manual) {
-    if (covered(normalizeRelPath(entry.path))) removedPaths.push(entry.path);
-    else kept.push(entry);
-  }
-  return { kept, removedPaths };
-}
-
-// Manual entries win when an include path collides with or overlaps a
-// manual path. Exact collisions are only reachable when the reconcile
-// write failed and a covered manual entry survived. Nested overlaps are
-// reachable normally: a manual entry for a partially-gitignored directory
-// survives reconciliation while the file's patterns match ignored files
-// inside it, and applyCarryOver runs entries concurrently, so applying
-// both races the parent against the child (spurious EEXIST failures).
-export function mergeCarryOver(
-  manual: CarryOverEntry[],
-  include: CarryOverEntry[],
-): CarryOverEntry[] {
-  const manualPaths = manual.map((e) => normalizeRelPath(e.path));
-  return [
-    ...manual,
-    ...include.filter((e) => !manualPaths.some((m) => pathsOverlap(e.path, m))),
-  ];
-}
-
-// True when the paths are equal or one is nested inside the other.
-function pathsOverlap(a: string, b: string): boolean {
-  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 }
 
 // Pure read for the Configure view. Never throws: a broken file or git

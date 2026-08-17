@@ -148,23 +148,6 @@ export function splitRemoteRefSync(
   return best;
 }
 
-export async function splitRemoteRef(
-  projectPath: string,
-  ref: string,
-): Promise<{ remote: string; branch: string } | null> {
-  return splitRemoteRefSync(ref, await listRemotes(projectPath));
-}
-
-// One branch from one remote -- cheaper than `fetch --all` when only
-// that ref is needed.
-export async function fetchRemoteRef(
-  projectPath: string,
-  remote: string,
-  branch: string,
-): Promise<void> {
-  await run(projectPath, ["fetch", "--quiet", remote, branch]);
-}
-
 // Single-string snapshot of every remote-tracking ref + its SHA. Compared
 // before/after a fetch to skip the broadcast when nothing actually moved.
 export async function snapshotRemoteRefs(projectPath: string): Promise<string> {

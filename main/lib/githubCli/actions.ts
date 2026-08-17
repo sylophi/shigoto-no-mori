@@ -1,5 +1,3 @@
-import type { MergeMethod } from "@shared/schemas";
-import { readShigomoriConfig, writeShigomoriConfig } from "../config/project";
 import { isENOENT } from "../util/paths";
 import { execGh, trimGhError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
@@ -57,46 +55,6 @@ export async function getPullRequestDiff(opts: {
     maxBuffer: 32 * 1024 * 1024,
     timeout: 120_000,
   });
-}
-
-const MERGE_FLAG: Record<MergeMethod, string> = {
-  merge: "--merge",
-  squash: "--squash",
-  rebase: "--rebase",
-};
-
-// Performs the actual `gh pr merge` and persists the user's pick into
-// the per-project config so the split button defaults to it next time.
-// Throws on gh failure -- the renderer surfaces the message inline.
-export async function mergePullRequest(opts: {
-  projectId: string;
-  cwd: string;
-  number: number;
-  method: MergeMethod;
-}): Promise<void> {
-  const { projectId, cwd, number, method } = opts;
-  await runGh(["pr", "merge", String(number), MERGE_FLAG[method]], {
-    cwd,
-    fallback: "gh pr merge failed",
-  });
-  // Best-effort: failure to persist the pref shouldn't fail the merge.
-  try {
-    const current = (await readShigomoriConfig(projectId).catch(
-      () => null,
-    )) ?? {
-      defaultBranch: "main",
-    };
-    if (current.lastMergeMethod !== method) {
-      await writeShigomoriConfig(projectId, {
-        ...current,
-        lastMergeMethod: method,
-      });
-    }
-  } catch {
-    // swallow
-  }
-  // Cache eviction is the IPC handler's job: it owns the engine choice
-  // (CLI vs TS) and evicts once for whichever path ran.
 }
 
 // Flips a PR between draft and ready for review. `gh pr ready` toggles

@@ -60,7 +60,7 @@ func resolveContext(cwd string) cliContext {
 	}
 
 	for _, proj := range ctx.projects {
-		if comparablePath(proj.Path) != comparablePath(primaryPath) {
+		if proj.Path != primaryPath {
 			continue
 		}
 		identities, err := listWorktreeIdentities(proj)
@@ -68,7 +68,7 @@ func resolveContext(cwd string) cliContext {
 			return ctx
 		}
 		for _, id := range identities {
-			if comparablePath(id.Path) == comparablePath(toplevel) {
+			if id.Path == toplevel {
 				ctx.current = &located{proj: proj, worktree: id}
 				return ctx
 			}
@@ -166,7 +166,7 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 		return nil, errf("%s isn't a worktree of any registered project.", abs)
 	}
 	for _, proj := range ctx.projects {
-		if comparablePath(proj.Path) != comparablePath(primaryPath) {
+		if proj.Path != primaryPath {
 			continue
 		}
 		identities, idErr := listWorktreeIdentities(proj)
@@ -174,7 +174,7 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 			continue
 		}
 		for _, id := range identities {
-			if comparablePath(id.Path) == comparablePath(toplevel) {
+			if id.Path == toplevel {
 				return &located{proj: proj, worktree: id}, nil
 			}
 		}

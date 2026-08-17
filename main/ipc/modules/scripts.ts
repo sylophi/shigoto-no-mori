@@ -1,10 +1,29 @@
+import type { ScriptName, ShigomoriConfig } from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "../../lib/projects";
 import { cancelScript, startScript } from "../../lib/scripts";
-import { resolveScriptCommand } from "../../lib/scripts/command";
+import { shellQuote } from "../../lib/scripts/process";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
+
+// The shell command behind each ScriptName.
+function resolveScriptCommand(
+  script: ScriptName,
+  config: ShigomoriConfig | null,
+  worktreePath: string,
+): string {
+  switch (script) {
+    case "setup":
+      return config?.scripts?.setup?.trim() ?? "";
+    case "teardown":
+      return config?.scripts?.teardown?.trim() ?? "";
+    case "port-pool-provision":
+      return `port-pool provision ${shellQuote(worktreePath)}`;
+    case "port-pool-release":
+      return `port-pool release ${shellQuote(worktreePath)}`;
+  }
+}
 
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {

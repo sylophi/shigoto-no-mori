@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -147,11 +148,11 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 		if entry.bare {
 			continue
 		}
-		isPrimary := comparablePath(entry.path) == comparablePath(proj.Path) || index == 0
+		isPrimary := entry.path == proj.Path || index == 0
 		identities = append(identities, worktreeIdentity{
 			ID:         worktreeIDFromPath(entry.path),
 			ProjectID:  proj.ID,
-			Name:       lastPathSegment(entry.path),
+			Name:       filepath.Base(entry.path),
 			Branch:     deriveBranch(entry),
 			Path:       entry.path,
 			IsPrimary:  isPrimary,
@@ -161,17 +162,6 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 		index++
 	}
 	return identities, nil
-}
-
-// Basename over the path's own separator shape (git emits forward
-// slashes even on Windows).
-func lastPathSegment(path string) string {
-	folded := strings.ReplaceAll(path, "\\", "/")
-	folded = strings.TrimRight(folded, "/")
-	if cut := strings.LastIndex(folded, "/"); cut >= 0 {
-		return folded[cut+1:]
-	}
-	return folded
 }
 
 // --- status probes (buildWorktree parity) ---

@@ -5,7 +5,6 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
-import { rename } from "node:fs/promises";
 import { config as loadEnv } from "dotenv";
 import {
   APP_BUNDLE_ID,
@@ -32,19 +31,6 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
 const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY);
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
-// Target platform of this build: the host by default, overridden by
-// `--platform win32` / `--platform=win32` / `-p win32` when
-// cross-packaging (e.g. building a Windows test app from macOS to run
-// under CrossOver).
-function targetPlatform(): string {
-  const eq = process.argv.find((a) => a.startsWith("--platform="));
-  if (eq) return eq.slice("--platform=".length);
-  const idx = process.argv.findIndex((a) => a === "--platform" || a === "-p");
-  if (idx >= 0 && process.argv[idx + 1]) return process.argv[idx + 1];
-  return process.platform;
-}
-const isWindowsTarget = targetPlatform() === "win32";
-
 // Whether this build weakens the inspect-arguments fuse for the e2e
 // driver. Only `electron-forge package` may do so; a make or publish
 // with E2E_FUSES set fails loudly instead of shipping a distributable
@@ -70,18 +56,11 @@ const config: ForgeConfig = {
     appCopyright: "© 2026 sylophi",
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
-    // into the user's bin dir. The CLI is not supported on Windows:
-    // never built, never bundled, never installed there.
+    // into the user's bin dir.
     extraResource: [
       "resources/licenses",
-      ...(isWindowsTarget ? [] : [`${CLI_DIST_DIR}/${cliBinaryName("prod")}`]),
+      `${CLI_DIST_DIR}/${cliBinaryName("prod")}`,
     ],
-    // The portable zip puts the exe directly in front of the user (no
-    // installer-made shortcut), so give it a space-free name: spaces in
-    // exe paths are a chronic quoting hazard in Windows shortcuts,
-    // scripts, and tooling. Scoped to win32 targets so the macOS bundle
-    // keeps its productName binary.
-    ...(isWindowsTarget ? { executableName: "shigoto-no-mori" } : {}),
     ...(shouldSignMac
       ? {
           osxSign: {
@@ -103,43 +82,13 @@ const config: ForgeConfig = {
         stdio: "inherit",
       });
       // Compile the CLI (requires Go on the build machine).
-      // Windows builds skip it entirely; that platform keeps the
-      // app-only workflow.
-      if (!isWindowsTarget) {
-        execFileSync("node", ["scripts/build-cli.mjs"], {
-          cwd: import.meta.dirname,
-          stdio: "inherit",
-        });
-      }
+      execFileSync("node", ["scripts/build-cli.mjs"], {
+        cwd: import.meta.dirname,
+        stdio: "inherit",
+      });
     },
-    // Windows support is experimental; put that in the artifact name so
-    // the download itself carries the caveat. The returned results feed
-    // the publisher, so the GitHub release asset gets the renamed file.
-    postMake: async (_forgeConfig, makeResults) =>
-      Promise.all(
-        makeResults.map(async (result) => {
-          if (result.platform !== "win32") return result;
-          const artifacts = await Promise.all(
-            result.artifacts.map(async (artifact) => {
-              const renamed = artifact.replace(/\.zip$/, "-experimental.zip");
-              if (renamed === artifact) return artifact;
-              await rename(artifact, renamed);
-              return renamed;
-            }),
-          );
-          return { ...result, artifacts };
-        }),
-      ),
   },
-  makers: [
-    // Both platforms ship as plain zips. On Windows that means a
-    // portable app (unzip anywhere, run the exe): no installer, no
-    // registry writes, and no Squirrel machinery to carry -- the
-    // trade-off is no auto-update there (Electron's Windows autoUpdater
-    // requires a Squirrel install), so Windows users update by
-    // downloading a new zip.
-    new MakerZIP({}, ["darwin", "win32"]),
-  ],
+  makers: [new MakerZIP({}, ["darwin"])],
   publishers: [
     new PublisherGithub({
       repository: {

@@ -1,29 +1,18 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname } from "node:path";
 import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
-import { comparablePath } from "../util/paths";
 import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
-import {
-  isManagedPath,
-  managedBasesFor,
-  resolveWorktreeBase,
-} from "../worktrees/paths";
+import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { run } from "./core";
-import {
-  fetchRemoteRef,
-  listRemotes,
-  remoteRefExists,
-  resolveDefaultBranch,
-  splitRemoteRef,
-} from "./remotes";
+import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
   path: string;
@@ -188,14 +177,8 @@ export type WorktreeIdentity = Pick<
 // produces the same id, anywhere. Paths are globally unique on a
 // filesystem, so the hash is too. 12 hex chars (48 bits) leaves plenty
 // of collision headroom for the handful of worktrees a project holds.
-// The path is folded through comparablePath first: on Windows the same
-// directory arrives as "C:\x" from node joins and "C:/x" from git
-// porcelain, and both must hash to the same id.
 export function worktreeIdFromPath(path: string): string {
-  return createHash("sha256")
-    .update(comparablePath(path))
-    .digest("hex")
-    .slice(0, 12);
+  return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
 
 export async function listWorktreeIdentities(
@@ -216,8 +199,7 @@ export async function listWorktreeIdentities(
   for (const entry of parsePorcelain(stdout)) {
     if (entry.bare) continue;
     const branch = deriveBranch(entry);
-    const isPrimary =
-      comparablePath(entry.path) === comparablePath(projectPath) || index === 0;
+    const isPrimary = entry.path === projectPath || index === 0;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
     // animal dirname; external ones use whatever the user named them.
@@ -272,7 +254,7 @@ interface BuildContext {
   shelvedSet: ReadonlySet<string>;
 }
 
-export async function loadBuildContext(
+async function loadBuildContext(
   projectId: string,
   projectPath: string,
 ): Promise<BuildContext> {
@@ -361,10 +343,6 @@ export async function findWorktreeIdentityOrThrow(
   return identity;
 }
 
-export function deriveProjectName(path: string): string {
-  return basename(path);
-}
-
 export async function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
@@ -374,88 +352,7 @@ export async function pickAvailableWorktreeName(
   return pickWorktreeName(used);
 }
 
-interface CreateWorktreeOptions {
-  requestedWorktreeName?: string;
-  branchName?: string;
-  base?: string;
-  checkout: boolean;
-}
-
-export async function createWorktree(
-  projectId: string,
-  projectPath: string,
-  opts: CreateWorktreeOptions,
-): Promise<Worktree> {
-  const { requestedWorktreeName, branchName, base, checkout } = opts;
-  // Dirname is decoupled from the branch — a random animal that isn't
-  // already used by another worktree in this project. When the caller
-  // supplies a name we treat it as a user-chosen destination and fail
-  // loudly on collision; only the unset case falls back to an animal
-  // pick (the renderer's pre-pick also flows through here).
-  // Case-insensitive: NTFS and default APFS treat "Feature" and
-  // "feature" as the same directory, so a same-case-different-name
-  // create would die inside `git worktree add` with a raw error.
-  const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name.toLowerCase()));
-  if (requestedWorktreeName && used.has(requestedWorktreeName.toLowerCase())) {
-    throw new Error(
-      `A worktree folder named "${requestedWorktreeName}" already exists in this project.`,
-    );
-  }
-  const worktreeName = requestedWorktreeName || pickWorktreeName(used);
-  const config = await readShigomoriConfig(projectId).catch(() => null);
-  const worktreePath = join(
-    resolveWorktreeBase(projectPath, config),
-    worktreeName,
-  );
-
-  // Refresh the remote-tracking ref the new worktree will sit on.
-  // Without this, refs/remotes/<base> is whatever the last fetch left
-  // behind -- which often matches local main and looks like the
-  // worktree silently used the local branch as its base.
-  if (base && (await remoteRefExists(projectPath, base))) {
-    const split = await splitRemoteRef(projectPath, base);
-    if (split) {
-      await fetchRemoteRef(projectPath, split.remote, split.branch).catch(
-        () => undefined,
-      );
-    }
-  }
-
-  await mkdir(dirname(worktreePath), { recursive: true });
-  if (checkout) {
-    if (!base) throw new Error("Checkout mode requires a base ref");
-    // No `-b`: reuse the existing branch in this new worktree. git
-    // refuses if the branch is already checked out in another worktree.
-    // `--` keeps a base ref from being parsed as flags.
-    await run(projectPath, ["worktree", "add", "--", worktreePath, base]);
-  } else {
-    // Quick-create: when the caller doesn't specify a branch, reuse the
-    // animal dirname so the branch and worktree start aligned.
-    const branch = branchName?.trim() || worktreeName;
-    const args = ["worktree", "add", "-b", branch, "--", worktreePath];
-    if (base) args.push(base);
-    await run(projectPath, args);
-  }
-  // Re-read identity from `git worktree list` so the returned worktree's
-  // branch reflects what git actually settled on (e.g. checking out
-  // `origin/main` creates a local `main` tracking branch).
-  const [fresh, ctx] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    loadBuildContext(projectId, projectPath),
-  ]);
-  // comparablePath: git porcelain reports forward-slash paths on
-  // Windows while worktreePath was built with node joins.
-  const identity = fresh.find(
-    (w) => comparablePath(w.path) === comparablePath(worktreePath),
-  );
-  if (!identity) {
-    throw new Error("Worktree disappeared after creation");
-  }
-  return buildWorktree(identity, ctx);
-}
-
-export async function removeWorktree(
+async function removeWorktree(
   projectPath: string,
   worktreePath: string,
   force: boolean,
@@ -471,13 +368,6 @@ export async function removeWorktree(
 // remove` after fs.rm because once the dir is gone, remove errors out
 // on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
 // real bugs stay visible.
-//
-// Known Windows hazard (documented in the README): Git for Windows can
-// recurse THROUGH a user-created directory junction (`mklink /J`)
-// during its own recursive delete, wiping the junction's target. The
-// app's carry-over links are real symlinks specifically to avoid this;
-// git recognizes those as links and only unlinks them, as does the
-// node fs.rm fallback below.
 export async function removeWorktreeForce(
   projectPath: string,
   worktreePath: string,
@@ -492,15 +382,7 @@ export async function removeWorktreeForce(
     }
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
-  // maxRetries: Windows surfaces transient EBUSY/EPERM while a terminal
-  // or editor still holds a handle in the tree; brief retries clear the
-  // common case. Harmless elsewhere.
-  await rm(worktreePath, {
-    recursive: true,
-    force: true,
-    maxRetries: 3,
-    retryDelay: 100,
-  });
+  await rm(worktreePath, { recursive: true, force: true });
   await pruneStaleWorktrees(projectPath);
 }
 

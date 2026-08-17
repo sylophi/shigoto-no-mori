@@ -1,8 +1,7 @@
 package main
 
 // sm adopt: convert an external worktree (made with raw git or
-// another tool) into a shigomori-managed one, ported from
-// convertExternalWorktree in main/lib/worktrees/operations.ts. The
+// another tool) into a shigomori-managed one. The
 // external's branch (or detached short hash) is re-checked-out at the
 // managed location: name-collision check BEFORE the destructive wipe
 // (so a failure can't strand the user with neither checkout),

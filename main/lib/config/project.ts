@@ -4,7 +4,6 @@
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ShigomoriConfig,
@@ -21,9 +20,8 @@ import { shigomoriRoot } from "../util/paths";
 import { ttlMapCache } from "../util/ttlCache";
 
 function projectDir(projectId: string): string {
-  // Defense in depth: ids come from our own store, but this path feeds
-  // a recursive rm (deleteProjectState). Refuse anything that could
-  // escape the projects directory.
+  // Defense in depth: ids come from our own store, but refuse anything
+  // that could escape the projects directory.
   if (/[\\/]/.test(projectId) || projectId.includes("..")) {
     throw new Error(`Invalid project id: ${projectId}`);
   }
@@ -65,26 +63,6 @@ export async function readShigomoriConfig(
   projectId: string,
 ): Promise<ShigomoriConfig | null> {
   return configCache.get(projectId);
-}
-
-// Bypasses the TTL cache. For read-modify-write callers (carry-over
-// reconciliation) where a 5s-stale read could clobber a concurrent save.
-export async function readShigomoriConfigFresh(
-  projectId: string,
-): Promise<ShigomoriConfig | null> {
-  configCache.invalidate(projectId);
-  return configCache.get(projectId);
-}
-
-export async function writeShigomoriConfig(
-  projectId: string,
-  config: ShigomoriConfig,
-): Promise<void> {
-  await atomicWriteJson(
-    projectConfigPath(projectId),
-    ShigomoriConfigSchema.parse(config),
-  );
-  configCache.invalidate(projectId);
 }
 
 export async function readWorktreeData(
@@ -130,12 +108,4 @@ export function invalidateProjectConfigCache(projectId: string): void {
 export function invalidateAllProjectConfigCaches(): void {
   configCache.invalidateByPrefix("");
   worktreeCache.invalidateByPrefix("");
-}
-
-export async function deleteProjectState(projectId: string): Promise<void> {
-  await rm(projectDir(projectId), { recursive: true, force: true });
-  configCache.invalidate(projectId);
-  // Drop every worktreeCache entry that belongs to this project so a
-  // re-add can't ever see stale data through the in-memory layer.
-  worktreeCache.invalidateByPrefix(`${projectId}:`);
 }

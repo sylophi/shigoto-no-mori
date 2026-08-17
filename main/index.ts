@@ -22,8 +22,6 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
-import { isWindows } from "./lib/util/platform";
-import { platformChrome } from "./electron/chrome";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
@@ -35,14 +33,6 @@ import {
   isInstallingUpdate,
   startUpdater,
 } from "./electron/updater";
-
-// A stable explicit AppUserModelID keeps taskbar grouping and pins
-// working for the portable build: the default AUMID is derived from the
-// exe path, so moving the unzipped folder would otherwise orphan pins
-// and split window grouping.
-if (isWindows) {
-  app.setAppUserModelId("com.sylophi.shigomori");
-}
 
 enableDevCdpPort();
 initShigomoriRoot(app.isPackaged);
@@ -57,16 +47,22 @@ let mainWindow: BrowserWindow | null = null;
 
 const createWindow = () => {
   // Drive the native appearance from the saved theme before constructing
-  // the window so the macOS vibrancy material (or the Windows chrome
-  // colors) picks the right light/dark variant on first paint. A value
-  // of "system" delegates back to the OS.
+  // the window so the macOS vibrancy material picks the right light/dark
+  // variant on first paint. A value of "system" delegates back to the OS.
   nativeTheme.themeSource = readThemeSync();
   mainWindow = new BrowserWindow({
     width: 920,
     height: 600,
     minWidth: 640,
     minHeight: 420,
-    ...platformChrome.windowOptions(),
+    // Inset traffic lights over a transparent shell so the
+    // NSVisualEffectView material set via `vibrancy` shows through where
+    // the renderer paints no background (the sidebar column).
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,
@@ -111,10 +107,6 @@ const createWindow = () => {
 
   attachContextMenu(mainWindow);
 };
-
-// Keep native chrome in sync with theme changes where the OS doesn't do
-// it on its own (Windows caption buttons + window background).
-platformChrome.attachThemeSync(() => mainWindow);
 
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start
@@ -171,8 +163,7 @@ app.on("window-all-closed", () => {
 let isQuitting = false;
 app.on("before-quit", (event) => {
   if (isQuitting) return;
-  // An update-triggered quit (macOS-only: the portable Windows build
-  // has no auto-updater) has to flow through Electron's natural quit so
+  // An update-triggered quit has to flow through Electron's natural quit so
   // the detached `sm update --finish-install` installer sees this pid
   // exit and swaps bundles. Awaiting the full kill chain here would
   // block that handoff for up to ~1.5s (grace + SIGKILL). Instead we

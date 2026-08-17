@@ -13,7 +13,6 @@ import {
   shell,
 } from "electron";
 import { isWebUrl } from "@shared/webUrl";
-import { isMac } from "../lib/util/platform";
 
 // Cap inline label text so a paragraph-sized selection doesn't blow out the
 // menu. Matches what Safari/Chrome show.
@@ -92,7 +91,7 @@ export function attachContextMenu(window: BrowserWindow): void {
       });
     }
 
-    if (hasSelection && !isEditable && isMac) {
+    if (hasSelection && !isEditable) {
       const label = truncateForLabel(params.selectionText);
       items.push({ type: "separator" });
       items.push({

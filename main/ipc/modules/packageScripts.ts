@@ -10,7 +10,7 @@ import {
   writeScriptSort,
 } from "../../lib/scripts/packageScriptStats";
 import {
-  buildScriptCommand,
+  readPackageScriptNames,
   readPackageScripts,
 } from "../../lib/scripts/packageScripts";
 import { cliRunScriptSpawn } from "../cliDelegate";
@@ -53,17 +53,16 @@ export const packageScriptsHandlers: Handlers<
     // Validated here even though the CLI validates again: a missing
     // script should fail this IPC call, not surface as error output in
     // an already-opened console run.
-    const pkg = await readPackageScripts(ctx.worktree.path);
-    if (!pkg || !(scriptName in pkg.scripts)) {
+    const scripts = await readPackageScriptNames(ctx.worktree.path);
+    if (!scripts || !(scriptName in scripts)) {
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 
-    // `sm run` is the engine when the CLI is available: it detects the
-    // manager and injects the script env. Windows / missing binary
-    // fall back to the TS builder. The use log is always bumped here,
-    // in-process (the CLI child is told --skip-use-log), so the state
-    // watcher sees a suppressible self-write instead of an external
-    // state.json change on every run.
+    // `sm run` is the engine: it detects the manager and injects the
+    // script env. The use log is bumped here, in-process (the CLI
+    // child is told --skip-use-log), so the state watcher sees a
+    // suppressible self-write instead of an external state.json change
+    // on every run.
     const viaCli = cliRunScriptSpawn({
       projectId,
       worktreeId,
@@ -72,9 +71,8 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
     });
     const runId = startScript({
-      command:
-        viaCli?.command ?? buildScriptCommand(pkg.packageManager, scriptName),
-      extraEnv: viaCli?.env,
+      command: viaCli.command,
+      extraEnv: viaCli.env,
       scriptName,
       worktree: ctx.worktree,
       project,

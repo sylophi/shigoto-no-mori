@@ -6,7 +6,6 @@ package main
 
 import (
 	"os/exec"
-	"runtime"
 )
 
 // Launch (or activate) the installed app by bundle id, so a renamed or
@@ -22,9 +21,6 @@ func openAppBundle() error {
 func cmdApp(_ cliContext, args []string) (int, error) {
 	if len(args) > 0 {
 		return 2, usageErrf("app takes no arguments.")
-	}
-	if runtime.GOOS != "darwin" {
-		return 1, errf("Opening the app is only supported on macOS.")
 	}
 	if flavor != "prod" {
 		return 1, errf("This is the dev CLI; the dev app isn't installed. Run `pnpm dev` in a checkout instead.")

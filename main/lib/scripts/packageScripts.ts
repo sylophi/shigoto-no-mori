@@ -5,12 +5,11 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { PackageManager } from "@shared/schemas";
 import { pathExists } from "../util/paths";
-import { isWindows } from "../util/platform";
 
 // Raw read of `package.json` + the package manager we'd use to run a
 // script. The IPC layer enriches this with per-script usage stats before
 // handing it to the renderer.
-export interface PackageScriptsFileResult {
+interface PackageScriptsFileResult {
   scripts: Record<string, string>;
   packageManager: PackageManager;
 }
@@ -24,9 +23,7 @@ const LOCKFILE_MAP: Array<{ file: string; manager: PackageManager }> = [
   { file: "yarn.lock", manager: "yarn" },
 ];
 
-export async function detectPackageManager(
-  cwd: string,
-): Promise<PackageManager> {
+async function detectPackageManager(cwd: string): Promise<PackageManager> {
   const hits = await Promise.all(
     LOCKFILE_MAP.map((l) => pathExists(join(cwd, l.file))),
   );
@@ -34,9 +31,11 @@ export async function detectPackageManager(
   return idx >= 0 ? LOCKFILE_MAP[idx].manager : "npm";
 }
 
-export async function readPackageScripts(
+// Just the `scripts` block. Callers that only need to check whether a
+// script exists take this and skip the lockfile probes below.
+export async function readPackageScriptNames(
   cwd: string,
-): Promise<PackageScriptsFileResult | null> {
+): Promise<Record<string, string> | null> {
   let raw: string;
   try {
     raw = await readFile(join(cwd, "package.json"), "utf8");
@@ -61,29 +60,16 @@ export async function readPackageScripts(
   for (const [name, value] of Object.entries(scripts)) {
     if (typeof value === "string") cleanScripts[name] = value;
   }
-  const packageManager = await detectPackageManager(cwd);
-  return { scripts: cleanScripts, packageManager };
+  return cleanScripts;
 }
 
-// All four package managers accept `<mgr> run <name>`. The bare alias
-// (`bun <name>`, `pnpm <name>`) works too for non-reserved names, but
-// `run` is unambiguous and matches what users normally type.
-
-// Quote one argument for the shell the script runner uses: POSIX sh
-// single-quoting, or cmd.exe double-quoting on Windows. cmd has no
-// escape for a double quote inside a quoted string that survives every
-// parser downstream, so those are stripped -- `"` is illegal in Windows
-// paths and script names anyway.
-export function shellQuote(s: string): string {
-  if (isWindows) {
-    return `"${s.replace(/"/g, "")}"`;
-  }
-  return `'${s.replace(/'/g, `'\\''`)}'`;
-}
-
-export function buildScriptCommand(
-  pkgManager: PackageManager,
-  scriptName: string,
-): string {
-  return `${pkgManager} run ${shellQuote(scriptName)}`;
+export async function readPackageScripts(
+  cwd: string,
+): Promise<PackageScriptsFileResult | null> {
+  const [scripts, packageManager] = await Promise.all([
+    readPackageScriptNames(cwd),
+    detectPackageManager(cwd),
+  ]);
+  if (!scripts) return null;
+  return { scripts, packageManager };
 }
