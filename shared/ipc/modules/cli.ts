@@ -8,9 +8,6 @@ import { invoke } from "@shared/ipc/contract";
 // - foreign: something we didn't create; only replaced when an install
 //   passes force (the Settings "Replace and install" consent)
 export const CliStatusSchema = z.object({
-  // False when there's nothing to link (a dev run without a built
-  // dist-cli binary). The settings section hides itself then.
-  supported: z.boolean(),
   name: z.string(),
   aliasName: z.string(),
   binDir: z.string(),
@@ -38,9 +35,6 @@ export const ShellHookStateSchema = z.object({
 export type ShellHookState = z.infer<typeof ShellHookStateSchema>;
 
 export const ShellIntegrationStatusSchema = z.object({
-  // False when the CLI binary can't run (a dev run without a built
-  // dist-cli binary).
-  supported: z.boolean(),
   // The user's login shell when integration supports it, else null
   // (installs target this shell, resolved app-side since a
   // Finder-launched app may not have $SHELL).

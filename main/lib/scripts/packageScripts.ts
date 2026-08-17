@@ -73,10 +73,3 @@ export async function readPackageScripts(
 export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
-
-export function buildScriptCommand(
-  pkgManager: PackageManager,
-  scriptName: string,
-): string {
-  return `${pkgManager} run ${shellQuote(scriptName)}`;
-}

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname } from "node:path";
 import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
@@ -10,19 +10,9 @@ import {
 import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
-import {
-  isManagedPath,
-  managedBasesFor,
-  resolveWorktreeBase,
-} from "../worktrees/paths";
+import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { run } from "./core";
-import {
-  fetchRemoteRef,
-  listRemotes,
-  remoteRefExists,
-  resolveDefaultBranch,
-  splitRemoteRef,
-} from "./remotes";
+import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
   path: string;
@@ -366,84 +356,7 @@ export async function pickAvailableWorktreeName(
   return pickWorktreeName(used);
 }
 
-interface CreateWorktreeOptions {
-  requestedWorktreeName?: string;
-  branchName?: string;
-  base?: string;
-  checkout: boolean;
-}
-
-export async function createWorktree(
-  projectId: string,
-  projectPath: string,
-  opts: CreateWorktreeOptions,
-): Promise<Worktree> {
-  const { requestedWorktreeName, branchName, base, checkout } = opts;
-  // Dirname is decoupled from the branch — a random animal that isn't
-  // already used by another worktree in this project. When the caller
-  // supplies a name we treat it as a user-chosen destination and fail
-  // loudly on collision; only the unset case falls back to an animal
-  // pick (the renderer's pre-pick also flows through here).
-  // Case-insensitive: NTFS and default APFS treat "Feature" and
-  // "feature" as the same directory, so a same-case-different-name
-  // create would die inside `git worktree add` with a raw error.
-  const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name.toLowerCase()));
-  if (requestedWorktreeName && used.has(requestedWorktreeName.toLowerCase())) {
-    throw new Error(
-      `A worktree folder named "${requestedWorktreeName}" already exists in this project.`,
-    );
-  }
-  const worktreeName = requestedWorktreeName || pickWorktreeName(used);
-  const config = await readShigomoriConfig(projectId).catch(() => null);
-  const worktreePath = join(
-    resolveWorktreeBase(projectPath, config),
-    worktreeName,
-  );
-
-  // Refresh the remote-tracking ref the new worktree will sit on.
-  // Without this, refs/remotes/<base> is whatever the last fetch left
-  // behind -- which often matches local main and looks like the
-  // worktree silently used the local branch as its base.
-  if (base && (await remoteRefExists(projectPath, base))) {
-    const split = await splitRemoteRef(projectPath, base);
-    if (split) {
-      await fetchRemoteRef(projectPath, split.remote, split.branch).catch(
-        () => undefined,
-      );
-    }
-  }
-
-  await mkdir(dirname(worktreePath), { recursive: true });
-  if (checkout) {
-    if (!base) throw new Error("Checkout mode requires a base ref");
-    // No `-b`: reuse the existing branch in this new worktree. git
-    // refuses if the branch is already checked out in another worktree.
-    // `--` keeps a base ref from being parsed as flags.
-    await run(projectPath, ["worktree", "add", "--", worktreePath, base]);
-  } else {
-    // Quick-create: when the caller doesn't specify a branch, reuse the
-    // animal dirname so the branch and worktree start aligned.
-    const branch = branchName?.trim() || worktreeName;
-    const args = ["worktree", "add", "-b", branch, "--", worktreePath];
-    if (base) args.push(base);
-    await run(projectPath, args);
-  }
-  // Re-read identity from `git worktree list` so the returned worktree's
-  // branch reflects what git actually settled on (e.g. checking out
-  // `origin/main` creates a local `main` tracking branch).
-  const [fresh, ctx] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    loadBuildContext(projectId, projectPath),
-  ]);
-  const identity = fresh.find((w) => w.path === worktreePath);
-  if (!identity) {
-    throw new Error("Worktree disappeared after creation");
-  }
-  return buildWorktree(identity, ctx);
-}
-
-export async function removeWorktree(
+async function removeWorktree(
   projectPath: string,
   worktreePath: string,
   force: boolean,
@@ -473,14 +386,7 @@ export async function removeWorktreeForce(
     }
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
-  // maxRetries: brief retries clear transient EBUSY/EPERM while a
-  // terminal or editor still holds a handle in the tree.
-  await rm(worktreePath, {
-    recursive: true,
-    force: true,
-    maxRetries: 3,
-    retryDelay: 100,
-  });
+  await rm(worktreePath, { recursive: true, force: true });
   await pruneStaleWorktrees(projectPath);
 }
 

@@ -1,22 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { reorderProjects } from "@shared/reorder";
-import type { Project, ShigomoriConfig } from "@shared/schemas";
+import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { readGlobalConfig } from "../../lib/config/global";
-import {
-  deleteProjectState,
-  readShigomoriConfig,
-  writeShigomoriConfig,
-} from "../../lib/config/project";
+import { readShigomoriConfig } from "../../lib/config/project";
 import { updateKey } from "../../lib/config/store";
 import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
 import { isGitRepo } from "../../lib/git/core";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
-import {
-  deriveProjectName,
-  pickAvailableWorktreeName,
-} from "../../lib/git/worktrees";
+import { pickAvailableWorktreeName } from "../../lib/git/worktrees";
 import {
   findProjectOrThrow,
   listProjectsWithStatus,
@@ -36,9 +27,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "../../lib/scripts";
-import { readPackageScripts } from "../../lib/scripts/packageScripts";
 import { expandHome } from "../../lib/util/paths";
-import { cliAvailable } from "../../electron/cliRunner";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
 // updateKey so the current list is read under the cross-process lock:
@@ -60,54 +49,13 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
 
     // Same engine as `sm projects add`: registration and the config
-    // seed run in the CLI when available; the TS body below stays as
-    // the fallback.
-    if (cliAvailable()) {
-      return projectsAddViaCli(path);
-    }
-
-    const project: Project = {
-      id: randomUUID(),
-      name: deriveProjectName(path),
-      path,
-    };
-
-    // Duplicate check inside the locked update so two concurrent adds
-    // (app + CLI) of the same directory can't both land.
-    updateProjects((existing) => {
-      if (existing.some((p) => p.path === path)) {
-        throw new Error(`Project already added: ${path}`);
-      }
-      return [...existing, project];
-    });
-
-    // Best-effort: seed a minimal config so downstream code always has a
-    // stable file to work against. Bare repos and unborn HEADs land in the
-    // catch and stay null until first Save.
-    try {
-      const defaultBranch = await resolveDefaultBranch(path);
-      const seeded: ShigomoriConfig = { defaultBranch };
-      const globalConfig = await readGlobalConfig();
-      if (globalConfig.autoPopulateInstall) {
-        const pkg = await readPackageScripts(path);
-        if (pkg) seeded.scripts = { setup: `${pkg.packageManager} install` };
-      }
-      await writeShigomoriConfig(project.id, seeded);
-    } catch {
-      // Intentionally swallowed.
-    }
-
-    return project;
+    // seed run in the CLI.
+    return projectsAddViaCli(path);
   },
 
   remove: async ({ id }) => {
-    const projects = loadProjects();
-    const removed = projects.find((p) => p.id === id);
-    // One engine decision for the whole removal: cliAvailable()
-    // re-probes on every call, so asking again later in the handler
-    // could disagree with the path taken here and break the "the CLI
-    // already deleted the state dir" bookkeeping below.
-    const useCli = cliAvailable();
+    const removed = loadProjects().find((p) => p.id === id);
+    if (!removed) return;
     // Reap scripts running in this project's worktrees before dropping
     // the registry entry: once the id is gone the renderer has no UI
     // left to stop them, and the per-worktree delete path (which would
@@ -118,31 +66,18 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // removal as an unstoppable orphan.
     markProjectDeleteInflight(id);
     try {
-      if (removed) {
-        await killScriptsForProject(id);
-      }
+      await killScriptsForProject(id);
       // Registry drop and per-project state deletion run in the CLI
-      // when available (same engine as `sm projects remove`); the TS
-      // path stays as the fallback for unknown ids.
-      if (removed && useCli) {
-        await projectsRemoveViaCli(id);
-      } else {
-        updateProjects((current) => current.filter((p) => p.id !== id));
-      }
+      // (same engine as `sm projects remove`).
+      await projectsRemoveViaCli(id);
     } finally {
       clearProjectDeleteInflight(id);
     }
-    // Drop the icon-cache entry and on-disk state so neither leaks across
-    // re-adds of the same path. State deletion is a recursive rm keyed
-    // on the id, so only run it for an id that matched a real project.
-    // The CLI path already deleted the state dir.
-    if (removed) {
-      await forgetProjectIcon(removed.path);
-      if (!useCli) {
-        await deleteProjectState(id);
-      }
-      dropCollapsedProject(id);
-    }
+    // Drop the icon-cache entry and collapsed pref so neither leaks
+    // across re-adds of the same path. The CLI already deleted the
+    // per-project state dir.
+    await forgetProjectIcon(removed.path);
+    dropCollapsedProject(id);
   },
 
   reorder: ({ draggedId, targetId, position }) => {

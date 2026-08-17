@@ -1,11 +1,9 @@
-// Spawn per-project setup/teardown and package scripts and stream their
-// merged stdout+stderr to the renderer. Each script runs in its own
-// session so we can kill the entire tree of children (dev servers,
-// watchers, compilers the user's command spawns), not just the
-// wrapping shell.
+// Spawn per-project scripts and stream their merged stdout+stderr to
+// the renderer. Each script runs in its own session so we can kill the
+// entire tree of children (dev servers, watchers, compilers the user's
+// command spawns), not just the wrapping shell.
 //
-// The OS-specific mechanics (which shell wraps the command, how a
-// process tree is signaled) live in ./platform -- this file only runs
+// The spawn/signal mechanics live in ./platform -- this file only runs
 // the SIGTERM -> grace -> SIGKILL escalation over that interface.
 //
 // On app quit (see index.ts) we kill every running script the same way
@@ -45,18 +43,6 @@ interface RunArgs {
   // delegation pins SHIGOMORI_ROOT through this (see cliSpawnEnv).
   extraEnv?: Record<string, string>;
   notify: NotifyScriptEvent;
-  // When set, main is the initiator (lifecycle orchestration) and
-  // we emit a "started" event so the renderer binds runId to slot.
-  // Omit for renderer-driven runs -- the renderer already knows the
-  // slot from scriptRuns.start().
-  started?: {
-    slot:
-      | { kind: "setup" }
-      | { kind: "teardown" }
-      | { kind: "portPool"; phase: "provision" | "release" };
-    projectId: string;
-    worktreeId: string;
-  };
 }
 
 interface RunRecord {
@@ -74,7 +60,6 @@ interface RunRecord {
 }
 
 const runningScripts = new Map<string, RunRecord>();
-const exitObservers = new Map<string, (code: number | null) => void>();
 // Ref-counted: overlapping deleters can mark the same worktree (a
 // per-worktree delete racing a nuke that lists it too), and the guard
 // must hold until the LAST one finishes -- with a plain Set, whichever
@@ -82,17 +67,6 @@ const exitObservers = new Map<string, (code: number | null) => void>();
 const inflightDeleteCounts = new Map<string, number>();
 const inflightProjectDeleteIds = new Set<string>();
 let shuttingDown = false;
-
-// Resolves the lifecycle observer registered by startScriptForLifecycle,
-// at most once per run. Every end-of-run path (spawn failure, child
-// "error", exit) funnels through here so none of them can leak or
-// double-resolve the observer.
-function resolveExitObserver(runId: string, code: number | null): void {
-  const observer = exitObservers.get(runId);
-  if (!observer) return;
-  exitObservers.delete(runId);
-  observer(code);
-}
 
 export function markDeleteInflight(worktreeId: string): void {
   inflightDeleteCounts.set(
@@ -139,9 +113,6 @@ export function registerInflightContributor(count: () => number): void {
   inflightContributors.push(count);
 }
 
-// Lifecycle scripts (setup, teardown, port-pool) all spawn through
-// startScript, so runningScripts covers package scripts plus the
-// create/delete lifecycles in a single count.
 export function getBusyOperations(): BusyOperations {
   let contributed = 0;
   for (const count of inflightContributors) contributed += count();
@@ -232,31 +203,18 @@ export function startScript(args: RunArgs): string {
   if (shuttingDown) {
     throw new Error("App is shutting down; refusing to start a new script.");
   }
-  // Renderer-driven runs must not land in a worktree that's mid-delete:
-  // the delete flow snapshots running scripts once (killScriptsForWorktree),
-  // so a spawn slipping in after that leaves a live dev server whose cwd
-  // is being rm'd. Lifecycle runs (args.started set) are exempt -- the
-  // delete's own teardown executes while the id is flagged.
-  if (args.started === undefined) {
-    if (inflightDeleteCounts.has(args.worktree.id)) {
-      throw new Error("This worktree is being deleted.");
-    }
-    if (inflightProjectDeleteIds.has(args.project.id)) {
-      throw new Error("This project is being removed.");
-    }
+  // Runs must not land in a worktree that's mid-delete: the delete flow
+  // snapshots running scripts once (killScriptsForWorktree), so a spawn
+  // slipping in after that leaves a live dev server whose cwd is being
+  // rm'd.
+  if (inflightDeleteCounts.has(args.worktree.id)) {
+    throw new Error("This worktree is being deleted.");
+  }
+  if (inflightProjectDeleteIds.has(args.project.id)) {
+    throw new Error("This project is being removed.");
   }
 
   const runId = randomUUID();
-
-  if (args.started) {
-    args.notify({
-      runId,
-      kind: "started",
-      projectId: args.started.projectId,
-      worktreeId: args.started.worktreeId,
-      slot: args.started.slot,
-    });
-  }
 
   const env = {
     ...process.env,
@@ -291,15 +249,13 @@ export function startScript(args: RunArgs): string {
     // deleted cwd). Node reports the cause via an async "error" event;
     // with no listener attached that emit rethrows as an uncaught
     // exception and crashes the main process. The microtask fallback
-    // covers any path where the event never fires, and both run after
-    // startScriptForLifecycle has registered its exit observer.
+    // covers any path where the event never fires.
     let reported = false;
     const reportSpawnFailure = (message: string) => {
       if (reported) return;
       reported = true;
       args.notify({ runId, kind: "error", data: message });
       args.notify({ runId, kind: "exit", code: null });
-      resolveExitObserver(runId, null);
     };
     child.once("error", (error) => reportSpawnFailure(error.message));
     queueMicrotask(() => reportSpawnFailure("Failed to start script process"));
@@ -330,8 +286,7 @@ export function startScript(args: RunArgs): string {
   // path ("error" vs "exit"), so callers emit that first, then settle.
   // Idempotent: a child "error" followed by "close" settles twice, and
   // the second call finds everything already done.
-  const settle = (observedCode: number | null) => {
-    resolveExitObserver(runId, observedCode);
+  const settle = () => {
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
@@ -357,7 +312,7 @@ export function startScript(args: RunArgs): string {
 
   child.on("error", (error) => {
     args.notify({ runId, kind: "error", data: error.message });
-    settle(null);
+    settle();
   });
 
   let exitNotified = false;
@@ -376,7 +331,7 @@ export function startScript(args: RunArgs): string {
     const wasSignal = signal !== null;
     const reported = record.cancelling || wasSignal ? null : code;
     args.notify({ runId, kind: "exit", code: reported });
-    settle(reported);
+    settle();
   };
 
   // Notify exit on "close" (process ended AND stdio flushed), not "exit":
@@ -449,17 +404,4 @@ export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
     if (record.exited || rootPidDead(record)) continue;
     signalTreeBestEffort(record.pid, signal);
   }
-}
-
-export function startScriptForLifecycle(args: RunArgs): {
-  runId: string;
-  exit: Promise<number | null>;
-} {
-  let resolveExit!: (code: number | null) => void;
-  const exit = new Promise<number | null>((res) => {
-    resolveExit = res;
-  });
-  const runId = startScript(args);
-  exitObservers.set(runId, resolveExit);
-  return { runId, exit };
 }

@@ -33,12 +33,7 @@ import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "../lib/util/jsonFile";
 import { shigomoriRoot } from "../lib/util/paths";
 import { confirmBusyAction } from "./busyPrompt";
-import {
-  cliAvailable,
-  cliFailureMessage,
-  runCli,
-  spawnCliDetached,
-} from "./cliRunner";
+import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -242,7 +237,7 @@ export function installUpdaterImpl(): void {
 
 export function startUpdater(): void {
   if (started) return;
-  if (!app.isPackaged || !cliAvailable()) {
+  if (!app.isPackaged) {
     // Publishes the state file too, so `sm update` reads "unsupported"
     // instead of waiting on a bridge that will never start.
     setState({ kind: "unsupported" });

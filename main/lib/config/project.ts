@@ -67,26 +67,6 @@ export async function readShigomoriConfig(
   return configCache.get(projectId);
 }
 
-// Bypasses the TTL cache. For read-modify-write callers (carry-over
-// reconciliation) where a 5s-stale read could clobber a concurrent save.
-export async function readShigomoriConfigFresh(
-  projectId: string,
-): Promise<ShigomoriConfig | null> {
-  configCache.invalidate(projectId);
-  return configCache.get(projectId);
-}
-
-export async function writeShigomoriConfig(
-  projectId: string,
-  config: ShigomoriConfig,
-): Promise<void> {
-  await atomicWriteJson(
-    projectConfigPath(projectId),
-    ShigomoriConfigSchema.parse(config),
-  );
-  configCache.invalidate(projectId);
-}
-
 export async function readWorktreeData(
   projectId: string,
   worktreeId: string,

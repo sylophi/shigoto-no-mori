@@ -10,7 +10,7 @@ import {
   type Theme,
   ThemeSchema,
 } from "@shared/schemas";
-import { atomicWriteJson, readJsonOrNull } from "../util/jsonFile";
+import { readJsonOrNull } from "../util/jsonFile";
 import { shigomoriRoot } from "../util/paths";
 import { ttlValueCache } from "../util/ttlCache";
 
@@ -31,11 +31,6 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
 // without this, reads for up to the TTL would keep serving the wiped
 // preferences as if the nuke hadn't happened.
 export function invalidateGlobalConfigCache(): void {
-  cache.invalidate();
-}
-
-export async function writeGlobalConfig(config: GlobalConfig): Promise<void> {
-  await atomicWriteJson(configPath(), GlobalConfigSchema.parse(config));
   cache.invalidate();
 }
 

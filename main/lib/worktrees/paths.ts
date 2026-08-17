@@ -5,25 +5,9 @@
 
 import { rmdir } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { ShigomoriConfig, WorktreeLayout } from "@shared/schemas";
+import type { ShigomoriConfig } from "@shared/schemas";
 import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
 import { shigomoriRoot } from "../util/paths";
-
-export function layoutOf(config: ShigomoriConfig | null): WorktreeLayout {
-  return config?.worktreeLayout ?? "managed-root";
-}
-
-export function resolveWorktreeBase(
-  projectPath: string,
-  config: ShigomoriConfig | null,
-): string {
-  return worktreeBaseFor({
-    layout: layoutOf(config),
-    projectPath,
-    shigomoriRoot: shigomoriRoot(),
-    customPath: config?.customWorktreePath ?? null,
-  });
-}
 
 // Every base directory whose direct children count as "managed" for
 // this project. All known layouts are included unconditionally so

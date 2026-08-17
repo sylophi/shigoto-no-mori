@@ -43,8 +43,16 @@ export function cliBinaryPath(): string | null {
   return null;
 }
 
-export function cliAvailable(): boolean {
-  return cliBinaryPath() !== null;
+// The CLI is the app's only engine; a missing binary (a dev run before
+// `pnpm cli:build --dev`) is a hard, actionable error.
+export function requireCliBinary(): string {
+  const binary = cliBinaryPath();
+  if (binary === null) {
+    throw new Error(
+      "The CLI binary is missing; run `pnpm cli:build --dev` (dev) or reinstall the app.",
+    );
+  }
+  return binary;
 }
 
 const children = new Set<ChildProcess>();
@@ -73,7 +81,7 @@ function cliBusyChildCount(): number {
 // mid-operation still prompts.
 registerInflightContributor(cliBusyChildCount);
 
-// Quit-time reap, mirroring killAllScripts for the TS engine: an CLI
+// Quit-time reap, mirroring killAllScripts for package scripts: a CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
 // child is spawned detached (its own process group), and the SIGTERM
 // goes to the whole group: the Go process doesn't forward signals, so
@@ -154,13 +162,11 @@ export function runCli(
   extraEnv?: Record<string, string>,
   opts?: { background?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
-  const binary = cliBinaryPath();
-  if (binary === null) {
-    return Promise.reject(
-      new Error(
-        "The CLI binary is missing; run `pnpm cli:build --dev` (dev) or reinstall the app.",
-      ),
-    );
+  let binary: string;
+  try {
+    binary = requireCliBinary();
+  } catch (err) {
+    return Promise.reject(err as Error);
   }
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {

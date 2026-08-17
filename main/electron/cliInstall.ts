@@ -24,7 +24,7 @@ import {
 } from "@shared/cliDist.mts";
 import type { CliStatus } from "@shared/ipc/modules/cli";
 import { app } from "electron";
-import { cliAvailable, cliBinaryPath } from "./cliRunner";
+import { cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";
 
 function cliFlavor(): "prod" | "dev" {
@@ -107,10 +107,6 @@ export async function cliLinkStatus(): Promise<CliStatus> {
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
-  const binary = cliBinaryPath();
-  if (binary === null) {
-    return { ...base, supported: false, state: "missing" };
-  }
   // Both links must be healthy before Settings claims "Installed":
   // inspect each and report the worst state, with linkPath pointing at
   // the offending link so the foreign/stale copy names the right path.
@@ -132,7 +128,7 @@ export async function cliLinkStatus(): Promise<CliStatus> {
   const foreignPaths = links
     .filter((entry) => entry.state === "foreign")
     .map((entry) => entry.link);
-  return { ...base, linkPath: worstLink, foreignPaths, supported: true, state };
+  return { ...base, linkPath: worstLink, foreignPaths, state };
 }
 
 function stateOfOwnership(
@@ -173,9 +169,6 @@ async function pointLinksAt(binary: string, force: boolean): Promise<void> {
 // doesn't point at the app can be fixed without a trip to the shell.
 export async function installCliLinks(force: boolean): Promise<CliStatus> {
   const status = await cliLinkStatus();
-  if (!status.supported) {
-    throw new Error("No CLI binary is available to link.");
-  }
   if (status.state === "foreign" && !force) {
     throw new Error(
       `${status.linkPath} already exists and wasn't created by ` +
@@ -218,16 +211,13 @@ export async function uninstallCliLinks(): Promise<void> {
 // so unlinking always runs. The failure then surfaces afterwards
 // rather than being swallowed: a hook left behind is inert (its guard
 // line no-ops once the command is gone), yet the user should hear it
-// stayed. Skipped when the binary can't run at all (missing dev
-// build), where there are no hooks to remove.
+// stayed.
 export async function uninstallCliEverything(): Promise<void> {
   let hookFailure: unknown;
-  if (cliAvailable()) {
-    try {
-      await uninstallShellIntegration();
-    } catch (err) {
-      hookFailure = err;
-    }
+  try {
+    await uninstallShellIntegration();
+  } catch (err) {
+    hookFailure = err;
   }
   await uninstallCliLinks();
   if (hookFailure !== undefined) throw hookFailure;
@@ -240,7 +230,7 @@ export async function uninstallCliEverything(): Promise<void> {
 export async function repairCliLinks(): Promise<void> {
   if (isTranslocated()) return;
   const status = await cliLinkStatus();
-  if (!status.supported || status.state !== "stale") return;
+  if (status.state !== "stale") return;
   const binary = cliBinaryPath();
   if (binary === null) return;
   try {
