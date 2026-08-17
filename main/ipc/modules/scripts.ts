@@ -3,7 +3,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "../../lib/projects";
 import { cancelScript, startScript } from "../../lib/scripts";
-import { shellQuote } from "../../lib/scripts/packageScripts";
+import { shellQuote } from "../../lib/scripts/process";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
 

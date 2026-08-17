@@ -9,7 +9,10 @@ import {
   usageFor,
   writeScriptSort,
 } from "../../lib/scripts/packageScriptStats";
-import { readPackageScripts } from "../../lib/scripts/packageScripts";
+import {
+  readPackageScriptNames,
+  readPackageScripts,
+} from "../../lib/scripts/packageScripts";
 import { cliRunScriptSpawn } from "../cliDelegate";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
@@ -50,8 +53,8 @@ export const packageScriptsHandlers: Handlers<
     // Validated here even though the CLI validates again: a missing
     // script should fail this IPC call, not surface as error output in
     // an already-opened console run.
-    const pkg = await readPackageScripts(ctx.worktree.path);
-    if (!pkg || !(scriptName in pkg.scripts)) {
+    const scripts = await readPackageScriptNames(ctx.worktree.path);
+    if (!scripts || !(scriptName in scripts)) {
       throw new Error(`Script "${scriptName}" is not defined in package.json`);
     }
 

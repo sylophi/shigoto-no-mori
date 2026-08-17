@@ -86,6 +86,30 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
   return new Set(inflightDeleteCounts.keys());
 }
 
+// The one place the tombstone protocol is spelled out: refuse a
+// concurrent mutation of the same worktree, mark the id so a still-
+// running create lifecycle can't spawn steps into a directory that is
+// vanishing or moving, reap app-spawned scripts before the mutation
+// (a dev server would otherwise outlive its worktree or keep running
+// in the old path), and always clear the mark. Callers supply the
+// busy message because the operations differ (removed vs moved).
+export async function withDeleteInflight<T>(
+  worktreeId: string,
+  busyMessage: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  if (getInflightDeleteIds().has(worktreeId)) {
+    throw new Error(busyMessage);
+  }
+  markDeleteInflight(worktreeId);
+  try {
+    await killScriptsForWorktree(worktreeId);
+    return await run();
+  } finally {
+    clearDeleteInflight(worktreeId);
+  }
+}
+
 // Project-level counterpart for projects.remove, which doesn't know its
 // worktree ids without a git call: blocks new renderer script runs
 // anywhere in the project while its scripts are being reaped and the

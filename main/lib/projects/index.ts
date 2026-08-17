@@ -2,8 +2,9 @@
 import { existsSync } from "node:fs";
 import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
+import { isSameOrInside } from "@shared/worktreeLayout";
 import { readKey } from "../config/store";
-import { isSameOrInside, shigomoriRoot, toAbsolute } from "../util/paths";
+import { shigomoriRoot, toAbsolute } from "../util/paths";
 import { usageFor } from "./usage";
 
 export const PROJECTS_KEY = "projects";

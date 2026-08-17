@@ -18,7 +18,7 @@ import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
 
-export interface SpawnScriptOptions {
+interface SpawnScriptOptions {
   command: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
@@ -37,11 +37,15 @@ const SCRIPT_STDIO: StdioOptions = ["pipe", "pipe", "pipe"];
 // (job control, gitstatus, prompt setup) throwing errors at us when
 // there's no controlling TTY.
 function resolveShell(): { command: string; args: string[] } {
-  const fromEnv = process.env["SHELL"];
-  if (fromEnv) return { command: fromEnv, args: ["-l", "-c"] };
-  const fromPasswd = userInfo().shell;
-  if (fromPasswd) return { command: fromPasswd, args: ["-l", "-c"] };
+  const userShell = process.env["SHELL"] || userInfo().shell;
+  if (userShell) return { command: userShell, args: ["-l", "-c"] };
   return { command: "/bin/sh", args: ["-c"] };
+}
+
+// Quote one argument for the shell spawnScript launches (POSIX sh
+// single-quoting).
+export function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
 export function spawnScript(opts: SpawnScriptOptions): ChildProcess {

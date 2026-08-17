@@ -11,6 +11,7 @@
 // are git's own worktree links, which `git worktree repair` fixes.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { isSameOrInside } from "@shared/worktreeLayout";
 import { run } from "./git/core";
 import { listWorktreeIdentities } from "./git/worktrees";
 import { findProjectInsideRoot, loadProjects } from "./projects";
@@ -21,12 +22,7 @@ import {
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/jsonFile";
-import {
-  isSameOrInside,
-  rootPointerPath,
-  shigomoriRoot,
-  toAbsolute,
-} from "./util/paths";
+import { rootPointerPath, shigomoriRoot, toAbsolute } from "./util/paths";
 
 export async function moveShigomoriRoot(
   parentDir: string,

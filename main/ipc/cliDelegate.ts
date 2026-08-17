@@ -34,11 +34,11 @@ import {
   type CliResult,
   cliFailureMessage,
 } from "../electron/cliRunner";
-import { shellQuote } from "../lib/scripts/packageScripts";
+import { shellQuote } from "../lib/scripts/process";
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the CLI's streamed lifecycle documents.
-export interface WorktreeOperationNotifiers {
+interface WorktreeOperationNotifiers {
   notifyPhase: (payload: WorktreeLifecyclePhase) => void;
   notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
   notifyScript: (payload: ScriptEvent) => void;

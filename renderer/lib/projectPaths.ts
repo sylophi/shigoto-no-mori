@@ -4,12 +4,8 @@
 
 const TRAILING_SEPS = /\/+$/;
 
-function lastSepIndex(value: string): number {
-  return value.lastIndexOf("/");
-}
-
 export function hasTrailingSlash(value: string): boolean {
-  return value.slice(-1) === "/";
+  return value.endsWith("/");
 }
 
 export function ensureTrailingSep(value: string): string {
@@ -18,13 +14,13 @@ export function ensureTrailingSep(value: string): string {
 
 export function getBrowseDirectoryPath(value: string): string {
   if (hasTrailingSlash(value)) return value;
-  const idx = lastSepIndex(value);
+  const idx = value.lastIndexOf("/");
   if (idx < 0) return value;
   return value.slice(0, idx + 1);
 }
 
 export function getBrowseLeafSegment(value: string): string {
-  return value.slice(lastSepIndex(value) + 1);
+  return value.slice(value.lastIndexOf("/") + 1);
 }
 
 export function appendBrowsePathSegment(
@@ -37,7 +33,7 @@ export function appendBrowsePathSegment(
 export function getBrowseParentPath(currentPath: string): string | null {
   const trimmed = currentPath.replace(TRAILING_SEPS, "");
   if (trimmed === "" || trimmed === "~") return null;
-  const idx = lastSepIndex(trimmed);
+  const idx = trimmed.lastIndexOf("/");
   if (idx < 0) return null;
   // "/foo" parents to the root.
   if (idx === 0) return "/";

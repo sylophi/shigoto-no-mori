@@ -4,7 +4,7 @@
 // matching "is this path one we manage?" check.
 
 import { rmdir } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { ShigomoriConfig } from "@shared/schemas";
 import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
 import { shigomoriRoot } from "../util/paths";
@@ -61,19 +61,20 @@ export async function pruneEmptyManagedParents(
   projectPath: string,
 ): Promise<void> {
   const parent = dirname(oldWorktreePath);
+  const baseFor = (layout: "managed-root" | "in-project"): string =>
+    worktreeBaseFor({
+      layout,
+      projectPath,
+      shigomoriRoot: shigomoriRoot(),
+      customPath: null,
+    });
 
-  const managedRootBase = join(
-    shigomoriRoot(),
-    "worktrees",
-    basename(projectPath),
-  );
-  if (parent === managedRootBase) {
+  if (parent === baseFor("managed-root")) {
     await tryRmdir(parent);
     return;
   }
 
-  const inProjectBase = join(projectPath, ".shigomori", "worktrees");
-  if (parent === inProjectBase) {
+  if (parent === baseFor("in-project")) {
     const removed = await tryRmdir(parent);
     if (removed) {
       await tryRmdir(dirname(parent));

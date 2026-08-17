@@ -30,14 +30,6 @@ import {
 import { expandHome } from "../../lib/util/paths";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
-// updateKey so the current list is read under the cross-process lock:
-// the CLI appends to this key too (sm projects add), and deriving
-// the new list from a read taken outside the lock would clobber a
-// concurrent CLI write.
-function updateProjects(update: (current: Project[]) => Project[]): void {
-  updateKey<Project[]>(PROJECTS_KEY, [], update);
-}
-
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),
 
@@ -81,7 +73,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   },
 
   reorder: ({ draggedId, targetId, position }) => {
-    updateProjects((current) =>
+    // updateKey so the current list is read under the cross-process lock:
+    // the CLI writes this key too (sm projects add), and deriving the new
+    // list from a read taken outside the lock would clobber a concurrent
+    // CLI write.
+    updateKey<Project[]>(PROJECTS_KEY, [], (current) =>
       reorderProjects(current, draggedId, targetId, position),
     );
   },

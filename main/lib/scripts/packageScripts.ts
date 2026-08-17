@@ -31,9 +31,11 @@ async function detectPackageManager(cwd: string): Promise<PackageManager> {
   return idx >= 0 ? LOCKFILE_MAP[idx].manager : "npm";
 }
 
-export async function readPackageScripts(
+// Just the `scripts` block. Callers that only need to check whether a
+// script exists take this and skip the lockfile probes below.
+export async function readPackageScriptNames(
   cwd: string,
-): Promise<PackageScriptsFileResult | null> {
+): Promise<Record<string, string> | null> {
   let raw: string;
   try {
     raw = await readFile(join(cwd, "package.json"), "utf8");
@@ -58,16 +60,16 @@ export async function readPackageScripts(
   for (const [name, value] of Object.entries(scripts)) {
     if (typeof value === "string") cleanScripts[name] = value;
   }
-  const packageManager = await detectPackageManager(cwd);
-  return { scripts: cleanScripts, packageManager };
+  return cleanScripts;
 }
 
-// All four package managers accept `<mgr> run <name>`. The bare alias
-// (`bun <name>`, `pnpm <name>`) works too for non-reserved names, but
-// `run` is unambiguous and matches what users normally type.
-
-// Quote one argument for the shell the script runner uses (POSIX sh
-// single-quoting).
-export function shellQuote(s: string): string {
-  return `'${s.replace(/'/g, `'\\''`)}'`;
+export async function readPackageScripts(
+  cwd: string,
+): Promise<PackageScriptsFileResult | null> {
+  const [scripts, packageManager] = await Promise.all([
+    readPackageScriptNames(cwd),
+    detectPackageManager(cwd),
+  ]);
+  if (!scripts) return null;
+  return { scripts, packageManager };
 }

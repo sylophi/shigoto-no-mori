@@ -5,6 +5,7 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
+import { basename } from "node:path";
 import { promisify } from "node:util";
 import { binaryOnPath } from "../util/binaries";
 import {
@@ -17,16 +18,6 @@ import catalogJson from "../../../cli/embed/launcher-catalog.json";
 
 const exec = promisify(execFile);
 
-export interface DetectedApp {
-  id: string;
-  label: string;
-  // macOS .app bundle names. `__finder__` is the always-available
-  // Finder sentinel.
-  bundleNames: string[];
-  cli?: string | undefined;
-  available: boolean;
-}
-
 interface CatalogEntry {
   id: string;
   label: string;
@@ -34,6 +25,10 @@ interface CatalogEntry {
   // Finder sentinel.
   bundleNames: string[];
   cli?: string;
+}
+
+export interface DetectedApp extends CatalogEntry {
+  available: boolean;
 }
 
 // The renderer maps each id to a brand SVG (or a lucide fallback).
@@ -69,15 +64,25 @@ async function detect(): Promise<DetectedApp[]> {
     CATALOG.map(async (entry) => {
       const bundleHit = entry.bundleNames.some(appExists);
       const cliHit = entry.cli ? await binaryOnPath(entry.cli) : false;
-      return {
-        id: entry.id,
-        label: entry.label,
-        bundleNames: entry.bundleNames,
-        cli: entry.cli,
-        available: bundleHit || cliHit,
-      };
+      // Object.assign onto a fresh object, not a spread: CATALOG is
+      // module-level and detect() re-runs behind the TTL cache, so the
+      // entry itself must never be mutated.
+      return Object.assign({}, entry, { available: bundleHit || cliHit });
     }),
   );
+}
+
+function resolveInstalledBundle(bundleNames: string[]): {
+  bundle: string;
+  appName: string;
+} {
+  const bundle = bundleNames
+    .map(bundlePath)
+    .find((p): p is string => p !== null);
+  if (!bundle) {
+    throw new Error(`No installed app found for ${bundleNames.join(", ")}`);
+  }
+  return { bundle, appName: basename(bundle, ".app") };
 }
 
 async function openWithBundle(
@@ -88,11 +93,7 @@ async function openWithBundle(
     await exec("open", [worktreePath]);
     return;
   }
-  const match = bundleNames.find((b) => appExists(b));
-  if (!match) {
-    throw new Error(`No installed app found for ${bundleNames.join(", ")}`);
-  }
-  const appName = match.replace(/^.+\//, "").replace(/\.app$/, "");
+  const { appName } = resolveInstalledBundle(bundleNames);
   await exec("open", ["-a", appName, worktreePath]);
 }
 
@@ -106,13 +107,7 @@ async function launchT3Code(
   app: DetectedApp,
   worktreePath: string,
 ): Promise<void> {
-  const bundle = app.bundleNames
-    .map(bundlePath)
-    .find((p): p is string => p !== null);
-  if (!bundle) {
-    throw new Error(`No installed app found for ${app.bundleNames.join(", ")}`);
-  }
-  const appName = bundle.replace(/^.+\//, "").replace(/\.app$/, "");
+  const { bundle, appName } = resolveInstalledBundle(app.bundleNames);
   await addProjectViaBundledCli(
     `${bundle}/Contents/MacOS/${appName}`,
     [`${bundle}/Contents/Resources`, ...T3_BUNDLED_CLI_SUBPATH].join("/"),
@@ -124,7 +119,10 @@ async function launchT3Code(
   await exec("open", ["-a", bundle]);
 }
 
-async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
+export async function launchDetected(
+  app: DetectedApp,
+  worktreePath: string,
+): Promise<void> {
   if (app.id === T3CODE_ID) {
     return launchT3Code(app, worktreePath);
   }
@@ -150,9 +148,7 @@ async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
 // the launcher row again after the TTL.
 const DETECT_TTL_MS = 5_000;
 
-const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
-  detect(),
-);
+const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, detect);
 
 export function detectApps(): Promise<DetectedApp[]> {
   return detectionCache.get();
@@ -163,13 +159,6 @@ export function findDetected(
   all: DetectedApp[],
 ): DetectedApp | undefined {
   return all.find((a) => a.id === id);
-}
-
-export function launchDetected(
-  app: DetectedApp,
-  worktreePath: string,
-): Promise<void> {
-  return launch(app, worktreePath);
 }
 
 // Deep-link URL for launchers whose app opens via a custom protocol

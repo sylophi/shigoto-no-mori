@@ -1,7 +1,7 @@
 import type { WebContents } from "electron";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Handlers } from "@shared/ipc/types";
-import type { Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { checkoutBranch, renameBranch } from "../../lib/git/branches";
 import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
@@ -23,12 +23,7 @@ import {
   type WorktreeIdentity,
 } from "../../lib/git/worktrees";
 import { findProjectOrThrow } from "../../lib/projects";
-import {
-  clearDeleteInflight,
-  getInflightDeleteIds,
-  killScriptsForWorktree,
-  markDeleteInflight,
-} from "../../lib/scripts";
+import { withDeleteInflight } from "../../lib/scripts";
 import { relocateWorktreeToManagedPath } from "../../lib/worktrees/relocate";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
@@ -84,33 +79,24 @@ export const worktreesHandlers: Handlers<
 
   delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
     const project = findProjectOrThrow(projectId);
-    // The CLI can't see the app's script registry, so around its run we
-    // refuse a duplicate delete, tombstone the id so a still-running
-    // create lifecycle can't spawn steps into the vanishing directory,
-    // and reap app-spawned scripts first (a dev server would otherwise
-    // outlive its worktree).
-    if (getInflightDeleteIds().has(worktreeId)) {
-      throw new Error("This worktree is already being removed.");
-    }
-    markDeleteInflight(worktreeId);
-    try {
-      await killScriptsForWorktree(worktreeId);
-      return await deleteViaCli(
-        project,
-        { worktreeId, force, skipCleanup },
-        notifierFor(event.sender),
-      );
-    } finally {
-      clearDeleteInflight(worktreeId);
-    }
-  },
-
-  setShelved: async ({ projectId, worktreeId, shelved }) => {
-    const project = findProjectOrThrow(projectId);
-    return mutateAndDescribe({ projectId, worktreeId }, () =>
-      setShelvedViaCli(project, worktreeId, shelved),
+    // The CLI can't see the app's script registry, so the delete runs
+    // under the shared tombstone protocol (see withDeleteInflight).
+    return withDeleteInflight(
+      worktreeId,
+      "This worktree is already being removed.",
+      () =>
+        deleteViaCli(
+          project,
+          { worktreeId, force, skipCleanup },
+          notifierFor(event.sender),
+        ),
     );
   },
+
+  setShelved: ({ projectId, worktreeId, shelved }) =>
+    mutateAndDescribe({ projectId, worktreeId }, (_wt, _pp, _target, project) =>
+      setShelvedViaCli(project, worktreeId, shelved),
+    ),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt, input.newBranch)),
@@ -196,6 +182,7 @@ async function mutateAndDescribe(
     worktreePath: string,
     projectPath: string,
     target: WorktreeIdentity,
+    project: Project,
   ) => Promise<void>,
 ): Promise<Worktree> {
   const project = findProjectOrThrow(projectId);
@@ -205,7 +192,7 @@ async function mutateAndDescribe(
     project.path,
     worktreeId,
   );
-  await action(target.path, project.path, target);
+  await action(target.path, project.path, target, project);
   const refreshed = await findWorktreeIdentityOrThrow(
     project.id,
     project.path,

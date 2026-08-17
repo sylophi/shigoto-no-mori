@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -151,7 +152,7 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 		identities = append(identities, worktreeIdentity{
 			ID:         worktreeIDFromPath(entry.path),
 			ProjectID:  proj.ID,
-			Name:       lastPathSegment(entry.path),
+			Name:       filepath.Base(entry.path),
 			Branch:     deriveBranch(entry),
 			Path:       entry.path,
 			IsPrimary:  isPrimary,
@@ -161,14 +162,6 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 		index++
 	}
 	return identities, nil
-}
-
-func lastPathSegment(path string) string {
-	folded := strings.TrimRight(path, "/")
-	if cut := strings.LastIndex(folded, "/"); cut >= 0 {
-		return folded[cut+1:]
-	}
-	return folded
 }
 
 // --- status probes (buildWorktree parity) ---

@@ -118,13 +118,8 @@ export function cliSpawnEnv(): Record<string, string> {
 // on a ChildProcess is an uncaught exception in the main process --
 // the caller is about to quit on success, so it must not do that on a
 // child that never started.
-export function spawnCliDetached(args: string[]): Promise<void> {
-  const binary = cliBinaryPath();
-  if (binary === null) {
-    return Promise.reject(
-      new Error("The CLI binary is missing. Reinstall the app."),
-    );
-  }
+export async function spawnCliDetached(args: string[]): Promise<void> {
+  const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
     const child = spawn(binary, args, {
       detached: true,
@@ -156,18 +151,13 @@ export interface CliResult {
 // group when it runs that long, so a wedged child (a stuck subprocess
 // on the Go side) can't hold the returned promise open forever -- the
 // kill surfaces as a normal non-zero close.
-export function runCli(
+export async function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
   extraEnv?: Record<string, string>,
   opts?: { background?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
-  let binary: string;
-  try {
-    binary = requireCliBinary();
-  } catch (err) {
-    return Promise.reject(err as Error);
-  }
+  const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
       env: { ...process.env, ...extraEnv, ...cliSpawnEnv() },

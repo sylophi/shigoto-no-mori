@@ -116,11 +116,6 @@ export function expandHome(path: string): string {
   return path;
 }
 
-// Containment check for path prefix guards; the implementation lives in
-// shared/worktreeLayout.ts and is re-exported here for main-side
-// callers.
-export { isSameOrInside } from "@shared/worktreeLayout";
-
 export function toAbsolute(path: string): string {
   const expanded = expandHome(path);
   return isAbsolute(expanded) ? expanded : resolve(expanded);

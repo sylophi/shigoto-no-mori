@@ -75,12 +75,6 @@ function clickBroadcast<C extends Contract, K extends keyof C>(
   };
 }
 
-const SETTINGS_MENU_ITEM: MenuItemConstructorOptions = {
-  label: "Settings…",
-  accelerator: "Cmd+,",
-  click: clickBroadcast(navContract, "openSettings", undefined),
-};
-
 function launchToolMenuItems(): MenuItemConstructorOptions[] {
   if (currentLaunchToolEntries.length === 0) return [];
   return [
@@ -103,7 +97,11 @@ export function buildAppMenu(): void {
       submenu: [
         { role: "about" },
         { type: "separator" },
-        SETTINGS_MENU_ITEM,
+        {
+          label: "Settings…",
+          accelerator: "Cmd+,",
+          click: clickBroadcast(navContract, "openSettings", undefined),
+        },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },

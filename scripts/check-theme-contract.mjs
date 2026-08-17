@@ -45,9 +45,6 @@ const RUNTIME_ATTRS = new Set([
   "data-popup-open",
   "data-disabled",
   "data-sonner-toast",
-  // Stamped on <html> via document.documentElement.dataset in
-  // renderer/index.tsx, so no JSX literal exists to grep.
-  "data-platform",
 ]);
 const attrRefs = [...css.matchAll(/\[(data-[\w-]+)(?:="([^"]+)")?\]/g)];
 for (const [, attr, value] of attrRefs) {
