@@ -202,7 +202,7 @@ func registerProject(path string) (project, error) {
 			_ = json.Unmarshal(raw, &projects)
 		}
 		for _, existing := range projects {
-			if comparablePath(existing.Path) == comparablePath(path) {
+			if existing.Path == path {
 				return nil, errf("Project already added: %s", path)
 			}
 		}
@@ -302,12 +302,12 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	}
 	registered := make(map[string]bool, len(ctx.projects))
 	for _, p := range ctx.projects {
-		registered[comparablePath(p.Path)] = true
+		registered[p.Path] = true
 	}
 	var candidates []string
 	known := 0
 	for _, repo := range scanForGitRepos(root) {
-		if registered[comparablePath(repo)] {
+		if registered[repo] {
 			known++
 			continue
 		}

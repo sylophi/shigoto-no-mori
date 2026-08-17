@@ -10,9 +10,6 @@
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
 //      the installed packages -- catches breaking upgrades.
-//   4. The rasterized doubutsu hexes in main/electron/chrome/win32.ts
-//      must match the CSS tokens -- catches palette retunes that forget
-//      the native Windows chrome.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -116,69 +113,6 @@ for (const { pkg, file, needle } of upstream) {
     failures.push(
       `${pkg}: "${needle}" no longer found in ${file} -- doubutsu selectors depending on it are dead`,
     );
-  }
-}
-
-// 4. Native chrome sync: the win32 window chrome carries sRGB hexes of
-//    the doubutsu background/card/foreground tokens. Convert the CSS
-//    tokens (OKLCH) ourselves and require the exact hex to appear in
-//    win32.ts, so retuning the palette can't silently strand the
-//    Windows shell on stale colors.
-const srgbGamma = (x) =>
-  x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
-
-function oklchToHex(lightness, chroma, hueDeg) {
-  const hue = (hueDeg * Math.PI) / 180;
-  const a = chroma * Math.cos(hue);
-  const b = chroma * Math.sin(hue);
-  const lRoot = lightness + 0.3963377774 * a + 0.2158037573 * b;
-  const mRoot = lightness - 0.1055613458 * a - 0.0638541728 * b;
-  const sRoot = lightness - 0.0894841775 * a - 1.291485548 * b;
-  const L = lRoot ** 3;
-  const M = mRoot ** 3;
-  const S = sRoot ** 3;
-  const lin = [
-    4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S,
-    -1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S,
-    -0.0041960863 * L - 0.7034186147 * M + 1.707614701 * S,
-  ];
-  return (
-    "#" +
-    lin
-      .map((x) =>
-        Math.round(Math.min(1, Math.max(0, srgbGamma(x))) * 255)
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("")
-  );
-}
-
-const win32Path = join(root, "main/electron/chrome/win32.ts");
-const win32Source = readFileSync(win32Path, "utf8");
-for (const [label, blockRe] of [
-  ["light", /:root\.doubutsu\s*\{([^}]*)\}/],
-  ["dark", /:root\.doubutsu\.dark\s*\{([^}]*)\}/],
-]) {
-  const block = css.match(blockRe)?.[1] ?? "";
-  for (const token of ["background", "card", "foreground"]) {
-    const m = block.match(
-      new RegExp(
-        `--${token}:\\s*oklch\\(([\\d.]+)\\s+([\\d.]+)\\s+([\\d.]+)\\)`,
-      ),
-    );
-    if (!m) {
-      failures.push(
-        `doubutsu.css: couldn't parse --${token} in the ${label} block (chrome-sync check needs plain oklch(L C H) values)`,
-      );
-      continue;
-    }
-    const hex = oklchToHex(Number(m[1]), Number(m[2]), Number(m[3]));
-    if (!win32Source.includes(hex)) {
-      failures.push(
-        `win32 chrome out of sync: ${label} --${token} is now ${hex}, but main/electron/chrome/win32.ts doesn't contain it -- update its chromeColors hexes`,
-      );
-    }
   }
 }
 

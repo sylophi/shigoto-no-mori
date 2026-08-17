@@ -7,7 +7,6 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
-import { comparablePath } from "../util/paths";
 import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
@@ -188,14 +187,8 @@ export type WorktreeIdentity = Pick<
 // produces the same id, anywhere. Paths are globally unique on a
 // filesystem, so the hash is too. 12 hex chars (48 bits) leaves plenty
 // of collision headroom for the handful of worktrees a project holds.
-// The path is folded through comparablePath first: on Windows the same
-// directory arrives as "C:\x" from node joins and "C:/x" from git
-// porcelain, and both must hash to the same id.
 export function worktreeIdFromPath(path: string): string {
-  return createHash("sha256")
-    .update(comparablePath(path))
-    .digest("hex")
-    .slice(0, 12);
+  return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
 
 export async function listWorktreeIdentities(
@@ -216,8 +209,7 @@ export async function listWorktreeIdentities(
   for (const entry of parsePorcelain(stdout)) {
     if (entry.bare) continue;
     const branch = deriveBranch(entry);
-    const isPrimary =
-      comparablePath(entry.path) === comparablePath(projectPath) || index === 0;
+    const isPrimary = entry.path === projectPath || index === 0;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
     // animal dirname; external ones use whatever the user named them.
@@ -444,11 +436,7 @@ export async function createWorktree(
     listWorktreeIdentities(projectId, projectPath),
     loadBuildContext(projectId, projectPath),
   ]);
-  // comparablePath: git porcelain reports forward-slash paths on
-  // Windows while worktreePath was built with node joins.
-  const identity = fresh.find(
-    (w) => comparablePath(w.path) === comparablePath(worktreePath),
-  );
+  const identity = fresh.find((w) => w.path === worktreePath);
   if (!identity) {
     throw new Error("Worktree disappeared after creation");
   }
@@ -471,13 +459,6 @@ export async function removeWorktree(
 // remove` after fs.rm because once the dir is gone, remove errors out
 // on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
 // real bugs stay visible.
-//
-// Known Windows hazard (documented in the README): Git for Windows can
-// recurse THROUGH a user-created directory junction (`mklink /J`)
-// during its own recursive delete, wiping the junction's target. The
-// app's carry-over links are real symlinks specifically to avoid this;
-// git recognizes those as links and only unlinks them, as does the
-// node fs.rm fallback below.
 export async function removeWorktreeForce(
   projectPath: string,
   worktreePath: string,
@@ -492,9 +473,8 @@ export async function removeWorktreeForce(
     }
     console.warn(`[worktrees] force-wipe fallback: ${msg}`);
   }
-  // maxRetries: Windows surfaces transient EBUSY/EPERM while a terminal
-  // or editor still holds a handle in the tree; brief retries clear the
-  // common case. Harmless elsewhere.
+  // maxRetries: brief retries clear transient EBUSY/EPERM while a
+  // terminal or editor still holds a handle in the tree.
   await rm(worktreePath, {
     recursive: true,
     force: true,

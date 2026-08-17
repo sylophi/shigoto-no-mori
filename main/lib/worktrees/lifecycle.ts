@@ -29,7 +29,6 @@ import {
   type NotifyScriptEvent,
   startScriptForLifecycle,
 } from "../scripts";
-import { scriptPlatform } from "../scripts/platform";
 import {
   readShigomoriConfig,
   readShigomoriConfigFresh,
@@ -312,18 +311,6 @@ interface DeleteArgs {
 // caller), which wraps the whole delete -- cleanup scripts AND the actual
 // removal -- so the busy-quit prompt can't miss the removal phase.
 export async function runDeleteCleanup(args: DeleteArgs): Promise<void> {
-  // Cleanup scripts can't run in this cwd (UNC path on Windows). Setup
-  // was refused for the same reason at create time, so there is nothing
-  // a teardown or port-pool release could need to undo. Skip rather
-  // than fail: a failing cleanup makes the delete un-completable (force
-  // re-runs cleanup, and the skip-cleanup affordance only appears for
-  // script failures).
-  if (scriptPlatform.unsupportedCwdReason(args.worktree.path) !== null) {
-    console.warn(
-      `[lifecycle] skipping delete cleanup for unsupported cwd: ${args.worktree.path}`,
-    );
-    return;
-  }
   const defaultBranch = await resolveDefaultBranch(
     args.project.path,
     args.config?.defaultBranch,

@@ -37,11 +37,7 @@
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
- *    doubutsu markup), li[data-row-idx] (configure/PickerRow.tsx),
- *    data-platform (stamped on <html> via dataset in renderer/index.tsx).
- *    Native chrome counterpart: main/electron/chrome/win32.ts holds
- *    sRGB hexes of the background/card/foreground tokens below;
- *    theme:check recomputes them from this file and fails on drift.
+ *    doubutsu markup), li[data-row-idx] (configure/PickerRow.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
@@ -441,22 +437,6 @@
    extension of the sidebar so the mint meets the canvas seamlessly. */
 .doubutsu :has(> [data-doubutsu-zone="sidebar"]) + [role="separator"] {
   background-color: var(--doubutsu-sidebar);
-}
-
-/* Windows draws the always-visible custom scrollbars from index.css
-   with a neutral gray thumb; warm it to the palette's brown axis so it
-   doesn't read foreign on the cream/wood surfaces. (data-platform and
-   .doubutsu share the <html> element.) */
-.doubutsu[data-platform="win32"] ::-webkit-scrollbar-thumb {
-  background: oklch(0.5 0.04 74 / 0.35);
-  background-clip: content-box;
-  border: 2px solid transparent;
-  border-radius: 5px;
-}
-.doubutsu[data-platform="win32"] ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0.04 74 / 0.55);
-  background-clip: content-box;
-  border: 2px solid transparent;
 }
 
 /* The leaf wallpaper lives on the main canvas (the big surface where

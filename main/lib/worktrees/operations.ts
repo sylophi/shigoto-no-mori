@@ -33,7 +33,6 @@ import {
   killScriptsForWorktree,
   markDeleteInflight,
 } from "../scripts";
-import { comparablePath } from "../util/paths";
 import { runCreateLifecycle, runDeleteCleanup } from "./lifecycle";
 import { pruneEmptyManagedParents } from "./paths";
 import { dropShelved, isShelved, setShelved } from "./shelved";
@@ -171,9 +170,7 @@ export async function relocateWorktreeToManagedPath(
   if (target.isPrimary) {
     throw new Error("The primary checkout can't be relocated");
   }
-  // comparablePath: target.path comes from git (forward slashes on
-  // Windows) while destinationPath was computed with node-style joins.
-  if (comparablePath(target.path) === comparablePath(destinationPath)) {
+  if (target.path === destinationPath) {
     // Already where it should be; refresh the row but skip the move.
     return describeWorktree(target, project.path);
   }

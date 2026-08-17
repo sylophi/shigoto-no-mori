@@ -147,7 +147,7 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 		if entry.bare {
 			continue
 		}
-		isPrimary := comparablePath(entry.path) == comparablePath(proj.Path) || index == 0
+		isPrimary := entry.path == proj.Path || index == 0
 		identities = append(identities, worktreeIdentity{
 			ID:         worktreeIDFromPath(entry.path),
 			ProjectID:  proj.ID,
@@ -163,11 +163,8 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 	return identities, nil
 }
 
-// Basename over the path's own separator shape (git emits forward
-// slashes even on Windows).
 func lastPathSegment(path string) string {
-	folded := strings.ReplaceAll(path, "\\", "/")
-	folded = strings.TrimRight(folded, "/")
+	folded := strings.TrimRight(path, "/")
 	if cut := strings.LastIndex(folded, "/"); cut >= 0 {
 		return folded[cut+1:]
 	}

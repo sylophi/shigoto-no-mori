@@ -220,7 +220,7 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		return worktreeJSON{}, err
 	}
 	for _, id := range fresh {
-		if comparablePath(id.Path) == comparablePath(worktreePath) {
+		if id.Path == worktreePath {
 			w := buildWorktree(proj, id, loadBuildContext(proj))
 			w.ProjectName = proj.Name
 			return w, nil

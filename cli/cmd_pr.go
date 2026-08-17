@@ -9,7 +9,6 @@ package main
 import (
 	"fmt"
 	"os/exec"
-	"runtime"
 	"strings"
 )
 
@@ -44,11 +43,6 @@ func cmdPr(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 	label := fmt.Sprintf("PR #%d (%s): %s", pr.Number, strings.ToLower(pr.State), pr.Title)
-	if runtime.GOOS != "darwin" {
-		out(label)
-		out(pr.URL)
-		return 0, nil
-	}
 	if err := exec.Command("open", pr.URL).Run(); err != nil {
 		return 1, errf("Couldn't open %s: %v", pr.URL, err)
 	}

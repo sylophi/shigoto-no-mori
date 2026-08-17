@@ -10,7 +10,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 )
 
@@ -21,10 +20,6 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if runtime.GOOS != "darwin" {
-		return 1, errf("open is only supported on macOS.")
-	}
-
 	tool := ""
 	if len(parsed.positionals) > 0 {
 		tool = parsed.positionals[0]

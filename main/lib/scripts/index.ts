@@ -14,7 +14,7 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
-import { scriptPlatform } from "./platform";
+import { signalTree, signalTreeBestEffort, spawnScript } from "./platform";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -22,9 +22,9 @@ import { scriptPlatform } from "./platform";
 export type NotifyScriptEvent = (payload: ScriptEvent) => void;
 
 const DEFAULT_GRACE_MS = 3_000;
-// How long to wait for a child that survived SIGKILL / taskkill -F
-// (kernel-stuck I/O, taskkill unavailable) before giving up. Callers
-// (worktree delete, app quit) must not hang forever behind it.
+// How long to wait for a child that survived SIGKILL (kernel-stuck I/O)
+// before giving up. Callers (worktree delete, app quit) must not hang
+// forever behind it.
 const UNKILLABLE_WAIT_MS = 5_000;
 
 interface ScriptWorktree {
@@ -178,10 +178,9 @@ interface KillOptions {
 // The OS frees the child's pid at its "exit" event, but record.exited
 // only flips once stdio flushes ("close", or "exit" + 500ms when a
 // grandchild inherited the pipes). Killing by pid inside that gap can
-// hit a recycled pid -- on Windows, taskkill /T would then take down an
-// unrelated process and its whole descendant tree. A dead root is also
-// useless as a kill target (the tree walks need it alive), so every
-// kill path treats it as already exited.
+// hit a recycled pid. A dead root is also useless as a kill target (the
+// tree walks need it alive), so every kill path treats it as already
+// exited.
 function rootPidDead(record: RunRecord): boolean {
   return record.child.exitCode !== null || record.child.signalCode !== null;
 }
@@ -212,12 +211,12 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
     });
   }
 
-  await scriptPlatform.signalTree(record.pid, "SIGTERM");
+  await signalTree(record.pid, "SIGTERM");
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
   const exited = await waitWithTimeout(record.done, graceMs);
   if (exited) return;
 
-  await scriptPlatform.signalTree(record.pid, "SIGKILL");
+  await signalTree(record.pid, "SIGKILL");
   const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
   if (!died) {
     // Give up rather than hanging the caller forever. The record stays
@@ -232,10 +231,6 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
 export function startScript(args: RunArgs): string {
   if (shuttingDown) {
     throw new Error("App is shutting down; refusing to start a new script.");
-  }
-  const cwdIssue = scriptPlatform.unsupportedCwdReason(args.worktree.path);
-  if (cwdIssue) {
-    throw new Error(cwdIssue);
   }
   // Renderer-driven runs must not land in a worktree that's mid-delete:
   // the delete flow snapshots running scripts once (killScriptsForWorktree),
@@ -285,7 +280,7 @@ export function startScript(args: RunArgs): string {
     ...args.extraEnv,
   };
 
-  const child: ChildProcess = scriptPlatform.spawnScript({
+  const child: ChildProcess = spawnScript({
     command: args.command,
     cwd: args.worktree.path,
     env,
@@ -445,16 +440,14 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 }
 
 // Synchronous best-effort kill for every running script's tree. Used
-// by the update-install quit path (macOS-only today), where we can't
-// await the full kill chain (that would block the handoff to the
-// detached installer waiting on our exit) but still want well-behaved
-// scripts to clean up before
-// Electron tears the main process down. Per-OS semantics live in
-// ./platform.
+// by the update-install quit path, where we can't await the full kill
+// chain (that would block the handoff to the detached installer waiting
+// on our exit) but still want well-behaved scripts to clean up before
+// Electron tears the main process down.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
     if (record.exited || rootPidDead(record)) continue;
-    scriptPlatform.signalTreeBestEffort(record.pid, signal);
+    signalTreeBestEffort(record.pid, signal);
   }
 }
 

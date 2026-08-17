@@ -11,7 +11,7 @@ import {
   T3_BUNDLED_CLI_SUBPATH,
   T3CODE_ID,
 } from "./t3code";
-import type { DetectedApp, PlatformLaunchers } from "./types";
+import type { DetectedApp } from "./types";
 import catalogJson from "../../../cli/embed/launcher-catalog.json";
 
 const exec = promisify(execFile);
@@ -53,7 +53,7 @@ function bundlePath(bundleName: string): string | null {
   return null;
 }
 
-async function detect(): Promise<DetectedApp[]> {
+export async function detect(): Promise<DetectedApp[]> {
   return Promise.all(
     CATALOG.map(async (entry) => {
       const bundleHit = entry.bundleNames.some(appExists);
@@ -62,7 +62,6 @@ async function detect(): Promise<DetectedApp[]> {
         id: entry.id,
         label: entry.label,
         bundleNames: entry.bundleNames,
-        winExe: null,
         cli: entry.cli,
         available: bundleHit || cliHit,
       };
@@ -114,7 +113,10 @@ async function launchT3Code(
   await exec("open", ["-a", bundle]);
 }
 
-async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
+export async function launch(
+  app: DetectedApp,
+  worktreePath: string,
+): Promise<void> {
   if (app.id === T3CODE_ID) {
     return launchT3Code(app, worktreePath);
   }
@@ -133,5 +135,3 @@ async function launch(app: DetectedApp, worktreePath: string): Promise<void> {
   }
   await openWithBundle(app.bundleNames, worktreePath);
 }
-
-export const darwinLaunchers: PlatformLaunchers = { detect, launch };

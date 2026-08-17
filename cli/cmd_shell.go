@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 )
@@ -228,17 +227,13 @@ func hookPath(kind string) string {
 		// macOS terminals start bash as a *login* shell, which reads
 		// .bash_profile/.bash_login/.profile and never .bashrc, so
 		// target the first login file that exists (never creating one
-		// that would shadow another). Elsewhere interactive shells
-		// read .bashrc.
-		if runtime.GOOS == "darwin" {
-			for _, name := range []string{".bash_profile", ".bash_login", ".profile"} {
-				if candidate := filepath.Join(home, name); fileExists(candidate) {
-					return candidate
-				}
+		// that would shadow another).
+		for _, name := range []string{".bash_profile", ".bash_login", ".profile"} {
+			if candidate := filepath.Join(home, name); fileExists(candidate) {
+				return candidate
 			}
-			return filepath.Join(home, ".bash_profile")
 		}
-		return filepath.Join(home, ".bashrc")
+		return filepath.Join(home, ".bash_profile")
 	default: // fish
 		// configHomeDir is "" only when the home dir is unresolvable,
 		// in which case `home` above is too -- no fallback can help.

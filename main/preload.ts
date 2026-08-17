@@ -28,9 +28,6 @@ import {
 } from "@shared/ipc/client";
 
 const api = {
-  // Synchronous platform tag so the renderer can branch chrome/shortcut
-  // rendering without waiting on an IPC round-trip.
-  platform: process.platform,
   projects,
   worktrees,
   branches,

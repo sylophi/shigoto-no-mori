@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -308,10 +307,7 @@ func TestWriteHookFileLeavesNoTempSibling(t *testing.T) {
 	}
 }
 
-func TestHookPathBashOnDarwin(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("darwin-only login-shell policy")
-	}
+func TestHookPathBash(t *testing.T) {
 	home := sandboxHome(t)
 	// No login files: default to .bash_profile (creating it shadows
 	// nothing, since none of the trio exists).

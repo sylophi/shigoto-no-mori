@@ -12,14 +12,10 @@ async function exec(
 ): Promise<{ stdout: string }> {
   const start = performance.now();
   try {
-    // windowsHide: git.exe is a console-subsystem binary; without this,
-    // every spawn from the windowless packaged app flashes a conhost
-    // window on Windows -- and this chokepoint runs on a 60s sweep.
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
     // removeWorktreeForce match on stderr text, which gettext would
     // otherwise translate.
     const result = await execFileP("git", args, {
-      windowsHide: true,
       env: { ...process.env, LC_ALL: "C" },
       ...options,
     });

@@ -59,8 +59,8 @@ export const packageScriptsHandlers: Handlers<
     }
 
     // `sm run` is the engine when the CLI is available: it detects the
-    // manager and injects the script env. Windows / missing binary
-    // fall back to the TS builder. The use log is always bumped here,
+    // manager and injects the script env. A missing binary falls back
+    // to the TS builder. The use log is always bumped here,
     // in-process (the CLI child is told --skip-use-log), so the state
     // watcher sees a suppressible self-write instead of an external
     // state.json change on every run.

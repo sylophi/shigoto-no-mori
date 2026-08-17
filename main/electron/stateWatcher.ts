@@ -25,9 +25,8 @@ const SELF_ECHO_MS = 1000;
 const activeWatchers: FSWatcher[] = [];
 
 // Close every watch on the root. Called before the data-folder move
-// renames the root out from under them: open directory handles can
-// block the rename on Windows, and the app relaunches right after the
-// move anyway, so nothing needs re-watching this session.
+// renames the root out from under them; the app relaunches right after
+// the move anyway, so nothing needs re-watching this session.
 export function stopStateWatcher(): void {
   for (const watcher of activeWatchers.splice(0)) watcher.close();
 }

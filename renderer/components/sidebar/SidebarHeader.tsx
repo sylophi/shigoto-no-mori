@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { isMac } from "@/lib/platform";
 import { cn, dragRegion } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
@@ -77,13 +76,8 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: DevAffordance) {
 function DefaultSidebarHeader({ showDevStyle, onRevealProd }: DevAffordance) {
   return (
     <div
-      // Title-bar drag region. The left inset clears the macOS traffic
-      // lights; Windows keeps its caption buttons top-right, over the
-      // main pane, so the sidebar needs no reserve.
-      className={cn(
-        "flex h-[52px] items-center gap-2 px-3",
-        isMac && "pl-[92px]",
-      )}
+      // Title-bar drag region. The left inset clears the traffic lights.
+      className="flex h-[52px] items-center gap-2 px-3 pl-[92px]"
       style={dragRegion("drag")}
     >
       <div className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">

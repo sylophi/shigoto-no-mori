@@ -69,9 +69,9 @@ export const worktreesHandlers: Handlers<
     return listWorktrees(project.id, project.path);
   },
 
-  // Lifecycle mutations route through the bundled CLI where it
-  // ships (everywhere but Windows), so the app and a terminal run the
-  // same engine; the TS path stays as the Windows fallback.
+  // Lifecycle mutations route through the bundled CLI so the app and a
+  // terminal run the same engine; the TS path stays as the fallback for
+  // dev runs without a built binary.
   create: async (
     { projectId, worktreeName, branchName, base, checkout },
     { event },

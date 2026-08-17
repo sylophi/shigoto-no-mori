@@ -37,7 +37,7 @@ import {
   markProjectDeleteInflight,
 } from "../../lib/scripts";
 import { readPackageScripts } from "../../lib/scripts/packageScripts";
-import { comparablePath, expandHome } from "../../lib/util/paths";
+import { expandHome } from "../../lib/util/paths";
 import { cliAvailable } from "../../electron/cliRunner";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
@@ -60,8 +60,8 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
 
     // Same engine as `sm projects add`: registration and the config
-    // seed run in the CLI where it ships; the TS body below stays as
-    // the Windows fallback.
+    // seed run in the CLI when available; the TS body below stays as
+    // the fallback.
     if (cliAvailable()) {
       return projectsAddViaCli(path);
     }
@@ -74,12 +74,8 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
     // Duplicate check inside the locked update so two concurrent adds
     // (app + CLI) of the same directory can't both land.
-    // comparablePath: the same directory can arrive as C:/x, C:\x, or
-    // different casing on Windows; one project row per directory.
     updateProjects((existing) => {
-      if (
-        existing.some((p) => comparablePath(p.path) === comparablePath(path))
-      ) {
+      if (existing.some((p) => p.path === path)) {
         throw new Error(`Project already added: ${path}`);
       }
       return [...existing, project];
@@ -126,8 +122,8 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
         await killScriptsForProject(id);
       }
       // Registry drop and per-project state deletion run in the CLI
-      // where it ships (same engine as `sm projects remove`); the TS
-      // path stays as the Windows fallback and for unknown ids.
+      // when available (same engine as `sm projects remove`); the TS
+      // path stays as the fallback for unknown ids.
       if (removed && useCli) {
         await projectsRemoveViaCli(id);
       } else {

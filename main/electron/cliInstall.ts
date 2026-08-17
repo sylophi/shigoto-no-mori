@@ -13,9 +13,6 @@
 //
 // Naming and path policy lives in @shared/cliDist.mts; this module
 // owns the link state machine and the "is that link ours?" judgment.
-//
-// Not on Windows: the portable zip has no stable install location to
-// link from, so Windows keeps the app-only workflow.
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -27,8 +24,6 @@ import {
 } from "@shared/cliDist.mts";
 import type { CliStatus } from "@shared/ipc/modules/cli";
 import { app } from "electron";
-import { comparablePath } from "../lib/util/paths";
-import { isWindows } from "../lib/util/platform";
 import { cliAvailable, cliBinaryPath } from "./cliRunner";
 import { uninstallShellIntegration } from "./cliShell";
 
@@ -77,8 +72,8 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
   if (!stat.isSymbolicLink()) return "foreign";
   const target = await readlink(link).catch(() => null);
   if (target === null) return "foreign";
-  const binary = isWindows ? null : cliBinaryPath();
-  if (binary !== null && comparablePath(target) === comparablePath(binary)) {
+  const binary = cliBinaryPath();
+  if (binary !== null && target === binary) {
     return "this-binary";
   }
   const name = cliName();
@@ -92,7 +87,7 @@ async function linkOwnership(link: string): Promise<LinkOwnership> {
 function isOnPath(dir: string): boolean {
   return (process.env.PATH ?? "")
     .split(delimiter)
-    .some((entry) => comparablePath(entry) === comparablePath(dir));
+    .some((entry) => entry === dir);
 }
 
 // Gatekeeper app translocation (quarantined app run from ~/Downloads)
@@ -112,7 +107,7 @@ export async function cliLinkStatus(): Promise<CliStatus> {
     foreignPaths: [] as string[],
     onPath: isOnPath(binDir),
   };
-  const binary = isWindows ? null : cliBinaryPath();
+  const binary = cliBinaryPath();
   if (binary === null) {
     return { ...base, supported: false, state: "missing" };
   }
@@ -223,8 +218,8 @@ export async function uninstallCliLinks(): Promise<void> {
 // so unlinking always runs. The failure then surfaces afterwards
 // rather than being swallowed: a hook left behind is inert (its guard
 // line no-ops once the command is gone), yet the user should hear it
-// stayed. Skipped when the binary can't run at all (Windows, missing
-// dev build), where there are no hooks to remove.
+// stayed. Skipped when the binary can't run at all (missing dev
+// build), where there are no hooks to remove.
 export async function uninstallCliEverything(): Promise<void> {
   let hookFailure: unknown;
   if (cliAvailable()) {

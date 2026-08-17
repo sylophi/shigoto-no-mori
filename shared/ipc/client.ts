@@ -165,7 +165,6 @@ export const projects = {
 export const runtime = {
   info: runtimeClient.info,
   setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
-  setDoubutsu: (enabled: boolean) => runtimeClient.setDoubutsu({ enabled }),
   nuke: runtimeClient.nuke,
   moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
   relaunch: runtimeClient.relaunch,

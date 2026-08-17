@@ -7,16 +7,28 @@
 //      double-forked daemons) and SIGTERM those too.
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import {
+  type ChildProcess,
+  execFile,
+  spawn,
+  type StdioOptions,
+} from "node:child_process";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
-import {
-  SCRIPT_STDIO,
-  type ScriptPlatform,
-  type SpawnScriptOptions,
-} from "./types";
 
 const execFileP = promisify(execFile);
+
+export interface SpawnScriptOptions {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}
+
+// stdin is a pipe we never write to or close. Closed stdin (EOF on first
+// read) makes tools like electron-forge and vite that listen for
+// keystrokes ("rs", "q") interpret it as "user closed the terminal" and
+// shut down, dragging the dev server with them.
+const SCRIPT_STDIO: StdioOptions = ["pipe", "pipe", "pipe"];
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
 // GUI launches depending on launchd state. os.userInfo().shell reads the
@@ -32,7 +44,7 @@ function resolveShell(): { command: string; args: string[] } {
   return { command: "/bin/sh", args: ["-c"] };
 }
 
-function spawnScript(opts: SpawnScriptOptions): ChildProcess {
+export function spawnScript(opts: SpawnScriptOptions): ChildProcess {
   const { command: shellCmd, args: shellArgs } = resolveShell();
   return spawn(shellCmd, [...shellArgs, opts.command], {
     cwd: opts.cwd,
@@ -95,22 +107,23 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
   return out;
 }
 
-async function signalTree(pid: number, signal: NodeJS.Signals): Promise<void> {
+// Callers escalate SIGTERM -> grace -> SIGKILL through this same path.
+export async function signalTree(
+  pid: number,
+  signal: NodeJS.Signals,
+): Promise<void> {
   safeKill(-pid, signal);
   const descendants = await listDescendantPids(pid);
   for (const d of descendants) safeKill(d, signal);
 }
 
+// Synchronous fire-and-forget variant for the update-install quit path,
+// where awaiting the kill chain would block the updater's handoff.
 // Descendants that escaped the group via setsid() get reparented to
 // launchd, same as if we hadn't signaled at all.
-function signalTreeBestEffort(pid: number, signal: NodeJS.Signals): void {
+export function signalTreeBestEffort(
+  pid: number,
+  signal: NodeJS.Signals,
+): void {
   safeKill(-pid, signal);
 }
-
-export const darwinScriptPlatform: ScriptPlatform = {
-  // POSIX shells are happy with any directory.
-  unsupportedCwdReason: () => null,
-  spawnScript,
-  signalTree,
-  signalTreeBestEffort,
-};

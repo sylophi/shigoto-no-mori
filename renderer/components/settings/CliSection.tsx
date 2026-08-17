@@ -14,8 +14,8 @@ import type {
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
-// Hidden entirely when there's nothing to link (Windows, dev run
-// without a built binary).
+// Hidden entirely when there's nothing to link (a dev run without a
+// built binary).
 export function CliSection() {
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
-import { isMac, modKey, shiftKey, shortcutLabel } from "@/lib/platform";
+import { modKey, shiftKey, shortcutLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -54,7 +54,7 @@ export function SidebarFooter({
   const settingsActive = location.pathname === "/settings";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
-  const modName = isMac ? "Meta" : "Control";
+  const modName = "Meta";
 
   // Dragging only reorders coherently when the displayed order matches the
   // stored order, so arranging forces the manual sort before entering the

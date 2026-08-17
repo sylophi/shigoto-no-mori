@@ -25,7 +25,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 )
@@ -939,13 +938,9 @@ func openConfigFileInEditor(path string) (int, error) {
 		}
 		return 0, nil
 	}
-	if runtime.GOOS == "darwin" {
-		if err := exec.Command("open", path).Run(); err != nil {
-			return 1, errf("Couldn't open %s: %v", path, err)
-		}
-		out("opened " + path)
-		return 0, nil
+	if err := exec.Command("open", path).Run(); err != nil {
+		return 1, errf("Couldn't open %s: %v", path, err)
 	}
-	out(path)
+	out("opened " + path)
 	return 0, nil
 }

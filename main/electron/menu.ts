@@ -15,7 +15,6 @@ import type { BroadcastProducerPayload } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
-import { isMac } from "../lib/util/platform";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
 const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
@@ -76,10 +75,9 @@ function clickBroadcast<C extends Contract, K extends keyof C>(
   };
 }
 
-// Shared between the mac app menu and the non-mac File menu.
 const SETTINGS_MENU_ITEM: MenuItemConstructorOptions = {
   label: "Settings…",
-  accelerator: "CmdOrCtrl+,",
+  accelerator: "Cmd+,",
   click: clickBroadcast(navContract, "openSettings", undefined),
 };
 
@@ -90,7 +88,7 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
     ...currentLaunchToolEntries.map(
       (entry, i): MenuItemConstructorOptions => ({
         label: entry.label,
-        accelerator: `CmdOrCtrl+${i + 1}`,
+        accelerator: `Cmd+${i + 1}`,
         enabled: currentLaunchToolsEnabled,
         click: clickBroadcast(navContract, "launchById", entry.id),
       }),
@@ -100,32 +98,28 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
 
 export function buildAppMenu(): void {
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac
-      ? ([
-          {
-            label: app.name,
-            submenu: [
-              { role: "about" },
-              { type: "separator" },
-              SETTINGS_MENU_ITEM,
-              { type: "separator" },
-              { role: "services" },
-              { type: "separator" },
-              { role: "hide" },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-        ] satisfies MenuItemConstructorOptions[])
-      : []),
+    {
+      label: app.name,
+      submenu: [
+        { role: "about" },
+        { type: "separator" },
+        SETTINGS_MENU_ITEM,
+        { type: "separator" },
+        { role: "services" },
+        { type: "separator" },
+        { role: "hide" },
+        { role: "hideOthers" },
+        { role: "unhide" },
+        { type: "separator" },
+        { role: "quit" },
+      ],
+    },
     {
       label: "File",
       submenu: [
         {
           label: "Add project…",
-          accelerator: "CmdOrCtrl+N",
+          accelerator: "Cmd+N",
           click: clickBroadcast(
             projectLauncherContract,
             "addProject",
@@ -133,16 +127,6 @@ export function buildAppMenu(): void {
           ),
         },
         ...launchToolMenuItems(),
-        // Without a mac-style app menu, File carries Settings and Exit
-        // (the conventional Windows/Linux placement).
-        ...(isMac
-          ? ([] satisfies MenuItemConstructorOptions[])
-          : ([
-              { type: "separator" },
-              SETTINGS_MENU_ITEM,
-              { type: "separator" },
-              { role: "quit", label: "Exit" },
-            ] satisfies MenuItemConstructorOptions[])),
       ],
     },
     {
@@ -162,7 +146,7 @@ export function buildAppMenu(): void {
       submenu: [
         {
           label: "Project launcher",
-          accelerator: "CmdOrCtrl+Shift+P",
+          accelerator: "Cmd+Shift+P",
           click: clickBroadcast(projectLauncherContract, "toggle", undefined),
         },
         { type: "separator" },
@@ -175,24 +159,10 @@ export function buildAppMenu(): void {
       submenu: [
         { role: "minimize" },
         { role: "close" },
-        ...(isMac
-          ? ([
-              { type: "separator" },
-              { role: "front" },
-            ] satisfies MenuItemConstructorOptions[])
-          : []),
+        { type: "separator" },
+        { role: "front" },
       ],
     },
-    // The About entry lives in the app menu on macOS; elsewhere it gets
-    // the conventional Help menu slot.
-    ...(isMac
-      ? ([] satisfies MenuItemConstructorOptions[])
-      : ([
-          {
-            label: "Help",
-            submenu: [{ role: "about" }],
-          },
-        ] satisfies MenuItemConstructorOptions[])),
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

@@ -11,7 +11,7 @@ import { globalConfigWriteViaCli } from "../cliDelegate";
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   read: () => readGlobalConfig(),
   // Same engine rule as the worktree/project mutations: the CLI
-  // performs the write when available. Windows stays on the TS path.
+  // performs the write when available.
   write: async ({ config }) => {
     if (cliAvailable()) {
       await globalConfigWriteViaCli(config);

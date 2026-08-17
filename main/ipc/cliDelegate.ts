@@ -9,7 +9,7 @@
 // boundary is validated against the shared zod schemas, so drift
 // between the two engines fails loudly here instead of surfacing as
 // undefined-flavored breakage in the renderer. Callers gate on
-// cliAvailable(); Windows (no CLI) stays on the TS engine.
+// cliAvailable().
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -277,7 +277,7 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 
 // The command (plus env overlay) that runs a package.json script
 // through the CLI engine, or null when the CLI isn't available
-// (Windows, missing binary). Unlike the functions above this doesn't
+// (missing dev build). Unlike the functions above this doesn't
 // spawn anything: package-script runs go through startScript so the
 // app's registry keeps owning streaming, cancel, and quit-time
 // reaping -- the CLI contributes manager detection and the

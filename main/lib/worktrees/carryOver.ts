@@ -5,7 +5,6 @@ import { cp, mkdir, stat, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { CarryOverEntry, CarryOverFailure } from "@shared/schemas";
 import { appendExcludes } from "../git/exclude";
-import { isWindows } from "../util/platform";
 
 export interface CarryOverResult {
   applied: number;
@@ -38,23 +37,13 @@ async function applyOne(
     await mkdir(dirname(dst), { recursive: true });
     if (entry.mode === "symlink") {
       // Absolute target so the link survives moving the worktree dir
-      // around. On Windows these are real symlinks (type "dir"/"file"),
-      // which require Developer Mode -- NOT junctions, even though those
-      // need no privilege: Git for Windows treats junction reparse
-      // points as plain directories in several recursive-delete paths,
-      // so a `git worktree remove --force` or `git clean -dfx` could
-      // recurse THROUGH the junction and wipe the linked source in the
-      // main checkout. Real symlinks are recognized as links and only
-      // ever unlinked. The EPERM mapping below explains the Developer
-      // Mode requirement instead of leaking a bare errno.
-      const winType = srcIsDir ? "dir" : "file";
-      await symlink(src, dst, isWindows ? winType : null);
+      // around.
+      await symlink(src, dst);
       // Only directory symlinks need to be hidden from git: `git diff
       // --no-index` tries to recurse through the link and errors, leaving
       // the file with a "1 file changed" count but a blank diff body.
       // File symlinks render fine as a `120000` patch, so we leave them
-      // visible as ordinary uncommitted changes. appendExcludes folds
-      // Windows separators into git's forward-slash pattern form itself.
+      // visible as ordinary uncommitted changes.
       return { failure: null, excludePath: srcIsDir ? entry.path : null };
     }
     // force:false makes cp throw EEXIST instead of overwriting files git
@@ -69,20 +58,6 @@ async function applyOne(
     if (code === "EEXIST" || code === "ERR_FS_CP_EEXIST") {
       return {
         failure: { path: entry.path, reason: "Destination already exists" },
-        excludePath: null,
-      };
-    }
-    if (code === "EPERM" && isWindows) {
-      // Symlink mode hits this creating the link itself; copy mode hits
-      // it when cp recreates a symlink nested inside the copied tree.
-      const reason =
-        entry.mode === "symlink"
-          ? "Creating symlinks on Windows requires Developer Mode; " +
-            "enable it in Windows Settings or switch this entry to copy"
-          : "Copy failed with EPERM. If the source contains symlinks, " +
-            "recreating them requires Developer Mode on Windows";
-      return {
-        failure: { path: entry.path, reason },
         excludePath: null,
       };
     }

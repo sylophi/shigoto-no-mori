@@ -22,11 +22,11 @@ export function makeIgnoreMatcher(
   };
 }
 
-// Git always emits forward slashes; stored entry paths may carry
-// backslashes on Windows. Normalize before comparing the two.
+// Collapse duplicate separators and trailing slashes before comparing
+// stored entry paths against git output.
 export function normalizeRelPath(p: string): string {
   return p
-    .split(/[\\/]/)
+    .split("/")
     .filter((seg) => seg.length > 0)
     .join("/");
 }

@@ -1,8 +1,7 @@
 // Spawns the bundled CLI as the app's worktree engine. The five
 // lifecycle mutations (create, delete, adopt, done, merge) route
-// through here on platforms that ship the CLI, so the app and a
-// terminal produce byte-identical behavior; Windows (no CLI) keeps the
-// TS engine. The binary is addressed directly -- Resources/ when
+// through here, so the app and a terminal produce byte-identical
+// behavior. The binary is addressed directly -- Resources/ when
 // packaged, dist-cli/smd in dev (built by `pnpm dev`) -- so no PATH
 // install is involved, and SHIGOMORI_ROOT is pinned to the app's own
 // root so the flavor split can never diverge.
@@ -13,7 +12,6 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "../lib/scripts";
 import { shigomoriRoot } from "../lib/util/paths";
-import { isWindows } from "../lib/util/platform";
 import { noteSelfWrite } from "../lib/util/selfWrite";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
@@ -45,10 +43,8 @@ export function cliBinaryPath(): string | null {
   return null;
 }
 
-// The CLI's script runner assumes a POSIX shell; Windows keeps the TS
-// engine (per-platform behavior there is the TS code's job).
 export function cliAvailable(): boolean {
-  return !isWindows && cliBinaryPath() !== null;
+  return cliBinaryPath() !== null;
 }
 
 const children = new Set<ChildProcess>();
@@ -169,7 +165,6 @@ export function runCli(
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
       env: { ...process.env, ...extraEnv, ...cliSpawnEnv() },
-      windowsHide: true,
       // Own process group so killAllCli can signal the CLI and any
       // lifecycle script it spawned as one unit (see killAllCli).
       detached: true,

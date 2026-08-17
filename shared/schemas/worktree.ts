@@ -131,9 +131,8 @@ export function deriveRemoteSyncState(
 export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
-  // The refine backstops the renderer's sanitizing: reserved device
-  // names ("con") or trailing dots ("foo.") break as directory names on
-  // Windows, so they never reach `git worktree add`.
+  // The refine backstops the renderer's sanitizing so reserved names
+  // ("root", "..") never reach `git worktree add`.
   worktreeName: z
     .string()
     .min(1)

@@ -20,7 +20,6 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { fileManagerName } from "@/lib/platform";
 import { modKey, shortcutLabel } from "@/lib/platform";
-import { comparablePath } from "@shared/worktreeLayout";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import { notifyError } from "@/lib/toast";
@@ -135,12 +134,8 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     setStage("scanning");
     try {
       const results = await window.api.fs.scanForGitRepos(browseDir);
-      const existingPaths = new Set(
-        existingProjects.map((p) => comparablePath(p.path)),
-      );
-      const newOnly = results.filter(
-        (p) => !existingPaths.has(comparablePath(p)),
-      );
+      const existingPaths = new Set(existingProjects.map((p) => p.path));
+      const newOnly = results.filter((p) => !existingPaths.has(p));
       setScanResults(newOnly);
       setSelected(new Set(newOnly));
       setHighlighted("");

@@ -1,28 +1,21 @@
-// App detection + launching, platform-selected once here. Each platform
-// owns its own catalog and launch mechanics (darwin.ts / win32.ts); this
-// module adds the pieces that are genuinely shared -- the detection
-// cache, custom launchers, and protocol deep links -- so callers never
-// branch on platform themselves.
+// App detection + launching. The catalog and launch mechanics live in
+// darwin.ts; this module adds the detection cache, custom launchers, and
+// protocol deep links.
 import { spawn } from "node:child_process";
-import { isUncPath } from "@shared/worktreeLayout";
-import { isWindows } from "../util/platform";
 import { ttlValueCache } from "../util/ttlCache";
-import { darwinLaunchers } from "./darwin";
-import type { DetectedApp, PlatformLaunchers } from "./types";
-import { win32Launchers } from "./win32";
+import { detect, launch } from "./darwin";
+import type { DetectedApp } from "./types";
 
 export type { DetectedApp } from "./types";
 
-const impl: PlatformLaunchers = isWindows ? win32Launchers : darwinLaunchers;
-
-// Detection is expensive (a dozen `which`/`where` shell-outs plus
-// filesystem checks). Cache briefly so a single user action that needs
-// the list a few times doesn't re-shell each time. Refreshes when the
-// user opens the launcher row again after the TTL.
+// Detection is expensive (a dozen `which` shell-outs plus filesystem
+// checks). Cache briefly so a single user action that needs the list a
+// few times doesn't re-shell each time. Refreshes when the user opens
+// the launcher row again after the TTL.
 const DETECT_TTL_MS = 5_000;
 
 const detectionCache = ttlValueCache<DetectedApp[]>(DETECT_TTL_MS, () =>
-  impl.detect(),
+  detect(),
 );
 
 export function detectApps(): Promise<DetectedApp[]> {
@@ -40,19 +33,17 @@ export function launchDetected(
   app: DetectedApp,
   worktreePath: string,
 ): Promise<void> {
-  return impl.launch(app, worktreePath);
+  return launch(app, worktreePath);
 }
 
 // Deep-link URL for launchers whose app opens via a custom protocol
-// rather than an exe/bundle invocation. These deliberately bypass the
-// detected exe even when one exists: the protocol URL is the only API
-// these apps expose for "open this folder" -- spawning the exe with a
+// rather than a bundle invocation. These deliberately bypass the
+// detected app even when one exists: the protocol URL is the only API
+// these apps expose for "open this folder" -- launching the app with a
 // path argument just opens the app. Detection still gates visibility
 // (the launcher only shows when the app is installed, and installers
 // register their scheme). The IPC layer opens the URL with Electron's
-// shell.openExternal -- routing it through a shell would expose it to
-// cmd.exe's %VAR% expansion on Windows. Ids a platform's catalog
-// doesn't include (codex is macOS-only) are simply never asked for.
+// shell.openExternal.
 export function deepLinkFor(
   appId: string,
   worktreePath: string,
@@ -71,30 +62,19 @@ export function deepLinkFor(
 }
 
 export function launchCustom(command: string, worktreePath: string): void {
-  // Same cmd.exe limitation as the script runner: a UNC cwd silently
-  // falls back to %windir%, so the user's command would run in
-  // C:\Windows instead of the worktree.
-  if (isWindows && isUncPath(worktreePath)) {
-    throw new Error(
-      "Custom launchers can't run in a network (UNC) worktree on " +
-        "Windows; map the share to a drive letter first.",
-    );
-  }
   const env = {
     ...process.env,
     SHIGOMORI_WORKSPACE_PATH: worktreePath,
   };
   // Detached + unref so the spawned process outlives this main process,
   // which matches "fire and forget launcher" semantics. `shell: true`
-  // runs the user's command through /bin/sh on POSIX and cmd.exe on
-  // Windows, so commands are authored in the platform's native syntax.
+  // runs the user's command through /bin/sh.
   const child = spawn(command, [], {
     cwd: worktreePath,
     env,
     shell: true,
     detached: true,
     stdio: "ignore",
-    windowsHide: true,
   });
   child.unref();
 }
