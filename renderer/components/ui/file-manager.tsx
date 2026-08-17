@@ -1,5 +1,4 @@
-// Icon for Finder, used by "Open in Finder" style affordances. The
-// matching display name lives in @/lib/platform (fileManagerName).
+// Icon for Finder, used by "Open in Finder" style affordances.
 import finderIconUrl from "@/app-icons/finder.png";
 
 export function FileManagerIcon({

@@ -3,8 +3,8 @@
 // entire tree of children (dev servers, watchers, compilers the user's
 // command spawns), not just the wrapping shell.
 //
-// The spawn/signal mechanics live in ./platform -- this file only runs
-// the SIGTERM -> grace -> SIGKILL escalation over that interface.
+// The spawn/signal mechanics live in ./process.ts -- this file only
+// runs the SIGTERM -> grace -> SIGKILL escalation over them.
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
@@ -12,7 +12,7 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
-import { signalTree, signalTreeBestEffort, spawnScript } from "./platform";
+import { signalTree, signalTreeBestEffort, spawnScript } from "./process";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the

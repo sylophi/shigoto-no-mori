@@ -1,8 +1,7 @@
 package main
 
-// sm done: post-merge cleanup, ported from
-// switchToPrimaryAndDeleteBranch in main/lib/git/sync.ts and its IPC
-// handler -- land the worktree back on the project's primary branch
+// sm done: post-merge cleanup --
+// land the worktree back on the project's primary branch
 // (creating a local tracking branch from the remote ref when needed,
 // then --ff-only pulling it current) and delete the now-merged branch
 // it was sitting on. Order matters: the checkout frees the merged
@@ -184,8 +183,8 @@ func deletedBranchField(branch string, deleted bool) any {
 	return nil
 }
 
-// switchToPrimaryBranch ports sync.ts: checkout the primary ref (via
-// the checkoutBranch precedence rules), then --ff-only pull when it
+// switchToPrimaryBranch: checkout the primary ref (via the
+// checkoutBranch precedence rules), then --ff-only pull when it
 // resolved to a remote-tracking ref.
 func switchToPrimaryBranch(worktreePath, primaryRef string, remotes []string) error {
 	if err := checkoutBranch(worktreePath, primaryRef, remotes); err != nil {

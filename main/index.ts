@@ -22,7 +22,6 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
-import { chromeWindowOptions } from "./electron/chrome";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
@@ -56,7 +55,14 @@ const createWindow = () => {
     height: 600,
     minWidth: 640,
     minHeight: 420,
-    ...chromeWindowOptions(),
+    // Inset traffic lights over a transparent shell so the
+    // NSVisualEffectView material set via `vibrancy` shows through where
+    // the renderer paints no background (the sidebar column).
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 18 },
+    backgroundColor: "#00000000",
+    vibrancy: "sidebar",
+    visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       sandbox: false,

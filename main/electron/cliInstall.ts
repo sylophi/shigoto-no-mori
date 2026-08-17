@@ -190,11 +190,10 @@ export async function installCliLinks(force: boolean): Promise<CliStatus> {
 }
 
 // Remove this flavor's links when they are recognizably shigomori-made.
-// Anything else at the path stays. Shared by the Settings uninstall
-// action and "Nuke everything". Accepts our-family on purpose: nuke
+// Anything else at the path stays. Accepts our-family on purpose: nuke
 // should also take the checkout link the prod app otherwise refuses to
 // manage.
-export async function uninstallCliLinks(): Promise<void> {
+async function uninstallCliLinks(): Promise<void> {
   await Promise.all(
     linkNames().map(async (name) => {
       const link = join(cliUserBinDir(), name);

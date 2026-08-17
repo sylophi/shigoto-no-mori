@@ -9,7 +9,7 @@ import { pathExists } from "../util/paths";
 // Raw read of `package.json` + the package manager we'd use to run a
 // script. The IPC layer enriches this with per-script usage stats before
 // handing it to the renderer.
-export interface PackageScriptsFileResult {
+interface PackageScriptsFileResult {
   scripts: Record<string, string>;
   packageManager: PackageManager;
 }
@@ -23,9 +23,7 @@ const LOCKFILE_MAP: Array<{ file: string; manager: PackageManager }> = [
   { file: "yarn.lock", manager: "yarn" },
 ];
 
-export async function detectPackageManager(
-  cwd: string,
-): Promise<PackageManager> {
+async function detectPackageManager(cwd: string): Promise<PackageManager> {
   const hits = await Promise.all(
     LOCKFILE_MAP.map((l) => pathExists(join(cwd, l.file))),
   );

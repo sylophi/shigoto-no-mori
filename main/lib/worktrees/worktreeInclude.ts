@@ -14,7 +14,7 @@ import {
   listUntrackedMatchingExcludeFile,
 } from "../git/branches";
 
-export const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
+const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 
 // Spec: a path is copied when it matches a .worktreeinclude pattern AND is
 // gitignored. `--others` already excludes tracked files; the intersection

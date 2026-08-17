@@ -254,7 +254,7 @@ interface BuildContext {
   shelvedSet: ReadonlySet<string>;
 }
 
-export async function loadBuildContext(
+async function loadBuildContext(
   projectId: string,
   projectPath: string,
 ): Promise<BuildContext> {
@@ -341,10 +341,6 @@ export async function findWorktreeIdentityOrThrow(
   const identity = identities.find((w) => w.id === worktreeId);
   if (!identity) throw unknownWorktreeError(worktreeId);
   return identity;
-}
-
-export function deriveProjectName(path: string): string {
-  return basename(path);
 }
 
 export async function pickAvailableWorktreeName(

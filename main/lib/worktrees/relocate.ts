@@ -1,11 +1,5 @@
 import { basename } from "node:path";
-import type {
-  ScriptEvent,
-  Project,
-  Worktree,
-  WorktreeCarryOverComplete,
-  WorktreeLifecyclePhase,
-} from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 import {
   deleteWorktreeData,
   readWorktreeData,
@@ -25,12 +19,6 @@ import {
 } from "../scripts";
 import { pruneEmptyManagedParents } from "./paths";
 import { dropShelved, isShelved, setShelved } from "./shelved";
-
-export interface WorktreeOperationNotifiers {
-  notifyPhase: (payload: WorktreeLifecyclePhase) => void;
-  notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
-  notifyScript: (payload: ScriptEvent) => void;
-}
 
 export async function relocateWorktreeToManagedPath(
   project: Project,

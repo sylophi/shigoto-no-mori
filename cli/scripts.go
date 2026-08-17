@@ -41,7 +41,7 @@ type scriptEnvInputs struct {
 	defaultBranch string
 }
 
-// Login shell (no -i), same selection as scripts/platform/darwin.ts.
+// Login shell (no -i), same selection as scripts/process.ts.
 // The app also consults the passwd entry for GUI launches with an
 // empty $SHELL; a CLI always runs from a terminal, where $SHELL is
 // set, so /bin/sh is a sufficient fallback.

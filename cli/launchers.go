@@ -3,7 +3,7 @@ package main
 // The app's launcher row, ported for `sm open`: detected macOS apps,
 // custom launcher commands from global and project config, and the
 // GitHub web entry. The tool catalog is one embedded JSON file shared
-// with main/lib/launchers/darwin.ts. Ordering and the rolling 14-day
+// with main/lib/launchers/index.ts. Ordering and the rolling 14-day
 // use log are shared with the app through state.json's launcherUseLog
 // key, so launching from the terminal reorders the row in the app and
 // vice versa.
@@ -33,7 +33,7 @@ type launcherApp struct {
 const t3codeID = "t3code"
 
 // The tool catalog is embedded from embed/launcher-catalog.json, which
-// main/lib/launchers/darwin.ts imports too -- one list, two consumers.
+// main/lib/launchers/index.ts imports too -- one list, two consumers.
 // bundleNames resolve against appRoots; "__finder__" is the
 // always-available Finder sentinel.
 //

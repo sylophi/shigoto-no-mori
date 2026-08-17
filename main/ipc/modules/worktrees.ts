@@ -29,7 +29,7 @@ import {
   killScriptsForWorktree,
   markDeleteInflight,
 } from "../../lib/scripts";
-import { relocateWorktreeToManagedPath } from "../../lib/worktrees/operations";
+import { relocateWorktreeToManagedPath } from "../../lib/worktrees/relocate";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
 import {
@@ -178,7 +178,6 @@ export const worktreesHandlers: Handlers<
 };
 
 // Resolve the project's primary ref, honoring the configured override.
-// Shared by the sync-from-primary and switch-to-primary handlers.
 async function resolvePrimaryRef(
   projectId: string,
   projectPath: string,

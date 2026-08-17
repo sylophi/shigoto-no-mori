@@ -148,11 +148,10 @@ export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
   checkout: z.boolean().optional(),
 });
 
-export const CarryOverFailureSchema = z.object({
+const CarryOverFailureSchema = z.object({
   path: z.string(),
   reason: z.string(),
 });
-export type CarryOverFailure = z.infer<typeof CarryOverFailureSchema>;
 
 export const CarryOverReportSchema = z.object({
   applied: z.number().int().nonnegative(),
@@ -161,7 +160,6 @@ export const CarryOverReportSchema = z.object({
   // are reported separately from the per-entry failures above.
   includeFailures: z.array(CarryOverFailureSchema).optional(),
 });
-export type CarryOverReport = z.infer<typeof CarryOverReportSchema>;
 
 export const CreateWorktreeResultSchema = z.object({
   worktree: WorktreeSchema,

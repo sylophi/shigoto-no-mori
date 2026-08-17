@@ -14,7 +14,6 @@ import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { modKey, shortcutLabel } from "@/lib/platform";
 import { getRecentWorktree } from "@/lib/recentWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
 import { LauncherTile } from "./LauncherTile";
@@ -244,7 +243,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
           />
           {projects.length === 0 ? (
             <p className="mt-10 text-center text-sm text-muted-foreground">
-              No projects yet — press {shortcutLabel(modKey, "N")} to add one.
+              No projects yet — press ⌘N to add one.
             </p>
           ) : filtered.length === 0 ? (
             <p className="mt-10 text-center text-sm text-muted-foreground">

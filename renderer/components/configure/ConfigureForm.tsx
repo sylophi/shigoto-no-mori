@@ -11,7 +11,6 @@ import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
-import { fileManagerName } from "@/lib/platform";
 import { notifyError } from "@/lib/toast";
 import type {
   CarryOverEntry,
@@ -178,7 +177,7 @@ export function ConfigureForm({
               }}
             >
               <FolderOpen />
-              Reveal in {fileManagerName}
+              Reveal in Finder
             </Button>
           </section>
 

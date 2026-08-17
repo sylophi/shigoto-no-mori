@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { fileManagerName } from "@/lib/platform";
 import { notifyError } from "@/lib/toast";
 
 // Where the shigomori state root lives, and the flow that moves it.
@@ -83,7 +82,7 @@ export function DataLocationSection() {
           }}
         >
           <FolderOpen />
-          Reveal in {fileManagerName}
+          Reveal in Finder
         </Button>
         <Button
           variant="outline"

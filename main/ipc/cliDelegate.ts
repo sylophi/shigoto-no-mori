@@ -17,9 +17,12 @@ import {
   type GlobalConfig,
   type Project,
   ProjectSchema,
+  type ScriptEvent,
   ScriptEventSchema,
   type ShigomoriConfig,
   type Worktree,
+  type WorktreeCarryOverComplete,
+  type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
@@ -32,7 +35,14 @@ import {
   cliFailureMessage,
 } from "../electron/cliRunner";
 import { shellQuote } from "../lib/scripts/packageScripts";
-import type { WorktreeOperationNotifiers } from "../lib/worktrees/operations";
+
+// Renderer-bound emit callbacks supplied by the IPC handler, fed from
+// the CLI's streamed lifecycle documents.
+export interface WorktreeOperationNotifiers {
+  notifyPhase: (payload: WorktreeLifecyclePhase) => void;
+  notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
+  notifyScript: (payload: ScriptEvent) => void;
+}
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
 

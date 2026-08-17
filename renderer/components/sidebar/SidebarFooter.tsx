@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
-import { modKey, shiftKey, shortcutLabel } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -155,8 +154,7 @@ export function SidebarFooter({
         // following space.
         tip={
           <>
-            Project launcher (<span className="font-mono">`</span> or{" "}
-            {shortcutLabel(modKey, shiftKey, "P")})
+            Project launcher (<span className="font-mono">`</span> or ⌘⇧P)
           </>
         }
       >
@@ -170,7 +168,7 @@ export function SidebarFooter({
           <LayoutGrid className="size-3.5" />
         </button>
       </SimpleTooltip>
-      <SimpleTooltip tip={`Add project (${shortcutLabel(modKey, "N")})`}>
+      <SimpleTooltip tip="Add project (⌘N)">
         <button
           type="button"
           onClick={openAddProject}

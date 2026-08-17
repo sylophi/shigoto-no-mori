@@ -71,8 +71,9 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
     code: z.number().nullable(),
   }),
   z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
-  // Emitted when main initiates a script (lifecycle orchestration);
-  // lets the renderer bind runId -> slot before data/exit arrive.
+  // Emitted by the CLI when it initiates a lifecycle script (forwarded
+  // by cliDelegate); lets the renderer bind runId -> slot before
+  // data/exit arrive.
   z.object({
     runId: z.string(),
     kind: z.literal("started"),

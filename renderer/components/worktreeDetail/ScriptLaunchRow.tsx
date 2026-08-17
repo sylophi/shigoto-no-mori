@@ -6,7 +6,6 @@ import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePackageScriptSort } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
-import { modKey, shortcutLabel } from "@/lib/platform";
 import { slotToParam } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { sortEntries } from "./scripts/sortPackageScripts";
@@ -157,10 +156,10 @@ function ScriptLaunchButton({
   });
   const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
 
-  // Cmd/Ctrl-click detours to the script's console instead of toggling the
+  // Cmd-click detours to the script's console instead of toggling the
   // run -- the modifier the tooltip advertises.
   const handleClick = (e: React.MouseEvent) => {
-    if (e.metaKey || e.ctrlKey) {
+    if (e.metaKey) {
       void navigate({
         to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
         params: {
@@ -181,7 +180,7 @@ function ScriptLaunchButton({
       disabled={state.cancelling}
       onClick={handleClick}
       aria-label={actionLabel}
-      title={`${actionLabel}\n${command}\n${shortcutLabel(modKey, "click")} to view output`}
+      title={`${actionLabel}\n${command}\n⌘click to view output`}
     />
   );
 }
