@@ -434,7 +434,7 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 		// schema requires it), which would silently drop every other
 		// configured field on the next read. Refuse instead of "clear".
 		return 2, usageErrf(
-			"--default-branch can't be empty; it's required, so set a ref instead of clearing it.")
+			"--default-branch can't be empty: it's required, so set a ref instead of clearing it.")
 	}
 	updates := map[string]string{}
 	if v, ok := parsed.strings["default-branch"]; ok {
@@ -701,7 +701,7 @@ func ensureDefaultBranchField(doc map[string]any, proj project) error {
 		configDocSet(doc, "defaultBranch", defaultBranch)
 		return nil
 	}
-	return errf("Can't determine %s's default branch; set it first: %s projects config set defaultBranch <ref> -p %s",
+	return errf("Can't determine %s's default branch. Set it first: %s projects config set defaultBranch <ref> -p %s",
 		proj.Name, binaryName, proj.Name)
 }
 

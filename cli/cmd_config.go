@@ -37,8 +37,8 @@ const (
 	stringKind
 	enumKind
 	intKind
-	// Arrays the CLI shows but doesn't set key-by-value; point users at
-	// the element verbs or `edit`.
+	// Arrays the CLI shows but doesn't set key-by-value. Point users
+	// at the element verbs or `edit`.
 	jsonKind
 )
 
@@ -47,7 +47,7 @@ type configKey struct {
 	name string
 	kind configKind
 	enum []string
-	// Effective value when the key is absent; nil = genuinely unset.
+	// Effective value when the key is absent (nil = genuinely unset).
 	// Doubles as the normalize-on-write target: setting a key to its
 	// default deletes it instead, matching the app's omit-on-default
 	// serialization.
@@ -176,8 +176,8 @@ func lookupConfigKey(keys []configKey, name string) (configKey, error) {
 	return configKey{}, usageErrf("Unknown key %q. Keys: %s.", name, strings.Join(names, ", "))
 }
 
-// The string forms git accepts for boolean config, normalized to a JSON
-// bool; enums and ints validated to the schema's constraints.
+// The string forms git accepts for boolean config, normalized to a
+// JSON bool. Enums and ints are validated to the schema's constraints.
 func parseConfigValue(key configKey, raw string) (any, error) {
 	switch key.kind {
 	case boolKind:
@@ -187,7 +187,7 @@ func parseConfigValue(key configKey, raw string) (any, error) {
 		case "false", "off", "no", "0":
 			return false, nil
 		}
-		return nil, usageErrf("%s is a boolean; use true or false.", key.name)
+		return nil, usageErrf("%s is a boolean: use true or false.", key.name)
 	case enumKind:
 		for _, v := range key.enum {
 			if raw == v {
@@ -292,8 +292,8 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 			if doc, decodeErr = decodeConfigDoc(raw); decodeErr != nil {
 				// A hand-edit gone wrong: merging into the {} fallback
 				// would atomically discard every other setting. The app
-				// errors on such files too; make the user fix it first.
-				return errf("%s is not valid JSON (%v); fix it (e.g. via `%s config edit`) and retry.",
+				// errors on such files too, so make the user fix it first.
+				return errf("%s is not valid JSON (%v). Fix it (e.g. via `%s config edit`) and retry.",
 					path, decodeErr, binaryName)
 			}
 		}
@@ -469,7 +469,7 @@ type configDocScope struct {
 	usageSuffix string // "" | " [-p <project>]"
 	suffix      string // "" | " for <project>"
 	project     string // rides along in --json documents when set
-	// Runs inside the lock before each read-modify-write lands; an
+	// Runs inside the lock before each read-modify-write lands. An
 	// error aborts the write (the project scope's defaultBranch
 	// backfill, which refuses to produce a schema-invalid document).
 	beforeWrite func(doc map[string]any) error
@@ -614,7 +614,7 @@ func runConfigSet(scope configDocScope, name, raw string) (int, error) {
 		// the schema, which would silently drop every other configured
 		// field on the next read. Refuse instead of "clear".
 		return 2, usageErrf(
-			"%s can't be empty; it's required, so set a value instead of clearing it.", key.name)
+			"%s can't be empty: it's required, so set a value instead of clearing it.", key.name)
 	}
 	if key.kind == stringKind && raw == "" {
 		// "" clears, matching the long-standing `--setup ''` behavior.
@@ -655,7 +655,7 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 	}
 	if key.required {
 		return 2, usageErrf(
-			"%s can't be cleared; it's required, so set a different value instead.", key.name)
+			"%s can't be cleared: it's required, so set a different value instead.", key.name)
 	}
 	err = scope.update(func(doc map[string]any) error {
 		configDocDelete(doc, key.name)
@@ -677,7 +677,7 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 }
 
 // Whole-document replace for the plumbing `write --data` verb. The
-// payload was already zod-parsed app-side; validateConfigDoc re-checks
+// payload was already zod-parsed app-side. validateConfigDoc re-checks
 // the shape (including required keys) so engine drift fails loudly.
 func runConfigWrite(scope configDocScope, data string) (int, error) {
 	if data == "" {
@@ -703,7 +703,7 @@ func runConfigWrite(scope configDocScope, data string) (int, error) {
 	return 0, nil
 }
 
-// The verbs both dispatchers share; handled=false means the verb
+// The verbs both dispatchers share. handled=false means the verb
 // belongs to the caller (bare/edit/carryover/unknown).
 func runSharedConfigVerb(scope configDocScope, parsed parsedArgs) (bool, int, error) {
 	code, err := 0, error(nil)
@@ -745,7 +745,7 @@ func structuredKeyErr(key configKey, editCmd string) error {
 	if key.hint != "" {
 		hint = "`" + binaryName + " " + key.hint + "`"
 	}
-	return usageErrf("%s is structured; use %s.", key.name, hint)
+	return usageErrf("%s is structured: use %s.", key.name, hint)
 }
 
 // --- sm config (global) ---
@@ -779,7 +779,7 @@ func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
 
 // sm [projects] config launcher [add <label> <command> | rm <ref>] --
 // element verbs over the launchers array. Ids are minted like the
-// app's (a lowercase uuid; the launcher row shows the entry as
+// app's (a lowercase uuid, shown in the launcher row as
 // custom:<id>). rm takes the id or an unambiguous label. Entries are
 // kept as raw maps so fields this CLI doesn't model survive.
 func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
@@ -847,7 +847,7 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 		var removed map[string]any
 		err := scope.update(func(doc map[string]any) error {
 			launchers, _ := doc["launchers"].([]any)
-			// Exact id match wins; otherwise the label must identify a
+			// Exact id match wins. Otherwise the label must identify a
 			// single entry (labels aren't unique, ids are). Removal is
 			// by index so an id-less entry (hand-edited file) can't
 			// drag its id-less siblings along.
@@ -863,10 +863,10 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 					if id, _ := launchers[idx].(map[string]any)["id"].(string); id != "" {
 						refs[i] = id
 					} else {
-						refs[i] = "(no id; use `edit`)"
+						refs[i] = "(no id, use `edit`)"
 					}
 				}
-				return errf("%d launchers are labeled %q; rm by id: %s.",
+				return errf("%d launchers are labeled %q. Remove by id: %s.",
 					len(matches), ref, strings.Join(refs, ", "))
 			}
 			idx := matches[0]
@@ -912,7 +912,7 @@ func launcherMatches(launchers []any, ref string) []int {
 }
 
 // Opens a config file in $VISUAL/$EDITOR in an interactive terminal,
-// the OS opener otherwise; --json (and editor-less non-darwin) just
+// the OS opener otherwise. --json (and editor-less non-darwin) just
 // reports the path. Seeds an empty document so a save round-trips.
 func openConfigFileInEditor(path string) (int, error) {
 	if _, err := os.Stat(path); err != nil {

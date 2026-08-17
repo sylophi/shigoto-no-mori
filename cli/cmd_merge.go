@@ -237,7 +237,7 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 		return "", err
 	}
 
-	// Best-effort preference persist, same as the app; the config
+	// Best-effort preference persist, same as the app. The config
 	// engine's lock and backfill hooks apply.
 	err := projectConfigScope(proj).update(func(doc map[string]any) error {
 		configDocSet(doc, "lastMergeMethod", method)

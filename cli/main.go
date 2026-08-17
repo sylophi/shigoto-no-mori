@@ -83,13 +83,13 @@ var projectItems = []helpItem{
 			" projects config list`. Structured lists get element verbs: launcher add " +
 			"<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
 			"/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
-			`--teardown <cmd>, and --default-branch <ref> remain as shorthands; "" clears a ` +
-			"script, default-branch can't be cleared."},
+			`--teardown <cmd>, and --default-branch <ref> remain as shorthands: "" clears a ` +
+			"script, and default-branch can't be cleared."},
 }
 
 var configItems = []helpItem{
 	{"config list", "Show every setting",
-		"Effective values; (default) marks keys not present in config.json."},
+		"Effective values, with (default) marking keys not present in config.json."},
 	{"config get <key>", "Print one setting's effective value", ""},
 	{"config set <key> <value>", "Change a setting",
 		"Booleans accept true/false, on/off, yes/no, 1/0. Setting a key to its default removes " +

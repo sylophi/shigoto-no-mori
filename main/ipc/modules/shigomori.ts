@@ -23,7 +23,7 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
     // Same engine rule as the other mutations: delegate to the CLI when
     // available (it also performs the in-project exclude side effect
     // and validates projectId, mapping onto the same unknown-project
-    // error); Windows stays on the TS path below.
+    // error). Windows stays on the TS path below.
     if (cliAvailable()) {
       await shigomoriWriteViaCli(projectId, config);
       // The watcher treats the delegated spawn as a self-write, so the

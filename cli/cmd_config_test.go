@@ -62,11 +62,11 @@ func TestParseConfigValueBoolForms(t *testing.T) {
 	} {
 		got, err := parseConfigValue(key, raw)
 		if err != nil || got != want {
-			t.Errorf("parse %q = %v, %v; want %v", raw, got, err, want)
+			t.Errorf("parse %q = %v, %v, want %v", raw, got, err, want)
 		}
 	}
 	if _, err := parseConfigValue(key, "maybe"); err == nil {
-		t.Error("parse \"maybe\" succeeded; want error")
+		t.Error("parse \"maybe\" succeeded, want error")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestParseConfigValueEnumAndInt(t *testing.T) {
 		t.Errorf("parse dark = %v, %v", got, err)
 	}
 	if _, err := parseConfigValue(theme, "solarized"); err == nil {
-		t.Error("parse solarized succeeded; want error")
+		t.Error("parse solarized succeeded, want error")
 	}
 	portBase := configKey{name: "portBase", kind: intKind}
 	if got, err := parseConfigValue(portBase, "5170"); err != nil || got != 5170 {
@@ -84,7 +84,7 @@ func TestParseConfigValueEnumAndInt(t *testing.T) {
 	}
 	for _, raw := range []string{"0", "-3", "many"} {
 		if _, err := parseConfigValue(portBase, raw); err == nil {
-			t.Errorf("parse %q succeeded; want error", raw)
+			t.Errorf("parse %q succeeded, want error", raw)
 		}
 	}
 }
@@ -150,7 +150,7 @@ func TestGlobalConfigSetRejects(t *testing.T) {
 		"launchers": "[]",    // structured
 	} {
 		if code, err := runConfigSet(globalConfigScope(), name, raw); code != 2 || err == nil {
-			t.Errorf("set %s %q = %d, %v; want usage error", name, raw, code, err)
+			t.Errorf("set %s %q = %d, %v, want usage error", name, raw, code, err)
 		}
 	}
 }
@@ -168,8 +168,8 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 	if got, _ := configDocGet(readDoc(t, path), "scripts.setup"); got != "pnpm install" {
 		t.Errorf("scripts.setup = %v", got)
 	}
-	// "" clears, like the long-standing --setup '' behavior; the sibling
-	// stays put.
+	// "" clears, like the long-standing --setup '' behavior. The
+	// sibling stays put.
 	if code, err := runConfigSet(projectConfigScope(proj), "scripts.setup", ""); code != 0 || err != nil {
 		t.Fatalf("clear scripts.setup: %d, %v", code, err)
 	}
@@ -193,10 +193,10 @@ func TestProjectConfigDefaultBranchGuards(t *testing.T) {
 	sandboxConfigRoot(t)
 	proj := testProject(t)
 	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", ""); code != 2 || err == nil {
-		t.Errorf("set defaultBranch \"\" = %d, %v; want usage error", code, err)
+		t.Errorf("set defaultBranch \"\" = %d, %v, want usage error", code, err)
 	}
 	if code, err := runConfigUnset(projectConfigScope(proj), "defaultBranch"); code != 2 || err == nil {
-		t.Errorf("unset defaultBranch = %d, %v; want usage error", code, err)
+		t.Errorf("unset defaultBranch = %d, %v, want usage error", code, err)
 	}
 	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", "main"); code != 0 || err != nil {
 		t.Fatalf("set defaultBranch main: %d, %v", code, err)
@@ -272,7 +272,7 @@ func TestLauncherAddRm(t *testing.T) {
 		t.Error("launchers key still present after removing the last entry")
 	}
 	if code, err := runLauncherVerb(scope, []string{"rm", "Ghost"}); code != 1 || err == nil {
-		t.Errorf("rm Ghost = %d, %v; want not-found error", code, err)
+		t.Errorf("rm Ghost = %d, %v, want not-found error", code, err)
 	}
 }
 
@@ -285,7 +285,7 @@ func TestLauncherRmAmbiguousLabel(t *testing.T) {
 		}
 	}
 	if code, err := runLauncherVerb(scope, []string{"rm", "Editor"}); code != 1 || err == nil {
-		t.Fatalf("rm ambiguous label = %d, %v; want error listing ids", code, err)
+		t.Fatalf("rm ambiguous label = %d, %v, want error listing ids", code, err)
 	}
 	// The id always removes exactly one.
 	launchers, _ := readDoc(t, scope.path)["launchers"].([]any)
@@ -311,7 +311,7 @@ func TestCarryOverVerbs(t *testing.T) {
 	}
 	entries, _ := readDoc(t, path)["carryOver"].([]any)
 	entry, _ := entries[0].(map[string]any)
-	// ./-prefix and trailing slash folded; symlink is the default mode.
+	// ./-prefix and trailing slash folded, and symlink is the default mode.
 	if entry["path"] != ".env" || entry["mode"] != "symlink" {
 		t.Errorf("entry = %v, want .env/symlink", entry)
 	}
@@ -328,8 +328,8 @@ func TestCarryOverVerbs(t *testing.T) {
 	if entry, _ = entries[0].(map[string]any); entry["mode"] != "copy" {
 		t.Errorf("mode after upsert = %v, want copy", entry["mode"])
 	}
-	// Absolute paths inside the project fold to relative; escapes are
-	// refused.
+	// Absolute paths inside the project fold to relative. Escapes
+	// are refused.
 	if code, err := add(pos("add", proj.Path+"/config/local.json")); code != 0 || err != nil {
 		t.Fatalf("add absolute-inside: %d, %v", code, err)
 	}
@@ -339,14 +339,14 @@ func TestCarryOverVerbs(t *testing.T) {
 	}
 	for _, bad := range []string{"../outside", "/etc/passwd", "a/../../b"} {
 		if code, err := add(pos("add", bad)); code != 2 || err == nil {
-			t.Errorf("add %q = %d, %v; want usage error", bad, code, err)
+			t.Errorf("add %q = %d, %v, want usage error", bad, code, err)
 		}
 	}
 	if code, err := add(pos("rm", ".env")); code != 0 || err != nil {
 		t.Fatalf("rm .env: %d, %v", code, err)
 	}
 	if code, err := add(pos("rm", ".env")); code != 1 || err == nil {
-		t.Errorf("rm missing = %d, %v; want not-found error", code, err)
+		t.Errorf("rm missing = %d, %v, want not-found error", code, err)
 	}
 	// Removing the last entry omits the key.
 	if code, err := add(pos("rm", "config/local.json")); code != 0 || err != nil {
@@ -364,7 +364,7 @@ func TestProjectConfigRefusesBranchlessWrite(t *testing.T) {
 	// the app's schema read throws on) must be refused, not written.
 	proj := testProject(t)
 	if code, err := runConfigSet(projectConfigScope(proj), "portBase", "5170"); code != 1 || err == nil {
-		t.Errorf("branchless set = %d, %v; want refusal", code, err)
+		t.Errorf("branchless set = %d, %v, want refusal", code, err)
 	}
 	if _, err := os.Stat(projectConfigJSONPath(proj.ID)); err == nil {
 		t.Error("refused write still created project.json")
@@ -378,7 +378,7 @@ func TestUpdateRefusesMalformedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	if code, err := runConfigSet(globalConfigScope(), "portPool", "on"); code != 1 || err == nil {
-		t.Errorf("set on malformed file = %d, %v; want error", code, err)
+		t.Errorf("set on malformed file = %d, %v, want error", code, err)
 	}
 	raw, err := os.ReadFile(configJSONPath())
 	if err != nil || string(raw) != broken {
@@ -455,7 +455,7 @@ func TestConfigWriteValidates(t *testing.T) {
 	if doc["theme"] != "dark" || doc["portPool"] != true {
 		t.Errorf("written doc = %v", doc)
 	}
-	// A JSON null decodes to a nil map; it must be refused, not treated
+	// A JSON null decodes to a nil map. It must be refused, not treated
 	// as {} and used to wipe the file.
 	if code, _ := runConfigWrite(scope, `null`); code != 2 {
 		t.Errorf("write null accepted: code %d", code)
