@@ -117,9 +117,12 @@ func resolveWorktreeInclude(projectPath string, config *projectConfig) ([]carryO
 	return entries, nil
 }
 
+// Collapse duplicate separators and trailing slashes before comparing
+// stored entry paths against git output. Must stay in lockstep with
+// normalizeRelPath in shared/gitPaths.ts.
 func normalizeRelPath(p string) string {
 	var parts []string
-	for _, seg := range regexp.MustCompile(`[\\/]`).Split(p, -1) {
+	for _, seg := range strings.Split(p, "/") {
 		if seg != "" {
 			parts = append(parts, seg)
 		}

@@ -213,10 +213,15 @@ async function uninstallCliLinks(): Promise<void> {
 // stayed.
 export async function uninstallCliEverything(): Promise<void> {
   let hookFailure: unknown;
-  try {
-    await uninstallShellIntegration();
-  } catch (err) {
-    hookFailure = err;
+  // No binary means the hook-removal spawn can't run -- and the guarded
+  // hook line is inert without the command anyway, so skipping is not a
+  // failure worth reporting.
+  if (cliBinaryPath() !== null) {
+    try {
+      await uninstallShellIntegration();
+    } catch (err) {
+      hookFailure = err;
+    }
   }
   await uninstallCliLinks();
   if (hookFailure !== undefined) throw hookFailure;
