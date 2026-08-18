@@ -14,7 +14,8 @@ sm projects add <folder> --all --yes
 ```
 
 `sm projects remove <name> --yes` unregisters a project. Its files stay
-on disk.
+on disk. If two projects share a name, pass the path instead of the
+name.
 
 Then run `sm projects config` and check two things: a sensible
 `defaultBranch`, and a `scripts.setup` command that makes a fresh worktree
