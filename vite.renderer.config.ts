@@ -17,7 +17,13 @@ function gitOutput(args: string): string | null {
 
 function buildInfo(mode: string): { version: string; commit: string } {
   const sha = gitOutput("rev-parse --short HEAD");
-  const dirty = (gitOutput("status --porcelain") ?? "") !== "";
+  // The release workflow stamps the tag into package.json before
+  // building, because Info.plist and app.getVersion() read the version
+  // from there at packaging time. Excluding that one file keeps shipped
+  // builds from reporting themselves as dirty, while genuine
+  // uncommitted changes still set the flag.
+  const dirty =
+    (gitOutput("status --porcelain -- ':!package.json'") ?? "") !== "";
   const commit = sha ? (dirty ? `${sha}-dirty` : sha) : "unknown";
   const tag = gitOutput("describe --tags --exact-match HEAD");
   const version = mode === "production" ? (tag ?? "unknown") : "dev";
