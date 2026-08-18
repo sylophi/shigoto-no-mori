@@ -1,0 +1,239 @@
+<!doctype html>
+<!--
+  Artwork for the dmg's Finder window, rendered to PNG by
+  scripts/build-dmg-background.cjs (`pnpm dmg:background`).
+
+  Deliberately not a hand-painted image: this page links the app's own
+  renderer/doubutsu.css and reuses its rules -- the drifting leaf
+  wallpaper on the canvas, the palette tokens, the sticker elevation
+  recipe, Zen Maru Gothic. A palette change in the app therefore reaches
+  the installer by re-running the script, with no second copy of the
+  design to keep in sync.
+
+  The composition mirrors the app it installs: the sidebar's cream brand
+  card floating up top, the leaf-patterned canvas holding the two icons
+  on their tiles, and one of the app's own translucent footer bands
+  along the bottom carrying the instruction.
+
+  Window and icon geometry arrives as CSS custom properties from
+  shared/dmgLayout.mts -- the same module forge.config.ts reads to tell
+  Finder where to drop the icons, so the painted tiles land exactly
+  under the real ones.
+-->
+<html class="doubutsu">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../renderer/doubutsu.css" />
+    <!-- Zen Maru Gothic the way renderer/index.css takes it: the
+         package's own stylesheets, rather than reaching into its
+         files/ layout by hand. 700 and 900 are the weights doubutsu
+         renders body and headings at. -->
+    <link
+      rel="stylesheet"
+      href="../node_modules/@fontsource/zen-maru-gothic/700.css"
+    />
+    <link
+      rel="stylesheet"
+      href="../node_modules/@fontsource/zen-maru-gothic/900.css"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      /* The art is authored at 1x and the whole stage is scaled for the
+         @2x twin, so both renders are the same layout to the pixel. */
+      body {
+        width: calc(var(--dmg-w) * 1px * var(--dmg-scale));
+        height: calc(var(--dmg-h) * 1px * var(--dmg-scale));
+      }
+
+      .stage {
+        position: relative;
+        width: calc(var(--dmg-w) * 1px);
+        height: calc(var(--dmg-h) * 1px);
+        overflow: hidden;
+        transform: scale(var(--dmg-scale));
+        transform-origin: top left;
+        background-color: var(--background);
+        color: var(--foreground);
+        /* Type comes from doubutsu.css's own `body` rule -- Zen Maru
+           Gothic at 700, with the app's fallback stack behind it. */
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* data-doubutsu-zone="main" on the stage brings the app's leaf
+         wallpaper with it. In the app that layer drifts forever; a still
+         frame wants the loop's first frame, so stop the clock. */
+      .doubutsu .stage::before {
+        animation: none;
+      }
+
+      /* --- Brand plaque ----------------------------------------------
+         The sidebar's brand card, lifted onto the installer: cream on
+         the patterned canvas, 仕事の森 as the hero, a giant 森 watermark
+         bleeding off the bottom. Elevation is doubutsu's sticker recipe
+         (faint solid outline + hard blur-less drop), never a soft
+         shadow. A plain div, not a <header>: inside the main zone,
+         doubutsu.css would dress a header as a translucent page band,
+         and this one wants to read as a card floating above the
+         canvas. */
+      .plaque {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        width: 340px;
+        height: 96px;
+        margin-left: -170px;
+        padding: 20px 24px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border-radius: 24px;
+        background-color: var(--card);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+      .wordmark {
+        position: relative;
+        z-index: 1;
+        margin: 0;
+        font-size: 30px;
+        line-height: 1;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+      }
+      .romaji {
+        position: relative;
+        z-index: 1;
+        display: block;
+        margin-top: 8px;
+        font-size: 13px;
+        color: var(--muted-foreground);
+      }
+      /* --- Prerelease sticker ------------------------------------------
+         Same tell the app uses for a dev build: the hero's near-black
+         ink swaps to leaf green and a rotated sticker lands on the
+         card's corner. Generic wording on purpose -- one committed
+         asset has to cover alpha, beta and rc alike. Hidden until the
+         root carries .prerelease. */
+      .chip {
+        display: none;
+        position: absolute;
+        top: 12px;
+        right: 14px;
+        z-index: 2;
+        transform: rotate(-6deg);
+        border-radius: 999px;
+        background-color: var(--primary);
+        padding: 4px 9px;
+        font-size: 11px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--primary-foreground);
+      }
+      .prerelease .chip {
+        display: block;
+      }
+      .prerelease .wordmark {
+        color: var(--primary);
+      }
+
+      .watermark {
+        position: absolute;
+        right: -6px;
+        bottom: -40px;
+        font-size: 130px;
+        line-height: 1;
+        font-weight: 900;
+        color: var(--doubutsu-watermark);
+        opacity: 0.15;
+      }
+
+      /* --- Tiles: where Finder drops the icons ------------------------
+         Centered on the icon coordinates the maker hands Finder, and
+         deeper than the icon itself so the name Finder paints
+         underneath still lands on the card rather than on bare canvas. */
+      .tile {
+        position: absolute;
+        /* Sized off the icon, not off 128. Finder paints the item's
+           name below the icon, so the tile holds both: 26 of air, the
+           icon, its name (a 6 gap plus a 14 line), 26 of air. Centering
+           the icon instead would leave the pair sitting low in the
+           tile, which is what it looks like from a foot away. */
+        width: calc((var(--icon) + 56) * 1px);
+        height: calc((var(--icon) + 72) * 1px);
+        top: calc((var(--icon-y) - var(--icon) / 2 - 26) * 1px);
+        transform: translateX(-50%);
+        border-radius: 22px;
+        background-color: var(--card);
+        box-shadow: var(--doubutsu-sticker-shadow);
+      }
+      .tile-app {
+        left: calc(var(--app-x) * 1px);
+      }
+      .tile-apps {
+        left: calc(var(--apps-x) * 1px);
+      }
+
+      /* --- Arrow: drag this way --------------------------------------
+         Leaf green carrying the AC diagonal stripes -- the same
+         45deg/20px pattern the app slides across anything you hover,
+         here holding still and pointing at /Applications. */
+      .arrow {
+        position: absolute;
+        left: calc((var(--app-x) + var(--apps-x)) * 0.5px);
+        top: calc(var(--icon-y) * 1px);
+        width: 112px;
+        height: 56px;
+        margin: -28px 0 0 -56px;
+        background-color: var(--primary);
+        background-image: var(--doubutsu-stripe-image);
+        background-size: 20px 20px;
+        -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2048%22%3E%3Cpath%20d%3D%22M12%2024H54%22%20stroke%3D%22%23000%22%20stroke-width%3D%2216%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M56%2010L84%2024L56%2038Z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%2212%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E");
+        mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2048%22%3E%3Cpath%20d%3D%22M12%2024H54%22%20stroke%3D%22%23000%22%20stroke-width%3D%2216%22%20stroke-linecap%3D%22round%22%2F%3E%3Cpath%20d%3D%22M56%2010L84%2024L56%2038Z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%2212%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fsvg%3E");
+        -webkit-mask-size: contain;
+        mask-size: contain;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+      }
+
+      /* --- Hint band -------------------------------------------------
+         A real <footer> inside the main zone, so doubutsu.css dresses it
+         the way it dresses a detail page's footer in the app: card fill
+         held back to 70%, which lets the leaf wallpaper carry on through
+         the band instead of being walled off by it. */
+      footer {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        overflow: hidden;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        color: var(--muted-foreground);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage" data-doubutsu-zone="main">
+      <div class="plaque">
+        <h1 class="wordmark">仕事の森</h1>
+        <span class="romaji">Shigoto no Mori</span>
+        <span class="chip">prerelease</span>
+        <span class="watermark">森</span>
+      </div>
+
+      <div class="tile tile-app"></div>
+      <div class="arrow"></div>
+      <div class="tile tile-apps"></div>
+
+      <footer>Drag the app into your Applications folder to install</footer>
+    </div>
+  </body>
+</html>

@@ -9,3 +9,5 @@ pre-commit:
       run: pnpm run format:check
     theme-contract:
       run: pnpm run theme:check
+    dmg-art:
+      run: pnpm run dmg:check

@@ -26,6 +26,8 @@
     "licenses": "node scripts/generate-third-party-licenses.mjs",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "extract-icon": "scripts/extract-app-icon.sh",
+    "dmg:background": "electron scripts/build-dmg-background.cjs",
+    "dmg:check": "node scripts/check-dmg-art.mjs",
     "seed": "node scripts/seed-test-data.mts",
     "cli": "go run -C cli .",
     "cli:build": "node scripts/build-cli.mjs",

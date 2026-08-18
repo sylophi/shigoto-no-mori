@@ -18,7 +18,9 @@
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
  *    --primary, --secondary, --muted, --accent, --destructive, --input,
  *    --ring, --radius, and the --color-{emerald,rose,amber,sky}-* vars
- *    Tailwind emits for raw palette utilities.
+ *    Tailwind emits for raw palette utilities. This file also defines
+ *    --doubutsu-* of its own, including the composed
+ *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
  *
  * 2. data-slot attributes set by our components (the preferred hook --
  *    when building new UI that doubutsu must restyle, add a slot here
@@ -44,7 +46,14 @@
  *    data-popup-open, cmdk's [cmdk-item] + aria-selected, sonner's
  *    [data-sonner-toast].
  *
- * 5. Tailwind utility names (stable public API, checked loosely):
+ * 5. One consumer outside renderer/: scripts/dmg-background.html, the
+ *    dmg installer artwork, which links this file and renders against
+ *    the leaf-wallpaper ::before, the header/footer band rule and the
+ *    --doubutsu-* tokens. It is a committed png, so a broken hook there
+ *    is invisible until someone opens a release -- theme:check verifies
+ *    it, and `pnpm dmg:check` catches art that predates a palette edit.
+ *
+ * 6. Tailwind utility names (stable public API, checked loosely):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
  *    -semibold/-bold/-black/-mono, .border-b/.border-t (only inside
  *    slotted surfaces), [class*="backdrop-blur"].
@@ -116,6 +125,26 @@
      the soft shadow/ring stack that doubutsu strips. */
   --doubutsu-edge: oklch(0.39 0.045 74.1 / 0.14);
   --doubutsu-edge-line: oklch(0.39 0.045 74.1 / 0.08);
+
+  /* Two recipes that are geometry as much as color, so they travel as
+     whole tokens rather than being retyped at each use: the sticker
+     elevation above, and the sliding stripe pattern below. Both resolve
+     their var()s on the element, so the dark block's edge/stripe values
+     flow through without a second definition. The installer artwork
+     (scripts/dmg-background.html) renders against these too, which is
+     what keeps its arrow and its cards on the same recipe as the app's
+     hover stripes and floating surfaces. */
+  --doubutsu-sticker-shadow:
+    0 0 0 1px var(--doubutsu-edge-line), 0 5px 0 0 var(--doubutsu-edge);
+  --doubutsu-stripe-image: linear-gradient(
+    45deg,
+    transparent 25%,
+    var(--doubutsu-stripe) 25%,
+    var(--doubutsu-stripe) 50%,
+    transparent 50%,
+    transparent 75%,
+    var(--doubutsu-stripe) 75%
+  );
 
   /* Semantic status colors that components use as raw Tailwind palette
      utilities (text-emerald-500, bg-amber-500/10, text-sky-500, ...)
@@ -281,9 +310,7 @@
     [data-slot="sheet-content"],
     [data-sonner-toast]
   ) {
-  box-shadow:
-    0 0 0 1px var(--doubutsu-edge-line),
-    0 5px 0 0 var(--doubutsu-edge) !important;
+  box-shadow: var(--doubutsu-sticker-shadow) !important;
 }
 
 /* Hairline separators inside those surfaces (the combobox search row,
@@ -581,15 +608,7 @@
 .doubutsu [data-highlighted]:not([data-disabled]),
 .doubutsu [cmdk-item][aria-selected="true"],
 .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
-  background-image: linear-gradient(
-    45deg,
-    transparent 25%,
-    var(--doubutsu-stripe) 25%,
-    var(--doubutsu-stripe) 50%,
-    transparent 50%,
-    transparent 75%,
-    var(--doubutsu-stripe) 75%
-  );
+  background-image: var(--doubutsu-stripe-image);
   background-size: 20px 20px;
   animation: ac-stripe-slide 0.6s linear infinite;
 }
