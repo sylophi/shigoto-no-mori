@@ -92,7 +92,9 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	err = updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
 		if raw != nil {
-			_ = json.Unmarshal(raw, &projects)
+			if err := json.Unmarshal(raw, &projects); err != nil {
+				return nil, malformedKeyErr(registryPath(), projectsKey, err)
+			}
 		}
 		kept := make([]project, 0, len(projects))
 		found := false
@@ -199,7 +201,12 @@ func registerProject(path string) (project, error) {
 	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
 		if raw != nil {
-			_ = json.Unmarshal(raw, &projects)
+			// Strict for the same reason as loadProjects, and with more
+			// at stake: treating a malformed value as empty here would
+			// rewrite the registry as just the project being added.
+			if err := json.Unmarshal(raw, &projects); err != nil {
+				return nil, malformedKeyErr(registryPath(), projectsKey, err)
+			}
 		}
 		for _, existing := range projects {
 			if existing.Path == path {
@@ -307,6 +314,15 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	var candidates []string
 	known := 0
 	for _, repo := range scanForGitRepos(root) {
+		// Fold through git exactly like single add: the scan built these
+		// paths from the caller's spelling of root, and a mis-cased or
+		// symlinked spelling registered verbatim defeats every later
+		// path lookup (resolveProjectByPath compares the canonical
+		// spelling) -- and slips past the already-registered check just
+		// below for the same reason.
+		if _, primaryPath, err := locateRepo(repo); err == nil {
+			repo = primaryPath
+		}
 		if registered[repo] {
 			known++
 			continue

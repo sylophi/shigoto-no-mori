@@ -640,3 +640,18 @@ func TestReadGlobalConfigStrict(t *testing.T) {
 		t.Error("readGlobalConfig on malformed config.json succeeded, want error")
 	}
 }
+
+// The write side of the same rule: registering into a malformed
+// projects value must refuse, not rewrite the registry as just the
+// new project.
+func TestRegisterProjectRefusesMalformedProjectsValue(t *testing.T) {
+	sandboxConfigRoot(t)
+	kept := `{"projects":{"p1":{"id":"p1","name":"alpha","path":"/tmp/alpha"}}}`
+	seedRegistry(t, kept)
+	if _, err := registerProject("/tmp/beta"); err == nil {
+		t.Error("registerProject into a malformed projects value succeeded, want error")
+	}
+	if raw, err := os.ReadFile(registryPath()); err != nil || string(raw) != kept {
+		t.Errorf("malformed projects value was rewritten to %q", raw)
+	}
+}

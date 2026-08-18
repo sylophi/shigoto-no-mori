@@ -43,7 +43,11 @@ const EXIT_POLL_MS = 100;
 
 const PersistedScriptSchema = z.object({
   runId: z.string().min(1),
-  pid: z.number().int().positive(),
+  // gte(2): the sweep signals the record's process *group* as -pid, and
+  // kill(-1, ...) is "every process you may signal". No real child ever
+  // has pid 1, but this file is untrusted input everywhere else, so the
+  // one value that would broadcast a signal is refused at the schema.
+  pid: z.number().int().gte(2),
   projectId: z.string().min(1),
   worktreeId: z.string().min(1),
   startedAt: z.number().int().positive(),
