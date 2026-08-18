@@ -12,6 +12,7 @@ import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
+import { type PersistedScript, persistRunningScripts } from "./persistence";
 import { signalTree, signalTreeBestEffort, spawnScript } from "./process";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
@@ -57,6 +58,9 @@ interface RunRecord {
   worktreeName: string;
   worktreePath: string;
   scriptName: string;
+  // The shell command we launched. Persisted with the record, where it
+  // is one of the facts that proves a surviving pid is still ours.
+  command: string;
   startedAt: number;
   exited: boolean;
   cancelling: boolean;
@@ -65,6 +69,25 @@ interface RunRecord {
 }
 
 const runningScripts = new Map<string, RunRecord>();
+
+// Mirror the live map to disk on every spawn and every settle, so a
+// crash that skips the kill chains leaves the next boot something to
+// sweep (see ./persistence.ts).
+function persistSnapshot(): void {
+  const scripts: PersistedScript[] = Array.from(
+    runningScripts.values(),
+    (record) => ({
+      runId: record.runId,
+      pid: record.pid,
+      projectId: record.projectId,
+      worktreeId: record.worktreeId,
+      startedAt: record.startedAt,
+      command: record.command,
+    }),
+  );
+  persistRunningScripts(scripts);
+}
+
 // Ref-counted: overlapping deleters can mark the same worktree (a
 // per-worktree delete racing a nuke that lists it too), and the guard
 // must hold until the LAST one finishes -- with a plain Set, whichever
@@ -337,6 +360,7 @@ export function startScript(args: RunArgs): string {
     worktreeName: args.worktree.name,
     worktreePath: args.worktree.path,
     scriptName: args.scriptName,
+    command: args.command,
     startedAt: Date.now(),
     exited: false,
     cancelling: false,
@@ -344,6 +368,7 @@ export function startScript(args: RunArgs): string {
     notify: args.notify,
   };
   runningScripts.set(runId, record);
+  persistSnapshot();
 
   // Shared end-of-run bookkeeping. The renderer-facing event differs per
   // path ("error" vs "exit"), so callers emit that first, then settle.
@@ -353,6 +378,7 @@ export function startScript(args: RunArgs): string {
     record.exited = true;
     resolveDone();
     runningScripts.delete(runId);
+    persistSnapshot();
   };
 
   // Both streams flow into a single "data" event so xterm sees one

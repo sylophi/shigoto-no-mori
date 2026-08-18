@@ -22,6 +22,7 @@ import {
   markShuttingDown,
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
+import { startOrphanScriptSweep } from "./lib/scripts/persistence";
 import { reapScriptsForRemovedWorktrees } from "./lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -183,6 +184,11 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
+  // A crash, a force quit, or an OOM skips every kill path below, so
+  // anything the last session left running is reaped here. Claims the
+  // record file synchronously (before any script can spawn) and does
+  // the killing in the background.
+  startOrphanScriptSweep();
   buildAppMenu();
   createWindow();
   startBackgroundFetch();

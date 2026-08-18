@@ -174,6 +174,7 @@ export const runtime = {
 export const scripts = {
   run: scriptsClient.run,
   cancel: (runId: string) => scriptsClient.cancel({ runId }),
+  orphanReport: scriptsClient.orphanReport,
   onEvent: scriptsClient.event,
   onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
 } as const;

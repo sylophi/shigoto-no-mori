@@ -67,9 +67,12 @@ export function startStateWatcher(poke: () => void): void {
           // app<->CLI plumbing, not user state: reacting to them would
           // turn every updater transition and every `sm update` run
           // into an app-wide refetch. Prefix match: the request file
-          // spawns a `.consuming` sibling while being claimed.
+          // spawns a `.consuming` sibling while being claimed. The
+          // running-scripts record (scripts/persistence.ts) is the same
+          // kind of plumbing, rewritten on every script spawn and exit.
           if (
             file === "updater.json" ||
+            file === "running-scripts.json" ||
             file?.startsWith("updater-request.json")
           ) {
             return;

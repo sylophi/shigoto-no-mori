@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
+  OrphanScriptReportSchema,
   RemovedWorktreeScriptsSchema,
   RunScriptPayloadSchema,
   ScriptEventSchema,
@@ -27,6 +28,14 @@ export const scriptsContract = {
   stoppedForRemovedWorktree: broadcast(
     "scripts:stoppedForRemovedWorktree",
     RemovedWorktreeScriptsSchema,
+  ),
+  // One-shot: the renderer asks once at startup whether the boot sweep
+  // stopped anything, so the user hears about dev servers that outlived
+  // a crash.
+  orphanReport: invoke(
+    "scripts:orphanReport",
+    z.void(),
+    OrphanScriptReportSchema,
   ),
 } as const;
 

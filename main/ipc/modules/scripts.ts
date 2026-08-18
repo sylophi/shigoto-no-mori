@@ -3,6 +3,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "../../lib/projects";
 import { cancelScript, startScript } from "../../lib/scripts";
+import { takeOrphanSweepReport } from "../../lib/scripts/persistence";
 import { shellQuote } from "../../lib/scripts/process";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
@@ -56,4 +57,6 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
       const cancelled = await cancelScript(runId);
       return { cancelled };
     },
+
+    orphanReport: async () => takeOrphanSweepReport(),
   };
