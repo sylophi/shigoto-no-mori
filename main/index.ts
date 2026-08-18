@@ -23,6 +23,10 @@ import {
 } from "./lib/scripts";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
+import {
+  isMovingToApplications,
+  offerMoveToApplications,
+} from "./electron/moveToApplications";
 import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -131,6 +135,11 @@ app.on("ready", async () => {
     app.exit(1);
     return;
   }
+  // A packaged app living outside Applications can never install its
+  // own updates, so offer the move before anything else starts: a
+  // successful move relaunches the moved copy, and this instance has
+  // nothing worth booting first.
+  if (await offerMoveToApplications()) return;
   buildAppMenu();
   createWindow();
   startBackgroundFetch();
@@ -173,7 +182,7 @@ app.on("before-quit", (event) => {
   // the normal-quit path: children that survive the best-effort pass
   // don't get the escalation fallback and may end up orphaned.
   // Acceptable for an explicit, user-initiated update.
-  if (isInstallingUpdate() || isRelaunching()) {
+  if (isInstallingUpdate() || isRelaunching() || isMovingToApplications()) {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();

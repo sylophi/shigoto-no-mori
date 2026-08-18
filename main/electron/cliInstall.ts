@@ -92,8 +92,9 @@ function isOnPath(dir: string): boolean {
 
 // Gatekeeper app translocation (quarantined app run from ~/Downloads)
 // mounts the bundle at a randomized read-only path that dies with the
-// process -- a link to it would dangle immediately.
-function isTranslocated(): boolean {
+// process -- a link to it would dangle immediately. Exported for the
+// launch-time move offer, which describes the same state to the user.
+export function isTranslocated(): boolean {
   return app.isPackaged && process.resourcesPath.includes("/AppTranslocation/");
 }
 
