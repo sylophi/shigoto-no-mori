@@ -53,7 +53,14 @@ function deriveBranch(entry: RawWorktreeEntry): string {
 
 async function getChangedCount(worktreePath: string): Promise<number> {
   try {
-    const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
+    // --untracked-files=normal pins the untracked listing against a
+    // user-level `status.showUntrackedFiles = no`; overwriteFromUpstream
+    // relies on this count agreeing with its own dirty guard.
+    const stdout = await run(worktreePath, [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=normal",
+    ]);
     return stdout.split("\n").filter((line) => line.length > 0).length;
   } catch {
     return 0;

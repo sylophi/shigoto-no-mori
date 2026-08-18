@@ -2,8 +2,12 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { run, runLenient } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
+
+const splitZ = (out: string) => out.split("\0").filter(Boolean);
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -26,17 +30,47 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // leaves nothing to recover from, so the guard has to live here.
 // Untracked files count as dirty too: `reset --hard` silently
 // overwrites any untracked file whose path exists in the upstream tree.
-// Same command as getChangedCount, so this refuses in exactly the
-// states where the renderer already hides the button (ignored files are
-// excluded, so build output doesn't trip it).
+// `--untracked-files=normal` pins that protection against a user-level
+// `status.showUntrackedFiles = no`. Same command as getChangedCount, so
+// this refuses in exactly the states where the renderer already hides
+// the button.
+//
+// Ignored files never appear in `status`, but `reset --hard` overwrites
+// them all the same when the upstream tree tracks a file at their path
+// (e.g. a carried-over `.env` colliding with a committed one) -- and
+// their content was never in git, so nothing can recover it. The second
+// guard catches exactly that: an upstream-tracked path that is not
+// tracked locally yet already exists on disk. Anything non-ignored at
+// such a path was already refused by the status guard above, so the
+// files this finds are the ignored collisions.
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
   await run(worktreePath, ["fetch"]);
-  const status = await run(worktreePath, ["status", "--porcelain=v1"]);
+  const status = await run(worktreePath, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=normal",
+  ]);
   if (status.trim().length > 0) {
     throw new Error(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
+    );
+  }
+  const [upstream, tracked] = await Promise.all([
+    run(worktreePath, ["ls-tree", "-r", "--name-only", "-z", "@{u}"]),
+    run(worktreePath, ["ls-files", "-z"]),
+  ]);
+  const trackedSet = new Set(splitZ(tracked));
+  const collisions = splitZ(upstream).filter(
+    (path) => !trackedSet.has(path) && existsSync(join(worktreePath, path)),
+  );
+  if (collisions.length > 0) {
+    const shown = collisions.slice(0, 3).join(", ");
+    const rest =
+      collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
+    throw new Error(
+      `Overwriting would replace ignored local file(s) the upstream branch tracks: ${shown}${rest}. Move them aside first.`,
     );
   }
   await run(worktreePath, ["reset", "--hard", "@{u}"]);
