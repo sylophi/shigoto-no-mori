@@ -5,8 +5,8 @@ import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so
-// the previous name is part of the key — the same composition the
-// FileDiff list already used for its React key.
+// the previous name is part of the key. That is the same composition
+// the FileDiff list already used for its React key.
 export function fileKey(file: FileDiffMetadata): string {
   return `${file.prevName ?? ""} ${file.name}`;
 }
@@ -28,7 +28,7 @@ export function fileStats(file: FileDiffMetadata): {
   return { additions, deletions };
 }
 
-// One-letter change marker in git's own vocabulary (A/D/R/M) — a status
+// One-letter change marker in git's own vocabulary (A/D/R/M). A status
 // column reads faster than five icons and costs one character of rail
 // width. Colors stay inside the four families doubutsu remaps.
 export const CHANGE_MARKS: Record<

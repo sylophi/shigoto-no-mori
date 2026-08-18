@@ -17,6 +17,13 @@ import { useEffect, useState } from "react";
 // the observer has to be re-armed.
 const SPY_BAND = "0px 0px -72% 0px";
 
+// The file wrappers in scroll order. This module owns the marker, so the
+// jump and step paths in DiffView read it through here rather than
+// spelling the selector out again.
+export function fileTargets(container: HTMLElement): HTMLElement[] {
+  return [...container.querySelectorAll<HTMLElement>("[data-diff-file]")];
+}
+
 export function useFileScrollSpy(
   containerRef: React.RefObject<HTMLElement | null>,
   filesKey: string,
@@ -26,9 +33,7 @@ export function useFileScrollSpy(
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const targets = [
-      ...container.querySelectorAll<HTMLElement>("[data-diff-file]"),
-    ];
+    const targets = fileTargets(container);
     if (targets.length === 0) return;
 
     const observer = new IntersectionObserver(

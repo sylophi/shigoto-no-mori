@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { ChevronsDownUp, ChevronsUpDown, Search } from "lucide-react";
 import { DiffStats } from "@/components/ui/diff-stats";
@@ -9,7 +9,7 @@ import { CHANGE_MARKS, fileKey, fileStats } from "./patchFiles";
 // The navigation rail for a multi-file patch: every file in the order it
 // appears in the scroll area, with its change marker and +/- counts.
 // Order is never re-ranked (that's why the filter is a plain substring
-// match and not lib/fuzzyMatch) — the rail is a map of the scroll area,
+// match and not lib/fuzzyMatch). The rail is a map of the scroll area,
 // so it has to keep the scroll area's order to stay readable.
 export function DiffFileIndex({
   files,
@@ -25,10 +25,11 @@ export function DiffFileIndex({
   allCollapsed: boolean;
   onSelect: (key: string) => void;
   onToggleAll: () => void;
-  // Visibility only; the caller owns the "is there room for a rail"
+  // Visibility only. The caller owns the "is there room for a rail"
   // question because it owns the pane.
 }) {
   const [query, setQuery] = useState("");
+  const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim().toLowerCase();
   const matches = needle
     ? files.filter(
@@ -37,6 +38,17 @@ export function DiffFileIndex({
           file.prevName?.toLowerCase().includes(needle),
       )
     : files;
+
+  // Keep the highlighted row on screen. Past ~24 files the rail is taller
+  // than its own viewport, and a scroll-spy marker you can't see is no
+  // marker at all. `nearest` is the minimum scroll that reveals the row,
+  // so a row already in view doesn't move and reading down a patch
+  // doesn't jitter.
+  useEffect(() => {
+    listRef.current
+      ?.querySelector("[data-active]")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [activeKey]);
 
   return (
     <div
@@ -79,7 +91,7 @@ export function DiffFileIndex({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
         {matches.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
             No files match that filter.
@@ -93,7 +105,7 @@ export function DiffFileIndex({
                 file={file}
                 active={key === activeKey}
                 collapsed={collapsedKeys.has(key)}
-                onSelect={() => onSelect(key)}
+                onSelect={onSelect}
               />
             );
           })
@@ -109,6 +121,10 @@ export function DiffFileIndex({
   );
 }
 
+// Split out so the highlight moving re-renders two rows' worth of work
+// rather than the whole rail: `onSelect` is the caller's own handler
+// (the key comes from the row), so an untouched row's props are
+// unchanged and its markup stays cached.
 function IndexRow({
   file,
   active,
@@ -118,7 +134,7 @@ function IndexRow({
   file: FileDiffMetadata;
   active: boolean;
   collapsed: boolean;
-  onSelect: () => void;
+  onSelect: (key: string) => void;
 }) {
   // No home to tildify against: these are repo-relative paths, so the
   // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
@@ -131,7 +147,7 @@ function IndexRow({
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={() => onSelect(fileKey(file))}
       data-active={active || undefined}
       title={
         file.prevName

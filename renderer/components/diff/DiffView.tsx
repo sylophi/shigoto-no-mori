@@ -2,19 +2,20 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 // parsePatchFiles lives in the root entry, not /react (the docs example
 // is slightly off — `@pierre/diffs/react` only re-exports the React
 // components and shared types). The two imports are friendly together.
-import { parsePatchFiles } from "@pierre/diffs";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
+import { flushSync } from "react-dom";
 import { ChevronDown, Loader2, PanelLeft } from "lucide-react";
 import { useElementWidth } from "@/hooks/ui/useElementWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { isEditableTarget } from "@/lib/dom";
+import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { fileKey } from "./patchFiles";
-import { useFileScrollSpy } from "./useFileScrollSpy";
+import { fileTargets, useFileScrollSpy } from "./useFileScrollSpy";
 
 const DIFF_THEME = {
   theme: { dark: "pierre-dark", light: "pierre-light" } as const,
@@ -55,18 +56,54 @@ const INDEX_AMPLE_PANE = 1024;
 const JUMP_GAP = 8;
 const INDEX_KEY = "diff.fileIndex";
 
-// The file wrappers in scroll order. Read from the DOM rather than from
-// a ref registry: the same `data-diff-file` marker already anchors the
-// scroll spy, and one marker beats threading a callback ref per file.
-function fileTargets(container: HTMLElement): HTMLElement[] {
-  return [...container.querySelectorAll<HTMLElement>("[data-diff-file]")];
-}
-
 function scrollToFile(container: HTMLElement, target: HTMLElement): void {
   container.scrollTop +=
     target.getBoundingClientRect().top -
     container.getBoundingClientRect().top -
     JUMP_GAP;
+}
+
+type CollapsedKeys = ReadonlySet<string>;
+
+// Fold-set updater. Returns the same Set when nothing moves, so a no-op
+// toggle doesn't re-render the patch.
+function withCollapsed(
+  prev: CollapsedKeys,
+  key: string,
+  collapsed: boolean,
+): CollapsedKeys {
+  if (prev.has(key) === collapsed) return prev;
+  const next = new Set(prev);
+  if (collapsed) next.add(key);
+  else next.delete(key);
+  return next;
+}
+
+// What landing on a file means, in one place: the rail's clicks and the
+// `[` / `]` keys both come through here. Module-level and taking the
+// (stable) state setters, so the key listener can call it without
+// re-registering on every render.
+function jumpToFile(
+  container: HTMLElement,
+  key: string,
+  setCollapsedKeys: React.Dispatch<React.SetStateAction<CollapsedKeys>>,
+  setActiveKey: (key: string) => void,
+): void {
+  const target = container.querySelector<HTMLElement>(
+    `[data-diff-file="${CSS.escape(key)}"]`,
+  );
+  if (!target) return;
+  // Expand first, and commit it before measuring anything: scrollTop is
+  // clamped against the current scrollHeight, so on a folded-up patch
+  // there is nothing to scroll into yet and the last files would land
+  // partway down the view instead of at the top. flushSync is what makes
+  // the growth visible to the scroll below. The wrapper node survives
+  // the re-render, so `target` stays good.
+  flushSync(() => setCollapsedKeys((prev) => withCollapsed(prev, key, false)));
+  scrollToFile(container, target);
+  // Claim the highlight immediately. The observer confirms it on the
+  // next frame rather than trailing the jump.
+  setActiveKey(key);
 }
 
 // Three states, not two: null means the user has never said, and the
@@ -143,84 +180,59 @@ export function DiffView({
   const toggleIndex = () => {
     const next = !showIndex;
     setIndexPref(next);
+    // The stored value is computed before the try: a conditional inside
+    // one makes React Compiler bail on this whole component, and without
+    // its memo cache the patch is re-parsed on every render.
+    const stored = next ? "1" : "0";
     try {
-      window.localStorage.setItem(INDEX_KEY, next ? "1" : "0");
+      window.localStorage.setItem(INDEX_KEY, stored);
     } catch {
       // localStorage may be unavailable; not fatal.
     }
   };
 
   const setCollapsed = (key: string, collapsed: boolean) =>
-    setCollapsedKeys((prev) => {
-      if (prev.has(key) === collapsed) return prev;
-      const next = new Set(prev);
-      if (collapsed) next.add(key);
-      else next.delete(key);
-      return next;
-    });
+    setCollapsedKeys((prev) => withCollapsed(prev, key, collapsed));
 
   const jumpTo = (key: string) => {
     const container = scrollRef.current;
-    const target = container?.querySelector<HTMLElement>(
-      `[data-diff-file="${CSS.escape(key)}"]`,
-    );
-    if (!container || !target) return;
-    // Expanding grows the file below its own header, so the header stays
-    // where it is and the offset measured now survives the state update.
-    setCollapsed(key, false);
-    scrollToFile(container, target);
-    // Claim the highlight immediately; the observer confirms it on the
-    // next frame rather than trailing the jump.
-    setActiveKey(key);
+    if (container) jumpToFile(container, key, setCollapsedKeys, setActiveKey);
   };
 
   // `[` / `]` step through the files without reaching for the rail (and
   // work even when it's hidden). Bare keys, so they stay inert while the
-  // filter box or any other field has focus. The handler deliberately
-  // touches only stable setters and the module-level DOM helpers, so the
-  // listener is re-registered on active-file changes and nothing else.
+  // filter box or any other field has focus, and while an overlay covers
+  // the page -- neither the launcher nor a modal traps focus, so without
+  // that guard they'd scroll the diff hidden behind them. The handler
+  // only picks the neighbouring key. jumpToFile stays the single
+  // definition of what landing on a file does.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "[" && e.key !== "]") return;
       if (e.repeat || e.isComposing) return;
       if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
       if (isEditableTarget(e.target)) return;
+      if (isOverlayOpen()) return;
       const container = scrollRef.current;
       if (!container) return;
-      const targets = fileTargets(container);
-      if (targets.length === 0) return;
+      const keys = fileTargets(container).map((el) => el.dataset["diffFile"]);
+      if (keys.length === 0) return;
       e.preventDefault();
-      const at = targets.findIndex(
-        (el) => el.dataset["diffFile"] === activeKey,
-      );
-      const target =
-        targets[
-          Math.min(
-            targets.length - 1,
-            Math.max(0, at + (e.key === "]" ? 1 : -1)),
-          )
-        ];
-      const key = target?.dataset["diffFile"];
-      if (!target || key === undefined) return;
-      setCollapsedKeys((prev) => {
-        if (!prev.has(key)) return prev;
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-      scrollToFile(container, target);
-      setActiveKey(key);
+      // No active file yet (nothing scrolled) steps to the first one.
+      const at = keys.indexOf(activeKey ?? undefined);
+      const step = e.key === "]" ? 1 : -1;
+      const next = keys[Math.min(keys.length - 1, Math.max(0, at + step))];
+      if (next !== undefined)
+        jumpToFile(container, next, setCollapsedKeys, setActiveKey);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [activeKey, setActiveKey]);
 
   return (
-    // The rail is a function of how much room this pane actually has,
-    // not of the window: the sidebar is user-resizable, so a viewport
-    // breakpoint would guess wrong. Measured rather than left to a
-    // container query because the chip has to know whether the rail is
-    // currently on screen to toggle the right way.
+    // Measured rather than left to a container query: the chip has to
+    // know whether the rail is currently on screen to toggle the right
+    // way. (Why the pane and not the window: see useElementWidth.)
     <div ref={paneRef} className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
         <BackButton onClick={onBack} label={backLabel} />
@@ -295,55 +307,83 @@ export function DiffView({
             >
               {allFiles.map((fileDiff) => {
                 const key = fileKey(fileDiff);
-                const collapsed = collapsedKeys.has(key);
                 return (
-                  // `PatchDiff` requires a single-file patch; for multi-file
-                  // output we parse with `parsePatchFiles` and spawn one
-                  // `<FileDiff>` per file per the library's recommended
-                  // pattern. React Compiler memoizes this implicitly.
-                  //
-                  // The wrapper is what the index scrolls to and what the
-                  // scroll spy observes; `collapsed` is pierre's own option,
-                  // which drops the file's rendered rows and keeps the
-                  // header, so folding a file also stops paying for it.
-                  <div key={key} data-diff-file={key}>
-                    <FileDiff
-                      fileDiff={fileDiff}
-                      options={{
-                        ...DIFF_THEME,
-                        diffStyle,
-                        themeType: resolved,
-                        collapsed,
-                      }}
-                      renderHeaderPrefix={() => (
-                        <button
-                          type="button"
-                          onClick={() => setCollapsed(key, !collapsed)}
-                          aria-expanded={!collapsed}
-                          aria-label={
-                            collapsed
-                              ? `Expand ${fileDiff.name}`
-                              : `Collapse ${fileDiff.name}`
-                          }
-                          className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                        >
-                          <ChevronDown
-                            aria-hidden
-                            className={cn(
-                              "size-3.5 transition-transform",
-                              collapsed && "-rotate-90",
-                            )}
-                          />
-                        </button>
-                      )}
-                    />
-                  </div>
+                  <DiffFileRow
+                    key={key}
+                    fileDiff={fileDiff}
+                    fileId={key}
+                    collapsed={collapsedKeys.has(key)}
+                    diffStyle={diffStyle}
+                    themeType={resolved}
+                    onToggle={setCollapsed}
+                  />
                 );
               })}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// One file of the patch. Its own component so folding a file re-renders
+// that file and not the other 130: pierre's FileDiff re-runs a full DOM
+// render on every pass (its instance effect has no dependency array, and
+// a collapsed instance never takes the cheap early return), so the
+// untouched rows have to keep their cached element to stay free. That
+// holds only while every prop here is stable per file -- hence `onToggle`
+// is the caller's own setter rather than a per-row closure.
+//
+// The wrapper is what the index scrolls to and what the scroll spy
+// observes. `collapsed` is pierre's own option, which drops the file's
+// rendered rows and keeps the header, so folding a file also stops
+// paying for it.
+function DiffFileRow({
+  fileDiff,
+  fileId,
+  collapsed,
+  diffStyle,
+  themeType,
+  onToggle,
+}: {
+  fileDiff: FileDiffMetadata;
+  fileId: string;
+  collapsed: boolean;
+  diffStyle: DiffStyle;
+  themeType: "light" | "dark";
+  onToggle: (key: string, collapsed: boolean) => void;
+}) {
+  return (
+    <div data-diff-file={fileId}>
+      {/* `PatchDiff` requires a single-file patch. For multi-file output
+          we parse with `parsePatchFiles` and spawn one `<FileDiff>` per
+          file per the library's recommended pattern. */}
+      <FileDiff
+        fileDiff={fileDiff}
+        options={{ ...DIFF_THEME, diffStyle, themeType, collapsed }}
+        renderHeaderPrefix={() => (
+          <button
+            type="button"
+            onClick={() => onToggle(fileId, !collapsed)}
+            aria-expanded={!collapsed}
+            aria-label={
+              collapsed
+                ? `Expand ${fileDiff.name}`
+                : `Collapse ${fileDiff.name}`
+            }
+            className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "size-3.5 transition-transform",
+                collapsed && "-rotate-90",
+              )}
+            />
+          </button>
+        )}
+      />
     </div>
   );
 }

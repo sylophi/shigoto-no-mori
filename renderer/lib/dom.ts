@@ -9,3 +9,14 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     (target instanceof HTMLElement && target.isContentEditable)
   );
 }
+
+// True while a full-app overlay is up (the project launcher, any modal
+// shell). Neither traps focus and both mount as siblings of the router,
+// so a bare-key shortcut in the page underneath still fires unless it
+// asks. Distinct from the launcher's own narrower check, which asks only
+// "is a modal up" to decide whether it may open on top.
+export function isOverlayOpen(): boolean {
+  return Boolean(
+    document.querySelector('[data-slot="launcher"], [data-slot="modal-shell"]'),
+  );
+}

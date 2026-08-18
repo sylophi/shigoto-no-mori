@@ -315,16 +315,25 @@
 }
 
 /* Hairline separators inside those surfaces (the combobox search row,
-   modal header/footer rows) went transparent with --border; replace
-   them with the same chunky muted band as the dropdown separator. */
+   modal header/footer rows, the diff rail's filter and match-count
+   rows) went transparent with --border; replace them with the same
+   chunky muted band as the dropdown separator. */
 .doubutsu
-  :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+  :is(
+    [data-slot="modal-shell"],
+    [data-slot="combobox-popup"],
+    [data-slot="diff-index"]
+  )
   .border-b,
 .doubutsu [data-slot="combobox-search"] {
   box-shadow: inset 0 -2px 0 0 var(--muted);
 }
 .doubutsu
-  :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+  :is(
+    [data-slot="modal-shell"],
+    [data-slot="combobox-popup"],
+    [data-slot="diff-index"]
+  )
   .border-t {
   box-shadow: inset 0 2px 0 0 var(--muted);
 }
@@ -383,24 +392,15 @@
    depths (Settings at the route root, WorktreeDetailInner one level
    down), and the band is the intended pattern for all of them. The
    footer sets bg-card in component code -- this is unlayered, so it
-   outranks that utility and the pair stays in sync. */
-.doubutsu [data-doubutsu-zone="main"] :is(header, footer) {
-  background-color: color-mix(in oklab, var(--card) 70%, transparent);
-}
+   outranks that utility and the pair stays in sync.
 
-/* The diff file index is bounded by a border-r in v1, which goes
-   transparent here. Give it the same lifted band as the header/footer
-   above, so the rail reads as its own panel and the drifting leaves
-   still carry through it. Its internal hairlines (the filter row, the
-   match count) take the chunky muted bar used everywhere else. */
+   The diff file index joins them rather than restating the recipe: it
+   is bounded by a border-r in v1, which goes transparent here, so the
+   rail wants the same band to read as its own panel. Keeping it on this
+   selector list means the alpha above stays the single knob. */
+.doubutsu [data-doubutsu-zone="main"] :is(header, footer),
 .doubutsu [data-slot="diff-index"] {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
-}
-.doubutsu [data-slot="diff-index"] .border-b {
-  box-shadow: inset 0 -2px 0 0 var(--muted);
-}
-.doubutsu [data-slot="diff-index"] .border-t {
-  box-shadow: inset 0 2px 0 0 var(--muted);
 }
 
 /* --- Typography: AC chunky-by-default ---
