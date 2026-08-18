@@ -252,13 +252,17 @@ export function NewWorktree() {
       >
         {/* First, and outside the sections it governs: the pull request
             mode hides the source field, and a toggle that moves out from
-            under the cursor as it's clicked is worse than the gap. */}
-        <ModeToggle
-          mode={mode}
-          onChange={setMode}
-          disabled={busy}
-          pullRequestUnavailable={prMode ? undefined : prUnavailable}
-        />
+            under the cursor as it's clicked is worse than the gap. The
+            wrapper keeps the track hugging its options -- a bare flex
+            child would stretch to the form's width. */}
+        <div>
+          <ModeToggle
+            mode={mode}
+            onChange={setMode}
+            disabled={busy}
+            pullRequestUnavailable={prMode ? undefined : prUnavailable}
+          />
+        </div>
 
         {!prMode && (
           <div className="space-y-2">
