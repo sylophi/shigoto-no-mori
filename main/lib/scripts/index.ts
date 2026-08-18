@@ -40,9 +40,6 @@ interface RunArgs {
   project: Pick<Project, "id" | "path" | "name">;
   projectBranch: string;
   defaultBranch: string;
-  // Overlaid on the standard script environment last. The CLI
-  // delegation pins SHIGOMORI_ROOT through this (see cliSpawnEnv).
-  extraEnv?: Record<string, string>;
   notify: NotifyScriptEvent;
 }
 
@@ -300,6 +297,10 @@ export function startScript(args: RunArgs): string {
 
   const runId = randomUUID();
 
+  // Inherits the app's environment plus the SHIGOMORI_* contract vars,
+  // and deliberately adds no state-root pin: a script's whole process
+  // tree inherits this, so naming a root here would follow the user's
+  // command into anything it starts (see initShigomoriRoot).
   const env = {
     ...process.env,
     // Convince modern tools (npm, pnpm, bun, vite, vitest, tsc, eslint
@@ -319,7 +320,6 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
     [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.projectBranch,
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
-    ...args.extraEnv,
   };
 
   const child: ChildProcess = spawnScript({

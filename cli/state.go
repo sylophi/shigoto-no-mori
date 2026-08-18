@@ -47,7 +47,8 @@ func initRoot() {
 // $XDG_CONFIG_HOME/<rootDirName>/root, one line holding an absolute
 // path (~/ allowed). Go mirror of the policy in shared/cliDist.mts
 // (the app reads and writes the same file). SHIGOMORI_ROOT still beats
-// it, and the app pins that var on every delegated spawn. Missing,
+// it, and nothing injects that var -- a caller who sets it is
+// sandboxing the whole tree on purpose (scripts.go). Missing,
 // empty, or non-absolute content falls through to the flavor default
 // -- initRoot runs before every command, so a malformed file must not
 // be fatal.

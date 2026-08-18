@@ -20,6 +20,15 @@ let cachedPointerPath: string | null = null;
 // SHIGOMORI_ROOT env override first (so a test harness can sandbox the
 // app), then the flavor's pointer file (policy in shared/cliDist.mts),
 // then ~/<rootDirName>.
+//
+// The override is something a human or a test harness sets, and it must
+// stay that way: the app itself may never put SHIGOMORI_ROOT into a
+// child's environment. Env vars are inherited by the whole process
+// tree, and the app runs the user's package.json scripts -- so a `dev`
+// script launched from the packaged app's script runner would boot the
+// dev build, see the packaged app's root here, and quietly operate on
+// real data. A sandboxed session needs no injection either: children
+// inherit the var from the app's own environment already.
 export function initShigomoriRoot(isPackaged: boolean): void {
   const envRoot = process.env.SHIGOMORI_ROOT;
   if (envRoot) {
