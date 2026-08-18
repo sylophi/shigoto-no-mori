@@ -141,8 +141,27 @@ function updateKeyIn<T>(
   });
 }
 
+// One line per file per app run. The reads that land here run on every
+// sidebar render and every refetch, so a file that stays broken would
+// otherwise log forever. The CLI dedupes the same way, in
+// noteFileTrouble.
+const hintFailureLogged = new Set<string>();
+
+function noteHintFailure(file: string, error: unknown): void {
+  if (hintFailureLogged.has(file)) return;
+  hintFailureLogged.add(file);
+  console.warn(`[store] ${file} unreadable, falling back:`, error);
+}
+
 interface JsonStore {
   readKey<T>(key: string, fallback: T): T;
+  // readKey for display-only reads. The strict read is what stops a
+  // write from rebuilding the file out of nothing, and that guarantee
+  // belongs to writes: a reader whose whole loss is a missing badge or
+  // a forgotten sort order should let the view render instead of
+  // taking it down. A read that feeds a later write is not one of
+  // these, and stays on readKey.
+  readHint<T>(key: string, fallback: T): T;
   writeKey<T>(key: string, value: T): void;
   // Read-modify-write of one key with the READ inside the lock. Callers
   // that derive the new value from the current one (append a project,
@@ -158,43 +177,47 @@ interface JsonStore {
   ): void;
 }
 
+// The two stores say exactly two things: which file they own, and
+// whether an old-format root has to be drained before the first touch.
+// Generated from those two rather than written out twice, so a method
+// can't gain a rule on one store and miss it on the other.
+function makeStore(file: string, beforeAccess?: () => void): JsonStore {
+  const enter = beforeAccess ?? (() => {});
+  return {
+    readKey<T>(key: string, fallback: T): T {
+      enter();
+      return readKeyIn(file, key, fallback);
+    },
+    readHint<T>(key: string, fallback: T): T {
+      try {
+        enter();
+        return readKeyIn(file, key, fallback);
+      } catch (error) {
+        noteHintFailure(file, error);
+        return fallback;
+      }
+    },
+    writeKey<T>(key: string, value: T): void {
+      enter();
+      writeKeyIn(file, key, value);
+    },
+    updateKey<T>(
+      key: string,
+      fallback: T,
+      update: (current: T) => T | undefined,
+    ): void {
+      enter();
+      updateKeyIn(file, key, fallback, update);
+    },
+  };
+}
+
 // Use logs, sort preferences, sidebar collapse set.
-export const stateStore: JsonStore = {
-  readKey<T>(key: string, fallback: T): T {
-    return readKeyIn(STATE_FILE, key, fallback);
-  },
-  writeKey<T>(key: string, value: T): void {
-    writeKeyIn(STATE_FILE, key, value);
-  },
-  updateKey<T>(
-    key: string,
-    fallback: T,
-    update: (current: T) => T | undefined,
-  ): void {
-    updateKeyIn(STATE_FILE, key, fallback, update);
-  },
-};
+export const stateStore = makeStore(STATE_FILE);
 
 // Project list and worktree shelf. Every entry point drains an
 // old-format root first, so no caller has to know the split happened.
-export const registryStore: JsonStore = {
-  readKey<T>(key: string, fallback: T): T {
-    ensureRegistrySplit();
-    return readKeyIn(REGISTRY_FILE, key, fallback);
-  },
-  writeKey<T>(key: string, value: T): void {
-    ensureRegistrySplit();
-    writeKeyIn(REGISTRY_FILE, key, value);
-  },
-  updateKey<T>(
-    key: string,
-    fallback: T,
-    update: (current: T) => T | undefined,
-  ): void {
-    ensureRegistrySplit();
-    updateKeyIn(REGISTRY_FILE, key, fallback, update);
-  },
-};
+export const registryStore = makeStore(REGISTRY_FILE, ensureRegistrySplit);
 
 // --- one-time move of the registry keys out of state.json ---
 //
@@ -206,10 +229,16 @@ export const registryStore: JsonStore = {
 // The write order is the whole safety argument. registry.json is
 // written first and state.json is stripped second, both atomic
 // renames, so a crash between them leaves the data in two places
-// rather than in none. The next run finds the leftovers, sees the keys
-// already in registry.json, keeps those and strips state.json again. A
-// key present in registry.json always wins: that file is the live copy
-// once it exists.
+// rather than in none. A key present in registry.json always wins:
+// that file is the live copy the moment it exists.
+//
+// That is also why the check below is a stat and not a read. Once
+// registry.json is there, reads are already correct and the state.json
+// read could only ever report nothing left to move. A crash in the
+// window between the two writes does leave a stale copy of the keys
+// behind in state.json, and it stays there. Nothing reads it: the
+// registry keys are only ever read from registry.json, and state.json
+// is only ever asked for the keys it owns.
 //
 // Two processes starting against the same old root are safe because
 // state.json is read again inside its lock. The loser of the race
@@ -220,19 +249,14 @@ let registrySplitDone = false;
 
 function ensureRegistrySplit(): void {
   if (registrySplitDone) return;
-  let state: Record<string, unknown>;
-  try {
-    state = readAll(STATE_FILE);
-  } catch (error) {
-    // The source is unreadable. Once registry.json exists the split is
-    // behind us and state.json's trouble belongs to the use logs, which
-    // report it on their own reads. Before that the registry is
-    // genuinely unknown, and answering "no projects" is the failure the
-    // strict read exists to prevent.
-    if (!existsSync(filePath(REGISTRY_FILE))) throw error;
+  if (existsSync(filePath(REGISTRY_FILE))) {
     registrySplitDone = true;
     return;
   }
+  // An unreadable state.json throws from here with no registry.json to
+  // read instead, so the registry is genuinely unknown. Answering "no
+  // projects" is the failure the strict read exists to prevent.
+  const state = readAll(STATE_FILE);
   if (!REGISTRY_KEYS.some((key) => key in state)) {
     registrySplitDone = true;
     return;

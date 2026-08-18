@@ -237,6 +237,14 @@ func readJSONObject(path string) (map[string]json.RawMessage, error) {
 	return all, nil
 }
 
+// The write side of readJSONObject, and the only place the schema
+// marker is stamped on these two documents. The map's values are
+// already-encoded JSON, so the marker goes in encoded too.
+func writeJSONObject(path string, doc map[string]json.RawMessage) error {
+	doc["schemaVersion"] = schemaVersionRaw
+	return atomicWriteJSON(path, doc)
+}
+
 func readStateFile() (map[string]json.RawMessage, error) {
 	return readJSONObject(statePath())
 }
@@ -292,7 +300,6 @@ func noteRegistryTrouble(err error) {
 func readStateHints() map[string]json.RawMessage {
 	all, err := readStateFile()
 	if err != nil {
-		vlog("[state] %v", err)
 		noteStateTrouble(err)
 		return map[string]json.RawMessage{}
 	}
@@ -302,7 +309,6 @@ func readStateHints() map[string]json.RawMessage {
 func readRegistryHints() map[string]json.RawMessage {
 	all, err := readRegistryFile()
 	if err != nil {
-		vlog("[state] %v", err)
 		noteRegistryTrouble(err)
 		return map[string]json.RawMessage{}
 	}
@@ -359,10 +365,7 @@ func updateFileKey(path, key string, fn func(raw json.RawMessage) (any, error)) 
 			return err
 		}
 		all[key] = encoded
-		// stampSchemaVersion's raw-map flavor: this map's values are
-		// already encoded, so the marker goes in encoded too.
-		all["schemaVersion"] = schemaVersionRaw
-		return atomicWriteJSON(path, all)
+		return writeJSONObject(path, all)
 	})
 }
 
@@ -388,10 +391,18 @@ func updateRegistryKey(key string, fn func(raw json.RawMessage) (any, error)) er
 // The write order is the whole safety argument. registry.json is
 // written first and state.json is stripped second, both atomic
 // renames, so a crash between them leaves the data in two places
-// rather than in none. The next run finds the leftovers, sees the keys
-// already in registry.json, keeps those and strips state.json again. A
-// key present in registry.json always wins: that file is the live copy
-// once it exists.
+// rather than in none. A key present in registry.json always wins:
+// that file is the live copy the moment it exists.
+//
+// That is also why the check below is a stat and not a read. Once
+// registry.json is there, reads are already correct and the state.json
+// read could only ever report nothing left to move. Every command
+// loads the project list, so that read is a whole file parsed for
+// nothing on every invocation, forever. A crash in the window between
+// the two writes does leave a stale copy of the keys behind in
+// state.json, and it stays there. Nothing reads it: the registry keys
+// are only ever read from registry.json, and state.json is only ever
+// asked for the keys it owns.
 //
 // Two processes starting against the same old root are safe because
 // state.json is read again inside its lock. The loser of the race
@@ -404,18 +415,19 @@ func ensureRegistrySplit() error {
 	if registrySplitDone {
 		return nil
 	}
-	state, err := readJSONObject(statePath())
-	if err != nil {
-		// The source is unreadable. Once registry.json exists the split
-		// is behind us and state.json's trouble belongs to the use logs,
-		// which report it on their own reads. Before that the registry
-		// is genuinely unknown, and answering "no projects" is the
-		// failure the strict read exists to prevent.
-		if _, statErr := os.Stat(registryPath()); statErr != nil {
-			return err
-		}
+	if _, err := os.Stat(registryPath()); err == nil {
 		registrySplitDone = true
 		return nil
+	}
+	state, err := readJSONObject(statePath())
+	if err != nil {
+		// The source is unreadable and there is no registry.json to
+		// read instead, so the registry is genuinely unknown. Answering
+		// "no projects" is the failure the strict read exists to
+		// prevent. Once registry.json does exist the stat above returns
+		// first, and state.json's trouble belongs to the use logs,
+		// which report it on their own reads.
+		return err
 	}
 	if !holdsAnyRegistryKey(state) {
 		registrySplitDone = true
@@ -468,8 +480,7 @@ func splitLocked() error {
 		if !changed {
 			return nil
 		}
-		registry["schemaVersion"] = schemaVersionRaw
-		return atomicWriteJSON(registryPath(), registry)
+		return writeJSONObject(registryPath(), registry)
 	})
 	if err != nil {
 		return err
@@ -477,8 +488,7 @@ func splitLocked() error {
 	for _, key := range moving {
 		delete(current, key)
 	}
-	current["schemaVersion"] = schemaVersionRaw
-	return atomicWriteJSON(statePath(), current)
+	return writeJSONObject(statePath(), current)
 }
 
 // Flips the id in the shelved map (store.ts writeKey semantics).

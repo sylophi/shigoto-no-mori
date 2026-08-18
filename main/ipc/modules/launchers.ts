@@ -106,7 +106,7 @@ async function getLaunchersForProject(
   const hidden = new Set(globalConfig.hiddenLaunchers ?? []);
   const entries = resolvable.filter((e) => !hidden.has(e.id));
 
-  const log = stateStore.readKey<UseLogMap>(USE_LOG_KEY, {});
+  const log = stateStore.readHint<UseLogMap>(USE_LOG_KEY, {});
   const now = Date.now();
   return {
     entries: entries.toSorted((a, b) => {

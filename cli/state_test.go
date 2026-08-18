@@ -393,17 +393,21 @@ func TestRegistrySplitIsIdempotent(t *testing.T) {
 }
 
 // A crash between the two writes leaves registry.json written and
-// state.json still carrying the old copy. The next pass must finish the
-// job without letting the stale copy overwrite the live one.
-func TestRegistrySplitFinishesAfterCrash(t *testing.T) {
+// state.json still carrying the old copy. The next pass reads the live
+// copy and leaves the stale one where it lies: registry.json exists,
+// so nothing consults those keys in state.json again, and re-reading
+// state.json on every run to strip them would cost every command a
+// file read forever.
+func TestRegistrySplitPrefersRegistryAfterCrash(t *testing.T) {
 	sandboxConfigRoot(t)
 	seedState(t, oldFormatState)
 	// What the crashed run had already written, plus the project the
-	// user added afterwards through the file that now holds the truth.
+	// user added and the worktree the user shelved afterwards through
+	// the file that now holds the truth.
 	seedRegistry(t, `{"projects":[`+
 		`{"id":"p1","name":"alpha","path":"/tmp/alpha"},`+
 		`{"id":"p2","name":"beta","path":"/tmp/beta"}],`+
-		`"shelvedWorktrees":{"w1":true},"schemaVersion":1}`)
+		`"shelvedWorktrees":{"w2":true},"schemaVersion":1}`)
 
 	projects, err := loadProjects()
 	if err != nil {
@@ -412,14 +416,11 @@ func TestRegistrySplitFinishesAfterCrash(t *testing.T) {
 	if len(projects) != 2 {
 		t.Errorf("projects = %v, want registry.json's two", projects)
 	}
-	state := readFile(t, statePath())
-	for _, key := range registryKeys {
-		if _, ok := state[key]; ok {
-			t.Errorf("second pass left %s in state.json", key)
-		}
+	if shelved := readShelvedSet(); !shelved["w2"] || len(shelved) != 1 {
+		t.Errorf("shelf = %v, want registry.json's w2 alone", shelved)
 	}
-	if len(state["projectUseLog"]) == 0 {
-		t.Error("second pass dropped the use log")
+	if raw, _ := os.ReadFile(statePath()); string(raw) != oldFormatState {
+		t.Errorf("second pass rewrote state.json to %q", raw)
 	}
 }
 

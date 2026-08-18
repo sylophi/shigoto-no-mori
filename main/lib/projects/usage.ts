@@ -22,40 +22,13 @@ export interface ProjectUsage {
   recentCount: number;
 }
 
-// One line per app run, for the same reason as usageFailureLogged
-// below: the reads guarded here run on every sidebar render and every
-// refetch, so an unreadable file would log forever. Its own flag
-// rather than a shared one, which would let whichever failure came
-// first hide the other.
-let hintFailureLogged = false;
-
-function noteHintFailure(error: unknown): void {
-  if (hintFailureLogged) return;
-  hintFailureLogged = true;
-  console.warn(
-    "[usage] project usage and sort unavailable, falling back:",
-    error,
-  );
-}
-
 // state.json is display-only from here on. The project list and the
 // shelf live in registry.json, so an unreadable state.json should cost
 // the sidebar its usage decoration and its sort preference, nothing
-// more. The store throws on a read it can't trust, which is what stops
-// a write from rebuilding the file out of nothing, and that guarantee
-// belongs to writes. These two reads fall back instead, so the list
-// still loads. bumpProjectUseCount below deliberately does not.
-function readStateHint<T>(key: string, fallback: T): T {
-  try {
-    return stateStore.readKey<T>(key, fallback);
-  } catch (error) {
-    noteHintFailure(error);
-    return fallback;
-  }
-}
-
+// more, which is what readHint buys. bumpProjectUseCount below
+// deliberately stays on the strict read.
 export function readProjectSort(): ProjectSortMode {
-  return readStateHint<ProjectSortMode>(SORT_KEY, IMPLICIT_MODE);
+  return stateStore.readHint<ProjectSortMode>(SORT_KEY, IMPLICIT_MODE);
 }
 
 export function writeProjectSort(mode: ProjectSortMode): void {
@@ -63,7 +36,7 @@ export function writeProjectSort(mode: ProjectSortMode): void {
 }
 
 export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
-  const log = readStateHint<UseLog>(USE_LOG_KEY, {});
+  const log = stateStore.readHint<UseLog>(USE_LOG_KEY, {});
   const now = Date.now();
   const out: Record<string, ProjectUsage> = {};
   for (const id of projectIds) {
