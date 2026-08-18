@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
 import { type ScriptRunState } from "@/store/scriptRuns";
+import { notifyError } from "@/lib/toast";
 import { AnsiSpan } from "./AnsiSpan";
 import {
   findUrlRanges,
@@ -52,7 +53,11 @@ function renderTokens(tokens: ConsoleToken[]): React.ReactNode {
       <button
         key={`url:${urlCounter++}:${start}`}
         type="button"
-        onClick={() => void window.api.shell.openExternal(url)}
+        onClick={() => {
+          window.api.shell
+            .openExternal(url)
+            .catch((err) => notifyError("Couldn't open link", err));
+        }}
         title={url}
         className="inline cursor-pointer underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
       >

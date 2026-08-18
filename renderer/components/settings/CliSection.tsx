@@ -5,7 +5,6 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
 import { queryKeys } from "@/lib/queryKeys";
-import { notifyError } from "@/lib/toast";
 import type {
   CliStatus,
   ShellIntegrationStatus,
@@ -30,7 +29,7 @@ export function CliSection() {
     mutationFn: (payload: { force: boolean }) =>
       window.api.cli.install(payload),
     onSuccess: applyStatus,
-    onError: (err) => notifyError("Couldn't install the CLI", err),
+    meta: { errorTitle: "Couldn't install the CLI" },
   });
   const uninstall = useMutation({
     mutationFn: () => window.api.cli.uninstall(),
@@ -39,7 +38,7 @@ export function CliSection() {
       // CLI uninstall sweeps the shell hooks too.
       void queryClient.invalidateQueries({ queryKey: queryKeys.cliShell() });
     },
-    onError: (err) => notifyError("Couldn't uninstall the CLI", err),
+    meta: { errorTitle: "Couldn't uninstall the CLI" },
   });
 
   if (!status) return null;
@@ -181,12 +180,12 @@ function ShellIntegrationBlock({ name }: { name: string }) {
   const enable = useMutation({
     mutationFn: () => window.api.cli.shellInstall(),
     onSuccess: applyStatus,
-    onError: (err) => notifyError("Couldn't enable shell integration", err),
+    meta: { errorTitle: "Couldn't enable shell integration" },
   });
   const remove = useMutation({
     mutationFn: () => window.api.cli.shellUninstall(),
     onSuccess: applyStatus,
-    onError: (err) => notifyError("Couldn't remove shell integration", err),
+    meta: { errorTitle: "Couldn't remove shell integration" },
   });
 
   if (!status) return null;

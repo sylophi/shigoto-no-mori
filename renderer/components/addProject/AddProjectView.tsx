@@ -119,7 +119,14 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   };
 
   const pickViaDialog = async () => {
-    const picked = await window.api.dialog.pickFolder();
+    let picked: string | null;
+    try {
+      picked = await window.api.dialog.pickFolder();
+    } catch (err) {
+      // A cancelled dialog resolves to null, so this is a real failure.
+      notifyError("Couldn't open the folder picker", err);
+      return;
+    }
     if (picked) await addAndOpen(picked);
   };
 
