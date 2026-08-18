@@ -280,20 +280,27 @@ async function reapOrphans(
   return { stopped };
 }
 
-// Reads what the previous session left behind, then immediately claims
-// the file for this instance. Nothing can have spawned yet at boot, so
-// the empty snapshot is accurate, and from here on every write is a
-// full replace of our own state.
+// Reads what the previous session left behind, then, unless another
+// live instance owns it, immediately claims the file for this
+// instance. Nothing can have spawned yet at boot, so the empty
+// snapshot is accurate once claimed, and from here on every write is a
+// full replace of our own state. The ownership check has to run before
+// the claim, not after: writing first would overwrite a live sibling
+// instance's record of its own running scripts before we've confirmed
+// they aren't ours to touch.
 function claimOrphanRecords(): PersistedScript[] {
   const previous = readSnapshot();
-  persistRunningScripts([]);
-  if (!previous) return [];
-  if (previous.ownerPid !== process.pid && isProcessAlive(previous.ownerPid)) {
+  if (
+    previous &&
+    previous.ownerPid !== process.pid &&
+    isProcessAlive(previous.ownerPid)
+  ) {
     // Another app instance is running those scripts right now, with a
-    // window attached to them. Not ours to reap.
+    // window attached to them. Not ours to reap, and not ours to claim.
     return [];
   }
-  return previous.scripts;
+  persistRunningScripts([]);
+  return previous?.scripts ?? [];
 }
 
 let sweep: Promise<OrphanScriptReport> | null = null;
