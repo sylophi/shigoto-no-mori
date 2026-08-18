@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type GlobalConfig,
-  GlobalConfigSchema,
+  StoredGlobalConfigSchema,
   type Theme,
   ThemeSchema,
 } from "@shared/schemas";
@@ -21,7 +21,8 @@ function configPath(): string {
 
 const cache = ttlValueCache<GlobalConfig>(
   5_000,
-  async () => (await readJsonOrNull(configPath(), GlobalConfigSchema)) ?? {},
+  async () =>
+    (await readJsonOrNull(configPath(), StoredGlobalConfigSchema)) ?? {},
 );
 
 export async function readGlobalConfig(): Promise<GlobalConfig> {

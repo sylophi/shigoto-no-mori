@@ -516,8 +516,8 @@ func TestConfigWriteMergesUnknownKeys(t *testing.T) {
 	sandboxConfigRoot(t)
 	scope := globalConfigScope()
 	// A document as a newer build would have left it: futureSetting is
-	// a key this registry doesn't model, and the app's schema strips it
-	// before Settings ever sees it, so the payload can't carry it back.
+	// a key this registry doesn't model, and the app's write payload
+	// schema strips it, so the payload can't carry it back.
 	seed := `{"theme": "dark", "doubutsu": false, "futureSetting": {"nested": "keep"}}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
@@ -577,6 +577,61 @@ func TestProjectConfigWriteMergesNestedAndReplacesArrays(t *testing.T) {
 	}
 	if entry, _ := entries[0].(map[string]any); entry["mode"] != "symlink" {
 		t.Errorf("carryOver[0] = %v, want the payload's symlink entry", entries[0])
+	}
+}
+
+// A hand-edited file can hold a scalar where the registry expects an
+// object. The merge still has to land the registry exactly as the
+// payload asks, or the write succeeds and leaves a document the app's
+// schema rejects on every read.
+func TestConfigWriteRepairsWrongShapedRegistryValues(t *testing.T) {
+	sandboxConfigRoot(t)
+	proj := seededProject(t)
+	scope := projectConfigScope(proj)
+	seed := `{"defaultBranch": "main", "futureTop": "keep",` +
+		`"scripts": "oops", "launchers": 3}` + "\n"
+	if err := os.WriteFile(scope.path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The clear case: the payload omits scripts.setup and
+	// scripts.teardown, so the wrong-shaped parent goes with them.
+	if code, err := runConfigWrite(scope, `{"defaultBranch": "dev"}`); code != 0 || err != nil {
+		t.Fatalf("write: %d, %v", code, err)
+	}
+	doc := readDoc(t, scope.path)
+	if _, ok := doc["scripts"]; ok {
+		t.Errorf("scripts = %v, want cleared even though it held a string", doc["scripts"])
+	}
+	if _, ok := doc["launchers"]; ok {
+		t.Errorf("launchers = %v, want cleared", doc["launchers"])
+	}
+	if doc["defaultBranch"] != "dev" {
+		t.Errorf("defaultBranch = %v, want dev", doc["defaultBranch"])
+	}
+	// Dropping the wrong-shaped parent costs nothing else: unknown keys
+	// elsewhere in the file are still preserved.
+	if doc["futureTop"] != "keep" {
+		t.Errorf("futureTop = %v, want it untouched", doc["futureTop"])
+	}
+}
+
+func TestConfigWriteSetsThroughWrongShapedParent(t *testing.T) {
+	sandboxConfigRoot(t)
+	proj := seededProject(t)
+	scope := projectConfigScope(proj)
+	for _, seeded := range []string{`"oops"`, `3`, `null`, `["oops"]`} {
+		seed := `{"defaultBranch": "main", "scripts": ` + seeded + `}` + "\n"
+		if err := os.WriteFile(scope.path, []byte(seed), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		data := `{"defaultBranch": "main", "scripts": {"setup": "new"}}`
+		if code, err := runConfigWrite(scope, data); code != 0 || err != nil {
+			t.Fatalf("write over %s: %d, %v", seeded, code, err)
+		}
+		scripts, _ := readDoc(t, scope.path)["scripts"].(map[string]any)
+		if scripts == nil || scripts["setup"] != "new" {
+			t.Errorf("scripts over %s = %v, want the payload's object", seeded, scripts)
+		}
 	}
 }
 

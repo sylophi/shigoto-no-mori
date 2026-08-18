@@ -704,13 +704,44 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 // unknown field sitting beside scripts.setup. Arrays and scalars
 // replace wholesale: element-wise merging would resurrect entries the
 // user just removed.
+// Either way the registry lands exactly as the payload asks, whatever
+// shape the file happens to hold, so a hand-edited `"scripts": "oops"`
+// is repaired here rather than written back out for the app's schema
+// to choke on.
 func mergeConfigDoc(keys []configKey, doc, payload map[string]any) {
 	for _, key := range keys {
 		if _, ok := configDocGet(payload, key.name); !ok {
-			configDocDelete(doc, key.name)
+			configDocClear(doc, key.name)
 		}
 	}
 	mergeJSONObjects(doc, payload)
+}
+
+// configDocDelete for the write path, where giving up is not an
+// option. It walks away from a dotted key whose parent holds a
+// non-object, which would leave a registry key the payload cleared
+// sitting on disk in a document the app then refuses to read. Drop the
+// wrong-shape parent whole instead: a scalar, an array or a null has
+// no fields under it, so there is no unknown sibling to preserve, and
+// the parent is the registry's own namespace rather than a key some
+// newer version owns. A payload that carries the same parent puts its
+// object back in the merge below.
+func configDocClear(doc map[string]any, name string) {
+	parts := strings.Split(name, ".")
+	m := doc
+	for i, part := range parts[:len(parts)-1] {
+		child, present := m[part]
+		if !present {
+			return
+		}
+		parent, isObject := child.(map[string]any)
+		if !isObject {
+			configDocDelete(doc, strings.Join(parts[:i+1], "."))
+			return
+		}
+		m = parent
+	}
+	configDocDelete(doc, name)
 }
 
 func mergeJSONObjects(doc, payload map[string]any) {
