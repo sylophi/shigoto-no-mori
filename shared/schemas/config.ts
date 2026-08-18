@@ -42,6 +42,9 @@ export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
 
 // Per-project config. Stored at ~/shigomori[-dev]/projects/<projectId>.json
 // and managed by the app, not committed to the user's repo.
+// Strict on purpose. It doubles as the shigomori:write IPC input, so a
+// key the renderer invents is dropped at the boundary instead of being
+// persisted into the user's file. Reads use the Stored variant below.
 export const ShigomoriConfigSchema = z.object({
   scripts: z
     .object({
@@ -68,6 +71,13 @@ export const ShigomoriConfigSchema = z.object({
 });
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 
+// The same document as read from disk, where a newer version may have
+// left keys this build doesn't model. Loose so the app doesn't strip
+// them out from under the user. They never have to ride back out in a
+// write payload: the CLI's `config write` merges into the file rather
+// than replacing it, so a key the payload doesn't mention stays put.
+export const StoredShigomoriConfigSchema = ShigomoriConfigSchema.loose();
+
 // Snapshot of the repo's .worktreeinclude file (Claude Code convention:
 // gitignore-syntax patterns whose gitignored matches are copied into new
 // worktrees). Read-only from the app's side; the file belongs to the repo.
@@ -93,6 +103,8 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.
+// Strict for the same reason as ShigomoriConfigSchema: it doubles as
+// the globalConfig:write IPC input.
 export const GlobalConfigSchema = z.object({
   theme: ThemeSchema.optional(),
   // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
@@ -134,6 +146,9 @@ export const GlobalConfigSchema = z.object({
   githubCli: z.boolean().optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
+
+// Read-side counterpart, loose like StoredShigomoriConfigSchema.
+export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
 
 export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,

@@ -16,8 +16,10 @@ package main
 // verb body lives here once and cmd_project.go contributes hooks.
 //
 // `write --data '<json>'` is plumbing for the app: the delegated
-// globalConfig:write / shigomori:write IPC handlers replace the whole
-// document through it so both surfaces run the same engine.
+// globalConfig:write / shigomori:write IPC handlers push whole
+// documents through it so both surfaces run the same engine. Those
+// writes merge into the file too, so a key only a newer version knows
+// about survives an older build's save.
 
 import (
 	"bytes"
@@ -690,29 +692,94 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 	return 0, nil
 }
 
-// Whole-document replace for the plumbing `write --data` verb. The
+// The merge a whole-document `write` lands into what's on disk. The
+// payload owns the scope's registry: a key it carries is written, a
+// registry key it omits is deleted (that is how the app clears a
+// setting back to its default, since it serializes defaults by
+// omission). Everything else already in the file is kept, so a key
+// only a newer version models survives an older build's save. The
+// app's zod schemas strip what they don't model, so the payload can't
+// be relied on to carry such a key back on its own.
+// Objects merge field by field for the same reason, which keeps an
+// unknown field sitting beside scripts.setup. Arrays and scalars
+// replace wholesale: element-wise merging would resurrect entries the
+// user just removed.
+// Either way the registry lands exactly as the payload asks, whatever
+// shape the file happens to hold, so a hand-edited `"scripts": "oops"`
+// is repaired here rather than written back out for the app's schema
+// to choke on.
+func mergeConfigDoc(keys []configKey, doc, payload map[string]any) {
+	for _, key := range keys {
+		if _, ok := configDocGet(payload, key.name); !ok {
+			configDocClear(doc, key.name)
+		}
+	}
+	mergeJSONObjects(doc, payload)
+}
+
+// configDocDelete for the write path, where giving up is not an
+// option. It walks away from a dotted key whose parent holds a
+// non-object, which would leave a registry key the payload cleared
+// sitting on disk in a document the app then refuses to read. Drop the
+// wrong-shape parent whole instead: a scalar, an array or a null has
+// no fields under it, so there is no unknown sibling to preserve, and
+// the parent is the registry's own namespace rather than a key some
+// newer version owns. A payload that carries the same parent puts its
+// object back in the merge below.
+func configDocClear(doc map[string]any, name string) {
+	parts := strings.Split(name, ".")
+	m := doc
+	for i, part := range parts[:len(parts)-1] {
+		child, present := m[part]
+		if !present {
+			return
+		}
+		parent, isObject := child.(map[string]any)
+		if !isObject {
+			configDocDelete(doc, strings.Join(parts[:i+1], "."))
+			return
+		}
+		m = parent
+	}
+	configDocDelete(doc, name)
+}
+
+func mergeJSONObjects(doc, payload map[string]any) {
+	for name, value := range payload {
+		if child, ok := value.(map[string]any); ok {
+			if existing, isObject := doc[name].(map[string]any); isObject {
+				mergeJSONObjects(existing, child)
+				continue
+			}
+		}
+		doc[name] = value
+	}
+}
+
+// Whole-document write for the plumbing `write --data` verb. The
 // payload was already zod-parsed app-side. validateConfigDoc re-checks
-// the shape (including required keys) so engine drift fails loudly.
+// the shape (including required keys) so engine drift fails loudly,
+// then mergeConfigDoc folds it into what is on disk under the lock.
+// Routing through scope.update rather than a raw locked write is also
+// what keeps the schemaVersion stamp and the no-op check on this path,
+// so a payload that changes nothing still writes nothing.
 func runConfigWrite(scope configDocScope, data string) (int, error) {
 	if data == "" {
 		return 2, usageErrf("write requires --data '<json>'.")
 	}
-	doc, err := decodeConfigDoc([]byte(data))
+	payload, err := decodeConfigDoc([]byte(data))
 	if err != nil {
 		return 2, usageErrf("--data must be a JSON object: %v", err)
 	}
-	if err := validateConfigDoc(scope.keys, doc); err != nil {
+	if err := validateConfigDoc(scope.keys, payload); err != nil {
 		return 1, err
 	}
-	stampSchemaVersion(doc)
-	err = withFileLock(scope.path, func() error {
-		return atomicWriteJSON(scope.path, doc)
+	err = scope.update(func(doc map[string]any) error {
+		mergeConfigDoc(scope.keys, doc, payload)
+		return nil
 	})
 	if err != nil {
-		return 1, err
-	}
-	if scope.afterWrite != nil {
-		scope.afterWrite(doc)
+		return exitCodeOf(err), err
 	}
 	emit(map[string]any{"ok": true})
 	return 0, nil

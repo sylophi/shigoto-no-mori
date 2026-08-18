@@ -7,7 +7,7 @@
 import { join } from "node:path";
 import {
   type ShigomoriConfig,
-  ShigomoriConfigSchema,
+  StoredShigomoriConfigSchema,
   type ShigomoriWorktreeData,
   ShigomoriWorktreeDataSchema,
 } from "@shared/schemas";
@@ -42,7 +42,7 @@ function worktreeDataPath(projectId: string, worktreeId: string): string {
 const configCache = ttlMapCache<string, ShigomoriConfig | null>(
   5_000,
   (projectId) =>
-    readJsonOrNull(projectConfigPath(projectId), ShigomoriConfigSchema),
+    readJsonOrNull(projectConfigPath(projectId), StoredShigomoriConfigSchema),
 );
 
 const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(

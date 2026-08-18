@@ -3,8 +3,8 @@ import { invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
   ReadWorktreeDataPayloadSchema,
-  ShigomoriConfigSchema,
   ShigomoriWorktreeDataSchema,
+  StoredShigomoriConfigSchema,
   WriteShigomoriPayloadSchema,
   WriteWorktreeDataPayloadSchema,
 } from "@shared/schemas";
@@ -13,7 +13,7 @@ export const shigomoriContract = {
   read: invoke(
     "shigomori:read",
     ProjectScopedPayloadSchema,
-    ShigomoriConfigSchema.nullable(),
+    StoredShigomoriConfigSchema.nullable(),
   ),
   write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
     tracksProjectUsage: true,
