@@ -13,6 +13,7 @@ import { FileManagerIcon } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { notifyError } from "@/lib/toast";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -244,10 +245,18 @@ export function FolderPickerModal({
           </div>
           <ChipButton
             onClick={async () => {
-              const picked = await window.api.dialog.pickFolder({
-                title,
-                buttonLabel: confirmLabel,
-              });
+              let picked: string | null;
+              try {
+                picked = await window.api.dialog.pickFolder({
+                  title,
+                  buttonLabel: confirmLabel,
+                });
+              } catch (err) {
+                // Cancelling resolves to null, so a rejection is a real
+                // dialog/IPC failure.
+                notifyError("Couldn't open the folder picker", err);
+                return;
+              }
               if (picked) onPick(picked);
             }}
           >
