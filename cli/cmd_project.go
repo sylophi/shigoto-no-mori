@@ -91,10 +91,8 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 
 	err = updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw != nil {
-			if err := json.Unmarshal(raw, &projects); err != nil {
-				return nil, malformedKeyErr(registryPath(), projectsKey, err)
-			}
+		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
+			return nil, err
 		}
 		kept := make([]project, 0, len(projects))
 		found := false
@@ -200,13 +198,8 @@ func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
 	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw != nil {
-			// Strict for the same reason as loadProjects, and with more
-			// at stake: treating a malformed value as empty here would
-			// rewrite the registry as just the project being added.
-			if err := json.Unmarshal(raw, &projects); err != nil {
-				return nil, malformedKeyErr(registryPath(), projectsKey, err)
-			}
+		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
+			return nil, err
 		}
 		for _, existing := range projects {
 			if existing.Path == path {
@@ -314,12 +307,21 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	var candidates []string
 	known := 0
 	for _, repo := range scanForGitRepos(root) {
-		// Fold through git exactly like single add: the scan built these
-		// paths from the caller's spelling of root, and a mis-cased or
-		// symlinked spelling registered verbatim defeats every later
-		// path lookup (resolveProjectByPath compares the canonical
-		// spelling) -- and slips past the already-registered check just
-		// below for the same reason.
+		// Raw-path check first: registered rows were canonicalized at
+		// registration, so a raw hit is already canonical and skips the
+		// git spawn -- a re-run over an all-registered root then costs
+		// no spawns at all.
+		if registered[repo] {
+			known++
+			continue
+		}
+		// Fold the rest through git exactly like single add: the scan
+		// built these paths from the caller's spelling of root, and a
+		// mis-cased or symlinked spelling registered verbatim defeats
+		// every later path lookup (resolveProjectByPath compares the
+		// canonical spelling). Re-check after folding: the canonical
+		// spelling may be the registered one even when the raw one
+		// wasn't.
 		if _, primaryPath, err := locateRepo(repo); err == nil {
 			repo = primaryPath
 		}
@@ -559,15 +561,11 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 	}
 	switch verb {
 	case "list":
-		doc, err := readConfigDoc(scope.path)
+		entries, err := readConfigArray(scope.path, "carryOver")
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		entries, _ := doc["carryOver"].([]any)
 		if jsonMode {
-			if entries == nil {
-				entries = []any{}
-			}
 			scope.emitOK(map[string]any{"carryOver": entries})
 			return 0, nil
 		}

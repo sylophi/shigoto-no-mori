@@ -4,6 +4,7 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
+import { WorktreeMissing } from "./WorktreeMissing";
 
 const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/pr-diff");
 
@@ -37,21 +38,15 @@ export function PullRequestDiff() {
   } = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
-    // Cold cache (e.g. a reload landing directly on this route): the
-    // list hasn't resolved yet, so absence doesn't mean missing.
-    if (worktreesPending) return null;
-    // The list query is silent on error, so without this branch a
-    // failed listing reads as a deleted worktree.
-    if (worktreesError) {
-      return (
-        <DiffNotFound
-          onBack={goBack}
-          message="Couldn't load worktrees."
-          action={{ label: "Retry", onClick: () => void refetchWorktrees() }}
-        />
-      );
-    }
-    return <DiffNotFound onBack={goBack} message="Worktree not found." />;
+    return (
+      <WorktreeMissing
+        isPending={worktreesPending}
+        isError={worktreesError}
+        refetch={refetchWorktrees}
+        onBack={goBack}
+        message="Worktree not found."
+      />
+    );
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`

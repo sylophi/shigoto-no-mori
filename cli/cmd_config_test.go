@@ -708,10 +708,10 @@ func TestListAndGetRefuseMalformedFile(t *testing.T) {
 
 // The editor seed is a real document, marker included, so a file
 // created by `sm config edit` doesn't read as pre-schema forever.
+// jsonMode returns right after seeding, so only the seed is covered
+// here -- the editor branch needs an interactive terminal.
 func TestEditSeedStampsSchemaVersion(t *testing.T) {
 	sandboxConfigRoot(t)
-	t.Setenv("VISUAL", "")
-	t.Setenv("EDITOR", "")
 	jsonModeSaved := jsonMode
 	jsonMode = true
 	t.Cleanup(func() { jsonMode = jsonModeSaved })

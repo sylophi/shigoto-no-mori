@@ -1,4 +1,4 @@
-import { runLenient } from "./core";
+import { runLenient, splitZ } from "./core";
 
 // Files git can see in the working tree: everything tracked, plus untracked
 // files that aren't gitignored. `-z` keeps paths with spaces or newlines
@@ -14,5 +14,5 @@ export async function listProjectFiles(projectPath: string): Promise<string[]> {
     "--exclude-standard",
     "-z",
   ]);
-  return stdout.split("\0").filter((path) => path.length > 0);
+  return splitZ(stdout);
 }

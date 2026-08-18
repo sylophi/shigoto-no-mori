@@ -2,12 +2,8 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-import { run, runLenient } from "./core";
+import { run, runLenient, splitZ } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
-
-const splitZ = (out: string) => out.split("\0").filter(Boolean);
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push"]);
@@ -31,18 +27,28 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // Untracked files count as dirty too: `reset --hard` silently
 // overwrites any untracked file whose path exists in the upstream tree.
 // `--untracked-files=normal` pins that protection against a user-level
-// `status.showUntrackedFiles = no`. Same command as getChangedCount, so
-// this refuses in exactly the states where the renderer already hides
-// the button.
+// `status.showUntrackedFiles = no`. getChangedCount deliberately does
+// NOT pin it -- it runs per worktree on every window focus, and `-uno`
+// is a setting people choose to make exactly that scan cheap. The only
+// cost of the mismatch is the overwrite button showing when this guard
+// will refuse, and the guard still refuses.
 //
 // Ignored files never appear in `status`, but `reset --hard` overwrites
 // them all the same when the upstream tree tracks a file at their path
 // (e.g. a carried-over `.env` colliding with a committed one) -- and
-// their content was never in git, so nothing can recover it. The second
-// guard catches exactly that: an upstream-tracked path that is not
-// tracked locally yet already exists on disk. Anything non-ignored at
-// such a path was already refused by the status guard above, so the
-// files this finds are the ignored collisions.
+// their content was never in git, so nothing can recover it. After a
+// clean status the only paths that can collide are upstream-tracked
+// ones with no local tracked counterpart, and (tree clean, so tracked
+// == HEAD) those are exactly the upstream side's added files versus
+// HEAD: one divergence-sized listing instead of two whole-tree ones.
+// `--no-renames` matters -- rename detection would report an upstream
+// rename as R, not A, and its destination path would slip through.
+// git itself then says which candidates are ignored files on disk
+// (`ls-files -o -i` with the candidates as pathspecs): a plain
+// exists-check would false-positive on case-insensitive APFS, where an
+// upstream case-only rename "exists" locally as the tracked file under
+// its old casing -- a state `reset --hard` handles fine and this guard
+// must not turn into a dead end.
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
@@ -57,14 +63,38 @@ export async function overwriteFromUpstream(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
     );
   }
-  const [upstream, tracked] = await Promise.all([
-    run(worktreePath, ["ls-tree", "-r", "--name-only", "-z", "@{u}"]),
-    run(worktreePath, ["ls-files", "-z"]),
-  ]);
-  const trackedSet = new Set(splitZ(tracked));
-  const collisions = splitZ(upstream).filter(
-    (path) => !trackedSet.has(path) && existsSync(join(worktreePath, path)),
+  const addedUpstream = splitZ(
+    await run(worktreePath, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "--diff-filter=A",
+      "-z",
+      "HEAD",
+      "@{u}",
+    ]),
   );
+  // Chunked: pathspecs travel as argv, and a badly-behind branch can
+  // carry enough added files to brush the OS arg-length limit.
+  const chunks: string[][] = [];
+  for (let i = 0; i < addedUpstream.length; i += 500) {
+    chunks.push(addedUpstream.slice(i, i + 500));
+  }
+  const collisions = (
+    await Promise.all(
+      chunks.map((chunk) =>
+        run(worktreePath, [
+          "ls-files",
+          "-z",
+          "--others",
+          "--ignored",
+          "--exclude-standard",
+          "--",
+          ...chunk,
+        ]),
+      ),
+    )
+  ).flatMap(splitZ);
   if (collisions.length > 0) {
     const shown = collisions.slice(0, 3).join(", ");
     const rest =

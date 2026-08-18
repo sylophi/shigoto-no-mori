@@ -60,7 +60,10 @@ const PersistedScriptSchema = z.object({
 // boot sweep kill the first one's live scripts out from under its
 // window.
 const SnapshotSchema = z.object({
-  ownerPid: z.number().int().positive(),
+  // Same floor as the script pids: pid 1 is launchd, which is always
+  // alive, so an ownerPid of 1 would read as a live sibling instance
+  // and permanently disable the boot sweep.
+  ownerPid: z.number().int().gte(2),
   scripts: z.array(PersistedScriptSchema),
 });
 

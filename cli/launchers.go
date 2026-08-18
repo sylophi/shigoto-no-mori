@@ -187,10 +187,8 @@ func pruneAndAppendUse(times []int64) []int64 {
 func bumpLauncherUse(id string) {
 	err := updateStateKey("launcherUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string][]int64{}
-		if raw != nil {
-			if err := json.Unmarshal(raw, &log); err != nil {
-				return nil, malformedKeyErr(statePath(), "launcherUseLog", err)
-			}
+		if err := decodeKey(statePath(), "launcherUseLog", raw, &log); err != nil {
+			return nil, err
 		}
 		log[id] = pruneAndAppendUse(log[id])
 		return log, nil

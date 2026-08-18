@@ -1,8 +1,8 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
+import { WorktreeMissing } from "./WorktreeMissing";
 
 const route = getRouteApi(
   "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
@@ -37,21 +37,15 @@ export function CommitDiff() {
   } = useCommitDiff(projectId, worktree?.id, hash);
 
   if (!worktree) {
-    // Cold cache (e.g. a reload landing directly on this route): the
-    // list hasn't resolved yet, so absence doesn't mean missing.
-    if (isPending) return null;
-    // The list query is silent on error, so without this branch a
-    // failed listing reads as a deleted worktree.
-    if (isError) {
-      return (
-        <DiffNotFound
-          onBack={goBack}
-          message="Couldn't load worktrees."
-          action={{ label: "Retry", onClick: () => void refetch() }}
-        />
-      );
-    }
-    return <DiffNotFound onBack={goBack} message="Worktree not found." />;
+    return (
+      <WorktreeMissing
+        isPending={isPending}
+        isError={isError}
+        refetch={refetch}
+        onBack={goBack}
+        message="Worktree not found."
+      />
+    );
   }
 
   return (

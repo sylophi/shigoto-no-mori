@@ -1,4 +1,4 @@
-import { runLenient } from "./core";
+import { runLenient, splitZ } from "./core";
 
 // Unified patch of every uncommitted change in the worktree. Combines
 // `git diff HEAD` (covers staged + unstaged tracked edits) with a
@@ -15,7 +15,7 @@ export async function getWorktreeDiff(worktreePath: string): Promise<string> {
       "-z",
     ]),
   ]);
-  const untracked = lsOutput.split("\0").filter((s) => s.length > 0);
+  const untracked = splitZ(lsOutput);
   const additions = await Promise.all(
     untracked.map((file) =>
       // `--` keeps a filename like `-weird.txt` from being parsed as flags.

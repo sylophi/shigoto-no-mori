@@ -244,10 +244,8 @@ func runArgv(manager, script string, extra []string) []string {
 func bumpPackageScriptUse(projectID, script string) {
 	err := updateStateKey("packageScriptUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string]map[string][]int64{}
-		if raw != nil {
-			if err := json.Unmarshal(raw, &log); err != nil {
-				return nil, malformedKeyErr(statePath(), "packageScriptUseLog", err)
-			}
+		if err := decodeKey(statePath(), "packageScriptUseLog", raw, &log); err != nil {
+			return nil, err
 		}
 		projectLog := log[projectID]
 		if projectLog == nil {
