@@ -692,14 +692,14 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 	return 0, nil
 }
 
-// The merge a whole-document `write` lands. The payload owns the
-// scope's registry: a key it carries is written, a registry key it
-// omits is deleted (that is how the app clears a setting back to its
-// default, since it serializes defaults by omission). Everything else
-// already in the file is kept, so a key only a newer version models
-// survives an older build's save. The app's zod schemas strip what they
-// don't model, so the payload can't be relied on to carry such a key
-// back on its own.
+// The merge a whole-document `write` lands into what's on disk. The
+// payload owns the scope's registry: a key it carries is written, a
+// registry key it omits is deleted (that is how the app clears a
+// setting back to its default, since it serializes defaults by
+// omission). Everything else already in the file is kept, so a key
+// only a newer version models survives an older build's save. The
+// app's zod schemas strip what they don't model, so the payload can't
+// be relied on to carry such a key back on its own.
 // Objects merge field by field for the same reason, which keeps an
 // unknown field sitting beside scripts.setup. Arrays and scalars
 // replace wholesale: element-wise merging would resurrect entries the
