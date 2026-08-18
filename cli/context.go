@@ -98,8 +98,10 @@ func projectHint(ctx cliContext) string {
 	return "Registered projects: " + strings.Join(names, ", ") + "."
 }
 
-func resolveProject(ctx cliContext, name string) (project, error) {
-	if name == "" {
+// Resolves `<name>` or a path, or (with no ref) the project
+// containing cwd.
+func resolveProject(ctx cliContext, ref string) (project, error) {
+	if ref == "" {
 		if ctx.current != nil {
 			return ctx.current.proj, nil
 		}
@@ -116,9 +118,15 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 		}
 		return project{}, usageErrf("Not inside a registered project; pass -p <project>. %s", projectHint(ctx))
 	}
+	// A ref spelled as a path resolves against the registered paths,
+	// which are unique where names are not (two clones can share a
+	// basename). Mirrors the directory refs resolveWorktree accepts.
+	if looksLikePath(ref) {
+		return resolveProjectByPath(ctx, ref)
+	}
 	var matches []project
 	for _, p := range ctx.projects {
-		if strings.EqualFold(p.Name, name) {
+		if strings.EqualFold(p.Name, ref) {
 			matches = append(matches, p)
 		}
 	}
@@ -126,14 +134,45 @@ func resolveProject(ctx cliContext, name string) (project, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
-		return project{}, usageErrf("Unknown project %q. %s", name, projectHint(ctx))
+		return project{}, usageErrf("Unknown project %q. %s", ref, projectHint(ctx))
 	default:
 		paths := make([]string, len(matches))
 		for i, p := range matches {
 			paths[i] = p.Path
 		}
-		return project{}, usageErrf("Multiple projects are named %q: %s.", name, strings.Join(paths, ", "))
+		// Never guess which one: the path is how to say which, and it
+		// keeps working for an entry whose directory is gone.
+		return project{}, usageErrf("%d projects are named %q. Name the one you mean by its path: %s.",
+			len(matches), ref, strings.Join(paths, ", "))
 	}
+}
+
+// A ref meant as a filesystem path rather than a name. Names never
+// contain a separator: they come from a directory's basename.
+func looksLikePath(ref string) bool {
+	return strings.ContainsAny(ref, `/\`) || ref == "." || ref == ".."
+}
+
+// Path refs for projects: the registered path by string first, so an
+// entry whose repo has moved or been deleted stays addressable (git
+// can say nothing about a directory that is gone), then git's answer
+// for which repo the path belongs to, so any directory inside a
+// checkout or one of its worktrees names the project too.
+func resolveProjectByPath(ctx cliContext, ref string) (project, error) {
+	abs := filepath.Clean(toAbsolute(ref))
+	for _, p := range ctx.projects {
+		if p.Path == abs {
+			return p, nil
+		}
+	}
+	if _, primaryPath, err := locateRepo(abs); err == nil {
+		for _, p := range ctx.projects {
+			if p.Path == primaryPath {
+				return p, nil
+			}
+		}
+	}
+	return project{}, usageErrf("No registered project at %s. %s", abs, projectHint(ctx))
 }
 
 func primaryOf(proj project) (located, error) {
@@ -311,7 +350,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 	// <project>/<name> ref almost never exists as a directory relative
 	// to cwd; when it does, the directory wins as the more explicit
 	// claim.
-	if strings.ContainsAny(ref, `/\`) || ref == "." || ref == ".." {
+	if looksLikePath(ref) {
 		target, err := resolveWorktreeByDir(ctx, ref)
 		if err != nil {
 			return located{}, err

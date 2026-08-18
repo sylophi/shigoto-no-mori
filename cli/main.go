@@ -74,8 +74,10 @@ var projectItems = []helpItem{
 	{"projects list", "List registered projects", ""},
 	{"projects add [<path>] [--all]", "Register a repo",
 		"The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips)."},
-	{"projects remove [<name>]", "Unregister a project",
-		"Worktrees stay on disk. Prompts for confirmation (--yes skips)."},
+	{"projects remove [<name-or-path>]", "Unregister a project",
+		"Worktrees stay on disk. Prompts for confirmation (--yes skips). " +
+			"When two projects share a name, remove by path (which also " +
+			"reaches an entry whose repo has since moved away)."},
 	{"projects config [<command>] [args]",
 		"Show or set per-project config",
 		"Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
@@ -260,7 +262,8 @@ func worktreesHelpText() string {
 
 func projectsHelpText() string {
 	return namespaceHelpText("projects", "p",
-		"Manage registered projects.", projectItems)
+		"Manage registered projects. A project is addressed by name, or "+
+			"by its path when the name isn't unique.", projectItems)
 }
 
 func configHelpText() string {
