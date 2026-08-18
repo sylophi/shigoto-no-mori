@@ -75,10 +75,21 @@ export function ProjectRow({
     triggerRef.current?.click();
   };
 
+  // Two failure sources, attributed by scope rather than by inspecting
+  // `create.isError` after the fact: that read is a render-time
+  // snapshot the closure captured, not the mutation's state now, so it
+  // both double-toasted create failures and latched true forever after
+  // the first one, swallowing genuine defaultBranch errors.
   const quickCreate = async () => {
     if (create.isPending) return;
+    let defaultBranch: string;
     try {
-      const defaultBranch = await window.api.projects.defaultBranch(project.id);
+      defaultBranch = await window.api.projects.defaultBranch(project.id);
+    } catch (err) {
+      notifyError("Couldn't resolve default branch", err);
+      return;
+    }
+    try {
       const { worktree } = await create.mutateAsync({
         projectId: project.id,
         base: defaultBranch,
@@ -87,10 +98,8 @@ export function ProjectRow({
         to: "/projects/$projectId/worktrees/$worktreeId",
         params: { projectId: project.id, worktreeId: worktree.id },
       });
-    } catch (err) {
-      if (!create.isError) {
-        notifyError("Couldn't resolve default branch", err);
-      }
+    } catch {
+      // The create mutation's meta already toasts this failure.
     }
   };
 

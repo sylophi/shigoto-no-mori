@@ -1,6 +1,6 @@
 import { branchNotMergedError, errorMessageOf } from "@shared/errors";
 import { type BranchList, isRealBranch } from "@shared/schemas";
-import { run } from "./core";
+import { run, splitZ } from "./core";
 import {
   listRemotes,
   localBranchExists,
@@ -160,7 +160,7 @@ async function listOthersIgnored(
     excludeArg,
     "--directory",
   ]);
-  return stdout.split("\0").filter((line) => line.length > 0);
+  return splitZ(stdout);
 }
 
 // Untracked paths ignored by the standard excludes (.gitignore et al).

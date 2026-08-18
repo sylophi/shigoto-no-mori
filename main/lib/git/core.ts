@@ -45,6 +45,12 @@ export async function runLenient(cwd: string, args: string[]): Promise<string> {
   }
 }
 
+// For `-z` output: NUL-separated records, with a trailing NUL that
+// would otherwise yield a phantom empty entry.
+export function splitZ(stdout: string): string[] {
+  return stdout.split("\0").filter((entry) => entry.length > 0);
+}
+
 export async function isGitRepo(path: string): Promise<boolean> {
   try {
     await exec(["rev-parse", "--git-dir"], { cwd: path });

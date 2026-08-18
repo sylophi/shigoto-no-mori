@@ -43,7 +43,11 @@ const EXIT_POLL_MS = 100;
 
 const PersistedScriptSchema = z.object({
   runId: z.string().min(1),
-  pid: z.number().int().positive(),
+  // gte(2): the sweep signals the record's process *group* as -pid, and
+  // kill(-1, ...) is "every process you may signal". No real child ever
+  // has pid 1, but this file is untrusted input everywhere else, so the
+  // one value that would broadcast a signal is refused at the schema.
+  pid: z.number().int().gte(2),
   projectId: z.string().min(1),
   worktreeId: z.string().min(1),
   startedAt: z.number().int().positive(),
@@ -56,7 +60,10 @@ const PersistedScriptSchema = z.object({
 // boot sweep kill the first one's live scripts out from under its
 // window.
 const SnapshotSchema = z.object({
-  ownerPid: z.number().int().positive(),
+  // Same floor as the script pids: pid 1 is launchd, which is always
+  // alive, so an ownerPid of 1 would read as a live sibling instance
+  // and permanently disable the boot sweep.
+  ownerPid: z.number().int().gte(2),
   scripts: z.array(PersistedScriptSchema),
 });
 

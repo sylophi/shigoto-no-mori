@@ -53,6 +53,10 @@ function deriveBranch(entry: RawWorktreeEntry): string {
 
 async function getChangedCount(worktreePath: string): Promise<number> {
   try {
+    // Deliberately NOT pinned to --untracked-files=normal, unlike the
+    // dirty guard in overwriteFromUpstream: this runs per worktree on
+    // every window focus, and `-uno` users chose that setting to make
+    // exactly this scan cheap. See the comment there.
     const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
     return stdout.split("\n").filter((line) => line.length > 0).length;
   } catch {

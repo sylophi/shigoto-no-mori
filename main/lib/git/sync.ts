@@ -2,7 +2,7 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
-import { run, runLenient } from "./core";
+import { run, runLenient, splitZ } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
@@ -26,17 +26,81 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // leaves nothing to recover from, so the guard has to live here.
 // Untracked files count as dirty too: `reset --hard` silently
 // overwrites any untracked file whose path exists in the upstream tree.
-// Same command as getChangedCount, so this refuses in exactly the
-// states where the renderer already hides the button (ignored files are
-// excluded, so build output doesn't trip it).
+// `--untracked-files=normal` pins that protection against a user-level
+// `status.showUntrackedFiles = no`. getChangedCount deliberately does
+// NOT pin it -- it runs per worktree on every window focus, and `-uno`
+// is a setting people choose to make exactly that scan cheap. The only
+// cost of the mismatch is the overwrite button showing when this guard
+// will refuse, and the guard still refuses.
+//
+// Ignored files never appear in `status`, but `reset --hard` overwrites
+// them all the same when the upstream tree tracks a file at their path
+// (e.g. a carried-over `.env` colliding with a committed one) -- and
+// their content was never in git, so nothing can recover it. After a
+// clean status the only paths that can collide are upstream-tracked
+// ones with no local tracked counterpart, and (tree clean, so tracked
+// == HEAD) those are exactly the upstream side's added files versus
+// HEAD: one divergence-sized listing instead of two whole-tree ones.
+// `--no-renames` matters -- rename detection would report an upstream
+// rename as R, not A, and its destination path would slip through.
+// git itself then says which candidates are ignored files on disk
+// (`ls-files -o -i` with the candidates as pathspecs): a plain
+// exists-check would false-positive on case-insensitive APFS, where an
+// upstream case-only rename "exists" locally as the tracked file under
+// its old casing -- a state `reset --hard` handles fine and this guard
+// must not turn into a dead end.
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
   await run(worktreePath, ["fetch"]);
-  const status = await run(worktreePath, ["status", "--porcelain=v1"]);
+  const status = await run(worktreePath, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=normal",
+  ]);
   if (status.trim().length > 0) {
     throw new Error(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
+    );
+  }
+  const addedUpstream = splitZ(
+    await run(worktreePath, [
+      "diff",
+      "--name-only",
+      "--no-renames",
+      "--diff-filter=A",
+      "-z",
+      "HEAD",
+      "@{u}",
+    ]),
+  );
+  // Chunked: pathspecs travel as argv, and a badly-behind branch can
+  // carry enough added files to brush the OS arg-length limit.
+  const chunks: string[][] = [];
+  for (let i = 0; i < addedUpstream.length; i += 500) {
+    chunks.push(addedUpstream.slice(i, i + 500));
+  }
+  const collisions = (
+    await Promise.all(
+      chunks.map((chunk) =>
+        run(worktreePath, [
+          "ls-files",
+          "-z",
+          "--others",
+          "--ignored",
+          "--exclude-standard",
+          "--",
+          ...chunk,
+        ]),
+      ),
+    )
+  ).flatMap(splitZ);
+  if (collisions.length > 0) {
+    const shown = collisions.slice(0, 3).join(", ");
+    const rest =
+      collisions.length > 3 ? ` (+${collisions.length - 3} more)` : "";
+    throw new Error(
+      `Overwriting would replace ignored local file(s) the upstream branch tracks: ${shown}${rest}. Move them aside first.`,
     );
   }
   await run(worktreePath, ["reset", "--hard", "@{u}"]);

@@ -1,15 +1,20 @@
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreeDiff } from "@/hooks/worktrees/useWorktreeDiff";
-import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
+import { WorktreeMissing } from "./WorktreeMissing";
 
 const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/diff");
 
 export function WorktreeDiff() {
   const { projectId, worktreeId } = route.useParams();
   const navigate = useNavigate();
-  const { data: worktrees = [], isPending } = useWorktrees(projectId);
+  const {
+    data: worktrees = [],
+    isPending,
+    isError,
+    refetch,
+  } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   const goBack = () =>
@@ -25,10 +30,15 @@ export function WorktreeDiff() {
   } = useWorktreeDiff(projectId, worktree?.id);
 
   if (!worktree) {
-    // Cold cache (e.g. a reload landing directly on this route): the
-    // list hasn't resolved yet, so absence doesn't mean missing.
-    if (isPending) return null;
-    return <DiffNotFound onBack={goBack} message="Worktree not found." />;
+    return (
+      <WorktreeMissing
+        isPending={isPending}
+        isError={isError}
+        refetch={refetch}
+        onBack={goBack}
+        message="Worktree not found."
+      />
+    );
   }
 
   return (

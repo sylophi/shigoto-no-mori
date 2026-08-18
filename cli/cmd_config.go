@@ -268,20 +268,41 @@ func decodeConfigDoc(raw []byte) (map[string]any, error) {
 	return doc, nil
 }
 
-// Read-only tolerance: missing or malformed files read as empty so
-// list/get always work. Writes go through updateConfigDoc, which
+// Missing reads as empty so list/get work on a fresh root. A file
+// that exists but can't be decoded is an error: printing defaults in
+// place of settings the user actually wrote is how a corrupt file
+// turns an explicit deleteBranchOnRemove opt-out back into "true
+// (default)" with exit 0. Writes go through updateConfigDoc, which
 // refuses malformed content instead of clobbering it.
-func readConfigDoc(path string) map[string]any {
-	raw, err := os.ReadFile(path)
+func readConfigDoc(path string) (map[string]any, error) {
+	doc := map[string]any{}
+	_, err := readJSONDoc(path, func(raw []byte) error {
+		decoded, err := decodeConfigDoc(raw)
+		if err != nil {
+			return err
+		}
+		doc = decoded
+		return nil
+	})
 	if err != nil {
-		return map[string]any{}
+		return nil, err
 	}
-	doc, err := decodeConfigDoc(raw)
+	return doc, nil
+}
+
+// Both list verbs (launchers, carry-over) read one array-valued key.
+// Absent or wrong-shaped reads as empty, matching the writers'
+// treatment of these keys as opaque raw entries.
+func readConfigArray(path, key string) ([]any, error) {
+	doc, err := readConfigDoc(path)
 	if err != nil {
-		return map[string]any{}
+		return nil, err
 	}
-	noteNewerSchema(path, raw)
-	return doc
+	entries, _ := doc[key].([]any)
+	if entries == nil {
+		entries = []any{}
+	}
+	return entries, nil
 }
 
 // Read-modify-write under the sibling .lock (withFileLock), so two CLI
@@ -569,7 +590,11 @@ func configListEntries(keys []configKey, doc map[string]any) []configListEntry {
 }
 
 func runConfigList(scope configDocScope) (int, error) {
-	entries := configListEntries(scope.keys, readConfigDoc(scope.path))
+	doc, err := readConfigDoc(scope.path)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	entries := configListEntries(scope.keys, doc)
 	if jsonMode {
 		scope.emitOK(map[string]any{"settings": entries})
 		return 0, nil
@@ -603,7 +628,11 @@ func runConfigGet(scope configDocScope, name string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	value, set := configDocGet(readConfigDoc(scope.path), key.name)
+	doc, err := readConfigDoc(scope.path)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	value, set := configDocGet(doc, key.name)
 	if !set {
 		value = key.def
 	}
@@ -871,11 +900,11 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 	}
 	switch verb {
 	case "list":
-		launchers, _ := readConfigDoc(scope.path)["launchers"].([]any)
+		launchers, err := readConfigArray(scope.path, "launchers")
+		if err != nil {
+			return exitCodeOf(err), err
+		}
 		if jsonMode {
-			if launchers == nil {
-				launchers = []any{}
-			}
 			scope.emitOK(map[string]any{"launchers": launchers})
 			return 0, nil
 		}
@@ -998,8 +1027,9 @@ func launcherMatches(launchers []any, ref string) []int {
 // reports the path. Seeds an empty document so a save round-trips.
 func openConfigFileInEditor(path string) (int, error) {
 	if _, err := os.Stat(path); err != nil {
-		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		if writeErr := os.WriteFile(path, []byte("{}\n"), 0o644); writeErr != nil {
+		seeded := map[string]any{}
+		stampSchemaVersion(seeded)
+		if writeErr := atomicWriteJSON(path, seeded); writeErr != nil {
 			return 1, errf("Couldn't create %s: %v", path, writeErr)
 		}
 	}
@@ -1018,6 +1048,17 @@ func openConfigFileInEditor(path string) (int, error) {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return 1, errf("%s failed: %v", editor, err)
+		}
+		// The editor bypasses updateConfigDoc's refusal of malformed
+		// content, so a stray trailing comma would otherwise surface
+		// only on some later command. Say it now, while the mistake is
+		// one keystroke old.
+		if raw, err := os.ReadFile(path); err == nil {
+			if _, decodeErr := decodeConfigDoc(raw); decodeErr != nil {
+				noteFileTrouble(path,
+					"Commands that read it will refuse until it parses.",
+					errf("%s is not valid JSON after the edit (%v)", path, decodeErr))
+			}
 		}
 		return 0, nil
 	}

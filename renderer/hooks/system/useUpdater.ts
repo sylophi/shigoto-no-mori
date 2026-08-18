@@ -25,10 +25,12 @@ export function useUpdater() {
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast above is the single source of truth; main pushes the new state via setQueryData
   const check = useMutation({
     mutationFn: () => window.api.updater.check(),
+    meta: { errorTitle: "Couldn't check for updates" },
   });
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast above is the single source of truth; main pushes the new state via setQueryData
   const install = useMutation({
     mutationFn: () => window.api.updater.install(),
+    meta: { errorTitle: "Couldn't install the update" },
   });
 
   // The explicit annotation strips react-query's NoInfer wrapper from

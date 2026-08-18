@@ -134,7 +134,7 @@ func availableLaunchers(proj project) []launcherEntry {
 			entries = append(entries, launcherEntry{id: "custom:" + c.ID, label: c.Label, custom: c})
 		}
 	}
-	appendCustom(readGlobalConfig().Launchers)
+	appendCustom(readGlobalConfigHints().Launchers)
 	if config := readProjectConfig(proj.ID); config != nil {
 		appendCustom(config.Launchers)
 	}
@@ -187,8 +187,8 @@ func pruneAndAppendUse(times []int64) []int64 {
 func bumpLauncherUse(id string) {
 	err := updateStateKey("launcherUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string][]int64{}
-		if raw != nil {
-			_ = json.Unmarshal(raw, &log)
+		if err := decodeKey(statePath(), "launcherUseLog", raw, &log); err != nil {
+			return nil, err
 		}
 		log[id] = pruneAndAppendUse(log[id])
 		return log, nil

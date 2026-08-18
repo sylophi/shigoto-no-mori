@@ -91,8 +91,8 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 
 	err = updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw != nil {
-			_ = json.Unmarshal(raw, &projects)
+		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
+			return nil, err
 		}
 		kept := make([]project, 0, len(projects))
 		found := false
@@ -198,8 +198,8 @@ func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
 	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
-		if raw != nil {
-			_ = json.Unmarshal(raw, &projects)
+		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
+			return nil, err
 		}
 		for _, existing := range projects {
 			if existing.Path == path {
@@ -222,7 +222,7 @@ func seedProjectConfig(proj project) {
 	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
 		seeded["defaultBranch"] = defaultBranch
 	}
-	global := readGlobalConfig()
+	global := readGlobalConfigHints()
 	if global.AutoPopulateInstall != nil && *global.AutoPopulateInstall {
 		if pm := detectPackageManager(proj.Path); pm != "" {
 			seeded["scripts.setup"] = pm + " install"
@@ -307,6 +307,24 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	var candidates []string
 	known := 0
 	for _, repo := range scanForGitRepos(root) {
+		// Raw-path check first: registered rows were canonicalized at
+		// registration, so a raw hit is already canonical and skips the
+		// git spawn -- a re-run over an all-registered root then costs
+		// no spawns at all.
+		if registered[repo] {
+			known++
+			continue
+		}
+		// Fold the rest through git exactly like single add: the scan
+		// built these paths from the caller's spelling of root, and a
+		// mis-cased or symlinked spelling registered verbatim defeats
+		// every later path lookup (resolveProjectByPath compares the
+		// canonical spelling). Re-check after folding: the canonical
+		// spelling may be the registered one even when the raw one
+		// wasn't.
+		if _, primaryPath, err := locateRepo(repo); err == nil {
+			repo = primaryPath
+		}
 		if registered[repo] {
 			known++
 			continue
@@ -543,11 +561,11 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 	}
 	switch verb {
 	case "list":
-		entries, _ := readConfigDoc(scope.path)["carryOver"].([]any)
+		entries, err := readConfigArray(scope.path, "carryOver")
+		if err != nil {
+			return exitCodeOf(err), err
+		}
 		if jsonMode {
-			if entries == nil {
-				entries = []any{}
-			}
 			scope.emitOK(map[string]any{"carryOver": entries})
 			return 0, nil
 		}

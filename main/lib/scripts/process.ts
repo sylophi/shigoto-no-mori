@@ -61,6 +61,12 @@ export function spawnScript(opts: SpawnScriptOptions): ChildProcess {
 }
 
 function safeKill(pid: number, signal: NodeJS.Signals): void {
+  // kill(-1) signals every process the user may signal, kill(0) our
+  // own group, kill(1) launchd. No real child or group ever maps to
+  // these, so refuse them at the chokepoint every pid source funnels
+  // through -- the persisted-scripts schema rejects pid < 2 too, but
+  // a floor here covers future sources as well.
+  if (!Number.isInteger(pid) || Math.abs(pid) < 2) return;
   try {
     process.kill(pid, signal);
   } catch {
