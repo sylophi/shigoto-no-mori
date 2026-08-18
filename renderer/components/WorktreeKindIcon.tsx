@@ -12,7 +12,10 @@ const KINDS = {
   shelved: { Icon: Archive, label: "Shelved" },
 } as const;
 
-function kindOf(worktree: Worktree): keyof typeof KINDS | null {
+// Exported so callers that need a fallback glyph for the plain case (the
+// command palette draws a branch icon there) can ask without re-deriving
+// the precedence order.
+export function worktreeKind(worktree: Worktree): keyof typeof KINDS | null {
   if (worktree.isPrimary) return "primary";
   if (worktree.isExternal) return "external";
   if (worktree.shelved) return "shelved";
@@ -26,7 +29,7 @@ export function WorktreeKindIcon({
   worktree: Worktree;
   showTooltip?: boolean;
 }) {
-  const kind = kindOf(worktree);
+  const kind = worktreeKind(worktree);
   if (!kind) return null;
   const { Icon, label } = KINDS[kind];
   const icon = (

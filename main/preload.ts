@@ -4,6 +4,7 @@
 import { contextBridge } from "electron";
 import {
   branches,
+  commandPalette,
   dialog,
   fs,
   git,
@@ -39,6 +40,7 @@ const api = {
   globalConfig,
   shell,
   projectLauncher,
+  commandPalette,
   nav,
   menu,
   window: windowApi,

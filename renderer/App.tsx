@@ -4,6 +4,7 @@ import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { AddProjectModal } from "@/components/AddProjectModal";
+import { CommandPalette } from "@/components/commandPalette/CommandPalette";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
@@ -56,6 +57,7 @@ export function App() {
             <TooltipProvider>
               <RouterProvider router={router} />
               <ProjectLauncher />
+              <CommandPalette />
               <AddProjectModal />
               <DevThemeHotkeys />
             </TooltipProvider>

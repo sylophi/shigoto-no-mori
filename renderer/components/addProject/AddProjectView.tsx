@@ -24,7 +24,7 @@ import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { router } from "@/router";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { ITEM_CLASS } from "./cmdkClasses";
+import { ITEM_CLASS } from "@/components/ui/cmdk";
 import { ScanningPanel } from "./ScanningPanel";
 import { ResultsPanel } from "./ResultsPanel";
 import { useBrowseState } from "./useBrowseState";
