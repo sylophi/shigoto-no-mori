@@ -14,9 +14,9 @@ export function WorktreeDetail() {
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {
     data: worktrees = [],
-    isPending,
-    isError,
-    refetch,
+    isPending: worktreesPending,
+    isError: worktreesError,
+    refetch: refetchWorktrees,
   } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
@@ -29,15 +29,19 @@ export function WorktreeDetail() {
   if (!worktree || !project) {
     // Cold cache (e.g. a reload landing directly on this route): the
     // lists haven't resolved yet, so absence doesn't mean missing.
-    if (isPending || projectsPending) return null;
+    if (worktreesPending || projectsPending) return null;
     // The worktrees query is silent on error because the sidebar owns
     // that message, so without this branch a failed listing would read
     // as a deleted worktree and offer no way back.
-    if (isError) {
+    if (worktreesError) {
       return (
         <CenteredMessage className="flex-col gap-3">
           Couldn't load worktrees.
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void refetchWorktrees()}
+          >
             Retry
           </Button>
         </CenteredMessage>
