@@ -653,10 +653,11 @@ func run() int {
 	}
 
 	initRoot()
-	// An unreadable or malformed state.json fails here rather than
+	// An unreadable or malformed registry.json fails here rather than
 	// running the command against an empty project list: every command
-	// that writes state would otherwise rebuild the file from that
-	// empty picture.
+	// that writes the registry would otherwise rebuild the file from
+	// that empty picture. This is also where an old-format root gets
+	// its registry drained out of state.json.
 	projects, err := loadProjects()
 	if err != nil {
 		reportError(err)

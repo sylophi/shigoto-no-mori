@@ -3,7 +3,16 @@
 // the CLI go through this module -- so every write cycle holds the
 // cross-process lock. Reads stay lock-free: the rename keeps the file
 // itself always consistent.
+//
+// Two files, split by what it costs to lose them. registry.json holds
+// the durable record of what the user has set up: the project list and
+// the worktree shelf. state.json holds what the app can rebuild by
+// being used: the three use logs, the two sort preferences and the
+// sidebar collapse set. The registry is only rewritten when projects
+// or the shelf actually change, so the writes that fire on nearly
+// every click never touch it.
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   renameSync,
@@ -20,21 +29,30 @@ import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
 import { noteSelfWrite } from "../util/selfWrite";
 
-const FILE = "state.json";
+const STATE_FILE = "state.json";
+const REGISTRY_FILE = "registry.json";
 
-function filePath(): string {
-  return join(shigomoriRoot(), FILE);
+// The registry's two keys live here rather than in their feature
+// modules so the accessors and the split below can't drift apart.
+// cli/state.go names the same two.
+export const PROJECTS_KEY = "projects";
+export const SHELVED_KEY = "shelvedWorktrees";
+
+const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
+
+function filePath(file: string): string {
+  return join(shigomoriRoot(), file);
 }
 
 // Every write is a read-modify-write of the whole file, so "I couldn't
 // read it" must never come back as "it's empty": a permission error, an
 // IO error or a cloud file that hasn't been materialized would rewrite
-// state.json with nothing but the key being written, dropping the
-// project registry, the shelf, and every use log. Only a genuinely
-// absent file is empty. Everything else throws, which aborts the write
-// with the file still on disk. The CLI's readStateFile does the same.
-function readAll(): Record<string, unknown> {
-  const path = filePath();
+// the file with nothing but the key being written, dropping the project
+// registry or every use log. Only a genuinely absent file is empty.
+// Everything else throws, which aborts the write with the file still on
+// disk. The CLI's readJsonObject does the same.
+function readAll(file: string): Record<string, unknown> {
+  const path = filePath(file);
   let raw: string;
   try {
     raw = readFileSync(path, "utf8");
@@ -55,7 +73,7 @@ function readAll(): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
-// A truncated or hand-mangled state.json is the one case where a blind
+// A truncated or hand-mangled file is the one case where a blind
 // rewrite destroys something recoverable, so refuse and name the file
 // rather than moving it aside and starting fresh. Quarantining would
 // leave the user staring at an empty app with their data in a file
@@ -71,8 +89,8 @@ function corruptMessage(path: string): string {
 // hands its result to callers that only want their own key, and the
 // marker belongs to the file, not to the data. Every write goes
 // through here, so the file is stamped whatever the caller was doing.
-function writeAll(data: Record<string, unknown>): void {
-  const path = filePath();
+function writeAll(file: string, data: Record<string, unknown>): void {
+  const path = filePath(file);
   mkdirSync(dirname(path), { recursive: true });
   const tmp = tempPathFor(path);
   writeFileSync(tmp, JSON.stringify(withSchemaVersion(data), null, 2), "utf8");
@@ -89,38 +107,149 @@ function writeAll(data: Record<string, unknown>): void {
   noteSelfWrite();
 }
 
-export function readKey<T>(key: string, fallback: T): T {
-  const all = readAll();
+function withStoreLock<T>(file: string, fn: () => T): T {
+  return withFileLock(`${filePath(file)}.lock`, fn);
+}
+
+function readKeyIn<T>(file: string, key: string, fallback: T): T {
+  const all = readAll(file);
   if (key in all) return all[key] as T;
   return fallback;
 }
 
-export function writeKey<T>(key: string, value: T): void {
-  withFileLock(`${filePath()}.lock`, () => {
-    const all = readAll();
+function writeKeyIn<T>(file: string, key: string, value: T): void {
+  withStoreLock(file, () => {
+    const all = readAll(file);
     all[key] = value;
-    writeAll(all);
+    writeAll(file, all);
   });
 }
 
-// Read-modify-write of one key with the READ inside the lock. Callers
-// that derive the new value from the current one (append a project,
-// toggle a shelf flag) must use this instead of readKey + writeKey:
-// with the read outside the lock, a concurrent CLI write between the
-// read and the write is silently clobbered. `update` may return
-// undefined to skip the write (no-op detected under the lock). It may
-// also throw (e.g. a duplicate check); the lock is still released.
-export function updateKey<T>(
+function updateKeyIn<T>(
+  file: string,
   key: string,
   fallback: T,
   update: (current: T) => T | undefined,
 ): void {
-  withFileLock(`${filePath()}.lock`, () => {
-    const all = readAll();
+  withStoreLock(file, () => {
+    const all = readAll(file);
     const current = key in all ? (all[key] as T) : fallback;
     const next = update(current);
     if (next === undefined) return;
     all[key] = next;
-    writeAll(all);
+    writeAll(file, all);
   });
+}
+
+interface JsonStore {
+  readKey<T>(key: string, fallback: T): T;
+  writeKey<T>(key: string, value: T): void;
+  // Read-modify-write of one key with the READ inside the lock. Callers
+  // that derive the new value from the current one (append a project,
+  // toggle a shelf flag) must use this instead of readKey + writeKey:
+  // with the read outside the lock, a concurrent CLI write between the
+  // read and the write is silently clobbered. `update` may return
+  // undefined to skip the write (no-op detected under the lock). It may
+  // also throw (e.g. a duplicate check); the lock is still released.
+  updateKey<T>(
+    key: string,
+    fallback: T,
+    update: (current: T) => T | undefined,
+  ): void;
+}
+
+// Use logs, sort preferences, sidebar collapse set.
+export const stateStore: JsonStore = {
+  readKey<T>(key: string, fallback: T): T {
+    return readKeyIn(STATE_FILE, key, fallback);
+  },
+  writeKey<T>(key: string, value: T): void {
+    writeKeyIn(STATE_FILE, key, value);
+  },
+  updateKey<T>(
+    key: string,
+    fallback: T,
+    update: (current: T) => T | undefined,
+  ): void {
+    updateKeyIn(STATE_FILE, key, fallback, update);
+  },
+};
+
+// Project list and worktree shelf. Every entry point drains an
+// old-format root first, so no caller has to know the split happened.
+export const registryStore: JsonStore = {
+  readKey<T>(key: string, fallback: T): T {
+    ensureRegistrySplit();
+    return readKeyIn(REGISTRY_FILE, key, fallback);
+  },
+  writeKey<T>(key: string, value: T): void {
+    ensureRegistrySplit();
+    writeKeyIn(REGISTRY_FILE, key, value);
+  },
+  updateKey<T>(
+    key: string,
+    fallback: T,
+    update: (current: T) => T | undefined,
+  ): void {
+    ensureRegistrySplit();
+    updateKeyIn(REGISTRY_FILE, key, fallback, update);
+  },
+};
+
+// --- one-time move of the registry keys out of state.json ---
+//
+// Roots written by an earlier build keep the project list and the shelf
+// in state.json. The first registry access in each process drains them
+// into registry.json. Mirrored by ensureRegistrySplit in cli/state.go,
+// which has to agree with this down to the file name and the key names.
+//
+// The write order is the whole safety argument. registry.json is
+// written first and state.json is stripped second, both atomic
+// renames, so a crash between them leaves the data in two places
+// rather than in none. The next run finds the leftovers, sees the keys
+// already in registry.json, keeps those and strips state.json again. A
+// key present in registry.json always wins: that file is the live copy
+// once it exists.
+//
+// Two processes starting against the same old root are safe because
+// state.json is read again inside its lock. The loser of the race
+// finds nothing left to move and writes nothing. Both locks are taken,
+// state.json's outside registry.json's. Nothing else takes both, so
+// the order can't deadlock.
+let registrySplitDone = false;
+
+function ensureRegistrySplit(): void {
+  if (registrySplitDone) return;
+  let state: Record<string, unknown>;
+  try {
+    state = readAll(STATE_FILE);
+  } catch (error) {
+    // The source is unreadable. Once registry.json exists the split is
+    // behind us and state.json's trouble belongs to the use logs, which
+    // report it on their own reads. Before that the registry is
+    // genuinely unknown, and answering "no projects" is the failure the
+    // strict read exists to prevent.
+    if (!existsSync(filePath(REGISTRY_FILE))) throw error;
+    registrySplitDone = true;
+    return;
+  }
+  if (!REGISTRY_KEYS.some((key) => key in state)) {
+    registrySplitDone = true;
+    return;
+  }
+  withStoreLock(STATE_FILE, () => {
+    const current = readAll(STATE_FILE);
+    const moving = REGISTRY_KEYS.filter((key) => key in current);
+    if (moving.length === 0) return;
+    withStoreLock(REGISTRY_FILE, () => {
+      const registry = readAll(REGISTRY_FILE);
+      const adding = moving.filter((key) => !(key in registry));
+      if (adding.length === 0) return;
+      for (const key of adding) registry[key] = current[key];
+      writeAll(REGISTRY_FILE, registry);
+    });
+    for (const key of moving) delete current[key];
+    writeAll(STATE_FILE, current);
+  });
+  registrySplitDone = true;
 }

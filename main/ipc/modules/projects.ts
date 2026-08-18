@@ -3,7 +3,7 @@ import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { readShigomoriConfig } from "../../lib/config/project";
-import { updateKey } from "../../lib/config/store";
+import { PROJECTS_KEY, registryStore } from "../../lib/config/store";
 import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
 import { isGitRepo } from "../../lib/git/core";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
@@ -12,7 +12,6 @@ import {
   findProjectOrThrow,
   listProjectsWithStatus,
   loadProjects,
-  PROJECTS_KEY,
 } from "../../lib/projects";
 import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
 import {
@@ -77,7 +76,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // the CLI writes this key too (sm projects add), and deriving the new
     // list from a read taken outside the lock would clobber a concurrent
     // CLI write.
-    updateKey<Project[]>(PROJECTS_KEY, [], (current) =>
+    registryStore.updateKey<Project[]>(PROJECTS_KEY, [], (current) =>
       reorderProjects(current, draggedId, targetId, position),
     );
   },

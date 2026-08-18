@@ -4,7 +4,7 @@
 // app. Stored in the global state.json — sort and usage are app-managed UI
 // state, not the user-editable per-project shigomori config.
 import type { ProjectSortMode } from "@shared/schemas";
-import { readKey, writeKey } from "../config/store";
+import { stateStore } from "../config/store";
 import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "projectUseLog";
@@ -23,15 +23,15 @@ export interface ProjectUsage {
 }
 
 export function readProjectSort(): ProjectSortMode {
-  return readKey<ProjectSortMode>(SORT_KEY, IMPLICIT_MODE);
+  return stateStore.readKey<ProjectSortMode>(SORT_KEY, IMPLICIT_MODE);
 }
 
 export function writeProjectSort(mode: ProjectSortMode): void {
-  writeKey<ProjectSortMode>(SORT_KEY, mode);
+  stateStore.writeKey<ProjectSortMode>(SORT_KEY, mode);
 }
 
 export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
-  const log = readKey<UseLog>(USE_LOG_KEY, {});
+  const log = stateStore.readKey<UseLog>(USE_LOG_KEY, {});
   const now = Date.now();
   const out: Record<string, ProjectUsage> = {};
   for (const id of projectIds) {
@@ -45,9 +45,9 @@ export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
 }
 
 export function bumpProjectUseCount(projectId: string): void {
-  const log = readKey<UseLog>(USE_LOG_KEY, {});
+  const log = stateStore.readKey<UseLog>(USE_LOG_KEY, {});
   log[projectId] = pruneAndPush(log[projectId] ?? [], Date.now());
-  writeKey<UseLog>(USE_LOG_KEY, log);
+  stateStore.writeKey<UseLog>(USE_LOG_KEY, log);
 }
 
 function hasStringProjectId(input: unknown): input is { projectId: string } {

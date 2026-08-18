@@ -1,7 +1,7 @@
 package main
 
 // sm shelve / unshelve: the app's "out of focus" flag. Pure UI state
-// in state.json -- nothing on disk changes. The primary checkout and
+// in registry.json -- nothing on disk changes. The primary checkout and
 // external worktrees can't be shelved.
 
 func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {

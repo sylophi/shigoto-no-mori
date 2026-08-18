@@ -3,14 +3,12 @@ import { existsSync } from "node:fs";
 import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
 import { isSameOrInside } from "@shared/worktreeLayout";
-import { readKey } from "../config/store";
+import { PROJECTS_KEY, registryStore } from "../config/store";
 import { shigomoriRoot, toAbsolute } from "../util/paths";
 import { usageFor } from "./usage";
 
-export const PROJECTS_KEY = "projects";
-
 export function loadProjects(): Project[] {
-  return readKey<Project[]>(PROJECTS_KEY, []);
+  return registryStore.readKey<Project[]>(PROJECTS_KEY, []);
 }
 
 // Decorated with `pathExists` for renderer-side "this project is missing"
