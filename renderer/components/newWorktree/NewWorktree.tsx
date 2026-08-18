@@ -19,6 +19,7 @@ import {
 import { tildify } from "@/lib/projectPaths";
 import {
   PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
+  pullRequestBranchCandidates,
   pullRequestFolderName,
 } from "@/lib/pullRequest";
 import {
@@ -105,11 +106,15 @@ export function NewWorktree() {
     branchName.length > 0 &&
     (branches?.local.includes(branchName) ?? false);
 
-  // The PR's head branch is what actually gets checked out, so an
-  // existing worktree on it blocks the create the same way an occupied
-  // base does in checkout mode.
+  // A PR checkout blocks the same way an occupied base does in checkout
+  // mode -- but only once every branch name the resolver could land on
+  // is taken. A fork head whose name collides with a local branch still
+  // has its owner-prefixed fallback to fall back to.
   const prHeadOccupied =
-    selectedPr !== null && worktreeByBranch.has(selectedPr.headRefName);
+    selectedPr !== null &&
+    pullRequestBranchCandidates(selectedPr).every((branch) =>
+      worktreeByBranch.has(branch),
+    );
 
   // Raw `worktreeName` is held separately from the sanitized `folderName`
   // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
@@ -284,10 +289,16 @@ export function NewWorktree() {
                 <p className="text-xs text-muted-foreground">
                   Checks out{" "}
                   <span className="font-mono text-foreground/80">
-                    {selectedPr.headRefName}
+                    {selectedPr.headRepo
+                      ? `refs/pull/${selectedPr.number}/head`
+                      : selectedPr.headRefName}
                   </span>
                   {selectedPr.headRepo
-                    ? `, fetched from refs/pull/${selectedPr.number}/head because the head lives in a fork. Nothing is configured to push back to it.`
+                    ? // Deliberately doesn't name the local branch: a fork
+                      // head that collides with a local name gets an
+                      // owner-prefixed one instead, and which it lands on
+                      // depends on git config the form can't read.
+                      ". The head lives in a fork, so nothing is configured to push back to it."
                     : ", tracking the branch on the remote."}
                 </p>
               )}

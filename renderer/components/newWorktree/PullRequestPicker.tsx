@@ -1,11 +1,12 @@
 import { GitPullRequest, GitPullRequestDraft } from "lucide-react";
 import type { PullRequestCandidate, Worktree } from "@shared/schemas";
+import { pullRequestBranchCandidates } from "@/lib/pullRequest";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 
 // The list behind the "From pull request" mode. One row per open PR;
-// picking one sets the branch the worktree checks out. Rows whose head
-// branch is already a HEAD somewhere are shown but not selectable --
+// picking one sets the branch the worktree checks out. Rows the resolver
+// has no free branch name left for are shown but not selectable --
 // hiding them would leave the user hunting for a PR that's right there
 // on GitHub.
 export function PullRequestPicker({
@@ -40,13 +41,34 @@ export function PullRequestPicker({
           key={pr.number}
           pr={pr}
           selected={selected?.number === pr.number}
-          occupiedBy={worktreeByBranch.get(pr.headRefName)}
+          occupiedBy={blockingWorktree(pr, worktreeByBranch)}
           onSelect={() => onSelect(pr)}
           disabled={disabled}
         />
       ))}
     </div>
   );
+}
+
+// Only a PR with no candidate name left is genuinely blocked. Checking
+// the head name alone would grey out every fork PR opened off its
+// author's default branch, and the owner-prefixed fallback that exists
+// for exactly that case would never get a chance to run.
+//
+// Names the *last* candidate's holder, not the first: a blocked fork PR
+// is usually blocked because that PR is already checked out under the
+// fallback name, and pointing at the worktree holding an unrelated
+// branch of the same name sends the user to the wrong row.
+function blockingWorktree(
+  pr: PullRequestCandidate,
+  worktreeByBranch: Map<string, Worktree>,
+): Worktree | undefined {
+  const holders = pullRequestBranchCandidates(pr).map((branch) =>
+    worktreeByBranch.get(branch),
+  );
+  return holders.every((held) => held !== undefined)
+    ? holders[holders.length - 1]
+    : undefined;
 }
 
 function PullRequestRow({
