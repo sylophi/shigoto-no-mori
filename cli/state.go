@@ -250,25 +250,63 @@ func readRegistryFile() (map[string]json.RawMessage, error) {
 	return readJSONObject(registryPath())
 }
 
-// Read of the display-only hints (shelf flags, launcher use counts).
-// Every command loads the projects list before it dispatches, so a
-// failure this late means the file went unreadable mid-command: drop
-// the hint rather than abort work that is otherwise fine. No writer
-// goes through here -- updateFileKey refuses instead.
-func asHints(all map[string]json.RawMessage, err error) map[string]json.RawMessage {
+// A file this build could not read, said once per process. Nothing
+// else reads state.json before a command dispatches (the pre-dispatch
+// load reads registry.json), so without this a truncated state.json
+// would refuse every use-log write for as long as it stays broken and
+// never say a word about it. The hint readers and the use-log writers
+// hit the same file several times per command, hence the dedupe: one
+// warning points at the cause, ten bury the output it came with.
+// Shaped like noteNewerSchema above, which dedupes the same way.
+var notedFileTrouble = map[string]bool{}
+
+func noteFileTrouble(path, degraded string, err error) {
+	if notedFileTrouble[path] {
+		return
+	}
+	notedFileTrouble[path] = true
+	note(yellowErr("warning:") + " " + err.Error())
+	note(dimErr(degraded))
+}
+
+// state.json holds use counts and view preferences, so a command whose
+// real work lives elsewhere still runs. updateFileKey refuses the
+// write, which is #161's guarantee and stays.
+func noteStateTrouble(err error) {
+	noteFileTrouble(statePath(),
+		"Use counts and view preferences are unavailable, and new uses aren't recorded, until the file is fixed.",
+		err)
+}
+
+func noteRegistryTrouble(err error) {
+	noteFileTrouble(registryPath(),
+		"Shelved worktrees are listed as unshelved until the file is fixed.",
+		err)
+}
+
+// Reads of the display-only hints: use counts and view preferences in
+// state.json, shelf flags in registry.json. Losing one costs a sort
+// order or a badge, so the command carries on with an empty document
+// rather than aborting work that is otherwise fine. No writer goes
+// through here. updateFileKey refuses on a bad read instead.
+func readStateHints() map[string]json.RawMessage {
+	all, err := readStateFile()
 	if err != nil {
 		vlog("[state] %v", err)
+		noteStateTrouble(err)
 		return map[string]json.RawMessage{}
 	}
 	return all
 }
 
-func readStateHints() map[string]json.RawMessage {
-	return asHints(readStateFile())
-}
-
 func readRegistryHints() map[string]json.RawMessage {
-	return asHints(readRegistryFile())
+	all, err := readRegistryFile()
+	if err != nil {
+		vlog("[state] %v", err)
+		noteRegistryTrouble(err)
+		return map[string]json.RawMessage{}
+	}
+	return all
 }
 
 func loadProjects() ([]project, error) {

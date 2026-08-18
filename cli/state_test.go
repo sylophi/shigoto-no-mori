@@ -11,8 +11,10 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -496,5 +498,97 @@ func TestRegistrySplitOnFreshRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(statePath()); err == nil {
 		t.Error("a registry write created state.json")
+	}
+}
+
+// --- a broken state.json is loud without being fatal ---
+
+// note/vlog write to os.Stderr through the package variable, so
+// swapping it is enough to read back what a command would have shown.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = saved
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	printed, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return string(printed)
+}
+
+// Nothing reads state.json before a command dispatches any more, so
+// the hint reads and the use-log writes are the only places left that
+// can notice it is broken. They carry on, and they say so once.
+func TestBrokenStateWarnsOnceAndKeepsWorking(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],`+
+		`"shelvedWorktrees":{"w1":true},"schemaVersion":1}`)
+	broken := `{"launcherUseLog": {"app:finder": [1`
+	seedState(t, broken)
+
+	var projects []project
+	var shelved map[string]bool
+	var hints map[string]json.RawMessage
+	var writeErr error
+	printed := captureStderr(t, func() {
+		var err error
+		if projects, err = loadProjects(); err != nil {
+			t.Errorf("loadProjects with an intact registry.json: %v", err)
+		}
+		shelved = readShelvedSet()
+		hints = readStateHints()
+		readStateHints()
+		writeErr = bumpUseLog()
+	})
+
+	if len(projects) != 1 || !shelved["w1"] {
+		t.Errorf("registry.json reads = %v, %v, want the project and the shelf", projects, shelved)
+	}
+	if len(hints) != 0 {
+		t.Errorf("hints from a broken state.json = %v, want empty", hints)
+	}
+	if writeErr == nil {
+		t.Error("write against a broken state.json succeeded, want the refusal")
+	}
+	if got := strings.Count(printed, "warning:"); got != 1 {
+		t.Errorf("warnings printed = %d, want exactly 1:\n%s", got, printed)
+	}
+	if !strings.Contains(printed, statePath()) {
+		t.Errorf("warning does not name state.json:\n%s", printed)
+	}
+	if raw, err := os.ReadFile(statePath()); err != nil || string(raw) != broken {
+		t.Errorf("broken state.json was rewritten to %q", raw)
+	}
+}
+
+// The same paths on a healthy root say nothing at all.
+func TestHealthyRootPrintsNoWarning(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],"schemaVersion":1}`)
+	seedState(t, `{"launcherUseLog":{"app:finder":[1]},"schemaVersion":1}`)
+	printed := captureStderr(t, func() {
+		if _, err := loadProjects(); err != nil {
+			t.Error(err)
+		}
+		readShelvedSet()
+		readStateHints()
+		if err := bumpUseLog(); err != nil {
+			t.Error(err)
+		}
+	})
+	if printed != "" {
+		t.Errorf("healthy root printed:\n%s", printed)
 	}
 }

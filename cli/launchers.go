@@ -195,6 +195,7 @@ func bumpLauncherUse(id string) {
 	})
 	if err != nil {
 		vlog("[open] use log bump failed: %v", err)
+		noteStateTrouble(err)
 	}
 }
 
