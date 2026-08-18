@@ -11,7 +11,7 @@ import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
 import { queryKeys } from "./lib/queryKeys";
-import { notifyError } from "./lib/toast";
+import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
@@ -21,6 +21,24 @@ import "./index.css";
 // if the user navigated away from the new worktree's detail page).
 // worktreeLifecycle.start() needs queryClient and moves below it.
 scriptRuns.start();
+
+// Scripts that survived a crash or a force quit are stopped by the main
+// process at boot. Their consoles died with the session that started
+// them, so this toast is the only place the user can find out that a
+// dev server they left running is gone (and its port free again).
+void window.api.scripts
+  .orphanReport()
+  .then(({ stopped }) => {
+    if (stopped === 0) return;
+    toast.warning(
+      `Stopped ${stopped} script${stopped === 1 ? "" : "s"} left running by a previous session`,
+      {
+        id: "orphan-scripts",
+        description: "Shigoto no Mori closed while they were still running.",
+      },
+    );
+  })
+  .catch(() => undefined);
 
 // React Query's default focus listener subscribes to `window.focus` and
 // `visibilitychange`, but those don't fire on every Electron focus
