@@ -72,6 +72,8 @@ export const queryKeys = {
     ["githubCli", "pullRequests", projectId, "project"] as const,
   worktreePullRequest: (projectId: string, branch: string) =>
     ["githubCli", "pullRequests", projectId, "branch", branch] as const,
+  pullRequestCandidates: (projectId: string) =>
+    ["githubCli", "pullRequests", projectId, "candidates"] as const,
 
   fsListDirectory: (path: string) => ["fs", "listDirectory", path] as const,
   fsIsGitRepo: (path: string) => ["fs", "isGitRepo", path] as const,

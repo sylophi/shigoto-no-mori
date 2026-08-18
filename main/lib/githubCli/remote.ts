@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { listRemoteUrls } from "../git/remotes";
+import { listRemoteEntries } from "../git/remotes";
 import { ttlMapCache, ttlValueCache } from "../util/ttlCache";
 import { ghReady } from "./readiness";
 
@@ -109,11 +109,11 @@ function parseRemoteUrl(url: string): GithubRepoInfo | null {
 const githubRepoCache = ttlMapCache<string, GithubRepoInfo | null>(
   GH_REPO_TTL_MS,
   async (cwd) => {
-    const [urls, hosts] = await Promise.all([
-      listRemoteUrls(cwd),
+    const [remotes, hosts] = await Promise.all([
+      listRemoteEntries(cwd),
       knownHostsCache.get(),
     ]);
-    for (const url of urls) {
+    for (const { url } of remotes) {
       const parsed = parseRemoteUrl(url);
       if (parsed && hosts.has(parsed.host)) return parsed;
     }
@@ -123,6 +123,39 @@ const githubRepoCache = ttlMapCache<string, GithubRepoInfo | null>(
 
 export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
   return githubRepoCache.get(cwd);
+}
+
+// The remote pointing at the repo `url` belongs to, by name. Fetching a
+// PR head needs a name, and neither "origin" nor "the first GitHub
+// remote" is a safe stand-in: a fork checkout has both the fork and the
+// parent as remotes, gh resolves pull requests against the parent, and
+// fetching a head from the wrong one lands different code under the
+// right branch name. Pass the PR's own URL -- it names the repo gh
+// actually answered from.
+export async function remoteNameForUrl(
+  cwd: string,
+  url: string,
+): Promise<string | null> {
+  const target = parseRemoteUrl(url);
+  if (!target) return null;
+  for (const entry of await listRemoteEntries(cwd)) {
+    const parsed = parseRemoteUrl(entry.url);
+    // GitHub treats owner and repo case-insensitively, and a remote
+    // typed by hand often disagrees with the API's casing.
+    if (
+      parsed &&
+      parsed.host === target.host &&
+      sameName(parsed.owner, target.owner) &&
+      sameName(parsed.repo, target.repo)
+    ) {
+      return entry.name;
+    }
+  }
+  return null;
+}
+
+function sameName(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
 }
 
 export function githubRepoUrl(info: GithubRepoInfo): string {

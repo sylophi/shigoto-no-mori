@@ -9,6 +9,10 @@ import {
   getWorktreePullRequest,
   listProjectPullRequests,
 } from "../../lib/githubCli/pullRequests";
+import {
+  listPullRequestCandidates,
+  resolvePullRequestCheckout,
+} from "../../lib/githubCli/pullRequestCheckout";
 import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "../../lib/githubCli/readiness";
 import { getRepoMergeConfig } from "../../lib/githubCli/repoConfig";
@@ -27,6 +31,16 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   worktreePullRequest: async ({ projectId, branch }) => {
     const project = findProjectOrThrow(projectId);
     return getWorktreePullRequest(project.path, branch);
+  },
+
+  pullRequestCandidates: async ({ projectId }) => {
+    const project = findProjectOrThrow(projectId);
+    return listPullRequestCandidates(project.path);
+  },
+
+  resolvePullRequestCheckout: async ({ projectId, number }) => {
+    const project = findProjectOrThrow(projectId);
+    return resolvePullRequestCheckout(project.path, number);
   },
 
   repoMergeConfig: async ({ projectId }) => {

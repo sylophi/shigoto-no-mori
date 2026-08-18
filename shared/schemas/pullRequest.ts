@@ -124,6 +124,84 @@ export const GithubCliReadinessSchema = z.object({
 });
 export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
 
+// One open PR offered as a worktree source in the create form. Slimmer
+// than PullRequestDetail on purpose: the picker only needs enough to
+// recognize the PR and resolve its head, and statusCheckRollup is the
+// field that makes `gh pr list` materially slower (same reason the
+// sidebar sweep skips it).
+export const PullRequestCandidateSchema = z.object({
+  number: z.number().int().positive(),
+  url: z.url(),
+  title: z.string(),
+  isDraft: z.boolean(),
+  headRefName: z.string().min(1),
+  authorLogin: z.string(),
+  // Fork heads exist locally only as refs/pull/<n>/head, so the resolver
+  // takes a different path for them -- and a different set of local
+  // branch names.
+  fromFork: z.boolean(),
+  // "owner/repo" of the fork, for the row's label. Null for a same-repo
+  // PR, and also for a fork gh can't name any more (deleted fork), which
+  // is why fork-ness rides on its own field.
+  headRepo: z.string().nullable(),
+  updatedAt: z.string(),
+});
+export type PullRequestCandidate = z.infer<typeof PullRequestCandidateSchema>;
+
+// Why gh itself can't be used, independent of any one repo. This is
+// what the readiness gate answers.
+export const GhUnavailableReasonSchema = z.enum([
+  "integration-off",
+  "gh-missing",
+  "gh-signed-out",
+]);
+export type GhUnavailableReason = z.infer<typeof GhUnavailableReasonSchema>;
+
+// Why the PR source is unavailable for a project: the readiness reasons
+// plus the two that are about this repo. Kept as codes rather than prose
+// so the renderer owns the wording (and can point at the setting that
+// fixes it).
+export const PullRequestSourceUnavailableSchema = z.enum([
+  ...GhUnavailableReasonSchema.options,
+  "no-github-remote",
+  "gh-failed",
+]);
+export type PullRequestSourceUnavailable = z.infer<
+  typeof PullRequestSourceUnavailableSchema
+>;
+
+// "no open PRs" (ok + empty list) is a different answer from "we can't
+// ask" -- the form disables the whole mode for the latter, so the two
+// can't collapse into an empty array.
+export const PullRequestCandidateListSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("ok"),
+    pullRequests: z.array(PullRequestCandidateSchema),
+  }),
+  z.object({
+    status: z.literal("unavailable"),
+    reason: PullRequestSourceUnavailableSchema,
+  }),
+]);
+export type PullRequestCandidateList = z.infer<
+  typeof PullRequestCandidateListSchema
+>;
+
+export const ResolvePullRequestCheckoutPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    number: z.number().int().positive(),
+  });
+
+export const PullRequestCheckoutRefSchema = z.object({
+  // Local branch the PR head now sits on. Feed it to worktrees.create as
+  // `base` with `checkout: true` -- from there it's an ordinary
+  // check-out-existing-branch create.
+  branch: z.string().min(1),
+});
+export type PullRequestCheckoutRef = z.infer<
+  typeof PullRequestCheckoutRefSchema
+>;
+
 export const GithubCliWorktreePullRequestPayloadSchema =
   ProjectScopedPayloadSchema.extend({
     branch: z.string().min(1),

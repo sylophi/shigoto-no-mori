@@ -50,18 +50,26 @@ export async function listRemotes(projectPath: string): Promise<string[]> {
   }
 }
 
-// Distinct URLs across all configured remotes. `git remote -v` emits two
-// rows per remote (fetch + push) so we de-dupe; the host classification
-// downstream doesn't care which side a URL came from.
-export async function listRemoteUrls(projectPath: string): Promise<string[]> {
+// Every row of `git remote -v` as a name + URL pair. git emits two rows
+// per remote, fetch and push. Both are kept because a remote can push
+// somewhere other than it fetches, and callers classifying hosts want to
+// see either side. Identical rows are de-duped.
+export async function listRemoteEntries(
+  projectPath: string,
+): Promise<{ name: string; url: string }[]> {
   try {
     const stdout = await run(projectPath, ["remote", "-v"]);
-    const urls = new Set<string>();
+    const entries: { name: string; url: string }[] = [];
+    const seen = new Set<string>();
     for (const line of stdout.split("\n")) {
-      const match = line.match(/^\S+\s+(\S+)\s+\(/);
-      if (match?.[1]) urls.add(match[1]);
+      const match = line.match(/^(\S+)\s+(\S+)\s+\(/);
+      const name = match?.[1];
+      const url = match?.[2];
+      if (!name || !url || seen.has(`${name}\t${url}`)) continue;
+      seen.add(`${name}\t${url}`);
+      entries.push({ name, url });
     }
-    return [...urls];
+    return entries;
   } catch {
     return [];
   }

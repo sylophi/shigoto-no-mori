@@ -87,6 +87,9 @@ export const githubCli = {
   projectPullRequests: (projectId: string) =>
     githubCliClient.projectPullRequests({ projectId }),
   worktreePullRequest: githubCliClient.worktreePullRequest,
+  pullRequestCandidates: (projectId: string) =>
+    githubCliClient.pullRequestCandidates({ projectId }),
+  resolvePullRequestCheckout: githubCliClient.resolvePullRequestCheckout,
   repoMergeConfig: (projectId: string) =>
     githubCliClient.repoMergeConfig({ projectId }),
   mergePullRequest: githubCliClient.mergePullRequest,
