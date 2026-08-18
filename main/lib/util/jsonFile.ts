@@ -21,9 +21,9 @@ export async function unlinkIfExists(filePath: string): Promise<void> {
 // shigomori persists carries it: state.json, registry.json,
 // config.json, projects/<id>/project.json and
 // projects/<id>/worktrees/<id>.json. Nothing reads it to decide
-// anything yet. It exists so a later format
-// change can tell an old file from a new one instead of inferring the
-// shape from whichever keys happen to be present. The CLI stamps the
+// anything yet. It exists so a later format change can tell an old
+// file from a new one instead of inferring the shape from whichever
+// keys happen to be present. The CLI stamps the
 // same key with the same value (cli/state.go). The two writers have to
 // move together, since a marker the two disagree on is worse than no
 // marker at all.

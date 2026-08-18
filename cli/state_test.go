@@ -624,7 +624,7 @@ func TestSetShelvedRefusesMalformedShelfValue(t *testing.T) {
 	}
 }
 
-// Missing config.json reads as defaults; a malformed one is an error.
+// Missing config.json reads as defaults. A malformed one is an error.
 // deleteBranchOnRemove decides whether `sm rm` deletes a branch, so a
 // corrupt file must not read as "unset".
 func TestReadGlobalConfigStrict(t *testing.T) {

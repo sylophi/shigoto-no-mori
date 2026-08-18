@@ -150,9 +150,9 @@ type launcherCommand struct {
 // shigomori persists carries it: state.json, registry.json,
 // config.json, projects/<id>/project.json and
 // projects/<id>/worktrees/<id>.json. Nothing reads it to decide
-// anything yet. It exists so a later format
-// change can tell an old file from a new one instead of inferring the
-// shape from whichever keys happen to be present. The app stamps the
+// anything yet. It exists so a later format change can tell an old
+// file from a new one instead of inferring the shape from whichever
+// keys happen to be present. The app stamps the
 // same key with the same value (main/lib/util/jsonFile.ts). The two
 // writers have to move together, since a marker the two disagree on is
 // worse than no marker at all.
@@ -214,7 +214,7 @@ func registryPath() string { return filepath.Join(shigomoriRoot(), "registry.jso
 
 // One read-and-classify for every JSON document the CLI reads
 // strictly: only a genuinely absent file reads as empty (found=false,
-// decode never runs); an unreadable or malformed file is an error.
+// decode never runs). An unreadable or malformed file is an error.
 // Both error strings live here and nowhere else.
 func readJSONDoc(path string, decode func([]byte) error) (found bool, err error) {
 	raw, err := os.ReadFile(path)
@@ -226,7 +226,7 @@ func readJSONDoc(path string, decode func([]byte) error) (found bool, err error)
 	}
 	noteNewerSchema(path, raw)
 	if err := decode(raw); err != nil {
-		// A wrong-typed field is not a syntax problem; telling the user
+		// A wrong-typed field is not a syntax problem. Telling the user
 		// to fix JSON that parses fine sends them hunting for a comma
 		// that isn't there.
 		var typeErr *json.UnmarshalTypeError
@@ -562,7 +562,7 @@ func dropShelved(worktreeID string) error {
 	return setShelved(worktreeID, false)
 }
 
-// Missing reads as defaults; a file that exists but can't be read or
+// Missing reads as defaults. A file that exists but can't be read or
 // parsed is an error. deleteBranchOnRemove decides whether `sm rm`
 // deletes a branch, so a corrupt config.json must not quietly read as
 // "unset" -- that flips an explicit opt-out back to the destructive
@@ -594,7 +594,7 @@ func readGlobalConfigHints() globalConfig {
 // nil when the file is missing, unreadable, or fails the schema's
 // required-field check -- matching the app's null-on-invalid behavior.
 // A missing file or absent defaultBranch is the ordinary
-// pre-configure state and stays silent; a file that exists but can't
+// pre-configure state and stays silent. A file that exists but can't
 // be read or parsed gets a one-time warning, because nil here means
 // carry-over, setup and teardown silently don't run.
 func readProjectConfig(projectID string) *projectConfig {
