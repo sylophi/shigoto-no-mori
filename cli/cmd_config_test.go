@@ -512,6 +512,74 @@ func TestConfigWriteValidates(t *testing.T) {
 	}
 }
 
+func TestConfigWriteMergesUnknownKeys(t *testing.T) {
+	sandboxConfigRoot(t)
+	scope := globalConfigScope()
+	// A document as a newer build would have left it: futureSetting is
+	// a key this registry doesn't model, and the app's schema strips it
+	// before Settings ever sees it, so the payload can't carry it back.
+	seed := `{"theme": "dark", "doubutsu": false, "futureSetting": {"nested": "keep"}}` + "\n"
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runConfigWrite(scope, `{"theme": "light"}`); code != 0 || err != nil {
+		t.Fatalf("write: %d, %v", code, err)
+	}
+	doc := readDoc(t, scope.path)
+	future, _ := doc["futureSetting"].(map[string]any)
+	if future == nil || future["nested"] != "keep" {
+		t.Errorf("futureSetting after write = %v, want it untouched", doc["futureSetting"])
+	}
+	if doc["theme"] != "light" {
+		t.Errorf("theme = %v, want light", doc["theme"])
+	}
+	// Omitting a registry key still clears it: that is how the app
+	// resets a field to its default.
+	if _, ok := doc["doubutsu"]; ok {
+		t.Errorf("doubutsu = %v, want cleared by the omitting payload", doc["doubutsu"])
+	}
+}
+
+func TestProjectConfigWriteMergesNestedAndReplacesArrays(t *testing.T) {
+	sandboxConfigRoot(t)
+	proj := seededProject(t)
+	scope := projectConfigScope(proj)
+	seed := `{"defaultBranch": "main", "futureTop": "keep",` +
+		`"scripts": {"setup": "old", "teardown": "bye", "futureScript": "keep"},` +
+		`"carryOver": [{"path": ".env", "mode": "copy"}, {"path": ".envrc", "mode": "copy"}]}` + "\n"
+	if err := os.WriteFile(scope.path, []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"defaultBranch": "main", "scripts": {"setup": "new"},` +
+		`"carryOver": [{"path": ".env", "mode": "symlink"}]}`
+	if code, err := runConfigWrite(scope, data); code != 0 || err != nil {
+		t.Fatalf("write: %d, %v", code, err)
+	}
+	doc := readDoc(t, scope.path)
+	if doc["futureTop"] != "keep" {
+		t.Errorf("futureTop = %v, want it untouched", doc["futureTop"])
+	}
+	scripts, _ := doc["scripts"].(map[string]any)
+	if scripts == nil || scripts["futureScript"] != "keep" {
+		t.Errorf("scripts = %v, want futureScript untouched", doc["scripts"])
+	}
+	if scripts["setup"] != "new" {
+		t.Errorf("scripts.setup = %v, want new", scripts["setup"])
+	}
+	// Nested registry keys clear the same way top-level ones do.
+	if _, ok := scripts["teardown"]; ok {
+		t.Errorf("scripts.teardown = %v, want cleared", scripts["teardown"])
+	}
+	// Arrays replace wholesale rather than merging element by element.
+	entries, _ := doc["carryOver"].([]any)
+	if len(entries) != 1 {
+		t.Fatalf("carryOver = %v, want the payload's single entry", entries)
+	}
+	if entry, _ := entries[0].(map[string]any); entry["mode"] != "symlink" {
+		t.Errorf("carryOver[0] = %v, want the payload's symlink entry", entries[0])
+	}
+}
+
 // --- the schema marker ---
 
 func TestConfigWriteStampsSchemaVersion(t *testing.T) {

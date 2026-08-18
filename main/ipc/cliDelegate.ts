@@ -324,9 +324,11 @@ export function cliRunScriptSpawn(args: {
 
 // Whole-document config writes through the CLI's plumbing `write
 // --data` verbs, so both surfaces run one write path (validation,
-// lock+atomic replace, and -- for project config -- the in-project
+// lock+atomic merge, and -- for project config -- the in-project
 // exclude side effect). The payloads were already zod-parsed at the
-// IPC boundary. The CLI re-checks the shape so engine drift fails
+// IPC boundary. The CLI merges the payload into the file rather than
+// replacing it, so a key written by a newer version survives a save
+// from an older one, and it re-checks the shape so engine drift fails
 // loudly. Callers must invalidate the TTL caches themselves: runCli's
 // self-write note suppresses the state watcher for these writes.
 export async function globalConfigWriteViaCli(

@@ -42,7 +42,11 @@ export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
 
 // Per-project config. Stored at ~/shigomori[-dev]/projects/<projectId>.json
 // and managed by the app, not committed to the user's repo.
-export const ShigomoriConfigSchema = z.object({
+// Loose so a project.json written by a newer version keeps the keys
+// this build doesn't model: stripping them on read would hand the write
+// path a document with those settings already gone. The CLI's write
+// merges rather than replaces, so this is belt and braces.
+export const ShigomoriConfigSchema = z.looseObject({
   scripts: z
     .object({
       setup: z.string().optional(),
@@ -93,7 +97,9 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.
-export const GlobalConfigSchema = z.object({
+// Loose for the same reason as ShigomoriConfigSchema: keys a newer
+// version added ride through the read and back into the write.
+export const GlobalConfigSchema = z.looseObject({
   theme: ThemeSchema.optional(),
   // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
   // the light and dark palettes shift to a bolder, color-blocked,
