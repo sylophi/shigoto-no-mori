@@ -11,7 +11,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { tempPathFor } from "../util/jsonFile";
+import {
+  noteNewerSchema,
+  tempPathFor,
+  withSchemaVersion,
+} from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
 import { noteSelfWrite } from "../util/selfWrite";
@@ -47,6 +51,7 @@ function readAll(): Record<string, unknown> {
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(corruptMessage(path));
   }
+  noteNewerSchema(path, parsed);
   return parsed as Record<string, unknown>;
 }
 
@@ -62,11 +67,15 @@ function corruptMessage(path: string): string {
   );
 }
 
+// withSchemaVersion on the way out rather than on the way in: readAll
+// hands its result to callers that only want their own key, and the
+// marker belongs to the file, not to the data. Every write goes
+// through here, so the file is stamped whatever the caller was doing.
 function writeAll(data: Record<string, unknown>): void {
   const path = filePath();
   mkdirSync(dirname(path), { recursive: true });
   const tmp = tempPathFor(path);
-  writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  writeFileSync(tmp, JSON.stringify(withSchemaVersion(data), null, 2), "utf8");
   try {
     renameSync(tmp, path);
   } catch (error) {

@@ -7,6 +7,7 @@ package main
 // defaultBranch. Everything runs against a temp SHIGOMORI_ROOT.
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 )
@@ -504,5 +505,59 @@ func TestConfigWriteValidates(t *testing.T) {
 	}
 	if _, err := os.Stat(projectConfigJSONPath(proj.ID)); err == nil {
 		t.Error("refused write still created project.json")
+	}
+}
+
+// --- the schema marker ---
+
+func TestConfigWriteStampsSchemaVersion(t *testing.T) {
+	sandboxConfigRoot(t)
+	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
+		t.Fatalf("set theme dark: %d, %v", code, err)
+	}
+	if got := readDoc(t, configJSONPath())["schemaVersion"]; got != json.Number("1") {
+		t.Errorf("config.json schemaVersion = %v, want 1", got)
+	}
+	proj := seededProject(t)
+	if got := readDoc(t, projectConfigJSONPath(proj.ID))["schemaVersion"]; got != json.Number("1") {
+		t.Errorf("project.json schemaVersion = %v, want 1", got)
+	}
+}
+
+// A marker from a build that doesn't exist yet is read, not refused,
+// and the rest of the document survives the write that stamps it back
+// down to what this build actually produces.
+func TestConfigToleratesNewerSchemaVersion(t *testing.T) {
+	sandboxConfigRoot(t)
+	seed := `{"schemaVersion": 99, "theme": "dark", "futureKey": "kept"}` + "\n"
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runConfigSet(globalConfigScope(), "portPool", "on"); code != 0 || err != nil {
+		t.Fatalf("set against a newer config: %d, %v", code, err)
+	}
+	doc := readDoc(t, configJSONPath())
+	if doc["theme"] != "dark" || doc["futureKey"] != "kept" {
+		t.Errorf("newer config lost fields: %v", doc)
+	}
+	if got := doc["schemaVersion"]; got != json.Number("1") {
+		t.Errorf("schemaVersion = %v, want this build's 1", got)
+	}
+}
+
+// The marker rides on writes that were going to happen anyway. A
+// mutation that changes nothing still touches nothing, so an untouched
+// file keeps its mtime and the watcher stays quiet.
+func TestNoopMutationDoesNotStampSchemaVersion(t *testing.T) {
+	sandboxConfigRoot(t)
+	seed := `{"theme": "dark"}` + "\n"
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
+		t.Fatalf("noop set: %d, %v", code, err)
+	}
+	if raw, err := os.ReadFile(configJSONPath()); err != nil || string(raw) != seed {
+		t.Errorf("noop set rewrote config.json to %q", raw)
 	}
 }

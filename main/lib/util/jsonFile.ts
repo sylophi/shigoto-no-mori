@@ -17,13 +17,64 @@ export async function unlinkIfExists(filePath: string): Promise<void> {
   }
 }
 
+// The version of the on-disk shape this build writes. Every file
+// shigomori persists carries it: state.json, config.json,
+// projects/<id>/project.json and projects/<id>/worktrees/<id>.json.
+// Nothing reads it to decide anything yet. It exists so a later format
+// change can tell an old file from a new one instead of inferring the
+// shape from whichever keys happen to be present. The CLI stamps the
+// same key with the same value (cli/state.go). The two writers have to
+// move together, since a marker the two disagree on is worse than no
+// marker at all.
+export const SCHEMA_VERSION = 1;
+
+// Stamps the marker on a document about to be written. Always this
+// build's constant, never whatever the file happened to carry: a
+// writer that copied a higher number forward would be claiming a shape
+// it has never produced, and full-replace writers (worktree data, the
+// config `write --data` payload) don't have the old value in hand
+// anyway, so copying it forward isn't a rule both writers could
+// follow. Appended rather than placed first, so adding the key to an
+// existing file moves nothing else around.
+export function withSchemaVersion<T extends object>(
+  value: T,
+): T & { schemaVersion: number } {
+  return { ...value, schemaVersion: SCHEMA_VERSION };
+}
+
+// The read side is deliberately toothless. Files written before the
+// marker existed have none, which is normal and forever, and a file
+// from a newer build is read exactly as it always was: refusing would
+// strand anyone who launched a newer build once, over a field nothing
+// consumes. It is still worth one line, because this build's next
+// write stamps the file back down to SCHEMA_VERSION and nothing else
+// would ever mention that. Once per file per run so the hot read paths
+// can't turn it into a flood. Mirrored by noteNewerSchema in
+// cli/state.go.
+const newerSchemaNoted = new Set<string>();
+
+export function noteNewerSchema(filePath: string, parsed: unknown): void {
+  if (parsed === null || typeof parsed !== "object") return;
+  const found = (parsed as Record<string, unknown>)["schemaVersion"];
+  if (typeof found !== "number" || found <= SCHEMA_VERSION) return;
+  if (newerSchemaNoted.has(filePath)) return;
+  newerSchemaNoted.add(filePath);
+  console.warn(
+    `[shigomori] ${filePath} was written by a newer build ` +
+      `(schemaVersion ${found}, this build writes ${SCHEMA_VERSION}). ` +
+      "Reading it anyway.",
+  );
+}
+
 export async function readJsonOrNull<T>(
   filePath: string,
   schema: z.ZodType<T>,
 ): Promise<T | null> {
   try {
     const raw = await readFile(filePath, "utf8");
-    return schema.parse(JSON.parse(raw));
+    const parsed: unknown = JSON.parse(raw);
+    noteNewerSchema(filePath, parsed);
+    return schema.parse(parsed);
   } catch (error) {
     if (isENOENT(error)) return null;
     throw new Error(`Failed to read ${filePath}`, { cause: error });

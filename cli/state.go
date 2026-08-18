@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -141,6 +142,60 @@ type launcherCommand struct {
 	Command string `json:"command"`
 }
 
+// --- schema marker ---
+
+// The version of the on-disk shape this build writes. Every file
+// shigomori persists carries it: state.json, config.json,
+// projects/<id>/project.json and projects/<id>/worktrees/<id>.json.
+// Nothing reads it to decide anything yet. It exists so a later format
+// change can tell an old file from a new one instead of inferring the
+// shape from whichever keys happen to be present. The app stamps the
+// same key with the same value (main/lib/util/jsonFile.ts). The two
+// writers have to move together, since a marker the two disagree on is
+// worse than no marker at all.
+const schemaVersion = 1
+
+// Pre-encoded for the state.json map, whose values are already-encoded
+// JSON.
+var schemaVersionRaw = json.RawMessage(strconv.Itoa(schemaVersion))
+
+// Always this build's constant, never whatever the file happened to
+// carry. A writer that copied a higher number forward would be
+// claiming a shape it has never produced, and the whole-document
+// `config write --data` path doesn't have the old value in hand
+// anyway, so copying it forward isn't a rule both writers could
+// follow. Callers stamp only once a write is actually going to happen,
+// so a no-op mutation stays a no-op.
+func stampSchemaVersion(doc map[string]any) {
+	doc["schemaVersion"] = schemaVersion
+}
+
+var notedNewerSchema = map[string]bool{}
+
+// The read side is deliberately toothless. Files written before the
+// marker existed have none, which is normal and forever, and a file
+// from a newer build is read exactly as it always was: refusing would
+// strand anyone who ran a newer build once, over a field nothing
+// consumes. It is still worth one line on stderr, because this build's
+// next write stamps the file back down to schemaVersion and nothing
+// else would ever mention that. Mirrors noteNewerSchema in the app's
+// jsonFile.ts.
+func noteNewerSchema(path string, raw []byte) {
+	var doc struct {
+		SchemaVersion int `json:"schemaVersion"`
+	}
+	if json.Unmarshal(raw, &doc) != nil || doc.SchemaVersion <= schemaVersion {
+		return
+	}
+	if notedNewerSchema[path] {
+		return
+	}
+	notedNewerSchema[path] = true
+	note(yellowErr(fmt.Sprintf(
+		"%s was written by a newer build (schemaVersion %d, this build writes %d). Reading it anyway.",
+		path, doc.SchemaVersion, schemaVersion)))
+}
+
 func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }
 
 // Only a genuinely absent file reads as empty. updateStateKey rewrites
@@ -159,6 +214,7 @@ func readStateFile() (map[string]json.RawMessage, error) {
 		}
 		return nil, errf("Couldn't read %s: %v", path, err)
 	}
+	noteNewerSchema(path, raw)
 	var all map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &all); err != nil {
 		return nil, errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err)
@@ -233,6 +289,9 @@ func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error
 			return err
 		}
 		all[key] = encoded
+		// stampSchemaVersion's state.json flavor: this map's values are
+		// already encoded, so the marker goes in encoded too.
+		all["schemaVersion"] = schemaVersionRaw
 		return atomicWriteJSON(statePath(), all)
 	})
 }
@@ -262,8 +321,10 @@ func dropShelved(worktreeID string) error {
 
 func readGlobalConfig() globalConfig {
 	var cfg globalConfig
-	raw, err := os.ReadFile(configJSONPath())
+	path := configJSONPath()
+	raw, err := os.ReadFile(path)
 	if err == nil {
+		noteNewerSchema(path, raw)
 		_ = json.Unmarshal(raw, &cfg)
 	}
 	return cfg
@@ -272,10 +333,12 @@ func readGlobalConfig() globalConfig {
 // nil when the file is missing, unreadable, or fails the schema's
 // required-field check -- matching the app's null-on-invalid behavior.
 func readProjectConfig(projectID string) *projectConfig {
-	raw, err := os.ReadFile(projectConfigJSONPath(projectID))
+	path := projectConfigJSONPath(projectID)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
+	noteNewerSchema(path, raw)
 	var cfg projectConfig
 	if json.Unmarshal(raw, &cfg) != nil {
 		return nil

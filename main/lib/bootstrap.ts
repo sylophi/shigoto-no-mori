@@ -5,9 +5,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { migrateProjectConfigsToDirLayout } from "./projects/stateMigration";
+import { withSchemaVersion } from "./util/jsonFile";
 import { shigomoriRoot } from "./util/paths";
 
-const EMPTY_JSON = "{}\n";
+// The placeholders carry the schema marker like every other write, so
+// even a root nobody has used yet says which shape it was made for.
+const SEED_JSON = `${JSON.stringify(withSchemaVersion({}), null, 2)}\n`;
 
 async function ensureFile(path: string, contents: string): Promise<void> {
   try {
@@ -23,8 +26,8 @@ export async function ensureShigomoriRoot(): Promise<void> {
   const root = shigomoriRoot();
   await mkdir(join(root, "projects"), { recursive: true });
   await Promise.all([
-    ensureFile(join(root, "config.json"), EMPTY_JSON),
-    ensureFile(join(root, "state.json"), EMPTY_JSON),
+    ensureFile(join(root, "config.json"), SEED_JSON),
+    ensureFile(join(root, "state.json"), SEED_JSON),
     migrateProjectConfigsToDirLayout(),
   ]);
 }

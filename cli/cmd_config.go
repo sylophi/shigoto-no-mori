@@ -278,6 +278,7 @@ func readConfigDoc(path string) map[string]any {
 	if err != nil {
 		return map[string]any{}
 	}
+	noteNewerSchema(path, raw)
 	return doc
 }
 
@@ -298,6 +299,7 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 				return errf("%s is not valid JSON (%v). Fix it (e.g. via `%s config edit`) and retry.",
 					path, decodeErr, binaryName)
 			}
+			noteNewerSchema(path, raw)
 		case !errors.Is(readErr, os.ErrNotExist):
 			// Same trap one step earlier: a permission or IO error is
 			// not an absent file, and treating it as one would rewrite
@@ -319,6 +321,10 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 		if bytes.Equal(before, after) {
 			return nil
 		}
+		// After the no-op check, so stamping the marker onto a file
+		// that predates it can't turn a write nobody asked for into an
+		// mtime bump the watcher reacts to.
+		stampSchemaVersion(doc)
 		return atomicWriteJSON(path, doc)
 	})
 }
@@ -698,6 +704,7 @@ func runConfigWrite(scope configDocScope, data string) (int, error) {
 	if err := validateConfigDoc(scope.keys, doc); err != nil {
 		return 1, err
 	}
+	stampSchemaVersion(doc)
 	err = withFileLock(scope.path, func() error {
 		return atomicWriteJSON(scope.path, doc)
 	})
