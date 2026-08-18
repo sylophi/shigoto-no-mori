@@ -9,6 +9,7 @@ import {
   git,
   githubCli,
   globalConfig,
+  hygiene,
   launchers,
   menu,
   nav,
@@ -50,6 +51,7 @@ const api = {
   cli,
   updater,
   launchers,
+  hygiene,
 } as const;
 
 export type RendererApi = typeof api;
