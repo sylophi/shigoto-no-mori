@@ -5,6 +5,7 @@ import {
   GitPullRequestDraft,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import { forkBranchCandidates } from "@shared/branches";
 import {
   MergeMethodSchema,
   type MergeMethod,
@@ -14,6 +15,7 @@ import {
   type PullRequestMergeState,
   type PullRequestSourceUnavailable,
   type RepoMergeConfig,
+  type Worktree,
 } from "@shared/schemas";
 
 export type PullRequestTone = "emerald" | "violet" | "rose" | "slate" | "amber";
@@ -38,7 +40,7 @@ export function describePullRequest(pr: PullRequest): PullRequestDescriptor {
 }
 
 // Why the new-worktree form can't offer the pull request source. Each
-// line names the thing to fix; none of them are recoverable from inside
+// line names the thing to fix. None of them are recoverable from inside
 // the form, so there's no action attached.
 export const PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT: Record<
   PullRequestSourceUnavailable,
@@ -55,7 +57,7 @@ const FOLDER_SLUG_WORDS = 4;
 const FOLDER_SLUG_MAX = 28;
 
 // Folder name for a PR checkout: "pr-142-adds-a-thing". The number
-// leads because that's how PRs get talked about; the slug is the first
+// leads because that's how PRs get talked about. The slug is the first
 // few title words, only there so the folder is recognizable at a glance
 // in a list of ten worktrees. Callers still run it through
 // sanitizeBranchForPath -- this only decides the shape.
@@ -70,20 +72,39 @@ export function pullRequestFolderName(pr: PullRequestCandidate): string {
 }
 
 // The local branch names a PR checkout can land on, in the order the
-// resolver tries them (pickForkBranchName in
-// main/lib/githubCli/pullRequestCheckout.ts). A fork head is named by
-// its author, so collisions with local branches are routine -- "patch-1",
-// or "main" when the PR was opened off the fork's default branch -- and
-// the resolver falls back to an owner-prefixed name. Callers checking
-// whether a PR is already checked out have to consider every candidate,
-// or the common fork case looks occupied when it isn't.
+// resolver tries them. Same-repo heads only ever land on the head name.
+// Fork heads have the owner-prefixed fallback too (forkBranchCandidates
+// is shared with the resolver so the two can't disagree). Callers
+// checking whether a PR is already checked out have to consider every
+// candidate, or the common fork case looks occupied when it isn't.
 export function pullRequestBranchCandidates(
   pr: PullRequestCandidate,
 ): string[] {
-  if (!pr.headRepo) return [pr.headRefName];
-  const owner = pr.headRepo.split("/")[0];
-  if (!owner) return [pr.headRefName];
-  return [pr.headRefName, `${owner}-${pr.headRefName}`];
+  if (!pr.fromFork) return [pr.headRefName];
+  return forkBranchCandidates(
+    pr.number,
+    pr.headRefName,
+    pr.headRepo?.split("/")[0],
+  );
+}
+
+// The worktree standing in the way of checking a PR out, if any. Only a
+// PR with no candidate name left is genuinely blocked -- checking the
+// head name alone would report every fork PR opened off its author's
+// default branch as taken. Names the *last* candidate's holder: a
+// blocked fork PR is usually blocked because that PR is already checked
+// out under the fallback name, and pointing at the worktree holding an
+// unrelated branch of the same name sends the user to the wrong row.
+export function pullRequestBlockedBy(
+  pr: PullRequestCandidate,
+  worktreeByBranch: Map<string, Worktree>,
+): Worktree | undefined {
+  const holders = pullRequestBranchCandidates(pr).map((branch) =>
+    worktreeByBranch.get(branch),
+  );
+  return holders.every((held) => held !== undefined)
+    ? holders.at(-1)
+    : undefined;
 }
 
 export interface MergeStateDescriptor {

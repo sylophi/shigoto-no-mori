@@ -1,7 +1,4 @@
-import type {
-  GithubCliReadiness,
-  PullRequestSourceUnavailable,
-} from "@shared/schemas";
+import type { GhUnavailableReason, GithubCliReadiness } from "@shared/schemas";
 import { readGlobalConfig } from "../config/global";
 import { binaryOnPath } from "../util/binaries";
 import { ttlValueCache } from "../util/ttlCache";
@@ -41,12 +38,9 @@ export async function ghReady(): Promise<boolean> {
 }
 
 // Same gate, but says which check failed. Surfaces that explain
-// themselves instead of just hiding (the new-worktree PR mode) use this;
-// everything else takes the boolean.
-export async function ghUnavailableReason(): Promise<Exclude<
-  PullRequestSourceUnavailable,
-  "no-github-remote" | "gh-failed"
-> | null> {
+// themselves instead of just hiding (the new-worktree PR mode) use this.
+// Everything else takes the boolean.
+export async function ghUnavailableReason(): Promise<GhUnavailableReason | null> {
   const config = await readGlobalConfig();
   if (config.githubCli === false) return "integration-off";
   const { installed, authed } = await getGithubCliReadiness();

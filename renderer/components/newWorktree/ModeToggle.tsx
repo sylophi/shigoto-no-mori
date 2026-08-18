@@ -7,7 +7,7 @@ export function ModeToggle({
   onChange,
   disabled,
   // Set when the pull request source can't be offered (no gh, no GitHub
-  // remote). Greys that option out and doubles as its tooltip; the form
+  // remote). Greys that option out and doubles as its tooltip. The form
   // prints the same line under the control.
   pullRequestUnavailable,
 }: {

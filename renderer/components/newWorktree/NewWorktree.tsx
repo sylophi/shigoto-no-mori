@@ -19,7 +19,7 @@ import {
 import { tildify } from "@/lib/projectPaths";
 import {
   PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
-  pullRequestBranchCandidates,
+  pullRequestBlockedBy,
   pullRequestFolderName,
 } from "@/lib/pullRequest";
 import {
@@ -34,9 +34,26 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { ModeToggle, type Mode } from "./ModeToggle";
-import { PullRequestPicker } from "./PullRequestPicker";
+import { PullRequestSource } from "./PullRequestPicker";
 
 const route = getRouteApi("/projects/$projectId/new");
+
+// Per-mode wording: what the destination line leads with, and what the
+// "use the source's name" checkbox calls that source.
+const MODE_COPY: Record<Mode, { destLead: string; folderNoun: string }> = {
+  "branch-from": {
+    destLead: "A new branch created off the source. Checked out into",
+    folderNoun: "branch",
+  },
+  checkout: {
+    destLead: "Check out the source branch into",
+    folderNoun: "source",
+  },
+  "pull-request": {
+    destLead: "Check out the pull request's head into",
+    folderNoun: "PR",
+  },
+};
 
 const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 
@@ -54,10 +71,9 @@ export function NewWorktree() {
   // git refuses to check out a branch that's already a HEAD elsewhere.
   // Keyed by branch so the PR picker can name the worktree holding it,
   // not just grey the row out.
-  const worktreeByBranch = worktrees.reduce<Map<string, Worktree>>((acc, w) => {
-    if (isRealBranch(w.branch)) acc.set(w.branch, w);
-    return acc;
-  }, new Map());
+  const worktreeByBranch = new Map<string, Worktree>(
+    worktrees.filter((w) => isRealBranch(w.branch)).map((w) => [w.branch, w]),
+  );
   const occupiedBranches = [...worktreeByBranch.keys()];
   const [mode, setMode] = useState<Mode>("branch-from");
   // The branch name and base are seeded from async reads (the picked
@@ -92,8 +108,6 @@ export function NewWorktree() {
     candidates.data?.status === "unavailable"
       ? PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[candidates.data.reason]
       : undefined;
-  const prList =
-    candidates.data?.status === "ok" ? candidates.data.pullRequests : [];
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in — block submit and surface why.
@@ -107,25 +121,20 @@ export function NewWorktree() {
     (branches?.local.includes(branchName) ?? false);
 
   // A PR checkout blocks the same way an occupied base does in checkout
-  // mode -- but only once every branch name the resolver could land on
-  // is taken. A fork head whose name collides with a local branch still
-  // has its owner-prefixed fallback to fall back to.
+  // mode. Same rule that greys the picker's rows out, so the submit gate
+  // and the list can't disagree.
   const prHeadOccupied =
     selectedPr !== null &&
-    pullRequestBranchCandidates(selectedPr).every((branch) =>
-      worktreeByBranch.has(branch),
-    );
+    pullRequestBlockedBy(selectedPr, worktreeByBranch) !== undefined;
 
   // Raw `worktreeName` is held separately from the sanitized `folderName`
   // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
   // be unreachable — the trailing `-` would be trimmed before the `2`).
-  const folderSource = prMode
-    ? selectedPr
-      ? pullRequestFolderName(selectedPr)
-      : ""
-    : mode === "checkout"
-      ? base
-      : branchName;
+  const folderSource = {
+    "branch-from": branchName,
+    checkout: base,
+    "pull-request": selectedPr ? pullRequestFolderName(selectedPr) : "",
+  }[mode];
   const folderName = sanitizeBranchForPath(
     useBranchAsFolder ? folderSource : worktreeName,
   );
@@ -198,17 +207,16 @@ export function NewWorktree() {
     }
   };
 
-  const errorMessage = (create.error ?? createFromPr.error)?.message ?? null;
+  // Scoped to the active mode: a mutation keeps its last error, so the
+  // other mode's stale failure would otherwise sit on top of this one.
+  const errorMessage =
+    (prMode ? createFromPr.error : create.error)?.message ?? null;
   const home = runtime?.homedir ?? null;
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
   const destPath = `${root}/worktrees/${project.name}/${folderName || "…"}`;
-  const destLead = prMode
-    ? "Check out the pull request's head into"
-    : mode === "branch-from"
-      ? "A new branch created off the source. Checked out into"
-      : "Check out the source branch into";
+  const destLead = MODE_COPY[mode].destLead;
   const destTrail =
     mode === "checkout"
       ? ". Branches already checked out in another worktree are hidden."
@@ -262,47 +270,14 @@ export function NewWorktree() {
             pullRequestUnavailable={prMode ? undefined : prUnavailable}
           />
           {prMode ? (
-            <>
-              <span className="block pt-2 text-sm font-medium">
-                Pull request
-              </span>
-              {candidates.isPending ? (
-                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  Loading pull requests…
-                </p>
-              ) : candidates.isError ? (
-                <ErrorBanner>{candidates.error.message}</ErrorBanner>
-              ) : prUnavailable ? (
-                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  {prUnavailable}
-                </p>
-              ) : (
-                <PullRequestPicker
-                  pullRequests={prList}
-                  selected={selectedPr}
-                  onSelect={setSelectedPr}
-                  worktreeByBranch={worktreeByBranch}
-                  disabled={busy}
-                />
-              )}
-              {selectedPr && (
-                <p className="text-xs text-muted-foreground">
-                  Checks out{" "}
-                  <span className="font-mono text-foreground/80">
-                    {selectedPr.headRepo
-                      ? `refs/pull/${selectedPr.number}/head`
-                      : selectedPr.headRefName}
-                  </span>
-                  {selectedPr.headRepo
-                    ? // Deliberately doesn't name the local branch: a fork
-                      // head that collides with a local name gets an
-                      // owner-prefixed one instead, and which it lands on
-                      // depends on git config the form can't read.
-                      ". The head lives in a fork, so nothing is configured to push back to it."
-                    : ", tracking the branch on the remote."}
-                </p>
-              )}
-            </>
+            <PullRequestSource
+              query={candidates}
+              unavailableText={prUnavailable}
+              selected={selectedPr}
+              onSelect={setSelectedPr}
+              worktreeByBranch={worktreeByBranch}
+              disabled={busy}
+            />
           ) : (
             <>
               <label
@@ -358,8 +333,7 @@ export function NewWorktree() {
                 disabled={busy}
                 className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
               />
-              Use {prMode ? "PR" : mode === "checkout" ? "source" : "branch"}{" "}
-              name
+              Use {MODE_COPY[mode].folderNoun} name
             </label>
           </div>
           <Input

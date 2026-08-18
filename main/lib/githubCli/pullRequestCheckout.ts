@@ -10,10 +10,13 @@ import type {
   PullRequestCandidateList,
   PullRequestCheckoutRef,
 } from "@shared/schemas";
+import { forkBranchCandidates } from "@shared/branches";
+import { errorMessageOf } from "@shared/errors";
+import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";
-import { fetchRemoteRef, localBranchExists } from "../git/remotes";
+import { localBranchExists } from "../git/remotes";
 import { execGh, trimGhError } from "./exec";
-import { getGithubRepoInfo, githubRemoteName } from "./remote";
+import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
 import { ghUnavailableReason } from "./readiness";
 
 // Enough to fill a picker without paging. Deliberately below the
@@ -42,18 +45,9 @@ const GhPrCandidateSchema = z.object({
 });
 type GhPrCandidate = z.infer<typeof GhPrCandidateSchema>;
 
-const CANDIDATE_JSON_FIELDS = [
-  "number",
-  "url",
-  "title",
-  "isDraft",
-  "headRefName",
-  "updatedAt",
-  "author",
-  "isCrossRepository",
-  "headRepository",
-  "headRepositoryOwner",
-].join(",");
+// Derived from the schema that parses the response, so the two can't
+// drift into "asked for a field we don't read" or the reverse.
+const CANDIDATE_JSON_FIELDS = Object.keys(GhPrCandidateSchema.shape).join(",");
 
 // Open PRs only: the mode exists to start a review, and checking out a
 // merged or closed head is the "check out source" mode's job.
@@ -65,9 +59,8 @@ export async function listPullRequestCandidates(
   if (!(await getGithubRepoInfo(cwd))) {
     return { status: "unavailable", reason: "no-github-remote" };
   }
-  let stdout: string;
   try {
-    ({ stdout } = await execGh(
+    const { stdout } = await execGh(
       [
         "pr",
         "list",
@@ -79,27 +72,23 @@ export async function listPullRequestCandidates(
         CANDIDATE_JSON_FIELDS,
       ],
       { cwd },
-    ));
+    );
+    const rows = z.array(GhPrCandidateSchema).parse(JSON.parse(stdout));
+    // gh already returns newest-first, which is the order a reviewer wants.
+    return { status: "ok", pullRequests: rows.map(toCandidate) };
   } catch {
-    // gh exited non-zero (network, SSO prompt, rate limit). The form
-    // says so rather than showing an empty list that reads as "no PRs".
+    // gh exited non-zero (network, SSO prompt, rate limit) or answered
+    // with something we can't read. The form says so rather than showing
+    // an empty list that reads as "no PRs".
     return { status: "unavailable", reason: "gh-failed" };
   }
-  let rows: GhPrCandidate[];
-  try {
-    rows = z.array(GhPrCandidateSchema).parse(JSON.parse(stdout));
-  } catch {
-    return { status: "unavailable", reason: "gh-failed" };
-  }
-  // gh already returns newest-first, which is the order a reviewer wants.
-  return { status: "ok", pullRequests: rows.map(toCandidate) };
 }
 
 function toCandidate(row: GhPrCandidate): PullRequestCandidate {
   const owner = row.headRepositoryOwner?.login;
   const repo = row.headRepository?.name;
-  // gh reports "owner/repo" directly on newer versions; compose it from
-  // the two sibling fields when it's missing.
+  // gh reports "owner/repo" directly on newer versions. When it's
+  // missing, compose it from the two sibling fields.
   const nameWithOwner =
     row.headRepository?.nameWithOwner ??
     (owner && repo ? `${owner}/${repo}` : undefined);
@@ -110,12 +99,16 @@ function toCandidate(row: GhPrCandidate): PullRequestCandidate {
     isDraft: row.isDraft,
     headRefName: row.headRefName,
     authorLogin: row.author?.login ?? "ghost",
+    fromFork: row.isCrossRepository,
     headRepo: row.isCrossRepository ? (nameWithOwner ?? null) : null,
     updatedAt: row.updatedAt,
   };
 }
 
 const GhPrHeadSchema = z.object({
+  // The repo half of this URL is the repo gh resolved the number
+  // against, which is the one we have to fetch from.
+  url: z.url(),
   headRefName: z.string().min(1),
   isCrossRepository: z.boolean(),
   headRepositoryOwner: z
@@ -139,7 +132,7 @@ async function readPullRequestHead(
         "view",
         String(number),
         "--json",
-        "headRefName,isCrossRepository,headRepositoryOwner",
+        "url,headRefName,isCrossRepository,headRepositoryOwner",
       ],
       { cwd },
     ));
@@ -164,11 +157,20 @@ export async function resolvePullRequestCheckout(
   if (await ghUnavailableReason()) {
     throw new Error("The GitHub CLI isn't available for this project.");
   }
-  const remote = await githubRemoteName(cwd);
-  if (!remote) {
+  if (!(await getGithubRepoInfo(cwd))) {
     throw new Error("This project has no GitHub remote to fetch from.");
   }
   const head = await readPullRequestHead(cwd, number);
+  // Resolved from the PR's URL rather than from "the first GitHub
+  // remote": in a fork checkout both the fork and the parent are
+  // remotes, and gh answered from the parent.
+  const remote = await remoteNameForUrl(cwd, head.url);
+  if (!remote) {
+    throw new Error(
+      `No git remote points at the repository holding pull request ` +
+        `#${number} (${head.url}). Add one and try again.`,
+    );
+  }
   return head.isCrossRepository
     ? resolveForkHead(cwd, remote, number, head)
     : resolveSameRepoHead(cwd, remote, head.headRefName);
@@ -190,7 +192,7 @@ async function resolveSameRepoHead(
     // The <src>:<dst> refspec is fast-forward-only, so a local branch
     // that has drifted from the PR head errors out instead of quietly
     // checking out stale code. (git also refuses when the branch is
-    // checked out elsewhere; the form greys those PRs out already.)
+    // checked out elsewhere, which the form greys those PRs out for.)
     try {
       await run(cwd, ["fetch", "--quiet", remote, `${branch}:${branch}`]);
     } catch (err) {
@@ -201,18 +203,13 @@ async function resolveSameRepoHead(
       );
     }
   } else {
-    await fetchRemoteRef(cwd, remote, branch);
+    await run(cwd, ["fetch", "--quiet", remote, branch]);
     // Explicit rather than leaning on `git worktree add`'s DWIM, which
-    // only fires when exactly one remote has the branch.
-    await run(cwd, [
-      "branch",
-      "--quiet",
-      "--track",
-      branch,
-      `${remote}/${branch}`,
-    ]);
+    // only fires when exactly one remote has the branch. createLocalBranch
+    // sets --track for a remote-tracking base, which is what this is.
+    await createLocalBranch(cwd, branch, `${remote}/${branch}`);
   }
-  return { branch, fromFork: false };
+  return { branch };
 }
 
 // Fork head: not on any remote we track, but GitHub publishes it on the
@@ -235,11 +232,14 @@ async function resolveForkHead(
       `${pullRef}:refs/heads/${branch}`,
     ]);
   } catch (err) {
+    // Non-fast-forward (the author force-pushed since this branch was
+    // last checked out) and "checked out at <path>" (the PR is already
+    // open in another worktree) both land here, and git's own stderr
+    // says which -- the remedy is the same either way.
     throw new Error(
-      `Couldn't fetch ${pullRef} onto ${branch}: ${message(err)}`,
-      {
-        cause: err,
-      },
+      `Couldn't fetch ${pullRef} onto ${branch}: ${message(err)}. Delete ` +
+        `or rename ${branch} and try again.`,
+      { cause: err },
     );
   }
   // What `gh pr checkout` writes for a fork the user can't push to:
@@ -249,31 +249,33 @@ async function resolveForkHead(
   // -- which is true.
   await run(cwd, ["config", `branch.${branch}.remote`, remote]);
   await run(cwd, ["config", `branch.${branch}.merge`, pullRef]);
-  return { branch, fromFork: true };
+  return { branch };
 }
 
-// Fork heads are named by their author, so collisions with local
-// branches are routine -- "patch-1", or "main" when someone opens a PR
-// off their fork's default branch. Reuse the branch when it's one we
-// created for this same PR, otherwise fall back to an owner-prefixed
-// name rather than fetching over whatever the user had there.
+// Reuse a branch when it's one we created for this same PR, otherwise
+// take the next candidate name rather than fetching over whatever the
+// user had there. The candidate list is shared with the form so the two
+// agree on which PRs are already checked out.
 async function pickForkBranchName(
   cwd: string,
   number: number,
   head: z.infer<typeof GhPrHeadSchema>,
 ): Promise<string> {
-  const preferred = head.headRefName;
-  if (!(await localBranchExists(cwd, preferred))) return preferred;
   const pullRef = `refs/pull/${number}/head`;
-  if ((await readBranchMerge(cwd, preferred)) === pullRef) return preferred;
-  const owner = head.headRepositoryOwner?.login;
-  const fallback = owner
-    ? `${owner}-${preferred}`
-    : `pr-${number}-${preferred}`;
-  if (!(await localBranchExists(cwd, fallback))) return fallback;
-  if ((await readBranchMerge(cwd, fallback)) === pullRef) return fallback;
+  const candidates = forkBranchCandidates(
+    number,
+    head.headRefName,
+    head.headRepositoryOwner?.login,
+  );
+  /* oxlint-disable no-await-in-loop -- the first usable name wins, so
+     probing the rest up front would be wasted git calls */
+  for (const name of candidates) {
+    if (!(await localBranchExists(cwd, name))) return name;
+    if ((await readBranchMerge(cwd, name)) === pullRef) return name;
+  }
+  /* oxlint-enable no-await-in-loop */
   throw new Error(
-    `Branches ${preferred} and ${fallback} both already exist and neither ` +
+    `Branches ${candidates.join(" and ")} both already exist and neither ` +
       `tracks pull request #${number}. Delete or rename one and try again.`,
   );
 }
@@ -295,10 +297,11 @@ async function readBranchMerge(
   }
 }
 
+// git failures carry the useful part on stderr. When they don't, fall
+// back to the Error itself.
 function message(err: unknown): string {
   const stderr = (err as { stderr?: string }).stderr;
-  if (typeof stderr === "string" && stderr.trim()) {
-    return stderr.trim().split("\n").at(-1) ?? stderr.trim();
-  }
-  return err instanceof Error ? err.message : String(err);
+  return typeof stderr === "string" && stderr.trim()
+    ? trimGhError(stderr)
+    : errorMessageOf(err);
 }

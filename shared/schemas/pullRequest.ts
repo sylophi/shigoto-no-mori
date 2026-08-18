@@ -136,21 +136,33 @@ export const PullRequestCandidateSchema = z.object({
   isDraft: z.boolean(),
   headRefName: z.string().min(1),
   authorLogin: z.string(),
-  // "owner/repo" when the head lives in a fork, null for same-repo PRs.
   // Fork heads exist locally only as refs/pull/<n>/head, so the resolver
-  // takes a different path for them.
+  // takes a different path for them -- and a different set of local
+  // branch names.
+  fromFork: z.boolean(),
+  // "owner/repo" of the fork, for the row's label. Null for a same-repo
+  // PR, and also for a fork gh can't name any more (deleted fork), which
+  // is why fork-ness rides on its own field.
   headRepo: z.string().nullable(),
   updatedAt: z.string(),
 });
 export type PullRequestCandidate = z.infer<typeof PullRequestCandidateSchema>;
 
-// Why the PR source is unavailable for a project. Kept as codes rather
-// than prose so the renderer owns the wording (and can point at the
-// setting that fixes it).
-export const PullRequestSourceUnavailableSchema = z.enum([
+// Why gh itself can't be used, independent of any one repo. This is
+// what the readiness gate answers.
+export const GhUnavailableReasonSchema = z.enum([
   "integration-off",
   "gh-missing",
   "gh-signed-out",
+]);
+export type GhUnavailableReason = z.infer<typeof GhUnavailableReasonSchema>;
+
+// Why the PR source is unavailable for a project: the readiness reasons
+// plus the two that are about this repo. Kept as codes rather than prose
+// so the renderer owns the wording (and can point at the setting that
+// fixes it).
+export const PullRequestSourceUnavailableSchema = z.enum([
+  ...GhUnavailableReasonSchema.options,
   "no-github-remote",
   "gh-failed",
 ]);
@@ -185,9 +197,6 @@ export const PullRequestCheckoutRefSchema = z.object({
   // `base` with `checkout: true` -- from there it's an ordinary
   // check-out-existing-branch create.
   branch: z.string().min(1),
-  // True when the head came from a fork (fetched via refs/pull/<n>/head).
-  // The form uses it to explain why the branch has no upstream.
-  fromFork: z.boolean(),
 });
 export type PullRequestCheckoutRef = z.infer<
   typeof PullRequestCheckoutRefSchema

@@ -56,3 +56,22 @@ export function sanitizeWorktreeNameInput(name: string): string {
 export function isValidWorktreeDirName(name: string): boolean {
   return name.length > 0 && sanitizeBranchForPath(name) === name;
 }
+
+// Local branch names a fork PR head can land on, in the order the
+// resolver tries them (pickForkBranchName in
+// main/lib/githubCli/pullRequestCheckout.ts). A fork head is named by
+// its author, so collisions with local branches are routine --
+// "patch-1", or "main" when the PR was opened off the fork's default
+// branch -- hence the owner-prefixed fallback. Shared so the form's
+// "already checked out" check can't drift from what the resolver
+// actually picks.
+export function forkBranchCandidates(
+  number: number,
+  headRefName: string,
+  owner: string | null | undefined,
+): string[] {
+  return [
+    headRefName,
+    owner ? `${owner}-${headRefName}` : `pr-${number}-${headRefName}`,
+  ];
+}

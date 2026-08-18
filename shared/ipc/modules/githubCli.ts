@@ -42,7 +42,6 @@ export const githubCliContract = {
     "githubCli:resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,
     PullRequestCheckoutRefSchema,
-    { tracksProjectUsage: true },
   ),
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
