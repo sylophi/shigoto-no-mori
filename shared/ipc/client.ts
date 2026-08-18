@@ -175,6 +175,7 @@ export const scripts = {
   run: scriptsClient.run,
   cancel: (runId: string) => scriptsClient.cancel({ runId }),
   onEvent: scriptsClient.event,
+  onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
 } as const;
 
 export const cli = {

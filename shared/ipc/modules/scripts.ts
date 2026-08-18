@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
+  RemovedWorktreeScriptsSchema,
   RunScriptPayloadSchema,
   ScriptEventSchema,
 } from "@shared/schemas";
@@ -19,6 +20,14 @@ export const scriptsContract = {
     z.object({ cancelled: z.boolean() }),
   ),
   event: broadcast("scripts:event", ScriptEventSchema),
+  // The worktree these scripts ran in was removed outside the app, so
+  // the app reaped them (see main/lib/scripts/removedWorktrees.ts). The
+  // run's own console goes away with the worktree row, so this is the
+  // only place the stop can still be reported.
+  stoppedForRemovedWorktree: broadcast(
+    "scripts:stoppedForRemovedWorktree",
+    RemovedWorktreeScriptsSchema,
+  ),
 } as const;
 
 export type ScriptsContract = typeof scriptsContract;
