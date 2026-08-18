@@ -143,29 +143,61 @@ type launcherCommand struct {
 
 func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }
 
-func readStateFile() map[string]json.RawMessage {
-	raw, err := os.ReadFile(statePath())
+// Only a genuinely absent file reads as empty. updateStateKey rewrites
+// the whole file from what this returns, so a permission error, an IO
+// error or a cloud file that hasn't been materialized read as {} would
+// replace the project registry, the shelf and every use log with the
+// one key being written. Malformed content is refused for the same
+// reason: it is the case where a blind rewrite destroys something the
+// user could still repair. Mirrors readAll in the app's store.ts.
+func readStateFile() (map[string]json.RawMessage, error) {
+	path := statePath()
+	raw, err := os.ReadFile(path)
 	if err != nil {
-		return map[string]json.RawMessage{}
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]json.RawMessage{}, nil
+		}
+		return nil, errf("Couldn't read %s: %v", path, err)
 	}
 	var all map[string]json.RawMessage
-	if json.Unmarshal(raw, &all) != nil {
+	if err := json.Unmarshal(raw, &all); err != nil {
+		return nil, errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err)
+	}
+	if all == nil {
+		return nil, errf("%s is not a JSON object. Fix the file or move it aside, then retry.", path)
+	}
+	return all, nil
+}
+
+// Read of the display-only hints (shelf flags, launcher use counts).
+// Every command loads the projects list from this same file before it
+// dispatches, so a failure this late means the file went unreadable
+// mid-command: drop the hint rather than abort work that is otherwise
+// fine. No writer goes through here -- updateStateKey refuses instead.
+func readStateHints() map[string]json.RawMessage {
+	all, err := readStateFile()
+	if err != nil {
+		vlog("[state] %v", err)
 		return map[string]json.RawMessage{}
 	}
 	return all
 }
 
-func loadProjects() []project {
+func loadProjects() ([]project, error) {
+	all, err := readStateFile()
+	if err != nil {
+		return nil, err
+	}
 	var projects []project
-	if raw, ok := readStateFile()["projects"]; ok {
+	if raw, ok := all["projects"]; ok {
 		_ = json.Unmarshal(raw, &projects)
 	}
-	return projects
+	return projects, nil
 }
 
 func readShelvedSet() map[string]bool {
 	shelved := map[string]bool{}
-	if raw, ok := readStateFile()["shelvedWorktrees"]; ok {
+	if raw, ok := readStateHints()["shelvedWorktrees"]; ok {
 		var m map[string]bool
 		if json.Unmarshal(raw, &m) == nil {
 			for id, v := range m {
@@ -185,7 +217,10 @@ func readShelvedSet() map[string]bool {
 // returning nil skips the write (no-op detected under the lock).
 func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error {
 	return withStateLock(func() error {
-		all := readStateFile()
+		all, err := readStateFile()
+		if err != nil {
+			return err
+		}
 		next, err := fn(all[key])
 		if err != nil {
 			return err

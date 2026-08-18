@@ -13,7 +13,7 @@ import {
 import { dirname, join } from "node:path";
 import { tempPathFor } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
-import { shigomoriRoot } from "../util/paths";
+import { isENOENT, shigomoriRoot } from "../util/paths";
 import { noteSelfWrite } from "../util/selfWrite";
 
 const FILE = "state.json";
@@ -22,15 +22,44 @@ function filePath(): string {
   return join(shigomoriRoot(), FILE);
 }
 
+// Every write is a read-modify-write of the whole file, so "I couldn't
+// read it" must never come back as "it's empty": a permission error, an
+// IO error or a cloud file that hasn't been materialized would rewrite
+// state.json with nothing but the key being written, dropping the
+// project registry, the shelf, and every use log. Only a genuinely
+// absent file is empty. Everything else throws, which aborts the write
+// with the file still on disk. The CLI's readStateFile does the same.
 function readAll(): Record<string, unknown> {
+  const path = filePath();
+  let raw: string;
   try {
-    return JSON.parse(readFileSync(filePath(), "utf8")) as Record<
-      string,
-      unknown
-    >;
-  } catch {
-    return {};
+    raw = readFileSync(path, "utf8");
+  } catch (error) {
+    if (isENOENT(error)) return {};
+    throw new Error(`Failed to read ${path}`, { cause: error });
   }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (error) {
+    throw new Error(corruptMessage(path), { cause: error });
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(corruptMessage(path));
+  }
+  return parsed as Record<string, unknown>;
+}
+
+// A truncated or hand-mangled state.json is the one case where a blind
+// rewrite destroys something recoverable, so refuse and name the file
+// rather than moving it aside and starting fresh. Quarantining would
+// leave the user staring at an empty app with their data in a file
+// they never asked for.
+function corruptMessage(path: string): string {
+  return (
+    `${path} is not a valid JSON object. Nothing was written. ` +
+    "Fix the file or move it aside, then try again."
+  );
 }
 
 function writeAll(data: Record<string, unknown>): void {

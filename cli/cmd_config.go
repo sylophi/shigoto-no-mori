@@ -22,6 +22,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -286,7 +287,9 @@ func readConfigDoc(path string) map[string]any {
 func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 	return withFileLock(path, func() error {
 		doc := map[string]any{}
-		if raw, readErr := os.ReadFile(path); readErr == nil {
+		raw, readErr := os.ReadFile(path)
+		switch {
+		case readErr == nil:
 			var decodeErr error
 			if doc, decodeErr = decodeConfigDoc(raw); decodeErr != nil {
 				// A hand-edit gone wrong: merging into the {} fallback
@@ -295,6 +298,12 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 				return errf("%s is not valid JSON (%v). Fix it (e.g. via `%s config edit`) and retry.",
 					path, decodeErr, binaryName)
 			}
+		case !errors.Is(readErr, os.ErrNotExist):
+			// Same trap one step earlier: a permission or IO error is
+			// not an absent file, and treating it as one would rewrite
+			// the config with nothing but the field being set. Only a
+			// file that isn't there yet starts from {}.
+			return errf("Couldn't read %s: %v", path, readErr)
 		}
 		before, err := json.Marshal(doc)
 		if err != nil {

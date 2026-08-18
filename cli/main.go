@@ -653,13 +653,22 @@ func run() int {
 	}
 
 	initRoot()
-	ctx := cliContext{projects: loadProjects()}
+	// An unreadable or malformed state.json fails here rather than
+	// running the command against an empty project list: every command
+	// that writes state would otherwise rebuild the file from that
+	// empty picture.
+	projects, err := loadProjects()
+	if err != nil {
+		reportError(err)
+		return 1
+	}
+	ctx := cliContext{projects: projects}
 	if !cmd.noCwd {
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."
 		}
-		ctx = resolveContext(cwd)
+		ctx = resolveContext(cwd, projects)
 	}
 	code, err := cmd.run(ctx, args)
 	if err != nil {

@@ -386,6 +386,32 @@ func TestUpdateRefusesMalformedFile(t *testing.T) {
 	}
 }
 
+// An unreadable file is not an absent one: merging into the {} start
+// would rewrite config.json with only the field being set.
+func TestUpdateRefusesUnreadableFile(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads through mode 0000")
+	}
+	sandboxConfigRoot(t)
+	kept := `{"theme": "dark"}`
+	if err := os.WriteFile(configJSONPath(), []byte(kept), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(configJSONPath(), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(configJSONPath(), 0o644) })
+	if code, err := runConfigSet(globalConfigScope(), "portPool", "on"); code != 1 || err == nil {
+		t.Errorf("set on unreadable file = %d, %v, want error", code, err)
+	}
+	if err := os.Chmod(configJSONPath(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(configJSONPath()); err != nil || string(raw) != kept {
+		t.Errorf("unreadable file was rewritten to %q", raw)
+	}
+}
+
 func TestNoopMutationSkipsWrite(t *testing.T) {
 	sandboxConfigRoot(t)
 	// Unsetting an absent key must not conjure the file into existence.

@@ -51,8 +51,10 @@ func locateRepo(dir string) (toplevel, primaryPath string, err error) {
 	return toplevel, primaryPath, nil
 }
 
-func resolveContext(cwd string) cliContext {
-	ctx := cliContext{projects: loadProjects()}
+// Takes the already-loaded project list: the entrypoint reads
+// state.json once and fails there if it can't.
+func resolveContext(cwd string, projects []project) cliContext {
+	ctx := cliContext{projects: projects}
 
 	toplevel, primaryPath, err := locateRepo(cwd)
 	if err != nil {

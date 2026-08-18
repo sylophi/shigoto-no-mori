@@ -59,6 +59,13 @@ function hasStringProjectId(input: unknown): input is { projectId: string } {
   );
 }
 
+// The store throws when state.json can't be read, and this runs after
+// roughly every action, so an unreadable file would log on every click.
+// One line per app run is enough to point at the cause, and the user's
+// next real action (adding a project, shelving a worktree) goes through
+// the same store and surfaces the error in the UI.
+let usageFailureLogged = false;
+
 // Called from the IPC registrar after an action whose contract entry sets
 // `tracksProjectUsage` succeeds. Bumps the project named by the payload and
 // returns its id so the caller can notify the renderer to refresh its
@@ -69,8 +76,13 @@ export function recordProjectActionUsage(input: unknown): string | null {
   try {
     bumpProjectUseCount(input.projectId);
     return input.projectId;
-  } catch {
-    // Usage tracking is best-effort; swallow so it can't fail the action.
+  } catch (error) {
+    // Usage tracking is best-effort, so the action the user asked for
+    // still counts as a success. Log rather than swallow outright.
+    if (!usageFailureLogged) {
+      usageFailureLogged = true;
+      console.warn("[usage] project use log not recorded:", error);
+    }
     return null;
   }
 }
