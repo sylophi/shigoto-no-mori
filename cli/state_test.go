@@ -3,10 +3,13 @@ package main
 // Tests for state-root resolution (initRoot): SHIGOMORI_ROOT beats the
 // pointer file, the pointer file beats the flavor default, and
 // malformed pointer content (blank, relative path) falls through to
-// the default. Everything runs against a temp HOME, so no real state
-// root or config is ever touched.
+// the default. Plus the state.json read guard: only an absent file
+// reads as empty, so a write can never rebuild the file from a failed
+// read. Everything runs against a temp HOME, so no real state root or
+// config is ever touched.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -129,5 +132,78 @@ func TestInitRootEnvBeatsPointer(t *testing.T) {
 	writePointer(t, filepath.Join(home, ".config"), filepath.Join(home, "pointer-root"))
 	if got := initRootT(t); got != envRoot {
 		t.Errorf("root = %q, want %q", got, envRoot)
+	}
+}
+
+// --- state.json reads (store.ts readAll parity) ---
+
+func seedState(t *testing.T, content string) {
+	t.Helper()
+	if err := os.WriteFile(statePath(), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The write every click makes: a use-log bump, the one that turned a
+// failed read into a one-key state.json.
+func bumpUseLog() error {
+	return updateStateKey("projectUseLog", func(json.RawMessage) (any, error) {
+		return map[string][]int64{"p1": {2}}, nil
+	})
+}
+
+func TestReadStateFileMissingIsEmpty(t *testing.T) {
+	sandboxConfigRoot(t)
+	all, err := readStateFile()
+	if err != nil || len(all) != 0 {
+		t.Errorf("read of absent state.json = %v, %v, want empty", all, err)
+	}
+	if err := bumpUseLog(); err != nil {
+		t.Errorf("write against absent state.json: %v", err)
+	}
+	if _, err := os.Stat(statePath()); err != nil {
+		t.Errorf("write did not create state.json: %v", err)
+	}
+}
+
+func TestUpdateStateKeyRefusesMalformedState(t *testing.T) {
+	sandboxConfigRoot(t)
+	broken := `{"projects": [{"id": "p1"`
+	seedState(t, broken)
+	if err := bumpUseLog(); err == nil {
+		t.Error("write against malformed state.json succeeded, want error")
+	}
+	if raw, err := os.ReadFile(statePath()); err != nil || string(raw) != broken {
+		t.Errorf("malformed state.json was rewritten to %q", raw)
+	}
+}
+
+func TestUpdateStateKeyRefusesUnreadableState(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads through mode 0000")
+	}
+	sandboxConfigRoot(t)
+	kept := `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],` +
+		`"shelvedWorktrees":{"w1":true},"projectUseLog":{"p1":[1]}}`
+	seedState(t, kept)
+	// The mode stays off for the whole write: restoring it first would
+	// let the read succeed, which is exactly what hid the bug. The
+	// directory stays writable, so the rename half of the write could
+	// still land.
+	if err := os.Chmod(statePath(), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(statePath(), 0o644) })
+	if _, err := loadProjects(); err == nil {
+		t.Error("loadProjects on unreadable state.json succeeded, want error")
+	}
+	if err := bumpUseLog(); err == nil {
+		t.Error("write against unreadable state.json succeeded, want error")
+	}
+	if err := os.Chmod(statePath(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := os.ReadFile(statePath()); err != nil || string(raw) != kept {
+		t.Errorf("unreadable state.json was rewritten to %q", raw)
 	}
 }

@@ -7,6 +7,7 @@
 // fresher per-branch PR query.
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
+import type { Project } from "@shared/schemas";
 import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git/remotes";
 import {
   pullRequestMapsEqual,
@@ -66,17 +67,31 @@ async function sweepProjectPullRequests(
   }
 }
 
+// Both sweeps below run from callbacks with nobody to catch for them (a
+// timer, the window-focus handler), and loadProjects throws when
+// state.json is unreadable. Skip the round rather than throw out of a
+// callback: refs going stale is the mild half of that problem, and the
+// UI's own reads of the same file report it.
+function projectsToSweep(): Project[] {
+  try {
+    return loadProjects();
+  } catch (error) {
+    console.warn("[fetch] skipping sweep, projects unreadable:", error);
+    return [];
+  }
+}
+
 // Git-only refresh used by the window-focus handler. The PR sweep is
 // timer-driven only -- the open worktree page has its own per-branch
 // query that handles focus.
 export function refreshAllProjectGitRefs(): void {
-  for (const project of loadProjects()) {
+  for (const project of projectsToSweep()) {
     void maybeFetchProject(project.id, project.path);
   }
 }
 
 function sweepAllProjects(): void {
-  for (const project of loadProjects()) {
+  for (const project of projectsToSweep()) {
     void maybeFetchProject(project.id, project.path);
     void sweepProjectPullRequests(project.id, project.path);
   }

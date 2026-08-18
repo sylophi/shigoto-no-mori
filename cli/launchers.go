@@ -147,7 +147,7 @@ const useLogWindow = 14 * 24 * time.Hour
 // the launcher row's ordering, driven by the same state.json log.
 func sortLaunchersByUse(entries []launcherEntry) {
 	var log map[string][]int64
-	if raw, ok := readStateFile()["launcherUseLog"]; ok {
+	if raw, ok := readStateHints()["launcherUseLog"]; ok {
 		_ = json.Unmarshal(raw, &log)
 	}
 	cutoff := time.Now().Add(-useLogWindow).UnixMilli()
