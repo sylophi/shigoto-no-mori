@@ -1,4 +1,5 @@
 import type { ForgeConfig } from "@electron-forge/shared-types";
+import { MakerDMG } from "@electron-forge/maker-dmg";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { PublisherGithub } from "@electron-forge/publisher-github";
 import { VitePlugin } from "@electron-forge/plugin-vite";
@@ -88,7 +89,14 @@ const config: ForgeConfig = {
       });
     },
   },
-  makers: [new MakerZIP({}, ["darwin"])],
+  // The dmg is what humans download: it opens the familiar
+  // drag-to-Applications window instead of leaving the app wherever
+  // Safari expanded it. The zip stays because the update feed serves
+  // it to the in-app updater.
+  makers: [
+    new MakerDMG({ icon: "assets/icon.icns" }, ["darwin"]),
+    new MakerZIP({}, ["darwin"]),
+  ],
   publishers: [
     new PublisherGithub({
       repository: {
