@@ -28,6 +28,14 @@ export const queryKeys = {
   pickedWorktreeName: (projectId: string | null) =>
     ["pickedWorktreeName", projectId] as const,
 
+  // Tidy-the-forest data. Split in two because the git facts are cheap
+  // and the disk walk is not: one key per worktree lets each size land
+  // on its own instead of the page waiting for the slowest checkout.
+  worktreeHygiene: (projectId: string | null) =>
+    ["worktreeHygiene", projectId] as const,
+  worktreeDiskUsage: (projectId: string, worktreeId: string) =>
+    ["worktreeDiskUsage", projectId, worktreeId] as const,
+
   branches: (projectId: string | null) => ["branches", projectId] as const,
   defaultBranch: (projectId: string | null) =>
     ["defaultBranch", projectId] as const,

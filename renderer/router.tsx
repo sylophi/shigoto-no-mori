@@ -17,6 +17,7 @@ import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
+import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
@@ -132,6 +133,12 @@ const manageBranchesRoute = createRoute({
   component: KeyedManageBranches,
 });
 
+const tidyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects/$projectId/tidy",
+  component: KeyedTidyForest,
+});
+
 const convertExternalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/convert-external",
@@ -164,6 +171,11 @@ function KeyedConfigureProject() {
 function KeyedManageBranches() {
   const { projectId } = manageBranchesRoute.useParams();
   return <ManageBranches key={projectId} />;
+}
+
+function KeyedTidyForest() {
+  const { projectId } = tidyRoute.useParams();
+  return <TidyForest key={projectId} />;
 }
 
 function KeyedConvertExternal() {
@@ -212,6 +224,7 @@ const routeTree = rootRoute.addChildren([
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,
+  tidyRoute,
   convertExternalRoute,
   worktreeLocationRoute,
   worktreeRoute,

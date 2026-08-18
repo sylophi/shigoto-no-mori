@@ -5,6 +5,7 @@ import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
+import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { navContract } from "@shared/ipc/modules/nav";
@@ -38,6 +39,7 @@ const fsClient = buildClient(fsContract);
 const gitClient = buildClient(gitContract);
 const githubCliClient = buildClient(githubCliContract);
 const globalConfigClient = buildClient(globalConfigContract);
+const hygieneClient = buildClient(hygieneContract);
 const launchersClient = buildClient(launchersContract);
 const menuClient = buildClient(menuContract);
 const navClient = buildClient(navContract);
@@ -102,6 +104,11 @@ export const githubCli = {
 export const globalConfig = {
   read: globalConfigClient.read,
   write: (config: GlobalConfig) => globalConfigClient.write({ config }),
+} as const;
+
+export const hygiene = {
+  list: (projectId: string) => hygieneClient.list({ projectId }),
+  diskUsage: hygieneClient.diskUsage,
 } as const;
 
 export const launchers = {
