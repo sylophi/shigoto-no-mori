@@ -27,7 +27,6 @@ import {
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import {
-  cliSpawnEnv,
   requireCliBinary,
   runCli,
   type CliDoc,
@@ -279,8 +278,8 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
   return ProjectSchema.parse(doc);
 }
 
-// The command (plus env overlay) that runs a package.json script
-// through the CLI engine. Unlike the functions above this doesn't
+// The command that runs a package.json script through the CLI
+// engine. Unlike the functions above this doesn't
 // spawn anything: package-script runs go through startScript so the
 // app's registry keeps owning streaming, cancel, and quit-time
 // reaping -- the CLI contributes manager detection and the
@@ -289,37 +288,29 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 // git for it, --skip-use-log keeps the use-log bump in the app's own
 // process (whose state watcher suppresses it as a self-write), and
 // `--` guards a script name that looks like a flag.
-export interface CliRunScriptSpawn {
-  command: string;
-  env: Record<string, string>;
-}
-
 export function cliRunScriptSpawn(args: {
   projectId: string;
   worktreeId: string;
   scriptName: string;
   projectBranch: string;
   defaultBranch: string;
-}): CliRunScriptSpawn {
+}): string {
   const binary = requireCliBinary();
-  return {
-    command: [
-      shellQuote(binary),
-      "run",
-      "--project-id",
-      shellQuote(args.projectId),
-      "--worktree-id",
-      shellQuote(args.worktreeId),
-      "--project-branch",
-      shellQuote(args.projectBranch),
-      "--default-branch",
-      shellQuote(args.defaultBranch),
-      "--skip-use-log",
-      "--",
-      shellQuote(args.scriptName),
-    ].join(" "),
-    env: cliSpawnEnv(),
-  };
+  return [
+    shellQuote(binary),
+    "run",
+    "--project-id",
+    shellQuote(args.projectId),
+    "--worktree-id",
+    shellQuote(args.worktreeId),
+    "--project-branch",
+    shellQuote(args.projectBranch),
+    "--default-branch",
+    shellQuote(args.defaultBranch),
+    "--skip-use-log",
+    "--",
+    shellQuote(args.scriptName),
+  ].join(" ");
 }
 
 // Whole-document config writes through the CLI's plumbing `write

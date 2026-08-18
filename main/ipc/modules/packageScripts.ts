@@ -63,7 +63,7 @@ export const packageScriptsHandlers: Handlers<
     // child is told --skip-use-log), so the state watcher sees a
     // suppressible self-write instead of an external state.json change
     // on every run.
-    const viaCli = cliRunScriptSpawn({
+    const command = cliRunScriptSpawn({
       projectId,
       worktreeId,
       scriptName,
@@ -71,8 +71,7 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
     });
     const runId = startScript({
-      command: viaCli.command,
-      extraEnv: viaCli.env,
+      command,
       scriptName,
       worktree: ctx.worktree,
       project,

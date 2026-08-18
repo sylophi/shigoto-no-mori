@@ -3,15 +3,15 @@
 // through here, so the app and a terminal produce byte-identical
 // behavior. The binary is addressed directly -- Resources/ when
 // packaged, dist-cli/smd in dev (built by `pnpm dev`) -- so no PATH
-// install is involved, and SHIGOMORI_ROOT is pinned to the app's own
-// root so the flavor split can never diverge.
+// install is involved: the binary is flavor-stamped at build time and
+// reads the same pointer file the app does, so it lands on the app's
+// root without being told.
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "../lib/scripts";
-import { shigomoriRoot } from "../lib/util/paths";
 import { noteSelfWrite } from "../lib/util/selfWrite";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
@@ -100,15 +100,6 @@ export function killAllCli(): void {
   }
 }
 
-// The env overlay every CLI spawn gets: SHIGOMORI_ROOT pinned to the
-// app's own root -- the invariant keeping the flavor split from
-// diverging. Every path that launches the CLI (the two spawn sites
-// below, and the package-script delegation that hands its command to
-// startScript) must route through this so the pin has one owner.
-export function cliSpawnEnv(): Record<string, string> {
-  return { SHIGOMORI_ROOT: shigomoriRoot() };
-}
-
 // Spawn a CLI command that must outlive this process (the update
 // installer waits for our pid to exit before swapping bundles).
 // Deliberately NOT tracked in `children`: killAllCli reaping it at
@@ -124,7 +115,6 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
     const child = spawn(binary, args, {
       detached: true,
       stdio: "ignore",
-      env: { ...process.env, ...cliSpawnEnv() },
     });
     child.once("error", reject);
     child.once("spawn", () => {
@@ -160,7 +150,7 @@ export async function runCli(
   const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
-      env: { ...process.env, ...extraEnv, ...cliSpawnEnv() },
+      env: { ...process.env, ...extraEnv },
       // Own process group so killAllCli can signal the CLI and any
       // lifecycle script it spawned as one unit (see killAllCli).
       detached: true,
