@@ -23,9 +23,9 @@ export function DataLocationSection() {
     let parent: string | null = null;
     try {
       parent = await window.api.dialog.pickFolder({
-        title: `Choose where the ${runtime.rootDirName} folder should live`,
+        title: `Move the ${runtime.rootDirName} folder`,
         buttonLabel: "Move here",
-        message: `The ${runtime.rootDirName} folder (worktrees, configs, state) will move into the folder you choose, keeping its name. The app restarts afterwards.`,
+        message: "Choose its new parent folder",
       });
     } catch (err) {
       // A real dialog/IPC failure, distinct from the user cancelling
