@@ -65,7 +65,7 @@ const createWindow = () => {
     visualEffectState: "active",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
-      sandbox: false,
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
     },
