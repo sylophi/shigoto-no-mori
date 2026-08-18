@@ -1,4 +1,5 @@
 import { ArrowDown, ArrowUp, CloudUpload } from "lucide-react";
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import {
   useOverwriteWorktree,
   usePublishWorktree,
@@ -29,6 +30,12 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
   const overwrite = useOverwriteWorktree();
   const publish = usePublishWorktree();
   const pullAndPush = usePullAndPushWorktree();
+  // Both diverged actions throw away one side's commits, which is more
+  // destructive than "Delete worktree" (that one keeps the branch). Same
+  // two-step confirm, and arming one disarms the other so a stray second
+  // click can't land on the button the user didn't mean.
+  const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
+  const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
 
   if (state.kind === "detached" || state.kind === "synced") return null;
 
@@ -88,8 +95,9 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
     );
   }
 
-  // Histories have truly diverged. The only safe pre-confirmed moves are
-  // "overwrite the remote" (force-push) or "overwrite local" (reset hard).
+  // Histories have truly diverged. The only moves left are "overwrite the
+  // remote" (force-push) or "overwrite local" (reset hard), both behind a
+  // two-step confirm.
   // pull --rebase would almost certainly fail mid-flight here, so we don't
   // offer it -- the user picks which side wins.
   const busy = pushForce.isPending || overwrite.isPending;
@@ -102,20 +110,34 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="rose"
         icon={ArrowUp}
-        label={`Push ${state.ahead}`}
-        title="git push --force-with-lease -- overwrites the remote"
+        label={confirmPushForce.armed ? "Confirm?" : `Push ${state.ahead}`}
+        title={
+          confirmPushForce.armed
+            ? "Click again to confirm"
+            : "git push --force-with-lease -- overwrites the remote"
+        }
         pending={pushForce.isPending}
         disabled={busy}
-        onClick={() => pushForce.mutate(input)}
+        onClick={() => {
+          confirmOverwrite.reset();
+          confirmPushForce.trigger(() => pushForce.mutate(input));
+        }}
       />
       <SyncActionButton
         tone="rose"
         icon={ArrowDown}
-        label={`Pull ${state.behind}`}
-        title="git fetch && git reset --hard @{u} -- overwrites local"
+        label={confirmOverwrite.armed ? "Confirm?" : `Pull ${state.behind}`}
+        title={
+          confirmOverwrite.armed
+            ? "Click again to confirm"
+            : "git fetch && git reset --hard @{u} -- overwrites local"
+        }
         pending={overwrite.isPending}
         disabled={busy}
-        onClick={() => overwrite.mutate(input)}
+        onClick={() => {
+          confirmPushForce.reset();
+          confirmOverwrite.trigger(() => overwrite.mutate(input));
+        }}
       />
     </span>
   );
