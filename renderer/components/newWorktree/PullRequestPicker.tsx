@@ -33,7 +33,7 @@ export function PullRequestSource({
 }) {
   return (
     <>
-      <span className="block pt-2 text-sm font-medium">Pull request</span>
+      <span className="block text-sm font-medium">Pull request</span>
       {query.isPending ? (
         <p className="px-3 py-6 text-center text-sm text-muted-foreground">
           Loading pull requests…

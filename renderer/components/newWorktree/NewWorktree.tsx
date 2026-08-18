@@ -250,6 +250,16 @@ export function NewWorktree() {
         className="flex max-w-xl flex-col gap-7 p-6"
         onSubmit={handleSubmit}
       >
+        {/* First, and outside the sections it governs: the pull request
+            mode hides the source field, and a toggle that moves out from
+            under the cursor as it's clicked is worse than the gap. */}
+        <ModeToggle
+          mode={mode}
+          onChange={setMode}
+          disabled={busy}
+          pullRequestUnavailable={prMode ? undefined : prUnavailable}
+        />
+
         {!prMode && (
           <div className="space-y-2">
             <label htmlFor="branch-base" className="block text-sm font-medium">
@@ -276,12 +286,6 @@ export function NewWorktree() {
         )}
 
         <div className="space-y-2">
-          <ModeToggle
-            mode={mode}
-            onChange={setMode}
-            disabled={busy}
-            pullRequestUnavailable={prMode ? undefined : prUnavailable}
-          />
           {prMode ? (
             <PullRequestSource
               query={candidates}
@@ -295,7 +299,7 @@ export function NewWorktree() {
             <>
               <label
                 htmlFor="branch-name"
-                className="block pt-2 text-sm font-medium"
+                className="block text-sm font-medium"
               >
                 Branch name
               </label>
