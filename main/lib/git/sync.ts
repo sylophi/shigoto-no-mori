@@ -18,11 +18,27 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 }
 
 // "Overwrite": throw away the local divergence and snap to the upstream.
-// Fetch first so `@{u}` reflects the current remote tip.
+// Fetch first so `@{u}` reflects the current remote tip, then re-check
+// the tree right before the reset. The renderer only offers this action
+// on a clean worktree, but it decides that from a cached `changedCount`
+// that another process (an agent, an editor) can invalidate without the
+// window ever losing focus. A `reset --hard` past uncommitted work
+// leaves nothing to recover from, so the guard has to live here.
+// Untracked files count as dirty too: `reset --hard` silently
+// overwrites any untracked file whose path exists in the upstream tree.
+// Same command as getChangedCount, so this refuses in exactly the
+// states where the renderer already hides the button (ignored files are
+// excluded, so build output doesn't trip it).
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
   await run(worktreePath, ["fetch"]);
+  const status = await run(worktreePath, ["status", "--porcelain=v1"]);
+  if (status.trim().length > 0) {
+    throw new Error(
+      "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
+    );
+  }
   await run(worktreePath, ["reset", "--hard", "@{u}"]);
 }
 
