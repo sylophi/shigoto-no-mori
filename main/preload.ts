@@ -21,6 +21,7 @@ import {
   cli,
   shell,
   shigomori,
+  tray,
   updater,
   windowApi,
   worktreeData,
@@ -50,6 +51,7 @@ const api = {
   cli,
   updater,
   launchers,
+  tray,
 } as const;
 
 export type RendererApi = typeof api;

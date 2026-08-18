@@ -31,6 +31,7 @@ import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
+import { hasTrayPopover, installTrayImpl, startTray } from "./electron/tray";
 import {
   installUpdaterImpl,
   isInstallingUpdate,
@@ -61,12 +62,6 @@ if (!app.requestSingleInstanceLock()) {
 
 initShigomoriRoot(app.isPackaged);
 
-// Electron-layer impls must be wired before registerIpcHandlers runs so
-// the first renderer call never lands on the throwing default.
-installMenuImpl();
-installUpdaterImpl();
-registerIpcHandlers();
-
 let mainWindow: BrowserWindow | null = null;
 // Set once the ready handler's own createWindow() call has run, so
 // second-instance can tell "boot is still in flight" (nothing to do
@@ -78,7 +73,7 @@ let mainWindow: BrowserWindow | null = null;
 // finishing right after.
 let hasBooted = false;
 
-const createWindow = () => {
+const createWindow = (): BrowserWindow => {
   hasBooted = true;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
@@ -139,7 +134,20 @@ const createWindow = () => {
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
 
+  // The menu bar popover keeps a (hidden) BrowserWindow alive for the
+  // life of the app, so `window-all-closed` stops firing once the tray
+  // is up. Closing the last real window must still quit, as it always
+  // has -- a worktree manager that silently lives on in the menu bar
+  // after you close it would be a surprise, not a feature. Gated on the
+  // popover existing so this and `window-all-closed` can never both
+  // fire and race the shutdown sequence.
+  mainWindow.on("closed", () => {
+    mainWindow = null;
+    if (!isQuitting && hasTrayPopover()) app.quit();
+  });
+
   attachContextMenu(mainWindow);
+  return mainWindow;
 };
 
 // Launching the app again while a copy runs is a request to see it, so
@@ -160,6 +168,16 @@ app.on("second-instance", () => {
   // asked for focus, and the launch the user just made is already gone.
   app.focus({ steal: true });
 });
+
+// Electron-layer impls must be wired before registerIpcHandlers runs so
+// the first renderer call never lands on the throwing default.
+installMenuImpl();
+installUpdaterImpl();
+installTrayImpl({
+  getMainWindow: () => mainWindow,
+  createMainWindow: () => createWindow(),
+});
+registerIpcHandlers();
 
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start
@@ -191,6 +209,10 @@ app.on("ready", async () => {
   startOrphanScriptSweep();
   buildAppMenu();
   createWindow();
+  // After the main window: the popover is a second renderer of the same
+  // bundle, and letting the real window win the race to the dev server
+  // keeps first paint where the user is looking.
+  startTray();
   startBackgroundFetch();
   startUpdater();
   // External CLI writes surface in the UI via an explicit invalidation

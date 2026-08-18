@@ -48,6 +48,31 @@ export function App() {
     [],
   );
 
+  // Picked from the menu bar popover. Selection in this app *is* the
+  // router location, so "focus the app on this worktree" is a navigate;
+  // main has already raised the window by the time this arrives.
+  useEffect(
+    () =>
+      window.api.nav.onOpenWorktree(({ projectId, worktreeId }) => {
+        void router.navigate({
+          to: "/projects/$projectId/worktrees/$worktreeId",
+          params: { projectId, worktreeId },
+        });
+      }),
+    [],
+  );
+
+  useEffect(
+    () =>
+      window.api.nav.onNewWorktree(({ projectId }) => {
+        void router.navigate({
+          to: "/projects/$projectId/new",
+          params: { projectId },
+        });
+      }),
+    [],
+  );
+
   return (
     <ThemeProvider>
       <DoubutsuProvider>

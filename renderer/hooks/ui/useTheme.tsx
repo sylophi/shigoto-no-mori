@@ -33,7 +33,17 @@ function readBootHint(): Theme {
   return "system";
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
+export function ThemeProvider({
+  children,
+  // Only the main window drives the native appearance. The menu bar
+  // popover renders the same tokens but must stay a passive reader:
+  // nativeTheme is process-global, so a second writer would stomp the
+  // main window's unsaved Settings preview back to the saved value.
+  syncNativeChrome = true,
+}: {
+  children: ReactNode;
+  syncNativeChrome?: boolean;
+}) {
   const { data: config, isLoading } = useGlobalConfig();
   // Avoid a one-frame light-mode flash while globalConfig fetches by trusting
   // the last value we cached locally. Config wins as soon as it arrives.
@@ -74,8 +84,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // Keep the main process in sync so the BrowserWindow background tracks
   // the applied theme (including unsaved previews).
   useEffect(() => {
+    if (!syncNativeChrome) return;
     void window.api.runtime.setTheme(applied);
-  }, [applied]);
+  }, [applied, syncNativeChrome]);
 
   // Mirror the saved value into localStorage so the next launch can paint
   // without waiting for globalConfig to load.

@@ -10,6 +10,8 @@ import {
 import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
+import { TrayApp } from "./components/tray/TrayApp";
+import { isTraySurface } from "./lib/surface";
 import { queryKeys } from "./lib/queryKeys";
 import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
@@ -139,26 +141,43 @@ if (!rootElement) {
   throw new Error("#root element missing from index.html");
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-      <Toaster
-        position="bottom-right"
-        offset={{ bottom: 16, right: 16 }}
-        closeButton
-        toastOptions={{
-          classNames: {
-            toast:
-              "!bg-popover !text-popover-foreground !border !border-border !shadow-md",
-            title: "!select-text",
-            description: "!text-muted-foreground !select-text",
-            error: "!text-destructive",
-            closeButton:
-              "!left-auto !right-0 ![transform:translate(35%,-35%)] !bg-popover !text-muted-foreground !border-border hover:!bg-accent hover:!text-foreground",
-          },
-        }}
-      />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+// The menu bar popover (main/electron/tray) loads this same bundle with
+// `?surface=tray`. It shares everything above -- the query client, the
+// focus wiring, the external-change invalidation -- and swaps only the
+// root component. Notably it gets no Toaster: it is a transient panel
+// that dismisses itself on blur, so a toast fired into it would vanish
+// with it. Actions that can fail (launching a tool) run in main and
+// surface their errors there.
+if (isTraySurface) {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TrayApp />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+} else {
+  createRoot(rootElement).render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <App />
+        <Toaster
+          position="bottom-right"
+          offset={{ bottom: 16, right: 16 }}
+          closeButton
+          toastOptions={{
+            classNames: {
+              toast:
+                "!bg-popover !text-popover-foreground !border !border-border !shadow-md",
+              title: "!select-text",
+              description: "!text-muted-foreground !select-text",
+              error: "!text-destructive",
+              closeButton:
+                "!left-auto !right-0 ![transform:translate(35%,-35%)] !bg-popover !text-muted-foreground !border-border hover:!bg-accent hover:!text-foreground",
+            },
+          }}
+        />
+      </QueryClientProvider>
+    </StrictMode>,
+  );
+}
