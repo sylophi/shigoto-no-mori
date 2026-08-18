@@ -11,7 +11,7 @@
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
 import { useSyncExternalStore } from "react";
-import type { ScriptEvent } from "@shared/schemas";
+import type { RemovedWorktreeScripts, ScriptEvent } from "@shared/schemas";
 import { toast } from "@/lib/toast";
 import { assertNever } from "@/lib/utils";
 import type { RendererApi } from "@/window";
@@ -102,7 +102,10 @@ interface StartInput {
   runner: () => Promise<{ runId: string }>;
 }
 
-type ScriptsApi = Pick<RendererApi["scripts"], "cancel" | "onEvent">;
+type ScriptsApi = Pick<
+  RendererApi["scripts"],
+  "cancel" | "onEvent" | "onStoppedForRemovedWorktree"
+>;
 
 type WarnFn = (title: string, options?: { description?: string }) => unknown;
 
@@ -118,7 +121,7 @@ class ScriptRunsStore {
   private pendingByRunId = new Map<string, PostStartEvent[]>();
   private perKeySubs = new Map<ScriptKey, Set<() => void>>();
   private worktreeSubs = new Map<string, Set<() => void>>();
-  private unsubscribeIpc: (() => void) | null = null;
+  private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   private warn: WarnFn;
 
@@ -128,13 +131,17 @@ class ScriptRunsStore {
   }
 
   start(): void {
-    if (this.unsubscribeIpc) return;
-    this.unsubscribeIpc = this.api.onEvent((event) => this.handleEvent(event));
+    if (this.unsubscribers.length > 0) return;
+    this.unsubscribers.push(
+      this.api.onEvent((event) => this.handleEvent(event)),
+      this.api.onStoppedForRemovedWorktree((info) =>
+        this.handleRemovedWorktree(info),
+      ),
+    );
   }
 
   dispose(): void {
-    this.unsubscribeIpc?.();
-    this.unsubscribeIpc = null;
+    for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
     this.states.clear();
     this.meta.clear();
     this.runIdToKey.clear();
@@ -227,6 +234,22 @@ class ScriptRunsStore {
       touched = true;
     }
     if (touched) this.notifyWorktree(worktreeId);
+  }
+
+  // Main reaped this worktree's scripts because it was removed outside
+  // the app. Worth saying out loud rather than letting the user find
+  // out from a dead localhost: they removed a worktree in a terminal,
+  // and the visible consequence is a dev server going down somewhere
+  // else. The run's own console can't carry the notice, since the row
+  // it lives on disappears with the worktree.
+  private handleRemovedWorktree(info: RemovedWorktreeScripts): void {
+    this.clearForWorktree(info.worktreeId);
+    this.warn(`${info.worktreeName} was removed outside the app`, {
+      description:
+        info.scriptCount === 1
+          ? "Its running script was stopped."
+          : `Its ${info.scriptCount} running scripts were stopped.`,
+    });
   }
 
   awaitExit(key: ScriptKey): Promise<number | null> {

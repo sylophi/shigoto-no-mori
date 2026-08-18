@@ -51,6 +51,11 @@ interface RunRecord {
   child: ChildProcess;
   projectId: string;
   worktreeId: string;
+  // Kept alongside the id so a worktree that has vanished from disk can
+  // still be named in the reap notice and probed by path. Neither is
+  // recoverable from the path-derived id after the fact.
+  worktreeName: string;
+  worktreePath: string;
   scriptName: string;
   startedAt: number;
   exited: boolean;
@@ -135,6 +140,38 @@ const inflightContributors: Array<() => number> = [];
 
 export function registerInflightContributor(count: () => number): void {
   inflightContributors.push(count);
+}
+
+// One entry per worktree that currently has live scripts, with what it
+// takes to identify that worktree after its directory is gone. The
+// removed-worktree reaper uses this as its "worktrees the app knows
+// existed" list, so it never has to cache one of its own.
+export interface RunningScriptWorktree {
+  projectId: string;
+  worktreeId: string;
+  worktreeName: string;
+  worktreePath: string;
+  scriptCount: number;
+}
+
+export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
+  const byWorktree = new Map<string, RunningScriptWorktree>();
+  for (const record of runningScripts.values()) {
+    if (record.exited) continue;
+    const existing = byWorktree.get(record.worktreeId);
+    if (existing) {
+      existing.scriptCount++;
+      continue;
+    }
+    byWorktree.set(record.worktreeId, {
+      projectId: record.projectId,
+      worktreeId: record.worktreeId,
+      worktreeName: record.worktreeName,
+      worktreePath: record.worktreePath,
+      scriptCount: 1,
+    });
+  }
+  return Array.from(byWorktree.values());
 }
 
 export function getBusyOperations(): BusyOperations {
@@ -297,6 +334,8 @@ export function startScript(args: RunArgs): string {
     child,
     projectId: args.project.id,
     worktreeId: args.worktree.id,
+    worktreeName: args.worktree.name,
+    worktreePath: args.worktree.path,
     scriptName: args.scriptName,
     startedAt: Date.now(),
     exited: false,

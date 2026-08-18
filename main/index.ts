@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, nativeTheme } from "electron";
 import path from "node:path";
 import { cliRootDirName } from "@shared/cliDist.mts";
 import { gitContract } from "@shared/ipc/modules/git";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
@@ -21,6 +22,7 @@ import {
   markShuttingDown,
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
+import { reapScriptsForRemovedWorktrees } from "./lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli } from "./electron/cliRunner";
@@ -141,6 +143,25 @@ app.on("ready", async () => {
   // focused the whole time an agent works in a terminal beside it.)
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
+    // The same refresh is the app's only chance to notice an `sm rm`
+    // run in a terminal: the CLI removes the worktree without knowing
+    // the app exists, leaving any script the app started in it running
+    // against a deleted cwd and still holding its port.
+    void reapScriptsForRemovedWorktrees()
+      .then((removed) => {
+        for (const worktree of removed) {
+          broadcastAll(scriptsContract, "stoppedForRemovedWorktree", {
+            worktreeId: worktree.worktreeId,
+            worktreeName: worktree.worktreeName,
+            scriptCount: worktree.scriptCount,
+          });
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn(
+          `[scripts] reap after external change failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
   });
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other

@@ -90,3 +90,16 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+
+// Scripts the app had running in a worktree that disappeared from disk
+// while the app was watching (an `sm rm` in a terminal). The app kills
+// them and tells the renderer, which has no other way to explain why a
+// dev server went down.
+export const RemovedWorktreeScriptsSchema = z.object({
+  worktreeId: z.string(),
+  worktreeName: z.string(),
+  scriptCount: z.number().int().positive(),
+});
+export type RemovedWorktreeScripts = z.infer<
+  typeof RemovedWorktreeScriptsSchema
+>;
