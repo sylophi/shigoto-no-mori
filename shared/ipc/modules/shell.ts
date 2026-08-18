@@ -6,7 +6,6 @@ import {
 } from "@shared/schemas";
 
 export const shellContract = {
-  openPath: invoke("shell:openPath", PathPayloadSchema, z.void()),
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,

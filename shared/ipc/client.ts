@@ -187,7 +187,6 @@ export const cli = {
 } as const;
 
 export const shell = {
-  openPath: (path: string) => shellClient.openPath({ path }),
   openExternal: (url: string) => shellClient.openExternal({ url }),
   showItemInFolder: (path: string) => shellClient.showItemInFolder({ path }),
 } as const;
