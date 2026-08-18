@@ -10,6 +10,10 @@
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
 //      the installed packages -- catches breaking upgrades.
+//   4. The one consumer outside renderer/ -- the dmg artwork in
+//      scripts/dmg-background.html -- must still find the tokens and
+//      the two rules it renders against. It ships as a committed png,
+//      so a stripped hook there is invisible until a release.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -109,6 +113,41 @@ for (const { pkg, file, needle } of upstream) {
   } else if (!readFileSync(path, "utf8").includes(needle)) {
     failures.push(
       `${pkg}: "${needle}" no longer found in ${file} -- doubutsu selectors depending on it are dead`,
+    );
+  }
+}
+
+// 4. The installer artwork renders against this stylesheet from outside
+//    renderer/, so the walk above never sees it. Check the tokens it
+//    reads are still declared, and that the two rule shapes it leans on
+//    -- the leaf wallpaper and the header/footer band -- still exist.
+const artFile = join(root, "scripts/dmg-background.html");
+const art = readFileSync(artFile, "utf8");
+// --dmg-*, --icon* and --app*-x are injected by the renderer at capture
+// time. Everything else has to come from the theme.
+const INJECTED = /^--(dmg-|icon|app-|apps-)/;
+for (const [, name] of art.matchAll(/var\((--[\w-]+)\)/g)) {
+  if (INJECTED.test(name)) continue;
+  if (!css.includes(`${name}:`)) {
+    failures.push(
+      `dmg-background.html reads ${name} but doubutsu.css no longer declares it`,
+    );
+  }
+}
+const ART_RULES = [
+  {
+    needle: /\[data-doubutsu-zone="main"\]::before/,
+    what: 'the leaf wallpaper on [data-doubutsu-zone="main"]',
+  },
+  {
+    needle: /\[data-doubutsu-zone="main"\][^{]*:is\(\s*header,\s*footer\s*\)/,
+    what: "the header/footer band rule",
+  },
+];
+for (const { needle, what } of ART_RULES) {
+  if (!needle.test(css)) {
+    failures.push(
+      `doubutsu.css no longer has ${what}, which the dmg artwork is drawn against`,
     );
   }
 }
