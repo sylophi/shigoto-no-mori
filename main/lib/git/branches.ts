@@ -27,6 +27,9 @@ export async function renameBranch(
 // checkout unambiguous when several remotes share the branch name. An
 // exact local branch always wins over the remote interpretation. Callers
 // that already hold the remote list can pass it to skip a `git remote`.
+// `--end-of-options` pins the name to the revision slot and the trailing
+// `--` keeps it out of the pathspec slot, so no caller-supplied name can
+// be read as a flag or as a file.
 export async function checkoutBranch(
   worktreePath: string,
   branch: string,
@@ -34,7 +37,7 @@ export async function checkoutBranch(
 ): Promise<void> {
   // An exact local branch (including the rare literal "remote/thing") wins.
   if (await localBranchExists(worktreePath, branch)) {
-    await run(worktreePath, ["checkout", branch]);
+    await run(worktreePath, ["checkout", "--end-of-options", branch, "--"]);
     return;
   }
   const split = splitRemoteRefSync(
@@ -45,12 +48,23 @@ export async function checkoutBranch(
   // tracking branch from the explicit ref so a name shared across remotes
   // stays unambiguous.
   if (split && !(await localBranchExists(worktreePath, split.branch))) {
-    await run(worktreePath, ["checkout", "--track", branch]);
+    await run(worktreePath, [
+      "checkout",
+      "--track",
+      "--end-of-options",
+      branch,
+      "--",
+    ]);
     return;
   }
   // Either a plain name git can DWIM, or the stripped local branch already
   // exists — switch to it.
-  await run(worktreePath, ["checkout", split ? split.branch : branch]);
+  await run(worktreePath, [
+    "checkout",
+    "--end-of-options",
+    split ? split.branch : branch,
+    "--",
+  ]);
 }
 
 // The "delete the local branch after the worktree is gone" policy for
