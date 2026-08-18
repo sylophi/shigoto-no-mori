@@ -35,6 +35,27 @@ import {
 } from "./electron/updater";
 
 enableDevCdpPort();
+
+// Electron scopes the single-instance lock to the userData directory,
+// and dev and packaged builds resolve the same one out of productName.
+// A dev run owns a different data root (~/shigomori-dev), so give it
+// its own userData or an installed copy would lock it out.
+if (!app.isPackaged) {
+  app.setPath("userData", `${app.getPath("userData")} (dev)`);
+}
+
+// One live instance per data root. A second copy (typically a fresh
+// download in ~/Downloads beside the installed app) would run its own
+// state watcher, background fetcher, updater and script registry over
+// the same files. `app.exit` skips before-quit, so the losing process
+// never reaches the quit sequence at the bottom of this file: it can't
+// prompt about busy work, and it can't reap scripts that belong to the
+// instance owning the root. It tells the user nothing, because raising
+// the running window is what launching the app asked for.
+if (!app.requestSingleInstanceLock()) {
+  app.exit(0);
+}
+
 initShigomoriRoot(app.isPackaged);
 
 // Electron-layer impls must be wired before registerIpcHandlers runs so
@@ -107,6 +128,22 @@ const createWindow = () => {
 
   attachContextMenu(mainWindow);
 };
+
+// Launching the app again while a copy runs is a request to see it, so
+// surface the window we already have. It can be missing if the user
+// closed it and then cancelled the quit that followed.
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow();
+  } else {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  // macOS won't raise a background app just because one of its windows
+  // asked for focus, and the launch the user just made is already gone.
+  app.focus({ steal: true });
+});
 
 app.on("ready", async () => {
   // Packaged launches inherit launchd's stripped PATH; dev launches start
