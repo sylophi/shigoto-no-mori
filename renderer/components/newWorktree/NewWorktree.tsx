@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -38,22 +42,26 @@ import { PullRequestSource } from "./PullRequestPicker";
 
 const route = getRouteApi("/projects/$projectId/new");
 
-// Per-mode wording: what the destination line leads with, and what the
-// "use the source's name" checkbox calls that source.
-const MODE_COPY: Record<Mode, { destLead: string; folderNoun: string }> = {
-  "branch-from": {
-    destLead: "A new branch created off the source. Checked out into",
-    folderNoun: "branch",
-  },
-  checkout: {
-    destLead: "Check out the source branch into",
-    folderNoun: "source",
-  },
-  "pull-request": {
-    destLead: "Check out the pull request's head into",
-    folderNoun: "PR",
-  },
+// What the destination line leads with, per mode.
+const MODE_DEST_LEAD: Record<Mode, string> = {
+  "branch-from": "A new branch created off the source. Checked out into",
+  checkout: "Check out the source branch into",
+  "pull-request": "Check out the pull request's head into",
 };
+
+// Where a PR checkout's folder name comes from. "pr" is the numbered
+// name, "branch" is the PR's head ref, "custom" hands the field over.
+type PrFolderSource = "pr" | "branch" | "custom";
+
+const PR_FOLDER_OPTIONS = [
+  { value: "pr", label: "PR", title: "Name the folder after the PR number" },
+  {
+    value: "branch",
+    label: "Branch",
+    title: "Name the folder after the PR's head branch",
+  },
+  { value: "custom", label: "Custom", title: "Type your own folder name" },
+] as const satisfies readonly SegmentedOption<PrFolderSource>[];
 
 const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 
@@ -91,6 +99,7 @@ export function NewWorktree() {
   const [selectedPr, setSelectedPr] = useState<PullRequestCandidate | null>(
     null,
   );
+  const [prFolderFrom, setPrFolderFrom] = useState<"pr" | "branch">("pr");
   const prMode = mode === "pull-request";
   const candidates = usePullRequestCandidates(projectId, prMode);
   const create = useCreateWorktree();
@@ -133,7 +142,11 @@ export function NewWorktree() {
   const folderSource = {
     "branch-from": branchName,
     checkout: base,
-    "pull-request": selectedPr ? pullRequestFolderName(selectedPr) : "",
+    "pull-request": !selectedPr
+      ? ""
+      : prFolderFrom === "branch"
+        ? selectedPr.headRefName
+        : pullRequestFolderName(selectedPr),
   }[mode];
   const folderName = sanitizeBranchForPath(
     useBranchAsFolder ? folderSource : worktreeName,
@@ -216,7 +229,7 @@ export function NewWorktree() {
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
   const destPath = `${root}/worktrees/${project.name}/${folderName || "…"}`;
-  const destLead = MODE_COPY[mode].destLead;
+  const destLead = MODE_DEST_LEAD[mode];
   const destTrail =
     mode === "checkout"
       ? ". Branches already checked out in another worktree are hidden."
@@ -317,24 +330,48 @@ export function NewWorktree() {
             >
               Worktree folder
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
-              <input
-                type="checkbox"
-                checked={useBranchAsFolder}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  if (!next) {
+            {prMode ? (
+              <SegmentedControl
+                aria-label="Worktree folder name source"
+                value={useBranchAsFolder ? prFolderFrom : "custom"}
+                onChange={(next) => {
+                  if (next === "custom") {
                     // Seed the editable field with whatever was just shown,
-                    // so toggling off doesn't blow away the user's context.
+                    // so switching doesn't blow away the user's context.
                     setWorktreeName(folderName);
+                    setUseBranchAsFolder(false);
+                    return;
                   }
-                  setUseBranchAsFolder(next);
+                  setPrFolderFrom(next);
+                  setUseBranchAsFolder(true);
                 }}
+                options={PR_FOLDER_OPTIONS}
                 disabled={busy}
-                className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
+                // The row is baseline-aligned for the label and the old
+                // checkbox; a bordered track wants its own centering.
+                className="self-center"
+                optionClassName="px-2 py-0.5 text-[11px]"
               />
-              Use {MODE_COPY[mode].folderNoun} name
-            </label>
+            ) : (
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+                <input
+                  type="checkbox"
+                  checked={useBranchAsFolder}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    if (!next) {
+                      // Seed the editable field with whatever was just shown,
+                      // so toggling off doesn't blow away the user's context.
+                      setWorktreeName(folderName);
+                    }
+                    setUseBranchAsFolder(next);
+                  }}
+                  disabled={busy}
+                  className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
+                />
+                Use {mode === "checkout" ? "source" : "branch"} name
+              </label>
+            )}
           </div>
           <Input
             id="worktree-name"
