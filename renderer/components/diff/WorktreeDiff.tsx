@@ -9,7 +9,12 @@ const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/diff");
 export function WorktreeDiff() {
   const { projectId, worktreeId } = route.useParams();
   const navigate = useNavigate();
-  const { data: worktrees = [], isPending } = useWorktrees(projectId);
+  const {
+    data: worktrees = [],
+    isPending,
+    isError,
+    refetch,
+  } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   const goBack = () =>
@@ -28,6 +33,17 @@ export function WorktreeDiff() {
     // Cold cache (e.g. a reload landing directly on this route): the
     // list hasn't resolved yet, so absence doesn't mean missing.
     if (isPending) return null;
+    // The list query is silent on error, so without this branch a
+    // failed listing reads as a deleted worktree.
+    if (isError) {
+      return (
+        <DiffNotFound
+          onBack={goBack}
+          message="Couldn't load worktrees."
+          action={{ label: "Retry", onClick: () => void refetch() }}
+        />
+      );
+    }
     return <DiffNotFound onBack={goBack} message="Worktree not found." />;
   }
 

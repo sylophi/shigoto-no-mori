@@ -11,7 +11,10 @@ import { GitRefNameSchema, isRealBranch } from "./project";
 // stops a value like "--output=/tmp/x" from ever reaching a flag
 // position, and it also drops rows a crafted commit subject forged into
 // the log output.
-const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/;
+// Up to 64 hex chars: %h/%H emit 64 in a sha256 object-format repo,
+// and capping at sha1's 40 would reject every record there, leaving
+// the commit list permanently empty.
+const COMMIT_HASH_RE = /^[0-9a-f]{4,64}$/;
 
 export const isCommitHash = (value: string): boolean =>
   COMMIT_HASH_RE.test(value);

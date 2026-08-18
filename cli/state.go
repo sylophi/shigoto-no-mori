@@ -147,9 +147,10 @@ type launcherCommand struct {
 // --- schema marker ---
 
 // The version of the on-disk shape this build writes. Every file
-// shigomori persists carries it: state.json, config.json,
-// projects/<id>/project.json and projects/<id>/worktrees/<id>.json.
-// Nothing reads it to decide anything yet. It exists so a later format
+// shigomori persists carries it: state.json, registry.json,
+// config.json, projects/<id>/project.json and
+// projects/<id>/worktrees/<id>.json. Nothing reads it to decide
+// anything yet. It exists so a later format
 // change can tell an old file from a new one instead of inferring the
 // shape from whichever keys happen to be present. The app stamps the
 // same key with the same value (main/lib/util/jsonFile.ts). The two

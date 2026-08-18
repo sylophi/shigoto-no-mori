@@ -55,8 +55,12 @@ export function PullRequestDiff() {
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`
-    // undefined, and neither means the branch has no pull request.
-    if (prPending) return null;
+    // undefined, and neither means the branch has no pull request. The
+    // lookup shells out to `gh`, which can hang on a slow network, so
+    // the pending state keeps the back button instead of a blank pane.
+    if (prPending) {
+      return <DiffNotFound onBack={goBack} message="Loading pull request…" />;
+    }
     if (prError) {
       return (
         <DiffNotFound
