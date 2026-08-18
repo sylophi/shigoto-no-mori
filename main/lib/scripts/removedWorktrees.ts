@@ -26,11 +26,14 @@ import {
   type RunningScriptWorktree,
 } from "./index";
 
-// Worktrees whose kill chain is already running. A kill takes seconds
-// in the worst case (SIGTERM, grace, SIGKILL) and the watcher can fire
-// again inside that window, which would otherwise reap-and-report the
-// same removal twice. Always cleared in a finally, so an entry can
-// never outlive the kill it guards.
+// Worktrees a reap pass is currently investigating or killing. A kill
+// takes seconds in the worst case (SIGTERM, grace, SIGKILL), and even
+// just the git enumeration can overlap the next watcher event, so a
+// candidate is marked here for the whole pass, not only once it's
+// confirmed removed -- otherwise two overlapping passes could both
+// conclude "removed" and reap-and-report the same worktree twice.
+// Always cleared in a finally, so an entry can never outlive the pass
+// that guards it.
 const reaping = new Set<string>();
 
 // Killing a dev server the user is still using is worse than leaving a
@@ -91,26 +94,39 @@ export async function reapScriptsForRemovedWorktrees(): Promise<
   );
   if (candidates.length === 0) return [];
 
-  const projects = loadProjects();
-  const perProject = await Promise.all(
-    Array.from(groupByProject(candidates), ([projectId, group]) => {
-      const project = projects.find((p) => p.id === projectId);
-      // The project itself was unregistered. projects.remove reaps its
-      // scripts on that path, and with no repo to ask there is nothing
-      // to conclude here.
-      return project ? findRemovedWorktrees(project, group) : [];
-    }),
-  );
-  const removed = perProject.flat();
-  if (removed.length === 0) return [];
-
-  for (const worktree of removed) reaping.add(worktree.worktreeId);
+  // Guard the whole pass, not just the confirmed-removed subset: the
+  // git enumeration below is itself async, so an overlapping watcher
+  // event must not be free to investigate the same candidates again
+  // while this pass is still deciding.
+  for (const worktree of candidates) reaping.add(worktree.worktreeId);
   try {
+    const projects = loadProjects();
+    const perProject = await Promise.all(
+      Array.from(groupByProject(candidates), ([projectId, group]) => {
+        const project = projects.find((p) => p.id === projectId);
+        // The project itself was unregistered. projects.remove reaps its
+        // scripts on that path, and with no repo to ask there is nothing
+        // to conclude here.
+        return project ? findRemovedWorktrees(project, group) : [];
+      }),
+    );
+    const removed = perProject.flat();
+    const removedIds = new Set(removed.map((worktree) => worktree.worktreeId));
+    // Candidates that turned out to still exist are done being
+    // investigated; release them now so a later, genuine removal isn't
+    // blocked behind this pass's guard.
+    for (const worktree of candidates) {
+      if (!removedIds.has(worktree.worktreeId)) {
+        reaping.delete(worktree.worktreeId);
+      }
+    }
+    if (removed.length === 0) return [];
+
     await Promise.all(
       removed.map((worktree) => killScriptsForWorktree(worktree.worktreeId)),
     );
+    return removed;
   } finally {
-    for (const worktree of removed) reaping.delete(worktree.worktreeId);
+    for (const worktree of candidates) reaping.delete(worktree.worktreeId);
   }
-  return removed;
 }
