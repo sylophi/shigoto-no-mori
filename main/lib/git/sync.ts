@@ -43,17 +43,19 @@ export async function publishCurrentBranch(
 // Try rebase first for linear history; on a per-commit conflict abort
 // and fall back to a whole-tree merge. Both abort paths swallow the
 // abort failure so the worktree isn't left half-rebased or half-merged
-// when the action propagates an error.
+// when the action propagates an error. `--end-of-options` keeps the ref
+// out of the flag slot. Neither command accepts a trailing `--`, which
+// they would read as a second revision argument.
 async function rebaseOrMergeAgainst(
   worktreePath: string,
   ref: string,
 ): Promise<void> {
   try {
-    await run(worktreePath, ["rebase", ref]);
+    await run(worktreePath, ["rebase", "--end-of-options", ref]);
   } catch {
     await runLenient(worktreePath, ["rebase", "--abort"]);
     try {
-      await run(worktreePath, ["merge", ref]);
+      await run(worktreePath, ["merge", "--end-of-options", ref]);
     } catch (err) {
       await runLenient(worktreePath, ["merge", "--abort"]);
       throw err;

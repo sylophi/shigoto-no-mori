@@ -40,5 +40,16 @@ export async function getCommitDiff(
   worktreePath: string,
   hash: string,
 ): Promise<string> {
-  return runLenient(worktreePath, ["show", "--format=", "--no-color", hash]);
+  // `--end-of-options` is what actually pins `hash` to the revision slot.
+  // A trailing `--` only bounds the pathspec list, so on its own it would
+  // still let a hash like `--output=FILE` be parsed as a flag and hand a
+  // malicious repo an arbitrary file write.
+  return runLenient(worktreePath, [
+    "show",
+    "--format=",
+    "--no-color",
+    "--end-of-options",
+    hash,
+    "--",
+  ]);
 }

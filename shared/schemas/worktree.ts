@@ -6,8 +6,22 @@ import {
 } from "./payloads";
 import { GitRefNameSchema, isRealBranch } from "./project";
 
+// Abbreviated commit hashes are produced by `git log %h` and travel back
+// down into git argv (`git show <hash>`). Pinning them to hex is what
+// stops a value like "--output=/tmp/x" from ever reaching a flag
+// position, and it also drops rows a crafted commit subject forged into
+// the log output.
+const COMMIT_HASH_RE = /^[0-9a-f]{4,40}$/;
+
+export const isCommitHash = (value: string): boolean =>
+  COMMIT_HASH_RE.test(value);
+
+export const CommitHashSchema = z
+  .string()
+  .regex(COMMIT_HASH_RE, { message: "Invalid commit hash" });
+
 export const CommitSummarySchema = z.object({
-  hash: z.string(),
+  hash: CommitHashSchema,
   subject: z.string(),
   author: z.string(),
   date: z.string(),
@@ -220,7 +234,7 @@ export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
 });
 
 export const CommitDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  hash: z.string().min(1),
+  hash: CommitHashSchema,
 });
 
 export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({

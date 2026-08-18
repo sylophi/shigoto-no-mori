@@ -4,6 +4,7 @@ import { basename, dirname } from "node:path";
 import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
+  isCommitHash,
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
@@ -116,15 +117,28 @@ const LOG_SENTINEL = "\x01";
 const LOG_FORMAT = `${LOG_SENTINEL}%h%x09%an%x09%aI%x09%s`;
 
 function parseLog(stdout: string): CommitSummary[] {
+  // A record only opens at a sentinel that starts a line. Git emits a raw
+  // SOH from `%s`, but it folds a subject's newlines into spaces, so a
+  // subject carrying one stays inside its own header line rather than
+  // opening a record of its own. Anything else on a line belongs to the
+  // open record's `--shortstat` tail.
+  const records: { header: string; stats: string }[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.startsWith(LOG_SENTINEL)) {
+      records.push({ header: line.slice(LOG_SENTINEL.length), stats: "" });
+      continue;
+    }
+    const open = records.at(-1);
+    if (open) open.stats += line;
+  }
   const commits: CommitSummary[] = [];
-  for (const chunk of stdout.split(LOG_SENTINEL)) {
-    if (!chunk) continue;
-    // react-doctor-disable-next-line react-doctor/js-set-map-lookups -- string.indexOf for a single newline, not an array membership test
-    const newlineAt = chunk.indexOf("\n");
-    const header = newlineAt === -1 ? chunk : chunk.slice(0, newlineAt);
-    const stats = newlineAt === -1 ? "" : chunk.slice(newlineAt + 1);
+  for (const { header, stats } of records) {
     const [hash, author, date, ...subjectParts] = header.split("\t");
-    if (!hash) continue;
+    // Belt and braces on top of the line-anchored split: a record whose
+    // first field isn't an abbreviated sha isn't a commit, so drop it
+    // instead of letting it reach the renderer (and, from there, git
+    // argv) as an attacker-chosen string.
+    if (!hash || !isCommitHash(hash)) continue;
     const insMatch = /(\d+) insertions?\(\+\)/.exec(stats);
     const delMatch = /(\d+) deletions?\(-\)/.exec(stats);
     commits.push({
