@@ -10,12 +10,19 @@ const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/pr-diff");
 export function PullRequestDiff() {
   const { projectId, worktreeId } = route.useParams();
   const navigate = useNavigate();
-  const { data: worktrees = [] } = useWorktrees(projectId);
+  const {
+    data: worktrees = [],
+    isPending: worktreesPending,
+    isError: worktreesError,
+    refetch: refetchWorktrees,
+  } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
-  const { data: pr } = useWorktreePullRequest(
-    projectId,
-    worktree?.branch ?? "",
-  );
+  const {
+    data: pr,
+    isPending: prPending,
+    isError: prError,
+    refetch: refetchPullRequest,
+  } = useWorktreePullRequest(projectId, worktree?.branch ?? "");
 
   const goBack = () =>
     void navigate({
@@ -30,9 +37,35 @@ export function PullRequestDiff() {
   } = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
+    // Cold cache (e.g. a reload landing directly on this route): the
+    // list hasn't resolved yet, so absence doesn't mean missing.
+    if (worktreesPending) return null;
+    // The list query is silent on error, so without this branch a
+    // failed listing reads as a deleted worktree.
+    if (worktreesError) {
+      return (
+        <DiffNotFound
+          onBack={goBack}
+          message="Couldn't load worktrees."
+          action={{ label: "Retry", onClick: () => void refetchWorktrees() }}
+        />
+      );
+    }
     return <DiffNotFound onBack={goBack} message="Worktree not found." />;
   }
   if (!pr) {
+    // Same story for the PR lookup: pending or failed both leave `pr`
+    // undefined, and neither means the branch has no pull request.
+    if (prPending) return null;
+    if (prError) {
+      return (
+        <DiffNotFound
+          onBack={goBack}
+          message="Couldn't load the pull request."
+          action={{ label: "Retry", onClick: () => void refetchPullRequest() }}
+        />
+      );
+    }
     return (
       <DiffNotFound
         onBack={goBack}
