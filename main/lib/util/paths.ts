@@ -84,6 +84,7 @@ function looksLikeRootTarget(target: string): boolean {
   }
   return (
     entries.length === 0 ||
+    entries.includes("registry.json") ||
     entries.includes("state.json") ||
     entries.includes("config.json")
   );

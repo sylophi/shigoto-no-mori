@@ -174,8 +174,8 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     let firstAddedId: string | null = null;
     for (const path of toAdd) {
       try {
-        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the state.json write
-        const project = await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the state.json write
+        // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the registry.json write
+        const project = await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry.json write
         firstAddedId ??= project.id;
       } catch {
         // Skip individual failures; user can retry by re-scanning.

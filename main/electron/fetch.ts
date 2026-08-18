@@ -69,7 +69,7 @@ async function sweepProjectPullRequests(
 
 // Both sweeps below run from callbacks with nobody to catch for them (a
 // timer, the window-focus handler), and loadProjects throws when
-// state.json is unreadable. Skip the round rather than throw out of a
+// registry.json is unreadable. Skip the round rather than throw out of a
 // callback: refs going stale is the mild half of that problem, and the
 // UI's own reads of the same file report it.
 function projectsToSweep(): Project[] {

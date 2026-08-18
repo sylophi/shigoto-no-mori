@@ -257,5 +257,6 @@ func bumpPackageScriptUse(projectID, script string) {
 	})
 	if err != nil {
 		vlog("[run] use log bump failed: %v", err)
+		noteStateTrouble(err)
 	}
 }

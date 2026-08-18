@@ -1,6 +1,7 @@
 // Per-user global config at ~/shigomori[-dev]/config.json. Holds preferences
 // that span every project (custom launchers, theme, …) and is kept separate
-// from state.json (runtime data) and from the per-project configs at
+// from registry.json (projects, shelf), state.json (use logs, sort and
+// collapse preferences) and the per-project configs at
 // ~/shigomori[-dev]/projects/<projectId>.json.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

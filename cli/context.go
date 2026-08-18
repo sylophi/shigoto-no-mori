@@ -52,7 +52,7 @@ func locateRepo(dir string) (toplevel, primaryPath string, err error) {
 }
 
 // Takes the already-loaded project list: the entrypoint reads
-// state.json once and fails there if it can't.
+// registry.json once and fails there if it can't.
 func resolveContext(cwd string, projects []project) cliContext {
 	ctx := cliContext{projects: projects}
 

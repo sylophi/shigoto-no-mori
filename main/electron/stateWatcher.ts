@@ -96,8 +96,9 @@ export function startStateWatcher(poke: () => void): void {
       // anything writes, so nothing to observe yet is fine.
     }
   };
-  // state.json + config.json live at the root; per-project config and
-  // worktree data under projects/. worktrees/ needs its own recursive
+  // registry.json, state.json and config.json live at the root, with
+  // per-project config and worktree data under projects/. worktrees/
+  // needs its own recursive
   // watch: an external `sm create` writes no state file at all -- the
   // only observable change is the new checkout directory two levels
   // down (worktrees/<project>/<name>), which a non-recursive root

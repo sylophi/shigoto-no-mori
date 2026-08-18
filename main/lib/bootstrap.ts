@@ -22,6 +22,12 @@ async function ensureFile(path: string, contents: string): Promise<void> {
   }
 }
 
+// registry.json is deliberately not seeded here. Its existence is what
+// tells the store that the registry has already been moved out of
+// state.json (config/store.ts), so conjuring an empty one would let a
+// root whose state.json has gone unreadable read back as "no projects"
+// instead of failing. It appears on the first registry write, or on the
+// split, whichever comes first.
 export async function ensureShigomoriRoot(): Promise<void> {
   const root = shigomoriRoot();
   await mkdir(join(root, "projects"), { recursive: true });

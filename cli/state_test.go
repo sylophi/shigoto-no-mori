@@ -11,8 +11,10 @@ package main
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -145,6 +147,17 @@ func seedState(t *testing.T, content string) {
 	}
 }
 
+func seedRegistry(t *testing.T, content string) {
+	t.Helper()
+	if err := os.WriteFile(registryPath(), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func shelveViaRegistry() error {
+	return setShelved("w1", true)
+}
+
 // The write every click makes: a use-log bump, the one that turned a
 // failed read into a one-key state.json.
 func bumpUseLog() error {
@@ -198,6 +211,9 @@ func TestUpdateStateKeyRefusesUnreadableState(t *testing.T) {
 	if _, err := loadProjects(); err == nil {
 		t.Error("loadProjects on unreadable state.json succeeded, want error")
 	}
+	if _, err := os.Stat(registryPath()); err == nil {
+		t.Error("failed split still created registry.json")
+	}
 	if err := bumpUseLog(); err == nil {
 		t.Error("write against unreadable state.json succeeded, want error")
 	}
@@ -231,15 +247,16 @@ func TestStateWriteStampsSchemaVersion(t *testing.T) {
 // file, so it says so.
 func TestStateReadToleratesOtherSchemaVersions(t *testing.T) {
 	sandboxConfigRoot(t)
-	registry := `"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}]`
-	seedState(t, "{"+registry+"}")
+	list := `"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}]`
+	seedRegistry(t, "{"+list+"}")
 	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
-		t.Errorf("read of unmarked state.json = %v, %v, want the project", projects, err)
+		t.Errorf("read of unmarked registry.json = %v, %v, want the project", projects, err)
 	}
-	seedState(t, `{"schemaVersion":99,`+registry+"}")
+	seedRegistry(t, `{"schemaVersion":99,`+list+"}")
 	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
-		t.Errorf("read of newer state.json = %v, %v, want the project", projects, err)
+		t.Errorf("read of newer registry.json = %v, %v, want the project", projects, err)
 	}
+	seedState(t, `{"schemaVersion":99,"projectUseLog":{"p1":[1]}}`)
 	if err := bumpUseLog(); err != nil {
 		t.Fatalf("write against newer state.json: %v", err)
 	}
@@ -250,7 +267,329 @@ func TestStateReadToleratesOtherSchemaVersions(t *testing.T) {
 	if got := string(all["schemaVersion"]); got != "1" {
 		t.Errorf("schemaVersion after write = %q, want this build's 1", got)
 	}
-	if len(all["projects"]) == 0 {
-		t.Error("write against newer state.json dropped the project registry")
+	if err := shelveViaRegistry(); err != nil {
+		t.Fatalf("write against newer registry.json: %v", err)
+	}
+	registry, err := readRegistryFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(registry["schemaVersion"]); got != "1" {
+		t.Errorf("registry schemaVersion after write = %q, want this build's 1", got)
+	}
+	if len(registry[projectsKey]) == 0 {
+		t.Error("write against newer registry.json dropped the project registry")
+	}
+}
+
+// --- the registry split ---
+
+// Every key an old-format root could hold, so the split has something
+// to lose on both sides of the line.
+const oldFormatState = `{
+  "projects": [{"id": "p1", "name": "alpha", "path": "/tmp/alpha"}],
+  "shelvedWorktrees": {"w1": true},
+  "projectUseLog": {"p1": [1]},
+  "packageScriptUseLog": {"p1": {"dev": [2]}},
+  "launcherUseLog": {"vscode": [3]},
+  "projectsCollapsed": ["p1"],
+  "projectsSort": "recent",
+  "packageScriptSort": {"p1": "alpha"},
+  "someKeyNobodyModels": 7
+}`
+
+func readFile(t *testing.T, path string) map[string]json.RawMessage {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("decode %s: %v", path, err)
+	}
+	return doc
+}
+
+// The registry lands in registry.json, the telemetry and the UI
+// preferences stay in state.json, and no key goes missing on the way.
+func TestRegistrySplitMovesOnlyTheRegistry(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedState(t, oldFormatState)
+
+	projects, err := loadProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 || projects[0].ID != "p1" {
+		t.Fatalf("projects after split = %v, want the seeded one", projects)
+	}
+	if shelved := readShelvedSet(); !shelved["w1"] {
+		t.Errorf("shelf after split = %v, want w1", shelved)
+	}
+
+	registry := readFile(t, registryPath())
+	for _, key := range registryKeys {
+		if len(registry[key]) == 0 {
+			t.Errorf("registry.json missing %s", key)
+		}
+	}
+	if got := string(registry["schemaVersion"]); got != "1" {
+		t.Errorf("registry.json schemaVersion = %q, want 1", got)
+	}
+	if len(registry) != len(registryKeys)+1 {
+		t.Errorf("registry.json picked up extra keys: %v", registry)
+	}
+
+	state := readFile(t, statePath())
+	for _, key := range registryKeys {
+		if _, ok := state[key]; ok {
+			t.Errorf("state.json still holds %s", key)
+		}
+	}
+	for _, key := range []string{
+		"projectUseLog", "packageScriptUseLog", "launcherUseLog",
+		"projectsCollapsed", "projectsSort", "packageScriptSort",
+		"someKeyNobodyModels",
+	} {
+		if len(state[key]) == 0 {
+			t.Errorf("split dropped %s from state.json", key)
+		}
+	}
+}
+
+// Running it again must rewrite nothing: the second pass has no keys
+// left to move, so both files keep the bytes the first pass left.
+func TestRegistrySplitIsIdempotent(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedState(t, oldFormatState)
+	if _, err := loadProjects(); err != nil {
+		t.Fatal(err)
+	}
+	firstState, err := os.ReadFile(statePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstRegistry, err := os.ReadFile(registryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A second process against the already-split root.
+	registrySplitDone = false
+	projects, err := loadProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 1 {
+		t.Errorf("projects on the second pass = %v, want the one", projects)
+	}
+	if raw, _ := os.ReadFile(statePath()); string(raw) != string(firstState) {
+		t.Errorf("second pass rewrote state.json to %q", raw)
+	}
+	if raw, _ := os.ReadFile(registryPath()); string(raw) != string(firstRegistry) {
+		t.Errorf("second pass rewrote registry.json to %q", raw)
+	}
+}
+
+// A crash between the two writes leaves registry.json written and
+// state.json still carrying the old copy. The next pass reads the live
+// copy and leaves the stale one where it lies: registry.json exists,
+// so nothing consults those keys in state.json again, and re-reading
+// state.json on every run to strip them would cost every command a
+// file read forever.
+func TestRegistrySplitPrefersRegistryAfterCrash(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedState(t, oldFormatState)
+	// What the crashed run had already written, plus the project the
+	// user added and the worktree the user shelved afterwards through
+	// the file that now holds the truth.
+	seedRegistry(t, `{"projects":[`+
+		`{"id":"p1","name":"alpha","path":"/tmp/alpha"},`+
+		`{"id":"p2","name":"beta","path":"/tmp/beta"}],`+
+		`"shelvedWorktrees":{"w2":true},"schemaVersion":1}`)
+
+	projects, err := loadProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projects) != 2 {
+		t.Errorf("projects = %v, want registry.json's two", projects)
+	}
+	if shelved := readShelvedSet(); !shelved["w2"] || len(shelved) != 1 {
+		t.Errorf("shelf = %v, want registry.json's w2 alone", shelved)
+	}
+	if raw, _ := os.ReadFile(statePath()); string(raw) != oldFormatState {
+		t.Errorf("second pass rewrote state.json to %q", raw)
+	}
+}
+
+// Half a split is still recoverable, so the unreadable half must not be
+// papered over: with no registry.json yet, the project list is unknown
+// and answering with an empty one is the failure this refuses.
+func TestRegistrySplitRefusesUnreadableState(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads through mode 0000")
+	}
+	sandboxConfigRoot(t)
+	seedState(t, oldFormatState)
+	if err := os.Chmod(statePath(), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(statePath(), 0o644) })
+	if _, err := loadProjects(); err == nil {
+		t.Error("loadProjects against an unreadable unsplit root succeeded, want error")
+	}
+
+	// Once registry.json exists the registry is knowable again, and
+	// state.json's trouble stays state.json's.
+	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}]}`)
+	registrySplitDone = false
+	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
+		t.Errorf("loadProjects from registry.json = %v, %v, want the project", projects, err)
+	}
+}
+
+// The point of the split: a use-log bump, which fires on nearly every
+// click, must leave the registry file untouched.
+func TestUseLogWriteLeavesRegistryAlone(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedState(t, oldFormatState)
+	if _, err := loadProjects(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(registryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeInfo, err := os.Stat(registryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := bumpUseLog(); err != nil {
+		t.Fatal(err)
+	}
+	afterInfo, err := os.Stat(registryPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw, _ := os.ReadFile(registryPath()); string(raw) != string(before) {
+		t.Errorf("use-log bump rewrote registry.json to %q", raw)
+	}
+	if !afterInfo.ModTime().Equal(beforeInfo.ModTime()) {
+		t.Error("use-log bump touched registry.json")
+	}
+}
+
+// A fresh root has no state.json to drain, and the first registry write
+// creates registry.json rather than resurrecting the old shape.
+func TestRegistrySplitOnFreshRoot(t *testing.T) {
+	sandboxConfigRoot(t)
+	if projects, err := loadProjects(); err != nil || len(projects) != 0 {
+		t.Errorf("fresh root = %v, %v, want empty", projects, err)
+	}
+	if _, err := os.Stat(registryPath()); err == nil {
+		t.Error("a read on a fresh root created registry.json")
+	}
+	if err := setShelved("w1", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(readFile(t, registryPath())[shelvedKey]) == 0 {
+		t.Error("shelve did not land in registry.json")
+	}
+	if _, err := os.Stat(statePath()); err == nil {
+		t.Error("a registry write created state.json")
+	}
+}
+
+// --- a broken state.json is loud without being fatal ---
+
+// note/vlog write to os.Stderr through the package variable, so
+// swapping it is enough to read back what a command would have shown.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = saved
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	printed, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return string(printed)
+}
+
+// Nothing reads state.json before a command dispatches any more, so
+// the hint reads and the use-log writes are the only places left that
+// can notice it is broken. They carry on, and they say so once.
+func TestBrokenStateWarnsOnceAndKeepsWorking(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],`+
+		`"shelvedWorktrees":{"w1":true},"schemaVersion":1}`)
+	broken := `{"launcherUseLog": {"app:finder": [1`
+	seedState(t, broken)
+
+	var projects []project
+	var shelved map[string]bool
+	var hints map[string]json.RawMessage
+	var writeErr error
+	printed := captureStderr(t, func() {
+		var err error
+		if projects, err = loadProjects(); err != nil {
+			t.Errorf("loadProjects with an intact registry.json: %v", err)
+		}
+		shelved = readShelvedSet()
+		hints = readStateHints()
+		readStateHints()
+		writeErr = bumpUseLog()
+	})
+
+	if len(projects) != 1 || !shelved["w1"] {
+		t.Errorf("registry.json reads = %v, %v, want the project and the shelf", projects, shelved)
+	}
+	if len(hints) != 0 {
+		t.Errorf("hints from a broken state.json = %v, want empty", hints)
+	}
+	if writeErr == nil {
+		t.Error("write against a broken state.json succeeded, want the refusal")
+	}
+	if got := strings.Count(printed, "warning:"); got != 1 {
+		t.Errorf("warnings printed = %d, want exactly 1:\n%s", got, printed)
+	}
+	if !strings.Contains(printed, statePath()) {
+		t.Errorf("warning does not name state.json:\n%s", printed)
+	}
+	if raw, err := os.ReadFile(statePath()); err != nil || string(raw) != broken {
+		t.Errorf("broken state.json was rewritten to %q", raw)
+	}
+}
+
+// The same paths on a healthy root say nothing at all.
+func TestHealthyRootPrintsNoWarning(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],"schemaVersion":1}`)
+	seedState(t, `{"launcherUseLog":{"app:finder":[1]},"schemaVersion":1}`)
+	printed := captureStderr(t, func() {
+		if _, err := loadProjects(); err != nil {
+			t.Error(err)
+		}
+		readShelvedSet()
+		readStateHints()
+		if err := bumpUseLog(); err != nil {
+			t.Error(err)
+		}
+	})
+	if printed != "" {
+		t.Errorf("healthy root printed:\n%s", printed)
 	}
 }

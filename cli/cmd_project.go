@@ -3,7 +3,7 @@ package main
 // sm projects <list|add|remove|config> -- manage registered projects
 // without the app. `add` ports the app's projects:add handler
 // (main/ipc/modules/projects.ts): git-repo check, duplicate-path
-// check, uuid + basename identity, locked state append, then a
+// check, uuid + basename identity, locked registry append, then a
 // best-effort project.json seed (defaultBranch, plus a `<pm> install`
 // setup script when the global autoPopulateInstall toggle is on).
 // `config` rewrites only the fields it's given, preserving everything
@@ -89,7 +89,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	err = updateStateKey("projects", func(raw json.RawMessage) (any, error) {
+	err = updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
 		if raw != nil {
 			_ = json.Unmarshal(raw, &projects)
@@ -196,7 +196,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 // directory can't both land.
 func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
-	err := updateStateKey("projects", func(raw json.RawMessage) (any, error) {
+	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
 		if raw != nil {
 			_ = json.Unmarshal(raw, &projects)

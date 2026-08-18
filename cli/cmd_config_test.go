@@ -19,6 +19,10 @@ func sandboxConfigRoot(t *testing.T) string {
 	saved := cachedRoot
 	cachedRoot = ""
 	t.Cleanup(func() { cachedRoot = saved })
+	// Per-root memo: a fresh sandbox has to look unsplit again, or a
+	// test that seeds an old-format state.json would silently skip it.
+	registrySplitDone = false
+	t.Cleanup(func() { registrySplitDone = false })
 	initRoot()
 	return root
 }

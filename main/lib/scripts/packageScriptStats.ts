@@ -7,7 +7,7 @@ import type {
   PackageScriptSortMode,
   PackageScriptUsage,
 } from "@shared/schemas";
-import { readKey, writeKey } from "../config/store";
+import { stateStore } from "../config/store";
 import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
@@ -22,7 +22,7 @@ type SortMap = Record<string, PackageScriptSortMode>;
 const IMPLICIT_MODE: PackageScriptSortMode = "frequent";
 
 export function readScriptSort(projectId: string): PackageScriptSortMode {
-  const map = readKey<SortMap>(SORT_KEY, {});
+  const map = stateStore.readHint<SortMap>(SORT_KEY, {});
   return map[projectId] ?? IMPLICIT_MODE;
 }
 
@@ -30,7 +30,10 @@ export function writeScriptSort(
   projectId: string,
   mode: PackageScriptSortMode,
 ): void {
-  const map = readKey<SortMap>(SORT_KEY, {});
+  // readKey rather than readHint even though readScriptSort above
+  // hints: this read feeds the write below, so a fallback to {} would
+  // offer up every other repo's sort to be overwritten.
+  const map = stateStore.readKey<SortMap>(SORT_KEY, {});
   if (
     map[projectId] === mode ||
     (mode === IMPLICIT_MODE && !(projectId in map))
@@ -42,14 +45,15 @@ export function writeScriptSort(
   } else {
     map[projectId] = mode;
   }
-  writeKey<SortMap>(SORT_KEY, map);
+  stateStore.writeKey<SortMap>(SORT_KEY, map);
 }
 
 export function usageFor(
   projectId: string,
   scriptNames: string[],
 ): Record<string, PackageScriptUsage> {
-  const projectLog = readKey<UseLog>(USE_LOG_KEY, {})[projectId] ?? {};
+  const projectLog =
+    stateStore.readHint<UseLog>(USE_LOG_KEY, {})[projectId] ?? {};
   const now = Date.now();
   const out: Record<string, PackageScriptUsage> = {};
   for (const name of scriptNames) {
@@ -66,12 +70,12 @@ export function bumpScriptUseCount(
   projectId: string,
   scriptName: string,
 ): void {
-  const log = readKey<UseLog>(USE_LOG_KEY, {});
+  const log = stateStore.readKey<UseLog>(USE_LOG_KEY, {});
   const projectLog = log[projectId] ?? {};
   projectLog[scriptName] = pruneAndPush(
     projectLog[scriptName] ?? [],
     Date.now(),
   );
   log[projectId] = projectLog;
-  writeKey<UseLog>(USE_LOG_KEY, log);
+  stateStore.writeKey<UseLog>(USE_LOG_KEY, log);
 }

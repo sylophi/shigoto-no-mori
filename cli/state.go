@@ -3,15 +3,16 @@ package main
 // On-disk state access, ported from main/lib/config/{store,global,
 // project}.ts and main/lib/util/{jsonFile,lockFile}.ts. Layout under
 // the root:
-//   state.json                              runtime data (projects, shelved)
+//   registry.json                           projects, shelved worktrees
+//   state.json                              use logs, sort/collapse prefs
 //   config.json                             global prefs
 //   projects/<projectId>/project.json       per-project config
 //   projects/<projectId>/worktrees/<id>.json  per-worktree data
 //   updater.json / updater-request.json     `sm update` bridge (cmd_update.go)
 //   updates/                                staged app updates (updater.go)
-// Writes are atomic tmp+rename; the state.json read-modify-write holds
-// the same `<file>.lock` advisory lock the app takes, so the two
-// processes can't clobber each other.
+// Writes are atomic tmp+rename; each read-modify-write holds the same
+// `<file>.lock` advisory lock the app takes, so the two processes can't
+// clobber each other.
 
 import (
 	"encoding/json"
@@ -85,7 +86,8 @@ func looksLikeRootTarget(target string) bool {
 		return true
 	}
 	for _, entry := range entries {
-		if entry.Name() == "state.json" || entry.Name() == "config.json" {
+		if entry.Name() == "registry.json" || entry.Name() == "state.json" ||
+			entry.Name() == "config.json" {
 			return true
 		}
 	}
@@ -196,17 +198,27 @@ func noteNewerSchema(path string, raw []byte) {
 		path, doc.SchemaVersion, schemaVersion)))
 }
 
+// The registry's two keys. The app names the same two in
+// main/lib/config/store.ts.
+const (
+	projectsKey = "projects"
+	shelvedKey  = "shelvedWorktrees"
+)
+
+var registryKeys = []string{projectsKey, shelvedKey}
+
 func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }
 
-// Only a genuinely absent file reads as empty. updateStateKey rewrites
+func registryPath() string { return filepath.Join(shigomoriRoot(), "registry.json") }
+
+// Only a genuinely absent file reads as empty. updateFileKey rewrites
 // the whole file from what this returns, so a permission error, an IO
 // error or a cloud file that hasn't been materialized read as {} would
-// replace the project registry, the shelf and every use log with the
+// replace the project registry, the shelf or every use log with the
 // one key being written. Malformed content is refused for the same
 // reason: it is the case where a blind rewrite destroys something the
 // user could still repair. Mirrors readAll in the app's store.ts.
-func readStateFile() (map[string]json.RawMessage, error) {
-	path := statePath()
+func readJSONObject(path string) (map[string]json.RawMessage, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -225,27 +237,91 @@ func readStateFile() (map[string]json.RawMessage, error) {
 	return all, nil
 }
 
-// Read of the display-only hints (shelf flags, launcher use counts).
-// Every command loads the projects list from this same file before it
-// dispatches, so a failure this late means the file went unreadable
-// mid-command: drop the hint rather than abort work that is otherwise
-// fine. No writer goes through here -- updateStateKey refuses instead.
+// The write side of readJSONObject, and the only place the schema
+// marker is stamped on these two documents. The map's values are
+// already-encoded JSON, so the marker goes in encoded too.
+func writeJSONObject(path string, doc map[string]json.RawMessage) error {
+	doc["schemaVersion"] = schemaVersionRaw
+	return atomicWriteJSON(path, doc)
+}
+
+func readStateFile() (map[string]json.RawMessage, error) {
+	return readJSONObject(statePath())
+}
+
+// Drains an old-format root before the first read, so no caller has to
+// know the split happened.
+func readRegistryFile() (map[string]json.RawMessage, error) {
+	if err := ensureRegistrySplit(); err != nil {
+		return nil, err
+	}
+	return readJSONObject(registryPath())
+}
+
+// A file this build could not read, said once per process. Nothing
+// else reads state.json before a command dispatches (the pre-dispatch
+// load reads registry.json), so without this a truncated state.json
+// would refuse every use-log write for as long as it stays broken and
+// never say a word about it. The hint readers and the use-log writers
+// hit the same file several times per command, hence the dedupe: one
+// warning points at the cause, ten bury the output it came with.
+// Shaped like noteNewerSchema above, which dedupes the same way.
+var notedFileTrouble = map[string]bool{}
+
+func noteFileTrouble(path, degraded string, err error) {
+	if notedFileTrouble[path] {
+		return
+	}
+	notedFileTrouble[path] = true
+	note(yellowErr("warning:") + " " + err.Error())
+	note(dimErr(degraded))
+}
+
+// state.json holds use counts and view preferences, so a command whose
+// real work lives elsewhere still runs. updateFileKey refuses the
+// write, which is #161's guarantee and stays.
+func noteStateTrouble(err error) {
+	noteFileTrouble(statePath(),
+		"Use counts and view preferences are unavailable, and new uses aren't recorded, until the file is fixed.",
+		err)
+}
+
+func noteRegistryTrouble(err error) {
+	noteFileTrouble(registryPath(),
+		"Shelved worktrees are listed as unshelved until the file is fixed.",
+		err)
+}
+
+// Reads of the display-only hints: use counts and view preferences in
+// state.json, shelf flags in registry.json. Losing one costs a sort
+// order or a badge, so the command carries on with an empty document
+// rather than aborting work that is otherwise fine. No writer goes
+// through here. updateFileKey refuses on a bad read instead.
 func readStateHints() map[string]json.RawMessage {
 	all, err := readStateFile()
 	if err != nil {
-		vlog("[state] %v", err)
+		noteStateTrouble(err)
+		return map[string]json.RawMessage{}
+	}
+	return all
+}
+
+func readRegistryHints() map[string]json.RawMessage {
+	all, err := readRegistryFile()
+	if err != nil {
+		noteRegistryTrouble(err)
 		return map[string]json.RawMessage{}
 	}
 	return all
 }
 
 func loadProjects() ([]project, error) {
-	all, err := readStateFile()
+	all, err := readRegistryFile()
 	if err != nil {
 		return nil, err
 	}
 	var projects []project
-	if raw, ok := all["projects"]; ok {
+	if raw, ok := all[projectsKey]; ok {
 		_ = json.Unmarshal(raw, &projects)
 	}
 	return projects, nil
@@ -253,7 +329,7 @@ func loadProjects() ([]project, error) {
 
 func readShelvedSet() map[string]bool {
 	shelved := map[string]bool{}
-	if raw, ok := readStateHints()["shelvedWorktrees"]; ok {
+	if raw, ok := readRegistryHints()[shelvedKey]; ok {
 		var m map[string]bool
 		if json.Unmarshal(raw, &m) == nil {
 			for id, v := range m {
@@ -266,14 +342,14 @@ func readShelvedSet() map[string]bool {
 	return shelved
 }
 
-// updateStateKey mirrors store.ts updateKey: read-modify-write of one
-// state.json key with the read under the cross-process lock, so a
-// concurrent app write can't be clobbered. fn receives the key's raw
-// current value (nil when absent) and returns the value to store;
-// returning nil skips the write (no-op detected under the lock).
-func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error {
-	return withStateLock(func() error {
-		all, err := readStateFile()
+// updateFileKey mirrors store.ts updateKey: read-modify-write of one
+// key with the read under the cross-process lock, so a concurrent app
+// write can't be clobbered. fn receives the key's raw current value
+// (nil when absent) and returns the value to store; returning nil skips
+// the write (no-op detected under the lock).
+func updateFileKey(path, key string, fn func(raw json.RawMessage) (any, error)) error {
+	return withFileLock(path, func() error {
+		all, err := readJSONObject(path)
 		if err != nil {
 			return err
 		}
@@ -289,16 +365,135 @@ func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error
 			return err
 		}
 		all[key] = encoded
-		// stampSchemaVersion's state.json flavor: this map's values are
-		// already encoded, so the marker goes in encoded too.
-		all["schemaVersion"] = schemaVersionRaw
-		return atomicWriteJSON(statePath(), all)
+		return writeJSONObject(path, all)
 	})
+}
+
+func updateStateKey(key string, fn func(raw json.RawMessage) (any, error)) error {
+	return updateFileKey(statePath(), key, fn)
+}
+
+func updateRegistryKey(key string, fn func(raw json.RawMessage) (any, error)) error {
+	if err := ensureRegistrySplit(); err != nil {
+		return err
+	}
+	return updateFileKey(registryPath(), key, fn)
+}
+
+// --- one-time move of the registry keys out of state.json ---
+//
+// Roots written by an earlier build keep the project list and the shelf
+// in state.json. The first registry access in each process drains them
+// into registry.json. Mirrors ensureRegistrySplit in the app's
+// store.ts, which has to agree with this down to the file name and the
+// key names.
+//
+// The write order is the whole safety argument. registry.json is
+// written first and state.json is stripped second, both atomic
+// renames, so a crash between them leaves the data in two places
+// rather than in none. A key present in registry.json always wins:
+// that file is the live copy the moment it exists.
+//
+// That is also why the check below is a stat and not a read. Once
+// registry.json is there, reads are already correct and the state.json
+// read could only ever report nothing left to move. Every command
+// loads the project list, so that read is a whole file parsed for
+// nothing on every invocation, forever. A crash in the window between
+// the two writes does leave a stale copy of the keys behind in
+// state.json, and it stays there. Nothing reads it: the registry keys
+// are only ever read from registry.json, and state.json is only ever
+// asked for the keys it owns.
+//
+// Two processes starting against the same old root are safe because
+// state.json is read again inside its lock. The loser of the race
+// finds nothing left to move and writes nothing. Both locks are taken,
+// state.json's outside registry.json's. Nothing else takes both, so
+// the order can't deadlock.
+var registrySplitDone bool
+
+func ensureRegistrySplit() error {
+	if registrySplitDone {
+		return nil
+	}
+	if _, err := os.Stat(registryPath()); err == nil {
+		registrySplitDone = true
+		return nil
+	}
+	state, err := readJSONObject(statePath())
+	if err != nil {
+		// The source is unreadable and there is no registry.json to
+		// read instead, so the registry is genuinely unknown. Answering
+		// "no projects" is the failure the strict read exists to
+		// prevent. Once registry.json does exist the stat above returns
+		// first, and state.json's trouble belongs to the use logs,
+		// which report it on their own reads.
+		return err
+	}
+	if !holdsAnyRegistryKey(state) {
+		registrySplitDone = true
+		return nil
+	}
+	if err := withFileLock(statePath(), splitLocked); err != nil {
+		return err
+	}
+	registrySplitDone = true
+	return nil
+}
+
+func holdsAnyRegistryKey(doc map[string]json.RawMessage) bool {
+	for _, key := range registryKeys {
+		if _, ok := doc[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Runs under the state.json lock.
+func splitLocked() error {
+	current, err := readJSONObject(statePath())
+	if err != nil {
+		return err
+	}
+	moving := []string{}
+	for _, key := range registryKeys {
+		if _, ok := current[key]; ok {
+			moving = append(moving, key)
+		}
+	}
+	if len(moving) == 0 {
+		return nil
+	}
+	err = withFileLock(registryPath(), func() error {
+		registry, err := readJSONObject(registryPath())
+		if err != nil {
+			return err
+		}
+		changed := false
+		for _, key := range moving {
+			if _, ok := registry[key]; ok {
+				continue
+			}
+			registry[key] = current[key]
+			changed = true
+		}
+		if !changed {
+			return nil
+		}
+		return writeJSONObject(registryPath(), registry)
+	})
+	if err != nil {
+		return err
+	}
+	for _, key := range moving {
+		delete(current, key)
+	}
+	return writeJSONObject(statePath(), current)
 }
 
 // Flips the id in the shelved map (store.ts writeKey semantics).
 func setShelved(worktreeID string, shelved bool) error {
-	return updateStateKey("shelvedWorktrees", func(raw json.RawMessage) (any, error) {
+	return updateRegistryKey(shelvedKey, func(raw json.RawMessage) (any, error) {
 		m := map[string]bool{}
 		if raw != nil {
 			_ = json.Unmarshal(raw, &m)
@@ -385,10 +580,6 @@ const (
 	lockTimeout = 5 * time.Second
 	lockRetry   = 25 * time.Millisecond
 )
-
-func withStateLock(fn func() error) error {
-	return withFileLock(statePath(), fn)
-}
 
 // Guards a read-modify-write of `path` against the app doing the same:
 // both sides take the sibling `<path>.lock` before touching the file.
