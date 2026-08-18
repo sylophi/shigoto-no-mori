@@ -18,7 +18,6 @@ export function DiffFileIndex({
   allCollapsed,
   onSelect,
   onToggleAll,
-  className,
 }: {
   files: FileDiffMetadata[];
   activeKey: string | null;
@@ -28,7 +27,6 @@ export function DiffFileIndex({
   onToggleAll: () => void;
   // Visibility only; the caller owns the "is there room for a rail"
   // question because it owns the pane.
-  className?: string;
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -43,10 +41,7 @@ export function DiffFileIndex({
   return (
     <div
       data-slot="diff-index"
-      className={cn(
-        "flex w-72 shrink-0 flex-col border-r border-border",
-        className,
-      )}
+      className="flex w-72 shrink-0 flex-col border-r border-border"
     >
       <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5">
         <Search

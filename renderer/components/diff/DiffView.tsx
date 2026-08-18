@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { ChevronDown, Loader2, PanelLeft } from "lucide-react";
+import { useElementWidth } from "@/hooks/ui/useElementWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
@@ -42,6 +43,13 @@ const DIFF_STYLE = {
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
 const INDEX_MIN_FILES = 3;
+// The rail is 288px. Below MIN the diff is left too narrow to read a
+// hunk without wrapping, so the rail isn't offered at all. Between MIN
+// and AMPLE it's offered but stays shut unless you ask for it: opening
+// by default there trades away width the diff still needs. At AMPLE the
+// diff keeps ~736px with the rail out, which fits a wide unified hunk.
+const INDEX_MIN_PANE = 672;
+const INDEX_AMPLE_PANE = 1024;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
 // would sit if you had scrolled it to the top yourself.
 const JUMP_GAP = 8;
@@ -61,11 +69,15 @@ function scrollToFile(container: HTMLElement, target: HTMLElement): void {
     JUMP_GAP;
 }
 
-function readStoredIndexOpen(): boolean {
+// Three states, not two: null means the user has never said, and the
+// pane width decides. Storing a default up-front would freeze whichever
+// width the diff happened to be opened at first.
+function readStoredIndexPref(): boolean | null {
   try {
-    return window.localStorage.getItem(INDEX_KEY) !== "0";
+    const stored = window.localStorage.getItem(INDEX_KEY);
+    return stored === null ? null : stored !== "0";
   } catch {
-    return true;
+    return null;
   }
 }
 
@@ -89,11 +101,12 @@ export function DiffView({
   emptyMessage: ReactNode;
 }) {
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
-  const [indexOpen, setIndexOpen] = useState(readStoredIndexOpen);
+  const [indexPref, setIndexPref] = useState(readStoredIndexPref);
   const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
@@ -113,13 +126,23 @@ export function DiffView({
     setCollapsedKeys(new Set());
   }
 
-  const showIndex = indexOpen && allFiles.length >= INDEX_MIN_FILES;
+  // Unmeasured (null) counts as too narrow, so the rail can't flash in
+  // and back out on the first frame of a diff opened in a narrow pane.
+  const indexAvailable =
+    allFiles.length >= INDEX_MIN_FILES &&
+    paneWidth !== null &&
+    paneWidth >= INDEX_MIN_PANE;
+  const showIndex =
+    indexAvailable && (indexPref ?? paneWidth >= INDEX_AMPLE_PANE);
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
+  // Toggles against what's on screen, not against the stored preference:
+  // in the auto state those differ, and a chip that needs two clicks to
+  // do anything the first time reads as broken.
   const toggleIndex = () => {
-    const next = !indexOpen;
-    setIndexOpen(next);
+    const next = !showIndex;
+    setIndexPref(next);
     try {
       window.localStorage.setItem(INDEX_KEY, next ? "1" : "0");
     } catch {
@@ -195,8 +218,10 @@ export function DiffView({
   return (
     // The rail is a function of how much room this pane actually has,
     // not of the window: the sidebar is user-resizable, so a viewport
-    // breakpoint would guess wrong. @container measures the pane itself.
-    <div className="@container/diff flex h-full flex-col">
+    // breakpoint would guess wrong. Measured rather than left to a
+    // container query because the chip has to know whether the rail is
+    // currently on screen to toggle the right way.
+    <div ref={paneRef} className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
         <BackButton onClick={onBack} label={backLabel} />
         <div className="flex items-start justify-between gap-6">
@@ -209,20 +234,17 @@ export function DiffView({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
-            {allFiles.length >= INDEX_MIN_FILES && (
+            {indexAvailable && (
               <ChipButton
                 onClick={toggleIndex}
-                aria-pressed={indexOpen}
+                aria-pressed={showIndex}
                 title={
-                  indexOpen
+                  showIndex
                     ? "Hide file index"
                     : "Show file index ([ and ] step through files)"
                 }
-                aria-label={indexOpen ? "Hide file index" : "Show file index"}
-                className={cn(
-                  "hidden py-1.5 @2xl/diff:inline-flex",
-                  indexOpen && "text-foreground",
-                )}
+                aria-label={showIndex ? "Hide file index" : "Show file index"}
+                className={cn("py-1.5", showIndex && "text-foreground")}
               >
                 <PanelLeft aria-hidden className="size-3.5" />
               </ChipButton>
@@ -235,7 +257,6 @@ export function DiffView({
       <div className="flex min-h-0 flex-1">
         {showIndex && (
           <DiffFileIndex
-            className="hidden @2xl/diff:flex"
             files={allFiles}
             activeKey={activeKey}
             collapsedKeys={collapsedKeys}
