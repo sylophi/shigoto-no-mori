@@ -3,34 +3,81 @@
 # dependencies = ["Pillow>=10.0"]
 # ///
 """
-Build the app icons — a deep-emerald squircle with a stylized tree,
-echoing the TreeDeciduous glyph from the welcome panel.
+Build the app icons — a squircle with a stylized tree, echoing the
+TreeDeciduous glyph from the welcome panel.
 
 Produces:
   assets/icon.png        — 1024x1024 master
+  assets/icon.svg        — vector master, same geometry
   assets/icon.iconset/   — per-size PNGs for `iconutil`
 
 Run `iconutil -c icns assets/icon.iconset -o assets/icon.icns` after.
+
+The raster and the vector are drawn from the same geometry constants
+below, so the two can't drift apart. Those coordinates are unit-relative
+(0..1), which also means the same shape works at any output size.
 """
 from __future__ import annotations
 
+import argparse
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / "assets"
-ICONSET = ASSETS / "icon.iconset"
 
 SIZE = 1024
 SS = 4  # supersample factor for crisper edges
 CORNER_RADIUS_RATIO = 0.225  # macOS Big Sur+ squircle approximation
-BG_TOP = (28, 95, 56)        # emerald-ish
-BG_BOTTOM = (14, 55, 36)     # deep forest
-LEAF = (245, 245, 244)       # warm white
-TRUNK = (245, 245, 244)
+
+# --- geometry, unit-relative -------------------------------------------------
+# Three overlapping circles form the crown; the chin ellipse fills the
+# gap where the lobes meet so the silhouette stays unbroken.
+CROWN = [
+    ((0.50, 0.32), 0.20),
+    ((0.34, 0.50), 0.21),
+    ((0.66, 0.50), 0.21),
+]
+CHIN = (0.36, 0.42, 0.64, 0.66)  # bounding box
+TRUNK_TOP = 0.62
+TRUNK_BOT = 0.84
+TRUNK_HALF_TOP = 0.045
+TRUNK_HALF_BOT = 0.06
 
 
+@dataclass(frozen=True)
+class Theme:
+    """Background is a vertical gradient; equal stops render flat."""
+
+    bg_top: tuple[int, int, int]
+    bg_bottom: tuple[int, int, int]
+    leaf: tuple[int, int, int]
+
+
+THEMES = {
+    # The original deep-forest mark.
+    "forest": Theme(
+        bg_top=(28, 95, 56),
+        bg_bottom=(14, 55, 36),
+        leaf=(245, 245, 244),
+    ),
+    # Doubutsu: leaf green settling onto --primary (#29ac68) at the
+    # bottom, under a tree in --background cream.
+    "doubutsu": Theme(
+        bg_top=(58, 196, 124),
+        bg_bottom=(41, 172, 104),
+        leaf=(250, 246, 238),
+    ),
+}
+
+
+def hexcolor(rgb: tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+# --- raster ------------------------------------------------------------------
 def vertical_gradient(size: int, top: tuple[int, int, int], bottom: tuple[int, int, int]) -> Image.Image:
     """Smooth top→bottom gradient as an RGB image."""
     strip = Image.new("RGB", (1, size))
@@ -53,9 +100,9 @@ def rounded_mask(size: int, radius: int) -> Image.Image:
     return mask
 
 
-def draw_tree(canvas: Image.Image) -> None:
-    """Draw a stylized filled tree (three overlapping leaf lobes + trunk),
-    composed at supersample resolution to keep edges crisp."""
+def draw_tree(canvas: Image.Image, theme: Theme) -> None:
+    """Draw the filled tree, composed at supersample resolution to keep
+    edges crisp."""
     w = canvas.size[0]
     layer = Image.new("RGBA", (w * SS, w * SS), (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)
@@ -64,28 +111,18 @@ def draw_tree(canvas: Image.Image) -> None:
         return round(value * w * SS)
 
     cx = scaled(0.5)
-    # Three overlapping circles form the crown; coords are unit-relative so
-    # the same shape works at any output size.
-    crown = [
-        ((0.50, 0.32), 0.20),
-        ((0.34, 0.50), 0.21),
-        ((0.66, 0.50), 0.21),
-    ]
-    for (ux, uy), r in crown:
-        rx, ry, rr = scaled(ux), scaled(uy), scaled(r)
-        d.ellipse((rx - rr, ry - rr, rx + rr, ry + rr), fill=LEAF)
 
-    # Fill the chin where the lobes meet — keeps the silhouette unbroken.
-    d.ellipse(
-        (scaled(0.36), scaled(0.42), scaled(0.64), scaled(0.66)),
-        fill=LEAF,
-    )
+    for (ux, uy), r in CROWN:
+        rx, ry, rr = scaled(ux), scaled(uy), scaled(r)
+        d.ellipse((rx - rr, ry - rr, rx + rr, ry + rr), fill=theme.leaf)
+
+    d.ellipse(tuple(scaled(v) for v in CHIN), fill=theme.leaf)
 
     # Trunk: short, slightly tapered.
-    trunk_top = scaled(0.62)
-    trunk_bot = scaled(0.84)
-    half_top = scaled(0.045)
-    half_bot = scaled(0.06)
+    trunk_top = scaled(TRUNK_TOP)
+    trunk_bot = scaled(TRUNK_BOT)
+    half_top = scaled(TRUNK_HALF_TOP)
+    half_bot = scaled(TRUNK_HALF_BOT)
     d.polygon(
         [
             (cx - half_top, trunk_top),
@@ -93,24 +130,82 @@ def draw_tree(canvas: Image.Image) -> None:
             (cx + half_bot, trunk_bot),
             (cx - half_bot, trunk_bot),
         ],
-        fill=TRUNK,
+        fill=theme.leaf,
     )
     # Round the trunk base.
     d.ellipse(
         (cx - half_bot, trunk_bot - half_bot, cx + half_bot, trunk_bot + half_bot),
-        fill=TRUNK,
+        fill=theme.leaf,
     )
 
     canvas.alpha_composite(layer.resize((w, w), Image.LANCZOS))
 
 
-def build_master() -> Image.Image:
-    bg = vertical_gradient(SIZE, BG_TOP, BG_BOTTOM).convert("RGBA")
+def build_master(theme: Theme) -> Image.Image:
+    bg = vertical_gradient(SIZE, theme.bg_top, theme.bg_bottom).convert("RGBA")
     mask = rounded_mask(SIZE, round(SIZE * CORNER_RADIUS_RATIO))
     canvas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     canvas.paste(bg, mask=mask)
-    draw_tree(canvas)
+    draw_tree(canvas, theme)
     return canvas
+
+
+# --- vector ------------------------------------------------------------------
+def build_svg(theme: Theme) -> str:
+    """Same shapes as the raster, at the same unit coordinates scaled to
+    the 1024 viewBox."""
+    s = float(SIZE)
+
+    def u(value: float) -> float:
+        return round(value * s, 3)
+
+    leaf = hexcolor(theme.leaf)
+    flat = theme.bg_top == theme.bg_bottom
+    bg_fill = hexcolor(theme.bg_top) if flat else "url(#bg)"
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{SIZE}" height="{SIZE}" '
+        f'viewBox="0 0 {SIZE} {SIZE}" role="img" aria-label="Shigoto no Mori">',
+    ]
+    if not flat:
+        parts += [
+            "  <defs>",
+            '    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1" '
+            'gradientUnits="objectBoundingBox">',
+            f'      <stop offset="0" stop-color="{hexcolor(theme.bg_top)}"/>',
+            f'      <stop offset="1" stop-color="{hexcolor(theme.bg_bottom)}"/>',
+            "    </linearGradient>",
+            "  </defs>",
+        ]
+    parts.append(
+        f'  <rect width="{SIZE}" height="{SIZE}" rx="{u(CORNER_RADIUS_RATIO)}" fill="{bg_fill}"/>'
+    )
+    parts.append(f'  <g fill="{leaf}">')
+
+    for (ux, uy), r in CROWN:
+        parts.append(f'    <circle cx="{u(ux)}" cy="{u(uy)}" r="{u(r)}"/>')
+
+    x0, y0, x1, y1 = CHIN
+    parts.append(
+        f'    <ellipse cx="{u((x0 + x1) / 2)}" cy="{u((y0 + y1) / 2)}" '
+        f'rx="{u((x1 - x0) / 2)}" ry="{u((y1 - y0) / 2)}"/>'
+    )
+
+    pts = " ".join(
+        f"{u(x)},{u(y)}"
+        for x, y in [
+            (0.5 - TRUNK_HALF_TOP, TRUNK_TOP),
+            (0.5 + TRUNK_HALF_TOP, TRUNK_TOP),
+            (0.5 + TRUNK_HALF_BOT, TRUNK_BOT),
+            (0.5 - TRUNK_HALF_BOT, TRUNK_BOT),
+        ]
+    )
+    parts.append(f'    <polygon points="{pts}"/>')
+    parts.append(
+        f'    <circle cx="{u(0.5)}" cy="{u(TRUNK_BOT)}" r="{u(TRUNK_HALF_BOT)}"/>'
+    )
+    parts += ["  </g>", "</svg>", ""]
+    return "\n".join(parts)
 
 
 ICONSET_SIZES: list[tuple[str, int]] = [
@@ -128,17 +223,26 @@ ICONSET_SIZES: list[tuple[str, int]] = [
 
 
 def main() -> None:
-    ASSETS.mkdir(exist_ok=True)
-    ICONSET.mkdir(exist_ok=True)
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--theme", choices=sorted(THEMES), default="doubutsu")
+    ap.add_argument("--out-dir", type=Path, default=ASSETS)
+    args = ap.parse_args()
 
-    master = build_master()
-    master.save(ASSETS / "icon.png", format="PNG")
+    theme = THEMES[args.theme]
+    out = args.out_dir
+    iconset = out / "icon.iconset"
+    out.mkdir(parents=True, exist_ok=True)
+    iconset.mkdir(exist_ok=True)
+
+    master = build_master(theme)
+    master.save(out / "icon.png", format="PNG")
+    (out / "icon.svg").write_text(build_svg(theme))
 
     for name, px in ICONSET_SIZES:
-        master.resize((px, px), Image.LANCZOS).save(ICONSET / name, format="PNG")
+        master.resize((px, px), Image.LANCZOS).save(iconset / name, format="PNG")
 
-    print(f"wrote {ASSETS / 'icon.png'} and {len(ICONSET_SIZES)} sized PNGs")
-    print("now run: iconutil -c icns assets/icon.iconset -o assets/icon.icns")
+    print(f"wrote {out / 'icon.png'}, {out / 'icon.svg'} and {len(ICONSET_SIZES)} sized PNGs")
+    print(f"now run: iconutil -c icns {iconset} -o {out / 'icon.icns'}")
 
 
 if __name__ == "__main__":
