@@ -8,8 +8,6 @@ Comes with a focused GUI and one-click launchers per worktree (editor, shell, ag
 
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
-Note: This project is still early and in active development. We offer macOS Apple Silicon builds.
-
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
