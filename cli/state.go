@@ -315,6 +315,15 @@ func readRegistryHints() map[string]json.RawMessage {
 	return all
 }
 
+// readJSONObject's strictness has to reach the key values too: a
+// well-formed document holding a wrong-shaped value would otherwise
+// read as empty, and the next locked write would persist that
+// emptiness -- the "rebuilt from an empty picture" failure the strict
+// document read exists to prevent, one level down.
+func malformedKeyErr(path, key string, err error) error {
+	return errf("%s holds a malformed %q value (%v). Fix the file or move it aside, then retry.", path, key, err)
+}
+
 func loadProjects() ([]project, error) {
 	all, err := readRegistryFile()
 	if err != nil {
@@ -322,7 +331,9 @@ func loadProjects() ([]project, error) {
 	}
 	var projects []project
 	if raw, ok := all[projectsKey]; ok {
-		_ = json.Unmarshal(raw, &projects)
+		if err := json.Unmarshal(raw, &projects); err != nil {
+			return nil, malformedKeyErr(registryPath(), projectsKey, err)
+		}
 	}
 	return projects, nil
 }
@@ -331,11 +342,13 @@ func readShelvedSet() map[string]bool {
 	shelved := map[string]bool{}
 	if raw, ok := readRegistryHints()[shelvedKey]; ok {
 		var m map[string]bool
-		if json.Unmarshal(raw, &m) == nil {
-			for id, v := range m {
-				if v {
-					shelved[id] = true
-				}
+		if err := json.Unmarshal(raw, &m); err != nil {
+			noteRegistryTrouble(malformedKeyErr(registryPath(), shelvedKey, err))
+			return shelved
+		}
+		for id, v := range m {
+			if v {
+				shelved[id] = true
 			}
 		}
 	}
@@ -496,7 +509,9 @@ func setShelved(worktreeID string, shelved bool) error {
 	return updateRegistryKey(shelvedKey, func(raw json.RawMessage) (any, error) {
 		m := map[string]bool{}
 		if raw != nil {
-			_ = json.Unmarshal(raw, &m)
+			if err := json.Unmarshal(raw, &m); err != nil {
+				return nil, malformedKeyErr(registryPath(), shelvedKey, err)
+			}
 		}
 		if m[worktreeID] == shelved {
 			return nil, nil
@@ -514,28 +529,62 @@ func dropShelved(worktreeID string) error {
 	return setShelved(worktreeID, false)
 }
 
-func readGlobalConfig() globalConfig {
+// Missing reads as defaults; a file that exists but can't be read or
+// parsed is an error. deleteBranchOnRemove decides whether `sm rm`
+// deletes a branch, so a corrupt config.json must not quietly read as
+// "unset" -- that flips an explicit opt-out back to the destructive
+// default. Same rule readJSONObject applies to the registry.
+func readGlobalConfig() (globalConfig, error) {
 	var cfg globalConfig
 	path := configJSONPath()
 	raw, err := os.ReadFile(path)
-	if err == nil {
-		noteNewerSchema(path, raw)
-		_ = json.Unmarshal(raw, &cfg)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return cfg, nil
+		}
+		return cfg, errf("Couldn't read %s: %v", path, err)
+	}
+	noteNewerSchema(path, raw)
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return cfg, errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err)
+	}
+	return cfg, nil
+}
+
+// For display paths (launcher lists, hidden-launcher filters,
+// port-pool detection): degrade to defaults with a one-time warning
+// instead of blocking the command. Anything that makes a destructive
+// decision from the config takes readGlobalConfig directly.
+func readGlobalConfigHints() globalConfig {
+	cfg, err := readGlobalConfig()
+	if err != nil {
+		noteFileTrouble(configJSONPath(),
+			"Global settings read as defaults until the file is fixed.", err)
 	}
 	return cfg
 }
 
 // nil when the file is missing, unreadable, or fails the schema's
 // required-field check -- matching the app's null-on-invalid behavior.
+// A missing file or absent defaultBranch is the ordinary
+// pre-configure state and stays silent; a file that exists but can't
+// be read or parsed gets a one-time warning, because nil here means
+// carry-over, setup and teardown silently don't run.
 func readProjectConfig(projectID string) *projectConfig {
 	path := projectConfigJSONPath(projectID)
+	degraded := "Carry-over and the setup/teardown scripts are skipped until the file is fixed."
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			noteFileTrouble(path, degraded, errf("Couldn't read %s: %v", path, err))
+		}
 		return nil
 	}
 	noteNewerSchema(path, raw)
 	var cfg projectConfig
-	if json.Unmarshal(raw, &cfg) != nil {
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		noteFileTrouble(path, degraded,
+			errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err))
 		return nil
 	}
 	if strings.TrimSpace(cfg.DefaultBranch) == "" {

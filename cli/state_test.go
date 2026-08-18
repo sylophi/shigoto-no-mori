@@ -593,3 +593,50 @@ func TestHealthyRootPrintsNoWarning(t *testing.T) {
 		t.Errorf("healthy root printed:\n%s", printed)
 	}
 }
+
+// --- key-value strictness ---
+
+// A well-formed document holding a wrong-shaped key value must refuse
+// the read, not report empty: every writer rebuilds the file from
+// what the reader returns, so "empty" would persist as a wiped
+// registry on the next add. Same rule readJSONObject applies to the
+// document, one level down.
+func TestLoadProjectsRefusesMalformedProjectsValue(t *testing.T) {
+	sandboxConfigRoot(t)
+	seedRegistry(t, `{"projects":{"p1":{"id":"p1","name":"alpha","path":"/tmp/alpha"}}}`)
+	if _, err := loadProjects(); err == nil {
+		t.Error("loadProjects on a malformed projects value succeeded, want error")
+	}
+}
+
+func TestSetShelvedRefusesMalformedShelfValue(t *testing.T) {
+	sandboxConfigRoot(t)
+	kept := `{"shelvedWorktrees":["w1","w2"]}`
+	seedRegistry(t, kept)
+	if err := setShelved("w9", true); err == nil {
+		t.Error("setShelved on a malformed shelf value succeeded, want error")
+	}
+	if raw, err := os.ReadFile(registryPath()); err != nil || string(raw) != kept {
+		t.Errorf("malformed shelf value was rewritten to %q", raw)
+	}
+	if shelved := readShelvedSet(); len(shelved) != 0 {
+		t.Errorf("hint read of malformed shelf = %v, want empty", shelved)
+	}
+}
+
+// Missing config.json reads as defaults; a malformed one is an error.
+// deleteBranchOnRemove decides whether `sm rm` deletes a branch, so a
+// corrupt file must not read as "unset".
+func TestReadGlobalConfigStrict(t *testing.T) {
+	sandboxConfigRoot(t)
+	if cfg, err := readGlobalConfig(); err != nil || cfg.DeleteBranchOnRemove != nil {
+		t.Errorf("missing config.json = %+v, %v, want zero value and nil error", cfg, err)
+	}
+	seed := `{"deleteBranchOnRemove": false,}` // trailing comma
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readGlobalConfig(); err == nil {
+		t.Error("readGlobalConfig on malformed config.json succeeded, want error")
+	}
+}

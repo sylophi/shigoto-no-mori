@@ -688,3 +688,37 @@ func TestNoopMutationDoesNotStampSchemaVersion(t *testing.T) {
 		t.Errorf("noop set rewrote config.json to %q", raw)
 	}
 }
+
+// list/get on a corrupt file must error, not print every key as its
+// default with exit 0: "deleteBranchOnRemove  true (default)" over an
+// explicitly written false is the destructive kind of wrong.
+func TestListAndGetRefuseMalformedFile(t *testing.T) {
+	sandboxConfigRoot(t)
+	seed := `{"deleteBranchOnRemove": false,}` // trailing comma
+	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, err := runConfigList(globalConfigScope()); code != 1 || err == nil {
+		t.Errorf("list on malformed file = %d, %v, want error", code, err)
+	}
+	if code, err := runConfigGet(globalConfigScope(), "deleteBranchOnRemove"); code != 1 || err == nil {
+		t.Errorf("get on malformed file = %d, %v, want error", code, err)
+	}
+}
+
+// The editor seed is a real document, marker included, so a file
+// created by `sm config edit` doesn't read as pre-schema forever.
+func TestEditSeedStampsSchemaVersion(t *testing.T) {
+	sandboxConfigRoot(t)
+	t.Setenv("VISUAL", "")
+	t.Setenv("EDITOR", "")
+	jsonModeSaved := jsonMode
+	jsonMode = true
+	t.Cleanup(func() { jsonMode = jsonModeSaved })
+	if code, err := openConfigFileInEditor(configJSONPath()); code != 0 || err != nil {
+		t.Fatalf("edit seeding = %d, %v", code, err)
+	}
+	if got := readDoc(t, configJSONPath())["schemaVersion"]; got != json.Number("1") {
+		t.Errorf("seeded schemaVersion = %v (%T), want 1", got, got)
+	}
+}

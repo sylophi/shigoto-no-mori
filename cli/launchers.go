@@ -134,7 +134,7 @@ func availableLaunchers(proj project) []launcherEntry {
 			entries = append(entries, launcherEntry{id: "custom:" + c.ID, label: c.Label, custom: c})
 		}
 	}
-	appendCustom(readGlobalConfig().Launchers)
+	appendCustom(readGlobalConfigHints().Launchers)
 	if config := readProjectConfig(proj.ID); config != nil {
 		appendCustom(config.Launchers)
 	}

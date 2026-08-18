@@ -229,7 +229,7 @@ func portPoolConfigured(dir string) bool {
 }
 
 func willRunPortPool(worktreePath string) bool {
-	global := readGlobalConfig()
+	global := readGlobalConfigHints()
 	if global.PortPool == nil || !*global.PortPool {
 		return false
 	}

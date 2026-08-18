@@ -99,7 +99,7 @@ func matchLauncher(entries []launcherEntry, tool string) *launcherEntry {
 
 func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry, error) {
 	hidden := map[string]bool{}
-	for _, id := range readGlobalConfig().HiddenLaunchers {
+	for _, id := range readGlobalConfigHints().HiddenLaunchers {
 		hidden[id] = true
 	}
 	var visible []launcherEntry

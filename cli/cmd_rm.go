@@ -95,7 +95,13 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 		}
 	}
 
-	global := readGlobalConfig()
+	// Strict read: deleteBranchOnRemove below decides a branch
+	// deletion, so a corrupt config.json aborts instead of silently
+	// reading as the destructive default.
+	global, err := readGlobalConfig()
+	if err != nil {
+		return "", err
+	}
 	config := readProjectConfig(proj.ID)
 
 	// Cleanup scripts (skip for externals -- no provision ever ran).

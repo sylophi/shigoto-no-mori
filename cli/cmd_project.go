@@ -222,7 +222,7 @@ func seedProjectConfig(proj project) {
 	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
 		seeded["defaultBranch"] = defaultBranch
 	}
-	global := readGlobalConfig()
+	global := readGlobalConfigHints()
 	if global.AutoPopulateInstall != nil && *global.AutoPopulateInstall {
 		if pm := detectPackageManager(proj.Path); pm != "" {
 			seeded["scripts.setup"] = pm + " install"
@@ -543,7 +543,11 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 	}
 	switch verb {
 	case "list":
-		entries, _ := readConfigDoc(scope.path)["carryOver"].([]any)
+		doc, err := readConfigDoc(scope.path)
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		entries, _ := doc["carryOver"].([]any)
 		if jsonMode {
 			if entries == nil {
 				entries = []any{}

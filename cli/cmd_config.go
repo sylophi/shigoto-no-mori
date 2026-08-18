@@ -268,20 +268,26 @@ func decodeConfigDoc(raw []byte) (map[string]any, error) {
 	return doc, nil
 }
 
-// Read-only tolerance: missing or malformed files read as empty so
-// list/get always work. Writes go through updateConfigDoc, which
+// Missing reads as empty so list/get work on a fresh root. A file
+// that exists but can't be decoded is an error: printing defaults in
+// place of settings the user actually wrote is how a corrupt file
+// turns an explicit deleteBranchOnRemove opt-out back into "true
+// (default)" with exit 0. Writes go through updateConfigDoc, which
 // refuses malformed content instead of clobbering it.
-func readConfigDoc(path string) map[string]any {
+func readConfigDoc(path string) (map[string]any, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return map[string]any{}
+		if errors.Is(err, os.ErrNotExist) {
+			return map[string]any{}, nil
+		}
+		return nil, errf("Couldn't read %s: %v", path, err)
 	}
 	doc, err := decodeConfigDoc(raw)
 	if err != nil {
-		return map[string]any{}
+		return nil, errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err)
 	}
 	noteNewerSchema(path, raw)
-	return doc
+	return doc, nil
 }
 
 // Read-modify-write under the sibling .lock (withFileLock), so two CLI
@@ -569,7 +575,11 @@ func configListEntries(keys []configKey, doc map[string]any) []configListEntry {
 }
 
 func runConfigList(scope configDocScope) (int, error) {
-	entries := configListEntries(scope.keys, readConfigDoc(scope.path))
+	doc, err := readConfigDoc(scope.path)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	entries := configListEntries(scope.keys, doc)
 	if jsonMode {
 		scope.emitOK(map[string]any{"settings": entries})
 		return 0, nil
@@ -603,7 +613,11 @@ func runConfigGet(scope configDocScope, name string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	value, set := configDocGet(readConfigDoc(scope.path), key.name)
+	doc, err := readConfigDoc(scope.path)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	value, set := configDocGet(doc, key.name)
 	if !set {
 		value = key.def
 	}
@@ -871,7 +885,11 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 	}
 	switch verb {
 	case "list":
-		launchers, _ := readConfigDoc(scope.path)["launchers"].([]any)
+		doc, err := readConfigDoc(scope.path)
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		launchers, _ := doc["launchers"].([]any)
 		if jsonMode {
 			if launchers == nil {
 				launchers = []any{}
@@ -999,7 +1017,10 @@ func launcherMatches(launchers []any, ref string) []int {
 func openConfigFileInEditor(path string) (int, error) {
 	if _, err := os.Stat(path); err != nil {
 		_ = os.MkdirAll(filepath.Dir(path), 0o755)
-		if writeErr := os.WriteFile(path, []byte("{}\n"), 0o644); writeErr != nil {
+		seeded := map[string]any{}
+		stampSchemaVersion(seeded)
+		encoded, _ := json.Marshal(seeded)
+		if writeErr := os.WriteFile(path, append(encoded, '\n'), 0o644); writeErr != nil {
 			return 1, errf("Couldn't create %s: %v", path, writeErr)
 		}
 	}
@@ -1018,6 +1039,15 @@ func openConfigFileInEditor(path string) (int, error) {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return 1, errf("%s failed: %v", editor, err)
+		}
+		// The editor bypasses updateConfigDoc's refusal of malformed
+		// content, so a stray trailing comma would otherwise surface
+		// only on some later command. Say it now, while the mistake is
+		// one keystroke old.
+		if raw, err := os.ReadFile(path); err == nil {
+			if _, err := decodeConfigDoc(raw); err != nil {
+				note(yellowErr("warning:") + " " + path + " is not valid JSON after the edit: " + err.Error())
+			}
 		}
 		return 0, nil
 	}
