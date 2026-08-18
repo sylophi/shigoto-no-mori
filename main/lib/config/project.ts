@@ -15,6 +15,7 @@ import {
   atomicWriteJson,
   readJsonOrNull,
   unlinkIfExists,
+  withSchemaVersion,
 } from "../util/jsonFile";
 import { shigomoriRoot } from "../util/paths";
 import { ttlMapCache } from "../util/ttlCache";
@@ -77,9 +78,12 @@ export async function writeWorktreeData(
   worktreeId: string,
   data: ShigomoriWorktreeData,
 ): Promise<void> {
+  // The zod parse strips anything it doesn't model, the marker
+  // included, so it is stamped back on at the write rather than
+  // carried through the schema.
   await atomicWriteJson(
     worktreeDataPath(projectId, worktreeId),
-    ShigomoriWorktreeDataSchema.parse(data),
+    withSchemaVersion(ShigomoriWorktreeDataSchema.parse(data)),
   );
   worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
 }

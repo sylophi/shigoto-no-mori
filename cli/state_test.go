@@ -5,8 +5,9 @@ package main
 // malformed pointer content (blank, relative path) falls through to
 // the default. Plus the state.json read guard: only an absent file
 // reads as empty, so a write can never rebuild the file from a failed
-// read. Everything runs against a temp HOME, so no real state root or
-// config is ever touched.
+// read, and the schema marker every write stamps. Everything runs
+// against a temp HOME, so no real state root or config is ever
+// touched.
 
 import (
 	"encoding/json"
@@ -205,5 +206,51 @@ func TestUpdateStateKeyRefusesUnreadableState(t *testing.T) {
 	}
 	if raw, err := os.ReadFile(statePath()); err != nil || string(raw) != kept {
 		t.Errorf("unreadable state.json was rewritten to %q", raw)
+	}
+}
+
+// --- the schema marker ---
+
+func TestStateWriteStampsSchemaVersion(t *testing.T) {
+	sandboxConfigRoot(t)
+	if err := bumpUseLog(); err != nil {
+		t.Fatal(err)
+	}
+	all, err := readStateFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(all["schemaVersion"]); got != "1" {
+		t.Errorf("schemaVersion = %q, want 1", got)
+	}
+}
+
+// Neither an absent marker (every file written before it existed) nor
+// one from a build that doesn't exist yet may stop a read. The write
+// that follows stamps this build's version either way: it wrote the
+// file, so it says so.
+func TestStateReadToleratesOtherSchemaVersions(t *testing.T) {
+	sandboxConfigRoot(t)
+	registry := `"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}]`
+	seedState(t, "{"+registry+"}")
+	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
+		t.Errorf("read of unmarked state.json = %v, %v, want the project", projects, err)
+	}
+	seedState(t, `{"schemaVersion":99,`+registry+"}")
+	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
+		t.Errorf("read of newer state.json = %v, %v, want the project", projects, err)
+	}
+	if err := bumpUseLog(); err != nil {
+		t.Fatalf("write against newer state.json: %v", err)
+	}
+	all, err := readStateFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(all["schemaVersion"]); got != "1" {
+		t.Errorf("schemaVersion after write = %q, want this build's 1", got)
+	}
+	if len(all["projects"]) == 0 {
+		t.Error("write against newer state.json dropped the project registry")
 	}
 }

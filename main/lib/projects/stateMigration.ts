@@ -9,7 +9,11 @@
 // picks up where it left off, and the new files (atomically written) win.
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { atomicWriteJson, unlinkIfExists } from "../util/jsonFile";
+import {
+  atomicWriteJson,
+  unlinkIfExists,
+  withSchemaVersion,
+} from "../util/jsonFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
 
 // A loose mirror of the legacy ShigomoriConfig: we only need to recognize
@@ -50,7 +54,7 @@ async function migrateOne(projectId: string): Promise<void> {
   }
 
   const { notes, ...projectFields } = parsed;
-  await atomicWriteJson(newProjectFile, projectFields);
+  await atomicWriteJson(newProjectFile, withSchemaVersion(projectFields));
 
   if (notes && typeof notes === "object") {
     // `allSettled` so one bad note doesn't strand the rest of the project's
@@ -60,9 +64,10 @@ async function migrateOne(projectId: string): Promise<void> {
     for (const [worktreeId, text] of Object.entries(notes)) {
       if (typeof text !== "string" || text.length === 0) continue;
       writes.push(
-        atomicWriteJson(join(newWorktreesDir, `${worktreeId}.json`), {
-          notes: text,
-        }),
+        atomicWriteJson(
+          join(newWorktreesDir, `${worktreeId}.json`),
+          withSchemaVersion({ notes: text }),
+        ),
       );
     }
     const results = await Promise.allSettled(writes);
