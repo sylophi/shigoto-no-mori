@@ -4,6 +4,7 @@ import { basename } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { uninstallCliEverything } from "../../electron/cliInstall";
+import { logFilePath } from "../../electron/log";
 import { relaunchApp } from "../../electron/relaunch";
 import { stopStateWatcher } from "../../electron/stateWatcher";
 import { stopUpdaterBridge } from "../../electron/updaterBridge";
@@ -17,6 +18,7 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
     shigomoriRoot: shigomoriRoot(),
     rootDirName: basename(shigomoriRoot()),
     homedir: homedir(),
+    logFile: logFilePath(),
     isDev: !app.isPackaged,
   }),
 

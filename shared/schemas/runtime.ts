@@ -7,6 +7,11 @@ export const RuntimeInfoSchema = z.object({
   // parse the path.
   rootDirName: z.string().min(1),
   homedir: z.string().min(1),
+  // Absolute path of the rolling main-process log, or null when the
+  // logs directory could not be opened this session (Settings hides
+  // the reveal button rather than pointing at a file that is not
+  // there).
+  logFile: z.string().min(1).nullable(),
   isDev: z.boolean(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;

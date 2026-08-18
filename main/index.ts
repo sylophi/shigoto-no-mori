@@ -6,6 +6,7 @@ import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
+import { installCrashHandlers, startFileLogging } from "./electron/log";
 import {
   refreshAllProjectGitRefs,
   startBackgroundFetch,
@@ -33,6 +34,11 @@ import {
   isInstallingUpdate,
   startUpdater,
 } from "./electron/updater";
+
+// Before anything else so the log file catches the whole boot, and so
+// a crash during it leaves a trace instead of a silently dead icon.
+startFileLogging();
+installCrashHandlers();
 
 enableDevCdpPort();
 initShigomoriRoot(app.isPackaged);
