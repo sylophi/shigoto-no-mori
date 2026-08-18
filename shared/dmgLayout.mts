@@ -13,9 +13,20 @@
 // .mts with no imports, so plain `node` and forge.config.ts can both
 // load it directly.
 
-// Content size of the mounted volume's Finder window. The background
-// image is rendered at exactly this size (plus an @2x twin).
+// The window size appdmg is told to save. Finder measures a window from
+// the outside, title bar included, and ds-store budgets 22 points for
+// one, which is the height it was before Big Sur. Today's is taller, so
+// the content area comes out short of what was asked for. Measured with
+// a ruler background on macOS 27: 10 points short.
 export const DMG_WINDOW = { width: 700, height: 460 } as const;
+const DMG_TITLE_BAR_SHORTFALL = 10;
+
+// So the art is painted at the size that actually shows. Anything drawn
+// past this is clipped by the bottom of the window.
+export const DMG_ART = {
+  width: DMG_WINDOW.width,
+  height: DMG_WINDOW.height - DMG_TITLE_BAR_SHORTFALL,
+} as const;
 
 // Finder's icon size inside the window. 128 keeps the app icon big
 // enough to read as the hero of the panel.

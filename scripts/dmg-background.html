@@ -158,11 +158,14 @@
          underneath still lands on the card rather than on bare canvas. */
       .tile {
         position: absolute;
-        /* Sized off the icon, not off 128: a wider margin either side,
-           and a deeper one below for the name Finder paints there. */
+        /* Sized off the icon, not off 128. Finder paints the item's
+           name below the icon, so the tile holds both: 26 of air, the
+           icon, its name (a 6 gap plus a 14 line), 26 of air. Centering
+           the icon instead would leave the pair sitting low in the
+           tile, which is what it looks like from a foot away. */
         width: calc((var(--icon) + 56) * 1px);
         height: calc((var(--icon) + 72) * 1px);
-        top: calc((var(--icon-y) - var(--icon) / 2 - 36) * 1px);
+        top: calc((var(--icon-y) - var(--icon) / 2 - 26) * 1px);
         transform: translateX(-50%);
         border-radius: 22px;
         background-color: var(--card);
@@ -208,7 +211,7 @@
         right: 0;
         bottom: 0;
         overflow: hidden;
-        height: 60px;
+        height: 40px;
         display: flex;
         align-items: center;
         justify-content: center;

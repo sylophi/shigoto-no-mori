@@ -55,8 +55,8 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 // and the scale, let it paint. (A second BrowserWindow in the same run
 // fails to load at all, so reuse is also the only thing that works.)
 async function render(win, layout, prerelease, scale) {
-  const width = layout.DMG_WINDOW.width * scale;
-  const height = layout.DMG_WINDOW.height * scale;
+  const width = layout.DMG_ART.width * scale;
+  const height = layout.DMG_ART.height * scale;
   win.setContentSize(width, height);
   await win.webContents.executeJavaScript(`
     (async () => {
@@ -86,8 +86,8 @@ app
     const outDir = join(ROOT, layout.DMG_ART_DIR);
     const win = new BrowserWindow({
       // render() sets the real size before every capture.
-      width: layout.DMG_WINDOW.width,
-      height: layout.DMG_WINDOW.height,
+      width: layout.DMG_ART.width,
+      height: layout.DMG_ART.height,
       useContentSize: true,
       show: false,
       frame: false,
@@ -105,8 +105,8 @@ app
     await win.webContents.executeJavaScript(`
       (() => {
         const vars = ${JSON.stringify({
-          "--dmg-w": layout.DMG_WINDOW.width,
-          "--dmg-h": layout.DMG_WINDOW.height,
+          "--dmg-w": layout.DMG_ART.width,
+          "--dmg-h": layout.DMG_ART.height,
           "--icon": layout.DMG_ICON_SIZE,
           "--icon-y": layout.DMG_ICON_Y,
           "--app-x": layout.DMG_APP_ICON.x,
