@@ -135,13 +135,21 @@ function TrailingSlot({
   // wider of the two, always. Cross-fading rather than swapping `hidden`
   // also keeps the button in the tab order -- a display:none control
   // would make shelving mouse-only.
+  //
+  // The two have to swap on exactly the same triggers or they overlap,
+  // and the trigger is hover plus *keyboard* focus, never plain focus:
+  // clicking a row to open it leaves the row div focused, so the
+  // focus-within this used to key off pinned the toggle open over the
+  // timestamp of whichever row you last selected. The button reads its
+  // own focus. The timestamp is a sibling, so it needs `:has` to see
+  // the same thing.
   return (
     <span className="ml-auto grid shrink-0 grid-cols-1 items-center justify-items-end">
       <span
         className={cn(
           "col-start-1 row-start-1 flex items-center",
           canShelve &&
-            "transition-opacity group-focus-within/inbox-row:opacity-0 group-hover/inbox-row:opacity-0",
+            "transition-opacity group-hover/inbox-row:opacity-0 group-focus-visible/inbox-row:opacity-0 group-has-[:focus-visible]/inbox-row:opacity-0",
         )}
       >
         {isDeleting ? (
@@ -171,7 +179,7 @@ function TrailingSlot({
             worktree.shelved ? "Unshelve worktree" : "Shelve worktree"
           }
           title={worktree.shelved ? "Unshelve" : "Shelve"}
-          className="col-start-1 row-start-1 rounded-sm p-0.5 opacity-0 transition-opacity group-focus-within/inbox-row:opacity-100 group-hover/inbox-row:opacity-100 hover:text-foreground focus-visible:opacity-100"
+          className="col-start-1 row-start-1 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/inbox-row:opacity-100 group-focus-visible/inbox-row:opacity-100 hover:text-foreground focus-visible:opacity-100"
         >
           {worktree.shelved ? (
             <ArchiveRestore aria-hidden className="size-3" />

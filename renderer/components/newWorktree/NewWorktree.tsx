@@ -53,13 +53,15 @@ const MODE_DEST_LEAD: Record<Mode, string> = {
 // name, "branch" is the PR's head ref, "custom" hands the field over.
 type PrFolderSource = "pr" | "branch" | "custom";
 
+// Branch leads: it's what `prFolderFrom` starts on, and a control whose
+// default sits in the middle reads as if something was already changed.
 const PR_FOLDER_OPTIONS = [
-  { value: "pr", label: "PR", title: "Name the folder after the PR number" },
   {
     value: "branch",
     label: "Branch",
     title: "Name the folder after the PR's head branch",
   },
+  { value: "pr", label: "PR", title: "Name the folder after the PR number" },
   { value: "custom", label: "Custom", title: "Type your own folder name" },
 ] as const satisfies readonly SegmentedOption<PrFolderSource>[];
 
@@ -302,6 +304,7 @@ export function NewWorktree() {
                 excludeBranches={
                   mode === "checkout" ? occupiedBranches : undefined
                 }
+                pinnedBranch={defaultBranch}
               />
               {baseOccupied && (
                 <p className="text-xs text-destructive">
