@@ -104,34 +104,30 @@ export function TidyRow({
           {worktree.shelved && <RowTag>Shelved</RowTag>}
         </div>
 
-        {/* Branch left, timing right: the times are the column being
-            compared down the list, so they line up with each other
-            instead of trailing whatever length the branch name happens
-            to be. */}
-        <div className="flex min-w-0 items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span className="min-w-0 truncate font-mono select-text">
+        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="truncate font-mono select-text">
             <BranchLabel
               branch={worktree.branch}
               detached={worktree.detached}
             />
           </span>
-          <span className="flex shrink-0 items-center gap-1.5">
-            <span title={ageTitle}>
-              {ageAt !== null
-                ? `committed ${formatRelativeTime(ageAt)}`
-                : "no commits"}
-            </span>
-            {editedSince !== null && (
-              <>
-                <span aria-hidden>·</span>
-                <span
-                  title={`Files changed ${new Date(editedSince).toLocaleString()}`}
-                >
-                  edited {formatRelativeTime(editedSince)}
-                </span>
-              </>
-            )}
+          <span aria-hidden>·</span>
+          <span className="shrink-0" title={ageTitle}>
+            {ageAt !== null
+              ? `committed ${formatRelativeTime(ageAt)}`
+              : "no commits"}
           </span>
+          {editedSince !== null && (
+            <>
+              <span aria-hidden>·</span>
+              <span
+                className="shrink-0"
+                title={`Files changed ${new Date(editedSince).toLocaleString()}`}
+              >
+                edited {formatRelativeTime(editedSince)}
+              </span>
+            </>
+          )}
         </div>
 
         <p className="text-xs text-muted-foreground">{verdict.reason}</p>
