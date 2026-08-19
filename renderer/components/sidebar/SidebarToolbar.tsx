@@ -110,9 +110,8 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
       </DropdownMenu>
       <div className="flex-1" />
       {/* The tidy page spans every project, which is the same span this
-          view has -- so it sits with the controls that leave the tree
-          rather than in the footer. Settings keeps the explained entry
-          for anyone reading the inbox, which has no toolbar. */}
+          view has, so it sits with the controls that leave the tree
+          rather than in the footer. */}
       <SimpleTooltip tip="Tidy the forest: sizes, staleness, what has landed">
         <button
           type="button"
