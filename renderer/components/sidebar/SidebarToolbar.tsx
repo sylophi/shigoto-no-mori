@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ArrowUpDown, Check, LayoutGrid } from "lucide-react";
+import { ArrowUpDown, Check, LayoutGrid, Trees } from "lucide-react";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ProjectSortMode } from "@shared/schemas";
 import { cn } from "@/lib/utils";
 import {
@@ -38,7 +39,10 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 // rather than in the footer, where they'd have to blink in and out as
 // the view changes. The footer keeps what both views share.
 export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { toggleLauncher } = useOverlays();
+  const tidyActive = location.pathname === "/tidy";
   const { data: sortMode = "manual" } = useProjectSort();
   const setSortMode = useSetProjectSort();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -105,6 +109,24 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="flex-1" />
+      {/* The tidy page spans every project, which is the same span this
+          view has -- so it sits with the controls that leave the tree
+          rather than in the footer. Settings keeps the explained entry
+          for anyone reading the inbox, which has no toolbar. */}
+      <SimpleTooltip tip="Tidy the forest — sizes, staleness, what has landed">
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/tidy" })}
+          aria-label="Tidy the forest"
+          aria-current={tidyActive ? "page" : undefined}
+          className={cn(
+            SIDEBAR_ICON_BUTTON,
+            tidyActive && "bg-accent text-foreground",
+          )}
+        >
+          <Trees className="size-3.5" />
+        </button>
+      </SimpleTooltip>
       <SimpleTooltip
         // The backtick renders in the mono font: the rounded doubutsu
         // fonts draw U+0060 as a narrow accent whose ink overhangs the
