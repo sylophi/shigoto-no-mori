@@ -25,7 +25,8 @@ export function TidyConfirm({
   onConfirm,
 }: TidyConfirmProps) {
   const [acknowledged, setAcknowledged] = useState(false);
-  const { selected, risky, reclaimBytes, reclaimPartial } = summary;
+  const { selected, risky, projectCount, reclaimBytes, reclaimPartial } =
+    summary;
   const count = selected.length;
   const blocked = risky.length > 0 && !acknowledged;
 
@@ -33,7 +34,10 @@ export function TidyConfirm({
     <ModalShell onClose={onCancel} popoverClassName="max-w-lg">
       <div className="p-5">
         <h2 className="text-base font-semibold">
-          Remove {count} {count === 1 ? "worktree" : "worktrees"}?
+          Remove {count} {count === 1 ? "worktree" : "worktrees"}
+          {/* Named up front: a selection reaching into several repos is a
+              bigger act than tidying the one you were looking at. */}
+          {projectCount > 1 && ` across ${projectCount} projects`}?
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Each one&apos;s directory is deleted from disk along with everything
@@ -51,7 +55,13 @@ export function TidyConfirm({
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="truncate text-sm font-medium select-text">
+                  <span className="min-w-0 truncate text-sm font-medium select-text">
+                    <span className="font-normal text-muted-foreground">
+                      {entry.project.name}
+                    </span>
+                    <span aria-hidden className="px-1 text-muted-foreground/60">
+                      /
+                    </span>
                     {entry.worktree.name}
                   </span>
                   <TidyVerdictBadge kind={entry.verdict.kind} />
@@ -84,8 +94,10 @@ export function TidyConfirm({
             <p className="mt-2 leading-relaxed">
               {risky.length} of these {risky.length === 1 ? "is" : "are"} not
               safe to remove:{" "}
-              {risky.map((entry) => entry.worktree.name).join(", ")}. Their
-              changes exist nowhere else.
+              {risky
+                .map((entry) => `${entry.project.name}/${entry.worktree.name}`)
+                .join(", ")}
+              . Their changes exist nowhere else.
             </p>
             <label className="mt-3 flex cursor-pointer items-center gap-2 select-none">
               <input

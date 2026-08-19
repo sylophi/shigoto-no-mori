@@ -14,6 +14,10 @@ interface TidyRowProps {
   disabled: boolean;
   onToggle: () => void;
   isLast: boolean;
+  // The list spans every project, so a bare directory name isn't an
+  // identity: two repos can both hold a "misty-otter". Off only inside a
+  // project group, where the heading above already says it.
+  showProject: boolean;
 }
 
 // One worktree in the tidy list. Wrapped in a <label> containing a
@@ -26,8 +30,9 @@ export function TidyRow({
   disabled,
   onToggle,
   isLast,
+  showProject,
 }: TidyRowProps) {
-  const { worktree, verdict, disk, ageAt, lastActivityAt } = entry;
+  const { worktree, project, verdict, disk, ageAt, lastActivityAt } = entry;
   const selectable = isSelectable(entry);
   const interactive = selectable && !disabled && status.kind !== "done";
   const ageTitle =
@@ -58,21 +63,33 @@ export function TidyRow({
         checked={checked}
         onChange={onToggle}
         disabled={!interactive}
-        aria-label={`Select ${worktree.name}`}
+        aria-label={`Select ${project.name} / ${worktree.name}`}
         className="mt-1 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium select-text">
+          <span className="min-w-0 truncate font-medium select-text">
+            {showProject && (
+              <>
+                <span className="font-normal text-muted-foreground">
+                  {project.name}
+                </span>
+                <span aria-hidden className="px-1 text-muted-foreground/60">
+                  /
+                </span>
+              </>
+            )}
             {worktree.name}
           </span>
           <TidyVerdictBadge kind={verdict.kind} />
           {worktree.isExternal && !worktree.isPrimary && (
-            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              External
-            </span>
+            <RowTag>External</RowTag>
           )}
+          {/* Shelved worktrees are hidden from the sidebar by default,
+              which is exactly how one ends up forgotten on disk -- so
+              this list shows them, labelled. */}
+          {worktree.shelved && <RowTag>Shelved</RowTag>}
         </div>
 
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
@@ -131,5 +148,15 @@ export function TidyRow({
         />
       </div>
     </label>
+  );
+}
+
+// Neutral marker for a property of the worktree itself, as opposed to
+// the verdict badge's judgement about removing it.
+function RowTag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+      {children}
+    </span>
   );
 }

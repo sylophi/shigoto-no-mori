@@ -187,6 +187,36 @@ export async function collectProjectHygiene(
   );
 }
 
+// How many worktrees are measured at once. The tidy page is app-wide,
+// so it asks for every worktree in every project in one go -- a fleet of
+// dozens on a machine with a few projects. Each walk already runs its
+// own bounded pool of directory readers, so letting them all start
+// together just thrashes the disk and makes the first size land later
+// than it would have. Three at a time keeps the queue moving visibly
+// while leaving the rest of the app's git calls some IO to work with.
+const DISK_WALK_CONCURRENCY = 3;
+
+let activeWalks = 0;
+const waitingWalks: Array<() => void> = [];
+
+async function withWalkSlot<T>(walk: () => Promise<T>): Promise<T> {
+  if (activeWalks >= DISK_WALK_CONCURRENCY) {
+    await new Promise<void>((resolve) => waitingWalks.push(resolve));
+  } else {
+    activeWalks += 1;
+  }
+  try {
+    return await walk();
+  } finally {
+    // Hand the slot straight to the next waiter rather than releasing
+    // and re-taking it: a release would let a caller arriving in the
+    // same tick jump the queue and push us over the limit.
+    const next = waitingWalks.shift();
+    if (next) next();
+    else activeWalks -= 1;
+  }
+}
+
 // Disk measurements are cached because a full walk of a big checkout
 // costs real IO, and the tidy page refetches on mount and on window
 // focus like every other query here. 60s is long enough to make
@@ -195,12 +225,16 @@ export async function collectProjectHygiene(
 //
 // Keyed by path, not id: the id is derived from the path anyway, and a
 // plain path key keeps the cached walk reusable no matter who asks.
+// Cache lookups sit inside the slot so a queued worktree whose walk
+// landed in the meantime returns from cache instead of re-walking.
 const diskCache = ttlMapCache(60_000, measureDirectory);
 
 export async function measureWorktreeDisk(
   worktreeId: string,
   worktreePath: string,
 ): Promise<WorktreeDiskUsage> {
-  const { bytes, lastActivityAt, partial } = await diskCache.get(worktreePath);
+  const { bytes, lastActivityAt, partial } = await withWalkSlot(() =>
+    diskCache.get(worktreePath),
+  );
   return { worktreeId, bytes, lastActivityAt, partial };
 }

@@ -115,6 +115,14 @@ const settingsRoute = createRoute({
   component: Settings,
 });
 
+// App-wide, like settings: the tidy page spans every project rather than
+// scoping to one, so it hangs off the root instead of /projects.
+const tidyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tidy",
+  component: TidyForest,
+});
+
 const newWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/new",
@@ -131,12 +139,6 @@ const manageBranchesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/branches",
   component: KeyedManageBranches,
-});
-
-const tidyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/tidy",
-  component: KeyedTidyForest,
 });
 
 const convertExternalRoute = createRoute({
@@ -171,11 +173,6 @@ function KeyedConfigureProject() {
 function KeyedManageBranches() {
   const { projectId } = manageBranchesRoute.useParams();
   return <ManageBranches key={projectId} />;
-}
-
-function KeyedTidyForest() {
-  const { projectId } = tidyRoute.useParams();
-  return <TidyForest key={projectId} />;
 }
 
 function KeyedConvertExternal() {
@@ -221,10 +218,10 @@ const commitDiffRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
+  tidyRoute,
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,
-  tidyRoute,
   convertExternalRoute,
   worktreeLocationRoute,
   worktreeRoute,

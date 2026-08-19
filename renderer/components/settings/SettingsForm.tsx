@@ -25,6 +25,7 @@ import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
+import { TidySection } from "./TidySection";
 import { CliSection } from "./CliSection";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
@@ -294,6 +295,8 @@ export function SettingsForm({
           </section>
 
           <DataLocationSection />
+
+          <TidySection />
 
           <DangerZone />
 

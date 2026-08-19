@@ -1101,11 +1101,91 @@ async function seedStaleWorktrees(): Promise<Manifest> {
     purpose:
       "Five worktrees covering every verdict on the 'Tidy the forest' page",
     tests: [
-      "Project menu -> 'Tidy up worktrees…' lists 5 worktrees + the primary.",
+      "Settings -> 'Tidy up worktrees…' lists these 5 worktrees + the primary, alongside every other registered project.",
       "abandoned-mint is 'Merged' and shipped-cedar is 'Already in primary'; both are preselected.",
       "messy-otter ('Uncommitted work'), half-done-fern ('Unpushed commits') and fresh-heron ('Active work') are NOT preselected.",
-      "Sizes fill in progressively and sort abandoned-mint (~9 MB) to the top under Size.",
+      "Sizes fill in progressively and sort abandoned-mint (~9 MB) to the top under Size, above every other project's worktrees.",
       "Ticking messy-otter forces the confirm dialog's acknowledgement checkbox before Remove enables.",
+    ],
+  };
+}
+
+// A second forest, so the app-wide page has more than one project to
+// span: cross-project sorting, the "Project" grouping, and the confirm
+// dialog's "across N projects" line all need two repos to mean anything.
+// Deliberately small -- its job is to be a second row source, not to
+// re-cover the verdicts stale-worktrees already covers.
+async function seedStaleSatellite(): Promise<Manifest> {
+  const remote = await bareRemote("stale-satellite");
+  const repo = join(REPOS, "stale-satellite");
+  await initRepo(repo);
+  await commitAt(
+    repo,
+    {
+      "README.md": "# stale-satellite\n\nA smaller wood, next door.\n",
+      ".gitignore": "node_modules/\n",
+      "package.json": pkgJson("stale-satellite", { dev: "echo dev" }),
+      "public/icon.svg": iconSvg("#0ea5e9", "ss"),
+      "src/index.ts": "export const version = 1;\n",
+    },
+    "Initial",
+    120,
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  await mkdir(EXTERNAL, { recursive: true });
+  const base = join(EXTERNAL, "stale-satellite");
+  await mkdir(base, { recursive: true });
+  const add = async (name: string, branch: string): Promise<string> => {
+    const path = join(base, name);
+    await git(repo, ["worktree", "add", "-b", branch, path, "main"]);
+    return path;
+  };
+
+  // Merged, clean, and older than anything in stale-worktrees: under
+  // "Age" it should sort above that project's rows, which is the whole
+  // point of one list across every project.
+  const landed = await add("quiet-badger", "feature/legacy-import");
+  await commitAt(
+    landed,
+    { "src/import.ts": "export const legacy = true;\n" },
+    "Legacy import",
+    200,
+  );
+  await git(repo, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "feature/legacy-import",
+    "-m",
+    "Merge legacy import",
+  ]);
+  await fakeDependencies(landed, 4);
+
+  // Unmerged and unpushed, so this project always has something the page
+  // refuses to tick -- a group that can't be cleared in one go.
+  const wip = await add("busy-lark", "feature/notifications");
+  await commitAt(
+    wip,
+    { "src/notify.ts": "export const soon = true;\n" },
+    "Notification shell",
+    5,
+  );
+  await fakeDependencies(wip, 1);
+
+  await git(repo, ["push", "origin", "main", "-q"]);
+
+  return {
+    name: "stale-satellite",
+    path: repo,
+    purpose:
+      "Second project for the app-wide 'Tidy the forest' page: one merged worktree, one unpushed",
+    tests: [
+      "Register this alongside stale-worktrees: the tidy page lists both projects' worktrees in one list, each row prefixed with its project.",
+      "Sorting by 'Project' groups the rows under per-project headings carrying each project's worktree count and size.",
+      "quiet-badger (~200 days) sorts to the top under Age, above every stale-worktrees row.",
+      "Selecting quiet-badger plus abandoned-mint makes the confirm dialog read 'across 2 projects'.",
     ],
   };
 }
@@ -1859,6 +1939,7 @@ async function main(): Promise<void> {
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
     { name: "stale-worktrees", run: seedStaleWorktrees },
+    { name: "stale-satellite", run: seedStaleSatellite },
     { name: "convertible-externals", run: seedConvertibleExternals },
     { name: "carryover-rich", run: seedCarryoverRich },
     { name: "carryover-symlink-dir", run: seedCarryoverSymlinkDir },

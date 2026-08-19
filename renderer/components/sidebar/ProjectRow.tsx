@@ -201,16 +201,6 @@ export function ProjectRow({
                     >
                       Manage branches
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/tidy",
-                          params: { projectId: project.id },
-                        })
-                      }
-                    >
-                      Tidy up worktrees…
-                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() =>
