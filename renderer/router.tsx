@@ -18,7 +18,6 @@ import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
-import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
@@ -104,16 +103,32 @@ function RootLayout() {
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
+export interface ForestSearch {
+  // Absent rather than false so a plain /forest link stays clean.
+  tidy?: true;
+  // Narrows the forest to one project, which is how the per-project
+  // "Tidy up worktrees" menu item keeps its scope.
+  project?: string;
+}
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: EmptyState,
 });
 
+// Tidy mode and the project scope live in the URL, not in component
+// state: tidy is a destination the project menu links straight to, it
+// changes what every row does on click, and it turns on a forest-wide
+// disk walk. All three are things a link should be able to say.
 const forestRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/forest",
   component: ForestOverview,
+  validateSearch: (search: Record<string, unknown>): ForestSearch => ({
+    tidy: search.tidy === true || search.tidy === "true" ? true : undefined,
+    project: typeof search.project === "string" ? search.project : undefined,
+  }),
 });
 
 const settingsRoute = createRoute({
@@ -138,12 +153,6 @@ const manageBranchesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/branches",
   component: KeyedManageBranches,
-});
-
-const tidyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/tidy",
-  component: KeyedTidyForest,
 });
 
 const convertExternalRoute = createRoute({
@@ -178,11 +187,6 @@ function KeyedConfigureProject() {
 function KeyedManageBranches() {
   const { projectId } = manageBranchesRoute.useParams();
   return <ManageBranches key={projectId} />;
-}
-
-function KeyedTidyForest() {
-  const { projectId } = tidyRoute.useParams();
-  return <TidyForest key={projectId} />;
 }
 
 function KeyedConvertExternal() {
@@ -232,7 +236,6 @@ const routeTree = rootRoute.addChildren([
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,
-  tidyRoute,
   convertExternalRoute,
   worktreeLocationRoute,
   worktreeRoute,

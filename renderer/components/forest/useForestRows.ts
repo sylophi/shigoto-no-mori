@@ -1,13 +1,22 @@
+import {
+  useAllProjectHygiene,
+  useForestDiskUsage,
+  type DiskUsageTotals,
+} from "@/hooks/hygiene/useWorktreeHygiene";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import {
+  deriveHygieneVerdict,
   type ForestSort,
   type Project,
   type PullRequest,
   type Worktree,
+  type WorktreeDiskUsage,
+  type WorktreeHygiene,
   worktreeLastActivityAt,
 } from "@shared/schemas";
 import {
+  isSelectable,
   matchesFacet,
   matchesQuery,
   needsAttention,
@@ -30,6 +39,10 @@ export interface ForestData {
   // would actually show. Counting pre-query would offer you "Attention
   // 7" and then hand you an empty screen.
   counts: Record<ForestFacet, number>;
+  // The same counts over the whole forest, filtered by nothing. The
+  // tidy strip is a survey of everything you own, so it must not move
+  // when you type in the filter box.
+  totals: Record<ForestFacet, number>;
   // Projects that hold at least one worktree, pre-filter. Not the same
   // as projects.length: a project can be registered and empty.
   plantedProjects: number;
@@ -37,6 +50,16 @@ export interface ForestData {
   // denominator in "5 of 23 worktrees".
   total: number;
   shown: number;
+  // Every entry in the forest, flat and filtered by nothing. Tidy mode
+  // works off this rather than off what's visible: a tick has to survive
+  // you typing in the filter box, and the batch has to remove what the
+  // dialog listed, not what happened to be on screen when you confirmed.
+  all: ForestEntry[];
+  // How many of those a checkbox will ever accept, i.e. everything but
+  // each project's primary checkout. The denominator in "3 of 12
+  // selected".
+  selectableCount: number;
+  disk: DiskUsageTotals;
   isLoading: boolean;
   failedCount: number;
 }
@@ -46,11 +69,16 @@ interface UseForestRowsArgs {
   facet: ForestFacet;
   sort: ForestSort;
   query: string;
+  // Tidy mode. Measuring every checkout of every project is the one
+  // expensive thing here, so the walk waits until you ask for it.
+  measureDisk: boolean;
 }
 
 function buildEntry(
   worktree: Worktree,
   pullRequest: PullRequest | undefined,
+  hygiene: WorktreeHygiene | undefined,
+  disk: WorktreeDiskUsage | undefined,
 ): ForestEntry {
   const date = worktree.recentCommits[0]?.date;
   const parsed = date ? Date.parse(date) : Number.NaN;
@@ -60,6 +88,8 @@ function buildEntry(
     attention: needsAttention(worktree, pullRequest),
     lastCommitAt: Number.isNaN(parsed) ? null : parsed,
     lastActivityAt: worktreeLastActivityAt(worktree),
+    verdict: deriveHygieneVerdict(worktree, hygiene),
+    disk,
   };
 }
 
@@ -77,9 +107,20 @@ export function useForestRows({
   facet,
   sort,
   query,
+  measureDisk,
 }: UseForestRowsArgs): ForestData {
   const worktreeQueries = useAllProjectWorktrees(projects);
   const pullRequestQueries = useAllProjectPullRequests(projects);
+  const hygieneQueries = useAllProjectHygiene(projects);
+  // Every worktree in the forest, flat, so the disk fan-out is one query
+  // per checkout rather than one per project.
+  const refs = projects.flatMap((project, i) =>
+    (worktreeQueries[i]?.data ?? []).map((worktree) => ({
+      projectId: project.id,
+      worktreeId: worktree.id,
+    })),
+  );
+  const disk = useForestDiskUsage(refs, measureDisk);
 
   const groups: ForestGroup[] = [];
   const counts: Record<ForestFacet, number> = {
@@ -87,7 +128,16 @@ export function useForestRows({
     attention: 0,
     dirty: 0,
     pullRequest: 0,
+    safe: 0,
   };
+  const totals: Record<ForestFacet, number> = {
+    all: 0,
+    attention: 0,
+    dirty: 0,
+    pullRequest: 0,
+    safe: 0,
+  };
+  const all: ForestEntry[] = [];
   let plantedProjects = 0;
   let total = 0;
   let shown = 0;
@@ -107,19 +157,28 @@ export function useForestRows({
       return;
     }
     const pullRequests = pullRequestQueries[i]?.data;
+    const hygieneById = new Map(
+      (hygieneQueries[i]?.data ?? []).map((facts) => [facts.worktreeId, facts]),
+    );
     const entries = (worktreeQuery.data ?? []).map((worktree) =>
-      buildEntry(worktree, pullRequests?.[worktree.branch]),
+      buildEntry(
+        worktree,
+        pullRequests?.[worktree.branch],
+        hygieneById.get(worktree.id),
+        disk.byId.get(worktree.id),
+      ),
     );
     if (entries.length > 0) plantedProjects++;
     total += entries.length;
+    all.push(...entries);
+    for (const entry of entries) {
+      tally(totals, entry);
+    }
     const matched = entries.filter((entry) =>
       matchesQuery(entry, query, project.name),
     );
     for (const entry of matched) {
-      counts.all++;
-      if (entry.attention) counts.attention++;
-      if (entry.worktree.changedCount > 0) counts.dirty++;
-      if (entry.pullRequest) counts.pullRequest++;
+      tally(counts, entry);
     }
     const visible = matched.filter((entry) => matchesFacet(entry, facet));
     shown += visible.length;
@@ -131,10 +190,22 @@ export function useForestRows({
   return {
     groups,
     counts,
+    totals,
     plantedProjects,
     total,
     shown,
+    all,
+    selectableCount: all.filter(isSelectable).length,
+    disk,
     isLoading,
     failedCount,
   };
+}
+
+function tally(counts: Record<ForestFacet, number>, entry: ForestEntry): void {
+  counts.all++;
+  if (entry.attention) counts.attention++;
+  if (entry.worktree.changedCount > 0) counts.dirty++;
+  if (entry.pullRequest) counts.pullRequest++;
+  if (entry.verdict.safe) counts.safe++;
 }

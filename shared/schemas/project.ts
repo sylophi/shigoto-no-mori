@@ -63,11 +63,19 @@ export const SetSidebarViewPayloadSchema = z.object({
   view: SidebarViewSchema,
 });
 
-// How the forest overview orders each project's worktrees. "activity" is
-// the implicit default and the only one that answers "what was I last
+// How the forest orders each project's worktrees. "activity" is the
+// implicit default and the only one that answers "what was I last
 // doing". "age" reads by worktree birthday, and "branch" alphabetically
-// for when you know the name and just want to find it.
-export const ForestSortSchema = z.enum(["activity", "age", "branch"]);
+// for when you know the name and just want to find it. "size" and
+// "tidiest" are the tidying orders: biggest first, and safest to remove
+// first.
+export const ForestSortSchema = z.enum([
+  "activity",
+  "age",
+  "branch",
+  "size",
+  "tidiest",
+]);
 export type ForestSort = z.infer<typeof ForestSortSchema>;
 
 export const SetForestSortPayloadSchema = z.object({

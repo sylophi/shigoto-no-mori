@@ -204,8 +204,8 @@ export function ProjectRow({
                     <DropdownMenuItem
                       onClick={() =>
                         void navigate({
-                          to: "/projects/$projectId/tidy",
-                          params: { projectId: project.id },
+                          to: "/forest",
+                          search: { tidy: true, project: project.id },
                         })
                       }
                     >

@@ -26,15 +26,33 @@ const FACETS: ReadonlyArray<{
   },
   { value: "dirty", label: "Dirty", title: "Uncommitted changes on disk" },
   { value: "pullRequest", label: "PR", title: "Branch has a pull request" },
+  {
+    value: "safe",
+    label: "Safe",
+    title: "Already merged or absorbed into the primary branch, and clean",
+  },
 ];
 
 // Listed rather than derived from the label map's key order: the menu
 // reads best default-first, and that's a claim about the menu, not about
 // how the type was declared.
-const SORT_OPTIONS: ReadonlyArray<SortOption<ForestSort>> = [
+//
+// "Size on disk" is only offered while tidying, because that is the only
+// time the sizes exist. Offering it in survey mode would sort every row
+// by zero and quietly fall through to the branch-name tiebreaker, and
+// since the sort persists you'd get that dead order back on your next
+// visit. "Safest to remove" needs only the hygiene verdicts, which load
+// either way, so it stays.
+const SURVEY_SORTS: ReadonlyArray<SortOption<ForestSort>> = [
   { value: "activity", label: FOREST_SORT_LABELS.activity },
   { value: "age", label: FOREST_SORT_LABELS.age },
   { value: "branch", label: FOREST_SORT_LABELS.branch },
+  { value: "tidiest", label: FOREST_SORT_LABELS.tidiest },
+];
+
+const TIDY_SORTS: ReadonlyArray<SortOption<ForestSort>> = [
+  ...SURVEY_SORTS,
+  { value: "size", label: FOREST_SORT_LABELS.size },
 ];
 
 interface ForestToolbarProps {
@@ -45,6 +63,8 @@ interface ForestToolbarProps {
   query: string;
   onQueryChange: (query: string) => void;
   counts: Record<ForestFacet, number>;
+  tidying: boolean;
+  disabled?: boolean;
 }
 
 export function ForestToolbar({
@@ -55,6 +75,8 @@ export function ForestToolbar({
   query,
   onQueryChange,
   counts,
+  tidying,
+  disabled,
 }: ForestToolbarProps) {
   const facetOptions: SegmentedOption<ForestFacet>[] = FACETS.map((option) => ({
     value: option.value,
@@ -101,6 +123,7 @@ export function ForestToolbar({
         options={facetOptions}
         aria-label="Show worktrees"
         optionClassName="gap-1.5 px-2.5 py-1 text-xs"
+        disabled={disabled}
       />
 
       {/* Names the current order rather than saying "Sort": the header
@@ -109,7 +132,7 @@ export function ForestToolbar({
       <SortMenu
         value={sort}
         onChange={onSortChange}
-        options={SORT_OPTIONS}
+        options={tidying ? TIDY_SORTS : SURVEY_SORTS}
         ariaLabel="Sort worktrees"
         label={FOREST_SORT_LABELS[sort]}
         triggerClassName="py-1 text-xs"

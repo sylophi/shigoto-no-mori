@@ -3,11 +3,11 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { formatBytes } from "@/lib/formatBytes";
-import type { TidySummary } from "./tidyModel";
+import type { ForestSelectionSummary } from "./forestFilters";
 import { TidyVerdictBadge } from "./TidyVerdictBadge";
 
 interface TidyConfirmProps {
-  summary: TidySummary;
+  summary: ForestSelectionSummary;
   deleteBranches: boolean;
   onCancel: () => void;
   onConfirm: () => void;

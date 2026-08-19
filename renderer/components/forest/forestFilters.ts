@@ -3,8 +3,11 @@ import { scoreMatch } from "@/lib/fuzzyMatch";
 import {
   deriveRemoteSyncState,
   type ForestSort,
+  type HygieneVerdict,
+  type HygieneVerdictKind,
   type PullRequest,
   type Worktree,
+  type WorktreeDiskUsage,
 } from "@shared/schemas";
 
 // One worktree as the overview sees it: the raw worktree plus the two
@@ -23,14 +26,28 @@ export interface ForestEntry {
   // minutes ago outranks one whose last commit is newer. Same helper the
   // inbox orders by, so the two cross-project surfaces agree.
   lastActivityAt: number;
+  // Whether this worktree's work has landed, and so whether removing it
+  // would lose anything. The same judgement the confirm step reads, so
+  // the row and the dialog can't disagree.
+  verdict: HygieneVerdict;
+  // Undefined until this worktree's walk lands, and never measured at
+  // all until you enter tidy mode.
+  disk: WorktreeDiskUsage | undefined;
 }
 
-export type ForestFacet = "all" | "attention" | "dirty" | "pullRequest";
+export type ForestFacet =
+  | "all"
+  | "attention"
+  | "dirty"
+  | "pullRequest"
+  | "safe";
 
 export const FOREST_SORT_LABELS: Record<ForestSort, string> = {
   activity: "Recent activity",
   age: "Newest worktree",
   branch: "Branch name",
+  size: "Size on disk",
+  tidiest: "Safest to remove",
 };
 
 // A worktree needs attention when it is not quietly in sync with its
@@ -75,6 +92,8 @@ export function matchesFacet(entry: ForestEntry, facet: ForestFacet): boolean {
       return entry.worktree.changedCount > 0;
     case "pullRequest":
       return entry.pullRequest !== undefined;
+    case "safe":
+      return entry.verdict.safe;
     default:
       return assertNever(facet);
   }
@@ -121,6 +140,23 @@ export function sortEntries(
   });
 }
 
+// Display order when sorting by "Safest to remove": the removable ones
+// first, then increasingly attached work, with the primary checkout
+// pinned last since it can never be removed.
+const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
+  merged: 0,
+  absorbed: 1,
+  unknown: 2,
+  active: 3,
+  unpushed: 4,
+  dirty: 5,
+  primary: 6,
+};
+
+// An unmeasured worktree sorts as 0, so rows still counting sink to the
+// bottom rather than jumping to the top of a destructive list.
+const bytes = (entry: ForestEntry) => entry.disk?.bytes ?? 0;
+
 function compareBySort(a: ForestEntry, b: ForestEntry, sort: ForestSort) {
   switch (sort) {
     case "activity":
@@ -129,7 +165,56 @@ function compareBySort(a: ForestEntry, b: ForestEntry, sort: ForestSort) {
       return newestFirst(a.worktree.createdAt, b.worktree.createdAt);
     case "branch":
       return a.worktree.branch.localeCompare(b.worktree.branch);
+    case "size":
+      return bytes(b) - bytes(a);
+    case "tidiest": {
+      const rank = VERDICT_RANK[a.verdict.kind] - VERDICT_RANK[b.verdict.kind];
+      return rank !== 0 ? rank : bytes(b) - bytes(a);
+    }
     default:
       return assertNever(sort);
   }
+}
+
+// The rows the forest is willing to tick on your behalf. Nothing dirty,
+// unmerged, detached or primary ever appears here. That is the whole
+// safety guarantee of tidy mode, so it lives in one function.
+export function defaultSelection(entries: readonly ForestEntry[]): Set<string> {
+  return new Set(
+    entries
+      .filter((entry) => entry.verdict.safe)
+      .map((entry) => entry.worktree.id),
+  );
+}
+
+export function isSelectable(entry: ForestEntry): boolean {
+  return entry.verdict.kind !== "primary";
+}
+
+export interface ForestSelectionSummary {
+  selected: ForestEntry[];
+  // Selected rows the forest would not have ticked itself. Non-empty
+  // means the confirm step demands an extra acknowledgement.
+  risky: ForestEntry[];
+  // Bytes freed by the current selection, counting only measured rows.
+  reclaimBytes: number;
+  // True when some selected row hasn't finished measuring, so the
+  // reclaim figure is a floor.
+  reclaimPartial: boolean;
+}
+
+export function summarize(
+  entries: readonly ForestEntry[],
+  selected: ReadonlySet<string>,
+): ForestSelectionSummary {
+  const picked = entries.filter((entry) => selected.has(entry.worktree.id));
+  return {
+    selected: picked,
+    risky: picked.filter((entry) => !entry.verdict.safe),
+    reclaimBytes: picked.reduce(
+      (sum, entry) => sum + (entry.disk?.bytes ?? 0),
+      0,
+    ),
+    reclaimPartial: picked.some((entry) => entry.disk === undefined),
+  };
 }

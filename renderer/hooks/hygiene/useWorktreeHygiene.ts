@@ -1,18 +1,20 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
-import type { WorktreeDiskUsage, WorktreeHygiene } from "@shared/schemas";
+import { useQueries } from "@tanstack/react-query";
+import type { Project, WorktreeDiskUsage } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
-// Git-derived staleness and merge facts for every worktree in a project.
-// Cheap enough to gate the list on.
-export function useWorktreeHygiene(projectId: string | null) {
-  return useQuery<WorktreeHygiene[]>({
-    queryKey: queryKeys.worktreeHygiene(projectId),
-    queryFn: () => {
-      if (!projectId) return [];
-      return window.api.hygiene.list(projectId);
-    },
-    enabled: projectId !== null,
-    meta: { errorTitle: "Couldn't check worktree hygiene" },
+// Git-derived staleness and merge facts for every worktree in a project,
+// one query per project. Cheap enough to gate the list on, so unlike the
+// disk walk below this runs whether or not you are tidying. Skips
+// projects whose path is gone, and stays silent, because a forest-wide
+// fan-out would otherwise fire one toast per broken project.
+export function useAllProjectHygiene(projects: Project[]) {
+  return useQueries({
+    queries: projects.map((project) => ({
+      queryKey: queryKeys.worktreeHygiene(project.id),
+      queryFn: () => window.api.hygiene.list(project.id),
+      enabled: project.pathExists !== false,
+      meta: { silentError: true },
+    })),
   });
 }
 
@@ -30,23 +32,32 @@ export interface DiskUsageTotals {
   partial: boolean;
 }
 
-// One query per worktree, in parallel. Each disk walk is independent, so
-// sizes fill in as they land instead of the page blocking on the largest
-// checkout -- which on a repo with node_modules is the whole point.
+export interface WorktreeRef {
+  projectId: string;
+  worktreeId: string;
+}
+
+// One query per worktree, in parallel, across every project. Each disk
+// walk is independent, so sizes fill in as they land instead of the page
+// blocking on the largest checkout, which on a repo with node_modules is
+// the whole point. `enabled` is how the forest keeps its survey cheap:
+// measuring every checkout of every project is the one expensive thing
+// on the screen, so it only runs once you ask to tidy.
 //
 // Errors are silent: a worktree that vanished mid-measure should leave
 // one dash in the table, not a toast.
-export function useWorktreeDiskUsage(
-  projectId: string,
-  worktreeIds: string[],
+export function useForestDiskUsage(
+  refs: WorktreeRef[],
+  enabled: boolean,
 ): DiskUsageTotals {
   return useQueries({
-    queries: worktreeIds.map((worktreeId) => ({
+    queries: refs.map(({ projectId, worktreeId }) => ({
       queryKey: queryKeys.worktreeDiskUsage(projectId, worktreeId),
       queryFn: () => window.api.hygiene.diskUsage({ projectId, worktreeId }),
       // Matches the main-side cache TTL, so a remount inside the window
       // reuses the walk instead of paying for it twice.
       staleTime: 60_000,
+      enabled,
       meta: { silentError: true },
     })),
     combine: (results): DiskUsageTotals => {
@@ -64,7 +75,7 @@ export function useWorktreeDiskUsage(
         measuredBytes,
         measuredCount: byId.size,
         totalCount: results.length,
-        measuring: results.some((result) => result.isPending),
+        measuring: enabled && results.some((result) => result.isPending),
         partial,
       };
     },

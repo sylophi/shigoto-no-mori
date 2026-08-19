@@ -35,7 +35,7 @@
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
  *      diff-index                diff/DiffFileIndex.tsx
- *      forest-row                forest/ForestWorktreeCard.tsx
+ *      forest-row                forest/ForestRow.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
@@ -405,14 +405,18 @@
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
-/* --- Forest tiles keep their edge ---
-   The forest overview is a stack of bg-card rows on the cream canvas.
-   Everywhere else a card sits alone and the fill step reads as
-   elevation on its own, but light mode has only 0.018 of lightness
-   between --card and --background, and ten of them in a column blur
-   into one slab. Borrow the floating-surface sticker outline (the edge
-   line, not the drop -- these sit in a list, they don't float) so ten
-   worktrees still read as ten separate things.
+/* --- Forest rows keep their edge ---
+   The forest is a stack of rows inside one bg-card container per
+   project, and the dividers between them are `border-b border-border`,
+   which the ambient strip above turns transparent. Light mode has only
+   0.018 of lightness between --card and --background, so without a
+   replacement ten rows blur into one slab. Borrow the floating-surface
+   sticker outline (the edge line, not the drop -- these sit in a list,
+   they don't float) so ten worktrees still read as ten separate things.
+
+   Both row shapes carry the slot: surveying renders a button, tidying
+   renders a label wrapping a checkbox, and the mode you're in is not a
+   reason for the rows to stop being separable.
 
    :not(:focus-visible) both outranks the ambient-depth strip's
    `box-shadow: none` and stands aside for the row's own focus ring, so
