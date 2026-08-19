@@ -71,11 +71,13 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
 //
 // The tree insets its child rows under a project header and packs them
 // tight: they are one line each, and the indent already says where a
-// group starts and stops. The inbox has neither, so its rows line up
-// with the sidebar's own chrome (the banner and the New worktree button
-// are both px-3) and keep a gap under them. Three-line rows butted
-// together read as one block of text with nothing for the eye to break
-// on, and at px-2 the row's hover fill visibly overhung the banner.
+// group starts and stops. The inbox has neither, so its rows keep a gap
+// under them. Three-line rows butted together read as one block of text
+// with nothing for the eye to break on.
+//
+// Every row sits at the same px-2 as the tree's. doubutsu widens the
+// inbox's inset from its own stylesheet, because the thing it needs to
+// line up with -- the banner card -- only exists in that theme.
 //
 // Padding, not margin: the virtualizer sizes each row from offsetHeight,
 // which counts the one and ignores the other, so a margin would let the
@@ -86,6 +88,13 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "worktree-skeleton": "px-2 pl-5",
   "worktree-error": "px-2 pl-5",
   "shelved-toggle": "px-2 pl-5",
-  "inbox-worktree": "px-3 pb-1",
-  "inbox-shelf": "px-3 pb-1",
+  "inbox-worktree": "px-2 pb-1",
+  "inbox-shelf": "px-2 pb-1",
 };
+
+// Rows belonging to the inbox's own column. They carry a data-slot so
+// doubutsu can widen their inset to clear its banner card, which the v1
+// header has no equivalent of.
+export function isInboxRow(kind: SidebarRow["kind"]): boolean {
+  return kind === "inbox-worktree" || kind === "inbox-shelf";
+}

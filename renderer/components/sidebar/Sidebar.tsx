@@ -242,11 +242,9 @@ export function Sidebar() {
           the tree instead gets the controls that only apply to it.
           Arranging takes over the whole sidebar, so neither shows. */}
       {arrangeMode ? null : inbox ? (
-        // px-3, not the px-2 the rows use: this is header chrome, so it
-        // lines up with the header above it -- doubutsu's banner is
-        // mx-3 and v1's title row is px-3. At px-2 the button visibly
-        // overhung the banner on both sides.
-        <div className="px-3 pb-1.5">
+        // Same inset as the rows below it, and the same slot, so
+        // doubutsu widens the whole column together.
+        <div data-slot="sidebar-inbox-item" className="px-2 pb-1.5">
           <NewWorktreeButton projects={orderedProjects} />
         </div>
       ) : (
