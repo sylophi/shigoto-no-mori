@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -389,8 +390,7 @@ export function NewWorktree() {
                 />
               ) : (
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={useBranchAsFolder}
                     onChange={(e) => {
                       const next = e.target.checked;
@@ -402,7 +402,6 @@ export function NewWorktree() {
                       setUseBranchAsFolder(next);
                     }}
                     disabled={busy}
-                    className="size-3.5 shrink-0 accent-primary disabled:cursor-not-allowed"
                   />
                   Use {mode === "checkout" ? "source" : "branch"} name
                 </label>

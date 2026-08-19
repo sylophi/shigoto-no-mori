@@ -36,6 +36,10 @@
     "react/react-in-jsx-scope": "off",
     "react/jsx-no-constructed-context-values": "off",
     "jsx-a11y/prefer-tag-over-role": "off",
+    "jsx-a11y/label-has-associated-control": [
+      "error",
+      { "controlComponents": ["Checkbox"] }
+    ],
     "no-restricted-properties": [
       "error",
       {

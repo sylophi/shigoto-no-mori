@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Folder } from "lucide-react";
 import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { formatBytes } from "@/lib/formatBytes";
@@ -107,11 +108,9 @@ export function TidyConfirm({
               . Their changes exist nowhere else.
             </p>
             <label className="mt-3 flex cursor-pointer items-center gap-2 select-none">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={acknowledged}
                 onChange={() => setAcknowledged((prev) => !prev)}
-                className="size-3.5 shrink-0 accent-destructive"
               />
               I understand this work will be lost
             </label>
