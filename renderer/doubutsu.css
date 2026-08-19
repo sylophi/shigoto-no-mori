@@ -27,7 +27,6 @@
  *    rather than targeting utility classes):
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
- *      checkbox                  ui/checkbox.tsx
  *      chip                      ui/chip-button.tsx, configure/CarryOverRow.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
@@ -358,14 +357,6 @@
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
   background-color: var(--muted);
-}
-
-/* Checkboxes become the tile every other tappable thing here is: rounder
-   than v1 wants, and sitting on the same solid edge. The component's own
-   fill carries the state, so only the shape is restated. */
-.doubutsu [data-slot="checkbox"] {
-  border-radius: 7px;
-  box-shadow: 0 2px 0 0 var(--doubutsu-edge);
 }
 
 /* --- Open popups keep their trigger lit ---

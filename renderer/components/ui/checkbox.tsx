@@ -2,13 +2,16 @@ import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // The app's checkbox. A native checkbox only accepts an accent tint, so
-// the platform box is switched off and this draws its own.
+// the platform box is switched off and this draws its own, keeping the
+// flat square the native one was.
 //
-// Unchecked is a filled tile rather than an outline, taking the same
-// `bg-input` track fill `ui/switch.tsx` uses. An empty box with a hairline
+// The part the native box couldn't express is the unchecked state: it
+// is a filled tile rather than an outline, taking the same `bg-input`
+// fill `ui/switch.tsx` uses for its track. An empty box with a hairline
 // border reads as unstyled in doubutsu, where every other control is a
 // solid shape. Checked swaps the fill to `bg-primary`, so the pair says
-// the same thing the switch's track does in either theme.
+// the same thing the switch's track does, in either theme and with no
+// per-theme rules of its own.
 //
 // The tick is a sibling icon rather than a background image so its
 // colour comes from a token like everything else.
@@ -28,7 +31,7 @@ export function Checkbox({
         // `checked:bg-primary` are the same specificity, so in dark mode
         // the unchecked fill would win on source order alone and a
         // ticked box would come out unfilled.
-        className="peer size-4 appearance-none rounded-[4px] border border-transparent bg-input shadow-xs transition-colors outline-none checked:bg-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/80 dark:checked:bg-primary"
+        className="peer size-4 appearance-none rounded-[4px] border border-transparent bg-input transition-colors outline-none checked:bg-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/80 dark:checked:bg-primary"
         {...props}
       />
       <Check
