@@ -1,5 +1,3 @@
-import { Folder } from "lucide-react";
-import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
@@ -8,7 +6,7 @@ import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { isSelectable, type TidyEntry } from "./tidyModel";
-import { TidyVerdictBadge } from "./TidyVerdictBadge";
+import { TidyEntryTitle } from "./TidyEntryTitle";
 
 interface TidyRowProps {
   entry: TidyEntry;
@@ -63,38 +61,14 @@ export function TidyRow({
     >
       <Checkbox
         checked={checked}
-        onChange={onToggle}
+        onCheckedChange={onToggle}
         disabled={!interactive}
         aria-label={`Select ${project.name} / ${worktree.name}`}
         className="mt-1"
       />
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex min-w-0 items-center gap-2">
-          {/* Fallback icon rather than nothing, for the same reason the
-              inbox uses one: this list mixes projects, so a missing icon
-              would ragged-edge every row around it. */}
-          {showProject && (
-            <ProjectIcon
-              projectId={project.id}
-              className="size-3"
-              fallback={Folder}
-            />
-          )}
-          <span className="-ml-0.5 min-w-0 truncate font-medium select-text">
-            {showProject && (
-              <>
-                <span className="font-normal text-muted-foreground">
-                  {project.name}
-                </span>
-                <span aria-hidden className="px-1 text-muted-foreground/60">
-                  /
-                </span>
-              </>
-            )}
-            {worktree.name}
-          </span>
-          <TidyVerdictBadge kind={verdict.kind} />
+        <TidyEntryTitle entry={entry} showProject={showProject}>
           {worktree.isExternal && !worktree.isPrimary && (
             <RowTag>External</RowTag>
           )}
@@ -102,7 +76,7 @@ export function TidyRow({
               which is exactly how one ends up forgotten on disk -- so
               this list shows them, labelled. */}
           {worktree.shelved && <RowTag>Shelved</RowTag>}
-        </div>
+        </TidyEntryTitle>
 
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <span className="truncate font-mono select-text">

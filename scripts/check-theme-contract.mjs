@@ -42,12 +42,14 @@ for (const file of walk(join(root, "renderer"))) {
 const failures = [];
 
 // 1. data-* hooks the CSS selects must be set in renderer source.
-//    (data-highlighted / data-popup-open / data-disabled are set by
-//    Base UI at runtime, data-sonner-toast by sonner -- checked below.)
+//    (data-highlighted / data-popup-open / data-disabled / data-unchecked
+//    are set by Base UI at runtime, data-sonner-toast by sonner --
+//    checked below.)
 const RUNTIME_ATTRS = new Set([
   "data-highlighted",
   "data-popup-open",
   "data-disabled",
+  "data-unchecked",
   "data-sonner-toast",
 ]);
 const attrRefs = [...css.matchAll(/\[(data-[\w-]+)(?:="([^"]+)")?\]/g)];
@@ -92,6 +94,11 @@ const upstream = [
     pkg: "@base-ui/react",
     file: "node_modules/@base-ui/react/utils/popupStateMapping.js",
     needle: "data-popup-open",
+  },
+  {
+    pkg: "@base-ui/react",
+    file: "node_modules/@base-ui/react/checkbox/root/CheckboxRootDataAttributes.js",
+    needle: "data-unchecked",
   },
   {
     pkg: "cmdk",

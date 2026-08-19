@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { Folder } from "lucide-react";
-import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { formatBytes } from "@/lib/formatBytes";
 import type { TidySummary } from "./tidyModel";
-import { TidyVerdictBadge } from "./TidyVerdictBadge";
+import { TidyEntryTitle } from "./TidyEntryTitle";
 
 interface TidyConfirmProps {
   summary: TidySummary;
@@ -57,23 +55,7 @@ export function TidyConfirm({
               className="flex items-start gap-2 rounded-md bg-muted/50 px-2.5 py-2"
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <div className="flex min-w-0 items-center gap-2">
-                  <ProjectIcon
-                    projectId={entry.project.id}
-                    className="size-3"
-                    fallback={Folder}
-                  />
-                  <span className="-ml-0.5 min-w-0 truncate text-sm font-medium select-text">
-                    <span className="font-normal text-muted-foreground">
-                      {entry.project.name}
-                    </span>
-                    <span aria-hidden className="px-1 text-muted-foreground/60">
-                      /
-                    </span>
-                    {entry.worktree.name}
-                  </span>
-                  <TidyVerdictBadge kind={entry.verdict.kind} />
-                </div>
+                <TidyEntryTitle entry={entry} showProject className="text-sm" />
                 <span className="truncate text-xs text-muted-foreground">
                   {entry.verdict.reason}
                 </span>
@@ -109,8 +91,9 @@ export function TidyConfirm({
             </p>
             <label className="mt-3 flex cursor-pointer items-center gap-2 select-none">
               <Checkbox
+                variant="destructive"
                 checked={acknowledged}
-                onChange={() => setAcknowledged((prev) => !prev)}
+                onCheckedChange={() => setAcknowledged((prev) => !prev)}
               />
               I understand this work will be lost
             </label>

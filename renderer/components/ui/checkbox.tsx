@@ -1,44 +1,56 @@
+// oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
+import type * as React from "react";
+import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { Check } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 
-// The app's checkbox. A native checkbox only accepts an accent tint, so
-// the platform box is switched off and this draws its own, keeping the
-// flat square the native one was.
+// The app's checkbox, on the same Base UI footing as `ui/switch.tsx`.
+// Base UI renders a real hidden input underneath, so native semantics,
+// keyboard handling and label association all survive, and the
+// `label:has(input[type="checkbox"])` row-hover hook doubutsu.css hangs
+// off keeps matching.
 //
-// The part the native box couldn't express is the unchecked state: it
-// is a filled tile rather than an outline, taking the same `bg-input`
-// fill `ui/switch.tsx` uses for its track. An empty box with a hairline
-// border reads as unstyled in doubutsu, where every other control is a
-// solid shape. Checked swaps the fill to `bg-primary`, so the pair says
-// the same thing the switch's track does, in either theme and with no
-// per-theme rules of its own.
+// v1 draws the empty box the way the rest of v1 draws things, with a
+// hairline. doubutsu strips hairlines, so it fills the box instead. See
+// the `[data-unchecked]` rule in doubutsu.css.
 //
-// The tick is a sibling icon rather than a background image so its
-// colour comes from a token like everything else.
-//
-// `className` lands on the wrapper, which is what callers are
-// positioning (mt-1 against a first line of text, and so on).
+// The destructive variant swaps which fill the ticked state takes. It
+// exists for the one checkbox whose job is to confirm losing work, and
+// it keeps the same weight as the default: the solid fill means ticked,
+// either way round.
 export function Checkbox({
   className,
+  variant = "default",
   ...props
-}: React.ComponentProps<"input">) {
+}: React.ComponentProps<typeof CheckboxPrimitive.Root> & {
+  variant?: "default" | "destructive";
+}) {
+  const destructive = variant === "destructive";
   return (
-    <span className={cn("relative inline-flex shrink-0", className)}>
-      <input
-        type="checkbox"
-        data-slot="checkbox"
-        // `dark:checked:` is not redundant: `dark:bg-input/80` and
-        // `checked:bg-primary` are the same specificity, so in dark mode
-        // the unchecked fill would win on source order alone and a
-        // ticked box would come out unfilled.
-        className="peer size-4 appearance-none rounded-[4px] border border-transparent bg-input transition-colors outline-none checked:bg-primary focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/80 dark:checked:bg-primary"
-        {...props}
-      />
-      <Check
-        aria-hidden
-        strokeWidth={3}
-        className="pointer-events-none absolute inset-0 m-auto size-3 text-primary-foreground opacity-0 peer-checked:opacity-100"
-      />
-    </span>
+    <CheckboxPrimitive.Root
+      data-slot="checkbox"
+      data-variant={variant}
+      className={cn(
+        "peer size-4 shrink-0 rounded-[4px] border border-input bg-background transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        destructive
+          ? "border-destructive/30 data-[checked]:border-destructive data-[checked]:bg-destructive"
+          : "data-[checked]:border-primary data-[checked]:bg-primary",
+        className,
+      )}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator
+        className={cn(
+          "flex items-center justify-center",
+          // `text-background` rather than a foreground token: the tick
+          // sits on the destructive fill, and the surface colour is the
+          // one thing guaranteed to contrast with it in all four modes.
+          destructive ? "text-background" : "text-primary-foreground",
+        )}
+      >
+        <Check aria-hidden className="size-3" strokeWidth={3} />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
   );
 }

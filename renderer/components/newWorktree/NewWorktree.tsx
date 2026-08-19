@@ -392,8 +392,7 @@ export function NewWorktree() {
                 <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
                   <Checkbox
                     checked={useBranchAsFolder}
-                    onChange={(e) => {
-                      const next = e.target.checked;
+                    onCheckedChange={(next) => {
                       if (!next) {
                         // Seed the editable field with whatever was just shown,
                         // so toggling off doesn't blow away the user's context.

@@ -44,7 +44,7 @@ export function ConvertRow({
     >
       <Checkbox
         checked={checked}
-        onChange={onToggle}
+        onCheckedChange={onToggle}
         disabled={!interactive}
         className="mt-1"
       />

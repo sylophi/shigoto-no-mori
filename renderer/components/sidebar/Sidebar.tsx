@@ -37,6 +37,7 @@ import {
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
+import { TidyButton } from "./TidyButton";
 import { sortProjects } from "./sortProjects";
 import { VirtualRow } from "./VirtualRow";
 
@@ -244,8 +245,16 @@ export function Sidebar() {
       {arrangeMode ? null : inbox ? (
         // px-2 like the rows below it, which is where v1 wants it.
         // doubutsu pulls it in to its banner card, hence the slot.
-        <div data-slot="sidebar-inbox-create" className="px-2 pb-1.5">
-          <NewWorktreeButton projects={orderedProjects} />
+        <div
+          data-slot="sidebar-inbox-create"
+          className="flex items-center gap-1 px-2 pb-1.5"
+        >
+          <div className="min-w-0 flex-1">
+            <NewWorktreeButton projects={orderedProjects} />
+          </div>
+          {/* The tidy page has no other way in, so it can't live only in
+              the tree's toolbar. */}
+          <TidyButton />
         </div>
       ) : (
         <SidebarToolbar onArrange={() => setArrangeMode(true)} />

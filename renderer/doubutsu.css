@@ -27,6 +27,7 @@
  *    rather than targeting utility classes):
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
+ *      checkbox (+ data-variant) ui/checkbox.tsx
  *      chip                      ui/chip-button.tsx, configure/CarryOverRow.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
@@ -45,8 +46,8 @@
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
- *    data-popup-open, cmdk's [cmdk-item] + aria-selected, sonner's
- *    [data-sonner-toast].
+ *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
+ *    aria-selected, sonner's [data-sonner-toast].
  *
  * 5. One consumer outside renderer/: scripts/dmg-background.html, the
  *    dmg installer artwork, which links this file and renders against
@@ -357,6 +358,15 @@
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
   background-color: var(--muted);
+}
+
+/* An unticked checkbox is a hairline box on the surface colour in v1,
+   and hairlines are exactly what the reset above strips. Left alone it
+   would be a control you cannot see, on a list that removes things. It
+   gets a fill of its own instead, which is how every other surface here
+   is told apart. */
+.doubutsu [data-slot="checkbox"][data-unchecked] {
+  background-color: var(--muted-foreground);
 }
 
 /* --- Open popups keep their trigger lit ---
