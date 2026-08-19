@@ -1,12 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { cn } from "@/lib/utils";
 import { RowContent } from "./RowContent";
-import {
-  isInboxRow,
-  ROW_LAYOUT,
-  type InboxShelf,
-  type SidebarRow,
-} from "./sidebarRow";
+import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
 
 interface VirtualRowProps {
   row: SidebarRow;
@@ -37,8 +32,6 @@ export function VirtualRow({
   return (
     <div
       data-index={index}
-      // See sidebar-inbox-item in doubutsu.css.
-      data-slot={isInboxRow(row.kind) ? "sidebar-inbox-item" : undefined}
       ref={measureRef}
       className={cn("absolute top-0 left-0 w-full", ROW_LAYOUT[row.kind])}
       style={{ transform: `translateY(${start}px)` }}

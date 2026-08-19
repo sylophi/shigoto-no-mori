@@ -242,9 +242,8 @@ export function Sidebar() {
           the tree instead gets the controls that only apply to it.
           Arranging takes over the whole sidebar, so neither shows. */}
       {arrangeMode ? null : inbox ? (
-        // Same inset as the rows below it, and the same slot, so
-        // doubutsu widens the whole column together.
-        <div data-slot="sidebar-inbox-item" className="px-2 pb-1.5">
+        // Same inset as the rows below it, so the column reads as one.
+        <div className="px-2 pb-1.5">
           <NewWorktreeButton projects={orderedProjects} />
         </div>
       ) : (

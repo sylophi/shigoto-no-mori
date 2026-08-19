@@ -75,10 +75,6 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
 // under them. Three-line rows butted together read as one block of text
 // with nothing for the eye to break on.
 //
-// Every row sits at the same px-2 as the tree's. doubutsu widens the
-// inbox's inset from its own stylesheet, because the thing it needs to
-// line up with -- the banner card -- only exists in that theme.
-//
 // Padding, not margin: the virtualizer sizes each row from offsetHeight,
 // which counts the one and ignores the other, so a margin would let the
 // next row overlap instead of parting them.
@@ -91,10 +87,3 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "inbox-worktree": "px-2 pb-1",
   "inbox-shelf": "px-2 pb-1",
 };
-
-// Rows belonging to the inbox's own column. They carry a data-slot so
-// doubutsu can widen their inset to clear its banner card, which the v1
-// header has no equivalent of.
-export function isInboxRow(kind: SidebarRow["kind"]): boolean {
-  return kind === "inbox-worktree" || kind === "inbox-shelf";
-}

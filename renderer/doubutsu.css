@@ -37,7 +37,6 @@
  *      diff-index                diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
- *      sidebar-inbox-item        sidebar/VirtualRow.tsx, sidebar/Sidebar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
@@ -473,17 +472,6 @@
   --muted-foreground: oklch(0.741 0.025 73.5);
   --accent: oklch(0.4 0.07 155);
   --accent-foreground: oklch(0.942 0.011 76.6);
-}
-
-/* The inbox column is written at the sidebar's usual px-2, which is
-   where v1 wants it: its header is a plain title row, so the rows and
-   the New worktree button should run as wide as the tree's do. doubutsu
-   puts a cream banner card at mx-3 above them, and against that edge
-   px-2 reads as an overhang -- every row's hover fill poking 4px past
-   the card on both sides. Only this theme has the card, so only this
-   theme pays the inset. */
-.doubutsu [data-slot="sidebar-inbox-item"] {
-  padding-inline: calc(var(--spacing) * 3);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
