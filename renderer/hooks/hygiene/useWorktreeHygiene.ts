@@ -30,7 +30,7 @@ export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
       // The sweep costs several git calls per worktree per project, and
       // the app's defaults refetch on every mount and window focus. A
       // window matching the disk cache keeps an alt-tab from re-probing
-      // every repo; the removal flow invalidates explicitly, which
+      // every repo. The removal flow invalidates explicitly, which
       // ignores staleTime.
       staleTime: 60_000,
       // Same reason the sidebar's worktree lists stay quiet: a project

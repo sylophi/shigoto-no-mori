@@ -333,7 +333,7 @@ export async function findWorktreeForDisk(
 
 // Three walks at a time. Each one already runs its own pool of
 // directory readers, so a wider window mostly makes the first size land
-// later; narrower than that and a fleet of forty crawls.
+// later. Any narrower and a fleet of forty crawls.
 const diskWalks = createLimiter(3);
 
 // Disk measurements are cached because a full walk of a big checkout

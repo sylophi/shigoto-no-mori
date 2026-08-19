@@ -38,12 +38,12 @@ export const WorktreeHygieneSchema = z.object({
   // True when this worktree has the project's own default branch
   // checked out. Removal deletes the local branch (see
   // deleteBranchOnRemove), and that branch is the one thing in the repo
-  // nothing else can restore — merged or not, it is never ticked.
+  // nothing else can restore. Merged or not, it is never ticked.
   holdsPrimaryBranch: z.boolean(),
   // True when the worktree has untracked files that `changedCount`
   // didn't see. `git status` honours the user's
   // status.showUntrackedFiles setting, so under `-uno` a tree full of
-  // uncommitted new files reports clean; this is checked separately for
+  // uncommitted new files reports clean. This is checked separately for
   // exactly the rows that would otherwise be auto-ticked.
   untracked: z.boolean(),
 });
@@ -144,7 +144,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "defaultBranch",
       safe: false,
-      reason: `Holds ${worktree.branch}, the project's default branch — removing it deletes that branch.`,
+      reason: `Removing this deletes ${worktree.branch}, the project's default branch.`,
     };
   }
   // Facts still loading, or the primary ref wouldn't resolve. Either way

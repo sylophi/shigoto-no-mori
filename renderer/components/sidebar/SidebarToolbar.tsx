@@ -113,7 +113,7 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
           view has -- so it sits with the controls that leave the tree
           rather than in the footer. Settings keeps the explained entry
           for anyone reading the inbox, which has no toolbar. */}
-      <SimpleTooltip tip="Tidy the forest — sizes, staleness, what has landed">
+      <SimpleTooltip tip="Tidy the forest: sizes, staleness, what has landed">
         <button
           type="button"
           onClick={() => void navigate({ to: "/tidy" })}

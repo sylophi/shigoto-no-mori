@@ -49,8 +49,8 @@ export function TidyForest() {
   const queryClient = useQueryClient();
   const { data: allProjects = [], isLoading: projectsLoading } = useProjects();
   // A project whose folder has moved or been deleted answers every git
-  // call with ENOENT. The sidebar already flags those; here they are
-  // simply left out, so one broken entry can't fill the page with rows
+  // call with ENOENT. The sidebar already flags those, so here they are
+  // simply left out and one broken entry can't fill the page with rows
   // that can't be judged.
   const projects = allProjects.filter(
     (project) => project.pathExists !== false,
@@ -127,8 +127,8 @@ export function TidyForest() {
         if (!result.ok) {
           throw new Error(
             result.cleanupError.phase === "teardown"
-              ? "Teardown script failed — the worktree is still on disk."
-              : "Releasing its ports failed — the worktree is still on disk.",
+              ? "Teardown script failed. The worktree is still on disk."
+              : "Releasing its ports failed. The worktree is still on disk.",
           );
         }
       },
