@@ -117,7 +117,7 @@ export function TidyForest() {
           projectId: entry.project.id,
           worktreeId: entry.worktree.id,
           // Force only where the user explicitly acknowledged losing
-          // uncommitted work; a clean worktree never needs it.
+          // uncommitted work. A clean worktree never needs it.
           force: entry.worktree.changedCount > 0,
         });
         // Deletion resolves either way: `ok: false` means a teardown

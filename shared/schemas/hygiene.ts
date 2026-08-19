@@ -9,7 +9,7 @@ import type { Worktree } from "./worktree";
 //
 // These are facts only. The judgement that decides what is safe to
 // remove lives in `deriveHygieneVerdict` below, so the same rules run in
-// the list, the summary and the confirm step — the split
+// the list, the summary and the confirm step. It is the same split
 // `deriveRemoteSyncState` already uses for remote state.
 export const WorktreeHygieneSchema = z.object({
   worktreeId: z.string(),
@@ -17,7 +17,7 @@ export const WorktreeHygieneSchema = z.object({
   // ref we couldn't read.
   lastCommitAt: z.number().int().nonnegative().nullable(),
   // Commits on this worktree's HEAD that the primary ref doesn't have.
-  // 0 means the branch is fully contained in primary — the classic
+  // 0 means the branch is fully contained in primary, the classic
   // "already merged" case.
   //
   // Null when the count couldn't be taken at all: a prunable worktree
@@ -69,7 +69,7 @@ export const WorktreeDiskUsageSchema = z.object({
 export type WorktreeDiskUsage = z.infer<typeof WorktreeDiskUsageSchema>;
 
 // How safe it is to remove a worktree. The tidy list preselects
-// `merged` and `absorbed` only; everything else takes a deliberate
+// `merged` and `absorbed` only. Everything else takes a deliberate
 // click plus an explicit acknowledgement.
 export type HygieneVerdictKind =
   | "primary" // the project's own checkout, never removable
@@ -135,7 +135,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "unknown",
       safe: false,
-      reason: "Detached HEAD — nothing to compare against.",
+      reason: "Detached HEAD, so there is nothing to compare against.",
     };
   }
   // Merged or not, removing this deletes the local branch the whole

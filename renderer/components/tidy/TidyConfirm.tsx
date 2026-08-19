@@ -44,7 +44,7 @@ export function TidyConfirm({
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Each one&apos;s directory is deleted from disk along with everything
-          inside it — node_modules, build output, and any file that was never
+          inside it: node_modules, build output, and any file that was never
           committed. Teardown scripts run first
           {deleteBranches ? ", and the local branch is deleted too" : ""}. This
           cannot be undone.

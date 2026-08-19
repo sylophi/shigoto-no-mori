@@ -42,7 +42,7 @@ const ACTIVITY_EXCLUDED_NAMES = new Set([
 ]);
 
 // How many directories are read concurrently. Enough to keep the disk
-// busy without risking EMFILE on a deep tree; the walk is IO-bound, so
+// busy without risking EMFILE on a deep tree. The walk is IO-bound, so
 // going wider stops helping well before this.
 const DIR_CONCURRENCY = 8;
 

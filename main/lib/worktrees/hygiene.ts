@@ -232,8 +232,8 @@ async function hygieneFor(
     // report a number that isn't one.
     if (uniqueCommits === null) continue;
     if (uniqueCommits === 0) {
-      // Fully contained already; the merge-tree probe would only confirm
-      // what the commit count just proved.
+      // Fully contained already. The merge-tree probe would only
+      // confirm what the commit count just proved.
       return contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
