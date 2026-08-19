@@ -9,9 +9,9 @@ import type { ForestSort } from "@shared/schemas";
 import { FOREST_SORT_LABELS, type ForestFacet } from "./forestFilters";
 
 // Ordered, not a Record keyed by facet: this is the order the segments
-// read left to right, widening from "everything" to the two narrowest
-// cuts, and that order is the control's design rather than an accident
-// of how the type was declared.
+// read left to right, widening from "everything" to the narrowest cuts,
+// and that order is the control's design rather than an accident of how
+// the type was declared.
 const FACETS: ReadonlyArray<{
   value: ForestFacet;
   label: string;
@@ -33,10 +33,15 @@ const FACETS: ReadonlyArray<{
   },
 ];
 
-// Listed rather than derived from the label map's key order: the menu
-// reads best default-first, and that's a claim about the menu, not about
-// how the type was declared.
-//
+const MODES: ReadonlyArray<SegmentedOption<"survey" | "tidy">> = [
+  { value: "survey", label: "Survey", title: "Read the state of everything" },
+  {
+    value: "tidy",
+    label: "Tidy",
+    title: "Measure disk use and pick worktrees to remove",
+  },
+];
+
 // "Size on disk" is only offered while tidying, because that is the only
 // time the sizes exist. Offering it in survey mode would sort every row
 // by zero and quietly fall through to the branch-name tiebreaker, and
@@ -64,9 +69,17 @@ interface ForestToolbarProps {
   onQueryChange: (query: string) => void;
   counts: Record<ForestFacet, number>;
   tidying: boolean;
+  onTidyingChange: (tidying: boolean) => void;
+  // Right-hand status while tidying, where the sort control's own count
+  // would otherwise sit. Absent while surveying.
+  selectionLabel: string | undefined;
   disabled?: boolean;
 }
 
+// Two rows of visible controls above the list, no chrome hidden in the
+// header. Row one is what you're doing, row two is what you're looking
+// at, and both keep the same left-heavy, count-on-the-right rhythm the
+// list and the action block below repeat.
 export function ForestToolbar({
   facet,
   onFacetChange,
@@ -76,6 +89,8 @@ export function ForestToolbar({
   onQueryChange,
   counts,
   tidying,
+  onTidyingChange,
+  selectionLabel,
   disabled,
 }: ForestToolbarProps) {
   const facetOptions: SegmentedOption<ForestFacet>[] = FACETS.map((option) => ({
@@ -92,51 +107,66 @@ export function ForestToolbar({
   }));
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-40 flex-1">
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground/60"
-        />
-        <Input
-          type="text"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          // Escape clears rather than blurring: the field is the only
-          // thing holding the list narrow, so "get me back to the whole
-          // forest" is the one action worth a key.
-          onKeyDown={(e) => {
-            if (e.key === "Escape" && query) {
-              e.preventDefault();
-              onQueryChange("");
-            }
-          }}
-          placeholder="Filter by branch, folder, or project…"
-          aria-label="Filter worktrees"
-          className="w-full py-1 pr-2.5 pl-7 text-xs"
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-3">
+        <div className="relative min-w-40 flex-1">
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground/60"
+          />
+          <Input
+            type="text"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            // Escape clears rather than blurring: the field is the only
+            // thing holding the list narrow, so "get me back to the whole
+            // forest" is the one action worth a key.
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && query) {
+                e.preventDefault();
+                onQueryChange("");
+              }
+            }}
+            placeholder="Filter by branch, folder, or project…"
+            aria-label="Filter worktrees"
+            className="w-full py-1.5 pr-2.5 pl-8"
+          />
+        </div>
+        <SegmentedControl<"survey" | "tidy">
+          value={tidying ? "tidy" : "survey"}
+          onChange={(next) => onTidyingChange(next === "tidy")}
+          options={MODES}
+          aria-label="Forest mode"
+          optionClassName="px-3 py-1.5 text-xs"
+          disabled={disabled}
         />
       </div>
 
-      <SegmentedControl
-        value={facet}
-        onChange={onFacetChange}
-        options={facetOptions}
-        aria-label="Show worktrees"
-        optionClassName="gap-1.5 px-2.5 py-1 text-xs"
-        disabled={disabled}
-      />
-
-      {/* Names the current order rather than saying "Sort": the header
-          is already claiming a line, and which way the forest is
-          ordered changes what you conclude from scanning it. */}
-      <SortMenu
-        value={sort}
-        onChange={onSortChange}
-        options={tidying ? TIDY_SORTS : SURVEY_SORTS}
-        ariaLabel="Sort worktrees"
-        label={FOREST_SORT_LABELS[sort]}
-        triggerClassName="py-1 text-xs"
-      />
+      <div className="flex items-center justify-between gap-3">
+        <SegmentedControl
+          value={facet}
+          onChange={onFacetChange}
+          options={facetOptions}
+          aria-label="Show worktrees"
+          optionClassName="gap-1.5 px-2.5 py-1 text-xs"
+          disabled={disabled}
+        />
+        <div className="flex shrink-0 items-center gap-3">
+          {selectionLabel && (
+            <span className="text-xs text-muted-foreground">
+              {selectionLabel}
+            </span>
+          )}
+          <SortMenu
+            value={sort}
+            onChange={onSortChange}
+            options={tidying ? TIDY_SORTS : SURVEY_SORTS}
+            ariaLabel="Sort worktrees"
+            label={FOREST_SORT_LABELS[sort]}
+            triggerClassName="py-1 text-xs"
+          />
+        </div>
+      </div>
     </div>
   );
 }

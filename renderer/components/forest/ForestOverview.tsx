@@ -4,7 +4,6 @@ import { Trees } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { Skeleton } from "@/components/ui/skeleton";
 import { sortProjects } from "@/components/sidebar/sortProjects";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
@@ -143,57 +142,24 @@ export function ForestOverview() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex items-end gap-3">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-xs text-muted-foreground">
-              {summaryLine}
-            </span>
-            {/* The display header the worktree page gets, not the small
-                one the settings-shaped routes share. This is a
-                destination you steer by, so it carries its own name at
-                the same weight a branch does. */}
-            <h1 className="flex min-w-0 items-center gap-2 text-2xl font-medium tracking-tight">
-              <Trees aria-hidden className="size-6 text-muted-foreground/70" />
-              The forest
-            </h1>
-          </div>
-          <div className="ml-auto shrink-0">
-            {tidying ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setTidying(false)}
-                disabled={batchRunning}
-              >
-                Done tidying
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTidying(true)}
-              >
-                Tidy the forest
-              </Button>
-            )}
-          </div>
-        </div>
-        <ForestToolbar
-          facet={facet}
-          onFacetChange={setFacet}
-          sort={sort}
-          onSortChange={(next) => setSort.mutate(next)}
-          query={query}
-          onQueryChange={setQuery}
-          counts={forest.counts}
-          tidying={tidying === true}
-          disabled={batchRunning}
-        />
+      <header className="flex flex-col gap-0.5 border-b border-border px-6 pt-7 pb-4">
+        <span className="truncate text-xs text-muted-foreground">
+          {summaryLine}
+        </span>
+        {/* The display header the worktree page gets, not the small one
+            the settings-shaped routes share. This is a destination you
+            steer by, so it carries its own name at the same weight a
+            branch does. Nothing else lives up here: every control this
+            screen has is visible in the column below, where you can see
+            what it's set to without opening anything. */}
+        <h1 className="flex min-w-0 items-center gap-2 text-2xl font-medium tracking-tight">
+          <Trees aria-hidden className="size-6 text-muted-foreground/70" />
+          The forest
+        </h1>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="flex max-w-4xl flex-col gap-6">
+        <div className="flex max-w-3xl flex-col gap-6">
           <ForestStrip
             tidying={tidying === true}
             disk={forest.disk}
@@ -201,6 +167,24 @@ export function ForestOverview() {
             total={forest.total}
             selectedCount={selected.size}
             reclaimBytes={summary.reclaimBytes}
+          />
+
+          <ForestToolbar
+            facet={facet}
+            onFacetChange={setFacet}
+            sort={sort}
+            onSortChange={(next) => setSort.mutate(next)}
+            query={query}
+            onQueryChange={setQuery}
+            counts={forest.counts}
+            tidying={tidying === true}
+            onTidyingChange={setTidying}
+            selectionLabel={
+              tidying
+                ? `${selected.size} of ${forest.selectableCount} selected`
+                : undefined
+            }
+            disabled={batchRunning}
           />
 
           {forest.failedCount > 0 && (
@@ -235,32 +219,32 @@ export function ForestOverview() {
               />
             ))
           )}
+
+          {/* The last block in the column rather than a bar pinned to the
+              viewport. Reading the list is the work, and the button that
+              ends it belongs after the thing it acts on, mirroring the
+              controls block above. */}
+          {tidying && forest.groups.length > 0 && (
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">
+                Only merged worktrees with a clean tree are ticked for you.
+                Anything else you pick yourself.
+              </p>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="shrink-0"
+                disabled={selected.size === 0 || batchRunning}
+                onClick={() => setConfirming(true)}
+              >
+                {batchRunning
+                  ? "Removing…"
+                  : `Remove ${plural(selected.size, "worktree")}`}
+              </Button>
+            </div>
+          )}
         </div>
       </div>
-
-      {tidying && forest.groups.length > 0 && (
-        <div className="flex items-center justify-between gap-3 border-t border-border px-6 py-3">
-          <p className="text-xs text-muted-foreground">
-            Only merged worktrees with a clean tree are ticked for you. Anything
-            else you pick yourself.
-          </p>
-          <div className="flex shrink-0 items-center gap-3">
-            <span className="text-xs text-muted-foreground">
-              {selected.size} of {forest.selectableCount} selected
-            </span>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={selected.size === 0 || batchRunning}
-              onClick={() => setConfirming(true)}
-            >
-              {batchRunning
-                ? "Removing…"
-                : `Remove ${plural(selected.size, "worktree")}`}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {confirming && (
         <TidyConfirm
@@ -364,35 +348,28 @@ function EmptyResult({
   onClear,
   onAddProject,
 }: EmptyResultProps) {
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-12 w-full" />
-        ))}
-      </div>
-    );
-  }
-  if (narrowed) {
-    return (
-      <div className="flex items-center gap-3">
-        <p className="text-sm text-muted-foreground">
-          No worktrees match this filter.
-        </p>
-        <Button size="xs" variant="outline" onClick={onClear}>
-          Clear
-        </Button>
-      </div>
-    );
-  }
   return (
-    <div className="flex items-center gap-3">
-      <p className="text-sm text-muted-foreground">
-        No worktrees in any project yet.
-      </p>
-      <Button size="xs" variant="outline" onClick={onAddProject}>
-        Add a project
-      </Button>
+    // A quiet dashed frame rather than skeleton rows: the list has a
+    // known shape and this is the absence of it, so saying so in one
+    // line beats faking four rows that will never arrive.
+    <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+      {loading ? (
+        <p>Counting the forest…</p>
+      ) : narrowed ? (
+        <>
+          <p>No worktrees match this filter.</p>
+          <Button size="xs" variant="outline" onClick={onClear}>
+            Clear
+          </Button>
+        </>
+      ) : (
+        <>
+          <p>No worktrees in any project yet.</p>
+          <Button size="xs" variant="outline" onClick={onAddProject}>
+            Add a project
+          </Button>
+        </>
+      )}
     </div>
   );
 }
