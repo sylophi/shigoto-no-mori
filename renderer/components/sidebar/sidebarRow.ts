@@ -1,8 +1,24 @@
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, PullRequest, Worktree } from "@shared/schemas";
+
+// The two shelves the inbox view folds shut by default. The third box --
+// the live one -- has no header and no toggle, so it isn't in this union.
+export type InboxShelf = "shelved" | "merged";
 
 export type SidebarRow =
   | { kind: "project"; key: string; project: Project; expanded: boolean }
   | { kind: "worktree"; key: string; worktree: Worktree }
+  // The inbox's own row: taller, cross-project, and built to be triaged
+  // rather than picked out of a short list. See InboxRow. The PR rides
+  // along because the builder already had to look it up to decide which
+  // box the row belongs in -- resolving it again per row would put a
+  // query observer on every visible row for an answer already in hand.
+  | {
+      kind: "inbox-worktree";
+      key: string;
+      worktree: Worktree;
+      projectName: string;
+      pr: PullRequest | undefined;
+    }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }
   | {
@@ -11,7 +27,33 @@ export type SidebarRow =
       projectId: string;
       count: number;
       expanded: boolean;
+    }
+  | {
+      kind: "inbox-shelf";
+      key: string;
+      shelf: InboxShelf;
+      count: number;
+      expanded: boolean;
     };
+
+// What a view hands the sidebar shell. Both row builders produce this,
+// so the shell renders one of them without knowing which.
+export interface SidebarViewModel {
+  rows: SidebarRow[];
+  failedCount: number;
+  // Shown instead of the list when the view has nothing to render and
+  // isn't merely still resolving. Null means "say nothing" -- which
+  // includes the loading case, since a flash of "nothing here" while the
+  // answer is still in flight is worse than a beat of blank space.
+  emptyMessage: string | null;
+  // Which row to scroll to when navigation lands on a worktree from
+  // outside the sidebar. Falls back to whatever contains it when its own
+  // row isn't rendered -- a folded project in the tree, a folded shelf in
+  // the inbox -- and null when the view can't place it at all. Neither
+  // view unfolds anything on the way: the empty-state redirect runs on
+  // every launch, and auto-expanding would undo the user's folding.
+  revealKey: (projectId: string, worktreeId: string) => string | null;
+}
 
 export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
@@ -19,4 +61,20 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "worktree-skeleton": 36,
   "worktree-error": 24,
   "shelved-toggle": 24,
+  "inbox-worktree": 62,
+  "inbox-shelf": 32,
+};
+
+// Whether the row hangs under a project header. Indentation is a
+// property of the row, not of the view: the tree's child rows sit under
+// a header and the inbox's don't, and reading it off the kind keeps the
+// virtualizer from having to be told which view it's drawing.
+export const ROW_INDENTED: Record<SidebarRow["kind"], boolean> = {
+  project: false,
+  worktree: true,
+  "worktree-skeleton": true,
+  "worktree-error": true,
+  "shelved-toggle": true,
+  "inbox-worktree": false,
+  "inbox-shelf": false,
 };

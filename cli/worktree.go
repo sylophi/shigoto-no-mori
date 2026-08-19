@@ -13,25 +13,27 @@ import (
 )
 
 type worktreeJSON struct {
-	ID            string          `json:"id"`
-	ProjectID     string          `json:"projectId"`
-	Name          string          `json:"name"`
-	Branch        string          `json:"branch"`
-	Path          string          `json:"path"`
-	Ahead         int             `json:"ahead"`
-	Behind        int             `json:"behind"`
-	HasUpstream   bool            `json:"hasUpstream"`
-	HasRemote     bool            `json:"hasRemote"`
-	DivergedClean bool            `json:"divergedClean"`
-	BehindPrimary int             `json:"behindPrimary"`
-	PrimaryRef    string          `json:"primaryRef,omitempty"`
-	ChangedCount  int             `json:"changedCount"`
-	RecentCommits []commitSummary `json:"recentCommits"`
-	IsPrimary     bool            `json:"isPrimary"`
-	IsExternal    bool            `json:"isExternal"`
-	Detached      bool            `json:"detached"`
-	Shelved       bool            `json:"shelved"`
-	ProjectName   string          `json:"projectName"`
+	ID                string          `json:"id"`
+	ProjectID         string          `json:"projectId"`
+	Name              string          `json:"name"`
+	Branch            string          `json:"branch"`
+	Path              string          `json:"path"`
+	Ahead             int             `json:"ahead"`
+	Behind            int             `json:"behind"`
+	HasUpstream       bool            `json:"hasUpstream"`
+	HasRemote         bool            `json:"hasRemote"`
+	DivergedClean     bool            `json:"divergedClean"`
+	BehindPrimary     int             `json:"behindPrimary"`
+	PrimaryRef        string          `json:"primaryRef,omitempty"`
+	MergedIntoPrimary bool            `json:"mergedIntoPrimary"`
+	ChangedCount      int             `json:"changedCount"`
+	LastChangeAt      int64           `json:"lastChangeAt,omitempty"`
+	RecentCommits     []commitSummary `json:"recentCommits"`
+	IsPrimary         bool            `json:"isPrimary"`
+	IsExternal        bool            `json:"isExternal"`
+	Detached          bool            `json:"detached"`
+	Shelved           bool            `json:"shelved"`
+	ProjectName       string          `json:"projectName"`
 }
 
 const recentCommitsCount = 4
@@ -40,6 +42,7 @@ type buildContext struct {
 	hasRemote  bool
 	primaryRef string
 	shelved    map[string]bool
+	chain      *primaryChain
 }
 
 // The configured default-branch override, or "" -- the nil-config
@@ -60,11 +63,13 @@ func loadBuildContext(proj project) buildContext {
 	// listRemotes feeds both hasRemote and the default-branch
 	// resolution; one spawn covers both.
 	remotes := listRemotes(proj.Path)
+	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
+		defaultBranchOverride(readProjectConfig(proj.ID)), remotes)
 	return buildContext{
-		hasRemote: len(remotes) > 0,
-		primaryRef: resolveDefaultBranchWithRemotes(proj.Path,
-			defaultBranchOverride(readProjectConfig(proj.ID)), remotes),
-		shelved: readShelvedSet(),
+		hasRemote:  len(remotes) > 0,
+		primaryRef: primaryRef,
+		shelved:    readShelvedSet(),
+		chain:      &primaryChain{path: proj.Path, ref: primaryRef},
 	}
 }
 
@@ -80,38 +85,40 @@ func identityOf(w worktreeJSON) worktreeIdentity {
 
 func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktreeJSON {
 	var (
-		changed int
+		changes workingTreeChanges
 		commits []commitSummary
 		rs      remoteSync
-		behind  int
+		primary primaryRelation
 		wg      sync.WaitGroup
 	)
 	wg.Add(4)
 	// Display probe: an unreadable status just shows as 0 changes.
-	go func() { defer wg.Done(); changed, _ = changedCount(id.Path) }()
+	go func() { defer wg.Done(); changes, _ = getWorkingTreeChanges(id.Path) }()
 	go func() { defer wg.Done(); commits = listCommits(id.Path, 0, recentCommitsCount) }()
 	go func() { defer wg.Done(); rs = getRemoteSync(id.Path) }()
-	go func() { defer wg.Done(); behind = behindPrimary(id, ctx.primaryRef) }()
+	go func() { defer wg.Done(); primary = getPrimaryRelation(id, ctx) }()
 	wg.Wait()
 	return worktreeJSON{
-		ID:            id.ID,
-		ProjectID:     id.ProjectID,
-		Name:          id.Name,
-		Branch:        id.Branch,
-		Path:          id.Path,
-		Ahead:         rs.ahead,
-		Behind:        rs.behind,
-		HasUpstream:   rs.hasUpstream,
-		HasRemote:     ctx.hasRemote,
-		DivergedClean: rs.divergedClean,
-		BehindPrimary: behind,
-		PrimaryRef:    ctx.primaryRef,
-		ChangedCount:  changed,
-		RecentCommits: commits,
-		IsPrimary:     id.IsPrimary,
-		IsExternal:    id.IsExternal,
-		Detached:      id.Detached,
-		Shelved:       !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID],
+		ID:                id.ID,
+		ProjectID:         id.ProjectID,
+		Name:              id.Name,
+		Branch:            id.Branch,
+		Path:              id.Path,
+		Ahead:             rs.ahead,
+		Behind:            rs.behind,
+		HasUpstream:       rs.hasUpstream,
+		HasRemote:         ctx.hasRemote,
+		DivergedClean:     rs.divergedClean,
+		BehindPrimary:     primary.behindPrimary,
+		PrimaryRef:        ctx.primaryRef,
+		MergedIntoPrimary: primary.mergedIntoPrimary,
+		ChangedCount:      changes.count,
+		LastChangeAt:      changes.lastChangeAt,
+		RecentCommits:     commits,
+		IsPrimary:         id.IsPrimary,
+		IsExternal:        id.IsExternal,
+		Detached:          id.Detached,
+		Shelved:           !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID],
 	}
 }
 

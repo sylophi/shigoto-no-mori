@@ -1,31 +1,32 @@
-import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
+import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
-import type { SidebarRow } from "./sidebarRow";
+import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
 
-interface UseSidebarRowsArgs {
+interface BuildSidebarRowsArgs {
   projects: Project[];
+  // Positionally aligned with `projects`.
+  worktreeQueries: ProjectWorktreeQueries;
   collapsed: Set<string>;
   shelvedExpanded: Set<string>;
   arrangeMode: boolean;
 }
 
-interface UseSidebarRowsResult {
-  rows: SidebarRow[];
-  failedCount: number;
-}
-
 // Flattens `projects` plus their per-project worktree queries into the
-// SidebarRow list the virtualizer renders. Mirrors the original inline
-// derivation so we keep its render-on-every-change semantics; useQueries
-// returns a fresh array each render and a useMemo here would need a
-// deep fingerprint to stay correct.
-export function useSidebarRows({
+// SidebarRow list the virtualizer renders. A plain function, not a hook:
+// the queries are subscribed once by the Sidebar and handed to whichever
+// builder the active view needs, so flipping views doesn't tear the
+// subscriptions down and re-probe git for every project.
+//
+// No memo, deliberately. The result is O(rows) to rebuild and the inputs
+// change whenever anything on screen does, so a cache here would need a
+// deep fingerprint to stay correct and would save nothing.
+export function buildSidebarRows({
   projects,
+  worktreeQueries,
   collapsed,
   shelvedExpanded,
   arrangeMode,
-}: UseSidebarRowsArgs): UseSidebarRowsResult {
-  const worktreeQueries = useAllProjectWorktrees(projects, true);
+}: BuildSidebarRowsArgs): SidebarViewModel {
   const failedCount = worktreeQueries.filter((q) => q.error).length;
 
   if (arrangeMode) {
@@ -35,7 +36,12 @@ export function useSidebarRows({
       project,
       expanded: false,
     }));
-    return { rows, failedCount };
+    return {
+      rows,
+      failedCount,
+      emptyMessage: null,
+      revealKey: (projectId) => headerKeyIfPresent(rows, projectId),
+    };
   }
 
   const rows: SidebarRow[] = [];
@@ -98,5 +104,28 @@ export function useSidebarRows({
       });
     }
   });
-  return { rows, failedCount };
+  return {
+    rows,
+    failedCount,
+    // Every project renders a header, so "no rows" here only ever means
+    // "no projects" -- which the shell already has its own answer for.
+    emptyMessage: null,
+    revealKey: (projectId, worktreeId) =>
+      rows.some((r) => r.key === `w:${worktreeId}`)
+        ? `w:${worktreeId}`
+        : // Only a folded project stands in for its worktree. A missing
+          // row in an open project means the listing hasn't landed yet,
+          // and settling for the header there would mark the reveal done
+          // and never scroll to the row once it appears.
+          collapsed.has(projectId)
+          ? headerKeyIfPresent(rows, projectId)
+          : null,
+  };
+}
+
+// A collapsed project hides its worktree rows, so its header is the
+// closest thing there is to reveal.
+function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
+  const key = `p:${projectId}`;
+  return rows.some((r) => r.key === key) ? key : null;
 }

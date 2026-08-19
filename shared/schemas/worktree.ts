@@ -77,7 +77,18 @@ export const WorktreeSchema = z.object({
   // so the renderer can show it on the pill without implying the source
   // is a local branch.
   primaryRef: z.string().optional(),
+  // True when this branch's work is already in the primary branch. See
+  // landedOnPrimary in main/lib/git/worktrees.ts for what does and
+  // doesn't count -- notably a local fast-forward merge doesn't, since
+  // its history is indistinguishable from a worktree that never
+  // committed. False for the primary worktree and for detached HEAD.
+  mergedIntoPrimary: z.boolean(),
   changedCount: z.number().int().nonnegative(),
+  // Newest mtime across the worktree's uncommitted changes, epoch ms.
+  // Absent when the tree is clean (or when the scan couldn't stat
+  // anything). Exists so "recently worked in" can account for edits that
+  // were never committed, not just the commit log.
+  lastChangeAt: z.number().int().nonnegative().optional(),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 4) so the IPC payload stays
   // small: 3 for the teaser plus 1 extra to signal "more available".
@@ -144,6 +155,32 @@ export function deriveRemoteSyncState(
     };
   }
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
+}
+
+// When the worktree last saw work, epoch ms, for recency sorting.
+// Uncommitted edits count: a worktree you were typing in five minutes
+// ago should outrank one whose last commit is newer but that you
+// haven't touched since. 0 when nothing is known -- a clean worktree
+// with no commits yet.
+export function worktreeLastActivityAt(
+  worktree: Pick<Worktree, "lastChangeAt" | "recentCommits">,
+): number {
+  const committed = Date.parse(worktree.recentCommits[0]?.date ?? "");
+  return Math.max(
+    worktree.lastChangeAt ?? 0,
+    Number.isNaN(committed) ? 0 : committed,
+  );
+}
+
+// A worktree this app created and owns, as opposed to the project's own
+// checkout or one the user made by hand elsewhere. The flags that only
+// apply to our own worktrees (shelving, relocating) key off this. Main
+// enforces the same rule, so offering them elsewhere produces a no-op
+// the UI then appears to ignore.
+export function isManagedWorktree(
+  worktree: Pick<Worktree, "isPrimary" | "isExternal">,
+): boolean {
+  return !worktree.isPrimary && !worktree.isExternal;
 }
 
 export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({

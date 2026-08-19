@@ -3,7 +3,11 @@ import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { assertNever, cn } from "@/lib/utils";
-import type { CleanupError, Worktree } from "@shared/schemas";
+import {
+  isManagedWorktree,
+  type CleanupError,
+  type Worktree,
+} from "@shared/schemas";
 
 // The footer is a four-state machine. The parent owns the transitions and
 // hands us a discriminated state plus the actions each state can fire, so
@@ -189,7 +193,7 @@ function NormalRow({
 
   return (
     <div className="ml-auto flex items-center gap-3">
-      {!worktree.isPrimary && !worktree.isExternal && (
+      {isManagedWorktree(worktree) && (
         <Button
           variant="ghost"
           size="xs"

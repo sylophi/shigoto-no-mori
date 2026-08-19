@@ -1,6 +1,11 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { PullRequest } from "@shared/schemas";
+import {
+  queryOptions,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import type { Project, PullRequest } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
 // Cascading invalidator: the shared key prefix knocks out both the
@@ -46,8 +51,8 @@ export function useWatchProjectPullRequests(): void {
 // changed; useWatchProjectPullRequests invalidates this query off that
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest instead.
-export function useProjectPullRequests(projectId: string) {
-  return useQuery<Record<string, PullRequest>>({
+function projectPullRequestsQueryOptions(projectId: string) {
+  return queryOptions<Record<string, PullRequest>>({
     queryKey: queryKeys.projectPullRequests(projectId),
     queryFn: () => window.api.githubCli.projectPullRequests(projectId),
     staleTime: Infinity,
@@ -56,3 +61,29 @@ export function useProjectPullRequests(projectId: string) {
     meta: { errorTitle: "Couldn't load pull requests" },
   });
 }
+
+export function useProjectPullRequests(projectId: string) {
+  return useQuery(projectPullRequestsQueryOptions(projectId));
+}
+
+// One query per project, sharing the per-project cache key with
+// useProjectPullRequests. The inbox sidebar is cross-project, so it
+// needs every map at once to tell a merged branch from a live one.
+// Main serves these from the sweep's cache, so the fan-out costs no
+// extra `gh` calls. Projects whose path is gone are skipped -- the
+// handler would just throw on the missing repo.
+//
+// Positionally aligned with `projects`, like useAllProjectWorktrees, so
+// a caller walking both indexes them the same way.
+export function useAllProjectPullRequests(projects: Project[]) {
+  return useQueries({
+    queries: projects.map((project) => ({
+      ...projectPullRequestsQueryOptions(project.id),
+      enabled: project.pathExists !== false,
+    })),
+  });
+}
+
+export type ProjectPullRequestQueries = ReturnType<
+  typeof useAllProjectPullRequests
+>;

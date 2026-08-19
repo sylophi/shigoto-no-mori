@@ -27,11 +27,11 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // Untracked files count as dirty too: `reset --hard` silently
 // overwrites any untracked file whose path exists in the upstream tree.
 // `--untracked-files=normal` pins that protection against a user-level
-// `status.showUntrackedFiles = no`. getChangedCount deliberately does
-// NOT pin it -- it runs per worktree on every window focus, and `-uno`
-// is a setting people choose to make exactly that scan cheap. The only
-// cost of the mismatch is the overwrite button showing when this guard
-// will refuse, and the guard still refuses.
+// `status.showUntrackedFiles = no`. getWorkingTreeChanges deliberately
+// does NOT pin it -- it runs per worktree on every window focus, and
+// `-uno` is a setting people choose to make exactly that scan cheap. The
+// only cost of the mismatch is the overwrite button showing when this
+// guard will refuse, and the guard still refuses.
 //
 // Ignored files never appear in `status`, but `reset --hard` overwrites
 // them all the same when the upstream tree tracks a file at their path

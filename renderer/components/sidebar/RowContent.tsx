@@ -1,14 +1,17 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { assertNever } from "@/lib/utils";
+import { InboxRow } from "./inbox/InboxRow";
+import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { ProjectRow } from "./ProjectRow";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
-import type { SidebarRow } from "./sidebarRow";
+import type { InboxShelf, SidebarRow } from "./sidebarRow";
 
 interface RowContentProps {
   row: SidebarRow;
   onToggle: (projectId: string) => void;
   onToggleShelved: (projectId: string) => void;
+  onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
   isHovered: boolean;
 }
@@ -17,6 +20,7 @@ export function RowContent({
   row,
   onToggle,
   onToggleShelved,
+  onToggleShelf,
   arrangeMode,
   isHovered,
 }: RowContentProps) {
@@ -33,6 +37,14 @@ export function RowContent({
       );
     case "worktree":
       return <WorktreeRow worktree={row.worktree} />;
+    case "inbox-worktree":
+      return (
+        <InboxRow
+          worktree={row.worktree}
+          projectName={row.projectName}
+          pr={row.pr}
+        />
+      );
     case "worktree-skeleton":
       return (
         <div className="space-y-1 px-2 py-1.5" aria-label="Loading worktrees">
@@ -46,6 +58,15 @@ export function RowContent({
           count={row.count}
           expanded={row.expanded}
           onToggle={() => onToggleShelved(row.projectId)}
+        />
+      );
+    case "inbox-shelf":
+      return (
+        <InboxShelfRow
+          shelf={row.shelf}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={() => onToggleShelf(row.shelf)}
         />
       );
     case "worktree-error":

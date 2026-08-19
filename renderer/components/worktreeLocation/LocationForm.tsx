@@ -7,10 +7,11 @@ import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import type {
-  ShigomoriConfig,
-  Worktree,
-  WorktreeLayout,
+import {
+  isManagedWorktree,
+  type ShigomoriConfig,
+  type Worktree,
+  type WorktreeLayout,
 } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
@@ -102,7 +103,7 @@ export function LocationForm({
   // Non-primary worktrees only -- the primary checkout sits at projectPath
   // and can't be moved. Externals can't be moved either: `git worktree
   // move` works only on managed worktrees we created.
-  const movable = worktrees.filter((w) => !w.isPrimary && !w.isExternal);
+  const movable = worktrees.filter(isManagedWorktree);
 
   const proposedFor = (worktree: Worktree): string =>
     worktreePathFor(layoutInputs, worktree.name);

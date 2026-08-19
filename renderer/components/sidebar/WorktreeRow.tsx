@@ -1,47 +1,27 @@
-import { useLocation, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
-import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { describePullRequest } from "@/lib/pullRequest";
-import {
-  useWorktreeScriptActivity,
-  type ScriptActivityKind,
-} from "@/store/scriptRuns";
+import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
+import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
-import { StatusPill } from "./StatusPill";
+import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
   worktree: Worktree;
 }
 
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
-  const navigate = useNavigate();
-  const { pathname } = useLocation();
-  const activity = useWorktreeScriptActivity(worktree.id);
-  const isDeleting = useIsDeletingWorktree(worktree.id);
-  // Not useMatchRoute: its stable function return reads from a hidden
-  // store, which React Compiler can't see, so isSelected stays cached at
-  // false. location.pathname is already decoded, so no encoding here.
-  const isSelected =
-    pathname === `/projects/${worktree.projectId}/worktrees/${worktree.id}`;
+  const { isSelected, open, activity, isDeleting, title } =
+    useWorktreeRowState(worktree);
 
   return (
     <button
       type="button"
-      onClick={() =>
-        void navigate({
-          to: "/projects/$projectId/worktrees/$worktreeId",
-          params: {
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-          },
-        })
-      }
-      title={describeRow(activity, isDeleting, worktree.shelved)}
+      onClick={open}
+      title={title}
       className={cn(
         "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
         "hover:bg-accent/60",
@@ -85,6 +65,7 @@ interface RowTrailingProps {
 // running script just adds a leading activity icon to the normal cluster
 // so status / PR / kind stay visible.
 function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
+  const { data: prs } = useProjectPullRequests(worktree.projectId);
   // Deletion spans cleanup scripts + the final git remove; the script
   // activity covers only cleanup, so keep the trash pulsing for the
   // whole mutation regardless of which phase is active.
@@ -95,36 +76,8 @@ function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
     <>
       {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
-      <PullRequestIndicator worktree={worktree} />
+      <PullRequestPill pr={prs?.[worktree.branch]} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
-  );
-}
-
-function describeRow(
-  activity: ScriptActivityKind | null,
-  isDeleting: boolean,
-  shelved: boolean,
-): string | undefined {
-  if (isDeleting) return "Deleting worktree";
-  if (activity === "setup") return "Running setup";
-  if (activity === "teardown") return "Running teardown";
-  if (activity === "package") return "Running a script";
-  if (shelved) return "Shelved";
-  return undefined;
-}
-
-function PullRequestIndicator({ worktree }: { worktree: Worktree }) {
-  const { data: prs } = useProjectPullRequests(worktree.projectId);
-  const pr = prs?.[worktree.branch];
-  if (!pr) return null;
-  const { Icon, tone, label } = describePullRequest(pr);
-  return (
-    <StatusPill
-      icon={Icon}
-      tone={tone}
-      title={`${label} #${pr.number}`}
-      aria-label={`${label} #${pr.number}`}
-    />
   );
 }

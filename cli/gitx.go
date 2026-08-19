@@ -8,6 +8,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -166,21 +167,83 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 
 // --- status probes (buildWorktree parity) ---
 
+// How many changed paths get stat'd for their mtime. Mirrors
+// CHANGE_MTIME_STAT_LIMIT in main/lib/git/worktrees.ts.
+const changeMtimeStatLimit = 64
+
+type workingTreeChanges struct {
+	count int
+	// Newest mtime across the changed paths, epoch ms. Zero for a clean
+	// worktree, and when every stat failed (an all-deletions diff).
+	lastChangeAt int64
+}
+
+// Splits `git status --porcelain=v1 -z` into the paths it reports. The
+// -z form is what makes the paths usable: without it git C-quotes
+// anything with a space or a non-ASCII byte. The cost is having to
+// consume the rename/copy source, which git emits as a bare extra field
+// right after the entry that renamed it.
+func parseStatusPaths(stdout string) []string {
+	fields := strings.Split(stdout, "\x00")
+	var paths []string
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		// Trailing empty field from the final NUL, and any short garbage:
+		// every real record is "XY <path>", so at least 4 bytes.
+		if len(field) < 4 {
+			continue
+		}
+		paths = append(paths, field[3:])
+		// Either column can be the R/C -- staged renames land in the
+		// index column, unstaged ones in the worktree column -- and both
+		// emit exactly one source field.
+		if isRenameOrCopy(field[0]) || isRenameOrCopy(field[1]) {
+			i++
+		}
+	}
+	return paths
+}
+
+func isRenameOrCopy(column byte) bool {
+	return column == 'R' || column == 'C'
+}
+
 // The error matters to callers guarding destructive operations: a
 // worktree whose status can't be read (broken gitdir pointer,
 // unreadable index) must NOT count as clean.
+func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
+	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
+	if err != nil {
+		return workingTreeChanges{}, err
+	}
+	paths := parseStatusPaths(stdout)
+	out := workingTreeChanges{count: len(paths)}
+	// A deleted path stats as a failure, an untracked directory stats as
+	// the directory -- both are fine, we only want the newest hit.
+	for i, rel := range paths {
+		if i >= changeMtimeStatLimit {
+			break
+		}
+		info, statErr := os.Stat(filepath.Join(worktreePath, rel))
+		if statErr != nil {
+			continue
+		}
+		if ms := info.ModTime().UnixMilli(); ms > out.lastChangeAt {
+			out.lastChangeAt = ms
+		}
+	}
+	return out, nil
+}
+
+// Count only. The destructive-op guards just want "is it dirty", and
+// the mtime scan getWorkingTreeChanges layers on top costs up to
+// changeMtimeStatLimit stats they would throw away.
 func changedCount(worktreePath string) (int, error) {
-	stdout, err := runGit(worktreePath, "status", "--porcelain=v1")
+	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
 	if err != nil {
 		return 0, err
 	}
-	count := 0
-	for _, line := range strings.Split(stdout, "\n") {
-		if line != "" {
-			count++
-		}
-	}
-	return count, nil
+	return len(parseStatusPaths(stdout)), nil
 }
 
 type remoteSync struct {
@@ -262,16 +325,104 @@ func listCommits(worktreePath string, skip, count int) []commitSummary {
 	return commits
 }
 
-func behindPrimary(id worktreeIdentity, primaryRef string) int {
-	if primaryRef == "" || id.IsPrimary || id.Detached {
-		return 0
+type primaryRelation struct {
+	behindPrimary     int
+	mergedIntoPrimary bool
+}
+
+// Ceiling on the first-parent walk in landedOnPrimary. Mirrors
+// FIRST_PARENT_SCAN_LIMIT in main/lib/git/worktrees.ts.
+const firstParentScanLimit = 2000
+
+// Whether the branch's work is in the primary branch. See
+// landedOnPrimary in main/lib/git/worktrees.ts for why this walks the
+// primary's first-parent chain rather than asking `git branch --merged`,
+// and which merge styles it deliberately reports as "not landed".
+func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain) bool {
+	if behindPrimary > firstParentScanLimit {
+		return false
 	}
-	stdout, err := runGit(id.Path, "rev-list", "--count", "HEAD.."+primaryRef)
+	head, err := runGit(worktreePath, "rev-parse", "HEAD")
 	if err != nil {
-		return 0
+		return false
 	}
-	n, _ := strconv.Atoi(strings.TrimSpace(stdout))
-	return n
+	tip := strings.TrimSpace(head)
+	if tip == "" {
+		return false
+	}
+	commits, ok := chain.get()
+	if !ok {
+		return false
+	}
+	return !commits[tip]
+}
+
+// The primary's first-parent chain, read once per project and shared by
+// every worktree in it -- one object store, one ref, one answer. Lazy,
+// so a project whose worktrees are all ahead of the primary never asks.
+// Mirrors primaryChainReader in main/lib/git/worktrees.ts.
+type primaryChain struct {
+	path string
+	ref  string
+	once sync.Once
+	set  map[string]bool
+	ok   bool
+}
+
+// The bool is "could we read it". False must be treated as "not landed":
+// an empty set would report every HEAD as off the chain, i.e. merged.
+func (c *primaryChain) get() (map[string]bool, bool) {
+	c.once.Do(func() {
+		if c.ref == "" {
+			return
+		}
+		// firstParentScanLimit bounds how far behind a worktree can be
+		// and still be asked about, so a chain that long covers every
+		// HEAD that could sit on it.
+		out, err := runGit(c.path, "rev-list", "--first-parent",
+			fmt.Sprintf("-n%d", firstParentScanLimit+1), c.ref)
+		if err != nil {
+			return
+		}
+		set := map[string]bool{}
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if line != "" {
+				set[line] = true
+			}
+		}
+		c.set, c.ok = set, true
+	})
+	return c.set, c.ok
+}
+
+// How the worktree sits against the project's primary branch. Both
+// answers are "no relation" where the question doesn't apply (no
+// primary, the primary worktree itself, detached HEAD).
+func getPrimaryRelation(id worktreeIdentity, ctx buildContext) primaryRelation {
+	if ctx.primaryRef == "" || id.IsPrimary || id.Detached {
+		return primaryRelation{}
+	}
+	// `--left-right` on the symmetric difference prints "<left>\t<right>":
+	// commits only on HEAD, then commits only on the primary.
+	stdout, err := runGit(id.Path, "rev-list", "--count", "--left-right", "HEAD..."+ctx.primaryRef)
+	if err != nil {
+		return primaryRelation{}
+	}
+	fields := strings.Fields(strings.TrimSpace(stdout))
+	if len(fields) < 2 {
+		return primaryRelation{}
+	}
+	aheadOfPrimary, _ := strconv.Atoi(fields[0])
+	behindPrimary, _ := strconv.Atoi(fields[1])
+	// Anything HEAD still holds on its own hasn't landed yet, and a
+	// branch level with the primary has nothing to have landed.
+	if aheadOfPrimary > 0 || behindPrimary == 0 {
+		return primaryRelation{behindPrimary: behindPrimary}
+	}
+	return primaryRelation{
+		behindPrimary:     behindPrimary,
+		mergedIntoPrimary: landedOnPrimary(id.Path, behindPrimary, ctx.chain),
+	}
 }
 
 // --- remotes / default branch (remotes.ts parity) ---

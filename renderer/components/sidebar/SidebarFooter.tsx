@@ -1,67 +1,62 @@
-import { useState } from "react";
 import {
-  ArrowUpDown,
-  Check,
   FolderPlus,
-  LayoutGrid,
+  Inbox,
+  ListTree,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import type { ProjectSortMode } from "@shared/schemas";
+import type { SidebarView } from "@shared/schemas";
 import { cn } from "@/lib/utils";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
-  useProjectSort,
-  useSetProjectSort,
-} from "@/hooks/projects/useProjectSort";
+  useSetSidebarView,
+  useSidebarView,
+} from "@/hooks/projects/useSidebarView";
 import { useUpdater } from "@/hooks/system/useUpdater";
+import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;
   onToggleArrange: () => void;
 }
 
-const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
-  { value: "alphabetical", label: "Alphabetical" },
-  { value: "recent", label: "Most recently used" },
-  { value: "frequent", label: "Most used" },
-  { value: "manual", label: "Manual order" },
-];
+const VIEW_OPTIONS = [
+  {
+    value: "projects",
+    label: <ListTree aria-hidden className="size-3.5" />,
+    title: "Group worktrees by project",
+  },
+  {
+    value: "inbox",
+    label: <Inbox aria-hidden className="size-3.5" />,
+    title: "One list across every project, newest work first",
+  },
+] as const satisfies ReadonlyArray<SegmentedOption<SidebarView>>;
 
+// What both views share: the layout toggle, and the two app-level
+// actions. Anything that only answers a question the project tree asks
+// lives in SidebarToolbar, above the tree.
 export function SidebarFooter({
   arrangeMode,
   onToggleArrange,
 }: SidebarFooterProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { toggleLauncher, openAddProject } = useOverlays();
-  const { data: sortMode = "manual" } = useProjectSort();
-  const setSortMode = useSetProjectSort();
+  const { openAddProject } = useOverlays();
+  const view = useSidebarView();
+  const setView = useSetSidebarView();
   const { state: updaterState } = useUpdater();
-  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
 
-  // Dragging only reorders coherently when the displayed order matches the
-  // stored order, so arranging forces the manual sort before entering the
-  // drag view.
-  const arrangeManually = () => {
-    setSortMode.mutate("manual");
-    onToggleArrange();
-  };
   if (arrangeMode) {
     return (
       <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
@@ -77,6 +72,25 @@ export function SidebarFooter({
   }
   return (
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
+      <SegmentedControl<SidebarView>
+        value={view}
+        onChange={(next) => setView.mutate(next)}
+        options={VIEW_OPTIONS}
+        aria-label="Sidebar layout"
+        optionClassName="px-1.5 py-1"
+      />
+      <div className="flex-1" />
+      <SimpleTooltip tip="Add project (⌘N)">
+        <button
+          type="button"
+          onClick={openAddProject}
+          aria-label="Add project"
+          aria-keyshortcuts={`${modName}+N`}
+          className={SIDEBAR_ICON_BUTTON}
+        >
+          <FolderPlus className="size-3.5" />
+        </button>
+      </SimpleTooltip>
       <SimpleTooltip
         tip={updateReady ? "Settings — update available" : "Settings"}
       >
@@ -86,10 +100,9 @@ export function SidebarFooter({
           aria-label={updateReady ? "Settings (update available)" : "Settings"}
           aria-current={settingsActive ? "page" : undefined}
           className={cn(
-            "relative rounded-md p-1.5 transition-colors hover:bg-accent hover:text-foreground",
-            settingsActive
-              ? "bg-accent text-foreground"
-              : "text-muted-foreground",
+            SIDEBAR_ICON_BUTTON,
+            "relative",
+            settingsActive && "bg-accent text-foreground",
           )}
         >
           <SettingsIcon className="size-3.5" />
@@ -99,84 +112,6 @@ export function SidebarFooter({
               className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
             />
           )}
-        </button>
-      </SimpleTooltip>
-      <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
-        {/* The tooltip hangs on a wrapper span, not the trigger button:
-            merged onto the button, the tooltip's attributes would
-            overwrite data-slot="dropdown-menu-trigger" and put
-            data-popup-open next to aria-haspopup, which doubutsu
-            styles as "menu open". Disabled while the menu is open so
-            the tip can't cover the popup. */}
-        <SimpleTooltip tip="Sort projects" disabled={sortMenuOpen}>
-          <span className="inline-flex">
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label="Sort projects"
-                  className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground"
-                >
-                  <ArrowUpDown className="size-3.5" />
-                </button>
-              }
-            />
-          </span>
-        </SimpleTooltip>
-        <DropdownMenuContent align="start" side="top" sideOffset={2}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-            {SORT_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => setSortMode.mutate(option.value)}
-              >
-                <Check
-                  className={cn(
-                    "size-3.5",
-                    sortMode === option.value ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={arrangeManually}>
-            Set manual order
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <div className="flex-1" />
-      <SimpleTooltip
-        // The backtick renders in the mono font: the rounded doubutsu
-        // fonts draw U+0060 as a narrow accent whose ink overhangs the
-        // following space.
-        tip={
-          <>
-            Project launcher (<span className="font-mono">`</span> or ⌘⇧P)
-          </>
-        }
-      >
-        <button
-          type="button"
-          onClick={toggleLauncher}
-          aria-label="Project launcher"
-          aria-keyshortcuts={`\` ${modName}+Shift+P`}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <LayoutGrid className="size-3.5" />
-        </button>
-      </SimpleTooltip>
-      <SimpleTooltip tip="Add project (⌘N)">
-        <button
-          type="button"
-          onClick={openAddProject}
-          aria-label="Add project"
-          aria-keyshortcuts={`${modName}+N`}
-          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
     </div>

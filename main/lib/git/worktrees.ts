@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, rm } from "node:fs/promises";
-import { basename, dirname } from "node:path";
+import { mkdir, rm, stat } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
@@ -12,7 +12,7 @@ import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
-import { run } from "./core";
+import { run, splitZ } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -51,16 +51,75 @@ function deriveBranch(entry: RawWorktreeEntry): string {
   return UNKNOWN_BRANCH;
 }
 
-async function getChangedCount(worktreePath: string): Promise<number> {
+// How many changed paths get stat'd for their mtime. Only the newest
+// timestamp survives, so a worktree in the middle of a huge refactor
+// doesn't need every path measured -- the cap keeps the per-worktree
+// cost flat no matter how dirty the tree is.
+const CHANGE_MTIME_STAT_LIMIT = 64;
+
+interface WorkingTreeChanges {
+  count: number;
+  // Newest mtime across the changed paths, epoch ms. Undefined for a
+  // clean worktree, and when every stat failed (an all-deletions diff).
+  lastChangeAt?: number;
+}
+
+// Splits `git status --porcelain=v1 -z` into the paths it reports. The
+// -z form is what makes the paths usable: without it git C-quotes
+// anything with a space or a non-ASCII byte, and un-quoting that back
+// into a real path is its own parser. The cost is having to consume the
+// rename/copy source, which git emits as a bare extra field right after
+// the entry that renamed it.
+function parseStatusPaths(stdout: string): string[] {
+  const fields = splitZ(stdout);
+  const paths: string[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    // Every real record is "XY <path>", so anything shorter is garbage.
+    if (!field || field.length < 4) continue;
+    paths.push(field.slice(3));
+    // Either column can be the R/C: staged renames land in the index
+    // column, unstaged ones (git detects those too) in the worktree
+    // column. Both emit exactly one source field, and mistaking it for a
+    // record of its own both inflates the count and stats a path with
+    // three bytes shorn off the front.
+    if (isRenameOrCopy(field[0]) || isRenameOrCopy(field[1])) i++;
+  }
+  return paths;
+}
+
+function isRenameOrCopy(column: string | undefined): boolean {
+  return column === "R" || column === "C";
+}
+
+async function getWorkingTreeChanges(
+  worktreePath: string,
+): Promise<WorkingTreeChanges> {
   try {
     // Deliberately NOT pinned to --untracked-files=normal, unlike the
     // dirty guard in overwriteFromUpstream: this runs per worktree on
     // every window focus, and `-uno` users chose that setting to make
     // exactly this scan cheap. See the comment there.
-    const stdout = await run(worktreePath, ["status", "--porcelain=v1"]);
-    return stdout.split("\n").filter((line) => line.length > 0).length;
+    const stdout = await run(worktreePath, ["status", "--porcelain=v1", "-z"]);
+    const paths = parseStatusPaths(stdout);
+    if (paths.length === 0) return { count: 0 };
+    // A deleted path stats as a failure, an untracked directory stats as
+    // the directory -- both are fine, we only want the newest hit.
+    const times = await Promise.all(
+      paths.slice(0, CHANGE_MTIME_STAT_LIMIT).map((rel) =>
+        stat(join(worktreePath, rel)).then(
+          (info) => info.mtimeMs,
+          () => 0,
+        ),
+      ),
+    );
+    const newest = Math.max(0, ...times);
+    return {
+      count: paths.length,
+      lastChangeAt: newest > 0 ? Math.round(newest) : undefined,
+    };
   } catch {
-    return 0;
+    return { count: 0 };
   }
 }
 
@@ -243,23 +302,127 @@ export async function listWorktreeIdentities(
 // all" affordance without a second round trip.
 const RECENT_COMMITS_COUNT = 4;
 
-// Per-worktree count of commits the primary has but HEAD doesn't.
-// Returns 0 for cases where the question doesn't apply (no primary,
-// primary worktree itself, detached HEAD) so the UI can branch on > 0.
-async function getBehindPrimary(
-  identity: WorktreeIdentity,
-  primaryRef: string | null,
-): Promise<number> {
-  if (!primaryRef || identity.isPrimary || identity.detached) return 0;
+interface PrimaryRelation {
+  behindPrimary: number;
+  mergedIntoPrimary: boolean;
+}
+
+// Ceiling on the first-parent walk in landedOnPrimary. A worktree this
+// far behind is stale enough that the answer has stopped mattering, and
+// hitting the cap reports "not landed", which only leaves the row where
+// it already was.
+const FIRST_PARENT_SCAN_LIMIT = 2000;
+
+// A branch can be an ancestor of the primary for two very different
+// reasons: its work was merged in, or it never left the primary's own
+// history -- a worktree created and then left alone while the primary
+// moved on. `git branch --merged` can't tell those apart, which is why
+// this walks the primary's first-parent chain instead: a branch that
+// landed via a merge commit hangs off that chain, an untouched one sits
+// on it. Keeping the second case out is what stops fresh, idle
+// worktrees from piling into the sidebar's Merged box every time
+// something else lands.
+//
+// A local fast-forward or rebase merge is genuinely indistinguishable
+// from "never started" here -- the resulting history is identical -- so
+// it reads as not landed. That errs toward leaving a row visible, and
+// GitHub-hosted repos get the answer from the PR state anyway.
+async function landedOnPrimary(
+  worktreePath: string,
+  behindPrimary: number,
+  readChain: PrimaryChainReader,
+): Promise<boolean> {
+  if (behindPrimary > FIRST_PARENT_SCAN_LIMIT) return false;
   try {
+    const [head, chain] = await Promise.all([
+      run(worktreePath, ["rev-parse", "HEAD"]),
+      readChain(),
+    ]);
+    const tip = head.trim();
+    return chain !== null && tip.length > 0 && !chain.has(tip);
+  } catch {
+    return false;
+  }
+}
+
+// The primary's first-parent chain is the same answer for every worktree
+// in the project -- one object store, one ref -- so it's read once and
+// shared. Lazily, because a project whose worktrees are all ahead of the
+// primary never asks the question and shouldn't pay for it.
+//
+// Null means "couldn't read it", which callers must treat as "not
+// landed": an empty set would say every HEAD is off the chain, i.e.
+// everything merged.
+type PrimaryChainReader = () => Promise<ReadonlySet<string> | null>;
+
+function primaryChainReader(
+  projectPath: string,
+  primaryRef: string | null,
+): PrimaryChainReader {
+  let pending: Promise<ReadonlySet<string> | null> | null = null;
+  return () => (pending ??= readPrimaryChain(projectPath, primaryRef));
+}
+
+async function readPrimaryChain(
+  projectPath: string,
+  primaryRef: string | null,
+): Promise<ReadonlySet<string> | null> {
+  if (!primaryRef) return null;
+  try {
+    // FIRST_PARENT_SCAN_LIMIT bounds how far behind a worktree can be
+    // and still be asked about, so a chain that long covers every HEAD
+    // that could be on it.
+    const stdout = await run(projectPath, [
+      "rev-list",
+      "--first-parent",
+      `-n${FIRST_PARENT_SCAN_LIMIT + 1}`,
+      primaryRef,
+    ]);
+    return new Set(stdout.trim().split("\n").filter(Boolean));
+  } catch {
+    return null;
+  }
+}
+
+// How the worktree sits against the project's primary branch. Both
+// answers are "no relation" where the question doesn't apply (no
+// primary, the primary worktree itself, detached HEAD).
+async function getPrimaryRelation(
+  identity: WorktreeIdentity,
+  ctx: BuildContext,
+): Promise<PrimaryRelation> {
+  const none: PrimaryRelation = {
+    behindPrimary: 0,
+    mergedIntoPrimary: false,
+  };
+  if (!ctx.primaryRef || identity.isPrimary || identity.detached) return none;
+  try {
+    // `--left-right` on the symmetric difference prints "<left>\t<right>":
+    // commits only on HEAD, then commits only on the primary.
     const stdout = await run(identity.path, [
       "rev-list",
       "--count",
-      `HEAD..${primaryRef}`,
+      "--left-right",
+      `HEAD...${ctx.primaryRef}`,
     ]);
-    return Number(stdout.trim()) || 0;
+    const [ahead, behind] = stdout.trim().split(/\s+/);
+    const aheadOfPrimary = Number(ahead) || 0;
+    const behindPrimary = Number(behind) || 0;
+    // Anything HEAD still holds on its own hasn't landed yet, and a
+    // branch level with the primary has nothing to have landed.
+    if (aheadOfPrimary > 0 || behindPrimary === 0) {
+      return { behindPrimary, mergedIntoPrimary: false };
+    }
+    return {
+      behindPrimary,
+      mergedIntoPrimary: await landedOnPrimary(
+        identity.path,
+        behindPrimary,
+        ctx.primaryChain,
+      ),
+    };
   } catch {
-    return 0;
+    return none;
   }
 }
 
@@ -270,6 +433,7 @@ interface BuildContext {
   hasRemote: boolean;
   primaryRef: string | null;
   shelvedSet: ReadonlySet<string>;
+  primaryChain: PrimaryChainReader;
 }
 
 async function loadBuildContext(
@@ -288,6 +452,7 @@ async function loadBuildContext(
     hasRemote: remotes.length > 0,
     primaryRef,
     shelvedSet: readShelvedSet(),
+    primaryChain: primaryChainReader(projectPath, primaryRef),
   };
 }
 
@@ -295,13 +460,12 @@ async function buildWorktree(
   identity: WorktreeIdentity,
   ctx: BuildContext,
 ): Promise<Worktree> {
-  const [changedCount, recentCommits, remoteSync, behindPrimary] =
-    await Promise.all([
-      getChangedCount(identity.path),
-      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-      getRemoteSync(identity.path),
-      getBehindPrimary(identity, ctx.primaryRef),
-    ]);
+  const [changes, recentCommits, remoteSync, primary] = await Promise.all([
+    getWorkingTreeChanges(identity.path),
+    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
+    getRemoteSync(identity.path),
+    getPrimaryRelation(identity, ctx),
+  ]);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -313,9 +477,11 @@ async function buildWorktree(
     hasUpstream: remoteSync.hasUpstream,
     hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
-    behindPrimary,
+    behindPrimary: primary.behindPrimary,
     primaryRef: ctx.primaryRef ?? undefined,
-    changedCount,
+    mergedIntoPrimary: primary.mergedIntoPrimary,
+    changedCount: changes.count,
+    lastChangeAt: changes.lastChangeAt,
     recentCommits,
     isPrimary: identity.isPrimary,
     isExternal: identity.isExternal,
