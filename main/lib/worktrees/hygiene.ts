@@ -29,16 +29,28 @@ import { measureDirectory } from "../util/dirSize";
 import { createLimiter } from "../util/limit";
 import { ttlMapCache } from "../util/ttlCache";
 
-// Epoch ms of the worktree's HEAD commit. Null for an empty repo.
-async function getLastCommitAt(worktreePath: string): Promise<number | null> {
+interface HeadCommit {
+  // Epoch ms of the worktree's HEAD commit.
+  at: number | null;
+  // Abbreviated hash, matching how the worktree list reports commits so
+  // the two can be compared.
+  hash: string | null;
+}
+
+// The commit HEAD points at. Both fields null for an empty repo.
+async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
   try {
-    const stdout = await run(worktreePath, ["log", "-1", "--format=%ct"]);
-    const seconds = Number(stdout.trim());
-    // Floored to a whole millisecond: the IPC schema takes safe ints, so
-    // a malformed %ct must not reach the boundary as a float.
-    return Number.isFinite(seconds) ? Math.floor(seconds * 1000) : null;
+    const stdout = await run(worktreePath, ["log", "-1", "--format=%ct%n%h"]);
+    const [seconds, hash] = stdout.trim().split("\n");
+    const at = Number(seconds);
+    return {
+      // Floored to a whole millisecond: the IPC schema takes safe ints,
+      // so a malformed %ct must not reach the boundary as a float.
+      at: Number.isFinite(at) ? Math.floor(at * 1000) : null,
+      hash: hash?.trim() || null,
+    };
   } catch {
-    return null;
+    return { at: null, hash: null };
   }
 }
 
@@ -191,10 +203,11 @@ async function hygieneFor(
   candidates: PrimaryCandidate[],
   primaryBranch: string | null,
 ): Promise<WorktreeHygiene> {
-  const lastCommitAt = await getLastCommitAt(identity.path);
+  const head = await getHeadCommit(identity.path);
   const base: WorktreeHygiene = {
     worktreeId: identity.id,
-    lastCommitAt,
+    lastCommitAt: head.at,
+    headHash: head.hash,
     uniqueCommits: null,
     contentAlreadyInPrimary: false,
     primaryRef: candidates[0]?.ref ?? null,
@@ -313,11 +326,25 @@ const identityCache = ttlMapCache(10_000, (key: string) => {
   return listWorktreeIdentities(projectId, projectPath);
 });
 
+// The renderer asks for every worktree's disk usage at once, so the
+// whole burst arrives before the first lookup has resolved and a
+// value-only cache would miss on all of them. Holding the in-flight
+// promise is what makes it one `git worktree list` per project rather
+// than one per row.
+const identityInFlight = new Map<string, Promise<WorktreeIdentity[]>>();
+
 function projectIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  return identityCache.get(`${projectId}\u0000${projectPath}`);
+  const key = `${projectId}\u0000${projectPath}`;
+  const pending = identityInFlight.get(key);
+  if (pending) return pending;
+  const load = identityCache.get(key).finally(() => {
+    identityInFlight.delete(key);
+  });
+  identityInFlight.set(key, load);
+  return load;
 }
 
 export async function findWorktreeForDisk(

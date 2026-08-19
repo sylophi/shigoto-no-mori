@@ -1109,7 +1109,7 @@ async function seedStaleWorktrees(): Promise<Manifest> {
     purpose:
       "Five worktrees covering every verdict on the 'Tidy the forest' page",
     tests: [
-      "Settings -> 'Tidy up worktrees…' lists these 5 worktrees + the primary, alongside every other registered project.",
+      "The sidebar's tree button ('Tidy the forest') lists these 5 worktrees + the primary, alongside every other registered project.",
       "abandoned-mint is 'Merged' and shipped-cedar is 'Already in primary'; both are preselected.",
       "messy-otter ('Uncommitted work'), half-done-fern ('Unpushed commits') and fresh-heron ('Active work') are NOT preselected.",
       "Sizes fill in progressively and sort abandoned-mint (~9 MB) to the top under Size, above every other project's worktrees.",

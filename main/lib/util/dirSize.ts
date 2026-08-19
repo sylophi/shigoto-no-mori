@@ -7,10 +7,14 @@
 //
 // Sizes come from `blocks * 512`, matching what `du` reports, so a
 // sparse file or a small file in a big block doesn't inflate the total
-// the way summing `size` would. Platforms that don't report `blocks`
+// the way summing `size` would. Like `du` on a single path, a hardlinked
+// file counts in full: a pnpm checkout links its packages into a global
+// store, so some of what a worktree measures stays on disk after it is
+// removed. Platforms that don't report `blocks`
 // fall back to the apparent size.
 import { lstat, opendir } from "node:fs/promises";
 import { join } from "node:path";
+import { createLimiter } from "./limit";
 
 // Names whose contents are real disk usage but not evidence that anyone
 // touched the worktree. A fresh `pnpm install` rewrites every mtime
@@ -41,10 +45,11 @@ const ACTIVITY_EXCLUDED_NAMES = new Set([
   "__pycache__",
 ]);
 
-// How many directories are read concurrently. Enough to keep the disk
-// busy without risking EMFILE on a deep tree. The walk is IO-bound, so
-// going wider stops helping well before this.
-const DIR_CONCURRENCY = 8;
+// How many directories are read concurrently, across every walk in
+// flight. Enough to keep the disk busy without risking EMFILE on a deep
+// tree. The walk is IO-bound, so going wider stops helping well before
+// this.
+const readDirs = createLimiter(8);
 
 export interface DirSizeResult {
   // Bytes occupied on disk across the whole tree.
@@ -77,7 +82,6 @@ export async function measureDirectory(
   root: string,
   exclude: ReadonlySet<string> = new Set(),
 ): Promise<DirSizeResult> {
-  const queue: PendingDir[] = [{ path: root, countsAsActivity: true }];
   let bytes = 0;
   let lastActivityAt: number | null = null;
   let partial = false;
@@ -103,14 +107,19 @@ export async function measureDirectory(
     }
   };
 
-  const readDir = async (entry: PendingDir) => {
+  // Reads one directory and returns the subdirectories to descend into.
+  // Files are measured here; the caller owns the recursion, so no slot is
+  // ever held while waiting on a child.
+  const readDir = async (entry: PendingDir): Promise<PendingDir[]> => {
+    const children: PendingDir[] = [];
     let dir;
     try {
       dir = await opendir(entry.path);
     } catch {
       partial = true;
-      return;
+      return children;
     }
+    const files: Array<Promise<void>> = [];
     try {
       for await (const child of dir) {
         const childPath = join(entry.path, child.name);
@@ -118,35 +127,35 @@ export async function measureDirectory(
           entry.countsAsActivity && !ACTIVITY_EXCLUDED_NAMES.has(child.name);
         if (child.isSymbolicLink()) {
           // Count the link itself, never its target.
-          await noteFile(childPath, false);
+          files.push(noteFile(childPath, false));
           continue;
         }
         if (child.isDirectory()) {
           if (!exclude.has(childPath)) {
-            queue.push({ path: childPath, countsAsActivity });
+            children.push({ path: childPath, countsAsActivity });
           }
           continue;
         }
-        if (child.isFile()) await noteFile(childPath, countsAsActivity);
+        if (child.isFile()) files.push(noteFile(childPath, countsAsActivity));
       }
     } catch {
       partial = true;
     }
+    await Promise.all(files);
+    return children;
   };
 
-  // Drain the queue with a fixed number of workers. Each worker pops the
-  // next directory until nothing is left, so newly discovered
-  // subdirectories are picked up by whichever worker frees up first.
-  const worker = async () => {
-    for (;;) {
-      const next = queue.pop();
-      if (!next) return;
-      // Sequential by design: this worker is one of DIR_CONCURRENCY
-      // running in parallel, and awaiting here is what bounds the fan-out.
-      await readDir(next); // oxlint-disable-line no-await-in-loop -- bounded worker pool
-    }
+  // Descend breadth-first, with only the directory reads themselves
+  // going through the limiter. Recursing inside a slot would deadlock the
+  // moment a tree is deeper than the limit, and a fixed pool of workers
+  // draining a shared queue has the opposite failure: every worker but
+  // the first finds the queue empty on the tick it starts, returns, and
+  // the walk runs single-file for the rest of its life.
+  const descend = async (entry: PendingDir): Promise<void> => {
+    const children = await readDirs(() => readDir(entry));
+    await Promise.all(children.map((child) => descend(child)));
   };
-  await Promise.all(Array.from({ length: DIR_CONCURRENCY }, () => worker()));
+  await descend({ path: root, countsAsActivity: true });
 
   // Floored for the same reason as the mtime above: the IPC schema takes
   // whole integers, and a platform reporting fractional blocks would

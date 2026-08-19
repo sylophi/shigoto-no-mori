@@ -16,6 +16,11 @@ export const WorktreeHygieneSchema = z.object({
   // Epoch ms of the worktree's HEAD commit. Null for an empty repo or a
   // ref we couldn't read.
   lastCommitAt: z.number().int().nonnegative().nullable(),
+  // The commit these facts were taken against, abbreviated the same way
+  // `Worktree.recentCommits` abbreviates. The facts and the worktree
+  // list are separate queries with separate lifetimes, and this is what
+  // lets the verdict notice it is reading them from different moments.
+  headHash: z.string().nullable(),
   // Commits on this worktree's HEAD that the primary ref doesn't have.
   // 0 means the branch is fully contained in primary, the classic
   // "already merged" case.
@@ -85,6 +90,11 @@ export interface HygieneVerdict {
   kind: HygieneVerdictKind;
   // True only for verdicts we are willing to tick on the user's behalf.
   safe: boolean;
+  // True when `git worktree remove` will refuse without --force. Lives
+  // on the verdict because the reason it refuses is the same evidence
+  // the verdict is reporting, and one of those reasons (untracked files
+  // under `-uno`) is invisible to changedCount.
+  needsForce: boolean;
   // One short sentence naming the evidence. Shown on the row and
   // repeated in the confirm step, so the consequence is never implicit.
   reason: string;
@@ -94,7 +104,13 @@ export interface HygieneVerdict {
 // caller can't accidentally pass a half-built row.
 export type HygieneWorktreeFacts = Pick<
   Worktree,
-  "changedCount" | "isPrimary" | "branch" | "detached" | "ahead" | "hasUpstream"
+  | "changedCount"
+  | "isPrimary"
+  | "branch"
+  | "detached"
+  | "ahead"
+  | "hasUpstream"
+  | "recentCommits"
 >;
 
 export function deriveHygieneVerdict(
@@ -105,6 +121,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "primary",
       safe: false,
+      needsForce: false,
       reason: "The project's primary checkout.",
     };
   }
@@ -115,6 +132,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "dirty",
       safe: false,
+      needsForce: true,
       reason: `${worktree.changedCount} uncommitted ${
         worktree.changedCount === 1 ? "change" : "changes"
       } would be lost.`,
@@ -128,6 +146,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "dirty",
       safe: false,
+      needsForce: true,
       reason: "Untracked files here would be lost.",
     };
   }
@@ -135,6 +154,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "unknown",
       safe: false,
+      needsForce: false,
       reason: "Detached HEAD, so there is nothing to compare against.",
     };
   }
@@ -144,6 +164,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "defaultBranch",
       safe: false,
+      needsForce: false,
       reason: `Removing this deletes ${worktree.branch}, the project's default branch.`,
     };
   }
@@ -153,9 +174,23 @@ export function deriveHygieneVerdict(
     return {
       kind: "unknown",
       safe: false,
+      needsForce: false,
       reason: hygiene
         ? "Couldn't resolve a primary branch to compare against."
         : "Still checking…",
+    };
+  }
+  // The facts and the worktree list are separate queries. If HEAD has
+  // moved since these were taken, they describe a commit that is no
+  // longer checked out, and "every commit is already in main" is exactly
+  // the wrong thing to say about work committed since. Reported as not
+  // knowing, which resolves itself on the next fetch.
+  if (hygiene.headHash !== (worktree.recentCommits[0]?.hash ?? null)) {
+    return {
+      kind: "unknown",
+      safe: false,
+      needsForce: false,
+      reason: "This worktree has moved on since it was last checked.",
     };
   }
   // A probe that couldn't run at all reports null, not 0. Treating the
@@ -165,6 +200,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "unknown",
       safe: false,
+      needsForce: false,
       reason: `Couldn't compare this worktree against ${hygiene.primaryRef}.`,
     };
   }
@@ -172,6 +208,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "merged",
       safe: true,
+      needsForce: false,
       reason: `Every commit is already in ${hygiene.primaryRef}.`,
     };
   }
@@ -179,6 +216,7 @@ export function deriveHygieneVerdict(
     return {
       kind: "absorbed",
       safe: true,
+      needsForce: false,
       reason: `Squash- or rebase-merged: these changes are already in ${hygiene.primaryRef}.`,
     };
   }
@@ -193,12 +231,14 @@ export function deriveHygieneVerdict(
     return {
       kind: "unpushed",
       safe: false,
+      needsForce: false,
       reason: `${commitCount} not in ${hygiene.primaryRef}, and not pushed anywhere.`,
     };
   }
   return {
     kind: "active",
     safe: false,
+    needsForce: false,
     reason: `${commitCount} not in ${hygiene.primaryRef}.`,
   };
 }

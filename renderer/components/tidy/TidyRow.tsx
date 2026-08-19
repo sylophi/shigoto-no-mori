@@ -33,7 +33,15 @@ export function TidyRow({
   isLast,
   showProject,
 }: TidyRowProps) {
-  const { worktree, project, verdict, disk, ageAt, lastActivityAt } = entry;
+  const {
+    worktree,
+    project,
+    verdict,
+    disk,
+    diskFailed,
+    ageAt,
+    lastActivityAt,
+  } = entry;
   const selectable = isSelectable(entry);
   const interactive = selectable && !disabled && status.kind !== "done";
   const ageTitle =
@@ -120,6 +128,13 @@ export function TidyRow({
           >
             {disk.partial ? "~" : ""}
             {formatBytes(disk.bytes)}
+          </span>
+        ) : diskFailed ? (
+          <span
+            className="text-sm text-muted-foreground"
+            title="Couldn't measure this worktree"
+          >
+            &mdash;
           </span>
         ) : (
           <Skeleton className="h-4 w-14" />

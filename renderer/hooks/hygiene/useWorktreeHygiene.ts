@@ -50,6 +50,10 @@ export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
 
 export interface DiskUsageTotals {
   byId: Map<string, WorktreeDiskUsage>;
+  // Worktrees whose walk failed outright, usually one that went away
+  // mid-measure. Distinct from "not measured yet", which is what an
+  // absent entry means, so the row can stop waiting on it.
+  failed: Set<string>;
   // Bytes summed over the worktrees that have finished measuring, so the
   // total can be shown climbing rather than withheld until the end.
   measuredBytes: number;
@@ -93,16 +97,23 @@ export function useWorktreeDiskUsage(
     })),
     combine: (results): DiskUsageTotals => {
       const byId = new Map<string, WorktreeDiskUsage>();
+      const failed = new Set<string>();
       let measuredBytes = 0;
       let partial = false;
-      for (const result of results) {
-        if (!result.data) continue;
+      results.forEach((result, index) => {
+        if (result.isError) {
+          const target = worktrees[index];
+          if (target) failed.add(target.id);
+          return;
+        }
+        if (!result.data) return;
         byId.set(result.data.worktreeId, result.data);
         measuredBytes += result.data.bytes;
         if (result.data.partial) partial = true;
-      }
+      });
       return {
         byId,
+        failed,
         measuredBytes,
         measuredCount: byId.size,
         totalCount: results.length,

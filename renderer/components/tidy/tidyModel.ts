@@ -20,6 +20,9 @@ export interface TidyEntry {
   project: Project;
   verdict: HygieneVerdict;
   disk: WorktreeDiskUsage | undefined;
+  // True when the walk failed rather than simply not having finished.
+  // The row shows a dash instead of waiting forever.
+  diskFailed: boolean;
   // The last commit's date, and what the Age sort uses. Null for a
   // worktree with no commits at all.
   //
@@ -62,6 +65,7 @@ export function buildTidyEntries(
   worktreesByProject: Map<string, Worktree[]>,
   hygieneById: Map<string, WorktreeHygiene>,
   diskById: Map<string, WorktreeDiskUsage>,
+  diskFailedIds: ReadonlySet<string>,
 ): TidyEntry[] {
   return projects.flatMap((project) =>
     (worktreesByProject.get(project.id) ?? []).map((worktree) => {
@@ -71,6 +75,7 @@ export function buildTidyEntries(
         worktree,
         project,
         disk,
+        diskFailed: diskFailedIds.has(worktree.id),
         verdict: deriveHygieneVerdict(worktree, hygiene),
         ageAt: hygiene?.lastCommitAt ?? null,
         lastActivityAt: disk?.lastActivityAt ?? null,
