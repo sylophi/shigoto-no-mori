@@ -19,7 +19,12 @@ export const WorktreeHygieneSchema = z.object({
   // Commits on this worktree's HEAD that the primary ref doesn't have.
   // 0 means the branch is fully contained in primary — the classic
   // "already merged" case.
-  uniqueCommits: z.number().int().nonnegative(),
+  //
+  // Null when the count couldn't be taken at all: a prunable worktree
+  // whose directory is gone, a corrupt repo, an unreadable ref. It has
+  // to be distinguishable from 0, because 0 is the one value that gets
+  // a row ticked for deletion on the user's behalf.
+  uniqueCommits: z.number().int().nonnegative().nullable(),
   // True when merging this worktree into the primary ref would change
   // nothing, i.e. its content is already there. Catches the squash- and
   // rebase-merged branches that `uniqueCommits > 0` misses, since those
@@ -30,6 +35,17 @@ export const WorktreeHygieneSchema = z.object({
   // "main" or "origin/main". Null when it couldn't be resolved, which
   // downgrades the verdict to "unknown".
   primaryRef: z.string().nullable(),
+  // True when this worktree has the project's own default branch
+  // checked out. Removal deletes the local branch (see
+  // deleteBranchOnRemove), and that branch is the one thing in the repo
+  // nothing else can restore — merged or not, it is never ticked.
+  holdsPrimaryBranch: z.boolean(),
+  // True when the worktree has untracked files that `changedCount`
+  // didn't see. `git status` honours the user's
+  // status.showUntrackedFiles setting, so under `-uno` a tree full of
+  // uncommitted new files reports clean; this is checked separately for
+  // exactly the rows that would otherwise be auto-ticked.
+  untracked: z.boolean(),
 });
 export type WorktreeHygiene = z.infer<typeof WorktreeHygieneSchema>;
 
@@ -57,6 +73,7 @@ export type WorktreeDiskUsage = z.infer<typeof WorktreeDiskUsageSchema>;
 // click plus an explicit acknowledgement.
 export type HygieneVerdictKind =
   | "primary" // the project's own checkout, never removable
+  | "defaultBranch" // holds the project's default branch: removal would delete it
   | "merged" // no unique commits: fully contained in primary
   | "absorbed" // squash/rebase merged: content already in primary
   | "dirty" // uncommitted changes would be destroyed
@@ -103,11 +120,31 @@ export function deriveHygieneVerdict(
       } would be lost.`,
     };
   }
+  // Untracked files the status scan didn't count. Same consequence as
+  // dirty -- files that exist nowhere else -- so it is reported the same
+  // way, just after it, since the count above is the more precise one
+  // whenever it was taken.
+  if (hygiene?.untracked) {
+    return {
+      kind: "dirty",
+      safe: false,
+      reason: "Untracked files here would be lost.",
+    };
+  }
   if (worktree.detached || !isRealBranch(worktree.branch)) {
     return {
       kind: "unknown",
       safe: false,
       reason: "Detached HEAD — nothing to compare against.",
+    };
+  }
+  // Merged or not, removing this deletes the local branch the whole
+  // project is built on. Never ticked, and never presented as tidy-able.
+  if (hygiene?.holdsPrimaryBranch) {
+    return {
+      kind: "defaultBranch",
+      safe: false,
+      reason: `Holds ${worktree.branch}, the project's default branch — removing it deletes that branch.`,
     };
   }
   // Facts still loading, or the primary ref wouldn't resolve. Either way
@@ -119,6 +156,16 @@ export function deriveHygieneVerdict(
       reason: hygiene
         ? "Couldn't resolve a primary branch to compare against."
         : "Still checking…",
+    };
+  }
+  // A probe that couldn't run at all reports null, not 0. Treating the
+  // two alike is how a worktree whose directory has gone missing would
+  // read as "every commit is already in main" and get ticked.
+  if (hygiene.uniqueCommits === null) {
+    return {
+      kind: "unknown",
+      safe: false,
+      reason: `Couldn't compare this worktree against ${hygiene.primaryRef}.`,
     };
   }
   if (hygiene.uniqueCommits === 0) {
@@ -160,6 +207,7 @@ export function deriveHygieneVerdict(
 // wording can't drift between the list, the summary and the confirm.
 export const HYGIENE_VERDICT_LABEL: Record<HygieneVerdictKind, string> = {
   primary: "Primary",
+  defaultBranch: "Default branch",
   merged: "Merged",
   absorbed: "Already in primary",
   dirty: "Uncommitted work",

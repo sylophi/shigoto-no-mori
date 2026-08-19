@@ -7,6 +7,7 @@
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
 import { unknownWorktreeError } from "@shared/errors";
+import { isSameOrInside } from "@shared/worktreeLayout";
 import {
   isRealBranch,
   type WorktreeDiskUsage,
@@ -41,20 +42,52 @@ async function getLastCommitAt(worktreePath: string): Promise<number | null> {
   }
 }
 
-// Commits on HEAD that `primaryRef` doesn't have.
+// Commits on HEAD that `primaryRef` doesn't have, or null when the
+// count couldn't be taken.
+//
+// The null matters more than the number: 0 is what makes the page tick a
+// row for deletion, and a prunable worktree (directory deleted out from
+// under git), an unreadable ref or a corrupt repo all fail here. Folding
+// those into 0 would preselect them as "every commit is already in
+// main", which is the one mistake this surface must not make. Unparsable
+// output is treated the same way -- fail safe, like `contentAlreadyIn`.
 async function countUniqueCommits(
   worktreePath: string,
   primaryRef: string,
-): Promise<number> {
+): Promise<number | null> {
   try {
     const stdout = await run(worktreePath, [
       "rev-list",
       "--count",
       `${primaryRef}..HEAD`,
     ]);
-    return Number(stdout.trim()) || 0;
+    const count = Number(stdout.trim());
+    return Number.isInteger(count) && count >= 0 ? count : null;
   } catch {
-    return 0;
+    return null;
+  }
+}
+
+// Does this worktree hold untracked files?
+//
+// `git status` honours status.showUntrackedFiles, so a user running
+// `-uno` gets changedCount === 0 for a tree full of new files. This asks
+// the question that setting suppresses, and is only asked for the rows
+// that would otherwise be ticked. `--exclude-standard` keeps it off
+// ignored paths, so node_modules costs nothing.
+async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
+  try {
+    const stdout = await run(worktreePath, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "-z",
+    ]);
+    return stdout.length > 0;
+  } catch {
+    // Unreadable cuts the same way as dirty: assume there is something
+    // to lose.
+    return true;
   }
 }
 
@@ -141,18 +174,36 @@ async function treeOf(
   }
 }
 
+// The untracked scan is worth a git call only where the answer changes
+// something, and that is exactly here: a worktree reported as contained
+// is one the page ticks on its own, so this is the last chance to notice
+// files that exist nowhere else.
+async function contained(
+  worktreePath: string,
+  facts: WorktreeHygiene,
+): Promise<WorktreeHygiene> {
+  return { ...facts, untracked: await hasUntrackedFiles(worktreePath) };
+}
+
 async function hygieneFor(
   identity: WorktreeIdentity,
   projectPath: string,
   candidates: PrimaryCandidate[],
+  primaryBranch: string | null,
 ): Promise<WorktreeHygiene> {
   const lastCommitAt = await getLastCommitAt(identity.path);
   const base: WorktreeHygiene = {
     worktreeId: identity.id,
     lastCommitAt,
-    uniqueCommits: 0,
+    uniqueCommits: null,
     contentAlreadyInPrimary: false,
     primaryRef: candidates[0]?.ref ?? null,
+    holdsPrimaryBranch:
+      !identity.isPrimary &&
+      !identity.detached &&
+      primaryBranch !== null &&
+      identity.branch === primaryBranch,
+    untracked: false,
   };
   // Nothing to compare for the primary checkout itself, a detached HEAD,
   // or when no primary ref resolved. The renderer turns each of those
@@ -177,32 +228,36 @@ async function hygieneFor(
       identity.path,
       candidate.ref,
     );
+    // A failed count says nothing about this ref, so move on rather than
+    // report a number that isn't one.
+    if (uniqueCommits === null) continue;
     if (uniqueCommits === 0) {
       // Fully contained already; the merge-tree probe would only confirm
       // what the commit count just proved.
-      return {
+      return contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits: 0,
         contentAlreadyInPrimary: true,
-      };
+      });
     }
     // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const contained = await contentAlreadyIn(
+    const alreadyIn = await contentAlreadyIn(
       projectPath,
       candidate,
       identity.branch,
     );
-    if (contained) {
-      return {
+    if (alreadyIn) {
+      return contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits,
         contentAlreadyInPrimary: true,
-      };
+      });
     }
     fallback ??= { ...base, primaryRef: candidate.ref, uniqueCommits };
   }
+
   return fallback ?? base;
 }
 
@@ -232,9 +287,17 @@ export async function collectProjectHygiene(
     primaryRef,
     remotes,
   );
+  // The local branch name behind the primary ref ("main" for
+  // "origin/main"), so a linked worktree that has it checked out can be
+  // recognised and kept off the tick list.
+  const primaryBranch = primaryRef
+    ? (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef)
+    : null;
   return Promise.all(
     identities.map((identity) =>
-      gitProbes(() => hygieneFor(identity, projectPath, candidates)),
+      gitProbes(() =>
+        hygieneFor(identity, projectPath, candidates, primaryBranch),
+      ),
     ),
   );
 }
@@ -279,18 +342,35 @@ const diskWalks = createLimiter(3);
 // navigating back instant, short enough that a freshly removed worktree
 // doesn't linger in the total.
 //
-// Keyed by path, not id: the id is derived from the path anyway, and a
-// plain path key keeps the cached walk reusable no matter who asks.
-// Cache lookups sit inside the slot so a queued worktree whose walk
-// landed in the meantime returns from cache instead of re-walking.
-const diskCache = ttlMapCache(60_000, measureDirectory);
+// Keyed by path plus whatever was carved out of it, not by id: the id is
+// derived from the path anyway, and folding the carve-outs into the key
+// keeps a walk from being reused after a nested worktree appeared or
+// went away. Cache lookups sit inside the slot so a queued worktree
+// whose walk landed in the meantime returns from cache instead of
+// re-walking.
+const diskCache = ttlMapCache(60_000, (key: string) => {
+  const [root, ...excluded] = key.split("\u0000");
+  return measureDirectory(root, new Set(excluded));
+});
 
 export async function measureWorktreeDisk(
-  worktreeId: string,
-  worktreePath: string,
+  projectId: string,
+  projectPath: string,
+  worktree: WorktreeIdentity,
 ): Promise<WorktreeDiskUsage> {
+  const worktreePath = worktree.path;
+  // Under the in-project layout a project's worktrees live inside its
+  // primary checkout. Each one is measured as its own row, so the
+  // enclosing walk steps over them rather than counting them twice.
+  const identities = await projectIdentities(projectId, projectPath);
+  const nested = identities
+    .map((identity) => identity.path)
+    .filter(
+      (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
+    )
+    .toSorted();
   const { bytes, lastActivityAt, partial } = await diskWalks(() =>
-    diskCache.get(worktreePath),
+    diskCache.get([worktreePath, ...nested].join("\u0000")),
   );
-  return { worktreeId, bytes, lastActivityAt, partial };
+  return { worktreeId: worktree.id, bytes, lastActivityAt, partial };
 }

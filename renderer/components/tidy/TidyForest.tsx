@@ -234,7 +234,13 @@ export function TidyForest() {
                   <Button
                     variant="ghost"
                     size="xs"
-                    disabled={batchRunning || candidates.length === 0}
+                    // Clearing is available whenever something is
+                    // ticked, even where nothing was safe enough to
+                    // offer in the first place.
+                    disabled={
+                      batchRunning ||
+                      (selected.size === 0 && candidates.length === 0)
+                    }
                     onClick={() =>
                       setPicked(selected.size > 0 ? new Set() : safeIds)
                     }

@@ -20,13 +20,14 @@ export interface TidyEntry {
   project: Project;
   verdict: HygieneVerdict;
   disk: WorktreeDiskUsage | undefined;
-  // How old the *work* is, and what the Age sort uses.
+  // The last commit's date, and what the Age sort uses. Null for a
+  // worktree with no commits at all.
   //
-  // This is the commit date, not the newest file mtime: `git worktree
-  // add` stamps every checked-out file with the current time, so a
-  // worktree branched from year-old work would otherwise report itself
-  // as seconds old. File activity is still surfaced (see
-  // `lastActivityAt`) but only as the secondary signal it can support.
+  // Deliberately not backfilled from file mtimes: `git worktree add`
+  // stamps every checked-out file with the current time, so a worktree
+  // branched from year-old work would report itself as seconds old --
+  // and the row renders this as "committed X ago", which a mtime isn't.
+  // File activity is surfaced separately as `lastActivityAt`.
   ageAt: number | null;
   // Newest mtime outside dependency/build dirs. Meaningful mainly for a
   // worktree that has been edited since its last commit.
@@ -52,7 +53,8 @@ const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
   active: 3,
   unpushed: 4,
   dirty: 5,
-  primary: 6,
+  defaultBranch: 6,
+  primary: 7,
 };
 
 export function buildTidyEntries(
@@ -70,7 +72,7 @@ export function buildTidyEntries(
         project,
         disk,
         verdict: deriveHygieneVerdict(worktree, hygiene),
-        ageAt: hygiene?.lastCommitAt ?? disk?.lastActivityAt ?? null,
+        ageAt: hygiene?.lastCommitAt ?? null,
         lastActivityAt: disk?.lastActivityAt ?? null,
       };
     }),
@@ -101,8 +103,12 @@ export function sortTidyEntries(
     if (sort === "project") {
       // Keeps every project's rows contiguous so the list can be broken
       // into labelled groups, and orders within a project exactly the
-      // way "Recommended" would.
-      const byProject = a.project.name.localeCompare(b.project.name);
+      // way "Recommended" would. Two projects can share a name -- the
+      // name is a directory basename -- so the id breaks the tie rather
+      // than letting their rows interleave into duplicate groups.
+      const byProject =
+        a.project.name.localeCompare(b.project.name) ||
+        a.project.id.localeCompare(b.project.id);
       if (byProject !== 0) return byProject;
       return rank(a) - rank(b) || bytes(b) - bytes(a);
     }

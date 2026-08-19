@@ -20,6 +20,6 @@ export const hygieneHandlers: Handlers<typeof hygieneContract> = {
       project.path,
       worktreeId,
     );
-    return measureWorktreeDisk(worktree.id, worktree.path);
+    return measureWorktreeDisk(project.id, project.path, worktree);
   },
 };

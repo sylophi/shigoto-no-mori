@@ -23,6 +23,7 @@ import { join } from "node:path";
 // project look freshly active.
 const ACTIVITY_EXCLUDED_NAMES = new Set([
   ".git",
+  ".shigomori",
   "node_modules",
   ".venv",
   "venv",
@@ -68,7 +69,14 @@ interface PendingDir {
 // never throws: unreadable entries are skipped and flagged via
 // `partial` so the caller can render an approximate total instead of an
 // error.
-export async function measureDirectory(root: string): Promise<DirSizeResult> {
+// `exclude` holds absolute directory paths to step over entirely. The
+// in-project layout puts a project's worktrees *inside* its primary
+// checkout, so without this the primary's walk counts every sibling's
+// bytes as its own and the page's headline total doubles.
+export async function measureDirectory(
+  root: string,
+  exclude: ReadonlySet<string> = new Set(),
+): Promise<DirSizeResult> {
   const queue: PendingDir[] = [{ path: root, countsAsActivity: true }];
   let bytes = 0;
   let lastActivityAt: number | null = null;
@@ -114,7 +122,9 @@ export async function measureDirectory(root: string): Promise<DirSizeResult> {
           continue;
         }
         if (child.isDirectory()) {
-          queue.push({ path: childPath, countsAsActivity });
+          if (!exclude.has(childPath)) {
+            queue.push({ path: childPath, countsAsActivity });
+          }
           continue;
         }
         if (child.isFile()) await noteFile(childPath, countsAsActivity);

@@ -23,6 +23,7 @@ const TONE: Record<HygieneVerdictKind, string> = {
   unpushed: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
   active: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   unknown: "bg-muted text-muted-foreground",
+  defaultBranch: "bg-muted text-muted-foreground",
   primary: "bg-muted text-muted-foreground",
 };
 
@@ -33,6 +34,7 @@ const ICON: Record<HygieneVerdictKind, typeof Check> = {
   unpushed: Upload,
   active: GitBranch,
   unknown: CircleHelp,
+  defaultBranch: Home,
   primary: Home,
 };
 
