@@ -15,9 +15,9 @@ interface StatusIndicatorProps {
 }
 
 // The classic sidebar row has room for one pill, so uncommitted work wins
-// and the remote state waits its turn. The inbox row is taller and asks a
-// different question -- "what is going on here" rather than "which row is
-// this" -- so it renders both pills itself.
+// and the remote state waits its turn. Taller surfaces -- the inbox row,
+// the forest card -- ask "what is going on here" rather than "which row
+// is this", so they compose the two pills below and show both.
 export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   return worktree.changedCount > 0 ? (
     <ChangedFilesPill worktree={worktree} />
@@ -26,7 +26,7 @@ export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   );
 }
 
-// Renders nothing on a clean tree, so the inbox row can place it
+// Renders nothing on a clean tree, so callers can place it
 // unconditionally alongside the remote pill.
 export function ChangedFilesPill({ worktree }: StatusIndicatorProps) {
   if (worktree.changedCount === 0) return null;
@@ -44,7 +44,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
 
   // Each remote-sync state has the same compact shape: icon + (optional)
   // count, tone-colored. The detail header carries the actions and full
-  // labels; this is just a "needs attention" signal for the sidebar.
+  // labels; this is just a "needs attention" signal.
   switch (state.kind) {
     case "detached":
     case "synced":

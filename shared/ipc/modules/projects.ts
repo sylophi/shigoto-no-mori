@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
   BranchListSchema,
+  ForestSortSchema,
   PathPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
@@ -9,6 +10,7 @@ import {
   ProjectSortModeSchema,
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
+  SetForestSortPayloadSchema,
   SetProjectSortPayloadSchema,
   SetSidebarViewPayloadSchema,
   SidebarViewSchema,
@@ -31,6 +33,12 @@ export const projectsContract = {
   setSidebarView: invoke(
     "projects:setSidebarView",
     SetSidebarViewPayloadSchema,
+    z.void(),
+  ),
+  getForestSort: invoke("projects:getForestSort", z.void(), ForestSortSchema),
+  setForestSort: invoke(
+    "projects:setForestSort",
+    SetForestSortPayloadSchema,
     z.void(),
   ),
   getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string())),

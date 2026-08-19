@@ -7,8 +7,8 @@
 // Two files, split by what it costs to lose them. registry.json holds
 // the durable record of what the user has set up: the project list and
 // the worktree shelf. state.json holds what the app can rebuild by
-// being used: the three use logs, the two sort preferences and the
-// sidebar collapse set. The registry is only rewritten when projects
+// being used: the three use logs, the three sort preferences, the
+// sidebar layout and the sidebar collapse set. The registry is only rewritten when projects
 // or the shelf actually change, so the writes that fire on nearly
 // every click never touch it.
 import {
