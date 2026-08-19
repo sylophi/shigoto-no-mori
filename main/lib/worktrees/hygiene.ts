@@ -6,6 +6,7 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
+import { unknownWorktreeError } from "@shared/errors";
 import {
   isRealBranch,
   type WorktreeDiskUsage,
@@ -24,6 +25,7 @@ import {
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { measureDirectory } from "../util/dirSize";
+import { createLimiter } from "../util/limit";
 import { ttlMapCache } from "../util/ttlCache";
 
 // Epoch ms of the worktree's HEAD commit. Null for an empty repo.
@@ -67,24 +69,24 @@ async function countUniqueCommits(
 // Conflicts exit non-zero and print a different tree, and any failure
 // leaves us returning false, so every error path fails safe: the branch
 // is treated as still carrying work.
+//
+// The primary's own tree OID is a per-project constant, so it is
+// resolved once by `primaryRefCandidates` rather than per worktree.
 async function contentAlreadyIn(
   projectPath: string,
-  primaryRef: string,
+  candidate: PrimaryCandidate,
   head: string,
 ): Promise<boolean> {
+  if (!candidate.tree) return false;
   try {
-    const primaryTree = (
-      await run(projectPath, ["rev-parse", `${primaryRef}^{tree}`])
-    ).trim();
-    if (!primaryTree) return false;
     const merged = await runLenient(projectPath, [
       "merge-tree",
       "--write-tree",
-      primaryRef,
+      candidate.ref,
       head,
     ]);
     const mergedTree = merged.split("\n", 1)[0]?.trim();
-    return Boolean(mergedTree) && mergedTree === primaryTree;
+    return Boolean(mergedTree) && mergedTree === candidate.tree;
   } catch {
     return false;
   }
@@ -101,20 +103,48 @@ async function contentAlreadyIn(
 //
 // Ordered canonical-first, so the ref we report is the remote one
 // whenever it already contains the work.
+// A ref to compare against, plus the tree it points at. Null tree means
+// the ref wouldn't resolve, which turns the containment probe off for it
+// rather than guessing.
+interface PrimaryCandidate {
+  ref: string;
+  tree: string | null;
+}
+
 async function primaryRefCandidates(
   projectPath: string,
-  primaryRef: string,
-): Promise<string[]> {
-  const split = splitRemoteRefSync(primaryRef, await listRemotes(projectPath));
-  if (!split || split.branch === primaryRef) return [primaryRef];
-  const hasLocal = await localBranchExists(projectPath, split.branch);
-  return hasLocal ? [primaryRef, split.branch] : [primaryRef];
+  primaryRef: string | null,
+  remotes: string[],
+): Promise<PrimaryCandidate[]> {
+  if (!primaryRef) return [];
+  const split = splitRemoteRefSync(primaryRef, remotes);
+  const refs = [primaryRef];
+  if (split && split.branch !== primaryRef) {
+    if (await localBranchExists(projectPath, split.branch)) {
+      refs.push(split.branch);
+    }
+  }
+  return Promise.all(
+    refs.map(async (ref) => ({ ref, tree: await treeOf(projectPath, ref) })),
+  );
+}
+
+async function treeOf(
+  projectPath: string,
+  ref: string,
+): Promise<string | null> {
+  try {
+    const stdout = await run(projectPath, ["rev-parse", `${ref}^{tree}`]);
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
 }
 
 async function hygieneFor(
   identity: WorktreeIdentity,
   projectPath: string,
-  candidates: string[],
+  candidates: PrimaryCandidate[],
 ): Promise<WorktreeHygiene> {
   const lastCommitAt = await getLastCommitAt(identity.path);
   const base: WorktreeHygiene = {
@@ -122,7 +152,7 @@ async function hygieneFor(
     lastCommitAt,
     uniqueCommits: 0,
     contentAlreadyInPrimary: false,
-    primaryRef: candidates[0] ?? null,
+    primaryRef: candidates[0]?.ref ?? null,
   };
   // Nothing to compare for the primary checkout itself, a detached HEAD,
   // or when no primary ref resolved. The renderer turns each of those
@@ -141,81 +171,107 @@ async function hygieneFor(
   // names the branch the work actually landed in. If none contains it,
   // fall back to the canonical ref's numbers.
   let fallback: WorktreeHygiene | null = null;
-  for (const ref of candidates) {
+  for (const candidate of candidates) {
     // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const uniqueCommits = await countUniqueCommits(identity.path, ref);
+    const uniqueCommits = await countUniqueCommits(
+      identity.path,
+      candidate.ref,
+    );
     if (uniqueCommits === 0) {
       // Fully contained already; the merge-tree probe would only confirm
       // what the commit count just proved.
       return {
         ...base,
-        primaryRef: ref,
+        primaryRef: candidate.ref,
         uniqueCommits: 0,
         contentAlreadyInPrimary: true,
       };
     }
     // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const contained = await contentAlreadyIn(projectPath, ref, identity.branch);
+    const contained = await contentAlreadyIn(
+      projectPath,
+      candidate,
+      identity.branch,
+    );
     if (contained) {
       return {
         ...base,
-        primaryRef: ref,
+        primaryRef: candidate.ref,
         uniqueCommits,
         contentAlreadyInPrimary: true,
       };
     }
-    fallback ??= { ...base, primaryRef: ref, uniqueCommits };
+    fallback ??= { ...base, primaryRef: candidate.ref, uniqueCommits };
   }
   return fallback ?? base;
 }
+
+// Probes run through a shared window because this is asked for every
+// project at once: a machine with five projects would otherwise start
+// forty independent git chains, `merge-tree` included, in one burst.
+const gitProbes = createLimiter(6);
 
 export async function collectProjectHygiene(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeHygiene[]> {
-  const [identities, config] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
+  const [identities, config, remotes] = await Promise.all([
+    projectIdentities(projectId, projectPath),
     readShigomoriConfig(projectId).catch(() => null),
+    listRemotes(projectPath),
   ]);
+  // A repo with no resolvable default branch has nothing to compare
+  // against. Reported as no candidates rather than as a failed call, so
+  // the rows read "can't tell" instead of loading forever.
   const primaryRef = await resolveDefaultBranch(
     projectPath,
     config?.defaultBranch,
+  ).catch(() => null);
+  const candidates = await primaryRefCandidates(
+    projectPath,
+    primaryRef,
+    remotes,
   );
-  const candidates = await primaryRefCandidates(projectPath, primaryRef);
   return Promise.all(
-    identities.map((identity) => hygieneFor(identity, projectPath, candidates)),
+    identities.map((identity) =>
+      gitProbes(() => hygieneFor(identity, projectPath, candidates)),
+    ),
   );
 }
 
-// How many worktrees are measured at once. The tidy page is app-wide,
-// so it asks for every worktree in every project in one go -- a fleet of
-// dozens on a machine with a few projects. Each walk already runs its
-// own bounded pool of directory readers, so letting them all start
-// together just thrashes the disk and makes the first size land later
-// than it would have. Three at a time keeps the queue moving visibly
-// while leaving the rest of the app's git calls some IO to work with.
-const DISK_WALK_CONCURRENCY = 3;
+// The worktree list, cached for long enough to serve one page load.
+//
+// The renderer asks for disk usage one worktree at a time, and each of
+// those calls needs the same id-to-path lookup -- without this, opening
+// the page re-runs `git worktree list` once per row on top of the once
+// per project the facts already paid for.
+const identityCache = ttlMapCache(10_000, (key: string) => {
+  const [projectId, projectPath] = key.split("\u0000");
+  return listWorktreeIdentities(projectId, projectPath);
+});
 
-let activeWalks = 0;
-const waitingWalks: Array<() => void> = [];
-
-async function withWalkSlot<T>(walk: () => Promise<T>): Promise<T> {
-  if (activeWalks >= DISK_WALK_CONCURRENCY) {
-    await new Promise<void>((resolve) => waitingWalks.push(resolve));
-  } else {
-    activeWalks += 1;
-  }
-  try {
-    return await walk();
-  } finally {
-    // Hand the slot straight to the next waiter rather than releasing
-    // and re-taking it: a release would let a caller arriving in the
-    // same tick jump the queue and push us over the limit.
-    const next = waitingWalks.shift();
-    if (next) next();
-    else activeWalks -= 1;
-  }
+function projectIdentities(
+  projectId: string,
+  projectPath: string,
+): Promise<WorktreeIdentity[]> {
+  return identityCache.get(`${projectId}\u0000${projectPath}`);
 }
+
+export async function findWorktreeForDisk(
+  projectId: string,
+  projectPath: string,
+  worktreeId: string,
+): Promise<WorktreeIdentity> {
+  const identities = await projectIdentities(projectId, projectPath);
+  const found = identities.find((identity) => identity.id === worktreeId);
+  if (!found) throw unknownWorktreeError(worktreeId);
+  return found;
+}
+
+// Three walks at a time. Each one already runs its own pool of
+// directory readers, so a wider window mostly makes the first size land
+// later; narrower than that and a fleet of forty crawls.
+const diskWalks = createLimiter(3);
 
 // Disk measurements are cached because a full walk of a big checkout
 // costs real IO, and the tidy page refetches on mount and on window
@@ -233,7 +289,7 @@ export async function measureWorktreeDisk(
   worktreeId: string,
   worktreePath: string,
 ): Promise<WorktreeDiskUsage> {
-  const { bytes, lastActivityAt, partial } = await withWalkSlot(() =>
+  const { bytes, lastActivityAt, partial } = await diskWalks(() =>
     diskCache.get(worktreePath),
   );
   return { worktreeId, bytes, lastActivityAt, partial };

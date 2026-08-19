@@ -18,10 +18,11 @@ import { formatBytes } from "@/lib/formatBytes";
 import { queryKeys } from "@/lib/queryKeys";
 import {
   buildTidyEntries,
-  defaultSelection,
   groupByProject,
   isSelectable,
+  safeToRemove,
   sortTidyEntries,
+  sumBytes,
   summarize,
   TIDY_SORT_OPTIONS,
   type TidyEntry,
@@ -31,6 +32,11 @@ import { TidyConfirm } from "./TidyConfirm";
 import { TidyGroupHeading } from "./TidyGroupHeading";
 import { TidyRow } from "./TidyRow";
 import { TidyStat } from "./TidyStat";
+
+// One shared object for every un-started row: a fresh literal per render
+// would give all 40 rows a new `status` prop each time a disk walk
+// lands, defeating the memoization that keeps the list cheap.
+const IDLE: RowStatus = { kind: "idle" };
 
 // The whole forest at once: every worktree of every registered project,
 // what it costs on disk, how stale it is, and whether its work already
@@ -59,9 +65,7 @@ export function TidyForest() {
       worktreeQueries[index]?.data ?? [],
     ]),
   );
-  const allWorktrees = projects.flatMap(
-    (project) => worktreesByProject.get(project.id) ?? [],
-  );
+  const allWorktrees = worktreeQueries.flatMap((query) => query.data ?? []);
   const disk = useWorktreeDiskUsage(allWorktrees);
 
   const [sort, setSort] = useState<TidySort>("recommended");
@@ -80,18 +84,21 @@ export function TidyForest() {
     disk.byId,
   );
   const ordered = sortTidyEntries(entries, sort);
-  const selected = picked ?? defaultSelection(entries);
+  const candidates = safeToRemove(entries);
+  const safeIds = new Set(candidates.map((entry) => entry.worktree.id));
+  const selected = picked ?? safeIds;
   const summary = summarize(entries, selected);
-  const candidates = entries.filter((entry) => entry.verdict.safe);
   const selectableCount = entries.filter(isSelectable).length;
   const deleteBranches = globalConfig?.deleteBranchOnRemove ?? true;
   const loading =
     projectsLoading ||
     (entries.length === 0 && worktreeQueries.some((query) => query.isPending));
 
+  const statusOf = (worktreeId: string) => status.get(worktreeId) ?? IDLE;
+
   const toggle = (worktreeId: string) => {
     setPicked((prev) => {
-      const next = new Set(prev ?? defaultSelection(entries));
+      const next = new Set(prev ?? safeIds);
       if (next.has(worktreeId)) next.delete(worktreeId);
       else next.add(worktreeId);
       return next;
@@ -106,13 +113,24 @@ export function TidyForest() {
       queue,
       (entry) => entry.worktree.id,
       async (entry) => {
-        await deleteWorktree.mutateAsync({
+        const result = await deleteWorktree.mutateAsync({
           projectId: entry.project.id,
           worktreeId: entry.worktree.id,
           // Force only where the user explicitly acknowledged losing
           // uncommitted work; a clean worktree never needs it.
           force: entry.worktree.changedCount > 0,
         });
+        // Deletion resolves either way: `ok: false` means a teardown
+        // script or a port release failed and the worktree is still on
+        // disk. Raising it here is what marks the row failed instead of
+        // "Removed", and keeps its bytes out of the freed total.
+        if (!result.ok) {
+          throw new Error(
+            result.cleanupError.phase === "teardown"
+              ? "Teardown script failed — the worktree is still on disk."
+              : "Releasing its ports failed — the worktree is still on disk.",
+          );
+        }
       },
     );
     // Removing a worktree doesn't change any *other* worktree's facts,
@@ -137,10 +155,7 @@ export function TidyForest() {
   const dirtyCount = entries.filter(
     (entry) => entry.worktree.changedCount > 0,
   ).length;
-  const reclaimable = candidates.reduce(
-    (sum, entry) => sum + (entry.disk?.bytes ?? 0),
-    0,
-  );
+  const reclaimable = sumBytes(candidates);
 
   return (
     <div className="flex h-full flex-col">
@@ -221,11 +236,7 @@ export function TidyForest() {
                     size="xs"
                     disabled={batchRunning || candidates.length === 0}
                     onClick={() =>
-                      setPicked(
-                        selected.size > 0
-                          ? new Set()
-                          : defaultSelection(entries),
-                      )
+                      setPicked(selected.size > 0 ? new Set() : safeIds)
                     }
                   >
                     {selected.size > 0 ? "Clear" : "Select safe"}
@@ -245,7 +256,7 @@ export function TidyForest() {
                       <TidyList
                         entries={group.entries}
                         selected={selected}
-                        statusOf={(id) => status.get(id) ?? { kind: "idle" }}
+                        statusOf={statusOf}
                         disabled={batchRunning}
                         onToggle={toggle}
                         showProject={false}
@@ -256,7 +267,7 @@ export function TidyForest() {
                   <TidyList
                     entries={ordered}
                     selected={selected}
-                    statusOf={(id) => status.get(id) ?? { kind: "idle" }}
+                    statusOf={statusOf}
                     disabled={batchRunning}
                     onToggle={toggle}
                     showProject

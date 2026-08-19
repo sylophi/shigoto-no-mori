@@ -19,7 +19,6 @@ export interface TidyEntry {
   // user can't place.
   project: Project;
   verdict: HygieneVerdict;
-  hygiene: WorktreeHygiene | undefined;
   disk: WorktreeDiskUsage | undefined;
   // How old the *work* is, and what the Age sort uses.
   //
@@ -69,7 +68,6 @@ export function buildTidyEntries(
       return {
         worktree,
         project,
-        hygiene,
         disk,
         verdict: deriveHygieneVerdict(worktree, hygiene),
         ageAt: hygiene?.lastCommitAt ?? disk?.lastActivityAt ?? null,
@@ -85,6 +83,13 @@ export function buildTidyEntries(
 const bytes = (entry: TidyEntry) => entry.disk?.bytes ?? 0;
 const age = (entry: TidyEntry) => entry.ageAt ?? Number.MAX_SAFE_INTEGER;
 const rank = (entry: TidyEntry) => VERDICT_RANK[entry.verdict.kind];
+
+// Every byte total on the page -- headline, per project, per selection
+// -- goes through here, so "a row still being walked counts as zero"
+// is stated once and every figure is a floor in the same way.
+export function sumBytes(entries: TidyEntry[]): number {
+  return entries.reduce((total, entry) => total + bytes(entry), 0);
+}
 
 export function sortTidyEntries(
   entries: TidyEntry[],
@@ -120,29 +125,20 @@ export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
   const groups: TidyGroup[] = [];
   for (const entry of entries) {
     const last = groups.at(-1);
-    if (last?.project.id === entry.project.id) {
-      last.entries.push(entry);
-      last.bytes += bytes(entry);
-    } else {
-      groups.push({
-        project: entry.project,
-        entries: [entry],
-        bytes: bytes(entry),
-      });
-    }
+    if (last?.project.id === entry.project.id) last.entries.push(entry);
+    else groups.push({ project: entry.project, entries: [entry], bytes: 0 });
   }
+  for (const group of groups) group.bytes = sumBytes(group.entries);
   return groups;
 }
 
-// The rows we are willing to tick on the user's behalf. Nothing dirty,
-// unmerged, detached or primary ever appears here -- that is the whole
-// safety guarantee of the page, so it lives in one function.
-export function defaultSelection(entries: TidyEntry[]): Set<string> {
-  return new Set(
-    entries
-      .filter((entry) => entry.verdict.safe)
-      .map((entry) => entry.worktree.id),
-  );
+// The rows we are willing to tick on the user's behalf, and the only
+// rule that decides it. Nothing dirty, unmerged, detached or primary is
+// ever in here -- that is the whole safety guarantee of the page, so the
+// page reads its "safe to remove" count off this same list rather than
+// re-filtering with its own copy of the predicate.
+export function safeToRemove(entries: TidyEntry[]): TidyEntry[] {
+  return entries.filter((entry) => entry.verdict.safe);
 }
 
 export function isSelectable(entry: TidyEntry): boolean {
@@ -174,10 +170,7 @@ export function summarize(
     selected: picked,
     risky: picked.filter((entry) => !entry.verdict.safe),
     projectCount: new Set(picked.map((entry) => entry.project.id)).size,
-    reclaimBytes: picked.reduce(
-      (sum, entry) => sum + (entry.disk?.bytes ?? 0),
-      0,
-    ),
+    reclaimBytes: sumBytes(picked),
     reclaimPartial: picked.some((entry) => entry.disk === undefined),
   };
 }

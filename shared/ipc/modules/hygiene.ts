@@ -1,24 +1,24 @@
 import { z } from "zod";
 import { invoke } from "@shared/ipc/contract";
 import {
-  DiskUsagePayloadSchema,
-  HygieneListPayloadSchema,
+  ProjectScopedPayloadSchema,
   WorktreeDiskUsageSchema,
   WorktreeHygieneSchema,
+  WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
 export const hygieneContract = {
   // Fast, all-git: safe to await before the tidy list renders.
   list: invoke(
     "hygiene:list",
-    HygieneListPayloadSchema,
+    ProjectScopedPayloadSchema,
     z.array(WorktreeHygieneSchema),
   ),
   // Slow, per-worktree: the renderer fires one of these per row so each
   // size lands independently instead of the page waiting on the total.
   diskUsage: invoke(
     "hygiene:diskUsage",
-    DiskUsagePayloadSchema,
+    WorktreeScopedPayloadSchema,
     WorktreeDiskUsageSchema,
   ),
 } as const;

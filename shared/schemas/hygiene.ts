@@ -1,8 +1,4 @@
 import { z } from "zod";
-import {
-  ProjectScopedPayloadSchema,
-  WorktreeScopedPayloadSchema,
-} from "./payloads";
 import { isRealBranch } from "./project";
 import type { Worktree } from "./worktree";
 
@@ -55,9 +51,6 @@ export const WorktreeDiskUsageSchema = z.object({
   partial: z.boolean(),
 });
 export type WorktreeDiskUsage = z.infer<typeof WorktreeDiskUsageSchema>;
-
-export const HygieneListPayloadSchema = ProjectScopedPayloadSchema;
-export const DiskUsagePayloadSchema = WorktreeScopedPayloadSchema;
 
 // How safe it is to remove a worktree. The tidy list preselects
 // `merged` and `absorbed` only; everything else takes a deliberate

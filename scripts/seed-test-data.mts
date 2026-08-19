@@ -49,10 +49,16 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_TERMINAL_PROMPT: "0",
 };
 
-async function git(cwd: string, args: string[]): Promise<string> {
+// `env` is for the callers that have to stamp a commit with a date;
+// everything else takes the pinned identity as-is.
+async function git(
+  cwd: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = {},
+): Promise<string> {
   const { stdout } = await execFileP("git", args, {
     cwd,
-    env: { ...process.env, ...GIT_ENV },
+    env: { ...process.env, ...GIT_ENV, ...env },
     maxBuffer: 10 * 1024 * 1024,
   });
   return stdout;
@@ -947,19 +953,24 @@ async function commitAt(
     Object.entries(files).map(([rel, content]) => writeAt(repo, rel, content)),
   );
   const when = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
-  await execFileP("git", ["add", "-A"], {
-    cwd: repo,
-    env: { ...process.env, ...GIT_ENV },
+  await git(repo, ["add", "-A"]);
+  await git(repo, ["commit", "-m", message, "-q"], {
+    GIT_AUTHOR_DATE: when,
+    GIT_COMMITTER_DATE: when,
   });
-  await execFileP("git", ["commit", "-m", message, "-q"], {
-    cwd: repo,
-    env: {
-      ...process.env,
-      ...GIT_ENV,
-      GIT_AUTHOR_DATE: when,
-      GIT_COMMITTER_DATE: when,
-    },
-  });
+}
+
+// A worktree in the shared external dir, which is where both stale-*
+// fixtures put theirs so the app reads them as unmanaged.
+async function addExternalWorktree(
+  repo: string,
+  base: string,
+  name: string,
+  branch: string,
+): Promise<string> {
+  const path = join(base, name);
+  await git(repo, ["worktree", "add", "-b", branch, path, "main"]);
+  return path;
 }
 
 // Bulk filler under a gitignored node_modules/, so a worktree has a
@@ -1002,11 +1013,8 @@ async function seedStaleWorktrees(): Promise<Manifest> {
   await mkdir(EXTERNAL, { recursive: true });
   const base = join(EXTERNAL, "stale-worktrees");
   await mkdir(base, { recursive: true });
-  const add = async (name: string, branch: string): Promise<string> => {
-    const path = join(base, name);
-    await git(repo, ["worktree", "add", "-b", branch, path, "main"]);
-    return path;
-  };
+  const add = (name: string, branch: string) =>
+    addExternalWorktree(repo, base, name, branch);
 
   // 1. Merged the ordinary way, clean, ancient, and by far the fattest.
   //    The headline "safe to remove" row.
@@ -1137,11 +1145,8 @@ async function seedStaleSatellite(): Promise<Manifest> {
   await mkdir(EXTERNAL, { recursive: true });
   const base = join(EXTERNAL, "stale-satellite");
   await mkdir(base, { recursive: true });
-  const add = async (name: string, branch: string): Promise<string> => {
-    const path = join(base, name);
-    await git(repo, ["worktree", "add", "-b", branch, path, "main"]);
-    return path;
-  };
+  const add = (name: string, branch: string) =>
+    addExternalWorktree(repo, base, name, branch);
 
   // Merged, clean, and older than anything in stale-worktrees: under
   // "Age" it should sort above that project's rows, which is the whole

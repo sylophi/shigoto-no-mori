@@ -1,9 +1,9 @@
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "../../lib/projects";
-import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import {
   collectProjectHygiene,
+  findWorktreeForDisk,
   measureWorktreeDisk,
 } from "../../lib/worktrees/hygiene";
 
@@ -15,7 +15,7 @@ export const hygieneHandlers: Handlers<typeof hygieneContract> = {
 
   diskUsage: async ({ projectId, worktreeId }) => {
     const project = findProjectOrThrow(projectId);
-    const worktree = await findWorktreeIdentityOrThrow(
+    const worktree = await findWorktreeForDisk(
       project.id,
       project.path,
       worktreeId,

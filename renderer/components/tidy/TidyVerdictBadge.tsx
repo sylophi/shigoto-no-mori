@@ -36,17 +36,10 @@ const ICON: Record<HygieneVerdictKind, typeof Check> = {
   primary: Home,
 };
 
-export function TidyVerdictBadge({
-  kind,
-  title,
-}: {
-  kind: HygieneVerdictKind;
-  title?: string;
-}) {
+export function TidyVerdictBadge({ kind }: { kind: HygieneVerdictKind }) {
   const Icon = ICON[kind];
   return (
     <span
-      title={title}
       className={cn(
         "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
         TONE[kind],
