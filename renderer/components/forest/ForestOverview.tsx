@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { Trees } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -144,11 +145,18 @@ export function ForestOverview() {
     <div className="flex h-full flex-col">
       <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
         <div className="flex items-end gap-3">
-          <div className="flex min-w-0 flex-col">
+          <div className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-xs text-muted-foreground">
               {summaryLine}
             </span>
-            <h1 className="text-lg font-medium tracking-tight">The forest</h1>
+            {/* The display header the worktree page gets, not the small
+                one the settings-shaped routes share. This is a
+                destination you steer by, so it carries its own name at
+                the same weight a branch does. */}
+            <h1 className="flex min-w-0 items-center gap-2 text-2xl font-medium tracking-tight">
+              <Trees aria-hidden className="size-6 text-muted-foreground/70" />
+              The forest
+            </h1>
           </div>
           <div className="ml-auto shrink-0">
             {tidying ? (
@@ -186,15 +194,14 @@ export function ForestOverview() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-4xl flex-col gap-6">
-          {tidying && (
-            <TidyStrip
-              disk={forest.disk}
-              totals={forest.totals}
-              total={forest.total}
-              selectedCount={selected.size}
-              reclaimBytes={summary.reclaimBytes}
-            />
-          )}
+          <ForestStrip
+            tidying={tidying === true}
+            disk={forest.disk}
+            totals={forest.totals}
+            total={forest.total}
+            selectedCount={selected.size}
+            reclaimBytes={summary.reclaimBytes}
+          />
 
           {forest.failedCount > 0 && (
             <ErrorBanner>
@@ -272,7 +279,8 @@ export function ForestOverview() {
   );
 }
 
-interface TidyStripProps {
+interface ForestStripProps {
+  tidying: boolean;
   disk: ForestData["disk"];
   totals: ForestData["totals"];
   total: number;
@@ -280,18 +288,23 @@ interface TidyStripProps {
   reclaimBytes: number;
 }
 
-// The three numbers that decide whether tidying is worth your time, and
-// in what order to look. Cross-project, because "which project is
-// hoarding disk" is a question you can't ask one project at a time.
-// Deliberately on the unfiltered totals: this is a survey of everything
-// you own, so it must not move when you type in the filter box.
-function TidyStrip({
+// The three numbers that say whether the forest needs you, and in what
+// order to look. Cross-project, because "which project is hoarding disk"
+// is a question you can't ask one project at a time. Deliberately on the
+// unfiltered totals: this is a survey of everything you own, so it must
+// not move when you type in the filter box.
+//
+// The first tile changes with the mode, because the sizes don't exist
+// until you ask to tidy. Surveying, the equivalent question is how much
+// of the forest is asking for attention.
+function ForestStrip({
+  tidying,
   disk,
   totals,
   total,
   selectedCount,
   reclaimBytes,
-}: TidyStripProps) {
+}: ForestStripProps) {
   const measuredLabel = disk.measuring
     ? `measuring ${disk.measuredCount} of ${disk.totalCount}…`
     : disk.partial
@@ -300,11 +313,23 @@ function TidyStrip({
 
   return (
     <div className="grid grid-cols-3 gap-3">
-      <TidyStat
-        label="On disk"
-        value={`${disk.partial ? "~" : ""}${formatBytes(disk.measuredBytes)}`}
-        detail={measuredLabel}
-      />
+      {tidying ? (
+        <TidyStat
+          label="On disk"
+          value={`${disk.partial ? "~" : ""}${formatBytes(disk.measuredBytes)}`}
+          detail={measuredLabel}
+        />
+      ) : (
+        <TidyStat
+          label="Wants attention"
+          value={String(totals.attention)}
+          detail={
+            totals.attention > 0
+              ? "unpushed, behind, or diverged"
+              : "everything is in sync"
+          }
+        />
+      )}
       <TidyStat
         label="Worktrees"
         value={String(total)}
@@ -314,9 +339,11 @@ function TidyStrip({
         label="Safe to remove"
         value={String(totals.safe)}
         detail={
-          selectedCount > 0
-            ? `selection frees about ${formatBytes(reclaimBytes)}`
-            : "nothing ticked"
+          !tidying
+            ? "already merged into primary"
+            : selectedCount > 0
+              ? `selection frees about ${formatBytes(reclaimBytes)}`
+              : "nothing ticked"
         }
         tone={totals.safe > 0 ? "positive" : "neutral"}
       />

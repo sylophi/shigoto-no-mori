@@ -1,7 +1,6 @@
 import { BranchLabel } from "@/components/ui/branch-label";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
 import { Skeleton } from "@/components/ui/skeleton";
-import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { ActivityIcon } from "@/components/sidebar/ActivityIcon";
 import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
 import {
@@ -19,16 +18,18 @@ import { TidyVerdictBadge } from "./TidyVerdictBadge";
 // on what a worktree looks like but not on what a row *is*. One is a link
 // into the worktree, the other is a checkbox, and a row that both
 // navigates and selects on the same click is a row that deletes the wrong
-// thing. The shared halves live in the two components below.
+// thing. The shared halves live in the components at the bottom.
+//
+// Both are three lines: what this is, where it came from, and what it's
+// doing. The folder name leads because it's what you'd type to cd there
+// and what removal actually deletes, with the branch a line below in
+// mono, where an identifier belongs.
 
 interface ForestSurveyRowProps {
   entry: ForestEntry;
   isLast: boolean;
 }
 
-// Line one is identity plus the status cluster the sidebar already speaks
-// (same components, so the surfaces can't disagree). Line two is what
-// you'd otherwise open the worktree to see.
 export function ForestSurveyRow({ entry, isLast }: ForestSurveyRowProps) {
   const { worktree, pullRequest } = entry;
   const { isSelected, open, activity, isDeleting, title } =
@@ -42,15 +43,18 @@ export function ForestSurveyRow({ entry, isLast }: ForestSurveyRowProps) {
       onClick={open}
       title={title}
       className={cn(
-        rowShell(isLast),
+        ROW_SHELL,
+        !isLast && "border-b border-border",
         dimClass({ shelved: worktree.shelved, isDeleting }),
         "hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none",
         isSelected && "bg-accent text-accent-foreground",
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowIdentity worktree={worktree}>
-          {isDeleting ? (
+      <RowBody
+        entry={entry}
+        detail={commit?.subject}
+        badges={
+          isDeleting ? (
             <ActivityIcon kind="teardown" />
           ) : (
             <>
@@ -61,10 +65,9 @@ export function ForestSurveyRow({ entry, isLast }: ForestSurveyRowProps) {
               <RemoteSyncPill worktree={worktree} />
               <PullRequestPill pr={pullRequest} showNumber />
             </>
-          )}
-        </RowIdentity>
-        <RowMeta entry={entry} detail={commit?.subject} />
-      </div>
+          )
+        }
+      />
     </button>
   );
 }
@@ -80,7 +83,8 @@ interface ForestTidyRowProps {
 
 // The same worktree asked a different question: not "what is happening
 // here" but "does removing this cost me anything". The verdict takes the
-// status cluster's place, and its reason takes the commit subject's.
+// status cluster's place, its reason takes the commit subject's, and the
+// size earns a column of its own because it's the number you're scanning.
 export function ForestTidyRow({
   entry,
   checked,
@@ -97,11 +101,12 @@ export function ForestTidyRow({
     // A <label> wrapping a native checkbox: that is the shape doubutsu.css
     // hangs its row-hover stripe off, so the Animal Crossing treatment
     // comes for free. It keeps the forest-row slot too, which is what
-    // draws the edge line between rows in a theme that strips borders.
+    // draws the line between rows in a theme that strips borders.
     <label
       data-slot="forest-row"
       className={cn(
-        rowShell(isLast),
+        ROW_SHELL,
+        !isLast && "border-b border-border",
         dimClass({
           shelved: worktree.shelved,
           disabled,
@@ -116,30 +121,25 @@ export function ForestTidyRow({
         onChange={onToggle}
         disabled={!interactive}
         aria-label={`Select ${worktree.name}`}
-        className="mt-1 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
+        className="mt-0.5 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
       />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <RowIdentity worktree={worktree}>
-          <TidyVerdictBadge kind={verdict.kind} title={verdict.reason} />
-        </RowIdentity>
-        <RowMeta entry={entry} detail={verdict.reason} />
-        {status.kind === "error" && (
-          <p className="text-xs text-destructive select-text">
-            {status.message}
-          </p>
-        )}
-      </div>
+      <RowBody
+        entry={entry}
+        detail={verdict.reason}
+        badges={<TidyVerdictBadge kind={verdict.kind} title={verdict.reason} />}
+        error={status.kind === "error" ? status.message : undefined}
+      />
       <div className="flex w-20 shrink-0 flex-col items-end gap-1">
         {disk ? (
           <span
-            className="text-xs tabular-nums"
+            className="text-sm tabular-nums"
             title={`${disk.bytes.toLocaleString()} bytes on disk`}
           >
             {disk.partial ? "~" : ""}
             {formatBytes(disk.bytes)}
           </span>
         ) : (
-          <Skeleton className="h-3.5 w-12" />
+          <Skeleton className="h-4 w-14" />
         )}
         <RowStatusBadge
           status={status}
@@ -154,12 +154,8 @@ export function ForestTidyRow({
   );
 }
 
-function rowShell(isLast: boolean): string {
-  return cn(
-    "flex w-full items-start gap-3 px-3 py-2.5 text-left transition-colors",
-    !isLast && "border-b border-border",
-  );
-}
+const ROW_SHELL =
+  "flex w-full items-start gap-3 px-3 py-3 text-left text-sm transition-colors";
 
 // One opacity, chosen by the strongest reason. Stacking the conditions as
 // separate utilities left the winner up to Tailwind's emission order
@@ -176,76 +172,67 @@ function dimClass(state: {
   return undefined;
 }
 
-// The branch, and whatever the row wants to say about its state.
-function RowIdentity({
-  worktree,
-  children,
-}: {
-  worktree: ForestEntry["worktree"];
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <span className="min-w-0 flex-1 truncate font-mono text-xs">
-        <BranchLabel
-          branch={worktree.branch}
-          detached={worktree.detached}
-          suffixClassName="text-[10px]"
-        />
-      </span>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
-    </div>
-  );
+interface RowBodyProps {
+  entry: ForestEntry;
+  // The row's third line: the commit subject while surveying, the reason
+  // a worktree is or isn't safe while tidying.
+  detail: string | undefined;
+  badges: React.ReactNode;
+  error?: string;
 }
 
-// Folder, one line of detail, and when things last happened. Same shape
-// in both modes so a row doesn't jump when you enter tidy.
-function RowMeta({
-  entry,
-  detail,
-}: {
-  entry: ForestEntry;
-  detail: string | undefined;
-}) {
+function RowBody({ entry, detail, badges, error }: RowBodyProps) {
   const { worktree } = entry;
   return (
-    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
-      {/* Capped rather than flexible: the folder name is the row's second
-          identity, so it holds its width and lets the detail give ground
-          first. */}
-      <span className="max-w-48 shrink-0 truncate">{worktree.name}</span>
-      {detail && (
-        <>
-          <Separator />
-          <span className="min-w-0 flex-1 truncate">{detail}</span>
-        </>
-      )}
-      <span className="tabular ml-auto flex shrink-0 items-center gap-1.5">
-        {entry.lastCommitAt !== null && (
-          <span title="Last commit">
-            {formatRelativeTime(entry.lastCommitAt)}
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate font-medium">{worktree.name}</span>
+        {worktree.isExternal && !worktree.isPrimary && (
+          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            External
           </span>
+        )}
+        <div className="ml-auto flex shrink-0 items-center gap-2">{badges}</div>
+      </div>
+
+      <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+        <span className="min-w-0 truncate font-mono">
+          <BranchLabel
+            branch={worktree.branch}
+            detached={worktree.detached}
+            suffixClassName="text-[10px]"
+          />
+        </span>
+        {entry.lastCommitAt !== null && (
+          <>
+            <Divider />
+            <span className="shrink-0 tabular-nums">
+              committed {formatRelativeTime(entry.lastCommitAt)}
+            </span>
+          </>
         )}
         {worktree.createdAt !== undefined && (
           <>
-            {/* Only a separator when there's a timestamp to its left. A
-                branch with no commits shows the age on its own. */}
-            {entry.lastCommitAt !== null && <Separator />}
-            <span title="Worktree age">
+            <Divider />
+            <span className="shrink-0 tabular-nums">
               {formatDuration(Date.now() - worktree.createdAt)} old
             </span>
           </>
         )}
-      </span>
+      </div>
+
+      {detail && (
+        <p className="truncate text-xs text-muted-foreground">{detail}</p>
+      )}
+      {error && <p className="text-xs text-destructive select-text">{error}</p>}
     </div>
   );
 }
 
-function Separator() {
+// A hairline, not a punctuation mark. Same job the interpunct was doing
+// without putting a character in the middle of a sentence.
+function Divider() {
   return (
-    <span aria-hidden className="shrink-0 opacity-50">
-      ·
-    </span>
+    <span aria-hidden className="h-2.5 w-px shrink-0 bg-current opacity-25" />
   );
 }
