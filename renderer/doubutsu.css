@@ -37,6 +37,7 @@
  *      diff-index                diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
+ *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
@@ -472,6 +473,17 @@
   --muted-foreground: oklch(0.741 0.025 73.5);
   --accent: oklch(0.4 0.07 155);
   --accent-foreground: oklch(0.942 0.011 76.6);
+}
+
+/* The inbox's New worktree button is a filled surface sitting directly
+   under the banner card, and doubutsu's card is inset at mx-3. At the
+   px-2 the rows use, the button's fill visibly overhangs the card above
+   it -- two stacked blocks that nearly line up read worse than two that
+   either match or clearly don't. The rows underneath are text with only
+   a hover fill, so they can run full width without the same clash.
+   v1 has no card, so it keeps the px-2. */
+.doubutsu [data-slot="sidebar-inbox-create"] {
+  padding-inline: calc(var(--spacing) * 3);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --

@@ -242,8 +242,9 @@ export function Sidebar() {
           the tree instead gets the controls that only apply to it.
           Arranging takes over the whole sidebar, so neither shows. */}
       {arrangeMode ? null : inbox ? (
-        // Same inset as the rows below it, so the column reads as one.
-        <div className="px-2 pb-1.5">
+        // px-2 like the rows below it, which is where v1 wants it.
+        // doubutsu pulls it in to its banner card, hence the slot.
+        <div data-slot="sidebar-inbox-create" className="px-2 pb-1.5">
           <NewWorktreeButton projects={orderedProjects} />
         </div>
       ) : (
