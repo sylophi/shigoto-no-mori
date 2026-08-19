@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Folder } from "lucide-react";
+import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -55,7 +57,12 @@ export function TidyConfirm({
             >
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <div className="flex min-w-0 items-center gap-2">
-                  <span className="min-w-0 truncate text-sm font-medium select-text">
+                  <ProjectIcon
+                    projectId={entry.project.id}
+                    className="size-3"
+                    fallback={Folder}
+                  />
+                  <span className="-ml-0.5 min-w-0 truncate text-sm font-medium select-text">
                     <span className="font-normal text-muted-foreground">
                       {entry.project.name}
                     </span>

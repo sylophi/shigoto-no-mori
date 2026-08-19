@@ -1,4 +1,6 @@
+import { Folder } from "lucide-react";
 import type { Project } from "@shared/schemas";
+import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { formatBytes } from "@/lib/formatBytes";
 
@@ -19,8 +21,15 @@ export function TidyGroupHeading({
   bytes,
 }: TidyGroupHeadingProps) {
   return (
-    <div className="flex items-baseline justify-between gap-3 px-0.5">
-      <SectionHeading className="truncate">{project.name}</SectionHeading>
+    <div className="flex items-center justify-between gap-3 px-0.5">
+      <div className="flex min-w-0 items-center gap-1.5">
+        <ProjectIcon
+          projectId={project.id}
+          className="size-3"
+          fallback={Folder}
+        />
+        <SectionHeading className="truncate">{project.name}</SectionHeading>
+      </div>
       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
         {count} {count === 1 ? "worktree" : "worktrees"} · {formatBytes(bytes)}
       </span>

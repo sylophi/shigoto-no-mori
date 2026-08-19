@@ -1,3 +1,5 @@
+import { Folder } from "lucide-react";
+import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,7 +71,17 @@ export function TidyRow({
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="min-w-0 truncate font-medium select-text">
+          {/* Fallback icon rather than nothing, for the same reason the
+              inbox uses one: this list mixes projects, so a missing icon
+              would ragged-edge every row around it. */}
+          {showProject && (
+            <ProjectIcon
+              projectId={project.id}
+              className="size-3"
+              fallback={Folder}
+            />
+          )}
+          <span className="-ml-0.5 min-w-0 truncate font-medium select-text">
             {showProject && (
               <>
                 <span className="font-normal text-muted-foreground">
