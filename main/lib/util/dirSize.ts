@@ -108,8 +108,8 @@ export async function measureDirectory(
   };
 
   // Reads one directory and returns the subdirectories to descend into.
-  // Files are measured here; the caller owns the recursion, so no slot is
-  // ever held while waiting on a child.
+  // Files are measured here. The caller owns the recursion, so no slot
+  // is ever held while waiting on a child.
   const readDir = async (entry: PendingDir): Promise<PendingDir[]> => {
     const children: PendingDir[] = [];
     let dir;
