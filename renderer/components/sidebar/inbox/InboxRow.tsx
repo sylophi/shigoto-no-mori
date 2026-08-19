@@ -79,7 +79,15 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
       </div>
 
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="min-w-0 flex-1 truncate font-mono text-xs font-medium">
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate font-mono text-xs",
+            // Weight is reserved for "this is the one you have open",
+            // same as the tree row. Bolding every branch spends the
+            // page's only emphasis on the thing every row has.
+            isSelected && "font-medium",
+          )}
+        >
           <BranchLabel branch={worktree.branch} detached={worktree.detached} />
         </span>
         <ChangedFilesPill worktree={worktree} />

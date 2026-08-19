@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { cn } from "@/lib/utils";
 import { RowContent } from "./RowContent";
-import { ROW_INDENTED, type InboxShelf, type SidebarRow } from "./sidebarRow";
+import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
 
 interface VirtualRowProps {
   row: SidebarRow;
@@ -33,10 +33,7 @@ export function VirtualRow({
     <div
       data-index={index}
       ref={measureRef}
-      className={cn(
-        "absolute top-0 left-0 w-full px-2",
-        ROW_INDENTED[row.kind] && "pl-5",
-      )}
+      className={cn("absolute top-0 left-0 w-full", ROW_LAYOUT[row.kind])}
       style={{ transform: `translateY(${start}px)` }}
       onMouseEnter={() => setHoveredProjectId(rowProjectId)}
       onMouseLeave={() =>

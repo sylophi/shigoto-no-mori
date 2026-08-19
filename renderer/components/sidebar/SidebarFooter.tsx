@@ -27,14 +27,14 @@ interface SidebarFooterProps {
 
 const VIEW_OPTIONS = [
   {
-    value: "projects",
-    label: <ListTree aria-hidden className="size-3.5" />,
-    title: "Group worktrees by project",
-  },
-  {
     value: "inbox",
     label: <Inbox aria-hidden className="size-3.5" />,
     title: "One list across every project, newest work first",
+  },
+  {
+    value: "projects",
+    label: <ListTree aria-hidden className="size-3.5" />,
+    title: "Group worktrees by project",
   },
 ] as const satisfies ReadonlyArray<SegmentedOption<SidebarView>>;
 

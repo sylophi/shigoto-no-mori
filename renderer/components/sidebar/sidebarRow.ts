@@ -61,20 +61,31 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "worktree-skeleton": 36,
   "worktree-error": 24,
   "shelved-toggle": 24,
-  "inbox-worktree": 62,
-  "inbox-shelf": 32,
+  "inbox-worktree": 66,
+  "inbox-shelf": 36,
 };
 
-// Whether the row hangs under a project header. Indentation is a
-// property of the row, not of the view: the tree's child rows sit under
-// a header and the inbox's don't, and reading it off the kind keeps the
-// virtualizer from having to be told which view it's drawing.
-export const ROW_INDENTED: Record<SidebarRow["kind"], boolean> = {
-  project: false,
-  worktree: true,
-  "worktree-skeleton": true,
-  "worktree-error": true,
-  "shelved-toggle": true,
-  "inbox-worktree": false,
-  "inbox-shelf": false,
+// Where the row sits in the scroller, read off the kind rather than
+// handed down from the view, so the virtualizer never has to be told
+// which layout it is drawing.
+//
+// The tree insets its child rows under a project header and packs them
+// tight: they are one line each, and the indent already says where a
+// group starts and stops. The inbox has neither, so its rows line up
+// with the sidebar's own chrome (the banner and the New worktree button
+// are both px-3) and keep a gap under them. Three-line rows butted
+// together read as one block of text with nothing for the eye to break
+// on, and at px-2 the row's hover fill visibly overhung the banner.
+//
+// Padding, not margin: the virtualizer sizes each row from offsetHeight,
+// which counts the one and ignores the other, so a margin would let the
+// next row overlap instead of parting them.
+export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
+  project: "px-2",
+  worktree: "px-2 pl-5",
+  "worktree-skeleton": "px-2 pl-5",
+  "worktree-error": "px-2 pl-5",
+  "shelved-toggle": "px-2 pl-5",
+  "inbox-worktree": "px-3 pb-1",
+  "inbox-shelf": "px-3 pb-1",
 };
