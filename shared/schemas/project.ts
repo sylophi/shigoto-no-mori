@@ -51,6 +51,18 @@ export const SetProjectSortPayloadSchema = z.object({
   mode: ProjectSortModeSchema,
 });
 
+// Which sidebar layout the user picked. "projects" is the classic tree
+// grouped by project. "inbox" is the flat, cross-project list split into
+// active / shelved / merged boxes, newest work first. "projects" is the
+// implicit default, so an install that never touches the toggle reads
+// back the layout it has always had.
+export const SidebarViewSchema = z.enum(["projects", "inbox"]);
+export type SidebarView = z.infer<typeof SidebarViewSchema>;
+
+export const SetSidebarViewPayloadSchema = z.object({
+  view: SidebarViewSchema,
+});
+
 // Sidebar collapse state: toggles one project id in the persisted
 // collapsed set. A toggle (rather than a whole-list write) keeps the
 // read-modify-write in the main process, so a stale renderer cache

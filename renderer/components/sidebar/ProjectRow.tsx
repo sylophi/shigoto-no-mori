@@ -4,7 +4,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { notifyError } from "@/lib/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
-import { useCreateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
 import type { Project } from "@shared/schemas";
 import { ProjectHeader } from "./ProjectHeader";
@@ -51,7 +50,11 @@ export function ProjectRow({
   const navigate = useNavigate();
   const missing = project.pathExists === false;
   const removeProject = useRemoveProject();
-  const create = useCreateWorktree();
+  const {
+    quickCreate,
+    openCreateForm,
+    isPending: creating,
+  } = useQuickCreateWorktree();
   // Two-step confirm so accidentally landing on "Remove" doesn't drop the
   // project. Menu stays open while armed; second click within the timeout
   // fires the actual remove. The arm is cleared whenever the dropdown
@@ -73,34 +76,6 @@ export function ProjectRow({
   const onHeaderContextMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     triggerRef.current?.click();
-  };
-
-  // Two failure sources, attributed by scope rather than by inspecting
-  // `create.isError` after the fact: that read is a render-time
-  // snapshot the closure captured, not the mutation's state now, so it
-  // both double-toasted create failures and latched true forever after
-  // the first one, swallowing genuine defaultBranch errors.
-  const quickCreate = async () => {
-    if (create.isPending) return;
-    let defaultBranch: string;
-    try {
-      defaultBranch = await window.api.projects.defaultBranch(project.id);
-    } catch (err) {
-      notifyError("Couldn't resolve default branch", err);
-      return;
-    }
-    try {
-      const { worktree } = await create.mutateAsync({
-        projectId: project.id,
-        base: defaultBranch,
-      });
-      void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId",
-        params: { projectId: project.id, worktreeId: worktree.id },
-      });
-    } catch {
-      // The create mutation's meta already toasts this failure.
-    }
   };
 
   const triggerButton = (
@@ -158,24 +133,21 @@ export function ProjectRow({
                 type="button"
                 onClick={(e) => {
                   if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                    void navigate({
-                      to: "/projects/$projectId/new",
-                      params: { projectId: project.id },
-                    });
+                    openCreateForm(project.id);
                     return;
                   }
-                  void quickCreate();
+                  void quickCreate(project.id);
                 }}
-                disabled={create.isPending}
+                disabled={creating}
                 aria-label={`Quick-create worktree in ${project.name}`}
                 title={`Quick-create worktree in ${project.name}`}
                 className={cn(
                   "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",
                   isHovered ? "opacity-100" : "opacity-0",
                 )}
-                aria-busy={create.isPending}
+                aria-busy={creating}
               >
-                {create.isPending ? (
+                {creating ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
                   <Plus className="size-3.5" />
@@ -188,18 +160,13 @@ export function ProjectRow({
                 {!missing && (
                   <>
                     <DropdownMenuItem
-                      disabled={create.isPending}
-                      onClick={() => void quickCreate()}
+                      disabled={creating}
+                      onClick={() => void quickCreate(project.id)}
                     >
                       Quick create
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/new",
-                          params: { projectId: project.id },
-                        })
-                      }
+                      onClick={() => openCreateForm(project.id)}
                     >
                       New worktree from…
                     </DropdownMenuItem>

@@ -18,22 +18,33 @@ import {
   useCollapsedProjects,
   useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
+import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
+import { useSidebarView } from "@/hooks/projects/useSidebarView";
+import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/lib/toast";
+import { buildSidebarRows } from "./buildSidebarRows";
+import { buildInboxRows } from "./inbox/buildInboxRows";
+import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { ProjectDragPreview } from "./ProjectDragPreview";
-import { ROW_SIZE_HINTS } from "./sidebarRow";
+import {
+  ROW_SIZE_HINTS,
+  type InboxShelf,
+  type SidebarViewModel,
+} from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
+import { SidebarToolbar } from "./SidebarToolbar";
 import { sortProjects } from "./sortProjects";
-import { useSidebarRows } from "./useSidebarRows";
 import { VirtualRow } from "./VirtualRow";
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
 export function Sidebar() {
   const { data: projects = [], isLoading } = useProjects();
   const { data: sortMode = "manual" } = useProjectSort();
+  const inbox = useSidebarView() === "inbox";
   const reorderProjects = useReorderProjects();
   // Absence == expanded, so new projects default open. Persisted in
   // state.json (like the sort preference) so a relaunch keeps the tree
@@ -44,6 +55,11 @@ export function Sidebar() {
   // Per-project "Show shelved" reveal. Transient on purpose -- the
   // whole point of shelving is to keep the noise down on a fresh window.
   const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // Inbox shelves, same transient-by-design reasoning as the per-project
+  // reveal above: both start folded on every launch.
+  const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
     () => new Set(),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -58,12 +74,11 @@ export function Sidebar() {
   };
 
   const toggleShelved = (projectId: string) => {
-    setShelvedExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(projectId)) next.delete(projectId);
-      else next.add(projectId);
-      return next;
-    });
+    setShelvedExpanded(withToggled(projectId));
+  };
+
+  const toggleShelf = (shelf: InboxShelf) => {
+    setOpenShelves(withToggled(shelf));
   };
 
   // Display order only. Drag-reorder still operates on the stored order
@@ -71,12 +86,27 @@ export function Sidebar() {
   // arrange mode is only reachable via the manual sort, where the orders match.
   const orderedProjects = sortProjects(projects, sortMode);
 
-  const { rows, failedCount } = useSidebarRows({
-    projects: orderedProjects,
-    collapsed,
-    shelvedExpanded,
-    arrangeMode,
-  });
+  // Subscribed here rather than inside the row builders so the two views
+  // share one set of observers. Toggling the view then costs nothing: the
+  // builders are plain functions over these results, and the queries --
+  // which re-probe git for every project on mount -- never unmount.
+  const worktreeQueries = useAllProjectWorktrees(orderedProjects);
+  const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
+  const view: SidebarViewModel = inbox
+    ? buildInboxRows({
+        projects: orderedProjects,
+        worktreeQueries,
+        pullRequestQueries,
+        openShelves,
+      })
+    : buildSidebarRows({
+        projects: orderedProjects,
+        worktreeQueries,
+        collapsed,
+        shelvedExpanded,
+        arrangeMode,
+      });
+  const { rows, failedCount } = view;
 
   // The per-project query is silent so the all-projects launcher fan-out
   // doesn't spam toasts; here we coalesce the same observations into one.
@@ -103,10 +133,10 @@ export function Sidebar() {
 
   // Reveal the selection when navigation comes from outside the sidebar
   // (launcher jump, empty-state redirect) by scrolling the virtualized
-  // list to the selected worktree's row. The row can lag the route
-  // (worktree queries still loading), so this retries every render until
-  // it exists; the ref stops repeat scrolls afterwards so the user can
-  // still scroll away freely.
+  // list to whichever row the active view says stands for it. The row can
+  // lag the route (worktree queries still loading), so this retries every
+  // render until it exists; the ref stops repeat scrolls afterwards so
+  // the user can still scroll away freely.
   const { pathname } = useLocation();
   const selectedMatch = pathname.match(
     /^\/projects\/([^/]+)\/worktrees\/([^/]+)$/,
@@ -119,14 +149,9 @@ export function Sidebar() {
       return;
     }
     if (lastRevealedRef.current === worktreeId) return;
-    let index = rows.findIndex((r) => r.key === `w:${worktreeId}`);
-    // Collapsed project: its worktree rows don't exist, so the header is
-    // the closest thing to reveal. Collapse state stays untouched -- the
-    // empty-state redirect runs on every launch, and auto-expanding
-    // would undo the user's pruning.
-    if (index < 0 && collapsed.has(projectId)) {
-      index = rows.findIndex((r) => r.key === `p:${projectId}`);
-    }
+    const key = view.revealKey(projectId, worktreeId);
+    if (!key) return;
+    const index = rows.findIndex((r) => r.key === key);
     if (index < 0) return;
     lastRevealedRef.current = worktreeId;
     virtualizer.scrollToIndex(index, { align: "auto" });
@@ -164,6 +189,42 @@ export function Sidebar() {
     ? (projects.find((p) => p.id === activeId) ?? null)
     : null;
 
+  // "Nothing configured" and "configured but nothing to show" are
+  // different answers, and neither should flash while its list is still
+  // resolving.
+  const emptyMessage = isLoading
+    ? null
+    : projects.length === 0
+      ? "No projects yet."
+      : view.emptyMessage;
+
+  const list = (
+    <div
+      className="relative"
+      style={{ height: `${virtualizer.getTotalSize()}px` }}
+    >
+      {virtualizer.getVirtualItems().map((vi) => {
+        const row = rows[vi.index];
+        if (!row) return null;
+        return (
+          <VirtualRow
+            key={row.key}
+            row={row}
+            index={vi.index}
+            start={vi.start}
+            measureRef={virtualizer.measureElement}
+            hoveredProjectId={hoveredProjectId}
+            setHoveredProjectId={setHoveredProjectId}
+            onToggle={toggleExpanded}
+            onToggleShelved={toggleShelved}
+            onToggleShelf={toggleShelf}
+            arrangeMode={arrangeMode}
+          />
+        );
+      })}
+    </div>
+  );
+
   return (
     // Both themes are fully transparent so the BrowserWindow vibrancy
     // material shows through. A heavy white wash in light mode washes
@@ -176,53 +237,46 @@ export function Sidebar() {
       className="flex h-full flex-col"
     >
       <SidebarHeader />
+      {/* Each view puts what it actually needs above its list. The inbox
+          has no project headers to hang a + off, so creating lives here;
+          the tree instead gets the controls that only apply to it.
+          Arranging takes over the whole sidebar, so neither shows. */}
+      {arrangeMode ? null : inbox ? (
+        // px-2 like the rows below it, which is where v1 wants it.
+        // doubutsu pulls it in to its banner card, hence the slot.
+        <div data-slot="sidebar-inbox-create" className="px-2 pb-1.5">
+          <NewWorktreeButton projects={orderedProjects} />
+        </div>
+      ) : (
+        <SidebarToolbar onArrange={() => setArrangeMode(true)} />
+      )}
       <div className="min-h-0 flex-1">
         <ScrollArea className="size-full" viewportRef={viewportRef}>
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
-          >
-            <SortableContext
-              items={orderedProjects.map((p) => p.id)}
-              strategy={verticalListSortingStrategy}
+          {/* Dragging reorders projects, which the inbox doesn't show --
+              so it doesn't mount the DnD context at all. */}
+          {inbox ? (
+            list
+          ) : (
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveId(null)}
             >
-              <div
-                className="relative"
-                style={{ height: `${virtualizer.getTotalSize()}px` }}
+              <SortableContext
+                items={orderedProjects.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
               >
-                {virtualizer.getVirtualItems().map((vi) => {
-                  const row = rows[vi.index];
-                  if (!row) return null;
-                  return (
-                    <VirtualRow
-                      key={row.key}
-                      row={row}
-                      index={vi.index}
-                      start={vi.start}
-                      measureRef={virtualizer.measureElement}
-                      hoveredProjectId={hoveredProjectId}
-                      setHoveredProjectId={setHoveredProjectId}
-                      onToggle={toggleExpanded}
-                      onToggleShelved={toggleShelved}
-                      arrangeMode={arrangeMode}
-                    />
-                  );
-                })}
-              </div>
-            </SortableContext>
-            <DragOverlay>
-              {activeProject ? (
-                <ProjectDragPreview project={activeProject} />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-          {!isLoading && projects.length === 0 && (
-            <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-              No projects yet.
-            </div>
+                {list}
+              </SortableContext>
+              <DragOverlay>
+                {activeProject ? (
+                  <ProjectDragPreview project={activeProject} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           )}
+          <SidebarEmptyState message={emptyMessage} />
         </ScrollArea>
       </div>
       <SidebarFooter
@@ -230,5 +284,24 @@ export function Sidebar() {
         onToggleArrange={() => setArrangeMode((v) => !v)}
       />
     </aside>
+  );
+}
+
+// Set updater for a value that's either in or out. Both of the sidebar's
+// fold states are exactly this.
+function withToggled<T>(value: T) {
+  return (prev: Set<T>) => {
+    const next = new Set(prev);
+    if (!next.delete(value)) next.add(value);
+    return next;
+  };
+}
+
+function SidebarEmptyState({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+      {message}
+    </div>
   );
 }
