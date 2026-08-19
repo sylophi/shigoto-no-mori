@@ -17,6 +17,7 @@ import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
+import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
@@ -114,6 +115,14 @@ const settingsRoute = createRoute({
   component: Settings,
 });
 
+// App-wide, like settings: the tidy page spans every project rather than
+// scoping to one, so it hangs off the root instead of /projects.
+const tidyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tidy",
+  component: TidyForest,
+});
+
 const newWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/new",
@@ -209,6 +218,7 @@ const commitDiffRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
+  tidyRoute,
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,

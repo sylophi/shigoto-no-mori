@@ -18,6 +18,7 @@ import {
 } from "@/hooks/projects/useProjectSort";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
+import { TidyButton } from "./TidyButton";
 
 interface SidebarToolbarProps {
   // Enter-only: the footer owns "Done arranging", so this never toggles
@@ -105,6 +106,7 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="flex-1" />
+      <TidyButton />
       <SimpleTooltip
         // The backtick renders in the mono font: the rounded doubutsu
         // fonts draw U+0060 as a narrow accent whose ink overhangs the

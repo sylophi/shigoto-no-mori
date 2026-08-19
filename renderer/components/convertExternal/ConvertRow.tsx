@@ -1,5 +1,6 @@
 import { FileDiff } from "lucide-react";
 import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
+import { Checkbox } from "@/components/ui/checkbox";
 import { type RowStatus } from "@/components/ui/row-status";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
@@ -41,12 +42,11 @@ export function ConvertRow({
         interactive && "cursor-pointer transition-colors hover:bg-accent/30",
       )}
     >
-      <input
-        type="checkbox"
+      <Checkbox
         checked={checked}
-        onChange={onToggle}
+        onCheckedChange={onToggle}
         disabled={!interactive}
-        className="mt-1 size-4 shrink-0 accent-primary disabled:cursor-not-allowed"
+        className="mt-1"
       />
       <WorktreeMoveDetails
         branch={worktree.branch}

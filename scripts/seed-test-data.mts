@@ -49,10 +49,16 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_TERMINAL_PROMPT: "0",
 };
 
-async function git(cwd: string, args: string[]): Promise<string> {
+// `env` is for the callers that have to stamp a commit with a date;
+// everything else takes the pinned identity as-is.
+async function git(
+  cwd: string,
+  args: string[],
+  env: NodeJS.ProcessEnv = {},
+): Promise<string> {
   const { stdout } = await execFileP("git", args, {
     cwd,
-    env: { ...process.env, ...GIT_ENV },
+    env: { ...process.env, ...GIT_ENV, ...env },
     maxBuffer: 10 * 1024 * 1024,
   });
   return stdout;
@@ -933,6 +939,262 @@ async function seedPreExistingWorktrees(): Promise<Manifest> {
   };
 }
 
+// Commits with a backdated author AND committer date. The shared `git`
+// helper pins identity but always commits "now"; the tidy-up page reads
+// committer dates (%ct) to age a worktree, so staleness can only be
+// staged by overriding both here.
+async function commitAt(
+  repo: string,
+  files: Record<string, string>,
+  message: string,
+  daysAgo: number,
+): Promise<void> {
+  await Promise.all(
+    Object.entries(files).map(([rel, content]) => writeAt(repo, rel, content)),
+  );
+  const when = new Date(Date.now() - daysAgo * 86_400_000).toISOString();
+  await git(repo, ["add", "-A"]);
+  await git(repo, ["commit", "-m", message, "-q"], {
+    GIT_AUTHOR_DATE: when,
+    GIT_COMMITTER_DATE: when,
+  });
+}
+
+// A worktree in the shared external dir, which is where both stale-*
+// fixtures put theirs so the app reads them as unmanaged.
+async function addExternalWorktree(
+  repo: string,
+  base: string,
+  name: string,
+  branch: string,
+): Promise<string> {
+  const path = join(base, name);
+  await git(repo, ["worktree", "add", "-b", branch, path, "main"]);
+  return path;
+}
+
+// Bulk filler under a gitignored node_modules/, so a worktree has a
+// believable on-disk footprint without touching its git state. Sizes are
+// small enough to keep seeding fast but far enough apart to sort visibly.
+async function fakeDependencies(
+  worktree: string,
+  megabytes: number,
+): Promise<void> {
+  const chunk = "x".repeat(1024 * 1024);
+  await Promise.all(
+    Array.from({ length: megabytes }, (_unused, index) =>
+      writeAt(worktree, `node_modules/filler-${index}/index.js`, chunk),
+    ),
+  );
+}
+
+// Exercises every verdict the "Tidy the forest" page can reach, with
+// spread-out ages and disk footprints so the list has something to sort.
+async function seedStaleWorktrees(): Promise<Manifest> {
+  const remote = await bareRemote("stale-worktrees");
+  const repo = join(REPOS, "stale-worktrees");
+  await initRepo(repo);
+  await commitAt(
+    repo,
+    {
+      "README.md":
+        "# stale-worktrees\n\nA forest that has been left to grow wild.\n",
+      ".gitignore": "node_modules/\n",
+      "package.json": pkgJson("stale-worktrees", { dev: "echo dev" }),
+      "public/icon.svg": iconSvg("#10b981", "sw"),
+      "src/index.ts": "export const version = 1;\n",
+    },
+    "Initial",
+    240,
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  await mkdir(EXTERNAL, { recursive: true });
+  const base = join(EXTERNAL, "stale-worktrees");
+  await mkdir(base, { recursive: true });
+  const add = (name: string, branch: string) =>
+    addExternalWorktree(repo, base, name, branch);
+
+  // 1. Merged the ordinary way, clean, ancient, and by far the fattest.
+  //    The headline "safe to remove" row.
+  const abandoned = await add("abandoned-mint", "feature/old-onboarding");
+  await commitAt(
+    abandoned,
+    { "src/onboarding.ts": "export const step = 1;\n" },
+    "Add onboarding",
+    150,
+  );
+  await git(repo, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "feature/old-onboarding",
+    "-m",
+    "Merge onboarding",
+  ]);
+  await fakeDependencies(abandoned, 9);
+
+  // 2. Squash-merged: still has commits main never took, so only the
+  //    merge-tree probe can tell this is already landed.
+  const shipped = await add("shipped-cedar", "feature/search");
+  await commitAt(
+    shipped,
+    { "src/search.ts": "export const q = '';\n" },
+    "Search groundwork",
+    96,
+  );
+  await commitAt(
+    shipped,
+    { "src/search.ts": "export const q = '';\nexport const go = () => q;\n" },
+    "Wire up search",
+    94,
+  );
+  await git(repo, ["merge", "--squash", "-q", "feature/search"]);
+  await git(repo, ["commit", "-m", "Add search (squashed)", "-q"]);
+  await fakeDependencies(shipped, 5);
+
+  // 3. Genuine unmerged work that was never pushed: the row the page must
+  //    refuse to preselect.
+  const halfDone = await add("half-done-fern", "feature/billing");
+  await commitAt(
+    halfDone,
+    { "src/billing.ts": "export const todo = true;\n" },
+    "Start billing",
+    12,
+  );
+  await fakeDependencies(halfDone, 3);
+
+  // 4. Branch is merged, but the working tree is dirty -- dirty must win
+  //    over merged so nothing uncommitted is ever ticked.
+  const messy = await add("messy-otter", "chore/tidy-imports");
+  await git(repo, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "chore/tidy-imports",
+    "-m",
+    "Merge tidy-imports",
+  ]);
+  await writeAt(
+    messy,
+    "src/index.ts",
+    "export const version = 2; // half-finished edit\n",
+  );
+  await writeAt(messy, "scratch.md", "notes that were never committed\n");
+  await fakeDependencies(messy, 2);
+
+  // 5. Unmerged but pushed, so its commits survive removal: "Active work"
+  //    rather than the louder "Unpushed commits".
+  const fresh = await add("fresh-heron", "feature/dashboard");
+  await commitAt(
+    fresh,
+    { "src/dashboard.ts": "export const live = true;\n" },
+    "Dashboard shell",
+    2,
+  );
+  await git(fresh, ["push", "-u", "origin", "feature/dashboard", "-q"]);
+  await fakeDependencies(fresh, 1);
+
+  // Publish the landed merges. Without this, origin/main still points at
+  // the initial commit and -- since resolveDefaultBranch prefers the
+  // remote-tracking ref -- every merged branch would be compared against
+  // an empty main. That is the realistic state anyway: you push what you
+  // merge.
+  await git(repo, ["push", "origin", "main", "-q"]);
+
+  return {
+    name: "stale-worktrees",
+    path: repo,
+    purpose:
+      "Five worktrees covering every verdict on the 'Tidy the forest' page",
+    tests: [
+      "The sidebar's tree button ('Tidy the forest') lists these 5 worktrees + the primary, alongside every other registered project.",
+      "abandoned-mint is 'Merged' and shipped-cedar is 'Already in primary'; both are preselected.",
+      "messy-otter ('Uncommitted work'), half-done-fern ('Unpushed commits') and fresh-heron ('Active work') are NOT preselected.",
+      "Sizes fill in progressively and sort abandoned-mint (~9 MB) to the top under Size, above every other project's worktrees.",
+      "Ticking messy-otter forces the confirm dialog's acknowledgement checkbox before Remove enables.",
+    ],
+  };
+}
+
+// A second forest, so the app-wide page has more than one project to
+// span: cross-project sorting, the "Project" grouping, and the confirm
+// dialog's "across N projects" line all need two repos to mean anything.
+// Deliberately small -- its job is to be a second row source, not to
+// re-cover the verdicts stale-worktrees already covers.
+async function seedStaleSatellite(): Promise<Manifest> {
+  const remote = await bareRemote("stale-satellite");
+  const repo = join(REPOS, "stale-satellite");
+  await initRepo(repo);
+  await commitAt(
+    repo,
+    {
+      "README.md": "# stale-satellite\n\nA smaller wood, next door.\n",
+      ".gitignore": "node_modules/\n",
+      "package.json": pkgJson("stale-satellite", { dev: "echo dev" }),
+      "public/icon.svg": iconSvg("#0ea5e9", "ss"),
+      "src/index.ts": "export const version = 1;\n",
+    },
+    "Initial",
+    120,
+  );
+  await git(repo, ["remote", "add", "origin", remote]);
+  await git(repo, ["push", "-u", "origin", "main", "-q"]);
+
+  await mkdir(EXTERNAL, { recursive: true });
+  const base = join(EXTERNAL, "stale-satellite");
+  await mkdir(base, { recursive: true });
+  const add = (name: string, branch: string) =>
+    addExternalWorktree(repo, base, name, branch);
+
+  // Merged, clean, and older than anything in stale-worktrees: under
+  // "Age" it should sort above that project's rows, which is the whole
+  // point of one list across every project.
+  const landed = await add("quiet-badger", "feature/legacy-import");
+  await commitAt(
+    landed,
+    { "src/import.ts": "export const legacy = true;\n" },
+    "Legacy import",
+    200,
+  );
+  await git(repo, [
+    "merge",
+    "--no-ff",
+    "-q",
+    "feature/legacy-import",
+    "-m",
+    "Merge legacy import",
+  ]);
+  await fakeDependencies(landed, 4);
+
+  // Unmerged and unpushed, so this project always has something the page
+  // refuses to tick -- a group that can't be cleared in one go.
+  const wip = await add("busy-lark", "feature/notifications");
+  await commitAt(
+    wip,
+    { "src/notify.ts": "export const soon = true;\n" },
+    "Notification shell",
+    5,
+  );
+  await fakeDependencies(wip, 1);
+
+  await git(repo, ["push", "origin", "main", "-q"]);
+
+  return {
+    name: "stale-satellite",
+    path: repo,
+    purpose:
+      "Second project for the app-wide 'Tidy the forest' page: one merged worktree, one unpushed",
+    tests: [
+      "Register this alongside stale-worktrees: the tidy page lists both projects' worktrees in one list, each row prefixed with its project.",
+      "Sorting by 'Project' groups the rows under per-project headings carrying each project's worktree count and size.",
+      "quiet-badger (~200 days) sorts to the top under Age, above every stale-worktrees row.",
+      "Selecting quiet-badger plus abandoned-mint makes the confirm dialog read 'across 2 projects'.",
+    ],
+  };
+}
+
 async function seedConvertibleExternals(): Promise<Manifest> {
   const remote = await bareRemote("convertible-externals");
   const repo = join(REPOS, "convertible-externals");
@@ -1681,6 +1943,8 @@ async function main(): Promise<void> {
     { name: "branch-delete-states", run: seedBranchDeleteStates },
     { name: "dirty-primary", run: seedDirtyPrimary },
     { name: "pre-existing-worktrees", run: seedPreExistingWorktrees },
+    { name: "stale-worktrees", run: seedStaleWorktrees },
+    { name: "stale-satellite", run: seedStaleSatellite },
     { name: "convertible-externals", run: seedConvertibleExternals },
     { name: "carryover-rich", run: seedCarryoverRich },
     { name: "carryover-symlink-dir", run: seedCarryoverSymlinkDir },
