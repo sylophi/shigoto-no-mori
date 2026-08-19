@@ -18,6 +18,14 @@ interface BranchComboboxProps {
   className?: string;
   // Free-text "Use as ref" entries are NOT filtered.
   excludeBranches?: readonly string[];
+  // Moved to the top of the unfiltered list, for pickers that ask "which
+  // branch do I start from" -- git's alphabetical order buries the one
+  // answer almost everyone wants. Opt-in rather than resolved in here:
+  // the project-settings picker is choosing which branch the default
+  // *is*, so seeding its list with the current answer only begs the
+  // question. Manage Branches asks the same thing the new-worktree form
+  // does and could pass it. That just hasn't been wired up yet.
+  pinnedBranch?: string;
 }
 
 export interface BranchEntry {
@@ -39,6 +47,17 @@ function toBranchEntries(
   return out;
 }
 
+// Only reorders the browse list. Once there's a query, ranking is the
+// query's business alone -- a pinned branch that doesn't match what was
+// typed sitting above the branch that does would just look broken.
+// Mutates: the caller hands over a list toBranchEntries just built.
+function pinFirst(entries: BranchEntry[], name: string | undefined) {
+  if (!name) return entries;
+  const at = entries.findIndex((b) => b.name === name);
+  if (at > 0) entries.unshift(...entries.splice(at, 1));
+  return entries;
+}
+
 export function BranchCombobox({
   projectId,
   value,
@@ -48,12 +67,16 @@ export function BranchCombobox({
   disabled,
   className,
   excludeBranches,
+  pinnedBranch,
 }: BranchComboboxProps) {
   const { data: branches, isFetching } = useBranches(projectId);
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
 
-  const all = toBranchEntries(branches, new Set(excludeBranches ?? []));
+  const all = pinFirst(
+    toBranchEntries(branches, new Set(excludeBranches ?? [])),
+    pinnedBranch,
+  );
   const sorted = rankByScore(query, all, (b) => b.name);
 
   const trimmedQuery = query.trim();
