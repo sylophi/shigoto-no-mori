@@ -1,12 +1,10 @@
-import { Archive, ArchiveRestore, Folder } from "lucide-react";
+import { Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
-import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
-  isManagedWorktree,
   worktreeLastActivityAt,
   type PullRequest,
   type Worktree,
@@ -39,25 +37,12 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
     useWorktreeRowState(worktree);
 
   return (
-    // A div, not a button: the shelve control is a button of its own and
-    // nesting one inside another is invalid. Enter/Space are wired by
-    // hand to keep the row keyboard-operable.
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={open}
-      onKeyDown={(event) => {
-        // Only when the row itself has focus. The shelve button inside it
-        // is keyboard-reachable, and swallowing its Enter would navigate
-        // instead of shelving.
-        if (event.target !== event.currentTarget) return;
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        open();
-      }}
       title={title}
       className={cn(
-        "group/inbox-row flex w-full cursor-pointer flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors outline-none",
+        "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors outline-none",
         "hover:bg-accent/60 focus-visible:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
@@ -108,15 +93,14 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
         )}
         <span className="min-w-0 truncate">{worktree.name}</span>
       </span>
-    </div>
+    </button>
   );
 }
 
 // Right end of the context line: normally "when did this last move",
 // which is what the inbox sorts on. A running script or a delete in
 // flight displaces it -- those are happening now, so they outrank a
-// timestamp. Hovering swaps in the shelve toggle, so the list can be
-// triaged without opening every row.
+// timestamp.
 function TrailingSlot({
   worktree,
   activity,
@@ -126,67 +110,18 @@ function TrailingSlot({
   activity: ScriptActivityKind | null;
   isDeleting: boolean;
 }) {
-  const setShelved = useSetShelved();
   const activityAt = worktreeLastActivityAt(worktree);
-  const canShelve = isManagedWorktree(worktree) && !isDeleting;
 
-  // Both children share one grid cell, so the timestamp can fade out and
-  // the button fade in without either moving: the cell is as wide as the
-  // wider of the two, always. Cross-fading rather than swapping `hidden`
-  // also keeps the button in the tab order -- a display:none control
-  // would make shelving mouse-only.
-  //
-  // The two have to swap on exactly the same triggers or they overlap,
-  // and the trigger is hover plus *keyboard* focus, never plain focus:
-  // clicking a row to open it leaves the row div focused, so the
-  // focus-within this used to key off pinned the toggle open over the
-  // timestamp of whichever row you last selected. The button reads its
-  // own focus. The timestamp is a sibling, so it needs `:has` to see
-  // the same thing.
   return (
-    <span className="ml-auto grid shrink-0 grid-cols-1 items-center justify-items-end">
-      <span
-        className={cn(
-          "col-start-1 row-start-1 flex items-center",
-          canShelve &&
-            "transition-opacity group-hover/inbox-row:opacity-0 group-focus-visible/inbox-row:opacity-0 group-has-[:focus-visible]/inbox-row:opacity-0",
-        )}
-      >
-        {isDeleting ? (
-          <ActivityIcon kind="teardown" />
-        ) : activity ? (
-          <ActivityIcon kind={activity} />
-        ) : (
-          <span className="tabular">
-            {activityAt > 0 ? formatRelativeTime(activityAt) : "no activity"}
-          </span>
-        )}
-      </span>
-      {canShelve && (
-        <button
-          type="button"
-          // Only the row navigates on click. This must not do both.
-          onClick={(event) => {
-            event.stopPropagation();
-            setShelved.mutate({
-              projectId: worktree.projectId,
-              worktreeId: worktree.id,
-              shelved: !worktree.shelved,
-            });
-          }}
-          disabled={setShelved.isPending}
-          aria-label={
-            worktree.shelved ? "Unshelve worktree" : "Shelve worktree"
-          }
-          title={worktree.shelved ? "Unshelve" : "Shelve"}
-          className="col-start-1 row-start-1 rounded-sm p-0.5 opacity-0 transition-opacity group-hover/inbox-row:opacity-100 group-focus-visible/inbox-row:opacity-100 hover:text-foreground focus-visible:opacity-100"
-        >
-          {worktree.shelved ? (
-            <ArchiveRestore aria-hidden className="size-3" />
-          ) : (
-            <Archive aria-hidden className="size-3" />
-          )}
-        </button>
+    <span className="ml-auto flex shrink-0 items-center">
+      {isDeleting ? (
+        <ActivityIcon kind="teardown" />
+      ) : activity ? (
+        <ActivityIcon kind={activity} />
+      ) : (
+        <span className="tabular">
+          {activityAt > 0 ? formatRelativeTime(activityAt) : "no activity"}
+        </span>
       )}
     </span>
   );
