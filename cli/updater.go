@@ -229,11 +229,15 @@ func teamIdentifier(bundle string) (string, error) {
 // A pidfile rather than the state.json lock: staging holds it for the
 // whole download, far past any reasonable lock timeout, and a crashed
 // holder must be detectable (dead pid) instead of waited out.
+// The stager's pidfile, named here so doctor and the stager can't
+// disagree about which file the lock is.
+func stagingLockPath() string { return filepath.Join(updatesDir(), "staging.pid") }
+
 func acquireStagingLock() (func(), error) {
 	if err := os.MkdirAll(updatesDir(), 0o755); err != nil {
 		return nil, errf("Couldn't create %s: %v", updatesDir(), err)
 	}
-	path := filepath.Join(updatesDir(), "staging.pid")
+	path := stagingLockPath()
 	for range 3 {
 		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {

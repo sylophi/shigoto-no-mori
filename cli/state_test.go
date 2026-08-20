@@ -167,7 +167,7 @@ func bumpUseLog() error {
 }
 
 func TestReadStateFileMissingIsEmpty(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	all, err := readStateFile()
 	if err != nil || len(all) != 0 {
 		t.Errorf("read of absent state.json = %v, %v, want empty", all, err)
@@ -181,7 +181,7 @@ func TestReadStateFileMissingIsEmpty(t *testing.T) {
 }
 
 func TestUpdateStateKeyRefusesMalformedState(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	broken := `{"projects": [{"id": "p1"`
 	seedState(t, broken)
 	if err := bumpUseLog(); err == nil {
@@ -196,7 +196,7 @@ func TestUpdateStateKeyRefusesUnreadableState(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads through mode 0000")
 	}
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	kept := `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],` +
 		`"shelvedWorktrees":{"w1":true},"projectUseLog":{"p1":[1]}}`
 	seedState(t, kept)
@@ -228,7 +228,7 @@ func TestUpdateStateKeyRefusesUnreadableState(t *testing.T) {
 // --- the schema marker ---
 
 func TestStateWriteStampsSchemaVersion(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	if err := bumpUseLog(); err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestStateWriteStampsSchemaVersion(t *testing.T) {
 // that follows stamps this build's version either way: it wrote the
 // file, so it says so.
 func TestStateReadToleratesOtherSchemaVersions(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	list := `"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}]`
 	seedRegistry(t, "{"+list+"}")
 	if projects, err := loadProjects(); err != nil || len(projects) != 1 {
@@ -314,7 +314,7 @@ func readFile(t *testing.T, path string) map[string]json.RawMessage {
 // The registry lands in registry.json, the telemetry and the UI
 // preferences stay in state.json, and no key goes missing on the way.
 func TestRegistrySplitMovesOnlyTheRegistry(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedState(t, oldFormatState)
 
 	projects, err := loadProjects()
@@ -361,7 +361,7 @@ func TestRegistrySplitMovesOnlyTheRegistry(t *testing.T) {
 // Running it again must rewrite nothing: the second pass has no keys
 // left to move, so both files keep the bytes the first pass left.
 func TestRegistrySplitIsIdempotent(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedState(t, oldFormatState)
 	if _, err := loadProjects(); err != nil {
 		t.Fatal(err)
@@ -399,7 +399,7 @@ func TestRegistrySplitIsIdempotent(t *testing.T) {
 // state.json on every run to strip them would cost every command a
 // file read forever.
 func TestRegistrySplitPrefersRegistryAfterCrash(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedState(t, oldFormatState)
 	// What the crashed run had already written, plus the project the
 	// user added and the worktree the user shelved afterwards through
@@ -431,7 +431,7 @@ func TestRegistrySplitRefusesUnreadableState(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads through mode 0000")
 	}
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedState(t, oldFormatState)
 	if err := os.Chmod(statePath(), 0o000); err != nil {
 		t.Fatal(err)
@@ -453,7 +453,7 @@ func TestRegistrySplitRefusesUnreadableState(t *testing.T) {
 // The point of the split: a use-log bump, which fires on nearly every
 // click, must leave the registry file untouched.
 func TestUseLogWriteLeavesRegistryAlone(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedState(t, oldFormatState)
 	if _, err := loadProjects(); err != nil {
 		t.Fatal(err)
@@ -484,7 +484,7 @@ func TestUseLogWriteLeavesRegistryAlone(t *testing.T) {
 // A fresh root has no state.json to drain, and the first registry write
 // creates registry.json rather than resurrecting the old shape.
 func TestRegistrySplitOnFreshRoot(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	if projects, err := loadProjects(); err != nil || len(projects) != 0 {
 		t.Errorf("fresh root = %v, %v, want empty", projects, err)
 	}
@@ -533,7 +533,7 @@ func captureStderr(t *testing.T, fn func()) string {
 // the hint reads and the use-log writes are the only places left that
 // can notice it is broken. They carry on, and they say so once.
 func TestBrokenStateWarnsOnceAndKeepsWorking(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],`+
 		`"shelvedWorktrees":{"w1":true},"schemaVersion":1}`)
 	broken := `{"launcherUseLog": {"app:finder": [1`
@@ -576,7 +576,7 @@ func TestBrokenStateWarnsOnceAndKeepsWorking(t *testing.T) {
 
 // The same paths on a healthy root say nothing at all.
 func TestHealthyRootPrintsNoWarning(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedRegistry(t, `{"projects":[{"id":"p1","name":"alpha","path":"/tmp/alpha"}],"schemaVersion":1}`)
 	seedState(t, `{"launcherUseLog":{"app:finder":[1]},"schemaVersion":1}`)
 	printed := captureStderr(t, func() {
@@ -602,7 +602,7 @@ func TestHealthyRootPrintsNoWarning(t *testing.T) {
 // registry on the next add. Same rule readJSONObject applies to the
 // document, one level down.
 func TestLoadProjectsRefusesMalformedProjectsValue(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seedRegistry(t, `{"projects":{"p1":{"id":"p1","name":"alpha","path":"/tmp/alpha"}}}`)
 	if _, err := loadProjects(); err == nil {
 		t.Error("loadProjects on a malformed projects value succeeded, want error")
@@ -610,7 +610,7 @@ func TestLoadProjectsRefusesMalformedProjectsValue(t *testing.T) {
 }
 
 func TestSetShelvedRefusesMalformedShelfValue(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	kept := `{"shelvedWorktrees":["w1","w2"]}`
 	seedRegistry(t, kept)
 	if err := setShelved("w9", true); err == nil {
@@ -628,7 +628,7 @@ func TestSetShelvedRefusesMalformedShelfValue(t *testing.T) {
 // deleteBranchOnRemove decides whether `sm rm` deletes a branch, so a
 // corrupt file must not read as "unset".
 func TestReadGlobalConfigStrict(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	if cfg, err := readGlobalConfig(); err != nil || cfg.DeleteBranchOnRemove != nil {
 		t.Errorf("missing config.json = %+v, %v, want zero value and nil error", cfg, err)
 	}
@@ -645,7 +645,7 @@ func TestReadGlobalConfigStrict(t *testing.T) {
 // projects value must refuse, not rewrite the registry as just the
 // new project.
 func TestRegisterProjectRefusesMalformedProjectsValue(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	kept := `{"projects":{"p1":{"id":"p1","name":"alpha","path":"/tmp/alpha"}}}`
 	seedRegistry(t, kept)
 	if _, err := registerProject("/tmp/beta"); err == nil {

@@ -21,12 +21,8 @@ package main
 // check failed.
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 )
 
 const (
@@ -68,16 +64,15 @@ type repair struct {
 }
 
 // Findings accumulate here in check order; the renderer groups them
-// afterwards, so a check never has to know where its line lands.
+// afterwards, so a check never has to know where its line lands. No
+// lock: the one parallel pass (checkProjects) gives each goroutine its
+// own report and merges them serially.
 type doctorReport struct {
-	mu       sync.Mutex
 	findings []finding
 }
 
 func (r *doctorReport) add(f finding) {
-	r.mu.Lock()
 	r.findings = append(r.findings, f)
-	r.mu.Unlock()
 }
 
 func (r *doctorReport) ok(group, id, title, detail string) {
@@ -90,6 +85,15 @@ func (r *doctorReport) warn(group, id, title, detail, fix string) {
 
 func (r *doctorReport) fail(group, id, title, detail, fix string) {
 	r.add(finding{Group: group, ID: id, Title: title, Status: statusFail, Detail: detail, Fix: fix})
+}
+
+// A finding --fix knows how to repair. Same shape as warn/fail, plus
+// the closure the driver may run later.
+func (r *doctorReport) repairable(group, id, title, status, detail, fix string, fixup *repair) {
+	r.add(finding{
+		Group: group, ID: id, Title: title, Status: status,
+		Detail: detail, Fix: fix, repair: fixup,
+	})
 }
 
 func (r *doctorReport) counts() (ok, warn, fail int) {
@@ -128,9 +132,9 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	// command exists to diagnose must not fail the load before the
 	// checks get to describe it. Read it here and degrade to none,
 	// because checkRegistryFile reports the parse failure itself.
-	ctx.projects, _ = loadProjects()
+	projects, _ := loadProjects()
 
-	report := runDoctorChecks(ctx)
+	report := runDoctorChecks(projects)
 	var repaired []string
 	if fix {
 		repaired = applyRepairs(report, yes)
@@ -139,14 +143,11 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 			// the per-project identity memo, then re-run so the printed
 			// checklist describes the world after the repairs, not before.
 			invalidateAllWorktreeIdentities()
-			projects, err := loadProjects()
-			if err != nil {
-				// Doctor is the command you reach for *because* the
-				// registry is broken, and checkRegistryFile already says
-				// so; carry on with none rather than refusing to report.
-				projects = nil
-			}
-			report = runDoctorChecks(cliContext{projects: projects})
+			// Doctor is the command you reach for *because* the registry
+			// is broken, and checkRegistryFile already says so; carry on
+			// with none rather than refusing to report.
+			projects, _ := loadProjects()
+			report = runDoctorChecks(projects)
 		}
 	}
 
@@ -203,25 +204,24 @@ func renderDoctorReport(report *doctorReport, repaired []string, fix bool) {
 	out("")
 
 	for _, group := range []string{groupEnv, groupState, groupProjects} {
-		var (
-			rows  [][]string
-			fixes []string
-		)
+		var shown []finding
 		for _, f := range report.findings {
-			if f.Group != group {
-				continue
+			if f.Group == group {
+				shown = append(shown, f)
 			}
-			rows = append(rows, []string{statusGlyph(f.Status), f.Title, f.Detail})
-			fixes = append(fixes, f.Fix)
 		}
-		if len(rows) == 0 {
+		if len(shown) == 0 {
 			continue
+		}
+		rows := make([][]string, len(shown))
+		for i, f := range shown {
+			rows[i] = []string{statusGlyph(f.Status), f.Title, f.Detail}
 		}
 		out(boldOut(group))
 		for i, line := range alignRows(rows) {
 			out("  " + line)
-			if fixes[i] != "" {
-				out("    " + dimOut("fix: "+fixes[i]))
+			if shown[i].Fix != "" {
+				out("    " + dimOut("fix: "+shown[i].Fix))
 			}
 		}
 		out("")
@@ -252,12 +252,17 @@ func renderDoctorReport(report *doctorReport, repaired []string, fix bool) {
 	}
 }
 
-func plural(n int) string {
+// English has more irregulars than a trailing "s" covers ("entry is" /
+// "entries are"), so the one pluralizer takes both forms and plural is
+// the shorthand for the common case.
+func pluralize(n int, one, many string) string {
 	if n == 1 {
-		return ""
+		return one
 	}
-	return "s"
+	return many
 }
+
+func plural(n int) string { return pluralize(n, "", "s") }
 
 func repairableCount(report *doctorReport) int {
 	n := 0
@@ -298,41 +303,4 @@ func applyRepairs(report *doctorReport, yes bool) []string {
 		applied = append(applied, f.repair.label)
 	}
 	return applied
-}
-
-func invalidateAllWorktreeIdentities() {
-	identityMemoMu.Lock()
-	clear(identityMemo)
-	identityMemoMu.Unlock()
-}
-
-// The registry half of `sm projects remove`, for a project whose repo
-// is gone: drop the entry under the state lock, then the per-project
-// state dir (config, worktree data), exactly as the app's
-// deleteProjectState does. A missing entry is not an error -- the app
-// may have removed it between the check and the repair.
-func dropProjectRegistration(projectID string) error {
-	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
-		var projects []project
-		if raw != nil {
-			_ = json.Unmarshal(raw, &projects)
-		}
-		kept := make([]project, 0, len(projects))
-		found := false
-		for _, p := range projects {
-			if p.ID == projectID {
-				found = true
-				continue
-			}
-			kept = append(kept, p)
-		}
-		if !found {
-			return nil, nil
-		}
-		return kept, nil
-	})
-	if err != nil {
-		return err
-	}
-	return os.RemoveAll(filepath.Join(shigomoriRoot(), "projects", projectID))
 }

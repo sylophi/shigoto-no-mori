@@ -37,6 +37,47 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 	}
 }
 
+// Drops a project's registry entry under the state lock. missingOK is
+// what separates the two callers: for `projects remove` a name that
+// isn't registered is a user error, while doctor's repair races the app
+// and must tolerate an entry that has already gone. The per-project
+// state dir is removeProjectState's job -- the two callers disagree
+// about what a failure there means.
+func removeProjectRegistration(projectID string, missingOK bool) error {
+	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
+		var projects []project
+		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
+			if !missingOK {
+				return nil, err
+			}
+			projects = nil
+		}
+		kept := make([]project, 0, len(projects))
+		found := false
+		for _, p := range projects {
+			if p.ID == projectID {
+				found = true
+				continue
+			}
+			kept = append(kept, p)
+		}
+		if !found {
+			if missingOK {
+				return nil, nil
+			}
+			return nil, unknownProjectErr(projectID)
+		}
+		return kept, nil
+	})
+	return err
+}
+
+// The per-project state dir (config, shelved marks, worktree data),
+// mirroring the app's deleteProjectState.
+func removeProjectState(projectID string) error {
+	return os.RemoveAll(projectDataDir(projectID))
+}
+
 // Ports the app's projects:remove: drop the registry entry and the
 // per-project state dir (config, shelved marks, worktree data).
 // Worktree checkouts stay on disk -- remove them first with `rm` if
@@ -89,31 +130,13 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	}
 
-	err = updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
-		var projects []project
-		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {
-			return nil, err
-		}
-		kept := make([]project, 0, len(projects))
-		found := false
-		for _, p := range projects {
-			if p.ID == proj.ID {
-				found = true
-				continue
-			}
-			kept = append(kept, p)
-		}
-		if !found {
-			return nil, unknownProjectErr(proj.ID)
-		}
-		return kept, nil
-	})
-	if err != nil {
+	if err := removeProjectRegistration(proj.ID, false); err != nil {
 		return exitCodeOf(err), err
 	}
-	// Mirrors the app's deleteProjectState; best-effort like the app's
-	// icon-cache cleanup.
-	_ = os.RemoveAll(projectDataDir(proj.ID))
+	// Best-effort, like the app's icon-cache cleanup: the entry is
+	// already gone, so failing here would report a half-removal the
+	// user can do nothing about.
+	_ = removeProjectState(proj.ID)
 
 	if jsonMode {
 		emit(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path})

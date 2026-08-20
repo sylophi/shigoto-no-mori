@@ -23,11 +23,11 @@ import (
 
 // --- checks ---
 
-func runDoctorChecks(ctx cliContext) *doctorReport {
+func runDoctorChecks(projects []project) *doctorReport {
 	report := &doctorReport{}
 	checkEnvironment(report)
-	checkStateRoot(report, ctx)
-	checkProjects(report, ctx)
+	checkStateRoot(report, projects)
+	checkProjects(report, projects)
 	return report
 }
 
@@ -43,7 +43,7 @@ func checkEnvironment(report *doctorReport) {
 
 // rev-parse --path-format=absolute (context.go's one-spawn locator)
 // landed in git 2.31, which makes it the real floor.
-var minGitVersion = [3]int{2, 31, 0}
+const minGitMajor, minGitMinor = 2, 31
 
 func checkGit(report *doctorReport) {
 	stdout, err := runGit("", "--version")
@@ -53,8 +53,8 @@ func checkGit(report *doctorReport) {
 		return
 	}
 	raw := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(stdout), "git version "))
-	parsed, ok := parseVersion(raw)
-	if ok && compareVersion(parsed, minGitVersion) < 0 {
+	major, minor, ok := parseGitVersion(raw)
+	if ok && belowGitFloor(major, minor) {
 		report.warn(groupEnv, "git", "git",
 			raw+" is older than 2.31, which sm's repo detection needs",
 			"Upgrade git (`brew upgrade git`).")
@@ -70,9 +70,9 @@ func checkGh(report *doctorReport) {
 			"Install the GitHub CLI (`brew install gh`), then `gh auth login`.")
 		return
 	}
-	// Only the exit code is consulted: `gh auth status` prints account
-	// details that have no business in sm's output.
-	if err := exec.Command("gh", "auth", "status").Run(); err != nil {
+	// Only success matters: `gh auth status` prints account details that
+	// have no business in sm's output.
+	if _, err := runGh("", "auth", "status"); err != nil {
 		report.warn(groupEnv, "gh", "gh", "installed but not authenticated",
 			"Run `gh auth login`.")
 		return
@@ -81,11 +81,11 @@ func checkGh(report *doctorReport) {
 }
 
 func ghVersion() string {
-	stdout, err := exec.Command("gh", "--version").Output()
+	stdout, err := runGh("", "--version")
 	if err != nil {
 		return "installed"
 	}
-	first, _, _ := strings.Cut(string(stdout), "\n")
+	first, _, _ := strings.Cut(stdout, "\n")
 	fields := strings.Fields(first)
 	if len(fields) >= 3 && fields[0] == "gh" && fields[1] == "version" {
 		return fields[2]
@@ -133,19 +133,13 @@ func checkFlavorAndApp(report *doctorReport) {
 
 // The conventional install locations, for the case where the CLI on
 // PATH is NOT the bundle's own copy (installedBundlePath refuses those,
-// on purpose -- see updater.go).
+// on purpose -- see updater.go). Goes through the launcher catalog's
+// scan so there's one list of where an .app can live.
 func findInstalledBundle() string {
 	if runtime.GOOS != "darwin" {
 		return ""
 	}
-	home, _ := os.UserHomeDir()
-	for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
-		candidate := filepath.Join(dir, appExecutableName+".app")
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return candidate
-		}
-	}
-	return ""
+	return bundlePathFor(appExecutableName + ".app")
 }
 
 // CFBundleShortVersionString, via `defaults` -- Info.plist is binary,
@@ -216,10 +210,11 @@ func binariesOnPath(name string) []string {
 func checkShellHook(report *doctorReport) {
 	var installed, edited, stale []string
 	for _, kind := range shellKinds {
-		switch hookStateOf(kind).State {
+		hook := inspectHook(kind)
+		switch hook.state.State {
 		case "installed":
 			installed = append(installed, kind)
-			if !hookBlockCurrent(kind) {
+			if !hookBlockCurrent(kind, hook) {
 				stale = append(stale, kind)
 			}
 		case "modified":
@@ -248,13 +243,9 @@ func checkShellHook(report *doctorReport) {
 	}
 }
 
-// Byte-compares the installed hook against what install would write
-// now. True (nothing to say) whenever there is no readable block.
-func hookBlockCurrent(kind string) bool {
-	hook := inspectHook(kind)
-	if hook.state.State != "installed" {
-		return true
-	}
+// Byte-compares an already-inspected hook against what install would
+// write now. True (nothing to say) whenever there is no readable block.
+func hookBlockCurrent(kind string, hook hookFile) bool {
 	if kind == "fish" {
 		data, err := os.ReadFile(hook.state.Path)
 		return err != nil || string(data) == fishHookContent()
@@ -268,7 +259,7 @@ func hookBlockCurrent(kind string) bool {
 
 // --- state root ---
 
-func checkStateRoot(report *doctorReport, ctx cliContext) {
+func checkStateRoot(report *doctorReport, projects []project) {
 	if !checkRootDir(report) {
 		return // nothing below can mean anything without a root
 	}
@@ -276,9 +267,13 @@ func checkStateRoot(report *doctorReport, ctx cliContext) {
 	checkRegistryFile(report)
 	checkStaleLocks(report)
 	checkStagingLock(report)
-	checkShelvedEntries(report, ctx)
+	checkShelvedEntries(report, projects)
 	checkPortAllocations(report)
 }
+
+// access(2)'s W_OK. Go's syscall package doesn't name the mode bits,
+// and a bare 0x2 at the call site says nothing.
+const writeOK = 0x2
 
 func checkRootDir(report *doctorReport) bool {
 	root := shigomoriRoot()
@@ -304,7 +299,7 @@ func checkRootDir(report *doctorReport) bool {
 			"Move it aside, or point SHIGOMORI_ROOT somewhere else.")
 		return false
 	}
-	if syscall.Access(root, 0x2) != nil {
+	if syscall.Access(root, writeOK) != nil {
 		report.fail(groupState, "root", "root",
 			collapseHome(root)+" isn't writable, so no command that changes state can work",
 			"Fix its ownership or permissions.")
@@ -315,7 +310,7 @@ func checkRootDir(report *doctorReport) bool {
 }
 
 func checkGlobalConfig(report *doctorReport) {
-	path := filepath.Join(shigomoriRoot(), "config.json")
+	path := configJSONPath()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		report.ok(groupState, "config", "config.json", "absent -- defaults apply")
@@ -387,19 +382,13 @@ func checkRegistryFile(report *doctorReport) {
 	}
 	if malformed > 0 {
 		report.warn(groupState, "registry", "registry.json",
-			fmt.Sprintf("%d registry entr%s missing an id or path", malformed, entryPlural(malformed)),
+			fmt.Sprintf("%d registry %s missing an id or path", malformed,
+				pluralize(malformed, "entry is", "entries are")),
 			"Remove the incomplete entries from "+collapseHome(path)+".")
 		return
 	}
 	report.ok(groupState, "registry", "registry.json",
 		fmt.Sprintf("valid, %d project%s registered", len(projects), plural(len(projects))))
-}
-
-func entryPlural(n int) string {
-	if n == 1 {
-		return "y is"
-	}
-	return "ies are"
 }
 
 // Advisory locks (state.go's protocol) are created and unlinked around
@@ -417,12 +406,13 @@ func checkStaleLocks(report *doctorReport) {
 		names[i] = collapseHome(lock)
 	}
 	label := fmt.Sprintf("%d stale lock file%s", len(locks), plural(len(locks)))
-	report.add(finding{
-		Group: groupState, ID: "locks", Title: "locks", Status: statusWarn,
-		Detail: names[0] + " has been held for longer than a write can take" +
-			extraLocksNote(len(locks)),
-		Fix: "Delete it (`" + binaryName + " doctor --fix`); the process that took it is gone.",
-		repair: &repair{
+	detail := names[0] + " has been held for longer than a write can take"
+	if extra := len(locks) - 1; extra > 0 {
+		detail += fmt.Sprintf(" (and %d more)", extra)
+	}
+	report.repairable(groupState, "locks", "locks", statusWarn, detail,
+		"Delete it (`"+binaryName+" doctor --fix`); the process that took it is gone.",
+		&repair{
 			prompt:      "Delete " + label + " (" + strings.Join(names, ", ") + ")?",
 			label:       "deleted " + label,
 			destructive: true,
@@ -434,20 +424,13 @@ func checkStaleLocks(report *doctorReport) {
 				}
 				return nil
 			},
-		},
-	})
-}
-
-func extraLocksNote(n int) string {
-	if n <= 1 {
-		return ""
-	}
-	return fmt.Sprintf(" (and %d more)", n-1)
+		})
 }
 
 // Only the state root's own tree is walked, and only where locks are
-// ever taken (the root itself and the per-project dirs) -- updates/ and
-// iconCache/ can hold thousands of files and never a lock.
+// ever taken: the root itself, the per-project dirs, and iconCache/
+// (iconcache.go takes index.json.lock under the same protocol).
+// updates/ holds downloads, never a lock.
 func findStaleLocks(root string) []string {
 	var stale []string
 	scan := func(dir string) {
@@ -467,6 +450,7 @@ func findStaleLocks(root string) []string {
 		}
 	}
 	scan(root)
+	scan(filepath.Join(root, "iconCache"))
 	projectsDir := filepath.Join(root, "projects")
 	if entries, err := os.ReadDir(projectsDir); err == nil {
 		for _, entry := range entries {
@@ -485,7 +469,7 @@ func findStaleLocks(root string) []string {
 // for a whole download, and a crashed stager is identified by its pid
 // being dead.
 func checkStagingLock(report *doctorReport) {
-	path := filepath.Join(updatesDir(), "staging.pid")
+	path := stagingLockPath()
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return // absent is the normal case; no line for it
@@ -498,31 +482,29 @@ func checkStagingLock(report *doctorReport) {
 	}
 	detail := "left behind by a crashed update"
 	if convErr == nil {
-		detail = fmt.Sprintf("left behind by a crashed update (pid %d is gone)", pid)
+		detail += fmt.Sprintf(" (pid %d is gone)", pid)
 	}
-	report.add(finding{
-		Group: groupState, ID: "staging-lock", Title: "update staging", Status: statusWarn,
-		Detail: detail + ", so `" + binaryName + " update` refuses to run",
-		Fix:    "Delete " + collapseHome(path) + " (`" + binaryName + " doctor --fix`).",
-		repair: &repair{
+	report.repairable(groupState, "staging-lock", "update staging", statusWarn,
+		detail+", so `"+binaryName+" update` refuses to run",
+		"Delete "+collapseHome(path)+" (`"+binaryName+" doctor --fix`).",
+		&repair{
 			prompt:      "Delete the stale update staging lock at " + collapseHome(path) + "?",
 			label:       "deleted the stale update staging lock",
 			destructive: true,
 			apply:       func() error { return os.Remove(path) },
-		},
-	})
+		})
 }
 
 // shelvedWorktrees keys are path-derived worktree ids. Ids that match
 // nothing are harmless but accumulate forever, and they're the cheapest
 // signal that worktrees were removed outside sm.
-func checkShelvedEntries(report *doctorReport, ctx cliContext) {
+func checkShelvedEntries(report *doctorReport, projects []project) {
 	shelved := readShelvedSet()
 	if len(shelved) == 0 {
 		return
 	}
 	known := map[string]bool{}
-	for _, proj := range ctx.projects {
+	for _, proj := range projects {
 		identities, err := listWorktreeIdentities(proj)
 		if err != nil {
 			return // an unreadable repo would make every id look orphaned
@@ -556,7 +538,7 @@ func checkShelvedEntries(report *doctorReport, ctx cliContext) {
 // belongs to another tool.
 func checkPortAllocations(report *doctorReport) {
 	global := readGlobalConfigHints()
-	if global.PortPool == nil || !*global.PortPool {
+	if !portPoolEnabled(global) {
 		return
 	}
 	if !portPoolInstalled() {
@@ -616,13 +598,13 @@ func parsePortPoolDirs(stdout string) []string {
 // One line per healthy project, and one line per problem otherwise:
 // a dozen registered projects would otherwise bury the findings that
 // matter under a hundred green ticks.
-func checkProjects(report *doctorReport, ctx cliContext) {
-	if len(ctx.projects) == 0 {
+func checkProjects(report *doctorReport, projects []project) {
+	if len(projects) == 0 {
 		return
 	}
-	perProject := make([]*doctorReport, len(ctx.projects))
+	perProject := make([]*doctorReport, len(projects))
 	var wg sync.WaitGroup
-	for i, proj := range ctx.projects {
+	for i, proj := range projects {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -634,7 +616,7 @@ func checkProjects(report *doctorReport, ctx cliContext) {
 	wg.Wait()
 	for i, sub := range perProject {
 		if len(sub.findings) == 0 {
-			report.ok(groupProjects, "project", ctx.projects[i].Name, "ok")
+			report.ok(groupProjects, "project", projects[i].Name, "ok")
 			continue
 		}
 		for _, f := range sub.findings {
@@ -652,7 +634,7 @@ func checkOneProject(report *doctorReport, proj project) {
 	config := readProjectConfig(proj.ID)
 	checkProjectConfig(report, proj, config)
 	checkProjectDefaultBranch(report, proj, config)
-	checkProjectWorktrees(report, proj)
+	checkProjectWorktrees(report, proj, config)
 	checkProjectScripts(report, proj, config)
 	checkProjectWorktreeInclude(report, proj, config)
 }
@@ -660,19 +642,25 @@ func checkOneProject(report *doctorReport, proj project) {
 func checkProjectRepo(report *doctorReport, proj project) bool {
 	info, err := os.Stat(proj.Path)
 	if os.IsNotExist(err) {
-		report.add(finding{
-			Group: groupProjects, ID: "project-path", Title: proj.Name, Status: statusFail,
-			Detail: collapseHome(proj.Path) + " is gone, so every command for this project fails",
-			Fix: "Restore the directory, or unregister it (`" + binaryName +
-				" projects remove " + proj.Name + "`).",
-			repair: &repair{
+		report.repairable(groupProjects, "project-path", proj.Name, statusFail,
+			collapseHome(proj.Path)+" is gone, so every command for this project fails",
+			"Restore the directory, or unregister it (`"+binaryName+
+				" projects remove "+proj.Name+"`).",
+			&repair{
 				prompt: "Unregister " + proj.Name + " (" + collapseHome(proj.Path) +
 					" is gone)? Its config under projects/ goes too.",
 				label:       "unregistered " + proj.Name,
 				destructive: true,
-				apply:       func() error { return dropProjectRegistration(proj.ID) },
-			},
-		})
+				apply: func() error {
+					if err := removeProjectRegistration(proj.ID, true); err != nil {
+						return err
+					}
+					// Unlike `projects remove`, doctor has nothing else to
+					// report: a state dir that survives is orphaned and
+					// undiscoverable, so the failure has to surface.
+					return removeProjectState(proj.ID)
+				},
+			})
 		return false
 	}
 	if err != nil || !info.IsDir() {
@@ -719,7 +707,7 @@ func sameDirectory(a, b string) bool {
 }
 
 func checkProjectConfig(report *doctorReport, proj project, config *projectConfig) {
-	path := filepath.Join(shigomoriRoot(), "projects", proj.ID, "project.json")
+	path := projectConfigJSONPath(proj.ID)
 	if _, err := os.Stat(path); err != nil {
 		return // no config at all is fine; defaults apply
 	}
@@ -749,7 +737,7 @@ func checkProjectDefaultBranch(report *doctorReport, proj project, config *proje
 
 // Three ways git's worktree metadata and the disk can disagree, all of
 // them producing worktrees that list but don't work.
-func checkProjectWorktrees(report *doctorReport, proj project) {
+func checkProjectWorktrees(report *doctorReport, proj project, config *projectConfig) {
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
 		report.fail(groupProjects, "project-worktrees", proj.Name,
@@ -767,25 +755,23 @@ func checkProjectWorktrees(report *doctorReport, proj project) {
 	}
 	if len(missing) > 0 {
 		projectPath := proj.Path
-		report.add(finding{
-			Group: groupProjects, ID: "project-worktrees", Title: proj.Name, Status: statusWarn,
-			Detail: fmt.Sprintf("git still lists %d worktree%s whose directory is gone (%s)",
+		report.repairable(groupProjects, "project-worktrees", proj.Name, statusWarn,
+			fmt.Sprintf("git still lists %d worktree%s whose directory is gone (%s)",
 				len(missing), plural(len(missing)), strings.Join(missing, ", ")),
-			Fix: "Prune the metadata (`" + binaryName + " doctor --fix`, or `git worktree prune`).",
-			repair: &repair{
+			"Prune the metadata (`"+binaryName+" doctor --fix`, or `git worktree prune`).",
+			&repair{
 				label: "pruned git's worktree metadata for " + proj.Name,
 				apply: func() error {
 					_, err := runGit(projectPath, "worktree", "prune")
 					return err
 				},
-			},
-		})
+			})
 	}
 	// The mirror image: a directory sitting in the managed layout that
 	// git has no record of. Adoptable, deletable, or a half-finished
 	// create -- sm can't tell, so it only points.
 	var strays []string
-	for _, base := range managedBasesFor(proj.Path, readProjectConfig(proj.ID)) {
+	for _, base := range managedBasesFor(proj.Path, config) {
 		entries, err := os.ReadDir(base)
 		if err != nil {
 			continue
@@ -811,18 +797,12 @@ func checkProjectWorktrees(report *doctorReport, proj project) {
 	if len(strays) > 0 {
 		sort.Strings(strays)
 		report.warn(groupProjects, "project-strays", proj.Name,
-			fmt.Sprintf("%d director%s in the managed layout that git doesn't know about (%s)",
-				len(strays), entryPluralShort(len(strays)), strings.Join(strays, ", ")),
+			fmt.Sprintf("%d %s in the managed layout that git doesn't know about (%s)",
+				len(strays), pluralize(len(strays), "directory", "directories"),
+				strings.Join(strays, ", ")),
 			"Adopt it (`"+binaryName+" adopt <path>`) or delete it by hand -- "+
 				binaryName+" won't guess.")
 	}
-}
-
-func entryPluralShort(n int) string {
-	if n == 1 {
-		return "y"
-	}
-	return "ies"
 }
 
 // Lifecycle scripts fail late and loudly (mid-create, after the
@@ -904,33 +884,27 @@ func checkProjectWorktreeInclude(report *doctorReport, proj project, config *pro
 
 // --- version comparison ---
 
-// Leading numeric components only ("2.39.5", "2.51.0.1", "2.39.5
-// (Apple Git-154)"); ok is false when nothing numeric leads.
-func parseVersion(raw string) ([3]int, bool) {
-	var parsed [3]int
-	words := strings.Fields(raw)
-	if len(words) == 0 {
-		return parsed, false
-	}
-	fields := strings.SplitN(words[0], ".", 4)
-	for i := 0; i < 3 && i < len(fields); i++ {
-		n, err := strconv.Atoi(fields[i])
-		if err != nil {
-			return parsed, i > 0
-		}
-		parsed[i] = n
-	}
-	return parsed, true
+func belowGitFloor(major, minor int) bool {
+	return major < minGitMajor || (major == minGitMajor && minor < minGitMinor)
 }
 
-func compareVersion(a, b [3]int) int {
-	for i := range a {
-		switch {
-		case a[i] < b[i]:
-			return -1
-		case a[i] > b[i]:
-			return 1
-		}
+// The leading major.minor of a git version string ("2.39.5",
+// "2.51.0.1", "2.39.5 (Apple Git-154)"). Only those two matter: the
+// floor sm needs is a minor release. ok is false when nothing numeric
+// leads. An unparseable minor reads as 0, which is the conservative
+// answer for a floor test.
+func parseGitVersion(raw string) (major, minor int, ok bool) {
+	words := strings.Fields(raw)
+	if len(words) == 0 {
+		return 0, 0, false
 	}
-	return 0
+	fields := strings.SplitN(words[0], ".", 3)
+	major, err := strconv.Atoi(fields[0])
+	if err != nil {
+		return 0, 0, false
+	}
+	if len(fields) > 1 {
+		minor, _ = strconv.Atoi(fields[1])
+	}
+	return major, minor, true
 }

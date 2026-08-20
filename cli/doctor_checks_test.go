@@ -17,22 +17,6 @@ import (
 	"time"
 )
 
-// A temp state root, installed as THE root for the rest of the test.
-func sandboxRoot(t *testing.T) string {
-	t.Helper()
-	// Symlink-free: git answers with resolved paths, and the project
-	// checks compare against them byte for byte.
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("SHIGOMORI_ROOT", root)
-	previous := cachedRoot
-	t.Cleanup(func() { cachedRoot = previous })
-	initRoot()
-	return root
-}
-
 func writeFileT(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -52,10 +36,8 @@ func seedRepo(t *testing.T, parent, name string) string {
 	}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = path
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		if _, err := runGit(path, args...); err != nil {
+			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 		}
 	}
 	run("init", "-q", "-b", "main")
@@ -105,9 +87,9 @@ func TestCheckGlobalConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := sandboxRoot(t)
+			sandboxRoot(t)
 			if tc.write {
-				writeFileT(t, filepath.Join(root, "config.json"), tc.content)
+				writeFileT(t, configJSONPath(), tc.content)
 			}
 			report := &doctorReport{}
 			checkGlobalConfig(report)
@@ -132,9 +114,9 @@ func TestCheckRegistryFile(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := sandboxRoot(t)
+			sandboxRoot(t)
 			if tc.write {
-				writeFileT(t, filepath.Join(root, "registry.json"), tc.content)
+				writeFileT(t, registryPath(), tc.content)
 			}
 			report := &doctorReport{}
 			checkRegistryFile(report)
@@ -146,8 +128,8 @@ func TestCheckRegistryFile(t *testing.T) {
 // A malformed registry.json is the one failure that makes sm forget every
 // project silently, so it must never read as a warning.
 func TestMalformedRegistryIsFatalNotAWarning(t *testing.T) {
-	root := sandboxRoot(t)
-	writeFileT(t, filepath.Join(root, "registry.json"), "definitely not json")
+	sandboxRoot(t)
+	writeFileT(t, registryPath(), "definitely not json")
 	report := &doctorReport{}
 	checkRegistryFile(report)
 	finding := onlyFinding(t, report, "registry", statusFail)
@@ -160,14 +142,14 @@ func TestFindStaleLocksIgnoresFreshOnes(t *testing.T) {
 	root := sandboxRoot(t)
 	fresh := filepath.Join(root, "state.json.lock")
 	writeFileT(t, fresh, "1234")
-	stale := filepath.Join(root, "projects", "AAA", "project.json.lock")
+	stale := projectConfigJSONPath("AAA") + ".lock"
 	writeFileT(t, stale, "1234")
 	old := time.Now().Add(-time.Hour)
 	if err := os.Chtimes(stale, old, old); err != nil {
 		t.Fatal(err)
 	}
 	// A non-lock file next door must never be swept up.
-	writeFileT(t, filepath.Join(root, "projects", "AAA", "project.json"), "{}")
+	writeFileT(t, projectConfigJSONPath("AAA"), "{}")
 
 	found := findStaleLocks(root)
 	if len(found) != 1 || found[0] != stale {
@@ -208,7 +190,7 @@ func TestStaleLockRepairDeletesEveryLock(t *testing.T) {
 }
 
 func TestCheckStagingLock(t *testing.T) {
-	root := sandboxRoot(t)
+	sandboxRoot(t)
 	// Absent: no line at all, the normal case.
 	report := &doctorReport{}
 	checkStagingLock(report)
@@ -217,7 +199,7 @@ func TestCheckStagingLock(t *testing.T) {
 	}
 
 	// A live pid (our own) is an update in progress, not a leftover.
-	path := filepath.Join(root, "updates", "staging.pid")
+	path := stagingLockPath()
 	writeFileT(t, path, strconv.Itoa(os.Getpid())+"\n")
 	report = &doctorReport{}
 	checkStagingLock(report)
@@ -244,8 +226,8 @@ func TestCheckStagingLock(t *testing.T) {
 func TestProjectPathGoneIsFatalAndRepairable(t *testing.T) {
 	root := sandboxRoot(t)
 	proj := project{ID: "GONE1", Name: "ghost", Path: filepath.Join(root, "repos", "ghost")}
-	writeFileT(t, filepath.Join(root, "projects", proj.ID, "project.json"), `{"defaultBranch":"main"}`)
-	writeFileT(t, filepath.Join(root, "registry.json"),
+	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
+	writeFileT(t, registryPath(),
 		`{"projects":[{"id":"GONE1","name":"ghost","path":"`+proj.Path+`"}]}`)
 
 	report := &doctorReport{}
@@ -264,7 +246,7 @@ func TestProjectPathGoneIsFatalAndRepairable(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Fatalf("registry still holds %+v", remaining)
 	}
-	if _, err := os.Stat(filepath.Join(root, "projects", proj.ID)); !os.IsNotExist(err) {
+	if _, err := os.Stat(projectDataDir(proj.ID)); !os.IsNotExist(err) {
 		t.Fatal("the project's state dir survived the repair")
 	}
 }
@@ -289,7 +271,7 @@ func TestHealthyProjectRecordsNothing(t *testing.T) {
 	root := sandboxRoot(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
-	writeFileT(t, filepath.Join(root, "projects", proj.ID, "project.json"),
+	writeFileT(t, projectConfigJSONPath(proj.ID),
 		`{"defaultBranch":"main","scripts":{"setup":"pnpm install"}}`)
 	invalidateAllWorktreeIdentities()
 
@@ -304,13 +286,11 @@ func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
 	root := sandboxRoot(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
-	writeFileT(t, filepath.Join(root, "projects", proj.ID, "project.json"), `{"defaultBranch":"main"}`)
+	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
 
 	worktree := filepath.Join(root, "worktrees", "alpha", "vanished")
-	cmd := exec.Command("git", "worktree", "add", "-q", "-b", "vanished", worktree)
-	cmd.Dir = repo
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("worktree add: %v\n%s", err, out)
+	if _, err := runGit(repo, "worktree", "add", "-q", "-b", "vanished", worktree); err != nil {
+		t.Fatalf("worktree add: %v", err)
 	}
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatal(err)
@@ -318,7 +298,7 @@ func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
 	invalidateAllWorktreeIdentities()
 
 	report := &doctorReport{}
-	checkProjectWorktrees(report, proj)
+	checkProjectWorktrees(report, proj, nil)
 	finding := onlyFinding(t, report, "project-worktrees", statusWarn)
 	if finding.repair == nil {
 		t.Fatal("prunable metadata must be repairable")
@@ -333,7 +313,7 @@ func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
 	}
 	invalidateAllWorktreeIdentities()
 	after := &doctorReport{}
-	checkProjectWorktrees(after, proj)
+	checkProjectWorktrees(after, proj, nil)
 	if len(findingsFor(after, "project-worktrees")) != 0 {
 		t.Fatalf("still reported after the prune: %+v", after.findings)
 	}
@@ -350,7 +330,7 @@ func TestStrayDirectoryInManagedLayoutIsReportedNotFixed(t *testing.T) {
 	invalidateAllWorktreeIdentities()
 
 	report := &doctorReport{}
-	checkProjectWorktrees(report, proj)
+	checkProjectWorktrees(report, proj, nil)
 	finding := onlyFinding(t, report, "project-strays", statusWarn)
 	if finding.repair != nil {
 		t.Fatal("a stray directory could be anything; it must never be auto-removed")
@@ -367,7 +347,7 @@ func TestProjectConfigPresentButInvalid(t *testing.T) {
 	root := sandboxRoot(t)
 	repo := seedRepo(t, root, "beta")
 	proj := project{ID: "B1", Name: "beta", Path: repo}
-	writeFileT(t, filepath.Join(root, "projects", proj.ID, "project.json"),
+	writeFileT(t, projectConfigJSONPath(proj.ID),
 		`{"scripts":{"setup":"pnpm install"}}`)
 	invalidateAllWorktreeIdentities()
 
@@ -461,20 +441,20 @@ func TestOrphanedShelvedMarks(t *testing.T) {
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	invalidateAllWorktreeIdentities()
-	ctx := cliContext{projects: []project{proj}}
+	projects := []project{proj}
 
 	// A mark on the primary checkout's own id is legitimate.
-	writeFileT(t, filepath.Join(root, "registry.json"),
+	writeFileT(t, registryPath(),
 		`{"shelvedWorktrees":{"`+worktreeIDFromPath(repo)+`":true}}`)
 	report := &doctorReport{}
-	checkShelvedEntries(report, ctx)
+	checkShelvedEntries(report, projects)
 	onlyFinding(t, report, "shelved", statusOK)
 
 	// An id nothing on disk hashes to is a leftover.
-	writeFileT(t, filepath.Join(root, "registry.json"),
+	writeFileT(t, registryPath(),
 		`{"shelvedWorktrees":{"0123456789ab":true}}`)
 	report = &doctorReport{}
-	checkShelvedEntries(report, ctx)
+	checkShelvedEntries(report, projects)
 	finding := onlyFinding(t, report, "shelved", statusWarn)
 	if finding.repair != nil {
 		t.Fatal("orphaned marks are harmless; they must not be auto-removed")
@@ -506,32 +486,34 @@ func TestParsePortPoolDirs(t *testing.T) {
 	}
 }
 
-func TestParseAndCompareVersion(t *testing.T) {
+func TestParseGitVersion(t *testing.T) {
 	cases := []struct {
-		raw  string
-		want [3]int
-		ok   bool
+		raw          string
+		major, minor int
+		ok           bool
 	}{
-		{"2.39.5", [3]int{2, 39, 5}, true},
-		{"2.54.0 (Apple Git-157)", [3]int{2, 54, 0}, true},
-		{"2.51.0.1", [3]int{2, 51, 0}, true},
-		{"2.30", [3]int{2, 30, 0}, true},
-		{"", [3]int{}, false},
-		{"unknown", [3]int{}, false},
+		{"2.39.5", 2, 39, true},
+		{"2.54.0 (Apple Git-157)", 2, 54, true},
+		{"2.51.0.1", 2, 51, true},
+		{"2.30", 2, 30, true},
+		{"3", 3, 0, true},
+		{"", 0, 0, false},
+		{"unknown", 0, 0, false},
 	}
 	for _, tc := range cases {
-		got, ok := parseVersion(tc.raw)
-		if ok != tc.ok || got != tc.want {
-			t.Fatalf("%q -> %v/%v, want %v/%v", tc.raw, got, ok, tc.want, tc.ok)
+		major, minor, ok := parseGitVersion(tc.raw)
+		if ok != tc.ok || major != tc.major || minor != tc.minor {
+			t.Fatalf("%q -> %d.%d/%v, want %d.%d/%v",
+				tc.raw, major, minor, ok, tc.major, tc.minor, tc.ok)
 		}
 	}
-	if compareVersion([3]int{2, 30, 0}, minGitVersion) >= 0 {
+	if !belowGitFloor(2, 30) {
 		t.Fatal("2.30 must sort below the minimum")
 	}
-	if compareVersion([3]int{2, 31, 0}, minGitVersion) != 0 {
-		t.Fatal("the minimum must compare equal to itself")
+	if belowGitFloor(2, 31) {
+		t.Fatal("the minimum must not sort below itself")
 	}
-	if compareVersion([3]int{3, 0, 0}, minGitVersion) <= 0 {
+	if belowGitFloor(3, 0) {
 		t.Fatal("3.0 must sort above the minimum")
 	}
 }
@@ -569,7 +551,7 @@ func TestHookBlockCurrent(t *testing.T) {
 	if err := installHook("zsh"); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if !hookBlockCurrent("zsh") {
+	if !hookBlockCurrent("zsh", inspectHook("zsh")) {
 		t.Fatal("a freshly installed hook must read as current")
 	}
 	rc := hookPath("zsh")
@@ -581,7 +563,7 @@ func TestHookBlockCurrent(t *testing.T) {
 	if hookStateOf("zsh").State != "installed" {
 		t.Fatal("an older guard line is still recognizably ours")
 	}
-	if hookBlockCurrent("zsh") {
+	if hookBlockCurrent("zsh", inspectHook("zsh")) {
 		t.Fatal("an older vintage must read as stale")
 	}
 }
