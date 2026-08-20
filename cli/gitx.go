@@ -129,6 +129,14 @@ func invalidateWorktreeIdentities(projectID string) {
 	identityMemoMu.Unlock()
 }
 
+// After a repair that can change any project's worktrees (doctor
+// --fix), where re-listing one project at a time isn't enough.
+func invalidateAllWorktreeIdentities() {
+	identityMemoMu.Lock()
+	clear(identityMemo)
+	identityMemoMu.Unlock()
+}
+
 func listWorktreeIdentities(proj project) ([]worktreeIdentity, error) {
 	identityMemoMu.Lock()
 	cached, ok := identityMemo[proj.ID]

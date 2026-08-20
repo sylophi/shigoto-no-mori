@@ -39,6 +39,8 @@ var generalItems = []helpItem{
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
 		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
+	{"doctor [--fix] [--yes]", "Check the installation and state root",
+		"A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook) and the state root (config and registry parse, stale locks, registry entries whose repo is gone, git's worktree metadata vs the disk, port-pool leases), then each project. Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched."},
 	{"help [<command>] [--all]", "Show help",
 		"help <command> documents one command, --all prints every command at once."},
 }
@@ -417,6 +419,7 @@ var commands = []command{
 	{name: "app", noContext: true, run: cmdApp},
 	{name: "update", noContext: true, run: cmdUpdate},
 	{name: "config", noContext: true, run: cmdConfigGlobal},
+	{name: "doctor", noContext: true, run: cmdDoctor},
 	{name: "shell", noContext: true, run: cmdShell},
 }
 

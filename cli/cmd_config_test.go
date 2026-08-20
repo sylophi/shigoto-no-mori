@@ -9,12 +9,18 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
-func sandboxConfigRoot(t *testing.T) string {
+func sandboxRoot(t *testing.T) string {
 	t.Helper()
-	root := t.TempDir()
+	// Symlink-free: git answers with resolved paths, and the checks that
+	// compare against them do it byte for byte.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("SHIGOMORI_ROOT", root)
 	saved := cachedRoot
 	cachedRoot = ""
@@ -95,7 +101,7 @@ func TestParseConfigValueEnumAndInt(t *testing.T) {
 }
 
 func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
 		t.Fatalf("set theme dark: %d, %v", code, err)
 	}
@@ -126,7 +132,7 @@ func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 }
 
 func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seed := `{"portPool": true, "futureKey": {"nested": 12345678901234567890}}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
@@ -147,7 +153,7 @@ func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 }
 
 func TestGlobalConfigSetRejects(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	for name, raw := range map[string]string{
 		"noSuchKey": "1",     // unknown key
 		"doubutsu":  "maybe", // bad bool
@@ -161,7 +167,7 @@ func TestGlobalConfigSetRejects(t *testing.T) {
 }
 
 func TestProjectConfigScriptsNesting(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	if code, err := runConfigSet(projectConfigScope(proj), "scripts.setup", "pnpm install"); code != 0 || err != nil {
@@ -195,7 +201,7 @@ func TestProjectConfigScriptsNesting(t *testing.T) {
 }
 
 func TestProjectConfigDefaultBranchGuards(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := testProject(t)
 	if code, err := runConfigSet(projectConfigScope(proj), "defaultBranch", ""); code != 2 || err == nil {
 		t.Errorf("set defaultBranch \"\" = %d, %v, want usage error", code, err)
@@ -212,7 +218,7 @@ func TestProjectConfigDefaultBranchGuards(t *testing.T) {
 }
 
 func TestProjectConfigBoolAndPathKeys(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	// Default true: explicit true stays out of the file, false is the
@@ -242,7 +248,7 @@ func TestProjectConfigBoolAndPathKeys(t *testing.T) {
 }
 
 func TestLauncherAddRm(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	scope := globalConfigScope()
 	if code, err := runLauncherVerb(scope, []string{"add", "Claude", "claude"}); code != 0 || err != nil {
 		t.Fatalf("add Claude: %d, %v", code, err)
@@ -282,7 +288,7 @@ func TestLauncherAddRm(t *testing.T) {
 }
 
 func TestLauncherRmAmbiguousLabel(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	scope := globalConfigScope()
 	for range 2 {
 		if code, err := runLauncherVerb(scope, []string{"add", "Editor", "code ."}); code != 0 || err != nil {
@@ -304,7 +310,7 @@ func TestLauncherRmAmbiguousLabel(t *testing.T) {
 }
 
 func TestCarryOverVerbs(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	add := func(args parsedArgs) (int, error) { return projectCarryOverVerb(proj, projectConfigScope(proj), args) }
@@ -363,7 +369,7 @@ func TestCarryOverVerbs(t *testing.T) {
 }
 
 func TestProjectConfigRefusesBranchlessWrite(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	// Unseeded project in a non-repo dir: the backfill resolves nothing,
 	// so a write that would land a defaultBranch-less document (which
 	// the app's schema read throws on) must be refused, not written.
@@ -377,7 +383,7 @@ func TestProjectConfigRefusesBranchlessWrite(t *testing.T) {
 }
 
 func TestUpdateRefusesMalformedFile(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	broken := `{"theme": "dark",}` // trailing comma
 	if err := os.WriteFile(configJSONPath(), []byte(broken), 0o644); err != nil {
 		t.Fatal(err)
@@ -397,7 +403,7 @@ func TestUpdateRefusesUnreadableFile(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root reads through mode 0000")
 	}
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	kept := `{"theme": "dark"}`
 	if err := os.WriteFile(configJSONPath(), []byte(kept), 0o644); err != nil {
 		t.Fatal(err)
@@ -418,7 +424,7 @@ func TestUpdateRefusesUnreadableFile(t *testing.T) {
 }
 
 func TestNoopMutationSkipsWrite(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	// Unsetting an absent key must not conjure the file into existence.
 	if code, err := runConfigUnset(globalConfigScope(), "theme"); code != 0 || err != nil {
 		t.Fatalf("noop unset: %d, %v", code, err)
@@ -429,7 +435,7 @@ func TestNoopMutationSkipsWrite(t *testing.T) {
 }
 
 func TestLauncherRmIdlessEntry(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	// Hand-written entries without ids: removal must be positional, not
 	// a nil == nil id sweep that deletes every id-less sibling.
 	seed := `{"launchers": [{"label": "A", "command": "a"}, {"label": "B", "command": "b"}]}` + "\n"
@@ -449,7 +455,7 @@ func TestLauncherRmIdlessEntry(t *testing.T) {
 }
 
 func TestCarryOverPathCanonicalization(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	pos := func(p ...string) parsedArgs {
 		return parsedArgs{positionals: append([]string{"carryover"}, p...), bools: map[string]bool{}}
@@ -471,7 +477,7 @@ func TestCarryOverPathCanonicalization(t *testing.T) {
 }
 
 func TestConfigWriteValidates(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	scope := globalConfigScope()
 	if code, _ := runConfigWrite(scope, `{"doubutsu": "nope"}`); code != 1 {
 		t.Errorf("mistyped doubutsu accepted: code %d", code)
@@ -513,7 +519,7 @@ func TestConfigWriteValidates(t *testing.T) {
 }
 
 func TestConfigWriteMergesUnknownKeys(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	scope := globalConfigScope()
 	// A document as a newer build would have left it: futureSetting is
 	// a key this registry doesn't model, and the app's write payload
@@ -541,7 +547,7 @@ func TestConfigWriteMergesUnknownKeys(t *testing.T) {
 }
 
 func TestProjectConfigWriteMergesNestedAndReplacesArrays(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	scope := projectConfigScope(proj)
 	seed := `{"defaultBranch": "main", "futureTop": "keep",` +
@@ -585,7 +591,7 @@ func TestProjectConfigWriteMergesNestedAndReplacesArrays(t *testing.T) {
 // payload asks, or the write succeeds and leaves a document the app's
 // schema rejects on every read.
 func TestConfigWriteRepairsWrongShapedRegistryValues(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	scope := projectConfigScope(proj)
 	seed := `{"defaultBranch": "main", "futureTop": "keep",` +
@@ -616,7 +622,7 @@ func TestConfigWriteRepairsWrongShapedRegistryValues(t *testing.T) {
 }
 
 func TestConfigWriteSetsThroughWrongShapedParent(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	proj := seededProject(t)
 	scope := projectConfigScope(proj)
 	for _, seeded := range []string{`"oops"`, `3`, `null`, `["oops"]`} {
@@ -638,7 +644,7 @@ func TestConfigWriteSetsThroughWrongShapedParent(t *testing.T) {
 // --- the schema marker ---
 
 func TestConfigWriteStampsSchemaVersion(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
 		t.Fatalf("set theme dark: %d, %v", code, err)
 	}
@@ -655,7 +661,7 @@ func TestConfigWriteStampsSchemaVersion(t *testing.T) {
 // and the rest of the document survives the write that stamps it back
 // down to what this build actually produces.
 func TestConfigToleratesNewerSchemaVersion(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seed := `{"schemaVersion": 99, "theme": "dark", "futureKey": "kept"}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
@@ -676,7 +682,7 @@ func TestConfigToleratesNewerSchemaVersion(t *testing.T) {
 // mutation that changes nothing still touches nothing, so an untouched
 // file keeps its mtime and the watcher stays quiet.
 func TestNoopMutationDoesNotStampSchemaVersion(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seed := `{"theme": "dark"}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
@@ -693,7 +699,7 @@ func TestNoopMutationDoesNotStampSchemaVersion(t *testing.T) {
 // default with exit 0: "deleteBranchOnRemove  true (default)" over an
 // explicitly written false is the destructive kind of wrong.
 func TestListAndGetRefuseMalformedFile(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	seed := `{"deleteBranchOnRemove": false,}` // trailing comma
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
@@ -711,7 +717,7 @@ func TestListAndGetRefuseMalformedFile(t *testing.T) {
 // jsonMode returns right after seeding, so only the seed is covered
 // here -- the editor branch needs an interactive terminal.
 func TestEditSeedStampsSchemaVersion(t *testing.T) {
-	sandboxConfigRoot(t)
+	sandboxRoot(t)
 	jsonModeSaved := jsonMode
 	jsonMode = true
 	t.Cleanup(func() { jsonMode = jsonModeSaved })

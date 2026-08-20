@@ -56,6 +56,7 @@ func cyanOut(s string) string   { return paint(s, "36", stdoutColor) }
 func greenOut(s string) string  { return paint(s, "32", stdoutColor) }
 func yellowOut(s string) string { return paint(s, "33", stdoutColor) }
 func dimOut(s string) string    { return paint(s, "2", stdoutColor) }
+func redOut(s string) string    { return paint(s, "31", stdoutColor) }
 func boldErr(s string) string   { return paint(s, "1", stderrColor) }
 func cyanErr(s string) string   { return paint(s, "36", stderrColor) }
 func greenErr(s string) string  { return paint(s, "32", stderrColor) }
