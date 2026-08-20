@@ -77,7 +77,6 @@ export type WorktreeDiskUsage = z.infer<typeof WorktreeDiskUsageSchema>;
 // `merged` and `absorbed` only. Everything else takes a deliberate
 // click plus an explicit acknowledgement.
 export type HygieneVerdictKind =
-  | "primary" // the project's own checkout, never removable
   | "defaultBranch" // holds the project's default branch: removal would delete it
   | "merged" // no unique commits: fully contained in primary
   | "absorbed" // squash/rebase merged: content already in primary
@@ -105,7 +104,6 @@ export interface HygieneVerdict {
 export type HygieneWorktreeFacts = Pick<
   Worktree,
   | "changedCount"
-  | "isPrimary"
   | "branch"
   | "detached"
   | "ahead"
@@ -117,14 +115,6 @@ export function deriveHygieneVerdict(
   worktree: HygieneWorktreeFacts,
   hygiene: WorktreeHygiene | undefined,
 ): HygieneVerdict {
-  if (worktree.isPrimary) {
-    return {
-      kind: "primary",
-      safe: false,
-      needsForce: false,
-      reason: "The project's primary checkout.",
-    };
-  }
   // Dirty beats everything. Uncommitted work is the one thing removal
   // can destroy with no copy anywhere, so it is reported first even when
   // the branch is also merged.
@@ -246,7 +236,6 @@ export function deriveHygieneVerdict(
 // Short label for the verdict badge, kept beside the verdict so the
 // wording can't drift between the list, the summary and the confirm.
 export const HYGIENE_VERDICT_LABEL: Record<HygieneVerdictKind, string> = {
-  primary: "Primary",
   defaultBranch: "Default branch",
   merged: "Merged",
   absorbed: "Already in primary",

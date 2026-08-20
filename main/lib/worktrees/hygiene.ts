@@ -212,7 +212,6 @@ async function hygieneFor(
     contentAlreadyInPrimary: false,
     primaryRef: candidates[0]?.ref ?? null,
     holdsPrimaryBranch:
-      !identity.isPrimary &&
       !identity.detached &&
       primaryBranch !== null &&
       identity.branch === primaryBranch,
@@ -221,6 +220,11 @@ async function hygieneFor(
   // Nothing to compare for the primary checkout itself, a detached HEAD,
   // or when no primary ref resolved. The renderer turns each of those
   // into a "can't tell" verdict, which is never preselected.
+  //
+  // The primary takes this arm on purpose, and it is not what keeps it
+  // off the tidy page -- that list drops primaries before they become
+  // rows. It is what keeps every other caller safe: facts that compare
+  // to nothing can't derive the merged verdict that ticks a row.
   if (
     candidates.length === 0 ||
     identity.isPrimary ||

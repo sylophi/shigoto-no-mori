@@ -24,7 +24,6 @@ const TONE: Record<HygieneVerdictKind, string> = {
   active: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
   unknown: "bg-muted text-muted-foreground",
   defaultBranch: "bg-muted text-muted-foreground",
-  primary: "bg-muted text-muted-foreground",
 };
 
 const ICON: Record<HygieneVerdictKind, typeof Check> = {
@@ -35,7 +34,6 @@ const ICON: Record<HygieneVerdictKind, typeof Check> = {
   active: GitBranch,
   unknown: CircleHelp,
   defaultBranch: Home,
-  primary: Home,
 };
 
 export function TidyVerdictBadge({ kind }: { kind: HygieneVerdictKind }) {

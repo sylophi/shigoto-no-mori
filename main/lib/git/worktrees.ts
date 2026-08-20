@@ -272,12 +272,34 @@ export async function listWorktreeIdentities(
   // This keeps mixed states (some worktrees still in the old layout
   // after a partial migration) from mislabeling rows as external.
   const managedBases = managedBasesFor(projectPath, config);
+  const entries = parsePorcelain(stdout);
+  // Which entry, if any, is the project's own checkout. Resolved once up
+  // front rather than per entry, so at most one row can carry the flag:
+  // every caller reads it as a singular ("the primary"), and the tidy
+  // page filters rows on it.
+  //
+  // A bare repo has none. Every entry git lists under one is a linked
+  // worktree with work in it, and this is the case that actually shows
+  // up: registration folds a path to the repo's common dir, so adding a
+  // project from inside a worktree of a bare repo registers the bare
+  // directory. A per-entry `index === 0` fallback would then crown
+  // whichever worktree git happened to list first, because the bare
+  // entry is skipped before the counter moves.
+  //
+  // Otherwise the project path wins wherever git lists it, which is what
+  // the flag means, and the first entry covers a project registered
+  // deeper in the repo. Registration folds that away, so the fallback is
+  // for a layout that changed under an existing registry entry.
+  const checkouts = entries.filter((entry) => !entry.bare);
+  const primaryPath = entries.some((entry) => entry.bare)
+    ? null
+    : (checkouts.find((entry) => entry.path === projectPath)?.path ??
+      checkouts[0]?.path ??
+      null);
   const identities: WorktreeIdentity[] = [];
-  let index = 0;
-  for (const entry of parsePorcelain(stdout)) {
-    if (entry.bare) continue;
+  for (const entry of checkouts) {
     const branch = deriveBranch(entry);
-    const isPrimary = entry.path === projectPath || index === 0;
+    const isPrimary = entry.path === primaryPath;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
     // animal dirname; external ones use whatever the user named them.
@@ -292,7 +314,6 @@ export async function listWorktreeIdentities(
       isExternal: !isManagedPath(entry.path, managedBases),
       detached: entry.detached ?? false,
     });
-    index++;
   }
   return identities;
 }
