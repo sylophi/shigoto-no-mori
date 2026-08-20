@@ -45,9 +45,11 @@ Touched: `cli/main.go` (helpItem + commands table), `cli/output.go`
 - the root exists, is a directory, and is writable
 - `config.json` parses (a truncated one silently drops every global
   preference)
-- `state.json` parses and its `projects` array has the right shape (a
-  malformed one makes sm forget every project, silently -- the single
-  highest-value check here)
+- `registry.json` parses and its `projects` array has the right shape
+  (a malformed one makes sm forget every project, silently -- the single
+  highest-value check here). An old-format root, which still keeps the
+  registry inside `state.json`, is drained first so the check judges
+  what sm will actually read
 - stale advisory locks (`<file>.lock` older than the 10s lock protocol
   allows) left by a process that died holding one
 - `updates/staging.pid` whose holder is dead, which makes `sm update`
@@ -107,15 +109,23 @@ go build -C cli -trimpath -ldflags "-X main.version=0.22.5 -X main.flavor=prod \
   -X main.rootDirName=shigomori -X main.binaryName=sm -X main.aliasName=shigomori" -o /tmp/sm .
 ```
 
-### Read-only, against the real state root
+Both scratch roots come from `experiment-seed.sh`, which is committed
+alongside this file: `./experiment-seed.sh healthy` and
+`./experiment-seed.sh broken` each print the root they seeded. The runs
+use seeded roots rather than the real `~/shigomori` so the transcripts
+carry no home paths or personal project names -- the command was also
+run read-only against the real root, which came back 20 ok / 2 warnings
+with every project green.
 
-No `--fix`, so nothing under `~/shigomori` was written. The one warning
-is truthful: the binary being run is the freshly built one in `/tmp`,
-not the copy inside the installed app bundle.
+The one warning both runs share is truthful: the binary is the freshly
+built one in `/tmp`, not the copy inside the installed app bundle.
+
+### A healthy root
 
 ```
-$ sm doctor          # read-only, against the real ~/shigomori
-sm doctor 0.22.5 (prod)  root ~/shigomori
+$ ./experiment-seed.sh healthy
+$ SHIGOMORI_ROOT=<that root> sm doctor
+sm doctor 0.22.5 (prod)  root /private/tmp/sm-doctor-scratch.5J7aCY
 
 Environment
   ✓  git         2.54.0 (Apple Git-157)
@@ -126,43 +136,32 @@ Environment
   ✓  shell hook  installed for zsh (not active in this session)
 
 State root
-  ✓  root         ~/shigomori (from SHIGOMORI_ROOT)
-  ✓  config.json  valid, 2 keys
-  ✓  state.json   valid, 11 projects registered
-  ✓  locks        no stale lock files
-  ✓  port pool    24 allocations, all pointing at directories that exist
+  ✓  root           /private/tmp/sm-doctor-scratch.5J7aCY (from SHIGOMORI_ROOT)
+  ✓  config.json    valid, 1 key
+  ✓  registry.json  valid, 2 projects registered
+  ✓  locks          no stale lock files
 
 Projects
-  ✓  shigoto-no-mori  ok
-  ✓  Celery           ok
-  ✓  agent-snippets   ok
-  ✓  songloupe        ok
-  ✓  PReviewer        ok
-  ✓  picto-place      ok
-  ✓  lichen           ok
-  ✓  dropcube         ok
-  ✓  whatagain        ok
-  ✓  rm-to-trash      ok
-  ✓  mise-en-scene    ok
+  ✓  alpha  ok
+  ✓  beta   ok
 
-20 ok, 1 warning
-$ echo $?
-0
+10 ok, 1 warning
+exit=0
 ```
 
-### Against a deliberately broken, hand-seeded scratch root
+### A deliberately broken root
 
-`SHIGOMORI_ROOT` pointed at a temp directory seeded with: a truncated
-`config.json`; four registered projects, one whose repo is gone, one
-that exists but was never a repo, one with a `project.json` missing the
-required `defaultBranch`, one with a setup script naming a file that
-isn't there; a worktree removed from disk but still in git's metadata; a
-stray directory in the managed layout; two locks with old mtimes; a
-`staging.pid` holding a dead pid.
+Seeded with: a truncated `config.json`; four registered projects, one
+whose repo is gone, one that exists but was never a repo, one with a
+`project.json` missing the required `defaultBranch`, one with a setup
+script naming a file that isn't there; a worktree removed from disk but
+still in git's metadata; a stray directory in the managed layout; two
+locks with old mtimes; a `staging.pid` holding a dead pid.
 
 ```
-$ sm doctor          # against a hand-seeded broken scratch root
-sm doctor 0.22.5 (prod)  root /private/tmp/sm-doctor-scratch.r50LMZ
+$ ./experiment-seed.sh broken
+$ SHIGOMORI_ROOT=<that root> sm doctor
+sm doctor 0.22.5 (prod)  root /private/tmp/sm-doctor-scratch.0wwBMz
 
 Environment
   ✓  git         2.54.0 (Apple Git-157)
@@ -173,71 +172,78 @@ Environment
   ✓  shell hook  installed for zsh (not active in this session)
 
 State root
-  ✓  root            /private/tmp/sm-doctor-scratch.r50LMZ (from SHIGOMORI_ROOT)
+  ✓  root            /private/tmp/sm-doctor-scratch.0wwBMz (from SHIGOMORI_ROOT)
   ✗  config.json     isn't valid JSON, so every global preference is silently ignored
-    fix: Repair the JSON in /private/tmp/sm-doctor-scratch.r50LMZ/config.json, or delete it to fall back to defaults.
-  ✓  state.json      valid, 4 projects registered
-  !  locks           /private/tmp/sm-doctor-scratch.r50LMZ/projects/AAAA1111/project.json.lock has been held for longer than a write can take (and 1 more)
+    fix: Repair the JSON in /private/tmp/sm-doctor-scratch.0wwBMz/config.json, or delete it to fall back to defaults.
+  ✓  registry.json   valid, 4 projects registered
+  !  locks           /private/tmp/sm-doctor-scratch.0wwBMz/projects/AAAA1111/project.json.lock has been held for longer than a write can take (and 1 more)
     fix: Delete it (`sm doctor --fix`); the process that took it is gone.
   !  update staging  left behind by a crashed update (pid 999999 is gone), so `sm update` refuses to run
-    fix: Delete /private/tmp/sm-doctor-scratch.r50LMZ/updates/staging.pid (`sm doctor --fix`).
+    fix: Delete /private/tmp/sm-doctor-scratch.0wwBMz/updates/staging.pid (`sm doctor --fix`).
 
 Projects
   !  alpha       git still lists 1 worktree whose directory is gone (vanished)
     fix: Prune the metadata (`sm doctor --fix`, or `git worktree prune`).
-  !  alpha       1 directory in the managed layout that git doesn't know about (/private/tmp/sm-doctor-scratch.r50LMZ/worktrees/alpha/stray-leftover)
+  !  alpha       1 directory in the managed layout that git doesn't know about (/private/tmp/sm-doctor-scratch.0wwBMz/worktrees/alpha/stray-leftover)
     fix: Adopt it (`sm adopt <path>`) or delete it by hand -- sm won't guess.
   !  alpha       the setup script runs scripts/bootstrap.sh, which isn't in the repo
     fix: Fix it with `sm projects config --setup '<command>' -p alpha`.
   !  beta        project.json exists but is invalid (bad JSON or no defaultBranch), so its scripts and layout are ignored
     fix: Run `sm projects config --default-branch <ref> -p beta` to rewrite it.
-  ✗  ghost       /private/tmp/sm-doctor-scratch.r50LMZ/repos/ghost-gone is gone, so every command for this project fails
+  ✗  ghost       /private/tmp/sm-doctor-scratch.0wwBMz/repos/ghost-gone is gone, so every command for this project fails
     fix: Restore the directory, or unregister it (`sm projects remove ghost`).
-  ✗  not-a-repo  /private/tmp/sm-doctor-scratch.r50LMZ/repos/not-a-repo is no longer a git repository
+  ✗  not-a-repo  /private/tmp/sm-doctor-scratch.0wwBMz/repos/not-a-repo is no longer a git repository
     fix: Restore the repo, or unregister it (`sm projects remove not-a-repo`).
 
 6 ok, 7 warnings, 3 failed
 4 of them can be repaired: run `sm doctor --fix`.
-$ echo $?
-1
+exit=1
 ```
 
 ### `--json`
 
+The same findings as a document (trimmed here to the summary and the
+first two non-ok checks):
+
 ```
-$ sm doctor --json          # pretty-printed here; the 6 "ok" checks elided for length
+$ SHIGOMORI_ROOT=<that root> sm --json doctor
 {
-  "ok": false,
-  "root": "/private/tmp/sm-doctor-scratch.r50LMZ",
-  "flavor": "prod",
-  "version": "0.22.5",
   "binary": "sm",
   "summary": {
     "fail": 3,
     "ok": 6,
     "warn": 7
   },
-  "repaired": []
+  "checks": [
+    {
+      "group": "Environment",
+      "id": "app",
+      "title": "app",
+      "status": "warn",
+      "detail": "this binary isn't the one inside /Applications/Shigoto no Mori.app, so `sm update` can't reach it",
+      "fix": "Re-link the CLI from the app's Settings, or run /Applications/Shigoto no Mori.app/Contents/Resources/sm."
+    },
+    {
+      "group": "State root",
+      "id": "config",
+      "title": "config.json",
+      "status": "fail",
+      "detail": "isn't valid JSON, so every global preference is silently ignored",
+      "fix": "Repair the JSON in /private/tmp/sm-doctor-scratch.0wwBMz/config.json, or delete it to fall back to defaults."
+    }
+  ]
 }
-"checks": [ ... 16 entries; the non-ok ones:
-  {"group": "Environment", "id": "app", "title": "app", "status": "warn", "detail": "this binary isn't the one inside /Applications/Shigoto no Mori.app, so `sm update` can't reach it", "fix": "Re-link the CLI from the app's Settings, or run /Applications/Shigoto no Mori.app/Contents/Resources/sm."}
-  {"group": "State root", "id": "config", "title": "config.json", "status": "fail", "detail": "isn't valid JSON, so every global preference is silently ignored", "fix": "Repair the JSON in /private/tmp/sm-doctor-scratch.r50LMZ/config.json, or delete it to fall back to defaults."}
-  {"group": "State root", "id": "locks", "title": "locks", "status": "warn", "detail": "/private/tmp/sm-doctor-scratch.r50LMZ/projects/AAAA1111/project.json.lock has been held for longer than a write can take (and 1 more)", "fix": "Delete it (`sm doctor --fix`); the process that took it is gone."}
-  {"group": "State root", "id": "staging-lock", "title": "update staging", "status": "warn", "detail": "left behind by a crashed update (pid 999999 is gone), so `sm update` refuses to run", "fix": "Delete /private/tmp/sm-doctor-scratch.r50LMZ/updates/staging.pid (`sm doctor --fix`)."}
-  {"group": "Projects", "id": "project-worktrees", "title": "alpha", "status": "warn", "detail": "git still lists 1 worktree whose directory is gone (vanished)", "fix": "Prune the metadata (`sm doctor --fix`, or `git worktree prune`)."}
-  {"group": "Projects", "id": "project-strays", "title": "alpha", "status": "warn", "detail": "1 directory in the managed layout that git doesn't know about (/private/tmp/sm-doctor-scratch.r50LMZ/worktrees/alpha/stray-leftover)", "fix": "Adopt it (`sm adopt <path>`) or delete it by hand -- sm won't guess."}
-  {"group": "Projects", "id": "project-scripts", "title": "alpha", "status": "warn", "detail": "the setup script runs scripts/bootstrap.sh, which isn't in the repo", "fix": "Fix it with `sm projects config --setup '<command>' -p alpha`."}
-  {"group": "Projects", "id": "project-config", "title": "beta", "status": "warn", "detail": "project.json exists but is invalid (bad JSON or no defaultBranch), so its scripts and layout are ignored", "fix": "Run `sm projects config --default-branch <ref> -p beta` to rewrite it."}
-  {"group": "Projects", "id": "project-path", "title": "ghost", "status": "fail", "detail": "/private/tmp/sm-doctor-scratch.r50LMZ/repos/ghost-gone is gone, so every command for this project fails", "fix": "Restore the directory, or unregister it (`sm projects remove ghost`)."}
-  {"group": "Projects", "id": "project-repo", "title": "not-a-repo", "status": "fail", "detail": "/private/tmp/sm-doctor-scratch.r50LMZ/repos/not-a-repo is no longer a git repository", "fix": "Restore the repo, or unregister it (`sm projects remove not-a-repo`)."}
-]
 ```
 
-### `--fix --yes` against the same scratch root
+### `--fix --yes` against the same broken root
+
+Four repairs apply; everything with a judgment call in it survives,
+and the checklist printed afterwards describes the world after the
+repairs, not before.
 
 ```
-$ sm doctor --fix --yes
-sm doctor 0.22.5 (prod)  root /private/tmp/sm-doctor-scratch.r50LMZ
+$ SHIGOMORI_ROOT=<that root> sm doctor --fix --yes
+sm doctor 0.22.5 (prod)  root /private/tmp/sm-doctor-scratch.0wwBMz
 
 Environment
   ✓  git         2.54.0 (Apple Git-157)
@@ -248,20 +254,20 @@ Environment
   ✓  shell hook  installed for zsh (not active in this session)
 
 State root
-  ✓  root         /private/tmp/sm-doctor-scratch.r50LMZ (from SHIGOMORI_ROOT)
-  ✗  config.json  isn't valid JSON, so every global preference is silently ignored
-    fix: Repair the JSON in /private/tmp/sm-doctor-scratch.r50LMZ/config.json, or delete it to fall back to defaults.
-  ✓  state.json   valid, 3 projects registered
-  ✓  locks        no stale lock files
+  ✓  root           /private/tmp/sm-doctor-scratch.0wwBMz (from SHIGOMORI_ROOT)
+  ✗  config.json    isn't valid JSON, so every global preference is silently ignored
+    fix: Repair the JSON in /private/tmp/sm-doctor-scratch.0wwBMz/config.json, or delete it to fall back to defaults.
+  ✓  registry.json  valid, 3 projects registered
+  ✓  locks          no stale lock files
 
 Projects
-  !  alpha       1 directory in the managed layout that git doesn't know about (/private/tmp/sm-doctor-scratch.r50LMZ/worktrees/alpha/stray-leftover)
+  !  alpha       1 directory in the managed layout that git doesn't know about (/private/tmp/sm-doctor-scratch.0wwBMz/worktrees/alpha/stray-leftover)
     fix: Adopt it (`sm adopt <path>`) or delete it by hand -- sm won't guess.
   !  alpha       the setup script runs scripts/bootstrap.sh, which isn't in the repo
     fix: Fix it with `sm projects config --setup '<command>' -p alpha`.
   !  beta        project.json exists but is invalid (bad JSON or no defaultBranch), so its scripts and layout are ignored
     fix: Run `sm projects config --default-branch <ref> -p beta` to rewrite it.
-  ✗  not-a-repo  /private/tmp/sm-doctor-scratch.r50LMZ/repos/not-a-repo is no longer a git repository
+  ✗  not-a-repo  /private/tmp/sm-doctor-scratch.0wwBMz/repos/not-a-repo is no longer a git repository
     fix: Restore the repo, or unregister it (`sm projects remove not-a-repo`).
 
 Repaired
@@ -271,8 +277,7 @@ Repaired
   ✓ unregistered ghost
 
 7 ok, 4 warnings, 2 failed
-$ echo $?
-1
+exit=1
 ```
 
 ## What's rough
@@ -319,7 +324,7 @@ $ echo $?
 $ go build -C cli ./...        # clean
 $ go vet -C cli ./...          # clean
 $ go test -C cli ./...
-ok  	cli	0.549s              # 46 tests pass, 23 of them new
+ok  	cli	0.691s              # all tests pass, 23 of them new
 ```
 
 The new tests seed their own temp state roots (and temp git repos where
