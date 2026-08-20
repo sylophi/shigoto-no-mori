@@ -51,21 +51,24 @@ a list row with the same code.
 
 ## Proof
 
-All runs used a scratch state root (`SHIGOMORI_ROOT=$(mktemp -d)`, seeded
-with a copy of the real `state.json` / project configs) and read-only git
-and gh commands. Nothing under `~/shigomori` was touched. The binary was
-built from this branch, so it identifies itself as `smd` (dev flavor).
-Home directories in the output below are redacted to `$HOME`; everything
-else is verbatim, ANSI stripped by piping.
+Read-only runs against the real state root: the card only reads, and no
+command below writes anything. The binary was built with the prod
+ldflags from `scripts/build-cli.mjs`, so it identifies itself as `sm`.
+Home directories are redacted to `$HOME` or shown collapsed as `~`;
+everything else is verbatim, ANSI stripped by piping.
+
+The `stash 1 (repo-wide)` row is real: a stash was live in the repo
+while these ran, which is the only reason that row appears at all.
 
 ```
 $ sm status
 shigoto-no-mori/bubbly-mouse
   path     ~/shigomori/worktrees/shigoto-no-mori/bubbly-mouse
   branch   exp/cli-status  local
-  base     origin/main  ↓2
-  changes  4 staged
-  commit   e158ef8  Point port-pool link at dittofleet org (#146)  (1h ago)
+  base     origin/main  ↑2 ↓2
+  changes  clean
+  stash    1 (repo-wide)
+  commit   5c8357e  Add EXPERIMENT.md with the sm status transcripts  (3d ago)
   ports    renderer 4170
   setup    pnpm install
   pr       none
@@ -88,22 +91,22 @@ $ sm --json status | python3 -m json.tool
         "upstream": null,
         "base": {
             "ref": "origin/main",
-            "ahead": 0,
+            "ahead": 2,
             "behind": 2
         },
-        "staged": 4,
+        "staged": 0,
         "unstaged": 0,
         "untracked": 0,
         "conflicted": 0,
-        "changedCount": 4,
-        "stashCount": 0,
+        "changedCount": 0,
+        "stashCount": 1,
         "lastCommit": {
-            "hash": "e158ef8",
-            "subject": "Point port-pool link at dittofleet org (#146)",
-            "author": "Harper",
-            "date": "2026-08-15T20:15:14-07:00",
-            "additions": 1,
-            "deletions": 1
+            "hash": "5c8357e",
+            "subject": "Add EXPERIMENT.md with the sm status transcripts",
+            "author": "sylophi",
+            "date": "2026-08-15T21:31:05-07:00",
+            "additions": 284,
+            "deletions": 0
         }
     },
     "ports": [
@@ -129,14 +132,15 @@ $ sm --json status | python3 -m json.tool
 Every addressing form:
 
 ```
-$ sm status chirpy-raccoon
-shigoto-no-mori/chirpy-raccoon
-  path     ~/shigomori/worktrees/shigoto-no-mori/chirpy-raccoon
-  branch   sm-config-commands  local
-  base     origin/main  ↓4
-  changes  9 unstaged, 2 untracked
-  commit   f36642b  Add the sm-teardown skill (#145)  (20h ago)
-  ports    renderer 3160
+$ sm status eager-hamster
+shigoto-no-mori/eager-hamster
+  path     ~/shigomori/worktrees/shigoto-no-mori/eager-hamster
+  branch   exp/cli-completions  local
+  base     origin/main  ↑1 ↓38
+  changes  clean
+  stash    1 (repo-wide)
+  commit   7f0c3d7  Add `sm completion` with a dynamic __complete h…  (3d ago)
+  ports    renderer 5465
   setup    pnpm install
   pr       none
 
@@ -144,9 +148,10 @@ $ sm status shigoto-no-mori/mellow-ermine
 shigoto-no-mori/mellow-ermine
   path     ~/shigomori/worktrees/shigoto-no-mori/mellow-ermine
   branch   exp/cli-jump  local
-  base     origin/main  ↓2
-  changes  5 unstaged, 2 untracked
-  commit   e158ef8  Point port-pool link at dittofleet org (#146)  (1h ago)
+  base     origin/main  ↑1 ↓38
+  changes  clean
+  stash    1 (repo-wide)
+  commit   4bd979b  Add frecency-ranked smart navigation to sm cd  (3d ago)
   ports    renderer 6278
   setup    pnpm install
   pr       none
@@ -156,32 +161,39 @@ shigoto-no-mori/shigoto-no-mori  (primary)
   path     ~/Software/app/shigoto-no-mori
   branch   main  ↓2
   changes  clean
-  commit   e158ef8  Point port-pool link at dittofleet org (#146)  (1h ago)
+  stash    1 (repo-wide)
+  commit   231eebc  Simplify and dedupe across the CLI, main, and r…  (1h ago)
   ports    renderer 5182
   setup    pnpm install
   pr       none
 
-$ sm status peppy-tortoise -p Celery
-Celery/peppy-tortoise
-  path     ~/shigomori/worktrees/Celery/peppy-tortoise
-  branch   celeste-theme  local
-  base     origin/main  ↓3
-  changes  19 unstaged
-  commit   6e50c59  Celery: dependency-aware Celeste mod manager (#…  (2d ago)
+$ sm status happy-alpaca -p shigoto-no-mori
+shigoto-no-mori/happy-alpaca
+  path     ~/shigomori/worktrees/shigoto-no-mori/happy-alpaca
+  branch   exp/cli-each  local
+  base     origin/main  ↑1 ↓38
+  changes  clean
+  stash    1 (repo-wide)
+  commit   d43e6e2  Add `sm each` to fan a command out across workt…  (3d ago)
+  ports    renderer 5917
   setup    pnpm install
   pr       none
 
-$ sm status ../soft-capybara
-shigoto-no-mori/soft-capybara
-  path     ~/shigomori/worktrees/shigoto-no-mori/soft-capybara
-  branch   configurable-data-root  local
-  base     origin/main  ↓7
-  changes  20 unstaged, 6 untracked
-  commit   c181dbd  Add sm run: run package.json scripts from the C…  (4d ago)
-  ports    renderer 6997
+$ sm status ../zippy-chameleon
+shigoto-no-mori/zippy-chameleon
+  path     ~/shigomori/worktrees/shigoto-no-mori/zippy-chameleon
+  branch   exp/cli-doctor  synced
+  base     origin/main  ↑2 ↓2
+  changes  clean
+  stash    1 (repo-wide)
+  commit   7d4c93a  Refresh the doctor proof against a reproducible…  (1h ago)
+  ports    renderer 7822
   setup    pnpm install
-  pr       none
+  pr       #188 draft  Add sm doctor
 ```
+
+That last one is the PR row populated, pointing at the draft PR opened
+for the sibling `sm doctor` experiment.
 
 Degrading when gh can't answer (the local half of the card is
 unaffected, and the ports still resolve because they come from the env
@@ -192,20 +204,23 @@ $ sm status --no-pr
 shigoto-no-mori/bubbly-mouse
   path     ~/shigomori/worktrees/shigoto-no-mori/bubbly-mouse
   branch   exp/cli-status  local
-  base     origin/main  ↓2
-  changes  4 staged
-  commit   e158ef8  Point port-pool link at dittofleet org (#146)  (1h ago)
+  base     origin/main  ↑2 ↓2
+  changes  clean
+  stash    1 (repo-wide)
+  commit   5c8357e  Add EXPERIMENT.md with the sm status transcripts  (3d ago)
   ports    renderer 4170
   setup    pnpm install
 
 $ env PATH=/usr/bin:/bin sm status
-shigoto-no-mori/bubbly-mouse
   ...
+  ports    renderer 4170
+  setup    pnpm install
   pr       unavailable (gh isn't installed)
 
 $ GH_TOKEN=bogus sm status
-shigoto-no-mori/bubbly-mouse
   ...
+  ports    renderer 4170
+  setup    pnpm install
   pr       unavailable (gh isn't authenticated)
 ```
 
@@ -213,7 +228,7 @@ Errors follow the existing conventions:
 
 ```
 $ sm status nope
-smd: No worktree named "nope".
+sm: No worktree named "nope".
 exit=1
 
 $ sm --json status nope
@@ -225,7 +240,7 @@ Help:
 
 ```
 $ sm status --help          # identical to `sm help status`
-Usage: smd worktrees status [<name>] [--no-pr]
+Usage: sm worktrees status [<name>] [--no-pr]
   Status card for one worktree
   The worktree you're standing in, at a glance: how the branch sits against its
   upstream and the project's base branch, staged/unstaged/untracked counts, the
@@ -234,7 +249,7 @@ Usage: smd worktrees status [<name>] [--no-pr]
   runs under a short deadline, and degrades to a note instead of stalling the
   card (--no-pr skips it). --json prints the whole card as one document.
 
-Run `smd --help` for the full list.
+Run `sm --help` for the full list.
 ```
 
 Wall time for the default run, gh probe included: ~0.67s.
@@ -257,11 +272,11 @@ whole-card renders (all rows present; PR row skipped / absent).
 
 ## What's rough
 
-- **No PR was rendered against a live repo.** No worktree on this
-  machine currently has an open PR, so the PR row and the check rollup
-  are only proven by unit tests (`TestPRLine`, `TestRollupChecks`). The
-  gh call itself is exercised: the "none" rows above are real `gh pr
-  list` round-trips that came back empty.
+- **The check rollup has never rendered against a live PR.** The PR row
+  itself is now proven end to end (the `#188 draft` row above is a real
+  `gh` round-trip), but that PR has no CI attached, so the passing /
+  failing / pending rollup is still only covered by unit tests
+  (`TestPRLine`, `TestRollupChecks`).
 - **The check rollup is a summary, not a list.** It counts
   passing/failing/pending. Naming the failing check would be more useful
   and costs nothing extra in the same gh call.

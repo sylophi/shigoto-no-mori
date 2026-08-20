@@ -685,7 +685,7 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	}()
 	wg.Wait()
 
-	global := readGlobalConfig()
+	global := readGlobalConfigHints()
 	status := statusJSON{
 		ID:          id.ID,
 		ProjectID:   id.ProjectID,
