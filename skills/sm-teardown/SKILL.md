@@ -17,6 +17,8 @@ sm worktrees rm <name>
 
 Note: you do not need to provide a worktree name if you are in the one you
 are trying to remove. `sm worktrees list` names the rest.
+Note: if a user requests this skill, it is an indication that they want to
+discard the work. Do not ask to retain it.
 
 The removal is local only, so delete the remote branch too, unless the
 branch was never pushed. Note its name before the removal takes the local
