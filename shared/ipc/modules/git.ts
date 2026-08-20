@@ -1,19 +1,17 @@
 import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
+import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
 export const gitContract = {
   refreshProject: invoke(
     "git:refreshProject",
-    z.object({ projectId: z.string() }),
+    ProjectScopedPayloadSchema,
     z.void(),
   ),
-  refsRefreshed: broadcast(
-    "git:refsRefreshed",
-    z.object({ projectId: z.string() }),
-  ),
+  refsRefreshed: broadcast("git:refsRefreshed", ProjectScopedPayloadSchema),
   fetchActive: broadcast(
     "git:fetchActive",
-    z.object({ projectId: z.string(), active: z.boolean() }),
+    ProjectScopedPayloadSchema.extend({ active: z.boolean() }),
   ),
   // Something outside the app (the CLI) changed worktrees or state
   // on disk. The renderer invalidates its queries -- refetch-on-focus
@@ -21,5 +19,3 @@ export const gitContract = {
   // agent works in a terminal beside it.
   externalChange: broadcast("git:externalChange", z.void()),
 } as const;
-
-export type GitContract = typeof gitContract;

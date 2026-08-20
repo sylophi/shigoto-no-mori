@@ -1,5 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { type RowStatus } from "@/components/ui/row-status";
+import { errorMessageOf } from "@shared/errors";
 
 // Drives the "run a mutation over a set of worktrees one at a time"
 // flows (convert-external, relocate). Both seed a per-row running status,
@@ -38,7 +39,7 @@ async function runBatchImpl<T>(
           return next;
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = errorMessageOf(err);
         setStatus((prev) => {
           const next = new Map(prev);
           next.set(key, { kind: "error", message });

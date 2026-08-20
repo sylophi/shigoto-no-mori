@@ -73,7 +73,7 @@ for (const [, attr, value] of attrRefs) {
 }
 
 // 2. App-level markers.
-for (const marker of ["doubutsu-only", "data-row-idx"]) {
+for (const marker of ["doubutsu-only", "v1-only", "data-row-idx"]) {
   if (css.includes(marker) && !rendererSource.includes(marker)) {
     failures.push(
       `doubutsu.css references "${marker}" but renderer source no longer uses it`,

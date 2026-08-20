@@ -38,5 +38,3 @@ export const scriptsContract = {
     OrphanScriptReportSchema,
   ),
 } as const;
-
-export type ScriptsContract = typeof scriptsContract;

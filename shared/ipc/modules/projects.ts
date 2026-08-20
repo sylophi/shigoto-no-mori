@@ -42,10 +42,7 @@ export const projectsContract = {
   ),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.
-  usageBumped: broadcast(
-    "projects:usageBumped",
-    z.object({ projectId: z.string() }),
-  ),
+  usageBumped: broadcast("projects:usageBumped", ProjectScopedPayloadSchema),
   defaultBranch: invoke(
     "projects:defaultBranch",
     ProjectScopedPayloadSchema,
@@ -77,5 +74,3 @@ export const projectsContract = {
     ProjectIconSchema.nullable(),
   ),
 } as const;
-
-export type ProjectsContract = typeof projectsContract;

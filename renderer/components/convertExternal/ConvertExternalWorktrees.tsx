@@ -14,6 +14,7 @@ import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
+import { withToggled } from "@/lib/toggleSet";
 
 const route = getRouteApi("/projects/$projectId/convert-external");
 
@@ -66,12 +67,7 @@ export function ConvertExternalWorktrees() {
   };
 
   const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setSelected(withToggled(id));
   };
 
   const toggleAll = () => {
@@ -168,8 +164,8 @@ export function ConvertExternalWorktrees() {
                 </span>
               </div>
 
-              <div className="overflow-hidden rounded-md border border-border">
-                {externals.map((wt, idx) => (
+              <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                {externals.map((wt) => (
                   <ConvertRow
                     key={wt.id}
                     worktree={wt}
@@ -180,7 +176,6 @@ export function ConvertExternalWorktrees() {
                     proposedPath={proposedPath(wt)}
                     home={home}
                     onToggle={() => toggle(wt.id)}
-                    isLast={idx === externals.length - 1}
                   />
                 ))}
               </div>

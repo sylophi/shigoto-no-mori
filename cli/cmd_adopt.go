@@ -35,18 +35,8 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	// tip, so anything uncommitted (or untracked) there is destroyed.
 	// The app's convert flow carries this in its confirmation dialog;
 	// the CLI needs the guard itself.
-	if !parsed.bools["force"] {
-		// Fail closed: an unreadable status must not pass for clean when
-		// adopting wipes the directory.
-		changed, err := changedCount(id.Path)
-		if err != nil {
-			return 1, errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to adopt anyway.", err)
-		}
-		if changed > 0 {
-			return 1, errf(
-				"Worktree has %d uncommitted change(s) that adopting would destroy. Commit them first, or pass --force.",
-				changed)
-		}
+	if err := requireClean(id, parsed.bools["force"], "adopt", "adopting"); err != nil {
+		return 1, err
 	}
 
 	branchOrSha := id.Branch

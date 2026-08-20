@@ -4,6 +4,7 @@ import { useFsStat } from "@/hooks/fs/useFsStat";
 import { cn } from "@/lib/utils";
 import type { CarryOverEntry } from "@shared/schemas";
 import { ModePicker } from "./ModePicker";
+import { ChipButton } from "@/components/ui/chip-button";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;
@@ -70,14 +71,14 @@ export function CarryOverRow({
           <span className="shrink-0 text-[11px] text-muted-foreground/70">
             used by <span className="font-mono">.worktreeinclude</span>
           </span>
-          <span
-            data-slot="chip"
-            className="inline-flex shrink-0 cursor-not-allowed items-center gap-1 rounded-md border border-input px-2 py-1 text-[11px] text-muted-foreground"
+          <ChipButton
+            disabled
+            className="shrink-0 cursor-not-allowed"
             title="Matches a pattern in the repo's .worktreeinclude file, so it's copied into every new worktree. Edit that file to change or remove it."
           >
             <CopyIcon className="size-3" />
             Copy
-          </span>
+          </ChipButton>
           <button
             type="button"
             disabled

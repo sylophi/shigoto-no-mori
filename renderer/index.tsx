@@ -80,10 +80,12 @@ const queryClient = new QueryClient({
       // Local git/fs state can change at any moment via another tool;
       // there's no "TTL" that's meaningful. Refetch whenever an observer
       // mounts, the window regains focus, or a mutation invalidates us.
-      // Hooks for genuinely-static data (runtime info) opt back in via
-      // `staleTime: Infinity`.
+      // Hooks for genuinely-static data (runtime info, detected launchers,
+      // project icons) opt out via their own staleTime. `true` rather than
+      // "always": "always" short-circuits ahead of the staleness check, so it
+      // silently defeats every staleTime a hook sets.
       refetchOnWindowFocus: true,
-      refetchOnMount: "always",
+      refetchOnMount: true,
       staleTime: 0,
       // An entity-gone failure (project/worktree deleted out from under
       // an in-flight query) is deterministic; retrying only delays the
@@ -114,7 +116,18 @@ const queryClient = new QueryClient({
 // refetch), but network-backed and static domains sit it out: a disk
 // change says nothing about GitHub or the updater, and refetching PR
 // lists here turns every external write into a burst of gh calls.
-const externalChangeExempt = new Set(["githubCli", "runtime", "updater"]);
+//
+// The hygiene domains sit it out for cost, not scope: both cache for 60s
+// (a sweep is several git calls or a directory walk per worktree) and
+// invalidation ignores staleTime. Focus, mount and the removal flow
+// still cover them.
+const externalChangeExempt = new Set([
+  "githubCli",
+  "runtime",
+  "updater",
+  "worktreeHygiene",
+  "worktreeDiskUsage",
+]);
 window.api.git.onExternalChange(() => {
   void queryClient.invalidateQueries({
     predicate: (query) => !externalChangeExempt.has(String(query.queryKey[0])),

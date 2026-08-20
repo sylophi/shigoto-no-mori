@@ -209,9 +209,25 @@ const (
 
 var registryKeys = []string{projectsKey, shelvedKey}
 
+// Every path under the state root in one place, so a layout change never
+// has to be chased into the command files.
 func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }
 
 func registryPath() string { return filepath.Join(shigomoriRoot(), "registry.json") }
+
+func configJSONPath() string { return filepath.Join(shigomoriRoot(), "config.json") }
+
+func projectDataDir(projectID string) string {
+	return filepath.Join(shigomoriRoot(), "projects", projectID)
+}
+
+func projectConfigJSONPath(projectID string) string {
+	return filepath.Join(projectDataDir(projectID), "project.json")
+}
+
+func worktreeDataPath(projectID, worktreeID string) string {
+	return filepath.Join(projectDataDir(projectID), "worktrees", worktreeID+".json")
+}
 
 // One read-and-classify for every JSON document the CLI reads
 // strictly: only a genuinely absent file reads as empty (found=false,
@@ -616,7 +632,7 @@ func readProjectConfig(projectID string) *projectConfig {
 }
 
 func deleteWorktreeData(projectID, worktreeID string) {
-	path := filepath.Join(shigomoriRoot(), "projects", projectID, "worktrees", worktreeID+".json")
+	path := worktreeDataPath(projectID, worktreeID)
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		vlog("[state] delete worktree data: %v", err)
 	}

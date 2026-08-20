@@ -32,7 +32,7 @@ func cmdWorktree(ctx cliContext, args []string) (int, error) {
 // over worktree names.
 func cmdWorktrees(ctx cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		out(worktreesHelpText())
+		out(namespaceHelp("worktrees"))
 		return 0, nil
 	}
 	if cmd := lookupCommand(args[0]); cmd != nil && cmd.worktree {
@@ -48,10 +48,7 @@ func cmdEnterWorktree(ctx cliContext, args []string, acrossProjects bool) (int, 
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
+	ref := parsed.positional(0)
 	// The subshell and the menus need a terminal. A wrapper-provided
 	// directive file with an explicit name needs neither. --json stays
 	// refused outright: a cd that emits no documents yet moves the
@@ -119,10 +116,7 @@ func enterWorktreeShell(name, path string) (int, error) {
 		}
 		// Couldn't write the directive, so the subshell still gets them there.
 	}
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
+	shell, _ := resolveShell()
 	note(fmt.Sprintf("Entering %s %s -- exit the shell to return.",
 		cyanErr(name), dimErr("("+path+")")))
 	cmd := exec.Command(shell)

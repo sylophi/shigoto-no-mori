@@ -5,5 +5,3 @@ export const projectLauncherContract = {
   toggle: broadcast("projectLauncher:toggle", z.void()),
   addProject: broadcast("projectLauncher:addProject", z.void()),
 } as const;
-
-export type ProjectLauncherContract = typeof projectLauncherContract;

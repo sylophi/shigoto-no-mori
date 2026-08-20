@@ -30,5 +30,3 @@ export const shigomoriContract = {
     { tracksProjectUsage: true },
   ),
 } as const;
-
-export type ShigomoriContract = typeof shigomoriContract;

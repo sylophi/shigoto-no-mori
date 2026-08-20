@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import type { CreatePhase } from "@shared/schemas";
 import { toast } from "@/lib/toast";
 import type { RendererApi } from "@/window";
+import { KeyedSubscribers } from "./keyedSubscribers";
 
 export type { CreatePhase } from "@shared/schemas";
 
@@ -32,9 +33,8 @@ function clippedLines(lines: string[], max: number): string {
 
 class WorktreeLifecycleStore {
   private phases = new Map<string, CreatePhase>();
-  private subs = new Map<string, Set<() => void>>();
+  private subs = new KeyedSubscribers<string>();
   private unsubscribePhase: (() => void) | null = null;
-  private unsubscribeCarryOver: (() => void) | null = null;
   private api: WorktreesApi;
   private warn: NotifyFn;
   private info: NotifyFn;
@@ -46,13 +46,16 @@ class WorktreeLifecycleStore {
     this.info = info;
   }
 
+  // The store is a renderer-lifetime singleton, so these subscriptions
+  // are never torn down; unsubscribePhase exists only as the
+  // already-started guard.
   start(deps?: StartDeps): void {
     if (this.unsubscribePhase) return;
     this.onCarryOverReconciled = deps?.onCarryOverReconciled ?? null;
     this.unsubscribePhase = this.api.onLifecyclePhase((evt) => {
       this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
     });
-    this.unsubscribeCarryOver = this.api.onCarryOverComplete((evt) => {
+    this.api.onCarryOverComplete((evt) => {
       const removed = evt.removedCarryOverPaths ?? [];
       if (removed.length > 0) {
         this.onCarryOverReconciled?.(evt.projectId);
@@ -91,28 +94,8 @@ class WorktreeLifecycleStore {
     });
   }
 
-  dispose(): void {
-    this.unsubscribePhase?.();
-    this.unsubscribePhase = null;
-    this.unsubscribeCarryOver?.();
-    this.unsubscribeCarryOver = null;
-    this.phases.clear();
-    this.subs.clear();
-  }
-
   subscribe(worktreeId: string, cb: () => void): () => void {
-    let bucket = this.subs.get(worktreeId);
-    if (!bucket) {
-      bucket = new Set();
-      this.subs.set(worktreeId, bucket);
-    }
-    bucket.add(cb);
-    return () => {
-      const b = this.subs.get(worktreeId);
-      if (!b) return;
-      b.delete(cb);
-      if (b.size === 0) this.subs.delete(worktreeId);
-    };
+    return this.subs.subscribe(worktreeId, cb);
   }
 
   snapshot(worktreeId: string): CreatePhase | null {
@@ -130,9 +113,7 @@ class WorktreeLifecycleStore {
   }
 
   private notify(worktreeId: string): void {
-    const bucket = this.subs.get(worktreeId);
-    if (!bucket) return;
-    for (const cb of bucket) cb();
+    this.subs.notify(worktreeId);
   }
 }
 

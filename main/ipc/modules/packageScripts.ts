@@ -1,7 +1,9 @@
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import type { Handlers } from "@shared/ipc/types";
-import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
-import { findProjectOrThrow } from "../../lib/projects";
+import {
+  findProjectAndWorktreeOrThrow,
+  findProjectOrThrow,
+} from "../../lib/projects";
 import { startScript } from "../../lib/scripts";
 import {
   bumpScriptUseCount,
@@ -22,10 +24,8 @@ export const packageScriptsHandlers: Handlers<
   HandlerContext
 > = {
   list: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    const worktree = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
+    const { project, worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
       worktreeId,
     );
     const file = await readPackageScripts(worktree.path);

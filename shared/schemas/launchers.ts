@@ -24,6 +24,25 @@ export type CustomLauncher = z.infer<typeof CustomLauncherSchema>;
 // the IPC compare against the same string.
 export const WEB_GITHUB_ID = "web:github";
 
+// A launcher id is "<kind>:<id>". Builder and parser live together so
+// the prefixes exist once, rather than being decoded by hand-counted
+// slices at each call site. Mirrored by cli/launchers.go.
+export type LauncherKind = "app" | "custom" | "web";
+
+export function launcherIdFor(kind: LauncherKind, id: string): string {
+  return `${kind}:${id}`;
+}
+
+export function parseLauncherId(
+  launcherId: string,
+): { kind: LauncherKind; id: string } | null {
+  const separator = launcherId.indexOf(":");
+  if (separator < 0) return null;
+  const kind = launcherId.slice(0, separator);
+  if (kind !== "app" && kind !== "custom" && kind !== "web") return null;
+  return { kind, id: launcherId.slice(separator + 1) };
+}
+
 export const WebLauncherSchema = z.object({
   kind: z.literal("web"),
   id: z.string(),

@@ -439,20 +439,17 @@ export function startScript(args: RunArgs): string {
   return runId;
 }
 
-export async function cancelScript(
-  runId: string,
-  opts: KillOptions = {},
-): Promise<boolean> {
+export async function cancelScript(runId: string): Promise<boolean> {
   const record = runningScripts.get(runId);
   if (!record) return false;
-  await killRecord(record, { reason: "Cancelled by user", ...opts });
+  await killRecord(record, { reason: "Cancelled by user" });
   return true;
 }
 
 async function killMatching(
   predicate: (record: RunRecord) => boolean,
   reason: string,
-  opts: KillOptions,
+  opts: KillOptions = {},
 ): Promise<void> {
   const targets = Array.from(runningScripts.values()).filter(
     (r) => !r.exited && predicate(r),
@@ -463,22 +460,16 @@ async function killMatching(
 
 export async function killScriptsForWorktree(
   worktreeId: string,
-  opts: KillOptions = {},
 ): Promise<void> {
-  await killMatching(
-    (r) => r.worktreeId === worktreeId,
-    "Worktree removed",
-    opts,
-  );
+  await killMatching((r) => r.worktreeId === worktreeId, "Worktree removed");
 }
 
-export async function killScriptsForProject(
-  projectId: string,
-  opts: KillOptions = {},
-): Promise<void> {
-  await killMatching((r) => r.projectId === projectId, "Project removed", opts);
+export async function killScriptsForProject(projectId: string): Promise<void> {
+  await killMatching((r) => r.projectId === projectId, "Project removed");
 }
 
+// The one caller that tunes the grace period is the quit path, which
+// can't wait out the default before Electron tears the process down.
 export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
   await killMatching(() => true, "App quit", opts);
 }

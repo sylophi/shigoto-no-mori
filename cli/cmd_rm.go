@@ -47,17 +47,31 @@ func removePreflight(id worktreeIdentity, force bool) error {
 	if id.IsPrimary {
 		return errf("Cannot delete the project's primary worktree")
 	}
+	return requireClean(id, force, "remove", "")
+}
+
+// Fail closed on a dirty or unreadable worktree: an unreadable status
+// must not pass for clean when the next step destroys the directory.
+// Shared by rm, land and adopt so the semantics can't drift. verb shapes
+// the --force prose; destroys is set when the operation takes the
+// changes with it, which earns the louder message.
+func requireClean(id worktreeIdentity, force bool, verb, destroys string) error {
 	if force {
 		return nil
 	}
 	changed, err := changedCount(id.Path)
 	if err != nil {
-		return errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to remove anyway.", err)
+		return errf("Couldn't check for uncommitted changes (%v). Fix the worktree, or pass --force to %s anyway.", err, verb)
 	}
-	if changed > 0 {
-		return errf("Worktree has %d uncommitted change(s). Pass --force to remove anyway.", changed)
+	if changed == 0 {
+		return nil
 	}
-	return nil
+	if destroys != "" {
+		return errf(
+			"Worktree has %d uncommitted change(s) that %s would destroy. Commit them first, or pass --force.",
+			changed, destroys)
+	}
+	return errf("Worktree has %d uncommitted change(s). Pass --force to %s anyway.", changed, verb)
 }
 
 // A lifecycle script failed during removal, so the worktree was left
@@ -108,8 +122,7 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	if !id.IsExternal && !opts.skipCleanup {
 		envInputs := lifecycleEnvInputs(proj, id, config)
 
-		portPoolEnabled := global.PortPool != nil && *global.PortPool
-		if portPoolEnabled && portPoolInstalled() && portPoolConfigured(id.Path) {
+		if portPoolActiveFor(global, id) {
 			envInputs.scriptName = "port-pool-release"
 			code, runID := runLifecycleScript(
 				portPoolCommand("release", id.Path), envInputs,

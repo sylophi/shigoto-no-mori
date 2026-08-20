@@ -23,6 +23,7 @@ import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { dragRegion } from "@/lib/utils";
+import { readStored, writeStored } from "@/lib/localStorage";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -30,14 +31,10 @@ const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
 
 function readStoredWidth(): number {
-  try {
-    const raw = window.localStorage.getItem(SIDEBAR_KEY);
-    const n = raw ? Number.parseInt(raw, 10) : NaN;
-    if (!Number.isFinite(n)) return SIDEBAR_DEFAULT;
-    return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
-  } catch {
-    return SIDEBAR_DEFAULT;
-  }
+  const raw = readStored(SIDEBAR_KEY);
+  const n = raw ? Number.parseInt(raw, 10) : NaN;
+  if (!Number.isFinite(n)) return SIDEBAR_DEFAULT;
+  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
 }
 
 function RootLayout() {
@@ -61,11 +58,7 @@ function RootLayout() {
       });
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
-      try {
-        window.localStorage.setItem(SIDEBAR_KEY, String(Math.round(last)));
-      } catch {
-        // localStorage may be unavailable; not fatal.
-      }
+      writeStored(SIDEBAR_KEY, String(Math.round(last)));
     };
     document.addEventListener("mousemove", onMove);
     document.addEventListener("mouseup", onUp);
@@ -123,72 +116,52 @@ const tidyRoute = createRoute({
   component: TidyForest,
 });
 
+// remountDeps on the project- and worktree-scoped routes: the router
+// keeps one component instance across a params change and just
+// re-renders it, so without this a route would keep showing the
+// previous entity's data until its queries happened to refetch. The
+// router keys the match on this value, which is what the hand-written
+// `key={projectId}` wrappers used to do.
 const newWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/new",
-  component: KeyedNewWorktree,
+  component: NewWorktree,
+  remountDeps: ({ params }) => params,
 });
 
 const configureProjectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/configure",
-  component: KeyedConfigureProject,
+  component: ConfigureProject,
+  remountDeps: ({ params }) => params,
 });
 
 const manageBranchesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/branches",
-  component: KeyedManageBranches,
+  component: ManageBranches,
+  remountDeps: ({ params }) => params,
 });
 
 const convertExternalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/convert-external",
-  component: KeyedConvertExternal,
+  component: ConvertExternalWorktrees,
+  remountDeps: ({ params }) => params,
 });
 
 const worktreeLocationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktree-location",
-  component: KeyedWorktreeLocation,
+  component: WorktreeLocation,
+  remountDeps: ({ params }) => params,
 });
-
-// Force remount on params change so refetchOnMount: "always" fires
-// (TanStack Router keeps the same instance and just re-renders otherwise).
-function KeyedWorktreeDetail() {
-  const { projectId, worktreeId } = worktreeRoute.useParams();
-  return <WorktreeDetail key={`${projectId}:${worktreeId}`} />;
-}
-
-function KeyedNewWorktree() {
-  const { projectId } = newWorktreeRoute.useParams();
-  return <NewWorktree key={projectId} />;
-}
-
-function KeyedConfigureProject() {
-  const { projectId } = configureProjectRoute.useParams();
-  return <ConfigureProject key={projectId} />;
-}
-
-function KeyedManageBranches() {
-  const { projectId } = manageBranchesRoute.useParams();
-  return <ManageBranches key={projectId} />;
-}
-
-function KeyedConvertExternal() {
-  const { projectId } = convertExternalRoute.useParams();
-  return <ConvertExternalWorktrees key={projectId} />;
-}
-
-function KeyedWorktreeLocation() {
-  const { projectId } = worktreeLocationRoute.useParams();
-  return <WorktreeLocation key={projectId} />;
-}
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeId",
-  component: KeyedWorktreeDetail,
+  component: WorktreeDetail,
+  remountDeps: ({ params }) => params,
 });
 
 const scriptConsoleRoute = createRoute({

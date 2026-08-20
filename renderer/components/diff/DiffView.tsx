@@ -16,6 +16,8 @@ import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { fileKey } from "./patchFiles";
 import { fileTargets, useFileScrollSpy } from "./useFileScrollSpy";
+import { CenteredMessage } from "@/components/ui/centered-message";
+import { readStored, writeStored } from "@/lib/localStorage";
 
 const DIFF_THEME = {
   theme: { dark: "pierre-dark", light: "pierre-light" } as const,
@@ -110,12 +112,8 @@ function jumpToFile(
 // pane width decides. Storing a default up-front would freeze whichever
 // width the diff happened to be opened at first.
 function readStoredIndexPref(): boolean | null {
-  try {
-    const stored = window.localStorage.getItem(INDEX_KEY);
-    return stored === null ? null : stored !== "0";
-  } catch {
-    return null;
-  }
+  const stored = readStored(INDEX_KEY);
+  return stored === null ? null : stored !== "0";
 }
 
 export function DiffView({
@@ -183,12 +181,7 @@ export function DiffView({
     // The stored value is computed before the try: a conditional inside
     // one makes React Compiler bail on this whole component, and without
     // its memo cache the patch is re-parsed on every render.
-    const stored = next ? "1" : "0";
-    try {
-      window.localStorage.setItem(INDEX_KEY, stored);
-    } catch {
-      // localStorage may be unavailable; not fatal.
-    }
+    writeStored(INDEX_KEY, next ? "1" : "0");
   };
 
   const setCollapsed = (key: string, collapsed: boolean) =>
@@ -287,18 +280,18 @@ export function DiffView({
           className="min-h-0 min-w-0 flex-1 overflow-auto bg-background"
         >
           {isLoading ? (
-            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            <CenteredMessage>
               <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
               Computing diff…
-            </div>
+            </CenteredMessage>
           ) : error ? (
-            <div className="flex h-full items-center justify-center px-6 text-sm text-muted-foreground">
+            <CenteredMessage className="px-6">
               Couldn't compute diff.
-            </div>
+            </CenteredMessage>
           ) : allFiles.length === 0 ? (
-            <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+            <CenteredMessage className="px-6 text-center">
               {emptyMessage}
-            </div>
+            </CenteredMessage>
           ) : (
             <div
               data-slot="diff-view"

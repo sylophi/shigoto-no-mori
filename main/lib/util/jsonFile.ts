@@ -1,5 +1,6 @@
 // Atomic JSON read/write helpers used by globalConfig.ts and shigomori.ts.
 // Both files keep their own caches; only the disk IO is shared here.
+import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { z } from "zod";
@@ -95,9 +96,34 @@ export function tempPathFor(filePath: string): string {
 }
 
 // selfWrite: false is for control-plane files the state watcher ignores
-// anyway (the updater bridge) -- claiming a self-write there would
-// blind the watcher to genuine external state writes for the echo
-// window around every updater transition.
+// anyway (the updater bridge, the running-scripts record) -- claiming a
+// self-write there would blind the watcher to genuine external state
+// writes for the echo window around every updater transition.
+//
+// The synchronous twin, for writers that can't await (sync readers, or a
+// teardown path). Same sequence as the async version, so the tmp-cleanup
+// and self-write rules exist once.
+export function atomicWriteJsonSync(
+  filePath: string,
+  value: unknown,
+  { selfWrite = true }: { selfWrite?: boolean } = {},
+): void {
+  mkdirSync(dirname(filePath), { recursive: true });
+  const temp = tempPathFor(filePath);
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  try {
+    renameSync(temp, filePath);
+  } catch (error) {
+    try {
+      unlinkSync(temp);
+    } catch {
+      // Best effort; the stray tmp file is harmless.
+    }
+    throw error;
+  }
+  if (selfWrite) noteSelfWrite();
+}
+
 export async function atomicWriteJson(
   filePath: string,
   value: unknown,

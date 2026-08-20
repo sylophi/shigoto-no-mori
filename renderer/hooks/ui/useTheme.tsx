@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import type { Theme } from "@shared/schemas";
+import { readStored, writeStored } from "@/lib/localStorage";
 import { useGlobalConfig } from "../config/useGlobalConfig";
 
 interface ThemeState {
@@ -26,7 +27,7 @@ function getSystemTheme(): "light" | "dark" {
 
 function readBootHint(): Theme {
   if (typeof window === "undefined") return "system";
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+  const stored = readStored(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
   }
@@ -81,11 +82,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   // without waiting for globalConfig to load.
   useEffect(() => {
     if (isLoading) return;
-    try {
-      window.localStorage.setItem(THEME_STORAGE_KEY, saved);
-    } catch {
-      // localStorage may be unavailable; not fatal.
-    }
+    writeStored(THEME_STORAGE_KEY, saved);
   }, [isLoading, saved]);
 
   return (

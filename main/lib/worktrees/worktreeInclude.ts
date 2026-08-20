@@ -6,7 +6,7 @@
 // backs the Configure view's read.
 
 import { join } from "node:path";
-import { makeIgnoreMatcher } from "@shared/gitPaths";
+import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
 import { pathExists } from "../util/paths";
 import type { WorktreeIncludeStatus } from "@shared/schemas";
 import {
@@ -32,11 +32,7 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
     listIgnoredPaths(projectPath),
   ]);
   const isIgnored = makeIgnoreMatcher(ignored);
-  return candidates.filter((c) => isIgnored(stripTrailingSlash(c)));
-}
-
-function stripTrailingSlash(p: string): string {
-  return p.endsWith("/") ? p.slice(0, -1) : p;
+  return candidates.filter((c) => isIgnored(normalizeRelPath(c)));
 }
 
 // Pure read for the Configure view. Never throws: a broken file or git

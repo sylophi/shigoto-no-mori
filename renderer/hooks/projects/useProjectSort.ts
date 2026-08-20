@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { ProjectSortMode } from "@shared/schemas";
+import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { queryKeys } from "@/lib/queryKeys";
 
 export function useProjectSort() {
@@ -11,27 +12,10 @@ export function useProjectSort() {
   });
 }
 
-interface SortMutationContext {
-  previous?: ProjectSortMode;
-}
-
 export function useSetProjectSort() {
-  const queryClient = useQueryClient();
-  return useMutation<void, Error, ProjectSortMode, SortMutationContext>({
-    mutationFn: (mode) => window.api.projects.setSort(mode),
-    onMutate: async (mode) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.projectsSort() });
-      const previous = queryClient.getQueryData<ProjectSortMode>(
-        queryKeys.projectsSort(),
-      );
-      queryClient.setQueryData(queryKeys.projectsSort(), mode);
-      return { previous };
-    },
-    onError: (_err, _mode, ctx) => {
-      if (ctx?.previous !== undefined) {
-        queryClient.setQueryData(queryKeys.projectsSort(), ctx.previous);
-      }
-    },
-    meta: { errorTitle: "Couldn't save project sort preference" },
-  });
+  return useOptimisticPreference<ProjectSortMode>(
+    queryKeys.projectsSort(),
+    (mode) => window.api.projects.setSort(mode),
+    "Couldn't save project sort preference",
+  );
 }

@@ -14,7 +14,6 @@ interface TidyRowProps {
   status: RowStatus;
   disabled: boolean;
   onToggle: () => void;
-  isLast: boolean;
   // The list spans every project, so a bare directory name isn't an
   // identity: two repos can both hold a "misty-otter". Off only inside a
   // project group, where the heading above already says it.
@@ -30,7 +29,6 @@ export function TidyRow({
   status,
   disabled,
   onToggle,
-  isLast,
   showProject,
 }: TidyRowProps) {
   const {
@@ -61,7 +59,6 @@ export function TidyRow({
     <label
       className={cn(
         "group flex items-start gap-3 px-3 py-3 text-sm",
-        !isLast && "border-b border-border",
         disabled && "opacity-70",
         !selectable && "opacity-60",
         interactive && "cursor-pointer transition-colors hover:bg-accent/30",

@@ -18,5 +18,3 @@ export const runtimeContract = {
   relaunch: invoke("runtime:relaunch", z.void(), z.void()),
   nukeProgress: broadcast("runtime:nukeProgress", NukeProgressSchema),
 } as const;
-
-export type RuntimeContract = typeof runtimeContract;

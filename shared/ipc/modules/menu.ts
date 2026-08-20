@@ -9,5 +9,3 @@ export const menuContract = {
     z.void(),
   ),
 } as const;
-
-export type MenuContract = typeof menuContract;

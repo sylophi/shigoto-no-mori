@@ -17,7 +17,8 @@
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
  *    --primary, --secondary, --muted, --accent, --destructive, --input,
- *    --ring, --radius, and the --color-{emerald,rose,amber,sky}-* vars
+ *    --ring, --radius, and the --color-{emerald,rose,amber,sky,violet,
+ *    indigo}-* vars
  *    Tailwind emits for raw palette utilities. This file also defines
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
@@ -28,7 +29,7 @@
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
- *      chip                      ui/chip-button.tsx, configure/CarryOverRow.tsx
+ *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
  *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
  *      modal-shell               ui/modal-shell.tsx
@@ -41,8 +42,9 @@
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), the `doubutsu-only` class (show-only-in-
- *    doubutsu markup), li[data-row-idx] (configure/PickerRow.tsx).
+ *    sidebar/Sidebar.tsx), the `doubutsu-only` / `v1-only` classes
+ *    (per-theme markup shipped side by side), li[data-row-idx]
+ *    (configure/PickerRow.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
@@ -166,6 +168,11 @@
   --color-amber-600: oklch(0.58 0.12 68);
   --color-amber-700: oklch(0.5 0.1 62);
   --color-sky-500: oklch(0.6 0.11 235);
+  /* Violet is the merged-PR purple (a GitHub convention worth keeping
+     legible) and indigo the pull-and-push action; both calm toward the
+     palette the way sky does rather than sitting at stock saturation. */
+  --color-violet-500: oklch(0.58 0.13 300);
+  --color-indigo-500: oklch(0.56 0.12 268);
 
   /* @pierre/diffs theme vars -- the diff viewer lives in shadow DOM but
      CSS custom props cascade in. Wiring these to the doubutsu palette
@@ -232,6 +239,8 @@
   --color-rose-500: oklch(0.72 0.15 32);
   --color-amber-500: oklch(0.78 0.13 80);
   --color-sky-500: oklch(0.72 0.12 235);
+  --color-violet-500: oklch(0.74 0.13 300);
+  --color-indigo-500: oklch(0.72 0.12 268);
 
   --diffs-bg: var(--background);
   --diffs-fg: var(--foreground);
@@ -286,7 +295,11 @@
    and clearly different from canvas, so outline / secondary read as
    different button TYPES. (Unlayered, so it also outranks the
    variant's hover:bg-muted -- the stripe overlay is the hover signal.) */
-.doubutsu [data-slot="button"][data-variant="outline"] {
+.doubutsu
+  [data-slot="button"]:is(
+    [data-variant="outline"],
+    [data-variant="outline-destructive"]
+  ) {
   background-color: var(--doubutsu-button-outline);
 }
 
@@ -615,6 +628,14 @@
 }
 .doubutsu .doubutsu-only {
   display: block;
+}
+
+/* The mirror: `v1-only` markup keeps its natural display in v1 and
+   drops out under doubutsu. Together the two let a component ship both
+   theme's markup side by side rather than branching on the theme in
+   JS, which theme:check can't see. */
+.doubutsu .v1-only {
+  display: none;
 }
 
 /* AC signature: diagonal stripes that slide vertically while you hover.

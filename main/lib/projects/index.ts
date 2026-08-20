@@ -4,6 +4,10 @@ import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
 import { isSameOrInside } from "@shared/worktreeLayout";
 import { PROJECTS_KEY, registryStore } from "../config/store";
+import {
+  findWorktreeIdentityOrThrow,
+  type WorktreeIdentity,
+} from "../git/worktrees";
 import { shigomoriRoot, toAbsolute } from "../util/paths";
 import { usageFor } from "./usage";
 
@@ -46,4 +50,19 @@ export function findProjectOrThrow(projectId: string): Project {
   const project = loadProjects().find((p) => p.id === projectId);
   if (!project) throw unknownProjectError(projectId);
   return project;
+}
+
+// The preamble every worktree-scoped IPC handler opens with, so a change
+// to how a worktree is resolved lands in one place.
+export async function findProjectAndWorktreeOrThrow(
+  projectId: string,
+  worktreeId: string,
+): Promise<{ project: Project; worktree: WorktreeIdentity }> {
+  const project = findProjectOrThrow(projectId);
+  const worktree = await findWorktreeIdentityOrThrow(
+    project.id,
+    project.path,
+    worktreeId,
+  );
+  return { project, worktree };
 }

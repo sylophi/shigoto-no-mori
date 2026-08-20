@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "@tanstack/react-router";
 import {
   DndContext,
   DragOverlay,
@@ -13,7 +12,6 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   useCollapsedProjects,
   useToggleCollapsedProject,
@@ -29,17 +27,14 @@ import { buildSidebarRows } from "./buildSidebarRows";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { ProjectDragPreview } from "./ProjectDragPreview";
-import {
-  ROW_SIZE_HINTS,
-  type InboxShelf,
-  type SidebarViewModel,
-} from "./sidebarRow";
+import type { InboxShelf, SidebarViewModel } from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { TidyButton } from "./TidyButton";
 import { sortProjects } from "./sortProjects";
-import { VirtualRow } from "./VirtualRow";
+import { SidebarList } from "./SidebarList";
+import { withToggled } from "@/lib/toggleSet";
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
 export function Sidebar() {
@@ -65,10 +60,6 @@ export function Sidebar() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
-  // Tracks the project whose region the cursor is currently over (header
-  // row OR one of its child rows). Lets the ProjectRow keep its action
-  // buttons visible while the cursor sits on a worktree below it.
-  const [hoveredProjectId, setHoveredProjectId] = useState<string | null>(null);
 
   const toggleExpanded = (projectId: string) => {
     toggleCollapsed.mutate(projectId);
@@ -124,39 +115,6 @@ export function Sidebar() {
   }, [failedCount]);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => viewportRef.current,
-    estimateSize: (index) => ROW_SIZE_HINTS[rows[index]?.kind ?? "worktree"],
-    overscan: 12,
-    getItemKey: (index) => rows[index]?.key ?? index,
-  });
-
-  // Reveal the selection when navigation comes from outside the sidebar
-  // (launcher jump, empty-state redirect) by scrolling the virtualized
-  // list to whichever row the active view says stands for it. The row can
-  // lag the route (worktree queries still loading), so this retries every
-  // render until it exists; the ref stops repeat scrolls afterwards so
-  // the user can still scroll away freely.
-  const { pathname } = useLocation();
-  const selectedMatch = pathname.match(
-    /^\/projects\/([^/]+)\/worktrees\/([^/]+)$/,
-  );
-  const lastRevealedRef = useRef<string | null>(null);
-  useEffect(() => {
-    const [, projectId, worktreeId] = selectedMatch ?? [];
-    if (!projectId || !worktreeId) {
-      lastRevealedRef.current = null;
-      return;
-    }
-    if (lastRevealedRef.current === worktreeId) return;
-    const key = view.revealKey(projectId, worktreeId);
-    if (!key) return;
-    const index = rows.findIndex((r) => r.key === key);
-    if (index < 0) return;
-    lastRevealedRef.current = worktreeId;
-    virtualizer.scrollToIndex(index, { align: "auto" });
-  });
 
   // distance: 5 lets a quick click still toggle expand; drag activates
   // only after the pointer moves 5px while held.
@@ -200,30 +158,17 @@ export function Sidebar() {
       : view.emptyMessage;
 
   const list = (
-    <div
-      className="relative"
-      style={{ height: `${virtualizer.getTotalSize()}px` }}
-    >
-      {virtualizer.getVirtualItems().map((vi) => {
-        const row = rows[vi.index];
-        if (!row) return null;
-        return (
-          <VirtualRow
-            key={row.key}
-            row={row}
-            index={vi.index}
-            start={vi.start}
-            measureRef={virtualizer.measureElement}
-            hoveredProjectId={hoveredProjectId}
-            setHoveredProjectId={setHoveredProjectId}
-            onToggle={toggleExpanded}
-            onToggleShelved={toggleShelved}
-            onToggleShelf={toggleShelf}
-            arrangeMode={arrangeMode}
-          />
-        );
-      })}
-    </div>
+    <SidebarList
+      rows={rows}
+      revealKey={view.revealKey}
+      viewportRef={viewportRef}
+      handlers={{
+        onToggle: toggleExpanded,
+        onToggleShelved: toggleShelved,
+        onToggleShelf: toggleShelf,
+        arrangeMode,
+      }}
+    />
   );
 
   return (
@@ -294,16 +239,6 @@ export function Sidebar() {
       />
     </aside>
   );
-}
-
-// Set updater for a value that's either in or out. Both of the sidebar's
-// fold states are exactly this.
-function withToggled<T>(value: T) {
-  return (prev: Set<T>) => {
-    const next = new Set(prev);
-    if (!next.delete(value)) next.add(value);
-    return next;
-  };
 }
 
 function SidebarEmptyState({ message }: { message: string | null }) {

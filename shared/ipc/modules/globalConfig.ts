@@ -9,5 +9,3 @@ export const globalConfigContract = {
   read: invoke("globalConfig:read", z.void(), StoredGlobalConfigSchema),
   write: invoke("globalConfig:write", WriteGlobalConfigPayloadSchema, z.void()),
 } as const;
-
-export type GlobalConfigContract = typeof globalConfigContract;

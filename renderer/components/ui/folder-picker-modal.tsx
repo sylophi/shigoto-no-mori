@@ -14,6 +14,7 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { notifyError } from "@/lib/toast";
+import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -175,7 +176,7 @@ export function FolderPickerModal({
               value={`${BROWSE_VALUE_PREFIX}up`}
               keywords={[".."]}
               onSelect={browseUp}
-              className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+              className={ITEM_CLASS}
             >
               <CornerLeftUp className="size-4 text-muted-foreground/80" />
               <span className="font-mono text-muted-foreground">..</span>
@@ -190,7 +191,7 @@ export function FolderPickerModal({
                 value={`${BROWSE_VALUE_PREFIX}${entryPath}`}
                 keywords={[entry.name]}
                 onSelect={() => browseTo(entry.name)}
-                className="flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm aria-selected:bg-accent aria-selected:text-accent-foreground"
+                className={ITEM_CLASS}
               >
                 <Folder className="size-4 text-muted-foreground/80" />
                 <span className="min-w-0 flex-1 truncate font-mono">

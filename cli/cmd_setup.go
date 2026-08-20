@@ -12,17 +12,11 @@ package main
 // matching release for them, so provisioning would leak a port.
 
 func cmdSetup(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}},
-	})
+	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
-	target, err := resolveWorktree(ctx, ref, parsed.strings["project"], true)
+	target, err := resolveWorktreeArgs(ctx, parsed, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

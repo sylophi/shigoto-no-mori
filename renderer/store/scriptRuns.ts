@@ -16,6 +16,8 @@ import { toast } from "@/lib/toast";
 import { assertNever } from "@/lib/utils";
 import type { RendererApi } from "@/window";
 import { scriptKey, type ScriptKey, type ScriptSlot } from "./scriptSlot";
+import { errorMessageOf } from "@shared/errors";
+import { KeyedSubscribers } from "./keyedSubscribers";
 
 // Re-export the slot codec so existing importers from "@/store/scriptRuns"
 // keep working without churning every consumer.
@@ -119,8 +121,8 @@ class ScriptRunsStore {
   // in start() once we know the runId. "started" events are dispatched
   // directly by handleEvent, so they never reach this buffer.
   private pendingByRunId = new Map<string, PostStartEvent[]>();
-  private perKeySubs = new Map<ScriptKey, Set<() => void>>();
-  private worktreeSubs = new Map<string, Set<() => void>>();
+  private perKeySubs = new KeyedSubscribers<ScriptKey>();
+  private worktreeSubs = new KeyedSubscribers<string>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   private warn: WarnFn;
@@ -138,16 +140,6 @@ class ScriptRunsStore {
         this.handleRemovedWorktree(info),
       ),
     );
-  }
-
-  dispose(): void {
-    for (const unsubscribe of this.unsubscribers.splice(0)) unsubscribe();
-    this.states.clear();
-    this.meta.clear();
-    this.runIdToKey.clear();
-    this.pendingByRunId.clear();
-    this.perKeySubs.clear();
-    this.worktreeSubs.clear();
   }
 
   async run(input: StartInput): Promise<void> {
@@ -168,7 +160,7 @@ class ScriptRunsStore {
       const result = await input.runner();
       runId = result.runId;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = errorMessageOf(err);
       this.setStateWithActivity(input.key, (s) => ({
         ...appendChunk(s, `\r\n\x1b[31m${message}\x1b[0m\r\n`),
         status: "errored",
@@ -263,33 +255,11 @@ class ScriptRunsStore {
   }
 
   subscribe(key: ScriptKey, cb: () => void): () => void {
-    let subs = this.perKeySubs.get(key);
-    if (!subs) {
-      subs = new Set();
-      this.perKeySubs.set(key, subs);
-    }
-    subs.add(cb);
-    return () => {
-      const bucket = this.perKeySubs.get(key);
-      if (!bucket) return;
-      bucket.delete(cb);
-      if (bucket.size === 0) this.perKeySubs.delete(key);
-    };
+    return this.perKeySubs.subscribe(key, cb);
   }
 
   subscribeWorktree(worktreeId: string, cb: () => void): () => void {
-    let subs = this.worktreeSubs.get(worktreeId);
-    if (!subs) {
-      subs = new Set();
-      this.worktreeSubs.set(worktreeId, subs);
-    }
-    subs.add(cb);
-    return () => {
-      const bucket = this.worktreeSubs.get(worktreeId);
-      if (!bucket) return;
-      bucket.delete(cb);
-      if (bucket.size === 0) this.worktreeSubs.delete(worktreeId);
-    };
+    return this.worktreeSubs.subscribe(worktreeId, cb);
   }
 
   // Highest-priority active slot for the worktree, or null if nothing is
@@ -321,15 +291,11 @@ class ScriptRunsStore {
   }
 
   private notify(key: ScriptKey): void {
-    const subs = this.perKeySubs.get(key);
-    if (!subs) return;
-    for (const cb of subs) cb();
+    this.perKeySubs.notify(key);
   }
 
   private notifyWorktree(worktreeId: string): void {
-    const subs = this.worktreeSubs.get(worktreeId);
-    if (!subs) return;
-    for (const cb of subs) cb();
+    this.worktreeSubs.notify(worktreeId);
   }
 
   private setStateWithActivity(

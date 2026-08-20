@@ -67,8 +67,6 @@ export const githubCliContract = {
   ),
   projectPullRequestsRefreshed: broadcast(
     "githubCli:projectPullRequestsRefreshed",
-    z.object({ projectId: z.string() }),
+    ProjectScopedPayloadSchema,
   ),
 } as const;
-
-export type GithubCliContract = typeof githubCliContract;
