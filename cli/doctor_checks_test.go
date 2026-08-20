@@ -8,9 +8,12 @@ package main
 // the suite describe the machine instead of the code.
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -373,10 +376,8 @@ func TestCheckProjectDefaultBranch(t *testing.T) {
 	if err := os.MkdirAll(empty, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command("git", "init", "-q", "-b", "main")
-	cmd.Dir = empty
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git init: %v\n%s", err, out)
+	if _, err := runGit(empty, "init", "-q", "-b", "main"); err != nil {
+		t.Fatalf("git init: %v", err)
 	}
 	report = &doctorReport{}
 	checkProjectDefaultBranch(report, project{ID: "E1", Name: "empty", Path: empty}, nil)
@@ -619,5 +620,153 @@ func TestApplyRepairsReportsFailuresAndKeepsGoing(t *testing.T) {
 	}
 	if len(applied) != 1 || applied[0] != "second" {
 		t.Fatalf("applied %v, want just the one that worked", applied)
+	}
+}
+
+// --- what --fix is allowed to touch ---
+
+// iconCache/ takes index.json.lock under the same advisory protocol as
+// the rest of the root, so a crashed icon write leaves exactly the kind
+// of lock this check exists to find. updates/ holds staged downloads
+// and never a lock, so a file that merely ends in .lock there is not
+// ours to delete.
+func TestFindStaleLocksScansIconCacheButNotUpdates(t *testing.T) {
+	root := sandboxRoot(t)
+	old := time.Now().Add(-time.Hour)
+	stale := func(path string) string {
+		writeFileT(t, path, "1")
+		if err := os.Chtimes(path, old, old); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	iconLock := stale(filepath.Join(root, "iconCache", "index.json.lock"))
+	updatesLock := stale(filepath.Join(root, "updates", "something.lock"))
+
+	found := findStaleLocks(root)
+	if len(found) != 1 || found[0] != iconLock {
+		t.Fatalf("found %v, want just %s", found, iconLock)
+	}
+	if _, err := os.Stat(updatesLock); err != nil {
+		t.Fatalf("the updates/ file should have been left alone: %v", err)
+	}
+}
+
+// The file header's promise: a plain `doctor` run reports, and changes
+// nothing. The one sanctioned exception is the state.json -> registry.json
+// migration, which is why this root is seeded already split.
+func TestDoctorWithoutFixWritesNothing(t *testing.T) {
+	root := sandboxRoot(t)
+	repo := seedRepo(t, root, "alpha")
+	proj := project{ID: "A1", Name: "alpha", Path: repo}
+	writeFileT(t, registryPath(),
+		`{"projects":[{"id":"A1","name":"alpha","path":"`+repo+`"}],"shelvedWorktrees":{"deadbeef1234":true}}`)
+	writeFileT(t, configJSONPath(), `{"portPool":false}`)
+	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
+	// Faults for the checks to have something to say about.
+	writeFileT(t, filepath.Join(root, "state.json.lock"), "1")
+	writeFileT(t, stagingLockPath(), "999999")
+	invalidateAllWorktreeIdentities()
+
+	before := snapshotTree(t, root)
+	report := runDoctorChecks([]project{proj})
+	if len(report.findings) == 0 {
+		t.Fatal("nothing was checked, so the assertion below proves nothing")
+	}
+	if _, _, failed := report.counts(); failed != 0 {
+		t.Fatalf("this fixture should only warn, got %d failures: %+v", failed, report.findings)
+	}
+	if after := snapshotTree(t, root); !reflect.DeepEqual(before, after) {
+		t.Fatalf("doctor wrote to the state root:\nbefore %v\nafter  %v", before, after)
+	}
+}
+
+// path -> "<size>:<content hash>" for every file under dir, so a
+// rewrite with identical length is still caught.
+func snapshotTree(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	seen := map[string]string{}
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		seen[path] = fmt.Sprintf("%d:%x", len(data), sha256.Sum256(data))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seen
+}
+
+// The two callers of removeProjectRegistration disagree about a missing
+// entry on purpose: `projects remove` is answering a name the user
+// typed, doctor's repair is racing the app.
+func TestRemoveProjectRegistrationMissingEntry(t *testing.T) {
+	sandboxRoot(t)
+	writeFileT(t, registryPath(), `{"projects":[{"id":"KEEP","name":"keep","path":"/tmp/keep"}]}`)
+
+	if err := removeProjectRegistration("ABSENT", false); err == nil {
+		t.Fatal("`projects remove` must reject an id that isn't registered")
+	}
+	if err := removeProjectRegistration("ABSENT", true); err != nil {
+		t.Fatalf("doctor's repair must tolerate an entry that's already gone: %v", err)
+	}
+	remaining, err := loadProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 1 || remaining[0].ID != "KEEP" {
+		t.Fatalf("the surviving entry was disturbed: %+v", remaining)
+	}
+}
+
+// Unregistering drops sm's own state for a project. The repo it points
+// at belongs to the user and must survive, whatever else happens.
+func TestUnregisteringNeverTouchesTheRepo(t *testing.T) {
+	root := sandboxRoot(t)
+	repo := seedRepo(t, root, "alpha")
+	writeFileT(t, filepath.Join(repo, "keep-me.txt"), "user data")
+	writeFileT(t, registryPath(),
+		`{"projects":[{"id":"A1","name":"alpha","path":"`+repo+`"}]}`)
+	writeFileT(t, projectConfigJSONPath("A1"), `{"defaultBranch":"main"}`)
+
+	if err := removeProjectRegistration("A1", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeProjectState("A1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(projectDataDir("A1")); !os.IsNotExist(err) {
+		t.Fatal("the project's state dir should be gone")
+	}
+	if _, err := os.Stat(filepath.Join(repo, "keep-me.txt")); err != nil {
+		t.Fatalf("the repo must be left alone: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, ".git")); err != nil {
+		t.Fatalf("the repo must still be a repo: %v", err)
+	}
+}
+
+// A healthy root offers nothing to repair, so --fix is a no-op on it.
+func TestFixOnAHealthyRootRepairsNothing(t *testing.T) {
+	root := sandboxRoot(t)
+	repo := seedRepo(t, root, "alpha")
+	proj := project{ID: "A1", Name: "alpha", Path: repo}
+	writeFileT(t, registryPath(),
+		`{"projects":[{"id":"A1","name":"alpha","path":"`+repo+`"}]}`)
+	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
+	invalidateAllWorktreeIdentities()
+
+	report := runDoctorChecks([]project{proj})
+	if n := repairableCount(report); n != 0 {
+		t.Fatalf("%d repairs offered on a healthy root: %+v", n, report.findings)
+	}
+	if applied := applyRepairs(report, true); len(applied) != 0 {
+		t.Fatalf("--fix did something on a healthy root: %v", applied)
 	}
 }
