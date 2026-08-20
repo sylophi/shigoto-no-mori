@@ -22,5 +22,3 @@ export const hygieneContract = {
     WorktreeDiskUsageSchema,
   ),
 } as const;
-
-export type HygieneContract = typeof hygieneContract;

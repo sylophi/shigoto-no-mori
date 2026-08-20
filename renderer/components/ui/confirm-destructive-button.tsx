@@ -25,13 +25,10 @@ export function ConfirmDestructiveButton({
     <Button
       type="button"
       size="sm"
-      variant="outline"
+      variant="outline-destructive"
       disabled={pending}
+      aria-pressed={armed}
       onClick={onClick}
-      className={cn(
-        "text-destructive hover:bg-destructive/10 hover:text-destructive",
-        armed && "bg-destructive/10",
-      )}
     >
       {renderContent({ armed, pending, pendingLabel, idleLabel })}
     </Button>

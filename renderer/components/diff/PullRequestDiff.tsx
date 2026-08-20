@@ -5,6 +5,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
+import { DiffStats } from "@/components/ui/diff-stats";
 
 const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/pr-diff");
 
@@ -95,10 +96,7 @@ export function PullRequestDiff() {
           {pr.changedFiles} {fileNoun} changed into{" "}
           <span className="font-mono text-foreground/80">{pr.baseRefName}</span>
           {", "}
-          <span className="font-mono text-emerald-500">
-            +{pr.additions}
-          </span>{" "}
-          <span className="font-mono text-rose-500">−{pr.deletions}</span>
+          <DiffStats additions={pr.additions} deletions={pr.deletions} />
         </>
       }
       emptyMessage="No file changes in this PR."

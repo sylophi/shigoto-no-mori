@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import { useGlobalConfig } from "../config/useGlobalConfig";
+import { readStored, writeStored } from "@/lib/localStorage";
 
 interface DoubutsuState {
   // Persisted value from config.json: what Settings considers "saved".
@@ -19,7 +20,7 @@ function readBootHint(): boolean {
   // Default is ON: only an explicit "false" (a saved opt-out) disables
   // the first paint's doubutsu look.
   if (typeof window === "undefined") return true;
-  return window.localStorage.getItem(DOUBUTSU_STORAGE_KEY) !== "false";
+  return readStored(DOUBUTSU_STORAGE_KEY) !== "false";
 }
 
 export function DoubutsuProvider({ children }: { children: ReactNode }) {
@@ -50,14 +51,7 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
   // paint without waiting for globalConfig to load.
   useEffect(() => {
     if (isLoading) return;
-    try {
-      window.localStorage.setItem(
-        DOUBUTSU_STORAGE_KEY,
-        saved ? "true" : "false",
-      );
-    } catch {
-      // localStorage may be unavailable; not fatal.
-    }
+    writeStored(DOUBUTSU_STORAGE_KEY, saved ? "true" : "false");
   }, [isLoading, saved]);
 
   return (

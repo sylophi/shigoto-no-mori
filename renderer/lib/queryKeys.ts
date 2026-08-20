@@ -3,6 +3,8 @@
 // invalidations can be audited in one place. Keys are camelCase tuples;
 // shared prefixes (e.g. "githubCli") let one invalidateQueries call
 // knock out everything in that domain.
+const PR_BRANCH_SCOPE = "branch";
+
 export const queryKeys = {
   globalConfig: () => ["globalConfig"] as const,
 
@@ -80,7 +82,7 @@ export const queryKeys = {
   projectPullRequests: (projectId: string) =>
     ["githubCli", "pullRequests", projectId, "project"] as const,
   worktreePullRequest: (projectId: string, branch: string) =>
-    ["githubCli", "pullRequests", projectId, "branch", branch] as const,
+    ["githubCli", "pullRequests", projectId, PR_BRANCH_SCOPE, branch] as const,
   pullRequestCandidates: (projectId: string) =>
     ["githubCli", "pullRequests", projectId, "candidates"] as const,
 
@@ -97,3 +99,12 @@ export const queryKeys = {
   runtimeInfo: () => ["runtime", "info"] as const,
   updaterState: () => ["updater", "state"] as const,
 } as const;
+
+// Matchers live beside the builders they mirror and share their segment
+// constants: a predicate that indexes a key by hand silently stops
+// matching the moment a segment moves, and nothing fails loudly.
+export function isWorktreePullRequestKey(query: {
+  queryKey: readonly unknown[];
+}): boolean {
+  return query.queryKey[3] === PR_BRANCH_SCOPE;
+}

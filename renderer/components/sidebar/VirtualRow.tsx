@@ -3,6 +3,15 @@ import { cn } from "@/lib/utils";
 import { RowContent } from "./RowContent";
 import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
 
+// What a row needs from the sidebar but this wrapper only forwards,
+// grouped so VirtualRow's own props stay about positioning and hover.
+export interface RowHandlers {
+  onToggle: (projectId: string) => void;
+  onToggleShelved: (projectId: string) => void;
+  onToggleShelf: (shelf: InboxShelf) => void;
+  arrangeMode: boolean;
+}
+
 interface VirtualRowProps {
   row: SidebarRow;
   index: number;
@@ -10,10 +19,7 @@ interface VirtualRowProps {
   measureRef: (node: Element | null) => void;
   hoveredProjectId: string | null;
   setHoveredProjectId: Dispatch<SetStateAction<string | null>>;
-  onToggle: (projectId: string) => void;
-  onToggleShelved: (projectId: string) => void;
-  onToggleShelf: (shelf: InboxShelf) => void;
-  arrangeMode: boolean;
+  handlers: RowHandlers;
 }
 
 export function VirtualRow({
@@ -23,10 +29,7 @@ export function VirtualRow({
   measureRef,
   hoveredProjectId,
   setHoveredProjectId,
-  onToggle,
-  onToggleShelved,
-  onToggleShelf,
-  arrangeMode,
+  handlers,
 }: VirtualRowProps) {
   const rowProjectId = projectIdForRow(row);
   return (
@@ -42,10 +45,7 @@ export function VirtualRow({
     >
       <RowContent
         row={row}
-        onToggle={onToggle}
-        onToggleShelved={onToggleShelved}
-        onToggleShelf={onToggleShelf}
-        arrangeMode={arrangeMode}
+        {...handlers}
         isHovered={hoveredProjectId === rowProjectId}
       />
     </div>

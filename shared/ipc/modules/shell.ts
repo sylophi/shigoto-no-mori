@@ -17,5 +17,3 @@ export const shellContract = {
     z.void(),
   ),
 } as const;
-
-export type ShellContract = typeof shellContract;

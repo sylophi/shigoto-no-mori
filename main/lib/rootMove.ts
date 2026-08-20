@@ -22,7 +22,12 @@ import {
   markDeleteInflight,
 } from "./scripts";
 import { tempPathFor, unlinkIfExists } from "./util/jsonFile";
-import { rootPointerPath, shigomoriRoot, toAbsolute } from "./util/paths";
+import {
+  isENOENT,
+  rootPointerPath,
+  shigomoriRoot,
+  toAbsolute,
+} from "./util/paths";
 
 export async function moveShigomoriRoot(
   parentDir: string,
@@ -67,7 +72,7 @@ export async function moveShigomoriRoot(
   // Clear an existing empty placeholder before the rename. A non-empty
   // directory is refused, never merged into.
   await rmdir(newRoot).catch((err) => {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+    if (!isENOENT(err)) {
       throw new Error(`${newRoot} already exists and is not empty.`);
     }
   });

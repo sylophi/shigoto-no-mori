@@ -15,12 +15,10 @@ export function BranchRow({
   projectId,
   name,
   worktree,
-  isLast,
 }: {
   projectId: string;
   name: string;
   worktree: Worktree | undefined;
-  isLast: boolean;
 }) {
   const navigate = useNavigate();
   const rename = useRenameAnyBranch();
@@ -63,12 +61,7 @@ export function BranchRow({
   };
 
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-3 px-3 py-2 text-sm",
-        !isLast && "border-b border-border",
-      )}
-    >
+    <div className={cn("group flex items-center gap-3 px-3 py-2 text-sm")}>
       {editing ? (
         <Input
           value={draft ?? ""}

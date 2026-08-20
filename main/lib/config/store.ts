@@ -11,23 +11,15 @@
 // sidebar collapse set. The registry is only rewritten when projects
 // or the shelf actually change, so the writes that fire on nearly
 // every click never touch it.
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
-import {
+  atomicWriteJsonSync,
   noteNewerSchema,
-  tempPathFor,
   withSchemaVersion,
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
-import { noteSelfWrite } from "../util/selfWrite";
 
 const STATE_FILE = "state.json";
 const REGISTRY_FILE = "registry.json";
@@ -90,21 +82,7 @@ function corruptMessage(path: string): string {
 // marker belongs to the file, not to the data. Every write goes
 // through here, so the file is stamped whatever the caller was doing.
 function writeAll(file: string, data: Record<string, unknown>): void {
-  const path = filePath(file);
-  mkdirSync(dirname(path), { recursive: true });
-  const tmp = tempPathFor(path);
-  writeFileSync(tmp, JSON.stringify(withSchemaVersion(data), null, 2), "utf8");
-  try {
-    renameSync(tmp, path);
-  } catch (error) {
-    try {
-      unlinkSync(tmp);
-    } catch {
-      // Best effort; the stray tmp file is harmless.
-    }
-    throw error;
-  }
-  noteSelfWrite();
+  atomicWriteJsonSync(filePath(file), withSchemaVersion(data));
 }
 
 function withStoreLock<T>(file: string, fn: () => T): T {

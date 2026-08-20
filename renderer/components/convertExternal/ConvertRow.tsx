@@ -15,7 +15,6 @@ interface ConvertRowProps {
   proposedPath: string;
   home: string | null;
   onToggle: () => void;
-  isLast: boolean;
 }
 
 export function ConvertRow({
@@ -26,7 +25,6 @@ export function ConvertRow({
   proposedPath,
   home,
   onToggle,
-  isLast,
 }: ConvertRowProps) {
   const detached = worktree.detached;
   const dirty = worktree.changedCount > 0;
@@ -37,7 +35,6 @@ export function ConvertRow({
     <label
       className={cn(
         "group flex items-start gap-3 px-3 py-3 text-sm",
-        !isLast && "border-b border-border",
         disabled && "opacity-70",
         interactive && "cursor-pointer transition-colors hover:bg-accent/30",
       )}

@@ -9,7 +9,6 @@ interface RelocateRowProps {
   destination: string;
   status: RowStatus;
   home: string | null;
-  isLast: boolean;
 }
 
 export function RelocateRow({
@@ -17,17 +16,11 @@ export function RelocateRow({
   destination,
   status,
   home,
-  isLast,
 }: RelocateRowProps) {
   const fromPath = tildify(worktree.path, home);
   const toPath = tildify(destination, home);
   return (
-    <div
-      className={cn(
-        "flex items-start gap-3 px-3 py-3 text-sm",
-        !isLast && "border-b border-border",
-      )}
-    >
+    <div className={cn("flex items-start gap-3 px-3 py-3 text-sm")}>
       <WorktreeMoveDetails
         branch={worktree.branch}
         detached={worktree.detached}

@@ -22,6 +22,19 @@ export interface ProjectHygiene {
   loading: boolean;
 }
 
+function combineHygiene(
+  results: readonly {
+    data: WorktreeHygiene[] | undefined;
+    isPending: boolean;
+  }[],
+): ProjectHygiene {
+  const byId = new Map<string, WorktreeHygiene>();
+  for (const result of results) {
+    for (const facts of result.data ?? []) byId.set(facts.worktreeId, facts);
+  }
+  return { byId, loading: results.some((result) => result.isPending) };
+}
+
 export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
   return useQueries({
     queries: projects.map((project) => ({
@@ -37,14 +50,10 @@ export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
       // folder that moved would otherwise raise one toast per project.
       meta: { silentError: true },
     })),
-    combine: (results): ProjectHygiene => {
-      const byId = new Map<string, WorktreeHygiene>();
-      for (const result of results) {
-        for (const facts of result.data ?? [])
-          byId.set(facts.worktreeId, facts);
-      }
-      return { byId, loading: results.some((result) => result.isPending) };
-    },
+    // Module scope, not inline: query-core compares combine by identity, so
+    // a fresh one each render rebuilds the Map and the result never keeps
+    // its identity.
+    combine: combineHygiene,
   });
 }
 

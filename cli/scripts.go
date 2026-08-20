@@ -12,9 +12,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,35 +65,30 @@ func resolveShell() (string, []string) {
 // tree. Nothing on either side adds one -- see initShigomoriRoot
 // (main/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
-	pairs := []string{
-		"SHIGOMORI_SCRIPT_NAME=" + in.scriptName,
-		"SHIGOMORI_WORKTREE_PATH=" + in.worktree.Path,
-		"SHIGOMORI_WORKTREE_NAME=" + in.worktree.Name,
-		"SHIGOMORI_WORKTREE_BRANCH=" + in.worktree.Branch,
-		"SHIGOMORI_WORKTREE_ID=" + in.worktree.ID,
-		"SHIGOMORI_PROJECT_PATH=" + in.proj.Path,
-		"SHIGOMORI_PROJECT_NAME=" + in.proj.Name,
-		"SHIGOMORI_PROJECT_BRANCH=" + in.projectBranch,
-		"SHIGOMORI_DEFAULT_BRANCH=" + in.defaultBranch,
-	}
-	keys := make([]string, len(pairs))
-	for i, pair := range pairs {
-		keys[i] = pair[:strings.IndexByte(pair, '=')+1]
+	contract := map[string]string{
+		"SHIGOMORI_SCRIPT_NAME":     in.scriptName,
+		"SHIGOMORI_WORKTREE_PATH":   in.worktree.Path,
+		"SHIGOMORI_WORKTREE_NAME":   in.worktree.Name,
+		"SHIGOMORI_WORKTREE_BRANCH": in.worktree.Branch,
+		"SHIGOMORI_WORKTREE_ID":     in.worktree.ID,
+		"SHIGOMORI_PROJECT_PATH":    in.proj.Path,
+		"SHIGOMORI_PROJECT_NAME":    in.proj.Name,
+		"SHIGOMORI_PROJECT_BRANCH":  in.projectBranch,
+		"SHIGOMORI_DEFAULT_BRANCH":  in.defaultBranch,
 	}
 	var env []string
 	for _, kv := range envWithoutCdFile() {
-		stale := false
-		for _, key := range keys {
-			if strings.HasPrefix(kv, key) {
-				stale = true
-				break
-			}
-		}
-		if !stale {
+		name, _, _ := strings.Cut(kv, "=")
+		if _, stale := contract[name]; !stale {
 			env = append(env, kv)
 		}
 	}
-	return append(env, pairs...)
+	// Sorted so a run's environment is reproducible, which the NDJSON
+	// event stream and any diffing of it rely on.
+	for _, name := range slices.Sorted(maps.Keys(contract)) {
+		env = append(env, name+"="+contract[name])
+	}
+	return env
 }
 
 func newRunID() string {
@@ -231,12 +228,20 @@ func portPoolConfigured(dir string) bool {
 	return ok
 }
 
-func willRunPortPool(worktreePath string) bool {
-	global := readGlobalConfigHints()
-	if global.PortPool == nil || !*global.PortPool {
+// The whole "does port-pool run here" rule, in one place: provision and
+// release must agree or a worktree keeps a port it never gives back.
+// Externals are excluded because no provision ever ran.
+func portPoolActiveFor(global globalConfig, id worktreeIdentity) bool {
+	if id.IsExternal || global.PortPool == nil || !*global.PortPool {
 		return false
 	}
-	return portPoolInstalled() && portPoolConfigured(worktreePath)
+	return portPoolInstalled() && portPoolConfigured(id.Path)
+}
+
+// Same rule against the tolerant read of the global config, for the
+// paths that only want to know whether anything will run.
+func willRunPortPool(id worktreeIdentity) bool {
+	return portPoolActiveFor(readGlobalConfigHints(), id)
 }
 
 func shellQuote(s string) string {

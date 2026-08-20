@@ -126,19 +126,39 @@ var envItems = []helpItem{
 }
 
 // One row per namespace: the items its subcommands resolve against,
-// the bare-page renderer, and the namespace-local alias fold (nil =
-// none). commandHelp derives both the bare page and per-subcommand
-// addressability from this, so a new namespace is a one-row change.
+// the pointer line the base help page renders, the blurb its own page
+// opens with, and the namespace-local alias fold (nil = none).
+// commandHelp, helpText and namespaceHelp all derive from this, so a
+// new namespace really is a one-row change.
 var helpNamespaces = []struct {
-	name  string
-	items []helpItem
-	page  func() string
-	canon func(string) string
+	name       string
+	desc       string
+	shortAlias string
+	blurb      string
+	items      []helpItem
+	canon      func(string) string
 }{
-	{"worktrees", worktreeItems, worktreesHelpText, nil},
-	{"projects", projectItems, projectsHelpText, canonicalProjectsSub},
-	{"config", configItems, configHelpText, nil},
-	{"shell", shellItems, shellHelpText, nil},
+	{"worktrees", "Worktree commands", "w or wt",
+		"The worktrees prefix is optional: " + binaryName + " rm == " + binaryName +
+			" wt rm. All commands accept -p <project>.",
+		worktreeItems, nil},
+	{"projects", "Project commands", "p",
+		"Manage registered projects. A project is addressed by name, or " +
+			"by its path when the name isn't unique.",
+		projectItems, canonicalProjectsSub},
+	{"config", "Global settings", "",
+		"Global settings, stored in config.json in the state root. Keys " +
+			"and current values: `" + binaryName + " config list`. Per-project " +
+			"settings live under `" + binaryName + " projects config`.",
+		configItems, nil},
+	{"shell", "Shell integration: cd without subshells", "",
+		"Shell integration makes cd and create move your current shell " +
+			"into the worktree instead of nesting a subshell. install " +
+			"hooks it into your shell config. The hook evals `" + binaryName +
+			" shell init <shell>`, whose wrapper function runs the real " +
+			"binary and cd's to the path it reports. Without the hook, " +
+			"those commands keep opening a subshell.",
+		shellItems, nil},
 }
 
 // The full catalog, used by per-command help matching. The base help
@@ -204,16 +224,11 @@ func helpText(full bool) string {
 
 	groups := helpGroups
 	if !full {
-		general := append(append([]helpItem{}, generalItems...),
-			helpItem{"worktrees <command>", "Worktree commands",
-				subcommandList(worktreeItems) + ". Run `" + binaryName + " worktrees` for details."},
-			helpItem{"projects <command>", "Project commands",
-				subcommandList(projectItems) + ". Run `" + binaryName + " projects` for details."},
-			helpItem{"config <command>", "Global settings",
-				subcommandList(configItems) + ". Run `" + binaryName + " config` for details."},
-			helpItem{"shell <command>", "Shell integration: cd without subshells",
-				subcommandList(shellItems) + ". Run `" + binaryName + " shell` for details."},
-		)
+		general := append([]helpItem{}, generalItems...)
+		for _, ns := range helpNamespaces {
+			general = append(general, helpItem{ns.name + " <command>", ns.desc,
+				subcommandList(ns.items) + ". Run `" + binaryName + " " + ns.name + "` for details."})
+		}
 		groups = []helpGroup{
 			{"Commands", general},
 			{"Flags", flagItems},
@@ -235,6 +250,15 @@ func helpText(full bool) string {
 
 // The namespace pages behind bare `sm worktrees` / `sm projects` /
 // `sm shell`. An empty shortAlias omits the tag.
+func namespaceHelp(name string) string {
+	for _, ns := range helpNamespaces {
+		if ns.name == name {
+			return namespaceHelpText(ns.name, ns.shortAlias, ns.blurb, ns.items)
+		}
+	}
+	return ""
+}
+
 func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string {
 	width := helpWidth()
 	var b strings.Builder
@@ -252,35 +276,6 @@ func namespaceHelpText(name, shortAlias, blurb string, items []helpItem) string 
 	col := inlineCol([]helpGroup{{"", items}})
 	b.WriteString(renderHelpSection("Commands", items, col, width))
 	return strings.TrimRight(b.String(), "\n")
-}
-
-func worktreesHelpText() string {
-	return namespaceHelpText("worktrees", "w or wt",
-		"The worktrees prefix is optional: "+binaryName+" rm == "+binaryName+
-			" wt rm. All commands accept -p <project>.", worktreeItems)
-}
-
-func projectsHelpText() string {
-	return namespaceHelpText("projects", "p",
-		"Manage registered projects. A project is addressed by name, or "+
-			"by its path when the name isn't unique.", projectItems)
-}
-
-func configHelpText() string {
-	return namespaceHelpText("config", "",
-		"Global settings, stored in config.json in the state root. Keys "+
-			"and current values: `"+binaryName+" config list`. Per-project "+
-			"settings live under `"+binaryName+" projects config`.", configItems)
-}
-
-func shellHelpText() string {
-	return namespaceHelpText("shell", "",
-		"Shell integration makes cd and create move your current shell "+
-			"into the worktree instead of nesting a subshell. install "+
-			"hooks it into your shell config. The hook evals `"+binaryName+
-			" shell init <shell>`, whose wrapper function runs the real "+
-			"binary and cd's to the path it reports. Without the hook, "+
-			"those commands keep opening a subshell.", shellItems)
 }
 
 const (
@@ -385,9 +380,11 @@ type command struct {
 	aliases []string
 	// Also reachable as `sm worktrees <name>`.
 	worktree bool
-	// Never looks at the cwd; run() skips the git context probes.
-	noCwd bool
-	run   func(cliContext, []string) (int, error)
+	// Takes no cliContext, so run() skips the registry read and the git
+	// probes. `sm shell init` is why it matters: the rc hook runs it in
+	// every new interactive shell.
+	noContext bool
+	run       func(cliContext, []string) (int, error)
 }
 
 var commands = []command{
@@ -414,10 +411,10 @@ var commands = []command{
 	// initialization cycle.
 	{name: "worktrees", aliases: []string{"worktree", "wt", "w"}},
 	{name: "projects", aliases: []string{"project", "p"}, run: cmdProject},
-	{name: "app", noCwd: true, run: cmdApp},
-	{name: "update", noCwd: true, run: cmdUpdate},
-	{name: "config", noCwd: true, run: cmdConfigGlobal},
-	{name: "shell", noCwd: true, run: cmdShell},
+	{name: "app", noContext: true, run: cmdApp},
+	{name: "update", noContext: true, run: cmdUpdate},
+	{name: "config", noContext: true, run: cmdConfigGlobal},
+	{name: "shell", noContext: true, run: cmdShell},
 }
 
 func init() {
@@ -482,7 +479,7 @@ func commandHelp(command string, args []string) string {
 		}
 		// Bare namespace help is the namespace page.
 		if len(args) == 0 {
-			return ns.page()
+			return namespaceHelp(ns.name)
 		}
 		// Subcommands derive from the catalog, like subcommandList, so
 		// a new one is help-addressable without touching this loop.
@@ -656,18 +653,18 @@ func run() int {
 	}
 
 	initRoot()
-	// An unreadable or malformed registry.json fails here rather than
-	// running the command against an empty project list: every command
-	// that writes the registry would otherwise rebuild the file from
-	// that empty picture. This is also where an old-format root gets
-	// its registry drained out of state.json.
-	projects, err := loadProjects()
-	if err != nil {
-		reportError(err)
-		return 1
-	}
-	ctx := cliContext{projects: projects}
-	if !cmd.noCwd {
+	var ctx cliContext
+	if !cmd.noContext {
+		// An unreadable or malformed registry.json fails here rather
+		// than running the command against an empty project list: every
+		// command that writes the registry would otherwise rebuild the
+		// file from that empty picture. This is also where an
+		// old-format root gets its registry drained out of state.json.
+		projects, err := loadProjects()
+		if err != nil {
+			reportError(err)
+			return 1
+		}
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."

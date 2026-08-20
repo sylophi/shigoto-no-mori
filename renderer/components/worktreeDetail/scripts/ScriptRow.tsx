@@ -11,16 +11,9 @@ interface ScriptRowProps {
   slot: ScriptSlot;
   label: string;
   command: string;
-  isLast: boolean;
 }
 
-export function ScriptRow({
-  worktree,
-  slot,
-  label,
-  command,
-  isLast,
-}: ScriptRowProps) {
+export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
   const navigate = useNavigate();
   const { state, busy, start, stop } = useScriptRunner(worktree, slot);
   // No history means there's nothing for the console to show, so the
@@ -40,12 +33,7 @@ export function ScriptRow({
   const actionLabel = busy ? `Stop ${label}` : `Run ${label}`;
 
   return (
-    <div
-      className={cn(
-        "flex items-stretch text-xs",
-        !isLast && "border-b border-border",
-      )}
-    >
+    <div className={cn("flex items-stretch text-xs")}>
       <button
         type="button"
         onClick={busy ? stop : start}

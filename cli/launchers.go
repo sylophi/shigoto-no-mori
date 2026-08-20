@@ -151,17 +151,16 @@ func sortLaunchersByUse(entries []launcherEntry) {
 		_ = json.Unmarshal(raw, &log)
 	}
 	cutoff := time.Now().Add(-useLogWindow).UnixMilli()
-	count := func(id string) int {
-		n := 0
-		for _, t := range log[id] {
+	counts := make(map[string]int, len(entries))
+	for _, entry := range entries {
+		for _, t := range log[entry.id] {
 			if t >= cutoff {
-				n++
+				counts[entry.id]++
 			}
 		}
-		return n
 	}
 	sort.SliceStable(entries, func(a, b int) bool {
-		if diff := count(entries[a].id) - count(entries[b].id); diff != 0 {
+		if diff := counts[entries[a].id] - counts[entries[b].id]; diff != 0 {
 			return diff > 0
 		}
 		return strings.ToLower(entries[a].label) < strings.ToLower(entries[b].label)
@@ -216,7 +215,7 @@ func launchEntry(entry launcherEntry, worktreePath string) error {
 func launchCustomCommand(command, worktreePath string) error {
 	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Dir = worktreePath
-	cmd.Env = append(os.Environ(), "SHIGOMORI_WORKSPACE_PATH="+worktreePath)
+	cmd.Env = append(envWithoutCdFile(), "SHIGOMORI_WORKSPACE_PATH="+worktreePath)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -284,7 +283,7 @@ func launchT3Code(a launcherApp, worktreePath string) error {
 	binary := filepath.Join(bundle, "Contents", "MacOS", appName)
 	script := filepath.Join(bundle, "Contents", "Resources", "app.asar", "apps", "server", "dist", "bin.mjs")
 	cmd := exec.Command(binary, script, "project", "add", worktreePath)
-	cmd.Env = append(os.Environ(), "ELECTRON_RUN_AS_NODE=1")
+	cmd.Env = append(envWithoutCdFile(), "ELECTRON_RUN_AS_NODE=1")
 	if combined, err := cmd.CombinedOutput(); err != nil &&
 		!strings.Contains(string(combined), "ProjectAlreadyExistsError") {
 		return fmt.Errorf("t3 project add: %w", err)

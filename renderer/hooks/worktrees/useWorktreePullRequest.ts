@@ -10,18 +10,22 @@ import {
   type PullRequest,
   type PullRequestDetail,
 } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { isWorktreePullRequestKey, queryKeys } from "@/lib/queryKeys";
 
-// Invalidates per-branch PR queries across projects (one tab worth,
-// since only one detail pane mounts at a time). The predicate skips
-// project-map queries, which have their own sweep-driven refresh and
-// shouldn't refetch on every window focus.
-function invalidateAllWorktreePullRequests(
+// Invalidates per-branch PR queries, scoped to one project when the
+// caller knows which one. The predicate skips project-map queries,
+// which have their own sweep-driven refresh and shouldn't refetch on
+// every window focus.
+function invalidateWorktreePullRequests(
   qc: ReturnType<typeof useQueryClient>,
+  projectId?: string,
 ) {
   void qc.invalidateQueries({
-    queryKey: queryKeys.pullRequestsAll(),
-    predicate: (q) => q.queryKey[3] === "branch",
+    queryKey:
+      projectId === undefined
+        ? queryKeys.pullRequestsAll()
+        : queryKeys.pullRequestsForProject(projectId),
+    predicate: isWorktreePullRequestKey,
   });
 }
 
@@ -33,11 +37,14 @@ function invalidateAllWorktreePullRequests(
 export function useWatchWorktreePullRequests(): void {
   const queryClient = useQueryClient();
   useEffect(() => {
-    const offRefs = window.api.git.onRefsRefreshed(() => {
-      invalidateAllWorktreePullRequests(queryClient);
+    // Scoped to the project whose refs moved: the sweep broadcasts per
+    // project, so an unscoped invalidation costs one `gh pr view` per other
+    // project every sweep, each cancelling the last.
+    const offRefs = window.api.git.onRefsRefreshed(({ projectId }) => {
+      invalidateWorktreePullRequests(queryClient, projectId);
     });
     const offFocus = window.api.window.onFocused(() => {
-      invalidateAllWorktreePullRequests(queryClient);
+      invalidateWorktreePullRequests(queryClient);
     });
     return () => {
       offRefs();

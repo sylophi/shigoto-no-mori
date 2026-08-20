@@ -24,5 +24,3 @@ export const launchersContract = {
     tracksProjectUsage: true,
   }),
 } as const;
-
-export type LaunchersContract = typeof launchersContract;

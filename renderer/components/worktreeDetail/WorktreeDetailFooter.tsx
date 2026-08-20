@@ -2,7 +2,7 @@ import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
 import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
-import { assertNever, cn } from "@/lib/utils";
+import { assertNever } from "@/lib/utils";
 import {
   isManagedWorktree,
   type CleanupError,
@@ -109,9 +109,8 @@ function CleanupErrorRow({
         Retry
       </Button>
       <Button
-        variant="ghost"
+        variant="ghost-destructive"
         size="xs"
-        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
         onClick={actions.onSkipCleanup}
       >
         <Trash2 />
@@ -144,9 +143,9 @@ function NeedsForceRow({
         Cancel
       </Button>
       <Button
-        variant="ghost"
+        variant="ghost-destructive"
         size="xs"
-        className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        className="shrink-0"
         disabled={busy}
         onClick={actions.onForceDelete}
       >
@@ -166,11 +165,11 @@ function CleanupRunningRow({
 }) {
   return (
     <Button
-      variant="ghost"
+      variant="ghost-destructive"
       size="xs"
       onClick={onCancelCleanup}
       disabled={cancelling}
-      className="ml-auto shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+      className="ml-auto shrink-0"
     >
       <Trash2 />
       {cancelling ? "Stopping..." : "Stop cleanup"}
@@ -218,12 +217,10 @@ function NormalRow({
       )}
       {!worktree.isPrimary && (
         <Button
-          variant="ghost"
+          variant="ghost-destructive"
           size="xs"
-          className={cn(
-            "shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive",
-            confirmDelete && "bg-destructive/10",
-          )}
+          className="shrink-0"
+          aria-pressed={confirmDelete}
           disabled={busy}
           onClick={onDelete}
           title={confirmDelete ? "Click again to confirm" : "Delete worktree"}

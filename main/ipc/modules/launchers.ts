@@ -2,6 +2,8 @@ import { shell } from "electron";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import type { Handlers } from "@shared/ipc/types";
 import {
+  launcherIdFor,
+  parseLauncherId,
   WEB_GITHUB_ID,
   type CustomLauncher,
   type DetectedLauncher,
@@ -14,7 +16,6 @@ import {
 import { readGlobalConfig } from "../../lib/config/global";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { stateStore } from "../../lib/config/store";
-import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
 import {
   deepLinkFor,
   type DetectedApp,
@@ -24,7 +25,10 @@ import {
   launchDetected,
 } from "../../lib/launchers";
 import { getGithubRepoInfo, githubRepoUrl } from "../../lib/githubCli/remote";
-import { findProjectOrThrow } from "../../lib/projects";
+import {
+  findProjectAndWorktreeOrThrow,
+  findProjectOrThrow,
+} from "../../lib/projects";
 import { countWithin, pruneAndPush } from "../../lib/util/useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
@@ -41,7 +45,7 @@ function customEntriesFrom(
   return launchers.map(
     (launcher): CustomLauncher => ({
       kind: "custom",
-      id: `custom:${launcher.id}`,
+      id: launcherIdFor("custom", launcher.id),
       label: launcher.label,
     }),
   );
@@ -63,7 +67,7 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
   return apps.map(
     (a): DetectedLauncher => ({
       kind: "detected",
-      id: `app:${a.id}`,
+      id: launcherIdFor("app", a.id),
       label: a.label,
       available: a.available,
     }),
@@ -137,16 +141,18 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
   forProject: async ({ projectId }) => getLaunchersForProject(projectId),
 
   launch: async ({ projectId, worktreeId, launcherId }) => {
-    const project = findProjectOrThrow(projectId);
-
-    const worktree = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
+    const { project, worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
       worktreeId,
     );
 
-    if (launcherId.startsWith("app:")) {
-      const appId = launcherId.slice("app:".length);
+    const parsed = parseLauncherId(launcherId);
+    if (parsed === null) {
+      throw new Error(`Unknown launcher id format: ${launcherId}`);
+    }
+
+    if (parsed.kind === "app") {
+      const appId = parsed.id;
       const apps = await detectApps();
       const app = findDetected(appId, apps);
       if (!app) throw new Error(`Launcher not detected: ${appId}`);
@@ -163,7 +169,10 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       return;
     }
 
-    if (launcherId === WEB_GITHUB_ID) {
+    if (parsed.kind === "web") {
+      if (launcherId !== WEB_GITHUB_ID) {
+        throw new Error(`Unknown web launcher: ${launcherId}`);
+      }
       const info = await getGithubRepoInfo(project.path);
       if (!info) throw new Error(`GitHub remote not found: ${project.name}`);
       await shell.openExternal(githubRepoUrl(info));
@@ -171,21 +180,16 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       return;
     }
 
-    if (launcherId.startsWith("custom:")) {
-      const customId = launcherId.slice("custom:".length);
-      const [projectConfig, globalConfig] = await Promise.all([
-        readShigomoriConfig(project.id),
-        readGlobalConfig(),
-      ]);
-      const custom = findCustomCommand(customId, globalConfig, projectConfig);
-      if (!custom) {
-        throw new Error(`Custom launcher not found: ${customId}`);
-      }
-      launchCustom(custom.command, worktree.path);
-      bumpUseCount(launcherId);
-      return;
+    const customId = parsed.id;
+    const [projectConfig, globalConfig] = await Promise.all([
+      readShigomoriConfig(project.id),
+      readGlobalConfig(),
+    ]);
+    const custom = findCustomCommand(customId, globalConfig, projectConfig);
+    if (!custom) {
+      throw new Error(`Custom launcher not found: ${customId}`);
     }
-
-    throw new Error(`Unknown launcher id format: ${launcherId}`);
+    launchCustom(custom.command, worktree.path);
+    bumpUseCount(launcherId);
   },
 };

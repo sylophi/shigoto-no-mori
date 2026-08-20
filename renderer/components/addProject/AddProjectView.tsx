@@ -20,14 +20,16 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
+import type { Worktree } from "@shared/schemas";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { router } from "@/router";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { ITEM_CLASS } from "./cmdkClasses";
+import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import { ScanningPanel } from "./ScanningPanel";
 import { ResultsPanel } from "./ResultsPanel";
 import { useBrowseState } from "./useBrowseState";
+import { withToggled } from "@/lib/toggleSet";
 
 interface AddProjectViewProps {
   onClose: () => void;
@@ -82,22 +84,17 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   // Best-effort: if listing fails, the project is added either way. Uses
   // the module-level router because this view is rendered as a sibling of
   // RouterProvider, where `useNavigate` has no context (see ProjectLauncher).
+  // Route choice built outside the try below: React Compiler can't lower
+  // a conditional inside one, and bails out the whole component.
   const selectPrimary = async (projectId: string) => {
     try {
       const worktrees = await queryClient.ensureQueryData(
         worktreesQueryOptions(projectId),
       );
-      const primary = worktrees.find((w) => w.isPrimary);
       // A bare repo registers fine but has no primary checkout, so
       // offer worktree creation instead (same fallback as ProjectLauncher).
-      await router.navigate(
-        primary
-          ? {
-              to: "/projects/$projectId/worktrees/$worktreeId",
-              params: { projectId, worktreeId: primary.id },
-            }
-          : { to: "/projects/$projectId/new", params: { projectId } },
-      );
+      const primary = worktrees.find((w) => w.isPrimary);
+      await router.navigate(buildOpenTarget(projectId, primary));
     } catch {
       // Stay wherever we are. The add itself already succeeded.
     }
@@ -159,12 +156,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   };
 
   const toggleSelected = (path: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
-      return next;
-    });
+    setSelected(withToggled(path));
   };
 
   const bulkAdd = async () => {
@@ -176,7 +168,9 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
       try {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential to avoid races on the registry.json write
         const project = await addProject.mutateAsync(path); // oxlint-disable-line no-await-in-loop -- sequential to avoid races on the registry.json write
-        firstAddedId ??= project.id;
+        // Plain if, not ??=: React Compiler can't lower logical assignment and
+        // bails out the whole component.
+        if (firstAddedId === null) firstAddedId = project.id;
       } catch {
         // Skip individual failures; user can retry by re-scanning.
       }
@@ -418,4 +412,14 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
       </div>
     </Command>
   );
+}
+
+function buildOpenTarget(projectId: string, primary: Worktree | undefined) {
+  if (!primary) {
+    return { to: "/projects/$projectId/new", params: { projectId } } as const;
+  }
+  return {
+    to: "/projects/$projectId/worktrees/$worktreeId",
+    params: { projectId, worktreeId: primary.id },
+  } as const;
 }

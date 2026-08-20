@@ -31,6 +31,7 @@ import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
+import { errorMessageOf } from "@shared/errors";
 import {
   installUpdaterImpl,
   isInstallingUpdate,
@@ -179,7 +180,7 @@ app.on("ready", async () => {
         "it and relaunch. To fall back to the default location, delete " +
         "the pointer file at ~/.config/" +
         `${cliRootDirName(app.isPackaged ? "prod" : "dev")}/root.\n\n` +
-        `${err instanceof Error ? err.message : String(err)}`,
+        `${errorMessageOf(err)}`,
     );
     app.exit(1);
     return;
@@ -215,7 +216,7 @@ app.on("ready", async () => {
       })
       .catch((err: unknown) => {
         console.warn(
-          `[scripts] reap after external change failed: ${err instanceof Error ? err.message : String(err)}`,
+          `[scripts] reap after external change failed: ${errorMessageOf(err)}`,
         );
       });
   });

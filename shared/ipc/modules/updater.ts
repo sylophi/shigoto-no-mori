@@ -8,5 +8,3 @@ export const updaterContract = {
   install: invoke("updater:install", z.void(), z.void()),
   state: broadcast("updater:state", UpdaterStateSchema),
 } as const;
-
-export type UpdaterContract = typeof updaterContract;

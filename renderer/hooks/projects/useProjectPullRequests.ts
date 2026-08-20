@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import type { Project, PullRequest } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
+import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
 
 // Cascading invalidator: the shared key prefix knocks out both the
 // sidebar map and any open per-branch detail in one call, so PR
@@ -75,12 +76,14 @@ export function useProjectPullRequests(projectId: string) {
 //
 // Positionally aligned with `projects`, like useAllProjectWorktrees, so
 // a caller walking both indexes them the same way.
+// Same combine as useAllProjectWorktrees, and for the same reason.
 export function useAllProjectPullRequests(projects: Project[]) {
   return useQueries({
     queries: projects.map((project) => ({
       ...projectPullRequestsQueryOptions(project.id),
       enabled: project.pathExists !== false,
     })),
+    combine: combineFanOut,
   });
 }
 

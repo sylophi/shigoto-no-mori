@@ -39,10 +39,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	name := ""
-	if len(parsed.positionals) > 0 {
-		name = parsed.positionals[0]
-	}
+	name := parsed.positional(0)
 	if isPrimaryKeyword(name) {
 		return 2, usageErrf("%q is reserved -- it addresses the project's primary checkout.", name)
 	}
@@ -177,7 +174,7 @@ func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfi
 	if config != nil {
 		setupCommand = strings.TrimSpace(config.Scripts.Setup)
 	}
-	portPoolNeeded := !id.IsExternal && willRunPortPool(id.Path)
+	portPoolNeeded := willRunPortPool(id)
 	if setupCommand == "" && !portPoolNeeded {
 		return failures, ran
 	}

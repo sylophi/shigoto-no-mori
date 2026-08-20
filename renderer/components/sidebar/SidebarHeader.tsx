@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { cn, dragRegion } from "@/lib/utils";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 
 // Dev builds mark the title so a stray window is never mistaken for the
 // packaged app. Both themes also carry a one-way peek at prod styling:
@@ -11,8 +10,10 @@ type DevAffordance = {
   onRevealProd: () => void;
 };
 
+// Both headers always render; `doubutsu-only` / `v1-only` pick which
+// shows. A JS branch on the theme would fork this component per theme
+// and be invisible to `pnpm theme:check`.
 export function SidebarHeader() {
-  const { applied: doubutsu } = useDoubutsu();
   const { data: runtime } = useRuntimeInfo();
   const isDev = runtime?.isDev ?? false;
   // Reset on unmount (window reload).
@@ -21,8 +22,12 @@ export function SidebarHeader() {
     showDevStyle: isDev && !revealProd,
     onRevealProd: () => setRevealProd(true),
   };
-  if (doubutsu) return <DoubutsuBrandHeader {...dev} />;
-  return <DefaultSidebarHeader {...dev} />;
+  return (
+    <>
+      <DoubutsuBrandHeader {...dev} />
+      <DefaultSidebarHeader {...dev} />
+    </>
+  );
 }
 
 // The "album-art" moment of doubutsu mode: a cream pill anchoring the
@@ -34,8 +39,8 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: DevAffordance) {
     <>
       {/* Draggable spacer reserves the macOS traffic-light area so the
           pill below doesn't get overlapped by the window controls. */}
-      <div className="h-10 shrink-0" style={dragRegion("drag")} />
-      <div className="relative mx-3 mb-2 overflow-hidden rounded-2xl bg-card px-5 pt-4 pb-5">
+      <div className="doubutsu-only h-10 shrink-0" style={dragRegion("drag")} />
+      <div className="doubutsu-only relative mx-3 mb-2 overflow-hidden rounded-2xl bg-card px-5 pt-4 pb-5">
         {/* Dev swaps the hero's near-black ink for leaf green -- loud
             enough to catch at a glance, still inside the palette. */}
         <h1
@@ -77,7 +82,7 @@ function DefaultSidebarHeader({ showDevStyle, onRevealProd }: DevAffordance) {
   return (
     <div
       // Title-bar drag region. The left inset clears the traffic lights.
-      className="flex h-[52px] items-center gap-2 px-3 pl-[92px]"
+      className="v1-only flex h-[52px] items-center gap-2 px-3 pl-[92px]"
       style={dragRegion("drag")}
     >
       <div className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">

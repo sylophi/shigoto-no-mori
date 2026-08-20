@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type RefObject } from "react";
 import { Loader2 } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import {
@@ -9,7 +9,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useBranchCommits } from "@/hooks/git/useBranchCommits";
-import type { Worktree } from "@shared/schemas";
+import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitRow } from "../commits/CommitRow";
 
 interface BranchHistoryDrawerProps {
@@ -85,8 +85,81 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
   );
 
   const commits = data ? data.pages.flat() : [];
-
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  return (
+    <div
+      ref={containerRef}
+      className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4"
+    >
+      {isLoading ? (
+        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          Loading commits…
+        </div>
+      ) : isError ? (
+        <div className="space-y-2 py-6 text-sm">
+          <div className="text-destructive select-text">
+            {error?.message ?? "Couldn't load branch history."}
+          </div>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            Retry
+          </button>
+        </div>
+      ) : commits.length === 0 ? (
+        <div className="py-6 text-sm text-muted-foreground">
+          No commits yet.
+        </div>
+      ) : (
+        <VirtualCommitList
+          commits={commits}
+          containerRef={containerRef}
+          worktree={worktree}
+          onNavigate={onNavigate}
+          hasNextPage={hasNextPage}
+          isFetchingNextPage={isFetchingNextPage}
+          fetchNextPage={fetchNextPage}
+        />
+      )}
+      {isFetchingNextPage && (
+        <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
+          <Loader2 aria-hidden className="size-3 animate-spin" />
+          Loading more…
+        </div>
+      )}
+      {!hasNextPage && !isLoading && commits.length > 0 && (
+        <div className="py-3 text-center text-[11px] text-muted-foreground/60">
+          End of history
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Split out for the same reason as SidebarList: keeping useVirtualizer
+// in a leaf lets the parent (which re-flattens the whole loaded
+// history) stay memoized.
+function VirtualCommitList({
+  commits,
+  containerRef,
+  worktree,
+  onNavigate,
+  hasNextPage,
+  isFetchingNextPage,
+  fetchNextPage,
+}: {
+  commits: CommitSummary[];
+  containerRef: RefObject<HTMLDivElement | null>;
+  worktree: Worktree;
+  onNavigate: () => void;
+  hasNextPage: boolean;
+  isFetchingNextPage: boolean;
+  fetchNextPage: () => unknown;
+}) {
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => containerRef.current,
@@ -118,68 +191,28 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
 
   return (
     <div
-      ref={containerRef}
-      className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4"
+      className="relative"
+      style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
-      {isLoading ? (
-        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-          <Loader2 aria-hidden className="size-3.5 animate-spin" />
-          Loading commits…
-        </div>
-      ) : isError ? (
-        <div className="space-y-2 py-6 text-sm">
-          <div className="text-destructive select-text">
-            {error?.message ?? "Couldn't load branch history."}
-          </div>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      {items.map((vi) => {
+        const commit = commits[vi.index];
+        if (!commit) return null;
+        return (
+          <div
+            key={commit.hash}
+            data-index={vi.index}
+            ref={virtualizer.measureElement}
+            className="absolute top-0 left-0 w-full"
+            style={{ transform: `translateY(${vi.start}px)` }}
           >
-            Retry
-          </button>
-        </div>
-      ) : commits.length === 0 ? (
-        <div className="py-6 text-sm text-muted-foreground">
-          No commits yet.
-        </div>
-      ) : (
-        <div
-          className="relative"
-          style={{ height: `${virtualizer.getTotalSize()}px` }}
-        >
-          {items.map((vi) => {
-            const commit = commits[vi.index];
-            if (!commit) return null;
-            return (
-              <div
-                key={commit.hash}
-                data-index={vi.index}
-                ref={virtualizer.measureElement}
-                className="absolute top-0 left-0 w-full"
-                style={{ transform: `translateY(${vi.start}px)` }}
-              >
-                <CommitRow
-                  worktree={worktree}
-                  commit={commit}
-                  onNavigate={onNavigate}
-                />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {isFetchingNextPage && (
-        <div className="flex items-center gap-2 py-3 text-xs text-muted-foreground">
-          <Loader2 aria-hidden className="size-3 animate-spin" />
-          Loading more…
-        </div>
-      )}
-      {!hasNextPage && !isLoading && commits.length > 0 && (
-        <div className="py-3 text-center text-[11px] text-muted-foreground/60">
-          End of history
-        </div>
-      )}
+            <CommitRow
+              worktree={worktree}
+              commit={commit}
+              onNavigate={onNavigate}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

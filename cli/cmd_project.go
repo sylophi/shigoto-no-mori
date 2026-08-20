@@ -20,7 +20,7 @@ import (
 
 func cmdProject(ctx cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		out(projectsHelpText())
+		out(namespaceHelp("projects"))
 		return 0, nil
 	}
 	switch canonicalProjectsSub(args[0]) {
@@ -113,7 +113,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	}
 	// Mirrors the app's deleteProjectState; best-effort like the app's
 	// icon-cache cleanup.
-	_ = os.RemoveAll(filepath.Join(shigomoriRoot(), "projects", proj.ID))
+	_ = os.RemoveAll(projectDataDir(proj.ID))
 
 	if jsonMode {
 		emit(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path})
@@ -158,9 +158,9 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	rawPath := "."
-	if len(parsed.positionals) > 0 {
-		rawPath = parsed.positionals[0]
+	rawPath := parsed.positional(0)
+	if rawPath == "" {
+		rawPath = "."
 	}
 	if parsed.bools["all"] {
 		return cmdProjectAddAll(ctx, toAbsolute(rawPath), parsed.bools["yes"])
@@ -402,10 +402,6 @@ func detectPackageManager(dir string) string {
 		}
 	}
 	return "npm"
-}
-
-func projectConfigJSONPath(projectID string) string {
-	return filepath.Join(shigomoriRoot(), "projects", projectID, "project.json")
 }
 
 func cmdConfig(ctx cliContext, args []string) (int, error) {

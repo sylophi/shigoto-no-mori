@@ -22,5 +22,3 @@ export const fsContract = {
   stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema),
   listEntries: invoke("fs:listEntries", PathPayloadSchema, FsListingSchema),
 } as const;
-
-export type FsContract = typeof fsContract;

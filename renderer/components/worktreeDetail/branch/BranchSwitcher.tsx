@@ -9,6 +9,7 @@ import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/ui/branch-combobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { isRealBranch, type Worktree } from "@shared/schemas";
+import { ErrorBanner } from "@/components/ui/error-banner";
 
 export function BranchSwitcher({
   worktree,
@@ -141,9 +142,9 @@ export function BranchSwitcher({
               ))}
             </Combobox.List>
             {checkout.error && (
-              <div className="border-t border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive select-text">
+              <ErrorBanner className="rounded-none border-x-0 border-t border-b-0">
                 {checkout.error.message}
-              </div>
+              </ErrorBanner>
             )}
           </Combobox.Popup>
         </Combobox.Positioner>

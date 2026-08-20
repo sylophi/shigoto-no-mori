@@ -69,5 +69,3 @@ export const cliContract = {
     ShellIntegrationStatusSchema,
   ),
 } as const;
-
-export type CliContract = typeof cliContract;

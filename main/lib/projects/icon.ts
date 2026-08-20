@@ -3,16 +3,15 @@
    either do unnecessary work or pick a lower-priority winner. */
 /* react-doctor-disable react-doctor/async-await-in-loop -- same reason as oxlint above. */
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
-import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
+import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import type { ProjectIcon } from "@shared/schemas";
 import { listProjectFiles } from "../git/files";
-import { tempPathFor } from "../util/jsonFile";
+import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
-import { noteSelfWrite } from "../util/selfWrite";
 
 // Icon candidates per location bucket. Bucket priority roughly tracks
 // how canonical each location is for "the project's primary icon":
@@ -415,11 +414,7 @@ function persistDirtySync(map: Map<string, IconCacheEntry>): void {
         if (entry) disk[key] = entry;
       }
       for (const key of deleted) delete disk[key];
-      mkdirSync(dirname(indexPath()), { recursive: true });
-      const temp = tempPathFor(indexPath());
-      writeFileSync(temp, `${JSON.stringify(disk, null, 2)}\n`, "utf8");
-      renameSync(temp, indexPath());
-      noteSelfWrite();
+      atomicWriteJsonSync(indexPath(), disk);
     });
   } catch (error) {
     // Put the keys back so the next persist retries them; a key
