@@ -6,7 +6,7 @@ export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();
 
   return (
-    <div className="flex h-full flex-col">
+    <div data-doubutsu-page="settings" className="flex h-full flex-col">
       <header className="relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4">
         <div className="relative z-[1] flex min-w-0 flex-col">
           <span className="text-xs text-muted-foreground">Shigoto no Mori</span>
