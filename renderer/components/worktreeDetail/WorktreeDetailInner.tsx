@@ -162,7 +162,7 @@ export function WorktreeDetailInner({
   };
 
   return (
-    <div data-doubutsu-page="worktree" className="flex h-full flex-col">
+    <div className="flex h-full flex-col">
       <header className="flex flex-col gap-2 border-b border-border px-6 pt-7 pb-5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button

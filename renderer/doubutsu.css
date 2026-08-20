@@ -42,12 +42,10 @@
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), data-doubutsu-page="worktree|settings|tidy"
- *    picking the canvas wallpaper (worktreeDetail/WorktreeDetailInner,
- *    settings/Settings, tidy/TidyForest), the `doubutsu-only` /
- *    `v1-only` classes (per-theme markup shipped side by side),
- *    li[data-row-idx]
- *    (configure/PickerRow.tsx).
+ *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy" picking
+ *    the canvas wallpaper (settings/Settings, tidy/TidyForest), the
+ *    `doubutsu-only` / `v1-only` classes (per-theme markup shipped side
+ *    by side), li[data-row-idx] (configure/PickerRow.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
@@ -573,46 +571,47 @@
   --doubutsu-drift-time: 24s;
 }
 
-/* Worktree detail -- five-petal blossoms drifting down-right, the
-   mirror of the leaves. A worktree is the plot you tend, so it wears
-   the tended thing. */
-.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="worktree"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22f%22%20fill%3D%22%23000%22%3E%3Ccircle%20cx%3D%220%22%20cy%3D%22-5.2%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%224.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%223.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-3.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-4.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20r%3D%222.6%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(28%2022)%20rotate(0)%20scale(1.2)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(84%2034)%20rotate(25)%20scale(0.85)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(56%2062)%20rotate(50)%20scale(1)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(20%2088)%20rotate(10)%20scale(0.75)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(96%2092)%20rotate(40)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(70%20104)%20rotate(66)%20scale(0.7)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(44%2034)%20rotate(18)%20scale(0.6)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(104%2056)%20rotate(42)%20scale(0.8)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(36%2062)%20rotate(58)%20scale(0.65)%22%2F%3E%3C%2Fsvg%3E");
-  --doubutsu-wallpaper-size: 120px 120px;
-  --doubutsu-wallpaper-opacity: 0.075;
-  --doubutsu-drift-x: 120px;
-  --doubutsu-drift-y: 120px;
-  --doubutsu-drift-time: 36s;
-}
+/* Apples, drawn and tuned but not yet spoken for. Left here so the next
+   page that wants a wallpaper of its own has one ready: paste these six
+   values into a data-doubutsu-page rule and it works. It is the one
+   uniform tile in the set, a single stamp at one size and one angle on a
+   half-drop lattice, so swapping in another fruit is a change of shape
+   and nothing else.
 
-/* Settings -- apples, the one pure axis in the set because fruit falls.
-   AC gives every island a native fruit you pick and then live with,
-   which is the shape of a settings page. Deliberately the one uniform
-   tile: a single stamp at one size and one angle on a half-drop
-   lattice, so swapping in another fruit is a change of shape and
-   nothing else. Its stamps sit on the tile edges rather than clear of
-   them, so the ones that straddle carry a wrapped twin on the far
-   side. */
-.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="settings"]) {
-  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22fr%22%20fill%3D%22%23000%22%3E%3Cpath%20d%3D%22M-0.55%20-1.8C-0.3-5%200.2-6.8%200.9-8.6L2-8.2C1.3-6.5%200.85-4.8%200.65-1.8Z%22%2F%3E%3Cellipse%20cx%3D%223.4%22%20cy%3D%22-7.2%22%20rx%3D%222.7%22%20ry%3D%221.35%22%20transform%3D%22rotate(-20%203.4%20-7.2)%22%2F%3E%3Cpath%20d%3D%22M0%20-2.4C1.3-5.2%204.2-6%205.8-3.8C7.2-1.6%207.2%203.2%205.2%205.8C3.6%207.9%201.2%208.2%200%207.6C-1.2%208.2-3.6%207.9-5.2%205.8C-7.2%203.2-7.2-1.6-5.8-3.8C-4.2-6-1.3-5.2%200-2.4Z%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(0%200)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(0%20120)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(120%200)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(120%20120)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(0%2040)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(120%2040)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(0%2080)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(120%2080)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(30%2020)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(30%2060)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(30%20100)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(60%200)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(60%20120)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(60%2040)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(60%2080)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(90%2020)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(90%2060)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(90%20100)%20scale(1.15)%22%2F%3E%3C%2Fsvg%3E");
+.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="APPLES"]) {
+  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22fr%22%20fill%3D%22%23000%22%3E%3Cpath%20d%3D%22M-0.55%20-1.8C-0.3-5%200.2-6.8%200.9-8.6L2-8.2C1.3-6.5%200.85-4.8%200.65-1.8Z%22%2F%3E%3Cellipse%20cx%3D%223.4%22%20cy%3D%22-7.2%22%20rx%3D%222.7%22%20ry%3D%221.35%22%20transform%3D%22rotate(-20%203.4%20-7.2)%22%2F%3E%3Cpath%20d%3D%22M0%20-2.4C1.3-5.2%204.2-6%205.8-3.8C7.2-1.6%207.2%203.2%205.2%205.8C3.6%207.9%201.2%208.2%200%207.6C-1.2%208.2-3.6%207.9-5.2%205.8C-7.2%203.2-7.2-1.6-5.8-3.8C-4.2-6-1.3-5.2%200-2.4Z%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(15%2015)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(15%2075)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(45%2045)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(45%20105)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(75%2015)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(75%2075)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(105%2045)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(105%20105)%20scale(1.15)%22%2F%3E%3C%2Fsvg%3E");
   --doubutsu-wallpaper-size: 120px 120px;
   --doubutsu-wallpaper-opacity: 0.075;
   --doubutsu-drift-x: 0px;
   --doubutsu-drift-y: 120px;
   --doubutsu-drift-time: 26s;
 }
+*/
 
-/* Tidy the forest -- boxes, sliding left. A villager leaving an AC
-   island packs into these, which is what this page does to a worktree.
-   The one square-cornered shape in an otherwise round set, and solid
-   fills, so it carries the lowest opacity of the four. */
-.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="tidy"]) {
+/* Settings: boxes, sliding left. The one square-cornered shape in an
+   otherwise round set, so it reads as its own room, and it borrows the
+   launcher triangles' scatter of a wide scale range and rotations spread
+   around the circle rather than a uniform tilt. Solid fills, so it
+   carries the lowest opacity of the four. */
+.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="settings"]) {
   --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22140%22%20height%3D%22140%22%20viewBox%3D%220%200%20140%20140%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cpath%20id%3D%22sq%22%20fill%3D%22%23000%22%20d%3D%22M-3.5%20-8h7a4.5%204.5%200%200%201%204.5%204.5v7a4.5%204.5%200%200%201%20-4.5%204.5h-7a4.5%204.5%200%200%201%20-4.5%20-4.5v-7a4.5%204.5%200%200%201%204.5%20-4.5Z%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(28%2030)%20rotate(18)%20scale(1.25)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(78%2022)%20rotate(205)%20scale(0.75)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(118%2044)%20rotate(72)%20scale(1.05)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(18%2074)%20rotate(130)%20scale(0.85)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(62%2066)%20rotate(41)%20scale(1.4)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(104%2090)%20rotate(250)%20scale(0.65)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(40%20114)%20rotate(300)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(86%20122)%20rotate(155)%20scale(0.9)%22%2F%3E%3Cuse%20href%3D%22%23sq%22%20transform%3D%22translate(128%20118)%20rotate(85)%20scale(0.7)%22%2F%3E%3C%2Fsvg%3E");
   --doubutsu-wallpaper-size: 140px 140px;
   --doubutsu-wallpaper-opacity: 0.07;
   --doubutsu-drift-x: -140px;
   --doubutsu-drift-y: 0px;
   --doubutsu-drift-time: 30s;
+}
+
+/* Tidy the forest: five-petal blossoms drifting down-right, the mirror
+   of the leaves. Clearing a forest is what lets it grow back, so the
+   page wears what comes after the work rather than the work. */
+.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="tidy"]) {
+  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22f%22%20fill%3D%22%23000%22%3E%3Ccircle%20cx%3D%220%22%20cy%3D%22-5.2%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%224.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%223.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-3.057%22%20cy%3D%224.207%22%20r%3D%223.1%22%2F%3E%3Ccircle%20cx%3D%22-4.945%22%20cy%3D%22-1.607%22%20r%3D%223.1%22%2F%3E%3Ccircle%20r%3D%222.6%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(28%2022)%20rotate(0)%20scale(1.2)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(84%2034)%20rotate(25)%20scale(0.85)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(56%2062)%20rotate(50)%20scale(1)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(20%2088)%20rotate(10)%20scale(0.75)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(96%2092)%20rotate(40)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(70%20104)%20rotate(66)%20scale(0.7)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(44%2034)%20rotate(18)%20scale(0.6)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(104%2056)%20rotate(42)%20scale(0.8)%22%2F%3E%3Cuse%20href%3D%22%23f%22%20transform%3D%22translate(36%2062)%20rotate(58)%20scale(0.65)%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper-size: 120px 120px;
+  --doubutsu-wallpaper-opacity: 0.075;
+  --doubutsu-drift-x: 120px;
+  --doubutsu-drift-y: 120px;
+  --doubutsu-drift-time: 36s;
 }
 
 /* The launcher is its own place, so it gets its own wallpaper on a
