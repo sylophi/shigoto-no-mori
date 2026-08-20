@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
-import { isSelectable, type TidyEntry } from "./tidyModel";
+import type { TidyEntry } from "./tidyModel";
 import { TidyEntryTitle } from "./TidyEntryTitle";
 
 interface TidyRowProps {
@@ -40,8 +40,7 @@ export function TidyRow({
     ageAt,
     lastActivityAt,
   } = entry;
-  const selectable = isSelectable(entry);
-  const interactive = selectable && !disabled && status.kind !== "done";
+  const interactive = !disabled && status.kind !== "done";
   const ageTitle =
     ageAt !== null
       ? `Last commit ${new Date(ageAt).toLocaleString()}`
@@ -60,7 +59,6 @@ export function TidyRow({
       className={cn(
         "group flex items-start gap-3 px-3 py-3 text-sm",
         disabled && "opacity-70",
-        !selectable && "opacity-60",
         interactive && "cursor-pointer transition-colors hover:bg-accent/30",
       )}
     >
@@ -74,9 +72,7 @@ export function TidyRow({
 
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <TidyEntryTitle entry={entry} showProject={showProject}>
-          {worktree.isExternal && !worktree.isPrimary && (
-            <RowTag>External</RowTag>
-          )}
+          {worktree.isExternal && <RowTag>External</RowTag>}
           {/* Shelved worktrees are hidden from the sidebar by default,
               which is exactly how one ends up forgotten on disk -- so
               this list shows them, labelled. */}

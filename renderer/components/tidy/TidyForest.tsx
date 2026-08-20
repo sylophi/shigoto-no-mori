@@ -19,7 +19,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import {
   buildTidyEntries,
   groupByProject,
-  isSelectable,
+  projectCount,
   safeToRemove,
   sortTidyEntries,
   sumBytes,
@@ -60,13 +60,21 @@ export function TidyForest() {
   const hygiene = useAllProjectHygiene(projects);
   const { data: globalConfig } = useGlobalConfig();
 
+  // Primary checkouts are left out everywhere on this page, not just
+  // from the list: they can never be removed, so counting the biggest
+  // directory each project owns towards a headline total sitting next to
+  // a Remove button would promise back disk that tidying can't return.
+  // Filtered once here, so the stats, the disk walks and the rows all
+  // describe the same set.
   const worktreesByProject = new Map<string, Worktree[]>(
     projects.map((project, index) => [
       project.id,
-      worktreeQueries[index]?.data ?? [],
+      (worktreeQueries[index]?.data ?? []).filter(
+        (worktree) => !worktree.isPrimary,
+      ),
     ]),
   );
-  const allWorktrees = worktreeQueries.flatMap((query) => query.data ?? []);
+  const allWorktrees = [...worktreesByProject.values()].flat();
   const disk = useWorktreeDiskUsage(allWorktrees);
 
   const [sort, setSort] = useState<TidySort>("recommended");
@@ -90,7 +98,6 @@ export function TidyForest() {
   const safeIds = new Set(candidates.map((entry) => entry.worktree.id));
   const selected = picked ?? safeIds;
   const summary = summarize(entries, selected);
-  const selectableCount = entries.filter(isSelectable).length;
   const deleteBranches = globalConfig?.deleteBranchOnRemove ?? true;
   const loading =
     projectsLoading ||
@@ -147,11 +154,16 @@ export function TidyForest() {
     setPicked(new Set());
   };
 
+  // Counted off the rows, like every other figure here: with primary
+  // checkouts gone a repo you have never branched from contributes
+  // nothing, and naming it anyway pads the caption above rows it has
+  // none of.
+  const rowProjects = projectCount(entries);
   const measuredLabel = disk.measuring
     ? `measuring ${disk.measuredCount} of ${disk.totalCount}…`
     : disk.partial
       ? "approximate"
-      : `across ${projects.length} ${projects.length === 1 ? "project" : "projects"}`;
+      : `across ${rowProjects} ${rowProjects === 1 ? "project" : "projects"}`;
 
   const dirtyCount = entries.filter(
     (entry) => entry.worktree.changedCount > 0,
@@ -187,7 +199,7 @@ export function TidyForest() {
             />
             <TidyStat
               label="Worktrees"
-              value={String(allWorktrees.length)}
+              value={String(entries.length)}
               detail={
                 dirtyCount > 0
                   ? `${dirtyCount} with uncommitted work`
@@ -230,7 +242,7 @@ export function TidyForest() {
                 />
                 <div className="flex shrink-0 items-center gap-2">
                   <span className="text-xs text-muted-foreground">
-                    {selected.size} of {selectableCount} selected
+                    {selected.size} of {entries.length} selected
                   </span>
                   <Button
                     variant="ghost"

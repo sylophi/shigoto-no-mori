@@ -47,8 +47,8 @@ export const TIDY_SORT_OPTIONS = [
 ];
 
 // Display order when sorting by "Recommended": the removable ones first,
-// then increasingly attached work, with the primary checkout pinned last
-// since it can never be removed.
+// then increasingly attached work, with the project's default branch
+// pinned last since removing it would delete the branch itself.
 const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
   merged: 0,
   absorbed: 1,
@@ -57,7 +57,6 @@ const VERDICT_RANK: Record<HygieneVerdictKind, number> = {
   unpushed: 4,
   dirty: 5,
   defaultBranch: 6,
-  primary: 7,
 };
 
 export function buildTidyEntries(
@@ -144,16 +143,20 @@ export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
 }
 
 // The rows we are willing to tick on the user's behalf, and the only
-// rule that decides it. Nothing dirty, unmerged, detached or primary is
-// ever in here -- that is the whole safety guarantee of the page, so the
-// page reads its "safe to remove" count off this same list rather than
+// rule that decides it. Nothing dirty, unmerged or detached is ever in
+// here -- that is the whole safety guarantee of the page, so the page
+// reads its "safe to remove" count off this same list rather than
 // re-filtering with its own copy of the predicate.
 export function safeToRemove(entries: TidyEntry[]): TidyEntry[] {
   return entries.filter((entry) => entry.verdict.safe);
 }
 
-export function isSelectable(entry: TidyEntry): boolean {
-  return entry.verdict.kind !== "primary";
+// How many distinct projects a set of rows reaches into. The headline
+// stat asks it of every row and the confirm step asks it of the ticked
+// ones, so both ask the same way and neither can drift from the list
+// they describe.
+export function projectCount(entries: TidyEntry[]): number {
+  return new Set(entries.map((entry) => entry.project.id)).size;
 }
 
 export interface TidySummary {
@@ -180,7 +183,7 @@ export function summarize(
   return {
     selected: picked,
     risky: picked.filter((entry) => !entry.verdict.safe),
-    projectCount: new Set(picked.map((entry) => entry.project.id)).size,
+    projectCount: projectCount(picked),
     reclaimBytes: sumBytes(picked),
     reclaimPartial: picked.some((entry) => entry.disk === undefined),
   };

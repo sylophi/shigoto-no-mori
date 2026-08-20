@@ -272,12 +272,30 @@ export async function listWorktreeIdentities(
   // This keeps mixed states (some worktrees still in the old layout
   // after a partial migration) from mislabeling rows as external.
   const managedBases = managedBasesFor(projectPath, config);
+  const entries = parsePorcelain(stdout);
+  // Which entry, if any, is the project's own checkout. Resolved once up
+  // front so exactly one row can carry the flag: callers all read it as
+  // a singular ("the primary"), and the tidy page now filters on it, so
+  // a second one silently costs a real worktree its row.
+  //
+  // The project path wins where git lists it, since that is what the
+  // flag means. A project registered somewhere else in the repo falls
+  // back to the first entry, which is git's own main worktree.
+  //
+  // Neither applies to a bare repo: it has no checkout, so every entry
+  // git lists is a linked worktree with work in it and none of them is
+  // primary. The fallback alone would have crowned whichever git listed
+  // first, because the bare entry is skipped before the counter moves.
+  const checkouts = entries.filter((entry) => !entry.bare);
+  const primaryPath = entries.some((entry) => entry.bare)
+    ? null
+    : (checkouts.find((entry) => entry.path === projectPath)?.path ??
+      checkouts[0]?.path ??
+      null);
   const identities: WorktreeIdentity[] = [];
-  let index = 0;
-  for (const entry of parsePorcelain(stdout)) {
-    if (entry.bare) continue;
+  for (const entry of checkouts) {
     const branch = deriveBranch(entry);
-    const isPrimary = entry.path === projectPath || index === 0;
+    const isPrimary = entry.path === primaryPath;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
     // animal dirname; external ones use whatever the user named them.
@@ -292,7 +310,6 @@ export async function listWorktreeIdentities(
       isExternal: !isManagedPath(entry.path, managedBases),
       detached: entry.detached ?? false,
     });
-    index++;
   }
   return identities;
 }
