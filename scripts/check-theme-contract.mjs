@@ -5,8 +5,9 @@
 // only be noticed by someone running with the theme on.
 //
 // Checked:
-//   1. Every data-slot / data-doubutsu-zone / data-variant value the
-//      CSS selects must be set somewhere in renderer source.
+//   1. Every data-slot / data-doubutsu-zone / data-doubutsu-page /
+//      data-variant value the CSS selects must be set somewhere in
+//      renderer source.
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
 //      the installed packages -- catches breaking upgrades.

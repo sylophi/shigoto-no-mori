@@ -24,8 +24,9 @@ Rules that keep both themes cheap to maintain:
   chips use `ui/chip-button.tsx`, few-way toggles use
   `ui/segmented-control.tsx` — don't re-inline their class strings.
 - **doubutsu.css may only select**: theme tokens, `data-slot` /
-  `data-doubutsu-zone` attributes, upstream library attributes (Base UI
-  `data-highlighted` etc.), and plain Tailwind utility names. Never a
+  `data-doubutsu-zone` / `data-doubutsu-page` attributes, upstream
+  library attributes (Base UI `data-highlighted` etc.), and plain
+  Tailwind utility names. Never a
   component's internal utility-class combination — that breaks silently
   when the component is restyled.
 - The full dependency list lives in the CONTRACT header of

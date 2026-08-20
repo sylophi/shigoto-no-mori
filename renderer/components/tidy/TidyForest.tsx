@@ -159,7 +159,7 @@ export function TidyForest() {
   const reclaimable = sumBytes(candidates);
 
   return (
-    <div className="flex h-full flex-col">
+    <div data-doubutsu-page="tidy" className="flex h-full flex-col">
       <header className="relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4">
         <div className="relative z-[1] flex min-w-0 flex-col">
           <span className="truncate text-xs text-muted-foreground">
