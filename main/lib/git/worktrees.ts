@@ -274,18 +274,22 @@ export async function listWorktreeIdentities(
   const managedBases = managedBasesFor(projectPath, config);
   const entries = parsePorcelain(stdout);
   // Which entry, if any, is the project's own checkout. Resolved once up
-  // front so exactly one row can carry the flag: callers all read it as
-  // a singular ("the primary"), and the tidy page now filters on it, so
-  // a second one silently costs a real worktree its row.
+  // front rather than per entry, so at most one row can carry the flag:
+  // every caller reads it as a singular ("the primary"), and the tidy
+  // page filters rows on it.
   //
-  // The project path wins where git lists it, since that is what the
-  // flag means. A project registered somewhere else in the repo falls
-  // back to the first entry, which is git's own main worktree.
+  // A bare repo has none. Every entry git lists under one is a linked
+  // worktree with work in it, and this is the case that actually shows
+  // up: registration folds a path to the repo's common dir, so adding a
+  // project from inside a worktree of a bare repo registers the bare
+  // directory. A per-entry `index === 0` fallback would then crown
+  // whichever worktree git happened to list first, because the bare
+  // entry is skipped before the counter moves.
   //
-  // Neither applies to a bare repo: it has no checkout, so every entry
-  // git lists is a linked worktree with work in it and none of them is
-  // primary. The fallback alone would have crowned whichever git listed
-  // first, because the bare entry is skipped before the counter moves.
+  // Otherwise the project path wins wherever git lists it, which is what
+  // the flag means, and the first entry covers a project registered
+  // deeper in the repo. Registration folds that away, so the fallback is
+  // for a layout that changed under an existing registry entry.
   const checkouts = entries.filter((entry) => !entry.bare);
   const primaryPath = entries.some((entry) => entry.bare)
     ? null
