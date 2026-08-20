@@ -110,6 +110,6 @@ export function invalidateProjectConfigCache(projectId: string): void {
 // watcher calls this on any change under the root so the 5s TTL can't
 // serve stale config after a CLI write.
 export function invalidateAllProjectConfigCaches(): void {
-  configCache.invalidateByPrefix("");
-  worktreeCache.invalidateByPrefix("");
+  configCache.clear();
+  worktreeCache.clear();
 }

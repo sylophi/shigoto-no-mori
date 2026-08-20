@@ -77,14 +77,13 @@ export function ManageBranches() {
                 No local branches yet.
               </p>
             ) : (
-              <div className="overflow-hidden rounded-md border border-border">
-                {locals.map((name, idx) => (
+              <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+                {locals.map((name) => (
                   <BranchRow
                     key={name}
                     projectId={projectId}
                     name={name}
                     worktree={worktreeByBranch.get(name)}
-                    isLast={idx === locals.length - 1}
                   />
                 ))}
               </div>

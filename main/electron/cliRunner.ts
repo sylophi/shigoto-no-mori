@@ -13,6 +13,7 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "../lib/scripts";
 import { noteSelfWrite } from "../lib/util/selfWrite";
+import { signalTreeBestEffort } from "../lib/scripts/process";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -92,7 +93,7 @@ registerInflightContributor(cliBusyChildCount);
 export function killAllCli(): void {
   for (const child of children) {
     try {
-      if (child.pid !== undefined) process.kill(-child.pid, "SIGTERM");
+      if (child.pid !== undefined) signalTreeBestEffort(child.pid, "SIGTERM");
       else child.kill("SIGTERM");
     } catch {
       // Already gone.
@@ -161,7 +162,8 @@ export async function runCli(
       opts?.timeoutMs !== undefined
         ? setTimeout(() => {
             try {
-              if (child.pid !== undefined) process.kill(-child.pid, "SIGKILL");
+              if (child.pid !== undefined)
+                signalTreeBestEffort(child.pid, "SIGKILL");
               else child.kill("SIGKILL");
             } catch {
               // Already gone.

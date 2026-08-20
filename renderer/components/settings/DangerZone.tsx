@@ -15,6 +15,7 @@ import { DOUBUTSU_STORAGE_KEY } from "@/hooks/ui/useDoubutsu";
 import { THEME_STORAGE_KEY } from "@/hooks/ui/useTheme";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
+import { removeStored } from "@/lib/localStorage";
 
 export function DangerZone() {
   const navigate = useNavigate();
@@ -37,12 +38,8 @@ export function DangerZone() {
       setProgress(null);
       try {
         await window.api.runtime.nuke();
-        try {
-          window.localStorage.removeItem(THEME_STORAGE_KEY);
-          window.localStorage.removeItem(DOUBUTSU_STORAGE_KEY);
-        } catch {
-          // localStorage may be unavailable; not fatal.
-        }
+        removeStored(THEME_STORAGE_KEY);
+        removeStored(DOUBUTSU_STORAGE_KEY);
         // Every cached query now describes deleted state. A blanket
         // invalidateQueries() would refetch them all against the wiped
         // root and raise a burst of "Unknown project/worktree" toasts,

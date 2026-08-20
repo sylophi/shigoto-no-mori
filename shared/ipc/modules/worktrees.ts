@@ -19,6 +19,13 @@ import {
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
+// Every worktree-scoped git mutation shares this contract; naming it
+// once means a new one can't silently miss tracksProjectUsage.
+const worktreeMutation = (channel: string) =>
+  invoke(channel, WorktreeScopedPayloadSchema, WorktreeSchema, {
+    tracksProjectUsage: true,
+  });
+
 export const worktreesContract = {
   list: invoke(
     "worktrees:list",
@@ -78,49 +85,15 @@ export const worktreesContract = {
     ListCommitsPayloadSchema,
     z.array(CommitSummarySchema),
   ),
-  push: invoke("worktrees:push", WorktreeScopedPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-  }),
-  pull: invoke("worktrees:pull", WorktreeScopedPayloadSchema, WorktreeSchema, {
-    tracksProjectUsage: true,
-  }),
-  pushForce: invoke(
-    "worktrees:pushForce",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true },
-  ),
-  overwrite: invoke(
-    "worktrees:overwrite",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true },
-  ),
-  publish: invoke(
-    "worktrees:publish",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    {
-      tracksProjectUsage: true,
-    },
-  ),
-  pullAndPush: invoke(
-    "worktrees:pullAndPush",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true },
-  ),
-  syncWithPrimary: invoke(
-    "worktrees:syncWithPrimary",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true },
-  ),
-  switchToPrimaryAndDeleteBranch: invoke(
+  push: worktreeMutation("worktrees:push"),
+  pull: worktreeMutation("worktrees:pull"),
+  pushForce: worktreeMutation("worktrees:pushForce"),
+  overwrite: worktreeMutation("worktrees:overwrite"),
+  publish: worktreeMutation("worktrees:publish"),
+  pullAndPush: worktreeMutation("worktrees:pullAndPush"),
+  syncWithPrimary: worktreeMutation("worktrees:syncWithPrimary"),
+  switchToPrimaryAndDeleteBranch: worktreeMutation(
     "worktrees:switchToPrimaryAndDeleteBranch",
-    WorktreeScopedPayloadSchema,
-    WorktreeSchema,
-    { tracksProjectUsage: true },
   ),
   lifecyclePhase: broadcast(
     "worktrees:lifecyclePhase",
@@ -131,5 +104,3 @@ export const worktreesContract = {
     WorktreeCarryOverCompleteSchema,
   ),
 } as const;
-
-export type WorktreesContract = typeof worktreesContract;

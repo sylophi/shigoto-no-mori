@@ -523,10 +523,6 @@ func globalConfigScope() configDocScope {
 	}
 }
 
-func configJSONPath() string {
-	return filepath.Join(shigomoriRoot(), "config.json")
-}
-
 func (s configDocScope) update(fn func(doc map[string]any) error) error {
 	var final map[string]any
 	err := updateConfigDoc(s.path, func(doc map[string]any) error {
@@ -869,7 +865,7 @@ func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
 		return exitCodeOf(err), err
 	}
 	if len(parsed.positionals) == 0 {
-		out(configHelpText())
+		out(namespaceHelp("config"))
 		return 0, nil
 	}
 	scope := globalConfigScope()

@@ -138,20 +138,23 @@ export function LocationForm({
     // stays disabled across it and a write failure aborts the moves.
     const saveLayoutIfChanged = async (): Promise<boolean> => {
       if (!layoutChanged) return true;
+      // If the project has no on-disk config yet, fall back to the resolved
+      // default branch so we never invent a branch name like "main" on a repo
+      // that uses "master". Hoisted out of the try below: React Compiler
+      // can't lower a ?? inside one.
+      const baseConfig: ShigomoriConfig = config ?? {
+        defaultBranch: resolvedDefaultBranch,
+      };
+      const nextCustomPath = layout === "custom" ? customPath.trim() : "";
+      const nextConfig: ShigomoriConfig = {
+        ...baseConfig,
+        worktreeLayout: layout,
+        customWorktreePath: nextCustomPath || undefined,
+      };
       try {
-        // If the project has no on-disk config yet, fall back to the
-        // resolved default branch (same source ConfigureProject uses)
-        // so we never invent a branch name like "main" on a repo that
-        // uses "master" or "trunk".
-        const nextConfig: ShigomoriConfig = {
-          ...(config ?? { defaultBranch: resolvedDefaultBranch }),
-          worktreeLayout: layout,
-          customWorktreePath:
-            layout === "custom" ? customPath.trim() : undefined,
-        };
         await write.mutateAsync({ projectId, config: nextConfig });
         setSavedLayout(layout);
-        setSavedCustomPath(layout === "custom" ? customPath.trim() : "");
+        setSavedCustomPath(nextCustomPath);
         return true;
       } catch {
         // useShigomoriWrite already surfaces an error toast via its meta.
@@ -215,15 +218,14 @@ export function LocationForm({
       )}
 
       {toMove.length > 0 && (
-        <div className="overflow-hidden rounded-md border border-border">
-          {toMove.map((wt, idx) => (
+        <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+          {toMove.map((wt) => (
             <RelocateRow
               key={wt.id}
               worktree={wt}
               destination={proposedFor(wt)}
               status={status.get(wt.id) ?? { kind: "idle" }}
               home={home}
-              isLast={idx === toMove.length - 1}
             />
           ))}
         </div>

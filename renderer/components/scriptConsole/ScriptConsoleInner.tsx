@@ -48,11 +48,10 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
           <div className="shrink-0">
             {busy ? (
               <Button
-                variant="outline"
+                variant="outline-destructive"
                 size="sm"
                 onClick={stop}
                 disabled={state.cancelling}
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
               >
                 <Square />
                 {state.cancelling ? "Stopping…" : "Stop"}

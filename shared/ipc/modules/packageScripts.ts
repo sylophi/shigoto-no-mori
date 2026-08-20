@@ -32,5 +32,3 @@ export const packageScriptsContract = {
     z.void(),
   ),
 } as const;
-
-export type PackageScriptsContract = typeof packageScriptsContract;

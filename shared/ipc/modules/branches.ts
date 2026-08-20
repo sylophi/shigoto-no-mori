@@ -17,5 +17,3 @@ export const branchesContract = {
     tracksProjectUsage: true,
   }),
 } as const;
-
-export type BranchesContract = typeof branchesContract;

@@ -10,9 +10,8 @@ interface Entry<V> {
 export interface TtlMapCache<K, V> {
   get(key: K): Promise<V>;
   invalidate(key: K): void;
-  // Drops every entry whose key starts with the given prefix. Only meaningful
-  // for string-keyed caches; throws on other key shapes so misuse stays loud.
-  invalidateByPrefix(prefix: K extends string ? string : never): void;
+  // Drops every entry at once, for writers that can't name what changed.
+  clear(): void;
 }
 
 export function ttlMapCache<K, V>(
@@ -24,9 +23,9 @@ export function ttlMapCache<K, V>(
   // write can't re-cache the pre-write value for a fresh TTL after the
   // writer invalidated. The stale value still goes to the caller that
   // started the load (unavoidable), but never back into the cache.
-  // Prefix invalidation bumps a cache-wide epoch instead of per-key
-  // generations: in-flight keys may not be in the store yet, and the
-  // only cost of an over-broad bump is one skipped re-cache.
+  // clear() bumps a cache-wide epoch instead of per-key generations:
+  // in-flight keys may not be in the store yet, and the only cost of an
+  // over-broad bump is one skipped re-cache.
   const generations = new Map<K, number>();
   let epoch = 0;
   return {
@@ -46,16 +45,9 @@ export function ttlMapCache<K, V>(
       store.delete(key);
       generations.set(key, (generations.get(key) ?? 0) + 1);
     },
-    invalidateByPrefix(prefix) {
+    clear() {
       epoch += 1;
-      for (const key of store.keys()) {
-        if (typeof key !== "string") {
-          throw new Error(
-            "invalidateByPrefix only works on string-keyed caches",
-          );
-        }
-        if (key.startsWith(prefix)) store.delete(key);
-      }
+      store.clear();
     },
   };
 }

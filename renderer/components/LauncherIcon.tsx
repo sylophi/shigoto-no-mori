@@ -28,7 +28,11 @@ import vscodiumIconUrl from "@/app-icons/vscodium.png";
 import windsurfIconUrl from "@/app-icons/windsurf.png";
 import xcodeIconUrl from "@/app-icons/xcode.png";
 import zedIconUrl from "@/app-icons/zed.png";
-import { WEB_GITHUB_ID, type LauncherEntry } from "@shared/schemas";
+import {
+  parseLauncherId,
+  WEB_GITHUB_ID,
+  type LauncherEntry,
+} from "@shared/schemas";
 
 interface LauncherIconProps {
   entry: LauncherEntry;
@@ -52,7 +56,7 @@ export function LauncherIcon({
     return <Sparkles className={className} />;
   }
 
-  const appId = entry.id.startsWith("app:") ? entry.id.slice(4) : entry.id;
+  const appId = parseLauncherId(entry.id)?.id ?? entry.id;
   switch (appId) {
     case "cursor":
       return <AppIcon src={cursorIconUrl} className={className} />;

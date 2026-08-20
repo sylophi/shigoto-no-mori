@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,7 +20,16 @@ import (
 
 const unknownBranch = "(unknown)"
 
+// Every git spawn passes through here, and `sm list` fans out over every
+// project x every worktree x four probes -- unbounded, that is hundreds
+// of processes and the time goes into fork/exec. runGit waits only on
+// its own child, never on another slot, so a counting semaphore here
+// caps the tree without deadlock.
+var gitSlots = make(chan struct{}, max(4, runtime.NumCPU()))
+
 func runGit(cwd string, args ...string) (string, error) {
+	gitSlots <- struct{}{}
+	defer func() { <-gitSlots }()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = cwd
 	var stdout, stderr bytes.Buffer
@@ -212,11 +222,10 @@ func isRenameOrCopy(column byte) bool {
 // worktree whose status can't be read (broken gitdir pointer,
 // unreadable index) must NOT count as clean.
 func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
-	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
+	paths, err := statusPaths(worktreePath)
 	if err != nil {
 		return workingTreeChanges{}, err
 	}
-	paths := parseStatusPaths(stdout)
 	out := workingTreeChanges{count: len(paths)}
 	// A deleted path stats as a failure, an untracked directory stats as
 	// the directory -- both are fine, we only want the newest hit.
@@ -239,11 +248,22 @@ func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
 // the mtime scan getWorkingTreeChanges layers on top costs up to
 // changeMtimeStatLimit stats they would throw away.
 func changedCount(worktreePath string) (int, error) {
-	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
+	paths, err := statusPaths(worktreePath)
 	if err != nil {
 		return 0, err
 	}
-	return len(parseStatusPaths(stdout)), nil
+	return len(paths), nil
+}
+
+// The one place the porcelain invocation and its parse live, so the
+// display probe and the destructive-op guards can never read the
+// working tree differently.
+func statusPaths(worktreePath string) ([]string, error) {
+	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
+	if err != nil {
+		return nil, err
+	}
+	return parseStatusPaths(stdout), nil
 }
 
 type remoteSync struct {

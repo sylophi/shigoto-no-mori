@@ -78,14 +78,13 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
             <p className="p-1 text-xs text-muted-foreground/70">No matches.</p>
           ) : (
             <ScriptList>
-              {filtered.map((entry, idx) => (
+              {filtered.map((entry) => (
                 <ScriptRow
                   key={entry.name}
                   worktree={worktree}
                   slot={{ kind: "package", name: entry.name }}
                   label={entry.name}
                   command={entry.command}
-                  isLast={idx === filtered.length - 1}
                 />
               ))}
             </ScriptList>

@@ -16,15 +16,16 @@
 // before anything is signaled. Every inconclusive answer leaves the
 // process alone.
 import { execFile } from "node:child_process";
-import { readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
 import { z } from "zod";
 import type { OrphanScriptReport } from "@shared/schemas";
-import { tempPathFor } from "../util/jsonFile";
+import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, shigomoriRoot } from "../util/paths";
 import { signalTree } from "./process";
+import { errorMessageOf } from "@shared/errors";
 
 const execFileP = promisify(execFile);
 
@@ -78,10 +79,6 @@ function lockPath(): string {
   return `${filePath()}.lock`;
 }
 
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 // Replaces the file with our whole in-memory set. Sync and locked to
 // match config/store.ts: the payload is a handful of records, and the
 // settle path can run while the app is already tearing down, where a
@@ -90,25 +87,16 @@ export function persistRunningScripts(scripts: PersistedScript[]): void {
   const path = filePath();
   const snapshot: Snapshot = { ownerPid: process.pid, scripts };
   try {
+    // selfWrite: false -- this is our own bookkeeping file, not state
+    // the watcher should echo back to the renderer.
     withFileLock(lockPath(), () => {
-      const temp = tempPathFor(path);
-      writeFileSync(temp, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
-      try {
-        renameSync(temp, path);
-      } catch (error) {
-        try {
-          unlinkSync(temp);
-        } catch {
-          // Best effort. The stray tmp file is harmless.
-        }
-        throw error;
-      }
+      atomicWriteJsonSync(path, snapshot, { selfWrite: false });
     });
   } catch (error) {
     // Losing the record costs the next boot's sweep and nothing else.
     // A script run must not fail over it.
     console.warn(
-      `[scripts] couldn't record running scripts: ${describe(error)}`,
+      `[scripts] couldn't record running scripts: ${errorMessageOf(error)}`,
     );
   }
 }
@@ -125,14 +113,16 @@ function readSnapshot(): Snapshot | null {
     // running, which is why both return null (nothing to sweep) rather
     // than an empty record set.
     if (!isENOENT(error)) {
-      console.warn(`[scripts] couldn't read ${FILE}: ${describe(error)}`);
+      console.warn(`[scripts] couldn't read ${FILE}: ${errorMessageOf(error)}`);
     }
     return null;
   }
   try {
     return SnapshotSchema.parse(JSON.parse(raw));
   } catch (error) {
-    console.warn(`[scripts] ignoring unusable ${FILE}: ${describe(error)}`);
+    console.warn(
+      `[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`,
+    );
     return null;
   }
 }
@@ -320,7 +310,7 @@ export function startOrphanScriptSweep(): void {
   if (sweep) return;
   const records = claimOrphanRecords();
   sweep = reapOrphans(records).catch((error) => {
-    console.warn(`[scripts] orphan sweep failed: ${describe(error)}`);
+    console.warn(`[scripts] orphan sweep failed: ${errorMessageOf(error)}`);
     return { stopped: 0 };
   });
 }

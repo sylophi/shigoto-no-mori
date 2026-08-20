@@ -2,7 +2,7 @@ import { Command } from "cmdk";
 import { Check, FolderGit2, Square } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
 import { ensureTrailingSep } from "@/lib/projectPaths";
-import { ITEM_CLASS } from "./cmdkClasses";
+import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 
 function relativeFromRoot(absolute: string, root: string): string {
   const trimmedRoot = ensureTrailingSep(root);

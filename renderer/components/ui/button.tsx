@@ -17,6 +17,13 @@ const buttonVariants = cva(
           "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
+        // Destructive tints of ghost and outline as real variants, so they emit
+        // a data-variant doubutsu can tell apart from a plain ghost.
+        // aria-pressed carries the two-step confirm's armed state.
+        "ghost-destructive":
+          "text-destructive hover:bg-destructive/10 hover:text-destructive aria-pressed:bg-destructive/10",
+        "outline-destructive":
+          "border-border bg-background text-destructive hover:bg-destructive/10 hover:text-destructive aria-pressed:bg-destructive/10 dark:border-input dark:bg-input/30",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

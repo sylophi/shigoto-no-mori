@@ -10,5 +10,3 @@ export const portPoolContract = {
   ),
   isInstalled: invoke("portPool:isInstalled", z.void(), z.boolean()),
 } as const;
-
-export type PortPoolContract = typeof portPoolContract;

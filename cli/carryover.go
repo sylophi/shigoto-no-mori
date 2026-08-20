@@ -75,11 +75,15 @@ func makeIgnoreMatcher(paths []string) func(string) bool {
 	}
 }
 
+// Either separator, so a Windows-authored entry can't smuggle a ".."
+// segment past the check.
+var pathSepRe = regexp.MustCompile(`[\\/]`)
+
 func isSafeRelPath(p string) bool {
 	if strings.HasPrefix(p, "/") || strings.Contains(p, "\x00") {
 		return false
 	}
-	for _, seg := range regexp.MustCompile(`[\\/]`).Split(p, -1) {
+	for _, seg := range pathSepRe.Split(p, -1) {
 		if seg == ".." {
 			return false
 		}

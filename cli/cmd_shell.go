@@ -61,7 +61,7 @@ var shellKinds = []string{"zsh", "bash", "fish"}
 
 func cmdShell(_ cliContext, args []string) (int, error) {
 	if len(args) == 0 {
-		out(shellHelpText())
+		out(namespaceHelp("shell"))
 		return 0, nil
 	}
 	sub, rest := args[0], args[1:]
@@ -242,10 +242,11 @@ func hookPath(kind string) string {
 }
 
 // Everything install would need to know about one shell's hook:
-//   installed  the hook is present and recognizably ours
-//   missing    no hook (or no rc file at all)
-//   modified   markers present but content we didn't write, never
-//              touched by install/uninstall, reported instead
+//
+//	installed  the hook is present and recognizably ours
+//	missing    no hook (or no rc file at all)
+//	modified   markers present but content we didn't write, never
+//	           touched by install/uninstall, reported instead
 type hookState struct {
 	Shell string `json:"shell"`
 	Path  string `json:"path"`

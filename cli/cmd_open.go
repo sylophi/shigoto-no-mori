@@ -20,10 +20,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	tool := ""
-	if len(parsed.positionals) > 0 {
-		tool = parsed.positionals[0]
-	}
+	tool := parsed.positional(0)
 
 	var target located
 	switch {

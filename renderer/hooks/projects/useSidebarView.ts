@@ -1,5 +1,6 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { SidebarView } from "@shared/schemas";
+import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { queryKeys } from "@/lib/queryKeys";
 
 // Resolved, not the raw query: main already defaults a missing or
@@ -16,29 +17,12 @@ export function useSidebarView(): SidebarView {
   return data ?? "projects";
 }
 
-interface ViewMutationContext {
-  previous?: SidebarView;
-}
-
-// Optimistic like the sort preference: the whole sidebar re-lays-out on
-// this value, so waiting a round trip to redraw would read as a hang.
+// Optimistic: the whole sidebar re-lays-out on this value, so waiting a
+// round trip to redraw would read as a hang.
 export function useSetSidebarView() {
-  const queryClient = useQueryClient();
-  return useMutation<void, Error, SidebarView, ViewMutationContext>({
-    mutationFn: (view) => window.api.projects.setSidebarView(view),
-    onMutate: async (view) => {
-      await queryClient.cancelQueries({ queryKey: queryKeys.sidebarView() });
-      const previous = queryClient.getQueryData<SidebarView>(
-        queryKeys.sidebarView(),
-      );
-      queryClient.setQueryData(queryKeys.sidebarView(), view);
-      return { previous };
-    },
-    onError: (_err, _view, ctx) => {
-      if (ctx?.previous !== undefined) {
-        queryClient.setQueryData(queryKeys.sidebarView(), ctx.previous);
-      }
-    },
-    meta: { errorTitle: "Couldn't save the sidebar layout" },
-  });
+  return useOptimisticPreference<SidebarView>(
+    queryKeys.sidebarView(),
+    (view) => window.api.projects.setSidebarView(view),
+    "Couldn't save the sidebar layout",
+  );
 }

@@ -32,6 +32,7 @@ import { TidyConfirm } from "./TidyConfirm";
 import { TidyGroupHeading } from "./TidyGroupHeading";
 import { TidyRow } from "./TidyRow";
 import { TidyStat } from "./TidyStat";
+import { withToggled } from "@/lib/toggleSet";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk
@@ -98,12 +99,9 @@ export function TidyForest() {
   const statusOf = (worktreeId: string) => status.get(worktreeId) ?? IDLE;
 
   const toggle = (worktreeId: string) => {
-    setPicked((prev) => {
-      const next = new Set(prev ?? safeIds);
-      if (next.has(worktreeId)) next.delete(worktreeId);
-      else next.add(worktreeId);
-      return next;
-    });
+    // Null picked means "everything safe is selected", so seed from
+    // that before flipping the one the user clicked.
+    setPicked((prev) => withToggled(worktreeId)(prev ?? safeIds));
   };
 
   const runRemovals = async () => {
@@ -347,8 +345,8 @@ function TidyList({
   showProject,
 }: TidyListProps) {
   return (
-    <div className="overflow-hidden rounded-md border border-border">
-      {entries.map((entry, index) => (
+    <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+      {entries.map((entry) => (
         <TidyRow
           key={entry.worktree.id}
           entry={entry}
@@ -356,7 +354,6 @@ function TidyList({
           status={statusOf(entry.worktree.id)}
           disabled={disabled}
           onToggle={() => onToggle(entry.worktree.id)}
-          isLast={index === entries.length - 1}
           showProject={showProject}
         />
       ))}

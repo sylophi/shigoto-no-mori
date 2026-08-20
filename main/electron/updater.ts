@@ -18,7 +18,6 @@
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
 // testing of a signed build -- the CLI child inherits it from our
 // environment.
-import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { app } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -31,10 +30,11 @@ import {
 import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "../lib/util/jsonFile";
-import { shigomoriRoot } from "../lib/util/paths";
+import { pathExists, shigomoriRoot } from "../lib/util/paths";
 import { confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
+import { errorMessageOf } from "@shared/errors";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 // The first check waits out the boot rush: staging can download
@@ -90,11 +90,7 @@ async function readStagedManifest(): Promise<StagedManifest | null> {
     StagedManifestSchema,
   ).catch(() => null);
   if (manifest === null) return null;
-  try {
-    await stat(join(stagedDir(), manifest.bundleName));
-  } catch {
-    return null;
-  }
+  if (!(await pathExists(join(stagedDir(), manifest.bundleName)))) return null;
   return manifest;
 }
 
@@ -165,7 +161,7 @@ async function runCheck(): Promise<void> {
     failed = true;
     setState({
       kind: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: errorMessageOf(err),
     });
   } finally {
     checkInFlight = false;
@@ -220,7 +216,7 @@ async function installUpdate(): Promise<void> {
     installing = false;
     setState({
       kind: "error",
-      message: err instanceof Error ? err.message : String(err),
+      message: errorMessageOf(err),
     });
     return;
   }

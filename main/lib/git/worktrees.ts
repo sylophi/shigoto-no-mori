@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { unknownWorktreeError } from "@shared/errors";
+import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
   isCommitHash,
@@ -12,6 +12,7 @@ import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
+import { createLimiter } from "../util/limit";
 import { run, splitZ } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 
@@ -493,6 +494,11 @@ async function buildWorktree(
   };
 }
 
+// Each buildWorktree starts four to six git processes and the sidebar
+// asks for every project at once on focus -- unbounded, that is hundreds
+// of simultaneous forks. Same window as tidy's gitProbes.
+const rowProbes = createLimiter(6);
+
 export async function listWorktrees(
   projectId: string,
   projectPath: string,
@@ -505,7 +511,9 @@ export async function listWorktrees(
   const ordered = identities.toSorted((a, b) =>
     a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
   );
-  return Promise.all(ordered.map((id) => buildWorktree(id, ctx)));
+  return Promise.all(
+    ordered.map((id) => rowProbes(() => buildWorktree(id, ctx))),
+  );
 }
 
 export async function describeWorktree(
@@ -560,7 +568,7 @@ export async function removeWorktreeForce(
     await removeWorktree(projectPath, worktreePath, true);
     return;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessageOf(err);
     if (!/Directory not empty|ENOTEMPTY/i.test(msg)) {
       throw err;
     }

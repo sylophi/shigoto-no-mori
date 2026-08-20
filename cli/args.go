@@ -80,6 +80,15 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 	return result, nil
 }
 
+// The i-th positional, "" when the caller didn't supply one -- the
+// optional-ref idiom every worktree-targeting command needs.
+func (p parsedArgs) positional(i int) string {
+	if i < len(p.positionals) {
+		return p.positionals[i]
+	}
+	return ""
+}
+
 // The arg-spec fragment shared by every command that targets a
 // worktree: -p/--project scoping plus the app-plumbing ids
 // (--project-id / --worktree-id) the IPC layer addresses by. Callers

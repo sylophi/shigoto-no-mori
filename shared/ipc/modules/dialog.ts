@@ -9,5 +9,3 @@ export const dialogContract = {
     z.string().nullable(),
   ),
 } as const;
-
-export type DialogContract = typeof dialogContract;

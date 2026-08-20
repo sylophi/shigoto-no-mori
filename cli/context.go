@@ -61,24 +61,34 @@ func resolveContext(cwd string, projects []project) cliContext {
 		return ctx
 	}
 
-	for _, proj := range ctx.projects {
+	if loc, owned := worktreeAt(ctx.projects, toplevel, primaryPath); loc != nil {
+		ctx.current = loc
+	} else if !owned {
+		ctx.unregisteredRepo = toplevel
+	}
+	return ctx
+}
+
+// The cwd-to-worktree rule, shared by the ambient context and explicit
+// path refs so the two can't disagree. owned separates "not a registered
+// repo" from "registered, but identities unreadable".
+func worktreeAt(projects []project, toplevel, primaryPath string) (loc *located, owned bool) {
+	for _, proj := range projects {
 		if proj.Path != primaryPath {
 			continue
 		}
+		owned = true
 		identities, err := listWorktreeIdentities(proj)
 		if err != nil {
-			return ctx
+			continue
 		}
 		for _, id := range identities {
 			if id.Path == toplevel {
-				ctx.current = &located{proj: proj, worktree: id}
-				return ctx
+				return &located{proj: proj, worktree: id}, true
 			}
 		}
-		return ctx
 	}
-	ctx.unregisteredRepo = toplevel
-	return ctx
+	return nil, owned
 }
 
 // Context line above a project menu offered from inside a repo that
@@ -206,19 +216,8 @@ func resolveWorktreeByDir(ctx cliContext, ref string) (*located, error) {
 	if gitErr != nil {
 		return nil, errf("%s isn't a worktree of any registered project.", abs)
 	}
-	for _, proj := range ctx.projects {
-		if proj.Path != primaryPath {
-			continue
-		}
-		identities, idErr := listWorktreeIdentities(proj)
-		if idErr != nil {
-			continue
-		}
-		for _, id := range identities {
-			if id.Path == toplevel {
-				return &located{proj: proj, worktree: id}, nil
-			}
-		}
+	if loc, _ := worktreeAt(ctx.projects, toplevel, primaryPath); loc != nil {
+		return loc, nil
 	}
 	return nil, errf("%s isn't a worktree of any registered project.", abs)
 }
@@ -277,11 +276,7 @@ func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs, primaryOK bool) (loc
 	if wid := parsed.strings["worktree-id"]; wid != "" {
 		return resolveWorktreeByID(ctx, parsed.strings["project-id"], wid)
 	}
-	ref := ""
-	if len(parsed.positionals) > 0 {
-		ref = parsed.positionals[0]
-	}
-	return resolveWorktree(ctx, ref, parsed.strings["project"], primaryOK)
+	return resolveWorktree(ctx, parsed.positional(0), parsed.strings["project"], primaryOK)
 }
 
 // Same front door for commands that target a project.

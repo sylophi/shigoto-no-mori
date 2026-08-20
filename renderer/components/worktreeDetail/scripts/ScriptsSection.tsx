@@ -87,14 +87,13 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
             <span className="font-mono text-muted-foreground">Lifecycle</span>
           </div>
           <ScriptList>
-            {lifecycleRows.map((row, idx) => (
+            {lifecycleRows.map((row) => (
               <ScriptRow
                 key={slotToParam(row.slot)}
                 worktree={worktree}
                 slot={row.slot}
                 label={row.label}
                 command={row.command}
-                isLast={idx === lifecycleRows.length - 1}
               />
             ))}
           </ScriptList>
