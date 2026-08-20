@@ -12,17 +12,18 @@ import (
 	"time"
 )
 
-func TestParseChangeCountsSplitsIndexAndWorktree(t *testing.T) {
+func TestChangeCountsSplitIndexAndWorktree(t *testing.T) {
 	porcelain := strings.Join([]string{
-		"M  staged.go",        // index only
-		" M unstaged.go",      // worktree only
-		"MM both.go",          // both sides
-		"?? new.go",           // untracked
-		"A  added.go",         // index only
-		"R  old.go -> new.go", // rename, index only
+		"M  staged.go",   // index only
+		" M unstaged.go", // worktree only
+		"MM both.go",     // both sides
+		"?? new.go",      // untracked
+		"A  added.go",    // index only
+		"R  new.go",      // rename, index only...
+		"old.go",         // ...and the bare source field it emits
 		"",
-	}, "\n")
-	got := parseChangeCounts(porcelain)
+	}, "\x00")
+	got := foldChangeCounts(parseStatusEntries(porcelain))
 	want := changeCounts{Staged: 4, Unstaged: 2, Untracked: 1, Total: 6}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -32,17 +33,17 @@ func TestParseChangeCountsSplitsIndexAndWorktree(t *testing.T) {
 	}
 }
 
-func TestParseChangeCountsConflictsAreNotDoubleCounted(t *testing.T) {
-	porcelain := "UU both.go\nAA added.go\nDD gone.go\nDU half.go\nM  fine.go\n"
-	got := parseChangeCounts(porcelain)
+func TestChangeCountsConflictsAreNotDoubleCounted(t *testing.T) {
+	porcelain := "UU both.go\x00AA added.go\x00DD gone.go\x00DU half.go\x00M  fine.go\x00"
+	got := foldChangeCounts(parseStatusEntries(porcelain))
 	want := changeCounts{Staged: 1, Conflicted: 4, Total: 5}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 }
 
-func TestParseChangeCountsIgnoresIgnoredAndEmpty(t *testing.T) {
-	got := parseChangeCounts("!! node_modules/\n\n\n")
+func TestChangeCountsIgnoreIgnoredAndEmpty(t *testing.T) {
+	got := foldChangeCounts(parseStatusEntries("!! node_modules/\x00\x00\x00"))
 	if !got.clean() {
 		t.Fatalf("expected clean, got %+v", got)
 	}
@@ -215,11 +216,12 @@ func TestStatusCardPlainRendersEveryKnownRow(t *testing.T) {
 			StashCount:   2,
 			LastCommit:   &commitSummary{Hash: "e158ef8", Subject: "Add the status card"},
 		},
-		Ports:    []portInfo{{Name: "renderer", Port: 4170}},
-		Scripts:  scriptsJSON{Setup: "pnpm install"},
-		PortPool: portPoolJSON{Enabled: true, Installed: true, Configured: true},
+		Ports:         []portInfo{{Name: "renderer", Port: 4170}},
+		Scripts:       scriptsJSON{Setup: "pnpm install"},
+		PortPool:      portPoolJSON{Enabled: true, Installed: true, Configured: true},
+		PRUnavailable: "gh isn't installed",
 	}
-	card := statusCard(status, prProbe{reason: "gh isn't installed"}, "")
+	card := statusCard(status, "")
 	for _, want := range []string{
 		"shigoto-no-mori/bubbly-mouse", "(shelved)",
 		"branch", "exp/cli-status", "↑2",
@@ -287,10 +289,12 @@ func TestPRLine(t *testing.T) {
 
 func TestStatusCardSkipsThePRRowWhenAsked(t *testing.T) {
 	status := statusJSON{ProjectName: "p", Name: "w", Branch: "b", Path: "/tmp/w"}
-	if card := statusCard(status, prProbe{skipped: true}, ""); strings.Contains(card, "pr ") {
+	skipped := status
+	skipped.PRSkipped = true
+	if card := statusCard(skipped, ""); strings.Contains(card, "pr ") {
 		t.Fatalf("--no-pr should print no pr row:\n%s", card)
 	}
-	if card := statusCard(status, prProbe{}, ""); !strings.Contains(card, "none") {
+	if card := statusCard(status, ""); !strings.Contains(card, "none") {
 		t.Fatalf("a branch with no PR should say so:\n%s", card)
 	}
 }

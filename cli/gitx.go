@@ -188,14 +188,23 @@ type workingTreeChanges struct {
 	lastChangeAt int64
 }
 
-// Splits `git status --porcelain=v1 -z` into the paths it reports. The
-// -z form is what makes the paths usable: without it git C-quotes
+// One record of `git status --porcelain=v1 -z`: the index column, the
+// worktree column, and the path. Callers that only want the path list
+// go through parseStatusPaths.
+type statusEntry struct {
+	index    byte
+	worktree byte
+	path     string
+}
+
+// Splits `git status --porcelain=v1 -z` into the entries it reports.
+// The -z form is what makes the paths usable: without it git C-quotes
 // anything with a space or a non-ASCII byte. The cost is having to
 // consume the rename/copy source, which git emits as a bare extra field
 // right after the entry that renamed it.
-func parseStatusPaths(stdout string) []string {
+func parseStatusEntries(stdout string) []statusEntry {
 	fields := strings.Split(stdout, "\x00")
-	var paths []string
+	var entries []statusEntry
 	for i := 0; i < len(fields); i++ {
 		field := fields[i]
 		// Trailing empty field from the final NUL, and any short garbage:
@@ -203,13 +212,28 @@ func parseStatusPaths(stdout string) []string {
 		if len(field) < 4 {
 			continue
 		}
-		paths = append(paths, field[3:])
+		entries = append(entries, statusEntry{index: field[0], worktree: field[1], path: field[3:]})
 		// Either column can be the R/C -- staged renames land in the
 		// index column, unstaged ones in the worktree column -- and both
 		// emit exactly one source field.
 		if isRenameOrCopy(field[0]) || isRenameOrCopy(field[1]) {
 			i++
 		}
+	}
+	return entries
+}
+
+func parseStatusPaths(stdout string) []string {
+	return pathsOf(parseStatusEntries(stdout))
+}
+
+func pathsOf(entries []statusEntry) []string {
+	if len(entries) == 0 {
+		return nil
+	}
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		paths = append(paths, entry.path)
 	}
 	return paths
 }
@@ -256,14 +280,22 @@ func changedCount(worktreePath string) (int, error) {
 }
 
 // The one place the porcelain invocation and its parse live, so the
-// display probe and the destructive-op guards can never read the
+// display probes and the destructive-op guards can never read the
 // working tree differently.
-func statusPaths(worktreePath string) ([]string, error) {
+func statusEntries(worktreePath string) ([]statusEntry, error) {
 	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
 	if err != nil {
 		return nil, err
 	}
-	return parseStatusPaths(stdout), nil
+	return parseStatusEntries(stdout), nil
+}
+
+func statusPaths(worktreePath string) ([]string, error) {
+	entries, err := statusEntries(worktreePath)
+	if err != nil {
+		return nil, err
+	}
+	return pathsOf(entries), nil
 }
 
 type remoteSync struct {
@@ -272,17 +304,35 @@ type remoteSync struct {
 	divergedClean bool
 }
 
-func getRemoteSync(worktreePath string) remoteSync {
-	stdout, err := runGit(worktreePath, "rev-list", "--left-right", "--count", "HEAD...@{u}")
+// `rev-list --left-right --count HEAD...<ref>` prints "<left>\t<right>":
+// commits only on HEAD, then commits only on the ref. The one place
+// that spawn and its parse live, so upstream sync, the primary
+// relation, and the status card can never read a divergence
+// differently. ok is false when the ref doesn't resolve here (a base
+// branch that was never fetched, no upstream) or HEAD is unborn.
+func aheadBehind(worktreePath, ref string) (ahead, behind int, ok bool) {
+	if ref == "" {
+		return 0, 0, false
+	}
+	stdout, err := runGit(worktreePath, "rev-list", "--left-right", "--count", "HEAD..."+ref)
 	if err != nil {
-		return remoteSync{}
+		return 0, 0, false
 	}
 	fields := strings.Fields(strings.TrimSpace(stdout))
-	rs := remoteSync{hasUpstream: true}
-	if len(fields) >= 2 {
-		rs.ahead, _ = strconv.Atoi(fields[0])
-		rs.behind, _ = strconv.Atoi(fields[1])
+	if len(fields) < 2 {
+		return 0, 0, false
 	}
+	ahead, _ = strconv.Atoi(fields[0])
+	behind, _ = strconv.Atoi(fields[1])
+	return ahead, behind, true
+}
+
+func getRemoteSync(worktreePath string) remoteSync {
+	ahead, behind, ok := aheadBehind(worktreePath, "@{u}")
+	if !ok {
+		return remoteSync{}
+	}
+	rs := remoteSync{ahead: ahead, behind: behind, hasUpstream: true}
 	if rs.ahead > 0 && rs.behind > 0 {
 		if _, err := runGit(worktreePath, "merge-tree", "--write-tree", "HEAD", "@{u}"); err == nil {
 			rs.divergedClean = true
@@ -422,18 +472,10 @@ func getPrimaryRelation(id worktreeIdentity, ctx buildContext) primaryRelation {
 	if ctx.primaryRef == "" || id.IsPrimary || id.Detached {
 		return primaryRelation{}
 	}
-	// `--left-right` on the symmetric difference prints "<left>\t<right>":
-	// commits only on HEAD, then commits only on the primary.
-	stdout, err := runGit(id.Path, "rev-list", "--count", "--left-right", "HEAD..."+ctx.primaryRef)
-	if err != nil {
+	aheadOfPrimary, behindPrimary, ok := aheadBehind(id.Path, ctx.primaryRef)
+	if !ok {
 		return primaryRelation{}
 	}
-	fields := strings.Fields(strings.TrimSpace(stdout))
-	if len(fields) < 2 {
-		return primaryRelation{}
-	}
-	aheadOfPrimary, _ := strconv.Atoi(fields[0])
-	behindPrimary, _ := strconv.Atoi(fields[1])
 	// Anything HEAD still holds on its own hasn't landed yet, and a
 	// branch level with the primary has nothing to have landed.
 	if aheadOfPrimary > 0 || behindPrimary == 0 {

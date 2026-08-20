@@ -47,7 +47,7 @@ var worktreeItems = []helpItem{
 	{"worktrees list [--all]", "List worktrees",
 		"All projects when outside one, or with --all."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
-		"The worktree you're standing in, at a glance: how the branch sits against its upstream and the project's base branch, staged/unstaged/untracked counts, the repo's stash depth, the last commit, provisioned ports, the lifecycle scripts it would run, and the branch's PR with its checks. The PR lookup needs gh, runs under a short deadline, and degrades to a note instead of stalling the card (--no-pr skips it). --json prints the whole card as one document."},
+		"Where the worktree you're standing in stands: branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},

@@ -14,15 +14,9 @@ package main
 // card (--no-pr skips it entirely).
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -43,30 +37,27 @@ type changeCounts struct {
 
 func (c changeCounts) clean() bool { return c.Total == 0 }
 
-// XY status codes (git status --porcelain=v1): X is the index side, Y
-// the worktree side. Unmerged entries carry a U on either side (plus
-// the AA/DD both-added/both-deleted pairs) and count as conflicted
-// rather than as staged+unstaged, which would double-count them.
-func parseChangeCounts(porcelain string) changeCounts {
+// XY status codes: X is the index side, Y the worktree side. Unmerged
+// entries carry a U on either side (plus the AA/DD both-added/
+// both-deleted pairs) and count as conflicted rather than as
+// staged+unstaged, which would double-count them.
+func foldChangeCounts(entries []statusEntry) changeCounts {
 	var counts changeCounts
-	for _, line := range strings.Split(porcelain, "\n") {
-		if len(line) < 2 {
-			continue
-		}
-		index, worktree := line[0], line[1]
+	for _, entry := range entries {
 		switch {
-		case index == '!' && worktree == '!':
+		case entry.index == '!' && entry.worktree == '!':
 			continue // ignored; only listed with --ignored, never counted
-		case index == '?' && worktree == '?':
+		case entry.index == '?' && entry.worktree == '?':
 			counts.Untracked++
-		case index == 'U' || worktree == 'U' ||
-			(index == 'A' && worktree == 'A') || (index == 'D' && worktree == 'D'):
+		case entry.index == 'U' || entry.worktree == 'U' ||
+			(entry.index == 'A' && entry.worktree == 'A') ||
+			(entry.index == 'D' && entry.worktree == 'D'):
 			counts.Conflicted++
 		default:
-			if index != ' ' {
+			if entry.index != ' ' {
 				counts.Staged++
 			}
-			if worktree != ' ' {
+			if entry.worktree != ' ' {
 				counts.Unstaged++
 			}
 		}
@@ -76,13 +67,15 @@ func parseChangeCounts(porcelain string) changeCounts {
 }
 
 // Display probe, like changedCount's caller in buildWorktree: an
-// unreadable status shows as clean rather than failing the card.
+// unreadable status shows as clean rather than failing the card. Goes
+// through gitx's statusEntries so the card and `list` can never read
+// the working tree differently.
 func readChangeCounts(worktreePath string) changeCounts {
-	stdout, err := runGit(worktreePath, "status", "--porcelain=v1")
+	entries, err := statusEntries(worktreePath)
 	if err != nil {
 		return changeCounts{}
 	}
-	return parseChangeCounts(stdout)
+	return foldChangeCounts(entries)
 }
 
 // Stashes live in the repo's common dir, so this counts the whole
@@ -99,131 +92,6 @@ func stashCount(worktreePath string) int {
 		}
 	}
 	return count
-}
-
-// The two-sided form of behindPrimary: how far HEAD has moved past a
-// ref and how far the ref has moved past HEAD. ok is false when the ref
-// doesn't resolve here (a base branch that was never fetched) or HEAD
-// is unborn, and the card drops the row rather than printing zeroes.
-func divergenceFrom(worktreePath, ref string) (ahead, behind int, ok bool) {
-	if ref == "" {
-		return 0, 0, false
-	}
-	stdout, err := runGit(worktreePath, "rev-list", "--left-right", "--count", "HEAD..."+ref)
-	if err != nil {
-		return 0, 0, false
-	}
-	fields := strings.Fields(strings.TrimSpace(stdout))
-	if len(fields) < 2 {
-		return 0, 0, false
-	}
-	ahead, _ = strconv.Atoi(fields[0])
-	behind, _ = strconv.Atoi(fields[1])
-	return ahead, behind, true
-}
-
-// --- provisioned ports ---
-
-// port-pool.config.json, the file portPoolConfigured already checks:
-// which port names the project allocates, and the env files (var name
-// -> template) port-pool writes them into.
-type portPoolConfig struct {
-	PortNames []string                     `json:"portNames"`
-	EnvFiles  map[string]map[string]string `json:"envFiles"`
-}
-
-type portInfo struct {
-	Name string `json:"name"`
-	Port int    `json:"port"`
-	File string `json:"file"`
-	Key  string `json:"key"`
-}
-
-// KEY=VALUE lines from a dotenv file: comments, blanks, `export `
-// prefixes, and surrounding quotes off. Deliberately not a full dotenv
-// parser -- these files are machine-written by port-pool.
-func parseEnvAssignments(content string) map[string]string {
-	env := map[string]string{}
-	for _, line := range strings.Split(content, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		trimmed = strings.TrimPrefix(trimmed, "export ")
-		key, value, found := strings.Cut(trimmed, "=")
-		if !found {
-			continue
-		}
-		value = strings.TrimSpace(value)
-		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
-			value = value[1 : len(value)-1]
-		}
-		env[strings.TrimSpace(key)] = value
-	}
-	return env
-}
-
-// The value each declared port name currently holds, read back out of
-// the env files rather than out of port-pool's own state -- the files
-// are the contract both sides already agree on. Only whole-value
-// templates ("${renderer}") can be reversed; a name embedded in a
-// larger string (a URL, say) goes unreported instead of guessed at.
-// First file that carries a name wins, so a name duplicated across env
-// files is reported once.
-func matchPorts(config portPoolConfig, files map[string]string) []portInfo {
-	byTemplate := map[string]string{}
-	for _, name := range config.PortNames {
-		byTemplate["${"+name+"}"] = name
-	}
-	ports := []portInfo{}
-	seen := map[string]bool{}
-	for _, file := range sortedKeys(config.EnvFiles) {
-		content, ok := files[file]
-		if !ok {
-			continue
-		}
-		env := parseEnvAssignments(content)
-		for _, key := range sortedKeys(config.EnvFiles[file]) {
-			name, isPort := byTemplate[config.EnvFiles[file][key]]
-			if !isPort || seen[name] {
-				continue
-			}
-			port, err := strconv.Atoi(env[key])
-			if err != nil || port <= 0 {
-				continue
-			}
-			seen[name] = true
-			ports = append(ports, portInfo{Name: name, Port: port, File: file, Key: key})
-		}
-	}
-	return ports
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for key := range m {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func provisionedPorts(worktreePath string) []portInfo {
-	raw, err := os.ReadFile(filepath.Join(worktreePath, "port-pool.config.json"))
-	if err != nil {
-		return []portInfo{}
-	}
-	var config portPoolConfig
-	if json.Unmarshal(raw, &config) != nil {
-		return []portInfo{}
-	}
-	files := map[string]string{}
-	for name := range config.EnvFiles {
-		if content, err := os.ReadFile(filepath.Join(worktreePath, name)); err == nil {
-			files[name] = string(content)
-		}
-	}
-	return matchPorts(config, files)
 }
 
 // --- pull request probe ---
@@ -302,36 +170,29 @@ func ghProbeReason(stderr string) string {
 	return "gh failed"
 }
 
-// findPullRequest's lookup (gh's server-side --head filter, any state)
-// with the check rollup attached and a deadline around it. Doesn't go
-// through runGh: that one is unbounded, and a status card must never be
-// the command that hangs.
+// findPullRequest's lookup -- the same args, so the card can't end up
+// describing a different PR than `sm merge` acts on -- with the check
+// rollup attached and a deadline around it. The deadline is why it
+// takes the context form: a status card must never be the command that
+// hangs.
 func probePullRequest(projectPath, branch string) prProbe {
-	if _, err := exec.LookPath("gh"); err != nil {
+	if !ghAvailable() {
 		return prProbe{reason: "gh isn't installed"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), prProbeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh",
-		"pr", "list", "--state", "all", "--head", branch, "--limit", "1",
-		"--json", "number,title,state,isDraft,url,statusCheckRollup")
-	cmd.Dir = projectPath
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	vlog("[gh] pr list --head %s (deadline %s)", branch, prProbeTimeout)
+	stdout, err := runGhContext(ctx, projectPath, prLookupArgs(branch, "statusCheckRollup")...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return prProbe{reason: "gh timed out"}
 		}
-		return prProbe{reason: ghProbeReason(stderr.String())}
+		return prProbe{reason: ghProbeReason(err.Error())}
 	}
 	var found []struct {
 		prSummary
 		StatusCheckRollup []checkNode `json:"statusCheckRollup"`
 	}
-	if json.Unmarshal(stdout.Bytes(), &found) != nil {
+	if json.Unmarshal([]byte(stdout), &found) != nil {
 		return prProbe{reason: "unexpected gh output"}
 	}
 	if len(found) == 0 {
@@ -396,10 +257,13 @@ type statusJSON struct {
 	Ports       []portInfo    `json:"ports"`
 	PortPool    portPoolJSON  `json:"portPool"`
 	Scripts     scriptsJSON   `json:"scripts"`
-	// null when the branch has no PR, or when the lookup couldn't run --
-	// prUnavailable then carries why.
+	// null when the branch has no PR, when the lookup couldn't run --
+	// prUnavailable then carries why -- or when --no-pr skipped it,
+	// which prSkipped is how a --json consumer tells apart from "this
+	// branch has no PR".
 	PR            *prCard `json:"pr"`
 	PRUnavailable string  `json:"prUnavailable,omitempty"`
+	PRSkipped     bool    `json:"prSkipped,omitempty"`
 }
 
 // --- rendering ---
@@ -441,26 +305,6 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max-1]) + "…"
 }
 
-// The ↑ahead ↓behind cell, in `list`'s vocabulary and colors so a card
-// and a table row can't describe the same divergence differently. even
-// is the label for "no divergence at all".
-func divergenceCell(p palette, ahead, behind int, even string) string {
-	if ahead == 0 && behind == 0 {
-		return p.green(even)
-	}
-	cell := ""
-	if ahead > 0 {
-		cell = p.cyan(fmt.Sprintf("↑%d", ahead))
-	}
-	if behind > 0 {
-		if cell != "" {
-			cell += " "
-		}
-		cell += p.yellow(fmt.Sprintf("↓%d", behind))
-	}
-	return cell
-}
-
 // Whether the checked-out branch IS the base branch -- "main" against
 // a base ref of "main" or "origin/main".
 func onBaseBranch(branch, ref string) bool {
@@ -495,9 +339,6 @@ func checksLine(checks prChecks) string {
 	if checks.Pending > 0 {
 		parts = append(parts, dimOut(fmt.Sprintf("%d pending", checks.Pending)))
 	}
-	if checks.Passing > 0 && len(parts) == 0 {
-		return greenOut(fmt.Sprintf("%d passing", checks.Passing))
-	}
 	if checks.Passing > 0 {
 		parts = append(parts, greenOut(fmt.Sprintf("%d passing", checks.Passing)))
 	}
@@ -524,14 +365,24 @@ func prLine(card *prCard, width int) string {
 	return line
 }
 
+// The label column plus its two-space gutter, and the room the rows
+// that append something after their value need for it: the divergence
+// cell on branch, the age parenthetical on commit, the checks summary
+// on pr. Named so a change to one of those suffixes has one place to
+// move rather than a bare number at the call site.
+const (
+	statusLabelWidth  = 12
+	statusSyncSuffix  = 12
+	statusAgeSuffix   = 20
+	statusCheckSuffix = 24
+)
+
 // Header line plus an aligned label/value block. Every value is painted
 // after its width is fixed; alignRows measures visible width, so the
 // column never drifts.
-func statusCard(status statusJSON, probe prProbe, accent string) string {
-	width := helpWidth()
-	// The label column plus its two-space gutter, so the longest value
-	// still fits the terminal.
-	valueWidth := width - 12
+func statusCard(status statusJSON, accent string) string {
+	// The longest value still has to fit the terminal.
+	valueWidth := helpWidth() - statusLabelWidth
 
 	title := status.Name
 	if stdoutColor {
@@ -542,18 +393,7 @@ func statusCard(status statusJSON, probe prProbe, accent string) string {
 		project = codeOut(project, accent)
 	}
 	header := project + dimOut("/") + title
-	// primary before external, and never both: the primary checkout
-	// isn't under the managed base either, and calling it external would
-	// only confuse (flagsCell makes the same call).
-	var flags []string
-	if status.IsPrimary {
-		flags = append(flags, "primary")
-	} else if status.IsExternal {
-		flags = append(flags, "external")
-	}
-	if status.Shelved {
-		flags = append(flags, "shelved")
-	}
+	flags := worktreeFlags(status.IsPrimary, status.IsExternal, status.Shelved)
 	if status.Detached {
 		flags = append(flags, "detached HEAD")
 	}
@@ -569,7 +409,7 @@ func statusCard(status statusJSON, probe prProbe, accent string) string {
 	}
 
 	row("path", dimOut(truncateRunes(collapseHome(status.Path), valueWidth)))
-	branch := cyanOut(truncateRunes(status.Branch, valueWidth-12))
+	branch := cyanOut(truncateRunes(status.Branch, valueWidth-statusSyncSuffix))
 	if status.Git.Upstream != nil {
 		branch += "  " + divergenceCell(outPalette,
 			status.Git.Upstream.Ahead, status.Git.Upstream.Behind, "synced")
@@ -588,7 +428,7 @@ func statusCard(status statusJSON, probe prProbe, accent string) string {
 		row("stash", fmt.Sprintf("%d", status.Git.StashCount)+dimOut(" (repo-wide)"))
 	}
 	if commit := status.Git.LastCommit; commit != nil {
-		line := yellowOut(commit.Hash) + "  " + truncateRunes(commit.Subject, valueWidth-20)
+		line := yellowOut(commit.Hash) + "  " + truncateRunes(commit.Subject, valueWidth-statusAgeSuffix)
 		if age := relativeAge(commit.Date); age != "" {
 			line += dimOut("  (" + age + ")")
 		}
@@ -606,11 +446,11 @@ func statusCard(status statusJSON, probe prProbe, accent string) string {
 	row("setup", dimOut(truncateRunes(status.Scripts.Setup, valueWidth)))
 	row("teardown", dimOut(truncateRunes(status.Scripts.Teardown, valueWidth)))
 	switch {
-	case probe.skipped:
+	case status.PRSkipped:
 	case status.PR != nil:
-		row("pr", prLine(status.PR, valueWidth-24))
-	case probe.reason != "":
-		row("pr", dimOut("unavailable ("+probe.reason+")"))
+		row("pr", prLine(status.PR, valueWidth-statusCheckSuffix))
+	case status.PRUnavailable != "":
+		row("pr", dimOut("unavailable ("+status.PRUnavailable+")"))
 	default:
 		row("pr", dimOut("none"))
 	}
@@ -650,18 +490,18 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		}
 	}()
 
-	// One read of the project's remotes, base ref, and shelved set --
-	// the same context list builds its rows from.
-	build := loadBuildContext(proj)
-	config := readProjectConfig(proj.ID)
-
+	// Every local probe is independent, so none of them waits on
+	// another -- including the two that read files rather than spawn
+	// git.
 	var (
 		counts   changeCounts
 		stashes  int
 		commits  []commitSummary
 		upstream remoteSync
 		base     *baseJSON
-		accent   string
+		build    buildContext
+		ports    []portInfo
+		pool     portPoolJSON
 		wg       sync.WaitGroup
 	)
 	wg.Add(6)
@@ -671,21 +511,28 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	go func() { defer wg.Done(); upstream = getRemoteSync(id.Path) }()
 	go func() {
 		defer wg.Done()
-		if ahead, behind, ok := divergenceFrom(id.Path, build.primaryRef); ok {
+		// One read of the project's remotes, base ref, config, and
+		// shelved set -- the same context list builds its rows from --
+		// then the divergence it exists for here.
+		build = loadBuildContext(proj)
+		if ahead, behind, ok := aheadBehind(id.Path, build.primaryRef); ok {
 			base = &baseJSON{Ref: build.primaryRef, syncJSON: syncJSON{Ahead: ahead, Behind: behind}}
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		// Icon work for the header's project accent; skipped when the
-		// color would be painted away anyway.
-		if stdoutColor {
-			accent = projectColorCode(proj)
+		// One read of port-pool.config.json answers both "which ports
+		// does this worktree hold" and "is it configured at all".
+		config := readPortPoolConfig(id.Path)
+		ports = provisionedPorts(id.Path, config)
+		pool = portPoolJSON{
+			Enabled:    portPoolEnabled(readGlobalConfigHints()),
+			Installed:  portPoolInstalled(),
+			Configured: config.configured(),
 		}
 	}()
 	wg.Wait()
 
-	global := readGlobalConfigHints()
 	status := statusJSON{
 		ID:          id.ID,
 		ProjectID:   id.ProjectID,
@@ -696,18 +543,14 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		IsPrimary:   id.IsPrimary,
 		IsExternal:  id.IsExternal,
 		Detached:    id.Detached,
-		Shelved:     !id.IsPrimary && !id.IsExternal && build.shelved[id.ID],
+		Shelved:     shelvedFlag(id, build),
 		Git: gitStatusJSON{
 			Base:         base,
 			changeCounts: counts,
 			StashCount:   stashes,
 		},
-		Ports: provisionedPorts(id.Path),
-		PortPool: portPoolJSON{
-			Enabled:    global.PortPool != nil && *global.PortPool,
-			Installed:  portPoolInstalled(),
-			Configured: portPoolConfigured(id.Path),
-		},
+		Ports:    ports,
+		PortPool: pool,
 	}
 	if upstream.hasUpstream {
 		status.Git.Upstream = &syncJSON{Ahead: upstream.ahead, Behind: upstream.behind}
@@ -715,12 +558,13 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	if len(commits) > 0 {
 		status.Git.LastCommit = &commits[0]
 	}
-	if config != nil {
+	if config := build.config; config != nil {
 		status.Scripts = scriptsJSON{Setup: config.Scripts.Setup, Teardown: config.Scripts.Teardown}
 	}
 
 	probe := <-probes
 	status.PR = probe.card
+	status.PRSkipped = probe.skipped
 	if probe.card == nil && probe.reason != "" {
 		status.PRUnavailable = probe.reason
 	}
@@ -729,6 +573,12 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		emit(status)
 		return 0, nil
 	}
-	out(statusCard(status, probe, accent))
+	// Icon work for the header's project accent, and only on the path
+	// that paints it.
+	accent := ""
+	if stdoutColor {
+		accent = projectColorCode(proj)
+	}
+	out(statusCard(status, accent))
 	return 0, nil
 }

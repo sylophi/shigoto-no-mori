@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -174,7 +175,12 @@ func stampSchemaVersion(doc map[string]any) {
 	doc["schemaVersion"] = schemaVersion
 }
 
-var notedNewerSchema = map[string]bool{}
+// Guarded: commands that fan out read several state files at once, and
+// two of them noticing something on the same run must not race.
+var (
+	notedMu          sync.Mutex
+	notedNewerSchema = map[string]bool{}
+)
 
 // The read side is deliberately toothless. Files written before the
 // marker existed have none, which is normal and forever, and a file
@@ -191,10 +197,13 @@ func noteNewerSchema(path string, raw []byte) {
 	if json.Unmarshal(raw, &doc) != nil || doc.SchemaVersion <= schemaVersion {
 		return
 	}
-	if notedNewerSchema[path] {
+	notedMu.Lock()
+	seen := notedNewerSchema[path]
+	notedNewerSchema[path] = true
+	notedMu.Unlock()
+	if seen {
 		return
 	}
-	notedNewerSchema[path] = true
 	note(yellowErr(fmt.Sprintf(
 		"%s was written by a newer build (schemaVersion %d, this build writes %d). Reading it anyway.",
 		path, doc.SchemaVersion, schemaVersion)))
@@ -311,10 +320,13 @@ func readRegistryFile() (map[string]json.RawMessage, error) {
 var notedFileTrouble = map[string]bool{}
 
 func noteFileTrouble(path, degraded string, err error) {
-	if notedFileTrouble[path] {
+	notedMu.Lock()
+	seen := notedFileTrouble[path]
+	notedFileTrouble[path] = true
+	notedMu.Unlock()
+	if seen {
 		return
 	}
-	notedFileTrouble[path] = true
 	note(yellowErr("warning:") + " " + err.Error())
 	note(dimErr(degraded))
 }

@@ -4,6 +4,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -11,6 +12,26 @@ import (
 // amber=warning, sky=info); the words alone carry the meaning when
 // color is off. Palette-parameterized because the picker renders the
 // same cells on stderr.
+// The ↑ahead ↓behind cell. Shared with the status card so a table row
+// and a card can't describe the same divergence differently. even is
+// the label for "no divergence at all".
+func divergenceCell(p palette, ahead, behind int, even string) string {
+	if ahead == 0 && behind == 0 {
+		return p.green(even)
+	}
+	cell := ""
+	if ahead > 0 {
+		cell = p.cyan(fmt.Sprintf("↑%d", ahead))
+	}
+	if behind > 0 {
+		if cell != "" {
+			cell += " "
+		}
+		cell += p.yellow(fmt.Sprintf("↓%d", behind))
+	}
+	return cell
+}
+
 func syncCell(p palette, w worktreeJSON) string {
 	if w.Detached {
 		return p.yellow("detached")
@@ -21,20 +42,24 @@ func syncCell(p palette, w worktreeJSON) string {
 	return divergenceCell(p, w.Ahead, w.Behind, "synced")
 }
 
+// primary before external, and never both: the primary checkout isn't
+// under the managed base either, and calling it external would only
+// confuse. Shared with the status card's header.
+func worktreeFlags(isPrimary, isExternal, shelved bool) []string {
+	var flags []string
+	if isPrimary {
+		flags = append(flags, "primary")
+	} else if isExternal {
+		flags = append(flags, "external")
+	}
+	if shelved {
+		flags = append(flags, "shelved")
+	}
+	return flags
+}
+
 func flagsCell(p palette, w worktreeJSON) string {
-	flags := ""
-	if w.IsPrimary {
-		flags = "primary"
-	} else if w.IsExternal {
-		flags = "external"
-	}
-	if w.Shelved {
-		if flags != "" {
-			flags += ", "
-		}
-		flags += "shelved"
-	}
-	return p.dim(flags)
+	return p.dim(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved), ", "))
 }
 
 func changesCell(p palette, w worktreeJSON) string {
