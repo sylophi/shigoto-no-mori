@@ -46,6 +46,8 @@ var generalItems = []helpItem{
 var worktreeItems = []helpItem{
 	{"worktrees list [--all]", "List worktrees",
 		"All projects when outside one, or with --all."},
+	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
+		"Where the worktree you're standing in stands: branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
@@ -389,6 +391,7 @@ type command struct {
 
 var commands = []command{
 	{name: "list", aliases: []string{"ls", "l"}, worktree: true, run: cmdList},
+	{name: "status", aliases: []string{"st"}, worktree: true, run: cmdStatus},
 	{name: "path", worktree: true, run: cmdPath},
 	{name: "cd", aliases: []string{"c"}, worktree: true, run: cmdCd},
 	{name: "switch", worktree: true, run: cmdWorktree},

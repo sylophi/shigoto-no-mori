@@ -43,6 +43,9 @@ type buildContext struct {
 	primaryRef string
 	shelved    map[string]bool
 	chain      *primaryChain
+	// The project config the primary ref was resolved from, kept so
+	// callers that need more of it don't read the file a second time.
+	config *projectConfig
 }
 
 // The configured default-branch override, or "" -- the nil-config
@@ -63,14 +66,23 @@ func loadBuildContext(proj project) buildContext {
 	// listRemotes feeds both hasRemote and the default-branch
 	// resolution; one spawn covers both.
 	remotes := listRemotes(proj.Path)
+	config := readProjectConfig(proj.ID)
 	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
-		defaultBranchOverride(readProjectConfig(proj.ID)), remotes)
+		defaultBranchOverride(config), remotes)
 	return buildContext{
 		hasRemote:  len(remotes) > 0,
 		primaryRef: primaryRef,
 		shelved:    readShelvedSet(),
 		chain:      &primaryChain{path: proj.Path, ref: primaryRef},
+		config:     config,
 	}
+}
+
+// Only worktrees the app manages carry a shelved mark: the primary
+// checkout and externals never do, and the two readers of the registry
+// set must agree on that or a card and a row disagree.
+func shelvedFlag(id worktreeIdentity, ctx buildContext) bool {
+	return !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID]
 }
 
 // The identity fields of a full status object -- for reusing helpers
@@ -118,7 +130,7 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		IsPrimary:         id.IsPrimary,
 		IsExternal:        id.IsExternal,
 		Detached:          id.Detached,
-		Shelved:           !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID],
+		Shelved:           shelvedFlag(id, ctx),
 	}
 }
 

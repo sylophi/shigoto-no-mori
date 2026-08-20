@@ -215,27 +215,136 @@ func portPoolInstalled() bool {
 	return err == nil
 }
 
-func portPoolConfigured(dir string) bool {
+// port-pool.config.json: which port names the project allocates, and
+// the env files (var name -> template) port-pool writes them into.
+// schemaVersion's presence is what marks the file as a real port-pool
+// config rather than something else parked at that path.
+type portPoolConfig struct {
+	SchemaVersion json.RawMessage              `json:"schemaVersion"`
+	PortNames     []string                     `json:"portNames"`
+	EnvFiles      map[string]map[string]string `json:"envFiles"`
+}
+
+func (c portPoolConfig) configured() bool { return len(c.SchemaVersion) > 0 }
+
+// One read of the file, so a caller that wants both the declared ports
+// and "is this worktree configured at all" doesn't parse it twice.
+func readPortPoolConfig(dir string) portPoolConfig {
 	raw, err := os.ReadFile(filepath.Join(dir, "port-pool.config.json"))
 	if err != nil {
-		return false
+		return portPoolConfig{}
 	}
-	var parsed map[string]json.RawMessage
-	if json.Unmarshal(raw, &parsed) != nil {
-		return false
+	var keys map[string]json.RawMessage
+	if json.Unmarshal(raw, &keys) != nil {
+		return portPoolConfig{}
 	}
-	_, ok := parsed["schemaVersion"]
-	return ok
+	// Key by key, tolerantly: "is this worktree configured" is the
+	// question provision and release both hinge on, and a portNames or
+	// envFiles shape this build doesn't model must not turn it into a
+	// no -- release would then skip and leak the worktree's ports.
+	config := portPoolConfig{SchemaVersion: keys["schemaVersion"]}
+	_ = json.Unmarshal(keys["portNames"], &config.PortNames)
+	_ = json.Unmarshal(keys["envFiles"], &config.EnvFiles)
+	return config
+}
+
+func portPoolConfigured(dir string) bool {
+	return readPortPoolConfig(dir).configured()
+}
+
+// The global toggle on its own, for the callers that ask about it
+// without a worktree in hand.
+func portPoolEnabled(global globalConfig) bool {
+	return global.PortPool != nil && *global.PortPool
 }
 
 // The whole "does port-pool run here" rule, in one place: provision and
 // release must agree or a worktree keeps a port it never gives back.
 // Externals are excluded because no provision ever ran.
 func portPoolActiveFor(global globalConfig, id worktreeIdentity) bool {
-	if id.IsExternal || global.PortPool == nil || !*global.PortPool {
+	if id.IsExternal || !portPoolEnabled(global) {
 		return false
 	}
 	return portPoolInstalled() && portPoolConfigured(id.Path)
+}
+
+// --- provisioned ports (the reverse lookup) ---
+
+type portInfo struct {
+	Name string `json:"name"`
+	Port int    `json:"port"`
+	File string `json:"file"`
+	Key  string `json:"key"`
+}
+
+// KEY=VALUE lines from a dotenv file: comments, blanks, `export `
+// prefixes, and surrounding quotes off. Deliberately not a full dotenv
+// parser -- these files are machine-written by port-pool.
+func parseEnvAssignments(content string) map[string]string {
+	env := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		trimmed = strings.TrimPrefix(trimmed, "export ")
+		key, value, found := strings.Cut(trimmed, "=")
+		if !found {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[len(value)-1] == value[0] {
+			value = value[1 : len(value)-1]
+		}
+		env[strings.TrimSpace(key)] = value
+	}
+	return env
+}
+
+// The value each declared port name currently holds, read back out of
+// the env files rather than out of port-pool's own state -- the files
+// are the contract both sides already agree on. Only whole-value
+// templates ("${renderer}") can be reversed; a name embedded in a
+// larger string (a URL, say) goes unreported instead of guessed at.
+// First file that carries a name wins, so a name duplicated across env
+// files is reported once.
+func matchPorts(config portPoolConfig, files map[string]string) []portInfo {
+	byTemplate := map[string]string{}
+	for _, name := range config.PortNames {
+		byTemplate["${"+name+"}"] = name
+	}
+	ports := []portInfo{}
+	seen := map[string]bool{}
+	for _, file := range slices.Sorted(maps.Keys(config.EnvFiles)) {
+		content, ok := files[file]
+		if !ok {
+			continue
+		}
+		env := parseEnvAssignments(content)
+		for _, key := range slices.Sorted(maps.Keys(config.EnvFiles[file])) {
+			name, isPort := byTemplate[config.EnvFiles[file][key]]
+			if !isPort || seen[name] {
+				continue
+			}
+			port, err := strconv.Atoi(env[key])
+			if err != nil || port <= 0 {
+				continue
+			}
+			seen[name] = true
+			ports = append(ports, portInfo{Name: name, Port: port, File: file, Key: key})
+		}
+	}
+	return ports
+}
+
+func provisionedPorts(worktreePath string, config portPoolConfig) []portInfo {
+	files := map[string]string{}
+	for name := range config.EnvFiles {
+		if content, err := os.ReadFile(filepath.Join(worktreePath, name)); err == nil {
+			files[name] = string(content)
+		}
+	}
+	return matchPorts(config, files)
 }
 
 // Same rule against the tolerant read of the global config, for the

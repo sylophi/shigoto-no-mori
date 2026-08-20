@@ -13,6 +13,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -20,15 +21,33 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var mergeMethodOrder = []string{"merge", "squash", "rebase"}
 
+func ghAvailable() bool {
+	_, err := exec.LookPath("gh")
+	return err == nil
+}
+
 func runGh(cwd string, args ...string) (string, error) {
-	if _, err := exec.LookPath("gh"); err != nil {
+	return runGhContext(context.Background(), cwd, args...)
+}
+
+// The one gh invocation, so every caller shares the install guard, the
+// stderr shaping, and the trace line. The context is what lets a caller
+// that must not hang -- the status card -- put a deadline on it.
+func runGhContext(ctx context.Context, cwd string, args ...string) (string, error) {
+	if !ghAvailable() {
 		return "", errf("GitHub CLI isn't installed")
 	}
-	cmd := exec.Command("gh", args...)
+	cmd := exec.CommandContext(ctx, "gh", args...)
+	// Without this, a cancelled context kills gh but Wait still blocks
+	// on the inherited pipes until every grandchild it spawned (git, a
+	// credential helper) exits too -- so the caller's deadline isn't
+	// one. Only ever reached after the context is already done.
+	cmd.WaitDelay = time.Second
 	cmd.Dir = cwd
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -53,10 +72,20 @@ type prSummary struct {
 	URL     string `json:"url"`
 }
 
+// How a branch's PR is located: gh's server-side --head filter, any
+// state, newest first. Shared so `merge` and `status` can never end up
+// looking at different pull requests. extraFields is for callers that
+// need more than prSummary carries.
+func prLookupArgs(branch string, extraFields ...string) []string {
+	fields := "number,title,state,isDraft,url"
+	for _, field := range extraFields {
+		fields += "," + field
+	}
+	return []string{"pr", "list", "--state", "all", "--head", branch, "--limit", "1", "--json", fields}
+}
+
 func findPullRequest(projectPath, branch string) (*prSummary, error) {
-	stdout, err := runGh(projectPath,
-		"pr", "list", "--state", "all", "--head", branch, "--limit", "1",
-		"--json", "number,title,state,isDraft,url")
+	stdout, err := runGh(projectPath, prLookupArgs(branch)...)
 	if err != nil {
 		return nil, err
 	}
