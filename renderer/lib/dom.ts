@@ -10,13 +10,38 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-// True while a full-app overlay is up (the project launcher, any modal
-// shell). Neither traps focus and both mount as siblings of the router,
-// so a bare-key shortcut in the page underneath still fires unless it
-// asks. Distinct from the launcher's own narrower check, which asks only
-// "is a modal up" to decide whether it may open on top.
+// True while something is layered over the page and owns the keyboard:
+// the launcher, a modal shell, a sheet, an open menu or combobox popup,
+// or the blocking veil. None of them trap focus (they mount as siblings
+// of the router, and the popups portal out), so a bare-key shortcut in
+// the page underneath still fires unless it asks. Distinct from the
+// launcher's own narrower check, which asks only "is a modal up" to
+// decide whether it may open on top.
+const OVERLAY_SLOTS = [
+  "launcher",
+  "modal-shell",
+  "sheet-content",
+  "dropdown-menu-content",
+  "combobox-popup",
+  "blocking-overlay",
+]
+  .map((slot) => `[data-slot="${slot}"]`)
+  .join(", ");
+
 export function isOverlayOpen(): boolean {
-  return Boolean(
-    document.querySelector('[data-slot="launcher"], [data-slot="modal-shell"]'),
-  );
+  return Boolean(document.querySelector(OVERLAY_SLOTS));
+}
+
+// The full "may a bare-key shortcut act right now" test: no modifiers,
+// not a key-repeat or an IME composition, not typing, and no overlay
+// covering the page. Composed here rather than at each listener so the
+// guard set stays uniform. Adding a condition later is one edit, not an
+// audit of every hotkey. Shortcuts that deliberately want a narrower
+// rule (the launcher's backtick closes even from its own search field)
+// keep their own check and say why.
+export function isBareKeyEvent(e: KeyboardEvent): boolean {
+  if (e.repeat || e.isComposing) return false;
+  if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return false;
+  if (isEditableTarget(e.target)) return false;
+  return !isOverlayOpen();
 }

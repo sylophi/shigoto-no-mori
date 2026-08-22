@@ -19,7 +19,10 @@ import {
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
-import { useSidebarView } from "@/hooks/projects/useSidebarView";
+import {
+  useSidebarView,
+  useSidebarViewHotkey,
+} from "@/hooks/projects/useSidebarView";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/lib/toast";
@@ -60,6 +63,7 @@ export function Sidebar() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
+  useSidebarViewHotkey(!arrangeMode);
 
   const toggleExpanded = (projectId: string) => {
     toggleCollapsed.mutate(projectId);

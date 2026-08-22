@@ -10,7 +10,7 @@ import { useElementWidth } from "@/hooks/ui/useElementWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
+import { isBareKeyEvent } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
@@ -202,10 +202,7 @@ export function DiffView({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "[" && e.key !== "]") return;
-      if (e.repeat || e.isComposing) return;
-      if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
-      if (isEditableTarget(e.target)) return;
-      if (isOverlayOpen()) return;
+      if (!isBareKeyEvent(e)) return;
       const container = scrollRef.current;
       if (!container) return;
       const keys = fileTargets(container).map((el) => el.dataset["diffFile"]);
