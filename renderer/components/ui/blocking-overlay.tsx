@@ -5,7 +5,10 @@ import { Loader2 } from "lucide-react";
 // and shows a single progress line.
 export function BlockingOverlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm">
+    <div
+      data-slot="blocking-overlay"
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-background/80 backdrop-blur-sm"
+    >
       <Loader2 className="size-6 animate-spin text-muted-foreground" />
       <p className="text-sm text-muted-foreground">{children}</p>
     </div>

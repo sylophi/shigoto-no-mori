@@ -25,6 +25,7 @@ export function SegmentedControl<T extends string>({
   className,
   optionClassName,
   "aria-label": ariaLabel,
+  "aria-keyshortcuts": ariaKeyshortcuts,
 }: {
   value: T;
   onChange: (next: T) => void;
@@ -34,11 +35,16 @@ export function SegmentedControl<T extends string>({
   // Sizing knobs only; color/selection stays uniform across call sites.
   optionClassName?: string;
   "aria-label"?: string;
+  // A key that alternates the whole control belongs on the group, not
+  // welded into an option's title. The icon options have no other
+  // accessible name.
+  "aria-keyshortcuts"?: string;
 }) {
   return (
     <div
       role="group"
       aria-label={ariaLabel}
+      aria-keyshortcuts={ariaKeyshortcuts}
       data-slot="segmented-control"
       className={cn(
         "inline-flex shrink-0 rounded-md border border-input p-0.5",

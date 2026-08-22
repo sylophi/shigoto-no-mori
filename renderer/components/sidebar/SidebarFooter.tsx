@@ -49,7 +49,7 @@ export function SidebarFooter({
   const location = useLocation();
   const { openAddProject } = useOverlays();
   const view = useSidebarView();
-  const setView = useSetSidebarView();
+  const { mutate: setView } = useSetSidebarView();
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
@@ -74,9 +74,10 @@ export function SidebarFooter({
     <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
       <SegmentedControl<SidebarView>
         value={view}
-        onChange={(next) => setView.mutate(next)}
+        onChange={setView}
         options={VIEW_OPTIONS}
         aria-label="Sidebar layout"
+        aria-keyshortcuts="Tab"
         optionClassName="px-1.5 py-1"
       />
       <div className="flex-1" />
