@@ -1,0 +1,328 @@
+[
+  {
+    "name": "root commit beats a usable remote",
+    "repos": [
+      {
+        "dir": "solo",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "solo-root"],
+          ["remote", "add", "origin", "https://github.com/owner/solo.git"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "solo",
+        "expected": "root:199b7009d9d72e9639ab4c5bc99fbd4ad8cf87b5"
+      }
+    ]
+  },
+  {
+    "name": "no remote falls back to the root commit",
+    "repos": [
+      {
+        "dir": "local",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "local-root"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "local",
+        "expected": "root:8710018ec8fd8c980494cbf3260e28f076954114"
+      }
+    ]
+  },
+  {
+    "name": "path-only remote still keys on the root commit",
+    "repos": [
+      {
+        "dir": "pathy",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "pathy-root"],
+          ["remote", "add", "origin", "/srv/git/example.git"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "pathy",
+        "expected": "root:73c3cce7cbe6bc668d6fd596809505b961d8d8c8"
+      }
+    ]
+  },
+  {
+    "name": "fork and upstream share one identity",
+    "repos": [
+      {
+        "dir": "canonical",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "shared-root"],
+          [
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/canonical/project.git"
+          ]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [["clone", "-q", "{{root}}/canonical", "fork"]]
+      },
+      {
+        "dir": "fork",
+        "git": [
+          [
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/forker/project.git"
+          ]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "canonical",
+        "expected": "root:099bc2ca7d05e3f8971e0a1c3f20a72b4c1877a3"
+      },
+      {
+        "dir": "fork",
+        "expected": "root:099bc2ca7d05e3f8971e0a1c3f20a72b4c1877a3"
+      }
+    ]
+  },
+  {
+    "name": "two roots on the default branch: lexically first wins",
+    "repos": [
+      {
+        "dir": "grafted",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "graft-root-a"],
+          ["checkout", "-q", "--orphan", "side"],
+          ["commit", "-q", "--allow-empty", "-m", "graft-root-b"],
+          ["checkout", "-q", "main"],
+          [
+            "merge",
+            "-q",
+            "--allow-unrelated-histories",
+            "--no-ff",
+            "-m",
+            "join",
+            "side"
+          ]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "grafted",
+        "expected": "root:4abb9df63aacfc90f619385854f299ae0f5b8a2c"
+      }
+    ]
+  },
+  {
+    "name": "identity follows the default branch, not HEAD",
+    "repos": [
+      {
+        "dir": "detoured",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "main-root"],
+          ["checkout", "-q", "--orphan", "detour"],
+          ["commit", "-q", "--allow-empty", "-m", "detour-root"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "detoured",
+        "expected": "root:639c1220ab42507638270bf3d23acda977a7e75d"
+      }
+    ]
+  },
+  {
+    "name": "shallow clone: upstream beats origin",
+    "repos": [
+      {
+        "dir": "src",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "src-root"],
+          ["commit", "-q", "--allow-empty", "-m", "src-tip"]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [
+          [
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "-q",
+            "--depth=1",
+            "file://{{root}}/src",
+            "shallow-upstream"
+          ]
+        ]
+      },
+      {
+        "dir": "shallow-upstream",
+        "git": [
+          [
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/someone/fork.git"
+          ],
+          [
+            "remote",
+            "add",
+            "upstream",
+            "https://github.com/canonical/project.git"
+          ]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "shallow-upstream",
+        "expected": "remote:github.com/canonical/project"
+      }
+    ]
+  },
+  {
+    "name": "shallow clone: origin beats the alphabetically-first remote",
+    "repos": [
+      {
+        "dir": "src",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "src-root"]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [
+          [
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "-q",
+            "--depth=1",
+            "file://{{root}}/src",
+            "shallow-origin"
+          ]
+        ]
+      },
+      {
+        "dir": "shallow-origin",
+        "git": [
+          [
+            "remote",
+            "set-url",
+            "origin",
+            "https://github.com/owner/project.git"
+          ],
+          ["remote", "add", "aaa", "https://github.com/aaa/first.git"]
+        ]
+      }
+    ],
+    "checks": [
+      { "dir": "shallow-origin", "expected": "remote:github.com/owner/project" }
+    ]
+  },
+  {
+    "name": "shallow clone with only a machine-local remote has no identity",
+    "repos": [
+      {
+        "dir": "src",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "src-root"]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [
+          [
+            "-c",
+            "protocol.file.allow=always",
+            "clone",
+            "-q",
+            "--depth=1",
+            "file://{{root}}/src",
+            "shallow-local"
+          ]
+        ]
+      }
+    ],
+    "checks": [{ "dir": "shallow-local", "expected": null }]
+  },
+  {
+    "name": "empty repo has no identity",
+    "repos": [{ "dir": "empty", "git": [["init", "-q", "-b", "main"]] }],
+    "checks": [{ "dir": "empty", "expected": null }]
+  },
+  {
+    "name": "a tag named like the default branch cannot hijack identity",
+    "repos": [
+      {
+        "dir": "tagged-main",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "branch-root"],
+          ["checkout", "-q", "--orphan", "side"],
+          ["commit", "-q", "--allow-empty", "-m", "tag-root"],
+          ["tag", "main"],
+          ["switch", "-q", "main"],
+          ["branch", "-q", "-D", "side"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "tagged-main",
+        "expected": "root:eb988531c03c23d10b9c3e1446dbe83ad2d0ff6b"
+      }
+    ]
+  },
+  {
+    "name": "tag shadowing a non-candidate sole branch stays identity-free",
+    "repos": [
+      {
+        "dir": "tagged-v1",
+        "git": [
+          ["init", "-q", "-b", "v1"],
+          ["commit", "-q", "--allow-empty", "-m", "branch-root"],
+          ["checkout", "-q", "--orphan", "side"],
+          ["commit", "-q", "--allow-empty", "-m", "tag-root"],
+          ["tag", "v1"],
+          ["switch", "-q", "v1"],
+          ["branch", "-q", "-D", "side"]
+        ]
+      }
+    ],
+    "checks": [{ "dir": "tagged-v1", "expected": null }]
+  },
+  {
+    "name": "sole non-candidate branch without remotes has no identity",
+    "repos": [
+      {
+        "dir": "trunk",
+        "git": [
+          ["init", "-q", "-b", "trunk"],
+          ["commit", "-q", "--allow-empty", "-m", "trunk-root"]
+        ]
+      }
+    ],
+    "checks": [{ "dir": "trunk", "expected": null }]
+  }
+]

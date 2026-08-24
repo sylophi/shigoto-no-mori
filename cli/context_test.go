@@ -84,9 +84,8 @@ func TestResolveProjectUnknownPath(t *testing.T) {
 // resolves a worktree.
 func TestResolveProjectByPathInsideCheckout(t *testing.T) {
 	dir := t.TempDir()
-	if _, err := runGit(dir, "init"); err != nil {
-		t.Skipf("git init unavailable: %v", err)
-	}
+	deterministicGitEnv(t)
+	runGitT(t, dir, "init")
 	_, primary, err := locateRepo(dir)
 	if err != nil {
 		t.Fatalf("locateRepo: %v", err)

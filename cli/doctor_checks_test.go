@@ -37,14 +37,9 @@ func seedRepo(t *testing.T, parent, name string) string {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	run := func(args ...string) {
-		t.Helper()
-		if _, err := runGit(path, args...); err != nil {
-			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
-		}
-	}
-	run("init", "-q", "-b", "main")
-	run("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init")
+	deterministicGitEnv(t)
+	runGitT(t, path, "init", "-q", "-b", "main")
+	runGitT(t, path, "commit", "-q", "--allow-empty", "-m", "init")
 	return path
 }
 
@@ -292,9 +287,7 @@ func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
 	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
 
 	worktree := filepath.Join(root, "worktrees", "alpha", "vanished")
-	if _, err := runGit(repo, "worktree", "add", "-q", "-b", "vanished", worktree); err != nil {
-		t.Fatalf("worktree add: %v", err)
-	}
+	runGitT(t, repo, "worktree", "add", "-q", "-b", "vanished", worktree)
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatal(err)
 	}
@@ -376,9 +369,7 @@ func TestCheckProjectDefaultBranch(t *testing.T) {
 	if err := os.MkdirAll(empty, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runGit(empty, "init", "-q", "-b", "main"); err != nil {
-		t.Fatalf("git init: %v", err)
-	}
+	runGitT(t, empty, "init", "-q", "-b", "main")
 	report = &doctorReport{}
 	checkProjectDefaultBranch(report, project{ID: "E1", Name: "empty", Path: empty}, nil)
 	onlyFinding(t, report, "project-branch", statusWarn)

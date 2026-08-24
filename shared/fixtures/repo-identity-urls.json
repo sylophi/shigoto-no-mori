@@ -1,0 +1,62 @@
+[
+  {
+    "input": "https://github.com/owner/repo",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "https://github.com/owner/repo.git",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "https://user:secret@github.com/owner/repo.git",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "https://GitHub.COM/Owner/Repo.git",
+    "expected": "github.com/Owner/Repo"
+  },
+  {
+    "input": "https://github.com/owner/repo/",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "ssh://git@github.com:2222/owner/repo.git",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "ssh://git@gitlab.example.com/group/sub/repo.git",
+    "expected": "gitlab.example.com/group/sub/repo"
+  },
+  {
+    "input": "git@github.com:owner/repo.git",
+    "expected": "github.com/owner/repo"
+  },
+  {
+    "input": "git@github.com:/owner/repo.git",
+    "expected": "github.com/owner/repo"
+  },
+  { "input": "github.com:owner/repo", "expected": "github.com/owner/repo" },
+  {
+    "input": "git@ssh.github.com:o/r.git",
+    "expected": "github.com/o/r"
+  },
+  {
+    "input": "ssh://git@ssh.github.com:443/o/r.git",
+    "expected": "github.com/o/r"
+  },
+  {
+    "input": "git@ÅBC.com:o/r.git",
+    "expected": "Åbc.com/o/r"
+  },
+  {
+    "input": "codeberg.org:owner/repo.git",
+    "expected": "codeberg.org/owner/repo"
+  },
+  { "input": "/srv/git/repo.git", "expected": null },
+  { "input": "./repo", "expected": null },
+  { "input": "../sibling/repo", "expected": null },
+  { "input": "~/repos/repo.git", "expected": null },
+  { "input": "file:///srv/git/repo.git", "expected": null },
+  { "input": "C:/repos/repo", "expected": null },
+  { "input": "repo", "expected": null }
+]
