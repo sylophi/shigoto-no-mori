@@ -6,8 +6,16 @@
 import type { PillTone } from "@/components/sidebar/StatusPill";
 import type { SupervisorStatus } from "./supervisor";
 
+// The tones this view actually emits, a subset of PillTone. Named so the
+// status dot maps over exactly these and carries no unreachable branch
+// for a tone the state machine can never produce.
+export type DeviceTone = Extract<
+  PillTone,
+  "emerald" | "sky" | "amber" | "rose" | "slate"
+>;
+
 export type DeviceStatusView = {
-  tone: PillTone;
+  tone: DeviceTone;
   label: string;
   // True only when the socket handshake has completed, so a caller can
   // gate a "View forest" affordance on a real connection.

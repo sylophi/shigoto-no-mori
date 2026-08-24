@@ -5,29 +5,26 @@
 // per-device api (host methods routed over the socket) instead of
 // window.api. No mutations live here: the remote forest is read only.
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project } from "@shared/schemas";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";
-import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
-import { hostKeysFor } from "@/lib/queryKeys";
+import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import {
+  combineFanOut,
+  worktreesQueryOptions,
+} from "@/hooks/worktrees/useWorktrees";
 
-// A query is gated on a connected api: an unconnected device (api
-// undefined, or an empty deviceId that never handshook) simply does not
-// fetch, and the page renders its connecting or blocked state instead.
-function remoteEnabled(
-  deviceId: string,
-  api: RemoteDeviceApi | undefined,
-): boolean {
-  return deviceId !== "" && api !== undefined;
-}
-
+// The remote builders scope the shared local options to a peer's device
+// id and api. The options builders own the key shape, the queryFn and the
+// connected gating (an unconnected device, no api or an empty id, never
+// fetches), so this file no longer forks that logic. Projects override
+// the base meta to stay silent, since the remote forest renders its own
+// inline error rather than a global toast.
 export function remoteProjectsQueryOptions(
   deviceId: string,
   api: RemoteDeviceApi | undefined,
 ) {
   return queryOptions<Project[]>({
-    queryKey: hostKeysFor(deviceId)("projects"),
-    queryFn: () => (api ? api.projects.list() : []),
-    enabled: remoteEnabled(deviceId, api),
+    ...projectsQueryOptions({ deviceId, api }),
     staleTime: 3_000,
     meta: { silentError: true },
   });
@@ -45,13 +42,7 @@ export function remoteWorktreesQueryOptions(
   api: RemoteDeviceApi | undefined,
   projectId: string,
 ) {
-  return queryOptions<Worktree[]>({
-    queryKey: hostKeysFor(deviceId)("worktrees", projectId),
-    queryFn: () => (api ? api.worktrees.list(projectId) : []),
-    enabled: remoteEnabled(deviceId, api),
-    staleTime: 3_000,
-    meta: { silentError: true },
-  });
+  return worktreesQueryOptions(projectId, { deviceId, api });
 }
 
 // One query per project, positionally aligned with the projects passed

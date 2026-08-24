@@ -4,6 +4,7 @@ import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { StatusDot } from "@/components/ui/status-dot";
 import { ToggleRow } from "./ToggleRow";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { useLocalGlobalConfigUpdate } from "@/hooks/config/useLocalGlobalConfigUpdate";
@@ -99,16 +100,10 @@ export function HostingSection() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <span className="inline-flex items-center gap-1.5 text-sm">
-          <span
-            className={
-              enabled
-                ? "size-1.5 rounded-full bg-emerald-500"
-                : "size-1.5 rounded-full bg-muted-foreground"
-            }
-          />
-          {enabled ? "Listening" : "Off"}
-        </span>
+        <StatusDot
+          tone={enabled ? "emerald" : "slate"}
+          label={enabled ? "Listening" : "Off"}
+        />
       </div>
 
       <ToggleRow

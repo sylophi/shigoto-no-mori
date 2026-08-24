@@ -9,6 +9,7 @@ import {
   useRemoteProjects,
 } from "@/hooks/remote/useRemoteForest";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { deviceVersionMismatch } from "@/lib/remote/devices";
 
 const route = getRouteApi("/devices/$deviceId");
@@ -22,7 +23,7 @@ const route = getRouteApi("/devices/$deviceId");
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();
-  // The registry is keyed by url; a device's welcome id is what the
+  // The registry is keyed by url. A device's welcome id is what the
   // route carries, so look it up by that. Guard the empty id explicitly:
   // an unconnected entry also carries "", so matching on it would pick an
   // arbitrary disconnected device rather than the not-connected panel.
@@ -60,7 +61,7 @@ function ConnectedForest({
     ]),
   );
 
-  const connected = device.status.phase === "connected";
+  const { connected } = deviceStatusView(device.status);
   const mismatch = deviceVersionMismatch(device);
 
   return (

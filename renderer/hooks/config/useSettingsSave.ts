@@ -10,6 +10,7 @@ import type {
   Theme,
 } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
+import { updateLocalGlobalConfig } from "@/lib/config/localGlobalConfig";
 import { queryKeys } from "@/lib/queryKeys";
 
 // The settings form's staged state. One flat shape across both stores:
@@ -180,12 +181,14 @@ export function useSettingsSave({
         serialize(managedDeviceConfig(state)) !== initialManagedDoc;
       const clientPersisted = serialize(clientConfig) !== initialClientDoc;
       if (devicePersisted) {
-        // Read the unredacted base at save time so the whole-document CLI
+        // Route through the single serialized writer so this save cannot
+        // race a hosting or remote-device write and clobber its domain.
+        // updateLocalGlobalConfig owns the read-unredacted-base-then-write
+        // -full-doc invariant: it reads the base imperatively (so the
+        // token never lands in a cached query) and the whole-document CLI
         // write keeps socketHost.token and remoteDevices, which the
-        // redacted read the form was built from omits. Read imperatively
-        // so the token never lands in a cached query.
-        const base = await window.api.globalConfig.readLocal();
-        await window.api.globalConfig.write(toWriteDoc(base, state));
+        // redacted read the form was built from omits.
+        await updateLocalGlobalConfig((base) => toWriteDoc(base, state));
       }
       if (clientPersisted) {
         try {

@@ -11,7 +11,7 @@ import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
 import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
-import { queryKeyDomain, queryKeys } from "./lib/queryKeys";
+import { hostKeyDeviceId, queryKeyDomain, queryKeys } from "./lib/queryKeys";
 import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
@@ -152,10 +152,21 @@ const externalChangeExempt = new Set([
   "worktreeDiskUsage",
 ]);
 
+// The external-change signal is this machine's git/fs watcher, so it
+// speaks only to the local device's forest. A remote device's queries
+// cache under ITS own id in the same host families, so leaving the
+// predicate domain-only would invalidate a peer's worktrees on a purely
+// local change. Gate host-scoped keys on the local device id. Client-
+// scoped keys carry no id and keep the domain-exempt behavior unchanged.
+const localDeviceId = window.api.deviceId;
+
 window.api.git.onExternalChange(() => {
   void queryClient.invalidateQueries({
-    predicate: (query) =>
-      !externalChangeExempt.has(String(queryKeyDomain(query.queryKey))),
+    predicate: (query) => {
+      const deviceId = hostKeyDeviceId(query.queryKey);
+      if (deviceId !== undefined && deviceId !== localDeviceId) return false;
+      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+    },
   });
 });
 
