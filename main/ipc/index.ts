@@ -1,3 +1,4 @@
+import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
@@ -40,10 +41,21 @@ import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { registerContract } from "./register";
+import { makeAccountHandlers } from "./modules/account";
+import { broadcastAll, registerContract } from "./register";
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
+  // Client-scoped: sign-in drives the OS browser and writes an
+  // OS-keychain credential on this machine, so it never rides the socket
+  // wire. The changed broadcast fans out to every window after any
+  // sign-in, sign-out or rename.
+  registerContract(
+    accountContract,
+    makeAccountHandlers(() =>
+      broadcastAll(accountContract, "changed", undefined),
+    ),
+  );
   registerContract(windowContract, windowHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);

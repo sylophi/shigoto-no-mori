@@ -45,3 +45,15 @@ pre-commit:
     relay:
       glob: "{relay/**,shared/relay/**}"
       run: pnpm run relay:check
+    # Drives the electron-free account layer (main/account/*) end to end
+    # with stubs: the PKCE math and authorize-URL params, the redirect
+    # parse, the token-exchange form and error path, the relay client's
+    # route/method/auth-tier discipline against the shared schemas, the
+    # credential store's encrypt and plaintext-fallback round trips, and
+    # the full loopback login flow plus its state-mismatch and timeout
+    # rejections. Gated to the account surface so it stays off unrelated
+    # commits. Proves sign-in, enrollment and storage cannot drift from
+    # shared/relay/protocol.ts without electron or a browser.
+    account:
+      glob: "{main/account/**,shared/ipc/modules/account.ts,scripts/check-account.mjs}"
+      run: pnpm run account:check
