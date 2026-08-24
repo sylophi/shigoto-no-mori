@@ -7,6 +7,9 @@ export const portPoolContract = defineContract("host", {
     "portPool:isActive",
     WorktreeScopedPayloadSchema,
     z.boolean(),
+    { remote: true },
   ),
-  isInstalled: invoke("portPool:isInstalled", z.void(), z.boolean()),
+  isInstalled: invoke("portPool:isInstalled", z.void(), z.boolean(), {
+    remote: true,
+  }),
 });

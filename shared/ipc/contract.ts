@@ -12,12 +12,23 @@ export type InvokeDef<
   // by the payload's `projectId`, feeding the sidebar usage sorts. Opt-in so
   // reads and view-only preference changes never count; see the IPC registrar.
   tracksProjectUsage?: boolean;
+  // Exposure axis, independent of scope. Only invokes tagged true reach
+  // a remote websocket peer (main/ipc/register.ts routes them to the ws
+  // binding). Left undefined here on purpose: a host-scoped invoke MUST
+  // set it explicitly (the socket check enforces this) so a new call
+  // can never silently join the remote surface by inheriting a default.
+  // Routing treats anything other than exactly true as local-only.
+  remote?: boolean;
 };
 
 export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
   kind: "broadcast";
   channel: string;
   payload: P;
+  // Exposure axis for fan-out frames. Only broadcasts tagged true reach
+  // remote peers; untagged host broadcasts stay Electron-only, so a
+  // future broadcast carrying host-only detail is local by default.
+  remote?: boolean;
 };
 
 export type CallDef = InvokeDef | BroadcastDef;
@@ -40,19 +51,30 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   channel: string,
   input: I,
   output: O,
-  opts?: { tracksProjectUsage?: boolean },
+  opts?: { tracksProjectUsage?: boolean; remote?: boolean },
 ): InvokeDef<I, O> => ({
   kind: "invoke",
   channel,
   input,
   output,
   tracksProjectUsage: opts?.tracksProjectUsage ?? false,
+  // Deliberately not defaulted: host-scoped invokes must pass an
+  // explicit boolean (enforced by the socket check). Client-scoped
+  // invokes never reach the ws binding, so leaving theirs undefined is
+  // harmless and routing reads it as local-only.
+  remote: opts?.remote,
 });
 
 export const broadcast = <P extends z.ZodTypeAny>(
   channel: string,
   payload: P,
-): BroadcastDef<P> => ({ kind: "broadcast", channel, payload });
+  opts?: { remote?: boolean },
+): BroadcastDef<P> => ({
+  kind: "broadcast",
+  channel,
+  payload,
+  remote: opts?.remote,
+});
 
 // Scope is deliberately not a type parameter. Today the only consumer
 // is the runtime transport lookup in buildApi. A scope brand at the

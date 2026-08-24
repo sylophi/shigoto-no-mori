@@ -13,7 +13,14 @@ import {
 // stream or port-carried output can travel but a GUI app opens on the
 // host machine.
 export const launchersContract = defineContract("host", {
-  detect: invoke("launchers:detect", z.void(), z.array(DetectedLauncherSchema)),
+  detect: invoke(
+    "launchers:detect",
+    z.void(),
+    z.array(DetectedLauncherSchema),
+    {
+      remote: true,
+    },
+  ),
   forProject: invoke(
     "launchers:forProject",
     ProjectScopedPayloadSchema,
@@ -24,8 +31,12 @@ export const launchersContract = defineContract("host", {
       // without re-deriving the filter in the renderer.
       hiddenCount: z.number().int().nonnegative(),
     }),
+    { remote: true },
   ),
+  // launch is remote false: it spawns an arbitrary shell command from
+  // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.
   launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
+    remote: false,
   }),
 });

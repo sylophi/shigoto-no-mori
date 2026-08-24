@@ -4,11 +4,15 @@
 // (use logs, sort and collapse preferences) and the per-project configs
 // at ~/shigomori[-dev]/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
+import { errorMessageOf } from "@shared/errors";
+import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import {
   type ClientConfig,
   ClientConfigSchema,
   type GlobalConfig,
+  type ReadGlobalConfig,
   StoredGlobalConfigSchema,
 } from "@shared/schemas";
 import {
@@ -35,11 +39,118 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
   return cache.get();
 }
 
+// Config-change reconcilers. Every change path (the IPC write, an
+// external CLI write picked up by the state watcher, and nuke wiping
+// config.json) drops the cache through invalidateGlobalConfigCache, so
+// a listener registered here runs on all of them. Hosting is toggled
+// this slice mainly by editing config.json or the CLI (no Settings UI),
+// which never touches the IPC write handler, so this subscriber is what
+// makes EVERY change reconcile the socket listener, nuke included (a
+// wiped config must stop the listener, not keep serving the old token).
+// Host owns the mechanism, main registers the one reconciler.
+type ConfigChangeListener = () => void;
+const configChangeListeners = new Set<ConfigChangeListener>();
+
+export function onGlobalConfigChange(
+  listener: ConfigChangeListener,
+): () => void {
+  configChangeListeners.add(listener);
+  return () => configChangeListeners.delete(listener);
+}
+
 // For callers that delete config.json out from under the cache (nuke):
 // without this, reads for up to the TTL would keep serving the wiped
-// preferences as if the nuke hadn't happened.
+// preferences as if the nuke hadn't happened. Also fans the change out
+// to every subscriber so downstream state (the socket listener)
+// reconciles no matter which path changed config.
 export function invalidateGlobalConfigCache(): void {
   cache.invalidate();
+  for (const listener of configChangeListeners) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn(`[config] change listener failed: ${errorMessageOf(error)}`);
+    }
+  }
+}
+
+// The one home for the socketHost enablement rule, shared by the boot
+// reconcile, the config-change reconcile and a future Settings UI (the
+// githubCli readiness precedent). A blank token means OFF regardless of
+// enabled, so a bare enabled:true never opens an unauthenticated
+// listener. Absent port falls back to the well-known default, and the
+// bind address is loopback unless LAN is explicitly opted in.
+export type ResolvedSocketHost = {
+  port: number;
+  token: string;
+  bindAddress: string;
+};
+
+export function resolveSocketHostConfig(
+  config: GlobalConfig,
+): ResolvedSocketHost | null {
+  const socketHost = config.socketHost;
+  const token = socketHost?.token ?? "";
+  if (socketHost?.enabled !== true || token === "") return null;
+  return {
+    port: socketHost.port ?? DEFAULT_SOCKET_PORT,
+    token,
+    // Secure by default: only the explicit LAN opt-in exposes the port
+    // to the network. Everything else stays on loopback.
+    bindAddress: socketHost.lan === true ? "0.0.0.0" : "127.0.0.1",
+  };
+}
+
+// Secure by default at enable time: when hosting is enabled but no token
+// is set, generate a high-entropy one (32 random bytes, base64url) and
+// persist it, rather than leaving an enabled-but-unauthable config that
+// the resolver treats as off. Runs under the CLI's sibling .lock (the
+// takeLegacyAppearance precedent) so app and CLI writes exclude each
+// other. Returns true when it wrote, so the caller can re-read. The
+// token is NOT logged: retrieve it with `sm config get socketHost.token`
+// to copy to the client device. Invalidates the module cache directly
+// rather than through the subscriber-firing helper, since the caller is
+// already inside a reconcile.
+export function ensureSocketHostToken(): boolean {
+  const path = configPath();
+  return withFileLock(`${path}.lock`, () => {
+    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
+    if (doc === null) return false;
+    const socketHost = doc.socketHost;
+    if (socketHost?.enabled !== true) return false;
+    const token = typeof socketHost.token === "string" ? socketHost.token : "";
+    if (token !== "") return false;
+    doc.socketHost = {
+      ...socketHost,
+      token: randomBytes(32).toString("base64url"),
+    };
+    atomicWriteJsonSync(path, withSchemaVersion(doc));
+    cache.invalidate();
+    console.info(
+      "[socket] generated a hosting token. Copy it to the client device with `sm config get socketHost.token`.",
+    );
+    return true;
+  });
+}
+
+// Read-boundary redaction: the token is a secret and never crosses any
+// wire. Replaces socketHost with its redacted shape (no token field, a
+// derived tokenSet boolean). This lives on the handler path on purpose:
+// packaged builds skip output re-parsing, so the read schema alone would
+// not strip the secret in production.
+export function redactGlobalConfigForRead(
+  config: GlobalConfig,
+): ReadGlobalConfig {
+  const { socketHost, ...rest } = config;
+  if (socketHost === undefined) return rest as ReadGlobalConfig;
+  const { token, ...withoutToken } = socketHost;
+  return {
+    ...rest,
+    socketHost: {
+      ...withoutToken,
+      tokenSet: typeof token === "string" && token !== "",
+    },
+  } as ReadGlobalConfig;
 }
 
 // One-shot drain of the pre-split appearance keys out of config.json,

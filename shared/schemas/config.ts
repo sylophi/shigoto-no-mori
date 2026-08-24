@@ -145,11 +145,57 @@ export const GlobalConfigSchema = z.object({
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
   githubCli: z.boolean().optional(),
+  // Remote hosting (v2 step 3, slice A): when enabled with a nonempty
+  // token, the app serves the REMOTE-tagged host IPC to clients over a
+  // websocket (host/socket/server.ts). Off by default, and gated on the
+  // token so a bare `enabled: true` can never open an unauthenticated
+  // listener. Secure by default: enabling binds LOOPBACK only. Exposing
+  // the port to the network is a separate explicit opt-in (`lan`). The
+  // token is high-entropy generated at enable time, never echoed back
+  // over a read (the read contract redacts it, see RedactedSocketHost
+  // below). Step 4 replaces this shared-token auth wholesale with
+  // pairing, so nothing else should grow to depend on the token's shape.
+  socketHost: z
+    .object({
+      enabled: z.boolean().optional(),
+      // Absent = DEFAULT_SOCKET_PORT (shared/ipc/socket/frames.ts).
+      port: z.number().int().min(1).max(65535).optional(),
+      // When true, bind 0.0.0.0 so other machines on the LAN can reach
+      // the listener. Absent or false binds 127.0.0.1: enabling hosting
+      // alone never exposes the port to the network.
+      lan: z.boolean().optional(),
+      token: z.string().optional(),
+    })
+    .optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 
 // Read-side counterpart, loose like StoredShigomoriConfigSchema.
 export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
+
+// The socketHost shape a globalConfig READ is allowed to return. The
+// token is a secret and must be structurally absent from any wire, so
+// this schema has no token field at all. A derived `tokenSet` boolean
+// lets a future Settings UI show that hosting is configured without
+// ever carrying the value. The redaction itself happens in the read
+// handler (host/lib/config/global.ts), since packaged builds skip
+// output re-parsing, so this schema documents and validates the shape
+// rather than being the thing that strips the secret.
+export const RedactedSocketHostSchema = z.object({
+  enabled: z.boolean().optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  lan: z.boolean().optional(),
+  tokenSet: z.boolean().optional(),
+});
+export type RedactedSocketHost = z.infer<typeof RedactedSocketHostSchema>;
+
+// Output schema for globalConfig:read. Loose like the stored variant so
+// legacy and newer keys pass through, but with socketHost forced to the
+// redacted shape so a token can never ride out on a read.
+export const ReadGlobalConfigSchema = GlobalConfigSchema.extend({
+  socketHost: RedactedSocketHostSchema.optional(),
+}).loose();
+export type ReadGlobalConfig = z.infer<typeof ReadGlobalConfigSchema>;
 
 export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,

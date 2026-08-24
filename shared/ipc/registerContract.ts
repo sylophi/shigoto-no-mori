@@ -46,15 +46,22 @@ export function registerContract<M extends ContractModule>(
         (i: unknown, ctx: HandlerContext) => unknown
       >
     )[key];
-    server.handle(def.channel, async (ctx, raw) => {
-      // Input parsing is UNCONDITIONAL, never gated by build type. The
-      // moment handlers are reachable over a socket, this parse is the
-      // wall between a malformed payload and git argv.
-      const input = def.input.parse(raw);
-      const result = await handler(input, ctx);
-      onSuccess?.(input);
-      return opts.validateOutputs ? def.output.parse(result) : result;
-    });
+    // The def's exposure decision rides to the transport so a composite
+    // wire can withhold a non-remote channel from the socket entirely.
+    const remote = def.remote === true;
+    server.handle(
+      def.channel,
+      async (ctx, raw) => {
+        // Input parsing is UNCONDITIONAL, never gated by build type. The
+        // moment handlers are reachable over a socket, this parse is the
+        // wall between a malformed payload and git argv.
+        const input = def.input.parse(raw);
+        const result = await handler(input, ctx);
+        onSuccess?.(input);
+        return opts.validateOutputs ? def.output.parse(result) : result;
+      },
+      { remote },
+    );
   }
 }
 
@@ -68,7 +75,7 @@ export function resolveBroadcast<
   module: M,
   key: K,
   payload: BroadcastProducerPayload<M, K>,
-): { channel: string; parsed: unknown } {
+): { channel: string; parsed: unknown; remote: boolean } {
   const def: CallDef | undefined = module.calls[key];
   // The key type narrows to broadcast defs, but a cast at a call site
   // can defeat it. Without this guard a wrong key surfaces as a crash
@@ -76,7 +83,11 @@ export function resolveBroadcast<
   if (def?.kind !== "broadcast") {
     throw new Error(`contract key "${key}" is not a broadcast`);
   }
-  return { channel: def.channel, parsed: def.payload.parse(payload) };
+  return {
+    channel: def.channel,
+    parsed: def.payload.parse(payload),
+    remote: def.remote === true,
+  };
 }
 
 // Fan-out broadcast: parses the payload once, then hands the wire shape
@@ -93,6 +104,6 @@ export function broadcastAll<
   payload: BroadcastProducerPayload<M, K>,
   server: ServerTransport,
 ): void {
-  const { channel, parsed } = resolveBroadcast(module, key, payload);
-  server.broadcastAll(channel, parsed);
+  const { channel, parsed, remote } = resolveBroadcast(module, key, payload);
+  server.broadcastAll(channel, parsed, { remote });
 }

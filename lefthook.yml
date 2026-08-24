@@ -22,3 +22,12 @@ pre-commit:
     go-test:
       glob: "{cli/**,shared/fixtures/**}"
       run: go test -C cli ./...
+    # Boots the real ws binding on an ephemeral port and asserts the
+    # auth/dispatch/broadcast/framing paths plus the hardening (terminate
+    # on bad token, oversized-frame and Origin rejection, in-flight cap,
+    # generation guard) and the explicit remote-tag contract. Gated to
+    # the socket surface plus the contract axis that decides remote
+    # exposure, so adding an untagged host invoke also trips it.
+    socket:
+      glob: "{host/socket/**,shared/ipc/socket/**,host/ipc/modules/globalConfig.ts,shared/ipc/modules/**,shared/ipc/contract.ts,shared/ipc/registerContract.ts,main/ipc/register.ts}"
+      run: pnpm run socket:check
