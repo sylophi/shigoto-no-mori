@@ -134,6 +134,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     globalConfig: {
       read: globalConfigClient.read,
+      // Local unredacted read. Carries remoteDevices and the hosting
+      // token, so it is remote false and callers must keep the result
+      // out of any broadly-cached query (the registry reconcile and the
+      // hosting/remote-device write base read it imperatively).
+      readLocal: globalConfigClient.readLocal,
       write: (config: GlobalConfig) => globalConfigClient.write({ config }),
     },
 

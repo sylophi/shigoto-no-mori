@@ -13,6 +13,12 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // only in the output schema) because packaged builds skip output
   // re-parsing.
   read: async () => redactGlobalConfigForRead(await readGlobalConfig()),
+  // Local unredacted read. Returns the full stored document with no
+  // redaction, so the renderer can reconcile its remote-device registry
+  // and read a whole-document write base that keeps remoteDevices and
+  // socketHost.token. The contract tags this remote false, so it is
+  // never bound to the socket and a peer can never reach it.
+  readLocal: async () => readGlobalConfig(),
   // Same engine rule as the worktree/project mutations: the CLI
   // performs the write.
   write: async ({ config }) => {
