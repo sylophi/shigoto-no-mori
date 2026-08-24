@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog } from "electron";
 import path from "node:path";
+import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { cliRootDirName } from "@shared/cliDist.mts";
 import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
@@ -128,6 +129,10 @@ const createWindow = () => {
       // runtime.info.
       additionalArguments: [
         `${DEVICE_ID_FLAG}${deviceId}`,
+        // This build's version, delivered the same way as the device id
+        // and the dev flag: the renderer sends it in the socket hello
+        // and compares it against a remote host's welcome for skew.
+        `${APP_VERSION_FLAG}${app.getVersion()}`,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
       ],
     },

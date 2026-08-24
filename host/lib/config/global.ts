@@ -133,24 +133,28 @@ export function ensureSocketHostToken(): boolean {
   });
 }
 
-// Read-boundary redaction: the token is a secret and never crosses any
-// wire. Replaces socketHost with its redacted shape (no token field, a
-// derived tokenSet boolean). This lives on the handler path on purpose:
-// packaged builds skip output re-parsing, so the read schema alone would
-// not strip the secret in production.
+// Read-boundary redaction: a secret never crosses any wire. socketHost
+// keeps its shape minus the token (a derived tokenSet boolean stands
+// in), and remoteDevices is dropped WHOLESALE: the outbound device list
+// (urls, labels, tokens this client holds to reach other hosts) is
+// private connect config, so a remote peer calling this read learns
+// none of it. Both are served over the SAME remote-tagged read, so both
+// are stripped here rather than only in the schema: packaged builds skip
+// output re-parsing, so the read schema alone would not strip them in
+// production.
 export function redactGlobalConfigForRead(
   config: GlobalConfig,
 ): ReadGlobalConfig {
-  const { socketHost, ...rest } = config;
-  if (socketHost === undefined) return rest as ReadGlobalConfig;
-  const { token, ...withoutToken } = socketHost;
-  return {
-    ...rest,
-    socketHost: {
+  const { socketHost, remoteDevices: _remoteDevices, ...rest } = config;
+  const redacted: ReadGlobalConfig = { ...rest };
+  if (socketHost !== undefined) {
+    const { token, ...withoutToken } = socketHost;
+    redacted.socketHost = {
       ...withoutToken,
       tokenSet: typeof token === "string" && token !== "",
-    },
-  } as ReadGlobalConfig;
+    };
+  }
+  return redacted;
 }
 
 // One-shot drain of the pre-split appearance keys out of config.json,

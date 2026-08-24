@@ -2,26 +2,28 @@
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
+import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { buildApi } from "@shared/ipc/client";
 import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
+import { requireArgFlag } from "./argFlags";
 import { electronClientTransport } from "./preloadTransport";
 
 // The device id arrives on argv (main passes --sm-device-id=<uuid> via
 // webPreferences.additionalArguments, which reaches sandboxed preloads)
-// so the renderer can read it synchronously at module scope. Missing or
-// empty means main and preload disagree on the flag, so fail loudly
-// rather than hand out keys scoped to nothing. Unreachable in practice:
-// main's ready handler resolves the id (minting or throwing) before
-// any window is created.
-const deviceIdArg = process.argv.find((arg) => arg.startsWith(DEVICE_ID_FLAG));
-const deviceId = deviceIdArg?.slice(DEVICE_ID_FLAG.length) ?? "";
-if (!deviceId) {
-  throw new Error("preload started without --sm-device-id");
-}
+// so the renderer can read it synchronously at module scope. Unreachable
+// as empty in practice: main's ready handler resolves the id (minting or
+// throwing) before any window is created.
+const deviceId = requireArgFlag(DEVICE_ID_FLAG, "--sm-device-id");
+
+// This build's version, on argv beside the device id. The renderer
+// sends it in the socket hello and compares it against a remote host's
+// welcome to flag a version skew.
+const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
 
 const api = {
   deviceId,
+  appVersion,
   // Client fact delivered the same way as the device id: dev-only
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).

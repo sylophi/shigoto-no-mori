@@ -22,13 +22,27 @@ const HOST_SCOPE = "host";
 // that defaults to this one.
 const localDeviceId: string = window.api.deviceId;
 
-// A host-scoped tuple: the sentinel, the device id, then the segments
-// the builder names. Prefix invalidation through these builders still
-// works because the id is a constant within a session.
-function host<const T extends readonly unknown[]>(
+// A host-scoped tuple builder bound to the local device id: the
+// sentinel, the id, then the segments the builder names. It is
+// hostKeysFor(localDeviceId) so the tuple-building body lives in exactly
+// one place, and the <const T> inference at every call site is unchanged.
+// Prefix invalidation through these builders still works because the id
+// is a constant within a session.
+const host = hostKeysFor(localDeviceId);
+
+// A host-scoped key builder for an ARBITRARY device id, the remote
+// counterpart of the module-level host() above. A remote device's data
+// caches under its OWN id (its welcome deviceId), in exactly the
+// families the local builders use, so it sits beside this machine's
+// data without colliding. queryKeyDomain still classifies these
+// correctly: it reads the domain off the third slot whatever id sits in
+// the second. The local builders and their call sites stay unchanged.
+export function hostKeysFor(
+  deviceId: string,
+): <const T extends readonly unknown[]>(
   ...segments: T
-): readonly ["host", string, ...T] {
-  return [HOST_SCOPE, localDeviceId, ...segments];
+) => readonly ["host", string, ...T] {
+  return (...segments) => [HOST_SCOPE, deviceId, ...segments];
 }
 
 // Domain segment of a key: the first element, or the third on
