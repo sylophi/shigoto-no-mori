@@ -16,7 +16,7 @@ import { noteSelfWrite } from "@host/lib/util/selfWrite";
 import { signalTreeBestEffort } from "@host/lib/scripts/process";
 // The injection seam in the CLI delegate owns the document shapes;
 // this runner is the Electron-side implementation wired in at boot.
-import type { CliDoc, CliResult } from "../ipc/cliDelegate";
+import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
 
 function candidateBinary(): string {
   return app.isPackaged

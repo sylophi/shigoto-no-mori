@@ -2,7 +2,7 @@ package main
 
 // sm projects <list|add|remove|config> -- manage registered projects
 // without the app. `add` ports the app's projects:add handler
-// (main/ipc/modules/projects.ts): git-repo check, duplicate-path
+// (host/ipc/modules/projects.ts): git-repo check, duplicate-path
 // check, uuid + basename identity, locked registry append, then a
 // best-effort project.json seed (defaultBranch, plus a `<pm> install`
 // setup script when the global autoPopulateInstall toggle is on).
@@ -264,7 +264,7 @@ func seedProjectConfig(proj project) {
 	}
 }
 
-// Mirrors the app's parent-folder scan (main/ipc/modules/fs.ts
+// Mirrors the app's parent-folder scan (host/ipc/modules/fs.ts
 // scanForGitRepos): outermost repos only, six levels deep, skipping
 // hidden directories, symlinks, and directories that virtually never
 // contain repos but are huge to walk.

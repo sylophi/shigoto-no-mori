@@ -114,7 +114,7 @@ func visibleWidth(s string) int {
 // that escapes a command is an environment failure and exits 1.
 // kind, when set, is a stable machine-readable code carried in the
 // --json error document so the app maps failures without matching
-// prose (see errorKindOf and main/ipc's cliFailureError).
+// prose (see errorKindOf and host/ipc's cliFailureError).
 type cliError struct {
 	msg  string
 	code int

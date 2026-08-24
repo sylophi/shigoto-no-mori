@@ -6,11 +6,11 @@
 // lands on a throwing default.
 import { shell } from "electron";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
-import { setCliRunnerImpl } from "../ipc/cliDelegate";
-import { setCliImpl } from "../ipc/modules/cli";
-import { setGitImpl } from "../ipc/modules/git";
-import { setLaunchersImpl } from "../ipc/modules/launchers";
-import { setRuntimeImpl } from "../ipc/modules/runtime";
+import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
+import { setCliImpl } from "@host/ipc/modules/cli";
+import { setGitImpl } from "@host/ipc/modules/git";
+import { setLaunchersImpl } from "@host/ipc/modules/launchers";
+import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import { broadcastAll } from "../ipc/register";
 import {
   cliLinkStatus,
