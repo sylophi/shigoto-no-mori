@@ -1,10 +1,8 @@
-import { app, nativeTheme } from "electron";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import { uninstallCliEverything } from "../../electron/cliInstall";
-import { relaunchApp } from "../../electron/relaunch";
 import { stopStateWatcher } from "../../electron/stateWatcher";
 import { stopUpdaterBridge } from "../../electron/updaterBridge";
 import { nukeEverything } from "@host/lib/nuke";
@@ -13,20 +11,13 @@ import { broadcastAll } from "../register";
 import { shigomoriRoot } from "@host/lib/util/paths";
 
 export const runtimeHandlers: Handlers<typeof runtimeContract> = {
+  // Host facts only. isDev deliberately isn't here: it describes the
+  // client build and rides the preload bridge (api.isDev) instead.
   info: () => ({
     shigomoriRoot: shigomoriRoot(),
     rootDirName: basename(shigomoriRoot()),
     homedir: homedir(),
-    isDev: !app.isPackaged,
   }),
-
-  // Track the renderer's applied theme (including unsaved previews) so
-  // the vibrancy material follows the in-app appearance rather than the
-  // OS one. The persistent value lives in ~/shigomori[-dev]/config.json
-  // and is written by the renderer through the globalConfig IPC.
-  setTheme: ({ theme }) => {
-    nativeTheme.themeSource = theme;
-  },
 
   moveRoot: async ({ parentDir }) => {
     await moveShigomoriRoot(parentDir, {
@@ -37,11 +28,8 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
     });
     // The root is a boot-time constant (initShigomoriRoot's one-shot
     // guard exists precisely so it can't change under live callers).
-    // The renderer calls `relaunch` once this reply lands.
-  },
-
-  relaunch: () => {
-    relaunchApp();
+    // The renderer calls the window module's `relaunch` once this
+    // reply lands.
   },
 
   nuke: async () => {

@@ -322,6 +322,11 @@ export function cliRunScriptSpawn(args: {
 // from an older one, and it re-checks the shape so engine drift fails
 // loudly. Callers must invalidate the TTL caches themselves: runCli's
 // self-write note suppresses the state watcher for these writes.
+//
+// globalConfig carries device fields only, which the narrowed
+// GlobalConfigSchema enforces at the IPC boundary. The merge-on-write
+// is also what keeps any legacy client keys (theme, doubutsu) in
+// config.json intact when a device-only payload lands.
 export async function globalConfigWriteViaCli(
   config: GlobalConfig,
 ): Promise<void> {

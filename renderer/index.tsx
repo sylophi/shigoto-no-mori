@@ -109,6 +109,15 @@ const queryClient = new QueryClient({
   }),
 });
 
+// Boot warmth for the device config: the appearance providers moved to
+// the client store and no longer keep this query alive, but the first
+// paint of the launch gates (ScriptLaunchRow, the tidy page) still
+// reads it. Prefetch once so those mounts hit a warm cache.
+void queryClient.prefetchQuery({
+  queryKey: queryKeys.globalConfig(),
+  queryFn: () => window.api.globalConfig.read(),
+});
+
 // State changed on disk under the app (an CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it
 // without a focus change. Deliberately broad within that scope (the
@@ -121,7 +130,13 @@ const queryClient = new QueryClient({
 // (a sweep is several git calls or a directory walk per worktree) and
 // invalidation ignores staleTime. Focus, mount and the removal flow
 // still cover them.
+//
+// clientConfig sits it out for scope: the store lives in this app
+// instance's userData and the CLI never writes it, so an external
+// change over the shigomori root can't touch it. Including it would
+// defeat the query's staleTime Infinity on every external CLI write.
 const externalChangeExempt = new Set([
+  "clientConfig",
   "githubCli",
   "runtime",
   "updater",

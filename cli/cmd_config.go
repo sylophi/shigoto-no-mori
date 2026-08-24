@@ -7,9 +7,9 @@ package main
 // against the same shapes the app's zod schemas enforce, and writes
 // are read-modify-write under the file lock so nothing else in the
 // document is disturbed. Serialization follows the app's authority
-// (SettingsForm.toConfig): a value equal to its default is stored by
-// deleting the key, so config files stay tidy no matter which surface
-// wrote them.
+// (renderer/hooks/config/useSettingsSave.ts): a value equal to its
+// default is stored by deleting the key, so config files stay tidy no
+// matter which surface wrote them.
 //
 // The two scopes differ only in what configDocScope models -- file
 // path, output decoration, key registry, and write hooks -- so every
@@ -71,12 +71,12 @@ type configKey struct {
 }
 
 // Mirrors GlobalConfigSchema (shared/schemas/config.ts); defaults from
-// SettingsForm.fromConfig, the serialization authority.
+// fromConfig in renderer/hooks/config/useSettingsSave.ts, the
+// serialization authority. Device fields only. Client config (theme, doubutsu) lives in the app's own
+// clientConfig.json, which this CLI never touches, and legacy client
+// keys still sitting in config.json pass through writes as unknown
+// keys.
 var globalConfigKeys = []configKey{
-	{name: "theme", kind: enumKind, enum: []string{"light", "dark", "system"}, def: "system",
-		desc: "UI theme"},
-	{name: "doubutsu", kind: boolKind, def: true,
-		desc: "Animal Crossing visual mode"},
 	{name: "launchScripts", kind: boolKind, def: true,
 		desc: "Show package scripts in the Launch section"},
 	{name: "deleteBranchOnRemove", kind: boolKind, def: true,
@@ -175,7 +175,13 @@ func lookupConfigKey(keys []configKey, name string) (configKey, error) {
 		}
 		names[i] = key.name
 	}
-	return configKey{}, usageErrf("Unknown key %q. Keys: %s.", name, strings.Join(names, ", "))
+	// The pre-split client keys get a pointer to their new home instead
+	// of a bare rejection.
+	hint := ""
+	if name == "theme" || name == "doubutsu" {
+		hint = " Appearance moved into the app's client settings (Settings -> Appearance)."
+	}
+	return configKey{}, usageErrf("Unknown key %q. Keys: %s.%s", name, strings.Join(names, ", "), hint)
 }
 
 // The string forms git accepts for boolean config, normalized to a

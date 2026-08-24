@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,7 +67,7 @@ func readDoc(t *testing.T, path string) map[string]any {
 }
 
 func TestParseConfigValueBoolForms(t *testing.T) {
-	key := configKey{name: "doubutsu", kind: boolKind}
+	key := configKey{name: "launchScripts", kind: boolKind}
 	for raw, want := range map[string]bool{
 		"true": true, "on": true, "yes": true, "1": true, "TRUE": true,
 		"false": false, "off": false, "no": false, "0": false,
@@ -82,12 +83,12 @@ func TestParseConfigValueBoolForms(t *testing.T) {
 }
 
 func TestParseConfigValueEnumAndInt(t *testing.T) {
-	theme := configKey{name: "theme", kind: enumKind, enum: []string{"light", "dark", "system"}}
-	if got, err := parseConfigValue(theme, "dark"); err != nil || got != "dark" {
-		t.Errorf("parse dark = %v, %v", got, err)
+	layout := configKey{name: "worktreeLayout", kind: enumKind, enum: []string{"managed-root", "in-project", "custom"}}
+	if got, err := parseConfigValue(layout, "in-project"); err != nil || got != "in-project" {
+		t.Errorf("parse in-project = %v, %v", got, err)
 	}
-	if _, err := parseConfigValue(theme, "solarized"); err == nil {
-		t.Error("parse solarized succeeded, want error")
+	if _, err := parseConfigValue(layout, "somewhere"); err == nil {
+		t.Error("parse somewhere succeeded, want error")
 	}
 	portBase := configKey{name: "portBase", kind: intKind}
 	if got, err := parseConfigValue(portBase, "5170"); err != nil || got != 5170 {
@@ -102,47 +103,52 @@ func TestParseConfigValueEnumAndInt(t *testing.T) {
 
 func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 	sandboxRoot(t)
-	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
-		t.Fatalf("set theme dark: %d, %v", code, err)
+	if code, err := runConfigSet(globalConfigScope(), "launchScripts", "false"); code != 0 || err != nil {
+		t.Fatalf("set launchScripts false: %d, %v", code, err)
 	}
 	doc := readDoc(t, configJSONPath())
-	if doc["theme"] != "dark" {
-		t.Errorf("theme = %v, want dark", doc["theme"])
+	if doc["launchScripts"] != false {
+		t.Errorf("launchScripts = %v, want false", doc["launchScripts"])
 	}
 	// Setting the default removes the key, matching the app's
 	// omit-on-default serialization.
-	if code, err := runConfigSet(globalConfigScope(), "theme", "system"); code != 0 || err != nil {
-		t.Fatalf("set theme system: %d, %v", code, err)
+	if code, err := runConfigSet(globalConfigScope(), "launchScripts", "true"); code != 0 || err != nil {
+		t.Fatalf("set launchScripts true: %d, %v", code, err)
 	}
-	if _, ok := readDoc(t, configJSONPath())["theme"]; ok {
-		t.Error("theme still present after being set to its default")
+	if _, ok := readDoc(t, configJSONPath())["launchScripts"]; ok {
+		t.Error("launchScripts still present after being set to its default")
 	}
-	if code, err := runConfigSet(globalConfigScope(), "doubutsu", "off"); code != 0 || err != nil {
-		t.Fatalf("set doubutsu off: %d, %v", code, err)
+	if code, err := runConfigSet(globalConfigScope(), "deleteBranchOnRemove", "off"); code != 0 || err != nil {
+		t.Fatalf("set deleteBranchOnRemove off: %d, %v", code, err)
 	}
-	if got := readDoc(t, configJSONPath())["doubutsu"]; got != false {
-		t.Errorf("doubutsu = %v, want false", got)
+	if got := readDoc(t, configJSONPath())["deleteBranchOnRemove"]; got != false {
+		t.Errorf("deleteBranchOnRemove = %v, want false", got)
 	}
-	if code, err := runConfigUnset(globalConfigScope(), "doubutsu"); code != 0 || err != nil {
-		t.Fatalf("unset doubutsu: %d, %v", code, err)
+	if code, err := runConfigUnset(globalConfigScope(), "deleteBranchOnRemove"); code != 0 || err != nil {
+		t.Fatalf("unset deleteBranchOnRemove: %d, %v", code, err)
 	}
-	if _, ok := readDoc(t, configJSONPath())["doubutsu"]; ok {
-		t.Error("doubutsu still present after unset")
+	if _, ok := readDoc(t, configJSONPath())["deleteBranchOnRemove"]; ok {
+		t.Error("deleteBranchOnRemove still present after unset")
 	}
 }
 
 func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 	sandboxRoot(t)
-	seed := `{"portPool": true, "futureKey": {"nested": 12345678901234567890}}` + "\n"
+	// theme is a legacy client key the registry no longer models. It
+	// must ride through device writes untouched, like any unknown key.
+	seed := `{"portPool": true, "theme": "dark", "futureKey": {"nested": 12345678901234567890}}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := runConfigSet(globalConfigScope(), "theme", "light"); code != 0 || err != nil {
-		t.Fatalf("set theme light: %d, %v", code, err)
+	if code, err := runConfigSet(globalConfigScope(), "launchScripts", "false"); code != 0 || err != nil {
+		t.Fatalf("set launchScripts false: %d, %v", code, err)
 	}
 	doc := readDoc(t, configJSONPath())
 	if doc["portPool"] != true {
 		t.Errorf("portPool = %v, want true", doc["portPool"])
+	}
+	if doc["theme"] != "dark" {
+		t.Errorf("theme = %v, want the legacy value untouched", doc["theme"])
 	}
 	// Unknown keys survive verbatim, including numbers a float64
 	// round-trip would mangle.
@@ -155,13 +161,32 @@ func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 func TestGlobalConfigSetRejects(t *testing.T) {
 	sandboxRoot(t)
 	for name, raw := range map[string]string{
-		"noSuchKey": "1",     // unknown key
-		"doubutsu":  "maybe", // bad bool
-		"theme":     "sepia", // bad enum
-		"launchers": "[]",    // structured
+		"noSuchKey":     "1",     // unknown key
+		"launchScripts": "maybe", // bad bool
+		"launchers":     "[]",    // structured
 	} {
 		if code, err := runConfigSet(globalConfigScope(), name, raw); code != 2 || err == nil {
 			t.Errorf("set %s %q = %d, %v, want usage error", name, raw, code, err)
+		}
+	}
+}
+
+// The client keys moved to the app's clientConfig.json store. Setting
+// them here must fail with the normal unknown-key error that names the
+// device keys which remain, plus a hint pointing at the keys' new home.
+func TestGlobalConfigRejectsClientKeys(t *testing.T) {
+	sandboxRoot(t)
+	for _, name := range []string{"theme", "doubutsu"} {
+		code, err := runConfigSet(globalConfigScope(), name, "dark")
+		if code != 2 || err == nil {
+			t.Fatalf("set %s = %d, %v, want unknown-key usage error", name, code, err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "Unknown key") || !strings.Contains(msg, "launchScripts") {
+			t.Errorf("set %s error = %q, want the unknown-key message listing device keys", name, msg)
+		}
+		if !strings.Contains(msg, "Settings -> Appearance") {
+			t.Errorf("set %s error = %q, want the client-settings hint", name, msg)
 		}
 	}
 }
@@ -426,7 +451,7 @@ func TestUpdateRefusesUnreadableFile(t *testing.T) {
 func TestNoopMutationSkipsWrite(t *testing.T) {
 	sandboxRoot(t)
 	// Unsetting an absent key must not conjure the file into existence.
-	if code, err := runConfigUnset(globalConfigScope(), "theme"); code != 0 || err != nil {
+	if code, err := runConfigUnset(globalConfigScope(), "launchScripts"); code != 0 || err != nil {
 		t.Fatalf("noop unset: %d, %v", code, err)
 	}
 	if _, err := os.Stat(configJSONPath()); err == nil {
@@ -479,17 +504,17 @@ func TestCarryOverPathCanonicalization(t *testing.T) {
 func TestConfigWriteValidates(t *testing.T) {
 	sandboxRoot(t)
 	scope := globalConfigScope()
-	if code, _ := runConfigWrite(scope, `{"doubutsu": "nope"}`); code != 1 {
-		t.Errorf("mistyped doubutsu accepted: code %d", code)
+	if code, _ := runConfigWrite(scope, `{"launchScripts": "nope"}`); code != 1 {
+		t.Errorf("mistyped launchScripts accepted: code %d", code)
 	}
 	if code, _ := runConfigWrite(scope, `not json`); code != 2 {
 		t.Errorf("malformed data accepted: code %d", code)
 	}
-	if code, err := runConfigWrite(scope, `{"theme": "dark", "portPool": true}`); code != 0 || err != nil {
+	if code, err := runConfigWrite(scope, `{"launchScripts": false, "portPool": true}`); code != 0 || err != nil {
 		t.Fatalf("valid write: %d, %v", code, err)
 	}
 	doc := readDoc(t, scope.path)
-	if doc["theme"] != "dark" || doc["portPool"] != true {
+	if doc["launchScripts"] != false || doc["portPool"] != true {
 		t.Errorf("written doc = %v", doc)
 	}
 	// A JSON null decodes to a nil map. It must be refused, not treated
@@ -521,14 +546,15 @@ func TestConfigWriteValidates(t *testing.T) {
 func TestConfigWriteMergesUnknownKeys(t *testing.T) {
 	sandboxRoot(t)
 	scope := globalConfigScope()
-	// A document as a newer build would have left it: futureSetting is
-	// a key this registry doesn't model, and the app's write payload
-	// schema strips it, so the payload can't carry it back.
-	seed := `{"theme": "dark", "doubutsu": false, "futureSetting": {"nested": "keep"}}` + "\n"
+	// futureSetting is a key only a newer build models, and theme and
+	// doubutsu are legacy client keys the registry no longer models.
+	// The app's write payload schema strips all of them, so only the
+	// merge keeps them alive across a device-only write.
+	seed := `{"launchScripts": false, "theme": "dark", "doubutsu": false, "futureSetting": {"nested": "keep"}}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := runConfigWrite(scope, `{"theme": "light"}`); code != 0 || err != nil {
+	if code, err := runConfigWrite(scope, `{"portPool": true}`); code != 0 || err != nil {
 		t.Fatalf("write: %d, %v", code, err)
 	}
 	doc := readDoc(t, scope.path)
@@ -536,13 +562,16 @@ func TestConfigWriteMergesUnknownKeys(t *testing.T) {
 	if future == nil || future["nested"] != "keep" {
 		t.Errorf("futureSetting after write = %v, want it untouched", doc["futureSetting"])
 	}
-	if doc["theme"] != "light" {
-		t.Errorf("theme = %v, want light", doc["theme"])
+	if doc["theme"] != "dark" || doc["doubutsu"] != false {
+		t.Errorf("legacy client keys after write = %v/%v, want them untouched", doc["theme"], doc["doubutsu"])
+	}
+	if doc["portPool"] != true {
+		t.Errorf("portPool = %v, want true", doc["portPool"])
 	}
 	// Omitting a registry key still clears it: that is how the app
 	// resets a field to its default.
-	if _, ok := doc["doubutsu"]; ok {
-		t.Errorf("doubutsu = %v, want cleared by the omitting payload", doc["doubutsu"])
+	if _, ok := doc["launchScripts"]; ok {
+		t.Errorf("launchScripts = %v, want cleared by the omitting payload", doc["launchScripts"])
 	}
 }
 
@@ -645,8 +674,8 @@ func TestConfigWriteSetsThroughWrongShapedParent(t *testing.T) {
 
 func TestConfigWriteStampsSchemaVersion(t *testing.T) {
 	sandboxRoot(t)
-	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
-		t.Fatalf("set theme dark: %d, %v", code, err)
+	if code, err := runConfigSet(globalConfigScope(), "launchScripts", "false"); code != 0 || err != nil {
+		t.Fatalf("set launchScripts false: %d, %v", code, err)
 	}
 	if got := readDoc(t, configJSONPath())["schemaVersion"]; got != json.Number("1") {
 		t.Errorf("config.json schemaVersion = %v, want 1", got)
@@ -683,11 +712,11 @@ func TestConfigToleratesNewerSchemaVersion(t *testing.T) {
 // file keeps its mtime and the watcher stays quiet.
 func TestNoopMutationDoesNotStampSchemaVersion(t *testing.T) {
 	sandboxRoot(t)
-	seed := `{"theme": "dark"}` + "\n"
+	seed := `{"launchScripts": false}` + "\n"
 	if err := os.WriteFile(configJSONPath(), []byte(seed), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code, err := runConfigSet(globalConfigScope(), "theme", "dark"); code != 0 || err != nil {
+	if code, err := runConfigSet(globalConfigScope(), "launchScripts", "false"); code != 0 || err != nil {
 		t.Fatalf("noop set: %d, %v", code, err)
 	}
 	if raw, err := os.ReadFile(configJSONPath()); err != nil || string(raw) != seed {

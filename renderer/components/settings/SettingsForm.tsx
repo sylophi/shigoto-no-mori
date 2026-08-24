@@ -8,15 +8,20 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
-import { useGlobalConfigWrite } from "@/hooks/config/useGlobalConfig";
+import {
+  fromConfig,
+  type SettingsFormState,
+  SettingsSaveError,
+  useSettingsSave,
+} from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTheme } from "@/hooks/ui/useTheme";
 import type {
+  ClientConfig,
   DetectedLauncher,
   GlobalConfig,
-  LauncherCommand,
   Theme,
 } from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
@@ -29,69 +34,12 @@ import { CliSection } from "./CliSection";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
 
-interface FormState {
-  theme: Theme;
-  doubutsu: boolean;
-  launchers: LauncherCommand[];
-  hiddenLaunchers: string[];
-  launchScripts: boolean;
-  deleteBranchOnRemove: boolean;
-  autoPopulateInstall: boolean;
-  portPool: boolean;
-  githubCli: boolean;
-}
-
-function fromConfig(config: GlobalConfig): FormState {
-  return {
-    theme: config.theme ?? "system",
-    doubutsu: config.doubutsu ?? true,
-    launchers: config.launchers ?? [],
-    // Sorted here and on every toggle so the id list has one canonical
-    // order. useDirtyForm compares FormState by JSON.stringify, and
-    // hiding is set-semantic -- without this, re-hiding a tool in a
-    // different order would read as an unsaved change.
-    hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
-    launchScripts: config.launchScripts ?? true,
-    deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
-    autoPopulateInstall: config.autoPopulateInstall ?? false,
-    portPool: config.portPool ?? false,
-    githubCli: config.githubCli ?? true,
-  };
-}
-
-function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
-  const valid = state.launchers.filter(
-    (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
-  );
-  return {
-    ...original,
-    // Default is "system"; omit when on the default to keep config.json tidy.
-    theme: state.theme === "system" ? undefined : state.theme,
-    // Default is on; omit when on, store explicit `false` when off so
-    // the user's opt-out survives reads (same as deleteBranchOnRemove).
-    doubutsu: state.doubutsu ? undefined : false,
-    launchers: valid.length > 0 ? valid : undefined,
-    // Default is everything shown; omit the key entirely when nothing is
-    // hidden rather than persisting an empty array.
-    hiddenLaunchers:
-      state.hiddenLaunchers.length > 0 ? state.hiddenLaunchers : undefined,
-    // Default is on; same opt-out serialization as deleteBranchOnRemove.
-    launchScripts: state.launchScripts ? undefined : false,
-    // Default is true; omit when on, store explicit `false` when off so
-    // the user's opt-out survives reads.
-    deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
-    // Default is false; only persist when explicitly enabled.
-    autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
-    portPool: state.portPool ? true : undefined,
-    // Default is true; same opt-out serialization as deleteBranchOnRemove.
-    githubCli: state.githubCli ? undefined : false,
-  };
-}
-
 export function SettingsForm({
   initialConfig,
+  initialClientConfig,
 }: {
   initialConfig: GlobalConfig;
+  initialClientConfig: ClientConfig;
 }) {
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
@@ -99,7 +47,7 @@ export function SettingsForm({
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
   const ghReady = ghInstalled && ghAuthed;
-  const write = useGlobalConfigWrite();
+  const save = useSettingsSave({ initialConfig, initialClientConfig });
   const { setOverride } = useTheme();
   const { setOverride: setDoubutsuOverride } = useDoubutsu();
 
@@ -107,7 +55,9 @@ export function SettingsForm({
   const missingTools = detected.filter((d) => !d.available);
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
-    useDirtyForm<FormState>(fromConfig(initialConfig));
+    useDirtyForm<SettingsFormState>(
+      fromConfig(initialConfig, initialClientConfig),
+    );
 
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values.
@@ -120,9 +70,25 @@ export function SettingsForm({
   );
 
   const handleSave = async () => {
-    await write.mutateAsync(toConfig(initialConfig, form));
-    setSavedSnapshot(form);
-    // No explicit setOverride(null) — the providers clear the override
+    // Two stores behind one Save. useSettingsSave routes each field to
+    // its engine and skips whichever store is unchanged.
+    try {
+      await save.mutateAsync(form);
+      setSavedSnapshot(form);
+    } catch (error) {
+      // The mutation's toast and the banner below already surface the
+      // failure. A partial failure still landed the device half, so
+      // advance the snapshot for it: only the appearance fields stay
+      // unsaved and Save retries just those.
+      if (error instanceof SettingsSaveError && error.devicePersisted) {
+        setSavedSnapshot((prev) => ({
+          ...form,
+          theme: prev.theme,
+          doubutsu: prev.doubutsu,
+        }));
+      }
+    }
+    // No explicit setOverride(null) -- the providers clear the override
     // automatically once `saved` catches up to the staged value.
   };
 
@@ -297,13 +263,13 @@ export function SettingsForm({
 
           <DangerZone />
 
-          {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
+          {save.error && <ErrorBanner>{save.error.message}</ErrorBanner>}
         </div>
       </div>
       <EditorFooter
         isDirty={isDirty}
-        isPending={write.isPending}
-        isSuccess={write.isSuccess}
+        isPending={save.isPending}
+        isSuccess={save.isSuccess}
         onDiscard={handleDiscard}
         onSave={() => void handleSave()}
       />

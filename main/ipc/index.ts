@@ -1,4 +1,5 @@
 import { branchesContract } from "@shared/ipc/modules/branches";
+import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -16,8 +17,10 @@ import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
+import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "./modules/branches";
+import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
 import { fsHandlers } from "./modules/fs";
 import { gitHandlers } from "./modules/git";
@@ -35,10 +38,13 @@ import { cliHandlers } from "./modules/cli";
 import { shellHandlers } from "./modules/shell";
 import { shigomoriHandlers } from "./modules/shigomori";
 import { updaterHandlers } from "./modules/updater";
+import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "./modules/worktrees";
 import { registerContract } from "./register";
 
 export function registerIpcHandlers(): void {
+  registerContract(clientConfigContract, clientConfigHandlers);
+  registerContract(windowContract, windowHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);

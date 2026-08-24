@@ -11,11 +11,8 @@ import {
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { DOUBUTSU_STORAGE_KEY } from "@/hooks/ui/useDoubutsu";
-import { THEME_STORAGE_KEY } from "@/hooks/ui/useTheme";
 import { tildify } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
-import { removeStored } from "@/lib/localStorage";
 
 export function DangerZone() {
   const navigate = useNavigate();
@@ -38,8 +35,12 @@ export function DangerZone() {
       setProgress(null);
       try {
         await window.api.runtime.nuke();
-        removeStored(THEME_STORAGE_KEY);
-        removeStored(DOUBUTSU_STORAGE_KEY);
+        // One rule decides what a nuke covers: this host's data root
+        // goes, and so does this machine's shigomori install (the CLI
+        // and its shell hooks), while preferences survive because they
+        // are preferences, not data. Appearance therefore stays put:
+        // it lives as client config in the app's own userData, and the
+        // localStorage boot hints stay valid.
         // Every cached query now describes deleted state. A blanket
         // invalidateQueries() would refetch them all against the wiped
         // root and raise a burst of "Unknown project/worktree" toasts,

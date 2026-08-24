@@ -1,6 +1,7 @@
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ContractModule, ContractScope } from "@shared/ipc/contract";
 import { branchesContract } from "@shared/ipc/modules/branches";
+import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -24,6 +25,7 @@ import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type {
+  ClientConfig,
   GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
@@ -45,6 +47,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     buildClient(m, transports[m.scope]);
 
   const branchesClient = c(branchesContract);
+  const clientConfigClient = c(clientConfigContract);
   const dialogClient = c(dialogContract);
   const fsClient = c(fsContract);
   const gitClient = c(gitContract);
@@ -72,6 +75,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       create: branchesClient.create,
       rename: branchesClient.rename,
       delete: branchesClient.delete,
+    },
+
+    clientConfig: {
+      read: clientConfigClient.read,
+      write: (config: ClientConfig) => clientConfigClient.write({ config }),
     },
 
     cli: {
@@ -205,10 +213,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     runtime: {
       info: runtimeClient.info,
-      setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
       nuke: runtimeClient.nuke,
       moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
-      relaunch: runtimeClient.relaunch,
       onNukeProgress: runtimeClient.nukeProgress,
     },
 
@@ -242,6 +248,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     window: {
       onFocused: windowClient.focused,
       onBlurred: windowClient.blurred,
+      previewTheme: (theme: Theme) => windowClient.previewTheme({ theme }),
+      relaunch: windowClient.relaunch,
     },
 
     worktreeData: {

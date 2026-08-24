@@ -1,9 +1,11 @@
+import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { SettingsForm } from "./SettingsForm";
 import { SettingsSkeleton } from "./SettingsSkeleton";
 
 export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();
+  const { data: clientConfig, isLoading: isClientLoading } = useClientConfig();
 
   return (
     <div data-doubutsu-page="settings" className="flex h-full flex-col">
@@ -19,10 +21,13 @@ export function Settings() {
           設定
         </span>
       </header>
-      {isLoading ? (
+      {isLoading || isClientLoading ? (
         <SettingsSkeleton />
       ) : (
-        <SettingsForm initialConfig={config ?? {}} />
+        <SettingsForm
+          initialConfig={config ?? {}}
+          initialClientConfig={clientConfig ?? {}}
+        />
       )}
     </div>
   );

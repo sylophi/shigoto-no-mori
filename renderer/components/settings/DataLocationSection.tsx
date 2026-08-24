@@ -40,7 +40,7 @@ export function DataLocationSection() {
       // Acknowledge: the main process relaunches only after this call,
       // which can't fire before the moveRoot reply above was delivered.
       // Fire-and-forget -- the app quits out from under the promise.
-      void window.api.runtime.relaunch();
+      void window.api.window.relaunch();
     } catch (err) {
       notifyError("Couldn't move data folder", err);
       setMoving(false);

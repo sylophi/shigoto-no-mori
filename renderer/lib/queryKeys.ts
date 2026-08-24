@@ -9,8 +9,8 @@
 // in the host's per-root state.json) and open with a constant "host"
 // sentinel followed by a device id, so a second device's data can
 // enter the cache without colliding and scope stays decidable from the
-// tuple alone. Client-scoped keys are window/session-local only
-// (runtimeInfo, updaterState) and never get either.
+// tuple alone. Client-scoped keys belong to this app instance alone
+// (updaterState, clientConfig) and never get either.
 const PR_BRANCH_SCOPE = "branch";
 const HOST_SCOPE = "host";
 
@@ -128,7 +128,14 @@ export const queryKeys = {
   worktreeIncludeStatus: (projectId: string | null) =>
     host("worktreeIncludeStatus", projectId),
 
-  runtimeInfo: () => ["runtime", "info"] as const,
+  // Host-scoped: the payload (shigomoriRoot, rootDirName, homedir) is
+  // a set of per-host facts served by the host-scoped runtime contract.
+  runtimeInfo: () => host("runtime", "info"),
+
+  // Client-scoped: the store lives in this app instance's userData, so
+  // no host sentinel and no device id.
+  clientConfig: () => ["clientConfig"] as const,
+
   updaterState: () => ["updater", "state"] as const,
 } as const;
 

@@ -99,20 +99,21 @@ export const ShigomoriWorktreeDataSchema = z.object({
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 
-// Global, per-user config kept in ~/shigomori[-dev]/config.json. Holds
+// Global, per-device config kept in ~/shigomori[-dev]/config.json. Holds
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.
-// Strict for the same reason as ShigomoriConfigSchema: it doubles as
-// the globalConfig:write IPC input.
+// Device config only: every key here gates what this machine can do,
+// so both the host and the CLI read it. How the app instance looks
+// (theme, doubutsu) is client config and lives in ClientConfigSchema
+// below.
+// Doubles as the globalConfig:write IPC input. z.object STRIPS unknown
+// keys rather than rejecting them, and it must not become .strict():
+// pre-split installs can still carry legacy client keys (and keys from
+// newer builds) in config.json, and those have to keep passing through
+// the write path unrejected. The stripping is also what drops a key
+// the renderer invents at the boundary instead of persisting it.
 export const GlobalConfigSchema = z.object({
-  theme: ThemeSchema.optional(),
-  // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
-  // the light and dark palettes shift to a bolder, color-blocked,
-  // Zen-Maru-Gothic-typeset look. On by default; absent = on, explicit
-  // `false` is the opt-out back to the v1 look. Mirrored to
-  // localStorage so startup paints without a flash.
-  doubutsu: z.boolean().optional(),
   launchers: z.array(LauncherCommandSchema).optional(),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
   // user has switched off, so they're skipped when building a project's
@@ -154,6 +155,30 @@ export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,
 });
 
+// Client config: how this app instance looks, kept in clientConfig.json
+// under Electron's userData and owned by the main process alone. The
+// CLI never reads or writes it, unlike the device config above.
+// Doubles as the clientConfig:write IPC input, stripping unknown keys
+// at the boundary like GlobalConfigSchema (and with the same
+// must-not-become-.strict() constraint).
+export const ClientConfigSchema = z.object({
+  theme: ThemeSchema.optional(),
+  // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
+  // the light and dark palettes shift to a bolder, color-blocked,
+  // Zen-Maru-Gothic-typeset look. On by default (absent = on), explicit
+  // `false` is the opt-out back to the v1 look. Mirrored to
+  // localStorage so startup paints without a flash.
+  doubutsu: z.boolean().optional(),
+});
+export type ClientConfig = z.infer<typeof ClientConfigSchema>;
+
+// Read-side counterpart, loose like StoredGlobalConfigSchema.
+export const StoredClientConfigSchema = ClientConfigSchema.loose();
+
+export const WriteClientConfigPayloadSchema = z.object({
+  config: ClientConfigSchema,
+});
+
 export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
   config: ShigomoriConfigSchema,
 });
@@ -174,6 +199,7 @@ export const WriteWorktreeDataPayloadSchema =
     data: ShigomoriWorktreeDataSchema,
   });
 
-export const SetThemePayloadSchema = z.object({
+// Input to the window module's non-persisting theme preview.
+export const PreviewThemePayloadSchema = z.object({
   theme: ThemeSchema,
 });
