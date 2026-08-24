@@ -1,0 +1,4 @@
+# Wrangler's local state (miniflare caches, local D1 data).
+.wrangler/
+# Local secrets for wrangler dev. Never committed.
+.dev.vars

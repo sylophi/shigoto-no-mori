@@ -14,6 +14,7 @@
     "**/out/",
     "**/dist/",
     "**/.vite/",
+    "**/.wrangler/",
     "pnpm-lock.yaml",
     "**/tsconfig.tsbuildinfo",
     "*.md",

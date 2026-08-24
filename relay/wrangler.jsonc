@@ -1,0 +1,49 @@
+// Cloudflare Worker config for the sm relay. Secrets never live here:
+// CLERK_SECRET_KEY is a wrangler secret (`wrangler secret put
+// CLERK_SECRET_KEY`), read by src/index.ts to verify Clerk session
+// tokens at enrollment.
+//
+// Plain vars the owner may set (via `vars` here or the dashboard):
+// - ALLOWED_WEB_ORIGIN: exact origin of the future step-8 web client.
+//   Unset means only Origin-less clients (the desktop app) may call
+//   the API. See the origin gate in src/worker.ts.
+// - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
+//   test seam, production should leave it unset.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sm-relay",
+  "main": "src/index.ts",
+  // Recent, and within the range supported by the workerd that
+  // @cloudflare/vitest-pool-workers runs the test suite on.
+  "compatibility_date": "2026-08-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ACCOUNT_RELAY",
+        "class_name": "AccountRelay",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      // SQLite-backed storage is required for new DO classes and is
+      // what the hibernation-era APIs assume.
+      "new_sqlite_classes": ["AccountRelay"],
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sm-relay",
+      // PLACEHOLDER: replace with the id printed by
+      // `wrangler d1 create sm-relay` before deploying. Local dev and
+      // the vitest suite ignore it.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+}
