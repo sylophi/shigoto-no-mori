@@ -2,10 +2,10 @@ import type { WebContents } from "electron";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Handlers } from "@shared/ipc/types";
 import type { Project, Worktree } from "@shared/schemas";
-import { readShigomoriConfig } from "../../lib/config/project";
-import { checkoutBranch, renameBranch } from "../../lib/git/branches";
-import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
-import { resolveDefaultBranch } from "../../lib/git/remotes";
+import { readShigomoriConfig } from "@host/lib/config/project";
+import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
+import { getCommitDiff, getWorktreeDiff } from "@host/lib/git/diff";
+import { resolveDefaultBranch } from "@host/lib/git/remotes";
 import {
   overwriteFromUpstream,
   publishCurrentBranch,
@@ -14,20 +14,20 @@ import {
   pushFastForward,
   pushForceWithLease,
   syncWithPrimary,
-} from "../../lib/git/sync";
+} from "@host/lib/git/sync";
 import {
   describeWorktree,
   findWorktreeIdentityOrThrow,
   listCommits,
   listWorktrees,
   type WorktreeIdentity,
-} from "../../lib/git/worktrees";
+} from "@host/lib/git/worktrees";
 import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
-} from "../../lib/projects";
-import { withDeleteInflight } from "../../lib/scripts";
-import { relocateWorktreeToManagedPath } from "../../lib/worktrees/relocate";
+} from "@host/lib/projects";
+import { withDeleteInflight } from "@host/lib/scripts";
+import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
 import {

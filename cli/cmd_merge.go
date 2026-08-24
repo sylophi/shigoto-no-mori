@@ -1,7 +1,7 @@
 package main
 
 // sm merge: merge the worktree's pull request the way the app does
-// (main/lib/githubCli/): find the PR for the branch via gh's
+// (host/lib/githubCli/): find the PR for the branch via gh's
 // server-side --head filter, resolve the merge method from the repo's
 // GitHub settings (merge > squash > rebase order, with the project's
 // saved lastMergeMethod winning while still allowed), run

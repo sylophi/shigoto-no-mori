@@ -2,7 +2,7 @@ package main
 
 // Adjective + animal pairs for naming worktree directories. The word
 // lists are embedded from embed/name-words.json, which the app's
-// main/lib/worktrees/names.ts imports too -- one pool, two consumers,
+// host/lib/worktrees/names.ts imports too -- one pool, two consumers,
 // nothing to keep in sync by hand.
 
 import (

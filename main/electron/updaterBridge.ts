@@ -21,8 +21,8 @@ import {
   atomicWriteJson,
   readJsonOrNull,
   unlinkIfExists,
-} from "../lib/util/jsonFile";
-import { shigomoriRoot } from "../lib/util/paths";
+} from "@host/lib/util/jsonFile";
+import { shigomoriRoot } from "@host/lib/util/paths";
 
 const REQUEST_STALE_MS = 2 * 60_000;
 

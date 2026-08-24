@@ -22,7 +22,7 @@ export const scriptsContract = {
   ),
   event: broadcast("scripts:event", ScriptEventSchema),
   // The worktree these scripts ran in was removed outside the app, so
-  // the app reaped them (see main/lib/scripts/removedWorktrees.ts). The
+  // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The
   // run's own console goes away with the worktree row, so this is the
   // only place the stop can still be reported.
   stoppedForRemovedWorktree: broadcast(

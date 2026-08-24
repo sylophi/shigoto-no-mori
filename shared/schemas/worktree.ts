@@ -78,7 +78,7 @@ export const WorktreeSchema = z.object({
   // is a local branch.
   primaryRef: z.string().optional(),
   // True when this branch's work is already in the primary branch. See
-  // landedOnPrimary in main/lib/git/worktrees.ts for what does and
+  // landedOnPrimary in host/lib/git/worktrees.ts for what does and
   // doesn't count -- notably a local fast-forward merge doesn't, since
   // its history is indistinguishable from a worktree that never
   // committed. False for the primary worktree and for detached HEAD.

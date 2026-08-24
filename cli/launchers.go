@@ -3,7 +3,7 @@ package main
 // The app's launcher row, ported for `sm open`: detected macOS apps,
 // custom launcher commands from global and project config, and the
 // GitHub web entry. The tool catalog is one embedded JSON file shared
-// with main/lib/launchers/index.ts. Ordering and the rolling 14-day
+// with host/lib/launchers/index.ts. Ordering and the rolling 14-day
 // use log are shared with the app through state.json's launcherUseLog
 // key, so launching from the terminal reorders the row in the app and
 // vice versa.
@@ -33,7 +33,7 @@ type launcherApp struct {
 const t3codeID = "t3code"
 
 // The tool catalog is embedded from embed/launcher-catalog.json, which
-// main/lib/launchers/index.ts imports too -- one list, two consumers.
+// host/lib/launchers/index.ts imports too -- one list, two consumers.
 // bundleNames resolve against appRoots; "__finder__" is the
 // always-available Finder sentinel.
 //
@@ -169,7 +169,7 @@ func sortLaunchersByUse(entries []launcherEntry) {
 
 // One rolling-window bump step, shared by every use log: launchers
 // here, package scripts in cmd_run.go. Ports pruneAndPush from
-// main/lib/util/useLog.ts: drop timestamps older than the window,
+// host/lib/util/useLog.ts: drop timestamps older than the window,
 // append now.
 func pruneAndAppendUse(times []int64) []int64 {
 	now := time.Now().UnixMilli()
@@ -227,7 +227,7 @@ func launchCustomCommand(command, worktreePath string) error {
 }
 
 // Protocol deep links for apps whose only "open this folder" API is
-// their URL scheme (see deepLinkFor in main/lib/launchers/index.ts).
+// their URL scheme (see deepLinkFor in host/lib/launchers/index.ts).
 func deepLinkFor(appID, worktreePath string) string {
 	switch appID {
 	case "codex":

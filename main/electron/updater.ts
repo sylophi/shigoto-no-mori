@@ -29,8 +29,8 @@ import {
 } from "@shared/schemas";
 import { setUpdaterImpl } from "../ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
-import { readJsonOrNull } from "../lib/util/jsonFile";
-import { pathExists, shigomoriRoot } from "../lib/util/paths";
+import { readJsonOrNull } from "@host/lib/util/jsonFile";
+import { pathExists, shigomoriRoot } from "@host/lib/util/paths";
 import { confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";

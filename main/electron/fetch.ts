@@ -8,13 +8,13 @@
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Project } from "@shared/schemas";
-import { fetchAllRemotes, snapshotRemoteRefs } from "../lib/git/remotes";
+import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
 import {
   pullRequestMapsEqual,
   readCachedProjectPullRequests,
   refreshProjectPullRequests,
-} from "../lib/githubCli/pullRequests";
-import { loadProjects } from "../lib/projects";
+} from "@host/lib/githubCli/pullRequests";
+import { loadProjects } from "@host/lib/projects";
 import { broadcastAll } from "../ipc/register";
 
 // Skip if a fetch finished within this window. Short enough that rapid

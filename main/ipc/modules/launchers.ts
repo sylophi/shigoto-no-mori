@@ -13,9 +13,9 @@ import {
   type ShigomoriConfig,
   type WebLauncher,
 } from "@shared/schemas";
-import { readGlobalConfig } from "../../lib/config/global";
-import { readShigomoriConfig } from "../../lib/config/project";
-import { stateStore } from "../../lib/config/store";
+import { readGlobalConfig } from "@host/lib/config/global";
+import { readShigomoriConfig } from "@host/lib/config/project";
+import { stateStore } from "@host/lib/config/store";
 import {
   deepLinkFor,
   type DetectedApp,
@@ -23,13 +23,13 @@ import {
   findDetected,
   launchCustom,
   launchDetected,
-} from "../../lib/launchers";
-import { getGithubRepoInfo, githubRepoUrl } from "../../lib/githubCli/remote";
+} from "@host/lib/launchers";
+import { getGithubRepoInfo, githubRepoUrl } from "@host/lib/githubCli/remote";
 import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
-} from "../../lib/projects";
-import { countWithin, pruneAndPush } from "../../lib/util/useLog";
+} from "@host/lib/projects";
+import { countWithin, pruneAndPush } from "@host/lib/util/useLog";
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the

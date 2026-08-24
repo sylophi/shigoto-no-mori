@@ -13,10 +13,10 @@
 // by the next focus refetch instead.
 import { type FSWatcher, mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
-import { invalidateGlobalConfigCache } from "../lib/config/global";
-import { invalidateAllProjectConfigCaches } from "../lib/config/project";
-import { shigomoriRoot } from "../lib/util/paths";
-import { selfWroteWithin } from "../lib/util/selfWrite";
+import { invalidateGlobalConfigCache } from "@host/lib/config/global";
+import { invalidateAllProjectConfigCaches } from "@host/lib/config/project";
+import { shigomoriRoot } from "@host/lib/util/paths";
+import { selfWroteWithin } from "@host/lib/util/selfWrite";
 import { cliChildCount } from "./cliRunner";
 
 const DEBOUNCE_MS = 300;

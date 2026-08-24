@@ -30,7 +30,7 @@ export function isEntityGoneError(error: unknown): boolean {
 // above: the renderer matches on the marker to swap its confirm dialog
 // into a force-delete prompt with friendlier copy than git's stderr.
 // The marker is deliberately NOT the phrase git prints ("is not fully
-// merged") so the two layers stay distinct: main/lib/git/branches.ts
+// merged") so the two layers stay distinct: host/lib/git/branches.ts
 // detects git's stderr and rethrows this error.
 const BRANCH_NOT_MERGED_MARKER = "has unmerged commits";
 

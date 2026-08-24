@@ -33,7 +33,7 @@ export function normalizeRelPath(p: string): string {
 
 // Keeps a relative path inside the project root: no absolute paths, no
 // ".." traversal, no NUL. Single source of truth for CarryOverEntrySchema
-// and for main-side filtering of resolved .worktreeinclude paths (main/lib
+// and for main-side filtering of resolved .worktreeinclude paths (host/lib
 // may only `import type` from the schemas barrel, so this lives here).
 export function isSafeRelPath(p: string): boolean {
   return (

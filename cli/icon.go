@@ -1,6 +1,6 @@
 package main
 
-// Project icon resolution, ported from main/lib/projects/icon.ts so
+// Project icon resolution, ported from host/lib/projects/icon.ts so
 // the CLI can color projects by logo without the app having run. The
 // shared cache in front of this scan lives in iconcache.go; what's
 // here is the resolution itself, and it must produce the same answer

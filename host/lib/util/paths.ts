@@ -13,7 +13,7 @@ let cachedRoot: string | null = null;
 let cachedPointerPath: string | null = null;
 
 // Called once at boot from main/index.ts with `app.isPackaged`. Keeping the
-// `electron` import out of this file is what lets the rest of `main/lib/`
+// `electron` import out of this file is what lets the rest of `host/lib/`
 // stay free of Electron coupling. Refuses a second call so a stray re-init
 // from somewhere unexpected fails loudly instead of silently flipping the
 // path under live callers. Resolution matches the CLI (cli/state.go):

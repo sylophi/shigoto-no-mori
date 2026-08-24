@@ -20,7 +20,7 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 // Containment test: true when `path` IS `ancestor` or sits anywhere
 // beneath it. Prefix matching by intent -- callers guarding destructive
 // flows (nuke, root move) want the whole subtree. Contrast
-// isManagedPath (main/lib/worktrees/paths.ts), which deliberately uses
+// isManagedPath (host/lib/worktrees/paths.ts), which deliberately uses
 // parent equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
   const folded = path.replace(/\/+$/, "");

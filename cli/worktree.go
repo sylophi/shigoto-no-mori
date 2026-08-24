@@ -167,7 +167,7 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 }
 
 // createWorktree ports the createWorktree flow from
-// main/lib/git/worktrees.ts: pick/validate the dirname, resolve the
+// host/lib/git/worktrees.ts: pick/validate the dirname, resolve the
 // layout base, refresh the remote base ref, `git worktree add`, and
 // re-read the identity so the returned branch is what git settled on.
 // checkout=true reuses the existing branch `base` (no -b) -- the adopt

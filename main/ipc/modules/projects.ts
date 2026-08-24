@@ -2,35 +2,35 @@ import { reorderProjects } from "@shared/reorder";
 import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { readShigomoriConfig } from "../../lib/config/project";
-import { PROJECTS_KEY, registryStore } from "../../lib/config/store";
-import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
-import { isGitRepo } from "../../lib/git/core";
-import { resolveDefaultBranch } from "../../lib/git/remotes";
-import { pickAvailableWorktreeName } from "../../lib/git/worktrees";
+import { readShigomoriConfig } from "@host/lib/config/project";
+import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
+import { listBranches, listIgnoredPaths } from "@host/lib/git/branches";
+import { isGitRepo } from "@host/lib/git/core";
+import { resolveDefaultBranch } from "@host/lib/git/remotes";
+import { pickAvailableWorktreeName } from "@host/lib/git/worktrees";
 import {
   findProjectOrThrow,
   listProjectsWithStatus,
   loadProjects,
-} from "../../lib/projects";
-import { forgetProjectIcon, readProjectIcon } from "../../lib/projects/icon";
+} from "@host/lib/projects";
+import { forgetProjectIcon, readProjectIcon } from "@host/lib/projects/icon";
 import {
   dropCollapsedProject,
   readCollapsedProjects,
   toggleCollapsedProject,
-} from "../../lib/projects/collapsed";
+} from "@host/lib/projects/collapsed";
 import {
   readSidebarView,
   writeSidebarView,
-} from "../../lib/projects/sidebarView";
-import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
-import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
+} from "@host/lib/projects/sidebarView";
+import { readProjectSort, writeProjectSort } from "@host/lib/projects/usage";
+import { readWorktreeIncludeStatus } from "@host/lib/worktrees/worktreeInclude";
 import {
   clearProjectDeleteInflight,
   killScriptsForProject,
   markProjectDeleteInflight,
-} from "../../lib/scripts";
-import { expandHome } from "../../lib/util/paths";
+} from "@host/lib/scripts";
+import { expandHome } from "@host/lib/util/paths";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {

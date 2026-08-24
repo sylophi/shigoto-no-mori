@@ -1,6 +1,6 @@
 package main
 
-// Git plumbing, ported from main/lib/git/{core,worktrees,remotes,
+// Git plumbing, ported from host/lib/git/{core,worktrees,remotes,
 // branches}.ts. One chokepoint (runGit) like the app's core.ts;
 // everything downstream parses the same porcelain the app does so both
 // surfaces describe worktrees identically.
@@ -186,7 +186,7 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 // --- status probes (buildWorktree parity) ---
 
 // How many changed paths get stat'd for their mtime. Mirrors
-// CHANGE_MTIME_STAT_LIMIT in main/lib/git/worktrees.ts.
+// CHANGE_MTIME_STAT_LIMIT in host/lib/git/worktrees.ts.
 const changeMtimeStatLimit = 64
 
 type workingTreeChanges struct {
@@ -409,11 +409,11 @@ type primaryRelation struct {
 }
 
 // Ceiling on the first-parent walk in landedOnPrimary. Mirrors
-// FIRST_PARENT_SCAN_LIMIT in main/lib/git/worktrees.ts.
+// FIRST_PARENT_SCAN_LIMIT in host/lib/git/worktrees.ts.
 const firstParentScanLimit = 2000
 
 // Whether the branch's work is in the primary branch. See
-// landedOnPrimary in main/lib/git/worktrees.ts for why this walks the
+// landedOnPrimary in host/lib/git/worktrees.ts for why this walks the
 // primary's first-parent chain rather than asking `git branch --merged`,
 // and which merge styles it deliberately reports as "not landed".
 func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain) bool {
@@ -438,7 +438,7 @@ func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain
 // The primary's first-parent chain, read once per project and shared by
 // every worktree in it -- one object store, one ref, one answer. Lazy,
 // so a project whose worktrees are all ahead of the primary never asks.
-// Mirrors primaryChainReader in main/lib/git/worktrees.ts.
+// Mirrors primaryChainReader in host/lib/git/worktrees.ts.
 type primaryChain struct {
 	path string
 	ref  string

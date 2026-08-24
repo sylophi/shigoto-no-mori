@@ -4,8 +4,8 @@ import {
   createLocalBranch,
   deleteAnyLocalBranch,
   renameAnyLocalBranch,
-} from "../../lib/git/branches";
-import { findProjectOrThrow } from "../../lib/projects";
+} from "@host/lib/git/branches";
+import { findProjectOrThrow } from "@host/lib/projects";
 
 export const branchesHandlers: Handlers<typeof branchesContract> = {
   create: async ({ projectId, name, base }) => {

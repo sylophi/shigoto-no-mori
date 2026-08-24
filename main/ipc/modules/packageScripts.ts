@@ -3,18 +3,18 @@ import type { Handlers } from "@shared/ipc/types";
 import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
-} from "../../lib/projects";
-import { startScript } from "../../lib/scripts";
+} from "@host/lib/projects";
+import { startScript } from "@host/lib/scripts";
 import {
   bumpScriptUseCount,
   readScriptSort,
   usageFor,
   writeScriptSort,
-} from "../../lib/scripts/packageScriptStats";
+} from "@host/lib/scripts/packageScriptStats";
 import {
   readPackageScriptNames,
   readPackageScripts,
-} from "../../lib/scripts/packageScripts";
+} from "@host/lib/scripts/packageScripts";
 import { cliRunScriptSpawn } from "../cliDelegate";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";

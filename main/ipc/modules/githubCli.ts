@@ -3,20 +3,20 @@ import type { Handlers } from "@shared/ipc/types";
 import {
   getPullRequestDiff,
   setPullRequestDraft,
-} from "../../lib/githubCli/actions";
+} from "@host/lib/githubCli/actions";
 import {
   evictProjectPullRequests,
   getWorktreePullRequest,
   listProjectPullRequests,
-} from "../../lib/githubCli/pullRequests";
+} from "@host/lib/githubCli/pullRequests";
 import {
   listPullRequestCandidates,
   resolvePullRequestCheckout,
-} from "../../lib/githubCli/pullRequestCheckout";
+} from "@host/lib/githubCli/pullRequestCheckout";
 import { mergeViaCli } from "../cliDelegate";
-import { getGithubCliReadiness } from "../../lib/githubCli/readiness";
-import { getRepoMergeConfig } from "../../lib/githubCli/repoConfig";
-import { findProjectOrThrow } from "../../lib/projects";
+import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
+import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
+import { findProjectOrThrow } from "@host/lib/projects";
 
 export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),

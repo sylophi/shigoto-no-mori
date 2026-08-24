@@ -147,7 +147,7 @@ function joinHostPath(host: string, path: string): string | null {
   let folded = lowerAsciiHost(host);
   // `ssh.<host>` is the host's SSH-over-443 alias (github.com publishes
   // ssh.github.com, and GHE mirrors the shape): same repo, one key.
-  // Mirrors normalizeHost in main/lib/githubCli/remote.ts.
+  // Mirrors normalizeHost in host/lib/githubCli/remote.ts.
   if (folded.startsWith("ssh.")) folded = folded.slice(4);
   if (folded.length === 0 || repo.length === 0) return null;
   return `${folded}/${repo}`;

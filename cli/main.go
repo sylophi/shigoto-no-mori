@@ -1,7 +1,7 @@
 package main
 
 // sm -- the Shigoto no Mori CLI, a Go port of the app's worktree
-// engine (main/lib/) with the same on-disk state, ids, lock protocol,
+// engine (host/lib/) with the same on-disk state, ids, lock protocol,
 // and JSON output shapes. The state root follows the compiled-in
 // flavor (sm -> ~/shigomori, smd -> ~/shigomori-dev, see flavor.go);
 // a ~/.config/<flavor-name>/root pointer file relocates it (state.go),

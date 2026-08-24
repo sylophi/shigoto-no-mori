@@ -31,7 +31,7 @@ export const PROJECTS_KEY = "projects";
 export const SHELVED_KEY = "shelvedWorktrees";
 // UUID naming this state root, not this machine: a dev root and a
 // prod root on one laptop are two devices. Generated on first read by
-// main/lib/config/deviceId.ts. The CLI only preserves it.
+// host/lib/config/deviceId.ts. The CLI only preserves it.
 export const DEVICE_ID_KEY = "deviceId";
 
 // Drives only the state.json→registry.json split below. deviceId is

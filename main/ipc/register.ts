@@ -12,7 +12,7 @@ import {
 import type { Contract } from "@shared/ipc/contract";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import type { BroadcastProducerPayload, Handlers } from "@shared/ipc/types";
-import { recordProjectActionUsage } from "../lib/projects/usage";
+import { recordProjectActionUsage } from "@host/lib/projects/usage";
 
 export type HandlerContext = { event: IpcMainInvokeEvent };
 

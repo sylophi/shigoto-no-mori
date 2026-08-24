@@ -6,7 +6,7 @@ import { BrowserWindow, dialog } from "electron";
 // CLI runner registers its child count as an inflight contributor at
 // module load (it is imported by the IPC modules during bootstrap,
 // well before any busy check can run).
-import { type BusyOperations, getBusyOperations } from "../lib/scripts";
+import { type BusyOperations, getBusyOperations } from "@host/lib/scripts";
 
 type BusyAction = "quit" | "restart";
 

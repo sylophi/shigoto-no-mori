@@ -5,8 +5,8 @@ import {
   readShigomoriConfig,
   readWorktreeData,
   writeWorktreeData,
-} from "../../lib/config/project";
-import { findProjectOrThrow } from "../../lib/projects";
+} from "@host/lib/config/project";
+import { findProjectOrThrow } from "@host/lib/projects";
 import { shigomoriWriteViaCli } from "../cliDelegate";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {

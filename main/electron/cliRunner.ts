@@ -11,9 +11,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
-import { registerInflightContributor } from "../lib/scripts";
-import { noteSelfWrite } from "../lib/util/selfWrite";
-import { signalTreeBestEffort } from "../lib/scripts/process";
+import { registerInflightContributor } from "@host/lib/scripts";
+import { noteSelfWrite } from "@host/lib/util/selfWrite";
+import { signalTreeBestEffort } from "@host/lib/scripts/process";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);

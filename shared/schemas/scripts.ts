@@ -105,7 +105,7 @@ export type RemovedWorktreeScripts = z.infer<
 >;
 
 // Result of the boot sweep for scripts a previous session left running
-// (main/lib/scripts/persistence.ts). Drained once by the renderer,
+// (host/lib/scripts/persistence.ts). Drained once by the renderer,
 // which is the only place those runs can still be reported: their
 // consoles died with the session that started them.
 export const OrphanScriptReportSchema = z.object({

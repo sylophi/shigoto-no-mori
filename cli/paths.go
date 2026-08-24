@@ -1,7 +1,7 @@
 package main
 
 // Path math ported from shared/worktreeLayout.ts and
-// main/lib/worktrees/paths.ts: path-derived worktree ids and the
+// host/lib/worktrees/paths.ts: path-derived worktree ids and the
 // managed-layout bases. Must stay behavior-identical to the TS side --
 // both compute the same ids and "is this managed?" answers over the
 // same state.
@@ -16,7 +16,7 @@ import (
 )
 
 // sha256(path)[:12], identical to worktreeIdFromPath in
-// main/lib/git/worktrees.ts -- the same path must hash to the same id
+// host/lib/git/worktrees.ts -- the same path must hash to the same id
 // from the app and the CLI.
 func worktreeIDFromPath(path string) string {
 	sum := sha256.Sum256([]byte(path))
@@ -90,7 +90,7 @@ func cwdInside(dir string) bool {
 
 // Every base directory whose direct children count as "managed" for a
 // project; all layouts included unconditionally (matches
-// managedBasesFor in main/lib/worktrees/paths.ts).
+// managedBasesFor in host/lib/worktrees/paths.ts).
 func managedBasesFor(projectPath string, config *projectConfig) []string {
 	bases := []string{
 		filepath.Join(shigomoriRoot(), "worktrees", filepath.Base(projectPath)),

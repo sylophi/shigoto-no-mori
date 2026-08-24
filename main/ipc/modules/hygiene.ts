@@ -1,11 +1,11 @@
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import type { Handlers } from "@shared/ipc/types";
-import { findProjectOrThrow } from "../../lib/projects";
+import { findProjectOrThrow } from "@host/lib/projects";
 import {
   collectProjectHygiene,
   findWorktreeForDisk,
   measureWorktreeDisk,
-} from "../../lib/worktrees/hygiene";
+} from "@host/lib/worktrees/hygiene";
 
 export const hygieneHandlers: Handlers<typeof hygieneContract> = {
   list: async ({ projectId }) => {
