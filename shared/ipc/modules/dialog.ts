@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import { PickFolderPayloadSchema } from "@shared/schemas";
 
-export const dialogContract = {
+export const dialogContract = defineContract("client", {
   pickFolder: invoke(
     "dialog:pickFolder",
     PickFolderPayloadSchema,
     z.string().nullable(),
   ),
-} as const;
+});

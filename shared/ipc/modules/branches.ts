@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   CreateBranchPayloadSchema,
   DeleteBranchPayloadSchema,
   RenameAnyBranchPayloadSchema,
 } from "@shared/schemas";
 
-export const branchesContract = {
+export const branchesContract = defineContract("host", {
   create: invoke("branches:create", CreateBranchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
   }),
@@ -16,4 +16,4 @@ export const branchesContract = {
   delete: invoke("branches:delete", DeleteBranchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
   }),
-} as const;
+});

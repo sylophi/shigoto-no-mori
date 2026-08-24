@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { broadcast, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   CheckoutBranchPayloadSchema,
   CommitDiffPayloadSchema,
@@ -26,7 +26,7 @@ const worktreeMutation = (channel: string) =>
     tracksProjectUsage: true,
   });
 
-export const worktreesContract = {
+export const worktreesContract = defineContract("host", {
   list: invoke(
     "worktrees:list",
     ProjectScopedPayloadSchema,
@@ -103,4 +103,4 @@ export const worktreesContract = {
     "worktrees:carryOverComplete",
     WorktreeCarryOverCompleteSchema,
   ),
-} as const;
+});

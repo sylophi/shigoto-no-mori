@@ -1,4 +1,5 @@
 import { buildClient } from "@shared/ipc/buildClient";
+import type { ContractModule, ContractScope } from "@shared/ipc/contract";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { fsContract } from "@shared/ipc/modules/fs";
@@ -21,6 +22,7 @@ import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import type { ClientTransport } from "@shared/ipc/transport";
 import type {
   GlobalConfig,
   LaunchToolMenuEntry,
@@ -33,226 +35,248 @@ import type {
   Theme,
 } from "@shared/schemas";
 
-const branchesClient = buildClient(branchesContract);
-const dialogClient = buildClient(dialogContract);
-const fsClient = buildClient(fsContract);
-const gitClient = buildClient(gitContract);
-const githubCliClient = buildClient(githubCliContract);
-const globalConfigClient = buildClient(globalConfigContract);
-const hygieneClient = buildClient(hygieneContract);
-const launchersClient = buildClient(launchersContract);
-const menuClient = buildClient(menuContract);
-const navClient = buildClient(navContract);
-const packageScriptsClient = buildClient(packageScriptsContract);
-const portPoolClient = buildClient(portPoolContract);
-const projectLauncherClient = buildClient(projectLauncherContract);
-const projectsClient = buildClient(projectsContract);
-const runtimeClient = buildClient(runtimeContract);
-const scriptsClient = buildClient(scriptsContract);
-const cliClient = buildClient(cliContract);
-const shellClient = buildClient(shellContract);
-const shigomoriClient = buildClient(shigomoriContract);
-const updaterClient = buildClient(updaterContract);
-const windowClient = buildClient(windowContract);
-const worktreesClient = buildClient(worktreesContract);
+// Ergonomic namespaces over the raw contract clients. Each module's
+// scope selects its transport, so the caller wires one transport per
+// scope and every contract lands on the right wire. The Electron
+// preload passes its IPC bridge for both scopes today. Step 3 swaps the
+// host entry for a socket transport and nothing else changes.
+export function buildApi(transports: Record<ContractScope, ClientTransport>) {
+  const c = <M extends ContractModule>(m: M) =>
+    buildClient(m, transports[m.scope]);
 
-export const branches = {
-  create: branchesClient.create,
-  rename: branchesClient.rename,
-  delete: branchesClient.delete,
-} as const;
+  const branchesClient = c(branchesContract);
+  const dialogClient = c(dialogContract);
+  const fsClient = c(fsContract);
+  const gitClient = c(gitContract);
+  const githubCliClient = c(githubCliContract);
+  const globalConfigClient = c(globalConfigContract);
+  const hygieneClient = c(hygieneContract);
+  const launchersClient = c(launchersContract);
+  const menuClient = c(menuContract);
+  const navClient = c(navContract);
+  const packageScriptsClient = c(packageScriptsContract);
+  const portPoolClient = c(portPoolContract);
+  const projectLauncherClient = c(projectLauncherContract);
+  const projectsClient = c(projectsContract);
+  const runtimeClient = c(runtimeContract);
+  const scriptsClient = c(scriptsContract);
+  const cliClient = c(cliContract);
+  const shellClient = c(shellContract);
+  const shigomoriClient = c(shigomoriContract);
+  const updaterClient = c(updaterContract);
+  const windowClient = c(windowContract);
+  const worktreesClient = c(worktreesContract);
 
-export const dialog = {
-  // Optional-arg ergonomics on top of the contract client. The payload
-  // type comes from PickFolderPayloadSchema, so new options never need
-  // re-declaring here.
-  pickFolder: (options?: PickFolderPayload) => dialogClient.pickFolder(options),
-} as const;
+  return {
+    branches: {
+      create: branchesClient.create,
+      rename: branchesClient.rename,
+      delete: branchesClient.delete,
+    },
 
-export const fs = {
-  listDirectory: (path: string) => fsClient.listDirectory({ path }),
-  scanForGitRepos: (path: string) => fsClient.scanForGitRepos({ path }),
-  isGitRepo: (path: string) => fsClient.isGitRepo({ path }),
-  stat: (path: string) => fsClient.stat({ path }),
-  listEntries: (path: string) => fsClient.listEntries({ path }),
-} as const;
+    cli: {
+      status: cliClient.status,
+      install: cliClient.install,
+      uninstall: cliClient.uninstall,
+      shellStatus: cliClient.shellStatus,
+      shellInstall: cliClient.shellInstall,
+      shellUninstall: cliClient.shellUninstall,
+    },
 
-export const git = {
-  refreshProject: (projectId: string) =>
-    gitClient.refreshProject({ projectId }),
-  onRefsRefreshed: gitClient.refsRefreshed,
-  onFetchActive: gitClient.fetchActive,
-  onExternalChange: gitClient.externalChange,
-} as const;
+    dialog: {
+      // Optional-arg ergonomics on top of the contract client. The payload
+      // type comes from PickFolderPayloadSchema, so new options never need
+      // re-declaring here.
+      pickFolder: (options?: PickFolderPayload) =>
+        dialogClient.pickFolder(options),
+    },
 
-export const githubCli = {
-  readiness: githubCliClient.readiness,
-  projectPullRequests: (projectId: string) =>
-    githubCliClient.projectPullRequests({ projectId }),
-  worktreePullRequest: githubCliClient.worktreePullRequest,
-  pullRequestCandidates: (projectId: string) =>
-    githubCliClient.pullRequestCandidates({ projectId }),
-  resolvePullRequestCheckout: githubCliClient.resolvePullRequestCheckout,
-  repoMergeConfig: (projectId: string) =>
-    githubCliClient.repoMergeConfig({ projectId }),
-  mergePullRequest: githubCliClient.mergePullRequest,
-  pullRequestDiff: githubCliClient.pullRequestDiff,
-  setPullRequestDraft: githubCliClient.setPullRequestDraft,
-  onProjectPullRequestsRefreshed: githubCliClient.projectPullRequestsRefreshed,
-} as const;
+    fs: {
+      listDirectory: (path: string) => fsClient.listDirectory({ path }),
+      scanForGitRepos: (path: string) => fsClient.scanForGitRepos({ path }),
+      isGitRepo: (path: string) => fsClient.isGitRepo({ path }),
+      stat: (path: string) => fsClient.stat({ path }),
+      listEntries: (path: string) => fsClient.listEntries({ path }),
+    },
 
-export const globalConfig = {
-  read: globalConfigClient.read,
-  write: (config: GlobalConfig) => globalConfigClient.write({ config }),
-} as const;
+    git: {
+      refreshProject: (projectId: string) =>
+        gitClient.refreshProject({ projectId }),
+      onRefsRefreshed: gitClient.refsRefreshed,
+      onFetchActive: gitClient.fetchActive,
+      onExternalChange: gitClient.externalChange,
+    },
 
-export const hygiene = {
-  list: (projectId: string) => hygieneClient.list({ projectId }),
-  diskUsage: hygieneClient.diskUsage,
-} as const;
+    githubCli: {
+      readiness: githubCliClient.readiness,
+      projectPullRequests: (projectId: string) =>
+        githubCliClient.projectPullRequests({ projectId }),
+      worktreePullRequest: githubCliClient.worktreePullRequest,
+      pullRequestCandidates: (projectId: string) =>
+        githubCliClient.pullRequestCandidates({ projectId }),
+      resolvePullRequestCheckout: githubCliClient.resolvePullRequestCheckout,
+      repoMergeConfig: (projectId: string) =>
+        githubCliClient.repoMergeConfig({ projectId }),
+      mergePullRequest: githubCliClient.mergePullRequest,
+      pullRequestDiff: githubCliClient.pullRequestDiff,
+      setPullRequestDraft: githubCliClient.setPullRequestDraft,
+      onProjectPullRequestsRefreshed:
+        githubCliClient.projectPullRequestsRefreshed,
+    },
 
-export const launchers = {
-  detect: launchersClient.detect,
-  forProject: (projectId: string) => launchersClient.forProject({ projectId }),
-  launch: launchersClient.launch,
-} as const;
+    globalConfig: {
+      read: globalConfigClient.read,
+      write: (config: GlobalConfig) => globalConfigClient.write({ config }),
+    },
 
-export const menu = {
-  setLaunchToolsEnabled: (enabled: boolean, entries?: LaunchToolMenuEntry[]) =>
-    menuClient.setLaunchToolsEnabled({ enabled, entries }),
-} as const;
+    hygiene: {
+      list: (projectId: string) => hygieneClient.list({ projectId }),
+      diskUsage: hygieneClient.diskUsage,
+    },
 
-export const nav = {
-  onOpenSettings: navClient.openSettings,
-  onLaunchById: navClient.launchById,
-} as const;
+    launchers: {
+      detect: launchersClient.detect,
+      forProject: (projectId: string) =>
+        launchersClient.forProject({ projectId }),
+      launch: launchersClient.launch,
+    },
 
-export const packageScripts = {
-  list: packageScriptsClient.list,
-  run: packageScriptsClient.run,
-  getSort: (projectId: string) => packageScriptsClient.getSort({ projectId }),
-  setSort: (projectId: string, mode: PackageScriptSortMode) =>
-    packageScriptsClient.setSort({ projectId, mode }),
-} as const;
+    menu: {
+      setLaunchToolsEnabled: (
+        enabled: boolean,
+        entries?: LaunchToolMenuEntry[],
+      ) => menuClient.setLaunchToolsEnabled({ enabled, entries }),
+    },
 
-export const portPool = {
-  isActive: portPoolClient.isActive,
-  isInstalled: portPoolClient.isInstalled,
-} as const;
+    nav: {
+      onOpenSettings: navClient.openSettings,
+      onLaunchById: navClient.launchById,
+    },
 
-export const projectLauncher = {
-  onToggle: projectLauncherClient.toggle,
-  onAddProject: projectLauncherClient.addProject,
-} as const;
+    packageScripts: {
+      list: packageScriptsClient.list,
+      run: packageScriptsClient.run,
+      getSort: (projectId: string) =>
+        packageScriptsClient.getSort({ projectId }),
+      setSort: (projectId: string, mode: PackageScriptSortMode) =>
+        packageScriptsClient.setSort({ projectId, mode }),
+    },
 
-export const projects = {
-  list: projectsClient.list,
-  add: (path: string) => projectsClient.add({ path }),
-  remove: (id: string) => projectsClient.remove({ id }),
-  reorder: (input: {
-    draggedId: string;
-    targetId: string;
-    position: "before" | "after";
-  }) => projectsClient.reorder(input),
-  getSort: projectsClient.getSort,
-  setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
-  getSidebarView: projectsClient.getSidebarView,
-  setSidebarView: (view: SidebarView) =>
-    projectsClient.setSidebarView({ view }),
-  getCollapsed: projectsClient.getCollapsed,
-  toggleCollapsed: (projectId: string) =>
-    projectsClient.toggleCollapsed({ projectId }),
-  onUsageBumped: projectsClient.usageBumped,
-  defaultBranch: (projectId: string) =>
-    projectsClient.defaultBranch({ projectId }),
-  listBranches: (projectId: string) =>
-    projectsClient.listBranches({ projectId }),
-  pickWorktreeName: (projectId: string) =>
-    projectsClient.pickWorktreeName({ projectId }),
-  listIgnoredPaths: (projectId: string) =>
-    projectsClient.listIgnoredPaths({ projectId }),
-  worktreeIncludeStatus: (projectId: string) =>
-    projectsClient.worktreeIncludeStatus({ projectId }),
-  icon: (projectId: string) => projectsClient.icon({ projectId }),
-} as const;
+    portPool: {
+      isActive: portPoolClient.isActive,
+      isInstalled: portPoolClient.isInstalled,
+    },
 
-export const runtime = {
-  info: runtimeClient.info,
-  setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
-  nuke: runtimeClient.nuke,
-  moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
-  relaunch: runtimeClient.relaunch,
-  onNukeProgress: runtimeClient.nukeProgress,
-} as const;
+    projectLauncher: {
+      onToggle: projectLauncherClient.toggle,
+      onAddProject: projectLauncherClient.addProject,
+    },
 
-export const scripts = {
-  run: scriptsClient.run,
-  cancel: (runId: string) => scriptsClient.cancel({ runId }),
-  orphanReport: scriptsClient.orphanReport,
-  onEvent: scriptsClient.event,
-  onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
-} as const;
+    projects: {
+      list: projectsClient.list,
+      add: (path: string) => projectsClient.add({ path }),
+      remove: (id: string) => projectsClient.remove({ id }),
+      reorder: (input: {
+        draggedId: string;
+        targetId: string;
+        position: "before" | "after";
+      }) => projectsClient.reorder(input),
+      getSort: projectsClient.getSort,
+      setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
+      getSidebarView: projectsClient.getSidebarView,
+      setSidebarView: (view: SidebarView) =>
+        projectsClient.setSidebarView({ view }),
+      getCollapsed: projectsClient.getCollapsed,
+      toggleCollapsed: (projectId: string) =>
+        projectsClient.toggleCollapsed({ projectId }),
+      onUsageBumped: projectsClient.usageBumped,
+      defaultBranch: (projectId: string) =>
+        projectsClient.defaultBranch({ projectId }),
+      listBranches: (projectId: string) =>
+        projectsClient.listBranches({ projectId }),
+      pickWorktreeName: (projectId: string) =>
+        projectsClient.pickWorktreeName({ projectId }),
+      listIgnoredPaths: (projectId: string) =>
+        projectsClient.listIgnoredPaths({ projectId }),
+      worktreeIncludeStatus: (projectId: string) =>
+        projectsClient.worktreeIncludeStatus({ projectId }),
+      icon: (projectId: string) => projectsClient.icon({ projectId }),
+    },
 
-export const cli = {
-  status: cliClient.status,
-  install: cliClient.install,
-  uninstall: cliClient.uninstall,
-  shellStatus: cliClient.shellStatus,
-  shellInstall: cliClient.shellInstall,
-  shellUninstall: cliClient.shellUninstall,
-} as const;
+    runtime: {
+      info: runtimeClient.info,
+      setTheme: (theme: Theme) => runtimeClient.setTheme({ theme }),
+      nuke: runtimeClient.nuke,
+      moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
+      relaunch: runtimeClient.relaunch,
+      onNukeProgress: runtimeClient.nukeProgress,
+    },
 
-export const shell = {
-  openExternal: (url: string) => shellClient.openExternal({ url }),
-  showItemInFolder: (path: string) => shellClient.showItemInFolder({ path }),
-} as const;
+    scripts: {
+      run: scriptsClient.run,
+      cancel: (runId: string) => scriptsClient.cancel({ runId }),
+      orphanReport: scriptsClient.orphanReport,
+      onEvent: scriptsClient.event,
+      onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
+    },
 
-export const shigomori = {
-  read: (projectId: string) => shigomoriClient.read({ projectId }),
-  write: (projectId: string, config: ShigomoriConfig) =>
-    shigomoriClient.write({ projectId, config }),
-} as const;
+    shell: {
+      openExternal: (url: string) => shellClient.openExternal({ url }),
+      showItemInFolder: (path: string) =>
+        shellClient.showItemInFolder({ path }),
+    },
 
-export const worktreeData = {
-  read: (projectId: string, worktreeId: string) =>
-    shigomoriClient.worktreeDataRead({ projectId, worktreeId }),
-  write: (projectId: string, worktreeId: string, data: ShigomoriWorktreeData) =>
-    shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
-} as const;
+    shigomori: {
+      read: (projectId: string) => shigomoriClient.read({ projectId }),
+      write: (projectId: string, config: ShigomoriConfig) =>
+        shigomoriClient.write({ projectId, config }),
+    },
 
-export const updater = {
-  get: updaterClient.get,
-  check: updaterClient.check,
-  install: updaterClient.install,
-  onState: updaterClient.state,
-} as const;
+    updater: {
+      get: updaterClient.get,
+      check: updaterClient.check,
+      install: updaterClient.install,
+      onState: updaterClient.state,
+    },
 
-export const windowApi = {
-  onFocused: windowClient.focused,
-  onBlurred: windowClient.blurred,
-} as const;
+    window: {
+      onFocused: windowClient.focused,
+      onBlurred: windowClient.blurred,
+    },
 
-export const worktrees = {
-  list: (projectId: string) => worktreesClient.list({ projectId }),
-  create: worktreesClient.create,
-  convertExternal: worktreesClient.convertExternal,
-  relocate: worktreesClient.relocate,
-  delete: worktreesClient.delete,
-  onLifecyclePhase: worktreesClient.lifecyclePhase,
-  onCarryOverComplete: worktreesClient.carryOverComplete,
-  renameBranch: worktreesClient.renameBranch,
-  setShelved: worktreesClient.setShelved,
-  checkoutBranch: worktreesClient.checkoutBranch,
-  diff: worktreesClient.diff,
-  commitDiff: worktreesClient.commitDiff,
-  listCommits: worktreesClient.listCommits,
-  push: worktreesClient.push,
-  pull: worktreesClient.pull,
-  pushForce: worktreesClient.pushForce,
-  overwrite: worktreesClient.overwrite,
-  publish: worktreesClient.publish,
-  pullAndPush: worktreesClient.pullAndPush,
-  syncWithPrimary: worktreesClient.syncWithPrimary,
-  switchToPrimaryAndDeleteBranch:
-    worktreesClient.switchToPrimaryAndDeleteBranch,
-} as const;
+    worktreeData: {
+      read: (projectId: string, worktreeId: string) =>
+        shigomoriClient.worktreeDataRead({ projectId, worktreeId }),
+      write: (
+        projectId: string,
+        worktreeId: string,
+        data: ShigomoriWorktreeData,
+      ) => shigomoriClient.worktreeDataWrite({ projectId, worktreeId, data }),
+    },
+
+    worktrees: {
+      list: (projectId: string) => worktreesClient.list({ projectId }),
+      create: worktreesClient.create,
+      convertExternal: worktreesClient.convertExternal,
+      relocate: worktreesClient.relocate,
+      delete: worktreesClient.delete,
+      onLifecyclePhase: worktreesClient.lifecyclePhase,
+      onCarryOverComplete: worktreesClient.carryOverComplete,
+      renameBranch: worktreesClient.renameBranch,
+      setShelved: worktreesClient.setShelved,
+      checkoutBranch: worktreesClient.checkoutBranch,
+      diff: worktreesClient.diff,
+      commitDiff: worktreesClient.commitDiff,
+      listCommits: worktreesClient.listCommits,
+      push: worktreesClient.push,
+      pull: worktreesClient.pull,
+      pushForce: worktreesClient.pushForce,
+      overwrite: worktreesClient.overwrite,
+      publish: worktreesClient.publish,
+      pullAndPush: worktreesClient.pullAndPush,
+      syncWithPrimary: worktreesClient.syncWithPrimary,
+      switchToPrimaryAndDeleteBranch:
+        worktreesClient.switchToPrimaryAndDeleteBranch,
+    },
+  } as const;
+}

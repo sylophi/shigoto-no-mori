@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { broadcast } from "@shared/ipc/contract";
+import { broadcast, defineContract } from "@shared/ipc/contract";
 
-export const navContract = {
+export const navContract = defineContract("client", {
   openSettings: broadcast("nav:openSettings", z.void()),
   launchById: broadcast("launch:byId", z.string()),
-} as const;
+});

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { broadcast, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   BranchListSchema,
   PathPayloadSchema,
@@ -16,7 +16,7 @@ import {
   WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
 
-export const projectsContract = {
+export const projectsContract = defineContract("host", {
   list: invoke("projects:list", z.void(), z.array(ProjectSchema)),
   add: invoke("projects:add", PathPayloadSchema, ProjectSchema),
   remove: invoke("projects:remove", RemoveProjectPayloadSchema, z.void()),
@@ -73,4 +73,4 @@ export const projectsContract = {
     ProjectScopedPayloadSchema,
     ProjectIconSchema.nullable(),
   ),
-} as const;
+});

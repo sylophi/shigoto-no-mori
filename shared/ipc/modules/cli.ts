@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 
 // State of the CLI symlink in the user's bin dir:
 // - installed: our link, pointing at the binary this app runs
@@ -45,7 +45,7 @@ export type ShellIntegrationStatus = z.infer<
   typeof ShellIntegrationStatusSchema
 >;
 
-export const cliContract = {
+export const cliContract = defineContract("host", {
   status: invoke("cli:status", z.void(), CliStatusSchema),
   install: invoke(
     "cli:install",
@@ -68,4 +68,4 @@ export const cliContract = {
     z.void(),
     ShellIntegrationStatusSchema,
   ),
-} as const;
+});

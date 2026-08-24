@@ -9,6 +9,9 @@ pre-commit:
       run: pnpm run format:check
     theme-contract:
       run: pnpm run theme:check
+    host-boundary:
+      glob: "{host/**,main/**,renderer/**,shared/**,scripts/check-host-boundary.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run host:check
     dmg-art:
       run: pnpm run dmg:check
     # Both parity checks are glob-gated: identity:check alone costs

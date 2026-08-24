@@ -8,10 +8,13 @@ import {
   type MenuItemConstructorOptions,
   type BrowserWindow,
 } from "electron";
-import type { Contract } from "@shared/ipc/contract";
+import type { ContractModule } from "@shared/ipc/contract";
 import { navContract } from "@shared/ipc/modules/nav";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
-import type { BroadcastProducerPayload } from "@shared/ipc/types";
+import type {
+  BroadcastKeys,
+  BroadcastProducerPayload,
+} from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
 import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
@@ -64,14 +67,14 @@ export function installMenuImpl(): void {
 // the callback's window as BaseWindow (no webContents); every window
 // this app creates is a BrowserWindow, so narrow once here. No-op when
 // no window has focus.
-function clickBroadcast<C extends Contract, K extends keyof C>(
-  contract: C,
+function clickBroadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
+  module: M,
   key: K,
-  payload: BroadcastProducerPayload<C, K>,
+  payload: BroadcastProducerPayload<M, K>,
 ): MenuItemConstructorOptions["click"] {
   return (_item, focusedWindow) => {
     const wc = (focusedWindow as BrowserWindow | undefined)?.webContents;
-    if (wc) broadcast(contract, key, payload, wc);
+    if (wc) broadcast(module, key, payload, wc);
   };
 }
 

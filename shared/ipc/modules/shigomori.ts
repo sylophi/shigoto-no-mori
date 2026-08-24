@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
   ReadWorktreeDataPayloadSchema,
@@ -9,7 +9,7 @@ import {
   WriteWorktreeDataPayloadSchema,
 } from "@shared/schemas";
 
-export const shigomoriContract = {
+export const shigomoriContract = defineContract("host", {
   read: invoke(
     "shigomori:read",
     ProjectScopedPayloadSchema,
@@ -29,4 +29,4 @@ export const shigomoriContract = {
     z.void(),
     { tracksProjectUsage: true },
   ),
-} as const;
+});

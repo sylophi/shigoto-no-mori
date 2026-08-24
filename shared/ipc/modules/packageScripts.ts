@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PackageScriptSortModeSchema,
   PackageScriptsResultSchema,
@@ -9,7 +9,7 @@ import {
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
-export const packageScriptsContract = {
+export const packageScriptsContract = defineContract("host", {
   list: invoke(
     "packageScripts:list",
     WorktreeScopedPayloadSchema,
@@ -31,4 +31,4 @@ export const packageScriptsContract = {
     SetPackageScriptSortPayloadSchema,
     z.void(),
   ),
-} as const;
+});

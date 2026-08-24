@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { broadcast, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
@@ -15,7 +15,7 @@ import {
   SetPullRequestDraftPayloadSchema,
 } from "@shared/schemas";
 
-export const githubCliContract = {
+export const githubCliContract = defineContract("host", {
   readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
@@ -69,4 +69,4 @@ export const githubCliContract = {
     "githubCli:projectPullRequestsRefreshed",
     ProjectScopedPayloadSchema,
   ),
-} as const;
+});
