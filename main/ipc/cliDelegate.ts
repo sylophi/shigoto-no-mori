@@ -26,14 +26,53 @@ import {
   WorktreeSchema,
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
-import {
-  requireCliBinary,
-  runCli,
-  type CliDoc,
-  type CliResult,
-  cliFailureMessage,
-} from "../electron/cliRunner";
 import { shellQuote } from "@host/lib/scripts/process";
+
+// One NDJSON document from the CLI's --json stream. `event` is set on
+// streamed progress documents (created/phase/carryOver/script/done);
+// single-document commands (rm, done, merge) emit result objects
+// without it.
+export interface CliDoc {
+  event?: string;
+  [key: string]: unknown;
+}
+
+export interface CliResult {
+  code: number;
+  docs: CliDoc[];
+  stderrTail: string;
+}
+
+// The electron layer injects the CLI process runner at boot. Spawning
+// stays in main/electron (the runner resolves the binary through
+// Electron's packaging paths and registers children with quit-time
+// reaping), so this seam owns the document shapes and the delegate
+// stays free of Electron imports.
+type CliRunnerImpl = {
+  runCli: (
+    args: string[],
+    onDoc?: (doc: CliDoc) => void,
+    extraEnv?: Record<string, string>,
+    opts?: { background?: boolean; timeoutMs?: number },
+  ) => Promise<CliResult>;
+  requireCliBinary: () => string;
+  cliFailureMessage: (result: CliResult, fallback: string) => string;
+};
+
+let impl: CliRunnerImpl | null = null;
+
+export function setCliRunnerImpl(next: CliRunnerImpl): void {
+  impl = next;
+}
+
+function runner(): CliRunnerImpl {
+  if (impl === null) {
+    throw new Error(
+      "cli delegate invoked before setCliRunnerImpl registered one",
+    );
+  }
+  return impl;
+}
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the CLI's streamed lifecycle documents.
@@ -61,7 +100,7 @@ function cliFailure(
   if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
     return unknownWorktreeError(ids.worktreeId);
   }
-  return new Error(cliFailureMessage(result, fallback));
+  return new Error(runner().cliFailureMessage(result, fallback));
 }
 
 // The final {ok: boolean} document of a run; throws the mapped failure
@@ -120,21 +159,24 @@ function runStreamingCreate(
         }
       }
     };
-    runCli(args, (doc) => {
-      // A schema mismatch before "created" fails the whole call; after
-      // it the promise is already resolved, so surface it as a log
-      // instead of losing it inside the stream reader.
-      try {
-        onDoc(doc);
-      } catch (error) {
-        if (created === null) reject(error as Error);
-        else console.warn("[cli] mid-stream document failed validation", error);
-      }
-    }).then((result) => {
-      if (created === null) {
-        reject(cliFailure(result, failureLabel, { worktreeId }));
-      }
-    }, reject);
+    runner()
+      .runCli(args, (doc) => {
+        // A schema mismatch before "created" fails the whole call; after
+        // it the promise is already resolved, so surface it as a log
+        // instead of losing it inside the stream reader.
+        try {
+          onDoc(doc);
+        } catch (error) {
+          if (created === null) reject(error as Error);
+          else
+            console.warn("[cli] mid-stream document failed validation", error);
+        }
+      })
+      .then((result) => {
+        if (created === null) {
+          reject(cliFailure(result, failureLabel, { worktreeId }));
+        }
+      }, reject);
   });
 }
 
@@ -200,7 +242,7 @@ export async function deleteViaCli(
   ];
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
-  const result = await runCli(args, (doc) => {
+  const result = await runner().runCli(args, (doc) => {
     if (doc.event === "script") {
       const { event: _event, ...scriptEvent } = doc;
       notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
@@ -223,7 +265,7 @@ export async function doneViaCli(
 ): Promise<Worktree> {
   // --force: the app's cleanup box appears in merged-PR context, so the
   // UI has already gated mergedness.
-  const result = await runCli([
+  const result = await runner().runCli([
     "done",
     "--project-id",
     project.id,
@@ -240,7 +282,7 @@ export async function mergeViaCli(
   number: number,
   method: string,
 ): Promise<void> {
-  const result = await runCli([
+  const result = await runner().runCli([
     "merge",
     "--project-id",
     project.id,
@@ -257,7 +299,7 @@ export async function setShelvedViaCli(
   worktreeId: string,
   shelved: boolean,
 ): Promise<void> {
-  const result = await runCli([
+  const result = await runner().runCli([
     shelved ? "shelve" : "unshelve",
     "--project-id",
     project.id,
@@ -268,7 +310,7 @@ export async function setShelvedViaCli(
 }
 
 export async function projectsAddViaCli(path: string): Promise<Project> {
-  const result = await runCli(["projects", "add", path]);
+  const result = await runner().runCli(["projects", "add", path]);
   const doc = result.docs.findLast(
     (d) => typeof d["id"] === "string" && typeof d["path"] === "string",
   );
@@ -295,7 +337,7 @@ export function cliRunScriptSpawn(args: {
   projectBranch: string;
   defaultBranch: string;
 }): string {
-  const binary = requireCliBinary();
+  const binary = runner().requireCliBinary();
   return [
     shellQuote(binary),
     "run",
@@ -330,7 +372,7 @@ export function cliRunScriptSpawn(args: {
 export async function globalConfigWriteViaCli(
   config: GlobalConfig,
 ): Promise<void> {
-  const result = await runCli([
+  const result = await runner().runCli([
     "config",
     "write",
     "--data",
@@ -343,7 +385,7 @@ export async function shigomoriWriteViaCli(
   projectId: string,
   config: ShigomoriConfig,
 ): Promise<void> {
-  const result = await runCli([
+  const result = await runner().runCli([
     "projects",
     "config",
     "write",
@@ -359,7 +401,7 @@ export async function shigomoriWriteViaCli(
 // extras (script reaping, icon cache, collapsed prefs) stay with the
 // caller because those registries live in the app's process.
 export async function projectsRemoveViaCli(projectId: string): Promise<void> {
-  const result = await runCli([
+  const result = await runner().runCli([
     "projects",
     "remove",
     "--project-id",
