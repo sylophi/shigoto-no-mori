@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, nativeTheme } from "electron";
 import path from "node:path";
 import { cliRootDirName } from "@shared/cliDist.mts";
+import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "./lib/bootstrap";
+import { getDeviceId } from "./lib/config/deviceId";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
 import {
@@ -79,6 +81,11 @@ let mainWindow: BrowserWindow | null = null;
 // finishing right after.
 let hasBooted = false;
 
+// Read once in the ready handler (a corrupt registry throws there, into
+// the boot error dialog). createWindow only interpolates it. Never
+// empty by the time any window exists: getDeviceId mints or throws.
+let deviceId = "";
+
 const createWindow = () => {
   hasBooted = true;
   // Drive the native appearance from the saved theme before constructing
@@ -103,6 +110,13 @@ const createWindow = () => {
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
+      // Synchronous delivery of the device id: the preload reads this
+      // flag off process.argv and exposes it on the bridge, so the
+      // renderer never has to gate key building behind an IPC call.
+      // The id itself is read in the ready handler, whose try/catch
+      // turns a corrupt registry into the error dialog instead of a
+      // throw out of createWindow with no window.
+      additionalArguments: [`${DEVICE_ID_FLAG}${deviceId}`],
     },
   });
 
@@ -168,6 +182,7 @@ app.on("ready", async () => {
   if (app.isPackaged) await applyUserShellPath();
   try {
     await ensureShigomoriRoot();
+    deviceId = getDeviceId();
   } catch (err) {
     // A pointer file can aim the root somewhere that isn't reachable
     // right now (external drive unplugged, permissions changed). A

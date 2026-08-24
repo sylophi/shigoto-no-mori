@@ -24,12 +24,19 @@ import { isENOENT, shigomoriRoot } from "../util/paths";
 const STATE_FILE = "state.json";
 const REGISTRY_FILE = "registry.json";
 
-// The registry's two keys live here rather than in their feature
-// modules so the accessors and the split below can't drift apart.
-// cli/state.go names the same two.
+// The registry's keys live here rather than in their feature modules
+// so the accessors and the split below can't drift apart. cli/state.go
+// names the same set.
 export const PROJECTS_KEY = "projects";
 export const SHELVED_KEY = "shelvedWorktrees";
+// UUID naming this state root, not this machine: a dev root and a
+// prod root on one laptop are two devices. Generated on first read by
+// main/lib/config/deviceId.ts. The CLI only preserves it.
+export const DEVICE_ID_KEY = "deviceId";
 
+// Drives only the state.json→registry.json split below. deviceId is
+// deliberately absent because it postdates the split, so no old-format
+// root holds one.
 const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
 
 function filePath(file: string): string {
