@@ -31,7 +31,7 @@ import {
   type ServerFrame,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import { createLimiter } from "@host/lib/util/limit";
+import { createLimiter } from "@shared/util/limit";
 
 export type WsServerStartOpts = {
   port: number;

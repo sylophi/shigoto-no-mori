@@ -1,34 +1,44 @@
-// The relay socket lifecycle (v2 step 4, slice C): one outbound
-// websocket from this device to its account's Durable Object, owned by
-// the main process and shared by both roles through the relay link.
-// Mirrors the WsServerBinding shape (refresh/stop/status plus a
-// ServerTransport half), so main/ipc/register.ts wires it the same way
-// it wires the LAN listener.
+// The browser relay socket lifecycle (v2 step 5a): one outbound
+// websocket from a web client to its account's Durable Object, driving
+// the shared relay link. It mirrors the SHAPE of the node connection in
+// host/relay/connection.ts but is built on browser globals only (the
+// WebSocket global, no node ws), so it runs in a plain browser and, under
+// node 22 (which ships a global WebSocket client), in the headless
+// web:relay:check.
 //
-// This file must stay Electron free (host:check). Everything Electron
-// or account flavored (deviceId, appVersion, accountId, the
-// credential-backed ticket mint) arrives through RelayConnectOpts, which
-// main composes.
-import { type RawData, WebSocket } from "ws";
+// A web client is a refuse-all host: it registers no handlers, exposes no
+// read-only channels, and grants no peer, so it can never serve a command
+// to a peer. It only DIALS peers as a client. That makes the host role a
+// no-op here, so this exposes just the client surface (connectPeer) plus
+// the lifecycle (refresh, stop, status), not the ServerTransport half the
+// node connection carries.
+//
+// This file must stay electron-free and node-builtin-free (host:check):
+// everything platform specific arrives through browser globals or the
+// injected RelayConnectOpts (deviceId, appVersion, accountId, the
+// credential-backed ticket mint).
 import { errorMessageOf } from "@shared/errors";
 import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
 import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import type { HandlerContext } from "@shared/ipc/transport";
 import {
-  createRelayLink,
-  RelayLinkDownError,
   type ConnectPeerOpts,
+  createRelayLink,
   type PeerConnection,
+  RelayLinkDownError,
   type RelayLink,
 } from "@shared/relay/link";
+import type {
+  RelayConnectOpts,
+  RelayConnectionStatus,
+} from "@shared/relay/connectionTypes";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
   CONNECT_TICKET_PARAM,
-  MAX_RELAY_MESSAGE_BYTES,
   RELAY_ROUTES,
 } from "@shared/relay/protocol";
 import {
@@ -38,47 +48,26 @@ import {
   type Supervisor,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
-import type {
-  RelayConnectOpts,
-  RelayConnectionStatus,
-} from "@shared/relay/connectionTypes";
 import { createLimiter } from "@shared/util/limit";
 
-// The deadline for one dial phase: the ticket mint, and separately the
-// ws accept (the first presence envelope). Named rather than a bare knob
-// because the relay has one honest value here, HELLO_TIMEOUT_MS.
-const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
-// After an owner close, how long a stalled relay has before its socket
-// is terminated, so a compromised relay that stalls the close handshake
-// cannot keep the socket (and its handlers) alive for ws's ~30s window.
-const TERMINATE_GRACE_MS = 1_500;
-
-// Re-exported so existing importers keep resolving the option and status
-// shapes from this module while the one definition lives in shared/ for
-// the browser connection to share.
 export type { RelayConnectOpts, RelayConnectionStatus };
+
+// The deadline for one dial phase: the ticket mint, and separately the
+// ws accept (the first presence envelope). One honest value, the relay's
+// HELLO_TIMEOUT_MS.
+const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 
 export type RelayConnectionCallbacks = {
   // Fired on every supervisor or presence transition, so the owner can
-  // fan a status snapshot out to its windows.
+  // fan a status snapshot out to its views.
   onChange?: () => void;
   // Every push frame received from any peer, see RelayLinkDeps.
   onPeerPush?: (deviceId: string, channel: string, payload: unknown) => void;
-  // Whether the named peer may run MUTATING calls on this host. Injected
-  // from main, which reads the host's per-account grant store live, so a
-  // grant or revoke takes effect without a relay reconnect. Left out (a
-  // headless test, or a build with no grant model) means no peer may
-  // command this host, so every mutating call is refused.
-  isCommandGranted?: (peerDeviceId: string) => boolean;
 };
 
 export type RelayConnectionBinding = {
-  // The HOST half. Registration is decoupled from connecting, exactly
-  // like the LAN binding: handlers recorded at boot are served whenever
-  // a socket is up.
-  server: ServerTransport;
-  // The CLIENT half. Rejects with RelayLinkDownError while the socket
-  // is down.
+  // The CLIENT half. Rejects with RelayLinkDownError while the socket is
+  // down.
   connectPeer(
     deviceId: string,
     opts?: ConnectPeerOpts,
@@ -91,11 +80,11 @@ export type RelayConnectionBinding = {
   status(): RelayConnectionStatus;
 };
 
-// The block-vs-retry rule for relay close codes. DEVICE_REVOKED is
-// terminal until re-login. SUPERSEDED means another socket for this
-// deviceId took over, and the losing side must not fight it, so it
-// blocks with a distinct message. TICKET_REJECTED and everything else
-// retry normally, since a fresh ticket is minted per attempt anyway.
+// The block-vs-retry rule for relay close codes, identical to the node
+// connection. DEVICE_REVOKED is terminal until re-login. SUPERSEDED means
+// another socket for this deviceId took over, and the losing side must
+// not fight it. Everything else retries, since a fresh ticket is minted
+// per attempt anyway.
 const relayCloseClassifier: CloseClassifier = (code) => {
   if (code === CLOSE_DEVICE_REVOKED) {
     return { message: "this device was revoked, sign in again" };
@@ -108,8 +97,8 @@ const relayCloseClassifier: CloseClassifier = (code) => {
   return null;
 };
 
-// The connect URL: ws(s) scheme, the shared connect route, the ticket
-// in the query string.
+// The connect URL: ws(s) scheme, the shared connect route, the ticket in
+// the query string.
 function connectUrlFor(relayUrl: string, ticket: string): string {
   const base = relayUrl.endsWith("/") ? relayUrl.slice(0, -1) : relayUrl;
   const wsBase = base.replace(/^https:/, "wss:").replace(/^http:/, "ws:");
@@ -117,9 +106,15 @@ function connectUrlFor(relayUrl: string, ticket: string): string {
   return `${wsBase}${RELAY_ROUTES.connect.path}?${param}`;
 }
 
+// A web client grants no peer: it can never serve a mutating command, so
+// its host-role grant predicate refuses every peer unconditionally.
+function refuseAllCommands(): boolean {
+  return false;
+}
+
 function sameOpts(a: RelayConnectOpts, b: RelayConnectOpts): boolean {
-  // mintTicket is a closure and deliberately not compared: it reads
-  // the stored credential fresh on every attempt.
+  // mintTicket is a closure and deliberately not compared: it reads the
+  // stored credential fresh on every attempt.
   return (
     a.relayUrl === b.relayUrl &&
     a.accountId === b.accountId &&
@@ -128,38 +123,24 @@ function sameOpts(a: RelayConnectOpts, b: RelayConnectOpts): boolean {
   );
 }
 
-function toText(data: RawData): string {
-  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
-  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
-  return data.toString("utf8");
-}
-
 export function createRelayConnection(
   callbacks: RelayConnectionCallbacks = {},
 ): RelayConnectionBinding {
-  // Shared by reference with every link generation, so handlers
-  // registered at boot survive reconnects.
+  // A web client serves nobody: it registers no handlers, tags no channel
+  // read-only, and grants no peer. These stay empty by construction, so
+  // the link's host role can never serve a command, and only the client
+  // role (connectPeer) does any work.
   const handlers = new Map<
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
-  // The EXPLICITLY read-only channel names (each handle's opts carried
-  // mutating:false), shared by reference with every link generation.
-  // Collected fail-closed: the link serves a channel to an ungranted peer
-  // only when it is in this set, so a mutation or an untagged channel is
-  // gated on a command grant. Populated at boot exactly like handlers,
-  // before any socket exists.
   const readOnlyChannels = new Set<string>();
-  // The grant predicate the link consults live at dispatch. Defaults to
-  // refusing every peer when main injects nothing, so a mutating call is
-  // never served ungated by accident.
-  const isCommandGranted = callbacks.isCommandGranted ?? (() => false);
   let link: RelayLink | null = null;
   let current: { supervisor: Supervisor; opts: RelayConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
   // The in-flight dial's cancel handle, so stop() can abort a dial that
   // has not yet established (the mint fetch or a half-open ws), not only
-  // an established socket (C2).
+  // an established socket.
   let pendingDialAbort: AbortController | null = null;
   // Serializes refresh/stop so a fast account double-toggle cannot
   // interleave one refresh's stop with another's start.
@@ -169,12 +150,11 @@ export function createRelayConnection(
     callbacks.onChange?.();
   }
 
-  // One connect attempt: mint a fresh ticket, dial the DO, and treat
-  // the FIRST PRESENCE envelope as the accept signal (the DO sends it
-  // right after accepting, and a rejected ticket never gets one, only
-  // a close). The resolved DeviceConnection satisfies the supervisor's
-  // shape, with empty remote identity because the DO speaks no sm
-  // welcome.
+  // One connect attempt: mint a fresh ticket, dial the DO, and treat the
+  // FIRST PRESENCE envelope as the accept signal (the DO sends it right
+  // after accepting, and a rejected ticket never gets one, only a close).
+  // The resolved DeviceConnection satisfies the supervisor's shape, with
+  // empty remote identity because the DO speaks no sm welcome.
   function dial(
     opts: RelayConnectOpts,
     onClose: (code: number | null) => void,
@@ -184,7 +164,7 @@ export function createRelayConnection(
       pendingDialAbort = dialAbort;
       // One settle per dial: whichever of accept, timeout, close, mint
       // failure or stop lands first owns the outcome, and no later event
-      // can flip established or fire a second onClose (C5).
+      // can flip established or fire a second onClose.
       let settled = false;
       let established = false;
       let ownerClosed = false;
@@ -194,16 +174,16 @@ export function createRelayConnection(
         if (pendingDialAbort === dialAbort) pendingDialAbort = null;
       }
 
-      // stop() aborts this. Terminate a half-open ws so an orphan dial
-      // cannot complete after stop and get superseded into terminal
-      // blocked (C2).
+      // stop() aborts this. A browser WebSocket has only close() (no
+      // terminate), so a half-open ws is closed so an orphan dial cannot
+      // complete after stop and get superseded into terminal blocked.
       dialAbort.signal.addEventListener("abort", () => {
         if (settled) return;
         settled = true;
         clearPending();
         if (ws !== null) {
           try {
-            ws.terminate();
+            ws.close();
           } catch {
             // Already gone.
           }
@@ -211,9 +191,9 @@ export function createRelayConnection(
         reject(new RemoteConnectError("relay dial cancelled", null, false));
       });
 
-      // The mint has its own deadline so a black-holed route cannot
-      // strand the supervisor in "connecting" forever (C6). It shares
-      // dialAbort so stop() cancels the fetch too.
+      // The mint has its own deadline so a black-holed route cannot strand
+      // the supervisor in "connecting" forever. It shares dialAbort so
+      // stop() cancels the fetch too.
       const mintTimer = setTimeout(() => dialAbort.abort(), ACCEPT_TIMEOUT_MS);
       void opts
         .mintTicket(dialAbort.signal)
@@ -239,17 +219,10 @@ export function createRelayConnection(
         });
 
       function startDial(ticket: string): void {
-        // Bound inbound buffering to the relay's own message limit,
-        // mirroring the LAN listener's maxPayload, and disable
-        // perMessageDeflate so a compression bomb cannot inflate a tiny
-        // frame past the limit (S2).
-        const socket = new WebSocket(connectUrlFor(opts.relayUrl, ticket), {
-          maxPayload: MAX_RELAY_MESSAGE_BYTES,
-          perMessageDeflate: false,
-        });
+        const socket = new WebSocket(connectUrlFor(opts.relayUrl, ticket));
         ws = socket;
-        // Set true once stop() or a rejection lands, so no further
-        // inbound frame runs a handler even while ws drains (S3).
+        // Set true once stop() or a rejection lands, so no further inbound
+        // frame runs a handler even while the socket drains.
         let dead = false;
 
         const acceptTimer = setTimeout(() => {
@@ -257,7 +230,7 @@ export function createRelayConnection(
           settled = true;
           clearPending();
           try {
-            socket.terminate();
+            socket.close();
           } catch {
             // Already closing.
           }
@@ -274,15 +247,10 @@ export function createRelayConnection(
             socket.send(text);
           },
           bufferedAmount: () => socket.bufferedAmount,
+          // Empty by construction: a web client serves no peer.
           handlers,
-          // Shared by reference (populated at boot). The link serves a
-          // channel to an ungranted peer only when it is in this
-          // read-only set, so a mutating call from a peer this host has
-          // not granted is refused while reads pass through.
-          // isCommandGranted is read live at dispatch so a grant takes
-          // effect without a reconnect.
           readOnlyChannels,
-          isCommandGranted,
+          isCommandGranted: refuseAllCommands,
           onPresence: () => {
             if (!settled) {
               settled = true;
@@ -292,10 +260,9 @@ export function createRelayConnection(
               link = nextLink;
               resolve({
                 transport: {
-                  // The relay socket carries no direct sm transport
-                  // of its own. Peer traffic goes through connectPeer,
-                  // so this seam only satisfies the shared
-                  // DeviceConnection shape.
+                  // The relay socket carries no direct sm transport of its
+                  // own. Peer traffic goes through connectPeer, so this
+                  // seam only satisfies the shared DeviceConnection shape.
                   invoke: () =>
                     Promise.reject(
                       new Error(
@@ -307,10 +274,8 @@ export function createRelayConnection(
                 close: () => {
                   ownerClosed = true;
                   dead = true;
-                  // Tear the link down SYNCHRONOUSLY so host sessions
-                  // abort at once and no in-flight handler answers into a
-                  // dead socket, rather than waiting on the close event
-                  // (S3).
+                  // Tear the link down synchronously so peer sessions abort
+                  // at once, rather than waiting on the close event.
                   if (link === nextLink) link = null;
                   nextLink.teardown();
                   try {
@@ -318,15 +283,6 @@ export function createRelayConnection(
                   } catch {
                     // Already closing.
                   }
-                  // close() is advisory: a stalled relay can hold it for
-                  // ~30s. Terminate after a short grace so it cannot.
-                  setTimeout(() => {
-                    try {
-                      socket.terminate();
-                    } catch {
-                      // Already gone.
-                    }
-                  }, TERMINATE_GRACE_MS);
                 },
                 remoteDeviceId: "",
                 remoteAppVersion: "",
@@ -337,29 +293,30 @@ export function createRelayConnection(
           onPeerPush: callbacks.onPeerPush,
         });
 
-        socket.on("message", (data, isBinary) => {
+        socket.addEventListener("message", (event: MessageEvent) => {
           // Once dead (owner close or a rejection), no further inbound
-          // frame runs a handler even though ws may still deliver
-          // buffered frames while closing (S3).
+          // frame runs a handler even though the socket may still deliver
+          // buffered frames while closing.
           if (dead) return;
-          // The protocol is JSON text. Binary frames are not part of
-          // it, so they are dropped.
-          if (isBinary) return;
-          // Wrap so a throw cannot escape into the ws EventEmitter and
-          // become an uncaught main-process exception (M4).
+          // The protocol is JSON text. A binary frame is not part of it,
+          // so it is dropped rather than treated as fatal.
+          if (typeof event.data !== "string") return;
+          // Wrap so a throw cannot escape into the event dispatch and
+          // become an uncaught exception.
           try {
-            nextLink.handleMessage(toText(data));
+            nextLink.handleMessage(event.data);
           } catch (error) {
             console.warn(
               `[relay] inbound message handler threw: ${errorMessageOf(error)}`,
             );
           }
         });
-        socket.on("error", () => {
-          // ws follows every error with close. The close handler owns
-          // the outcome so the reject reason carries the close code.
+        socket.addEventListener("error", () => {
+          // The browser fires error with no useful detail and always
+          // follows it with close. The close handler owns the outcome so
+          // the reject reason carries the close code.
         });
-        socket.on("close", (code) => {
+        socket.addEventListener("close", (event: CloseEvent) => {
           dead = true;
           clearTimeout(acceptTimer);
           clearPending();
@@ -369,9 +326,9 @@ export function createRelayConnection(
             settled = true;
             reject(
               new RemoteConnectError(
-                `relay closed before accept (code ${code})`,
-                code,
-                relayCloseClassifier(code) !== null,
+                `relay closed before accept (code ${event.code})`,
+                event.code,
+                relayCloseClassifier(event.code) !== null,
               ),
             );
             notifyChange();
@@ -380,7 +337,7 @@ export function createRelayConnection(
           // An established socket dropped. The owner-close path stays
           // silent so the supervisor never reconnects against its own
           // stop.
-          if (established && !ownerClosed) onClose(code);
+          if (established && !ownerClosed) onClose(event.code);
           notifyChange();
         });
       }
@@ -391,24 +348,24 @@ export function createRelayConnection(
     if (current === null) return;
     const { supervisor } = current;
     current = null;
-    // Cancel any in-flight dial (mint fetch or half-open ws) so an
-    // orphan connect cannot complete after stop and be superseded into
-    // terminal blocked (C2).
+    // Cancel any in-flight dial (mint fetch or half-open ws) so an orphan
+    // connect cannot complete after stop and be superseded into terminal
+    // blocked.
     if (pendingDialAbort !== null) {
       pendingDialAbort.abort();
       pendingDialAbort = null;
     }
     // stop() closes the live socket via the connection's close, whose
-    // close event tears the link down (the owner close also tears it
-    // down synchronously).
+    // close event tears the link down (the owner close also tears it down
+    // synchronously).
     supervisor.stop();
   }
 
   function startNow(opts: RelayConnectOpts): void {
     const connect: ConnectFn = (connectOpts) => dial(opts, connectOpts.onClose);
     const supervisor = createSupervisor({
-      // The params satisfy the supervisor's LAN-oriented shape. Only
-      // url is meaningful here, and the token is empty by design.
+      // The params satisfy the supervisor's LAN-oriented shape. Only url
+      // is meaningful here, and the token is empty by design.
       params: {
         url: opts.relayUrl,
         token: "",
@@ -426,31 +383,7 @@ export function createRelayConnection(
     supervisor.start();
   }
 
-  const server: ServerTransport = {
-    handle(channel, fn, opts) {
-      // Mirrors ipcMain.handle's one-handler-per-channel rule, so a
-      // double registration fails at boot on every wire alike.
-      if (handlers.has(channel)) {
-        throw new Error(
-          `[relay] handler already registered for channel "${channel}"`,
-        );
-      }
-      handlers.set(channel, fn);
-      // Record an EXPLICITLY read-only channel (mutating:false) so the
-      // link may serve it to any account peer. Fail-closed: a channel
-      // left untagged, or tagged mutating:true, is deliberately NOT
-      // recorded here, so the link gates it on a per-peer command grant.
-      if (opts?.mutating === false) readOnlyChannels.add(channel);
-    },
-    broadcastAll(channel, payload) {
-      // No socket or no helloed peers means nobody to tell, silently.
-      link?.broadcastAll(channel, payload);
-    },
-  };
-
   return {
-    server,
-
     connectPeer(deviceId, opts) {
       if (link === null) {
         return Promise.reject(new RelayLinkDownError());
@@ -465,9 +398,9 @@ export function createRelayConnection(
           stopNow();
           return;
         }
-        // A blocked supervisor restarts on refresh: refresh only runs
-        // when inputs may have changed (boot, sign-in, sign-out,
-        // rename), and blocked is terminal precisely until then.
+        // A blocked supervisor restarts on refresh: refresh only runs when
+        // inputs may have changed (boot, sign-in, sign-out), and blocked
+        // is terminal precisely until then.
         if (
           current !== null &&
           sameOpts(current.opts, opts) &&
@@ -488,8 +421,8 @@ export function createRelayConnection(
       const localDeviceId = current?.opts.deviceId;
       // The link owns the authoritative roster and per-peer versions, so
       // this reads them rather than keeping a second copy that a stale
-      // generation's close could wipe (C4). Presence includes the
-      // receiver per protocol.ts, so the local device is filtered out.
+      // generation's close could wipe. Presence includes the receiver per
+      // protocol.ts, so the local device is filtered out.
       const online = (link?.onlineDeviceIds() ?? []).filter(
         (id) => id !== localDeviceId,
       );

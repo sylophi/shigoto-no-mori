@@ -61,12 +61,14 @@ const isMainSpecifier = (spec, fileDir) => {
 const visitedAllowlisted = new Set();
 let contractModuleCount = 0;
 
-for (const dir of ["host", "main", "renderer", "shared"]) {
+for (const dir of ["host", "main", "renderer", "shared", "web"]) {
   for (const file of walk(join(repoRoot, dir), SOURCE_EXTENSIONS)) {
     const rel = relative(repoRoot, file);
     const src = stripComments(readFileSync(file, "utf8"));
     const fileDir = dirname(file);
-    const contractLayer = dir === "host" || dir === "shared";
+    // web/ is the browser client platform: like host/ and shared/ it must
+    // stay Electron free and must not reach into the main/ binding layer.
+    const contractLayer = dir === "host" || dir === "shared" || dir === "web";
     if (IPC_RENDERER_ALLOWLIST.has(rel)) visitedAllowlisted.add(rel);
 
     const specifiers = [...src.matchAll(IMPORT_SPECIFIER)].map((m) => m[1]);

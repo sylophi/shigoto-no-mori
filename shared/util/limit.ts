@@ -1,7 +1,9 @@
 // Bounded concurrency for work that fans out as wide as the caller
-// happens to ask for.
+// happens to ask for. Pure (no node builtins, no electron), so it lives
+// in shared/ and both the host probes and the web relay connection's
+// single-slot lifecycle serializer use the one implementation.
 //
-// The tidy surface is the reason this exists: it asks about every
+// The tidy surface is the reason it started here: it asks about every
 // worktree in every project at once, so both its git probes and its
 // directory walks would otherwise start as one burst of hundreds of
 // processes and syscalls. Queueing them behind a small window makes the

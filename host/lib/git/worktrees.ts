@@ -12,7 +12,7 @@ import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
-import { createLimiter } from "../util/limit";
+import { createLimiter } from "@shared/util/limit";
 import { run, splitZ } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 

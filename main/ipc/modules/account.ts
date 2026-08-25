@@ -19,14 +19,14 @@ import {
 } from "../../account/credentialStore";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
 import { runLoginFlow } from "../../account/login";
-import { createAccountService } from "../../account/service";
+import { createAccountService } from "@shared/account/service";
 import {
   isConfigured,
   mergeServiceEnv,
   parseDotenv,
   resolveServiceConfig,
   type AccountServiceConfig,
-} from "../../account/serviceConfig";
+} from "@shared/account/serviceConfig";
 
 // Built lazily on first handler use, never at import time. This module is
 // imported before app "ready" (registerIpcHandlers runs at the top of

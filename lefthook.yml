@@ -10,7 +10,7 @@ pre-commit:
     theme-contract:
       run: pnpm run theme:check
     host-boundary:
-      glob: "{host/**,main/**,renderer/**,shared/**,scripts/check-host-boundary.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{host/**,main/**,renderer/**,shared/**,web/**,scripts/check-host-boundary.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run host:check
     dmg-art:
       run: pnpm run dmg:check
@@ -55,8 +55,18 @@ pre-commit:
     # hello token and the per-peer in-flight cap. Gated to the relay
     # transport surface plus the sm frame layer it multiplexes.
     relaylink:
-      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,host/lib/util/limit.ts,scripts/check-relay-link.mjs}"
+      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/util/limit.ts,scripts/check-relay-link.mjs}"
       run: pnpm run relaylink:check
+    # Boots the same stub Durable Object and drives the BROWSER relay
+    # connection (web/relay/connection.ts, built on the global WebSocket)
+    # under node against a real node host peer, asserting connect,
+    # connectPeer hello/welcome, a peer invoke round trip, presence, the
+    # revoked/superseded blocked verdicts, a fresh-ticket redial and the
+    # per-dial ticket mint. Gated to the browser connection plus the relay
+    # transport surface it drives.
+    web-relay:
+      glob: "{web/**,shared/relay/**,shared/remote/**,shared/util/limit.ts,scripts/check-web-relay.mjs}"
+      run: pnpm run web:relay:check
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,
@@ -74,5 +84,5 @@ pre-commit:
     # commits. Proves sign-in, enrollment and storage cannot drift from
     # shared/relay/protocol.ts without electron or a browser.
     account:
-      glob: "{main/account/**,shared/ipc/modules/account.ts,scripts/check-account.mjs}"
+      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,scripts/check-account.mjs}"
       run: pnpm run account:check
