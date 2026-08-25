@@ -151,6 +151,12 @@ function buildQueryKeys(deviceId: string) {
     // a set of per-host facts served by the host-scoped runtime contract.
     runtimeInfo: () => host("runtime", "info"),
 
+    // Host-scoped: the CALLING device's command-access verdict on this
+    // host, served by the per-caller remoteAccess preflight. It caches
+    // under the peer's own id; the local device is always granted and
+    // never reaches this key.
+    commandAccess: () => host("commandAccess"),
+
     // Client-scoped: the store lives in this app instance's userData, so
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
