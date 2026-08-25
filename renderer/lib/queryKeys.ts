@@ -11,6 +11,8 @@
 // enter the cache without colliding and scope stays decidable from the
 // tuple alone. Client-scoped keys belong to this app instance alone
 // (updaterState, clientConfig) and never get either.
+import type { QueryClient } from "@tanstack/react-query";
+
 const PR_BRANCH_SCOPE = "branch";
 const HOST_SCOPE = "host";
 
@@ -197,6 +199,58 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
 // cache. Anything rendered under a HostScopeProvider must use the
 // scoped registry from useHostScope instead.
 export const queryKeys = queryKeysFor(localDeviceId);
+
+// The "state on this device moved, refetch what you're showing" sweep,
+// shared by both externalChange consumers: the local watcher
+// subscription in renderer/index.tsx (with localDeviceId) and
+// useWatchRemoteHost (with the remote device's id). Deliberately broad
+// within its scope (the host debounces the signal and only active
+// queries actually refetch), but some domains sit it out:
+//
+// - githubCli for scope AND cost: a disk change says nothing about
+//   GitHub, and refetching PR lists here turns every ping into a burst
+//   of gh network calls.
+// - worktreeHygiene / worktreeDiskUsage for cost: both cache for 60s (a
+//   sweep is several git calls or a directory walk per worktree) and
+//   invalidation ignores staleTime. Focus, mount and the removal flow
+//   still cover them.
+// - runtime and updater: static per-host facts and this install's
+//   updater state. No host state change touches either.
+// - clientConfig for scope: the store lives in this app instance's
+//   userData, so no host's state change can touch it. Including it
+//   would defeat the query's staleTime Infinity on every ping.
+// - fs for loop-safety as well as relevance: a git-state ping says
+//   nothing about a directory listing, and because fs reads are tagged
+//   mutating (they ride the command grant), a ping-driven fs refetch on
+//   a remote scope would itself trigger the host's resolved-mutation
+//   ping, refetching forever.
+const externalChangeExempt = new Set([
+  "clientConfig",
+  "fs",
+  "githubCli",
+  "runtime",
+  "updater",
+  "worktreeHygiene",
+  "worktreeDiskUsage",
+]);
+
+// Host-scoped keys invalidate only when bound to THIS device id: a
+// remote device's queries cache under its own id in the same host
+// families, so a device-blind sweep would invalidate a peer's worktrees
+// on a purely local change (and vice versa). Client-scoped keys carry
+// no id and keep the domain-exempt behavior whichever device pinged.
+export function invalidateHostDevice(
+  queryClient: QueryClient,
+  deviceId: string,
+): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => {
+      const keyDeviceId = hostKeyDeviceId(query.queryKey);
+      if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
+      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+    },
+  });
+}
 
 // Matchers live beside the builders they mirror and share their segment
 // constants: a predicate that indexes a key by hand silently stops

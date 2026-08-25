@@ -31,6 +31,8 @@ import {
   encodeFrame,
 } from "@shared/ipc/socket/frames";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
+import { z } from "zod";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";
 import { createWsServerBinding } from "@host/socket/server";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
@@ -544,6 +546,63 @@ async function main() {
       } finally {
         await binding.stop();
       }
+    },
+  );
+
+  await check(
+    "registrar: onMutationResolved fires after a mutating invoke resolves, never for reads or failures",
+    async () => {
+      // The remote-viewer externalChange ping (main/ipc/register.ts)
+      // hangs off this registrar hook, so pin its semantics at the seam
+      // with an in-memory transport: the LAN wire refuses mutating
+      // invokes outright, and the Electron+relay composite that
+      // actually emits the ping imports electron, out of reach here.
+      const handlers = new Map();
+      const server = {
+        handle: (channel, fn) => handlers.set(channel, fn),
+        broadcastAll: () => {},
+      };
+      const pingContract = defineContract("host", {
+        mutate: invoke("pingtest:mutate", z.void(), z.void(), {
+          remote: true,
+          mutating: true,
+        }),
+        read: invoke("pingtest:read", z.void(), z.void(), {
+          remote: true,
+          mutating: false,
+        }),
+        failMutate: invoke("pingtest:failMutate", z.void(), z.void(), {
+          remote: true,
+          mutating: true,
+        }),
+      });
+      let resolved = 0;
+      registerContract(
+        pingContract,
+        {
+          mutate: async () => {},
+          read: async () => {},
+          failMutate: async () => {
+            throw new Error("boom");
+          },
+        },
+        server,
+        {
+          validateOutputs: true,
+          onMutationResolved: () => {
+            resolved += 1;
+          },
+        },
+      );
+      const ctx = {};
+      await handlers.get("pingtest:read")(ctx, undefined);
+      assert.equal(resolved, 0, "a read must not trip the mutation hook");
+      await handlers.get("pingtest:mutate")(ctx, undefined);
+      assert.equal(resolved, 1, "a resolved mutation must trip the hook");
+      await assert.rejects(() =>
+        handlers.get("pingtest:failMutate")(ctx, undefined),
+      );
+      assert.equal(resolved, 1, "a failed mutation must not trip the hook");
     },
   );
 
