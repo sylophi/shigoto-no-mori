@@ -19,6 +19,7 @@ import {
 export const projectsContract = defineContract("host", {
   list: invoke("projects:list", z.void(), z.array(ProjectSchema), {
     remote: true,
+    mutating: false,
   }),
   add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
     remote: false,
@@ -31,6 +32,7 @@ export const projectsContract = defineContract("host", {
   }),
   getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema, {
     remote: true,
+    mutating: false,
   }),
   setSort: invoke("projects:setSort", SetProjectSortPayloadSchema, z.void(), {
     remote: false,
@@ -41,6 +43,7 @@ export const projectsContract = defineContract("host", {
     SidebarViewSchema,
     {
       remote: true,
+      mutating: false,
     },
   ),
   setSidebarView: invoke(
@@ -51,6 +54,7 @@ export const projectsContract = defineContract("host", {
   ),
   getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string()), {
     remote: true,
+    mutating: false,
   }),
   // Returns the post-toggle list so the renderer can sync to disk truth.
   toggleCollapsed: invoke(
@@ -68,36 +72,36 @@ export const projectsContract = defineContract("host", {
     "projects:defaultBranch",
     ProjectScopedPayloadSchema,
     z.string(),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   listBranches: invoke(
     "projects:listBranches",
     ProjectScopedPayloadSchema,
     BranchListSchema,
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   pickWorktreeName: invoke(
     "projects:pickWorktreeName",
     ProjectScopedPayloadSchema,
     z.string(),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   listIgnoredPaths: invoke(
     "projects:listIgnoredPaths",
     ProjectScopedPayloadSchema,
     z.array(z.string()),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   worktreeIncludeStatus: invoke(
     "projects:worktreeIncludeStatus",
     ProjectScopedPayloadSchema,
     WorktreeIncludeStatusSchema,
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   icon: invoke(
     "projects:icon",
     ProjectScopedPayloadSchema,
     ProjectIconSchema.nullable(),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
 });

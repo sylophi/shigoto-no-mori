@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceInfoSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema, DeviceInfoSchema } from "@shared/relay/protocol";
 
 // The relay account layer as the renderer sees it. Client-scoped on
 // purpose: sign-in drives an OS browser and writes an OS-keychain
@@ -55,8 +55,30 @@ export const accountContract = defineContract("client", {
     z.string().min(1).max(256),
     AccountStatusSchema,
   ),
+  // Grants a peer device command access on THIS host: after the grant,
+  // this machine serves that peer's MUTATING relay calls instead of
+  // refusing them (reads were always served). Scoped to the current
+  // account and enforced host-local, so it never rides the relay wire
+  // (client-scoped). Throws if signed out. The deviceId bound matches
+  // DeviceInfo.deviceId so a listed peer's id always parses.
+  grantCommands: invoke("account:grantCommands", DeviceIdSchema, z.void()),
+  // Withdraws a peer device's command access, so its mutating calls are
+  // refused again. Reads remain served. Idempotent.
+  revokeCommands: invoke("account:revokeCommands", DeviceIdSchema, z.void()),
+  // The peer deviceIds this host currently trusts to run commands, for
+  // the CURRENT account. Empty when signed out or none granted.
+  listGrantedDevices: invoke(
+    "account:listGrantedDevices",
+    z.void(),
+    z.array(z.string()),
+  ),
   // Fan-out after any sign-in, sign-out or rename so every window
   // re-reads status and the device list. Client-scoped, so it stays on
   // the Electron wire only.
   changed: broadcast("account:changed", z.void()),
+  // Fan-out after a command grant or revoke, kept separate from `changed`
+  // so a grant toggle does not thrash the account status and device
+  // queries. The account settings invalidates only the granted-set query
+  // on this.
+  grantsChanged: broadcast("account:grantsChanged", z.void()),
 });

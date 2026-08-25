@@ -71,3 +71,50 @@ export function useSetDeviceName() {
     meta: { errorTitle: "Couldn't rename this device" },
   });
 }
+
+// The peer deviceIds this host grants command access, for the current
+// account. Enabled only when signed in, mirroring useAccountDevices: the
+// handler returns [] signed out, and gating keeps the query idle. Kept
+// off the "account" prefix so a grant toggle invalidates only this.
+export function useGrantedDevices(enabled: boolean) {
+  return useQuery<string[]>({
+    queryKey: queryKeys.accountGrantedDevices(),
+    queryFn: () => window.api.account.listGrantedDevices(),
+    enabled,
+    meta: { errorTitle: "Couldn't load command grants" },
+  });
+}
+
+// Invalidate the granted-devices query whenever main fans out a grant
+// change, so every window's per-device control reflects the new state
+// without polling. Separate from the account.changed watch so a grant
+// toggle never re-reads status or the device list.
+export function useWatchGrantsChanges(): void {
+  const queryClient = useQueryClient();
+  useEffect(
+    () =>
+      window.api.account.onGrantsChanged(() => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.accountGrantedDevices(),
+        });
+      }),
+    [queryClient],
+  );
+}
+
+// Grant and revoke are imperative writes matching the account and
+// hosting sections. They do not invalidate themselves: main emits
+// grantsChanged and useWatchGrantsChanges invalidates off it.
+export function useGrantCommands() {
+  return useMutation<void, Error, string>({
+    mutationFn: (deviceId) => window.api.account.grantCommands(deviceId),
+    meta: { errorTitle: "Couldn't allow commands" },
+  });
+}
+
+export function useRevokeCommands() {
+  return useMutation<void, Error, string>({
+    mutationFn: (deviceId) => window.api.account.revokeCommands(deviceId),
+    meta: { errorTitle: "Couldn't revoke commands" },
+  });
+}

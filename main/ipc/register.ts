@@ -31,7 +31,7 @@ import {
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import { createRelayConnection } from "@host/relay/connection";
 import { createWsServerBinding } from "@host/socket/server";
-import { relayConnectInputs } from "./modules/account";
+import { isPeerCommandGranted, relayConnectInputs } from "./modules/account";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -117,6 +117,10 @@ const relayServer = createRelayConnection({
   onPeerPush: (deviceId, channel, payload) => {
     broadcastAll(relayContract, "peerPush", { deviceId, channel, payload });
   },
+  // The relay link refuses a peer's mutating call unless this host has
+  // granted it command access. Read live from the account layer's grant
+  // cache so a grant or revoke applies without a relay reconnect.
+  isCommandGranted: isPeerCommandGranted,
 });
 
 // Host-scoped calls are served on every wire that may carry them.
@@ -134,8 +138,13 @@ const hostServer: ServerTransport = {
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
+      // The LAN socket serves every remote channel to an authenticated
+      // LAN peer, so it takes no mutating info: LAN hosting is a single
+      // trusted token and the grant model is relay-only. The relay
+      // binding needs the mutating flag to gate a command on a per-peer
+      // grant, so only it receives opts.
       wsServer.handle(channel, fn);
-      relayServer.server.handle(channel, fn);
+      relayServer.server.handle(channel, fn, { mutating: opts.mutating });
     }
   },
   broadcastAll(channel, payload, opts) {

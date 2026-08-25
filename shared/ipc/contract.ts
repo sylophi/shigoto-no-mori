@@ -19,6 +19,16 @@ export type InvokeDef<
   // can never silently join the remote surface by inheriting a default.
   // Routing treats anything other than exactly true as local-only.
   remote?: boolean;
+  // Command-vs-read axis for the account relay grant model. `mutating`
+  // marks a call that changes state (spawns a subprocess, writes files
+  // or config, or performs a git or network action), as opposed to a
+  // pure read of existing state. Reads are always served to any account
+  // peer, while mutations require a per-peer command grant enforced at
+  // the relay link's dispatch. Optional in the type because only
+  // remote:true host invokes need it (the socket check enforces that a
+  // remote invoke classifies itself), while client-scoped and
+  // remote:false calls never reach the grant check.
+  mutating?: boolean;
 };
 
 export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
@@ -51,7 +61,7 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   channel: string,
   input: I,
   output: O,
-  opts?: { tracksProjectUsage?: boolean; remote?: boolean },
+  opts?: { tracksProjectUsage?: boolean; remote?: boolean; mutating?: boolean },
 ): InvokeDef<I, O> => ({
   kind: "invoke",
   channel,
@@ -63,6 +73,11 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   // invokes never reach the ws binding, so leaving theirs undefined is
   // harmless and routing reads it as local-only.
   remote: opts?.remote,
+  // Deliberately not defaulted either: a remote:true host invoke must
+  // classify itself (enforced by the socket check) so a new remote call
+  // cannot silently join the wire without declaring whether it mutates.
+  // Reads and remote:false calls leave it undefined.
+  mutating: opts?.mutating,
 });
 
 export const broadcast = <P extends z.ZodTypeAny>(

@@ -81,7 +81,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       signOut: accountClient.signOut,
       listDevices: accountClient.listDevices,
       setDeviceName: accountClient.setDeviceName,
+      grantCommands: accountClient.grantCommands,
+      revokeCommands: accountClient.revokeCommands,
+      listGrantedDevices: accountClient.listGrantedDevices,
       onChanged: accountClient.changed,
+      onGrantsChanged: accountClient.grantsChanged,
     },
 
     branches: {

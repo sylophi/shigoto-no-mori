@@ -89,6 +89,12 @@ export type RelayConnectionCallbacks = {
   onChange?: () => void;
   // Every push frame received from any peer, see RelayLinkDeps.
   onPeerPush?: (deviceId: string, channel: string, payload: unknown) => void;
+  // Whether the named peer may run MUTATING calls on this host. Injected
+  // from main, which reads the host's per-account grant store live, so a
+  // grant or revoke takes effect without a relay reconnect. Left out (a
+  // headless test, or a build with no grant model) means no peer may
+  // command this host, so every mutating call is refused.
+  isCommandGranted?: (peerDeviceId: string) => boolean;
 };
 
 export type RelayConnectionBinding = {
@@ -162,6 +168,17 @@ export function createRelayConnection(
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
+  // The EXPLICITLY read-only channel names (each handle's opts carried
+  // mutating:false), shared by reference with every link generation.
+  // Collected fail-closed: the link serves a channel to an ungranted peer
+  // only when it is in this set, so a mutation or an untagged channel is
+  // gated on a command grant. Populated at boot exactly like handlers,
+  // before any socket exists.
+  const readOnlyChannels = new Set<string>();
+  // The grant predicate the link consults live at dispatch. Defaults to
+  // refusing every peer when main injects nothing, so a mutating call is
+  // never served ungated by accident.
+  const isCommandGranted = callbacks.isCommandGranted ?? (() => false);
   let link: RelayLink | null = null;
   let current: { supervisor: Supervisor; opts: RelayConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
@@ -283,6 +300,14 @@ export function createRelayConnection(
           },
           bufferedAmount: () => socket.bufferedAmount,
           handlers,
+          // Shared by reference (populated at boot). The link serves a
+          // channel to an ungranted peer only when it is in this
+          // read-only set, so a mutating call from a peer this host has
+          // not granted is refused while reads pass through.
+          // isCommandGranted is read live at dispatch so a grant takes
+          // effect without a reconnect.
+          readOnlyChannels,
+          isCommandGranted,
           onPresence: () => {
             if (!settled) {
               settled = true;
@@ -427,7 +452,7 @@ export function createRelayConnection(
   }
 
   const server: ServerTransport = {
-    handle(channel, fn) {
+    handle(channel, fn, opts) {
       // Mirrors ipcMain.handle's one-handler-per-channel rule, so a
       // double registration fails at boot on every wire alike.
       if (handlers.has(channel)) {
@@ -436,6 +461,11 @@ export function createRelayConnection(
         );
       }
       handlers.set(channel, fn);
+      // Record an EXPLICITLY read-only channel (mutating:false) so the
+      // link may serve it to any account peer. Fail-closed: a channel
+      // left untagged, or tagged mutating:true, is deliberately NOT
+      // recorded here, so the link gates it on a per-peer command grant.
+      if (opts?.mutating === false) readOnlyChannels.add(channel);
     },
     broadcastAll(channel, payload) {
       // No socket or no helloed peers means nobody to tell, silently.

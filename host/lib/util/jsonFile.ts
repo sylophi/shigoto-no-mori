@@ -145,14 +145,21 @@ export function tempPathFor(filePath: string): string {
 // The synchronous twin, for writers that can't await (sync readers, or a
 // teardown path). Same sequence as the async version, so the tmp-cleanup
 // and self-write rules exist once.
+// `mode` sets the permission bits on the created file (masked by umask
+// like any create), for callers that keep a file out of a shared dir's
+// world-readable set, e.g. the 0o600 grant store. Omitted leaves the
+// platform default, so existing callers are unchanged.
 export function atomicWriteJsonSync(
   filePath: string,
   value: unknown,
-  { selfWrite = true }: { selfWrite?: boolean } = {},
+  { selfWrite = true, mode }: { selfWrite?: boolean; mode?: number } = {},
 ): void {
   mkdirSync(dirname(filePath), { recursive: true });
   const temp = tempPathFor(filePath);
-  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, {
+    encoding: "utf8",
+    mode,
+  });
   try {
     renameSync(temp, filePath);
   } catch (error) {

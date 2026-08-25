@@ -10,10 +10,14 @@ import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import {
   useAccountDevices,
   useAccountStatus,
+  useGrantCommands,
+  useGrantedDevices,
+  useRevokeCommands,
   useSetDeviceName,
   useSignIn,
   useSignOut,
   useWatchAccountChanges,
+  useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -28,12 +32,19 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 // matching the affordance the LAN device list offers.
 export function AccountSection() {
   useWatchAccountChanges();
+  useWatchGrantsChanges();
   const { data: status } = useAccountStatus();
   const signIn = useSignIn();
   const signOut = useSignOut();
 
   const signedIn = status?.signedIn === true;
   const devicesQuery = useAccountDevices(signedIn);
+  // The peers this host grants command access, so each peer row can offer
+  // an "Allow commands" / "Revoke" toggle. Host-local, so it is
+  // independent of whether the peer is online.
+  const grantedSet = new Set(useGrantedDevices(signedIn).data ?? []);
+  const grantCommands = useGrantCommands();
+  const revokeCommands = useRevokeCommands();
   // The dot and "View forest" gate derive from the live relay store, not
   // the account:listDevices HTTP snapshot (which only invalidates on
   // account:changed), so a device coming online or offline updates
@@ -103,6 +114,15 @@ export function AccountSection() {
                     device={device}
                     isThisDevice={device.deviceId === window.api.deviceId}
                     relayDevice={relayById.get(device.deviceId)}
+                    granted={grantedSet.has(device.deviceId)}
+                    grantPending={
+                      (grantCommands.isPending &&
+                        grantCommands.variables === device.deviceId) ||
+                      (revokeCommands.isPending &&
+                        revokeCommands.variables === device.deviceId)
+                    }
+                    onGrant={() => grantCommands.mutate(device.deviceId)}
+                    onRevoke={() => revokeCommands.mutate(device.deviceId)}
                   />
                 ))}
               </div>
@@ -127,15 +147,26 @@ export function AccountSection() {
 // One device row: an online dot, the name, this-device marker, and the
 // platform plus device id as a muted sub-line. An online peer gets the
 // "View forest" affordance, navigating to the same device route the
-// LAN list uses, where the registry serves it over the relay bridge.
+// LAN list uses, where the registry serves it over the relay bridge. A
+// peer that is not this device also gets a command-grant toggle: until
+// this host grants it, the peer sees a read-only mirror and its mutating
+// calls are refused at the relay link (transport-enforced, slice D).
 function DeviceRow({
   device,
   isThisDevice,
   relayDevice,
+  granted,
+  grantPending,
+  onGrant,
+  onRevoke,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
   relayDevice: RemoteDevice | undefined;
+  granted: boolean;
+  grantPending: boolean;
+  onGrant: () => void;
+  onRevoke: () => void;
 }) {
   const navigate = useNavigate();
   // A peer is reachable when its relay entry is in the connected phase
@@ -165,6 +196,21 @@ function DeviceRow({
           {device.platform} &middot; {device.deviceId}
         </span>
       </div>
+      {!isThisDevice && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">
+            {granted ? "Can run commands here" : "Read-only"}
+          </span>
+          <Button
+            variant={granted ? "ghost" : "outline"}
+            size="sm"
+            disabled={grantPending}
+            onClick={granted ? onRevoke : onGrant}
+          >
+            {granted ? "Revoke" : "Allow commands"}
+          </Button>
+        </div>
+      )}
       {reachable && !isThisDevice && (
         <Button
           variant="outline"

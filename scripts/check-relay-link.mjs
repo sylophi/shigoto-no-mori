@@ -188,18 +188,30 @@ function startStubRelay() {
 let hangResolvers = [];
 
 function registerTestHandlers(server) {
-  server.handle("test:echo", async (_ctx, raw) => raw);
-  server.handle("test:void", async () => undefined);
-  server.handle("test:fail", async () => {
-    throw new Error("boom");
-  });
+  // These are all EXPLICIT reads (mutating:false). The gate is fail-closed:
+  // it serves an ungranted peer only a channel proven read-only, so a
+  // handler left untagged would be refused for every peer (nobody is
+  // granted in these tests). Tagging them read-only keeps the generic
+  // dispatch, framing, size-guard and epoch tests serving as before.
+  server.handle("test:echo", async (_ctx, raw) => raw, { mutating: false });
+  server.handle("test:void", async () => undefined, { mutating: false });
+  server.handle(
+    "test:fail",
+    async () => {
+      throw new Error("boom");
+    },
+    { mutating: false },
+  );
   server.handle(
     "test:hang",
     () => new Promise((resolve) => hangResolvers.push(resolve)),
+    { mutating: false },
   );
   // Returns a result too large for one relay envelope, so the size guard
   // must downgrade it to an ok:false instead of swallowing it (C8).
-  server.handle("test:bigResult", async () => "x".repeat(1_100_000));
+  server.handle("test:bigResult", async () => "x".repeat(1_100_000), {
+    mutating: false,
+  });
 }
 
 async function bootDevice(stub, deviceId, opts = {}, track) {
@@ -207,6 +219,9 @@ async function bootDevice(stub, deviceId, opts = {}, track) {
   const connection = createRelayConnection({
     onChange: opts.onChange,
     onPeerPush: opts.onPeerPush,
+    // The grant predicate the host role consults live at dispatch. Tests
+    // pass a toggleable one to drive the command-grant enforcement.
+    isCommandGranted: opts.isCommandGranted,
   });
   // Register the connection's teardown immediately, so a boot that fails
   // its wait still gets cleaned up and cannot leak the event loop.
@@ -823,6 +838,90 @@ async function main() {
       const peer = await a.connection.connectPeer("B");
       const result = await peer.transport.invoke("test:echo", "alive");
       assert.equal(result, "alive");
+    },
+  );
+
+  await check(
+    "command grant: a read is served to an ungranted peer, a mutation is refused until this host grants the peer, and the mutating handler never runs while ungranted",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      const a = await bootDevice(stub, "A", {}, track);
+      // B decides which peers may command it. `granted` starts false and
+      // the predicate reads it LIVE, so a later flip takes effect without
+      // a reconnect (the store read in main is synchronous the same way).
+      let granted = false;
+      const b = await bootDevice(
+        stub,
+        "B",
+        { registerHandlers: true, isCommandGranted: () => granted },
+        track,
+      );
+      // A side-effecting mutating handler: the flag proves whether the
+      // handler body ran, so a refusal that still executed the handler
+      // would fail the assertion.
+      let mutations = 0;
+      b.connection.server.handle(
+        "test:mutate",
+        async () => {
+          mutations += 1;
+          return "mutated";
+        },
+        { mutating: true },
+      );
+      const peer = await a.connection.connectPeer("B");
+      // (a) A read (test:echo is an explicit read-only channel) is served
+      // to an ungranted peer.
+      assert.equal(await peer.transport.invoke("test:echo", "read"), "read");
+      // (b) A mutating call from the ungranted peer is refused ok:false
+      // with the permission message, and the handler body never ran.
+      await assert.rejects(
+        () => peer.transport.invoke("test:mutate", undefined),
+        (error) =>
+          error instanceof Error &&
+          /not permitted to run commands/.test(error.message),
+      );
+      assert.equal(mutations, 0, "the mutating handler ran while ungranted");
+      // (c) Once this host grants the peer, the SAME mutating channel is
+      // served and the handler runs, with no reconnect.
+      granted = true;
+      assert.equal(
+        await peer.transport.invoke("test:mutate", undefined),
+        "mutated",
+      );
+      assert.equal(
+        mutations,
+        1,
+        "the mutating handler did not run once granted",
+      );
+    },
+  );
+
+  await check(
+    "fail-closed: a channel registered WITHOUT an explicit mutating:false is refused for an ungranted peer, so the gate defaults closed even though the channel was never tagged mutating:true",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      const a = await bootDevice(stub, "A", {}, track);
+      // B grants nobody: isCommandGranted defaults to refusing every peer.
+      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
+      // A handler registered with NO opts: it was classified neither a read
+      // (mutating:false) nor a command (mutating:true). A mutation left
+      // untagged this way must NOT be served as a read. The flag proves the
+      // handler body never ran.
+      let ran = 0;
+      b.connection.server.handle("test:untagged", async () => {
+        ran += 1;
+        return "ran";
+      });
+      const peer = await a.connection.connectPeer("B");
+      await assert.rejects(
+        () => peer.transport.invoke("test:untagged", undefined),
+        (error) =>
+          error instanceof Error &&
+          /not permitted to run commands/.test(error.message),
+      );
+      assert.equal(ran, 0, "an untagged channel ran for an ungranted peer");
     },
   );
 

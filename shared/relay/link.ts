@@ -143,6 +143,23 @@ export type RelayLinkDeps = {
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >;
+  // The channel names EXPLICITLY classified read-only (each remote
+  // invoke's `mutating` flag is false), collected fail-closed. The gate
+  // serves a channel to an ungranted peer ONLY when it is in this set, so
+  // anything not proven a read (a mutation, or an untagged channel)
+  // requires a command grant (see isCommandGranted). This is the safe
+  // default: a wrongly-gated read is low-severity and quickly noticed, a
+  // wrongly-served mutation is high-severity and silent, so the
+  // security-critical axis defaults closed. Injected so the link stays
+  // electron-free and the relay-link check drives it with a stub set.
+  readOnlyChannels: ReadonlySet<string>;
+  // Whether the named peer is currently permitted to run mutating calls
+  // on THIS host. Enforcement is host-local: this machine decides which
+  // peers may command it. Read live at dispatch (not cached at link
+  // creation) so a grant or revoke takes effect without a relay
+  // reconnect. Injected from main, which reads the host's grant store
+  // for the current account.
+  isCommandGranted: (peerDeviceId: string) => boolean;
   // The full online list from every presence envelope, after the link
   // has reconciled its per-peer state against it.
   onPresence?: (online: readonly string[]) => void;
@@ -434,6 +451,26 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
         id: frame.id,
         ok: false,
         message: `No handler registered for channel "${frame.channel}"`,
+      };
+    } else if (
+      !deps.readOnlyChannels.has(frame.channel) &&
+      !deps.isCommandGranted(from)
+    ) {
+      // Fail-closed: a channel is served to this ungranted peer ONLY when
+      // it is an EXPLICITLY known read-only channel. Anything else (a
+      // mutation, or a channel that was never classified) is refused until
+      // this host has granted this peer command access. The grant is
+      // consulted live here, so the handler NEVER runs for an ungranted
+      // peer. The gate defaults closed on purpose: a wrongly-gated read is
+      // low-severity and quickly noticed, a wrongly-served mutation is
+      // high-severity and silent, so the security-critical axis is the one
+      // that defaults closed.
+      answer = {
+        t: "res",
+        id: frame.id,
+        ok: false,
+        message:
+          "this device is not permitted to run commands on the remote machine",
       };
     } else {
       try {

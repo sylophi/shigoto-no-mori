@@ -43,7 +43,13 @@ export type HandlerContext = {
 // where the files live"; remote answers "safe to serve a remote peer",
 // and the two are independent decisions. Single-wire transports ignore
 // it (they already know their reach).
-export type TransportCallOpts = { remote?: boolean };
+//
+// `opts.mutating` is the command-vs-read axis: the registrar passes each
+// call's `def.mutating` here so the relay binding can collect the
+// mutating channel names and gate them on a per-peer command grant.
+// Bindings with no grant model (the Electron binding, the LAN socket)
+// ignore it.
+export type TransportCallOpts = { remote?: boolean; mutating?: boolean };
 
 export type ServerTransport = {
   handle(

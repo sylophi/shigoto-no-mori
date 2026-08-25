@@ -165,6 +165,11 @@ export const queryKeys = {
   account: () => ["account"] as const,
   accountStatus: () => ["account", "status"] as const,
   accountDevices: () => ["account", "devices"] as const,
+  // The peer deviceIds this host grants command access. Kept OUTSIDE the
+  // "account" prefix so a grant toggle (which fans out on grantsChanged)
+  // invalidates only this query and never thrashes status or the device
+  // list.
+  accountGrantedDevices: () => ["accountGrants"] as const,
 
   updaterState: () => ["updater", "state"] as const,
 } as const;

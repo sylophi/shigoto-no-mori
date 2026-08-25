@@ -15,12 +15,17 @@ import { deviceVersionMismatch } from "@/lib/remote/devices";
 
 const route = getRouteApi("/devices/$deviceId");
 
-// Read-only view of another machine's forest (v2 step 3, slice C). This
-// is UI-enforced read only: the socket transport does not block
-// host-scoped writes, so the guarantee is simply that this page renders
-// no mutation control. There is no create, quick-create, delete, land,
-// convert, relocate or reorder here, and no worktree-detail write
-// surface. It shows every project and every worktree, nothing more.
+// Read-only view of another machine's forest (v2 step 3, slice C). Over
+// the account relay the read-only guarantee is now transport-enforced
+// for mutations (slice D): the host refuses a peer's mutating call
+// unless it has explicitly granted that peer command access, so a
+// mutating channel that never reaches this page's UI cannot be reached
+// by hand either. This page additionally renders no mutation control:
+// no create, quick-create, delete, land, convert, relocate or reorder
+// here, and no worktree-detail write surface. It shows every project and
+// every worktree, nothing more. Note the LAN socket has no grant model
+// (a LAN peer is a single trusted token), so over LAN the read-only
+// property is still this page's no-mutation-control convention alone.
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();

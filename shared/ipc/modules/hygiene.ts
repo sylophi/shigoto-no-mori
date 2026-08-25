@@ -13,7 +13,7 @@ export const hygieneContract = defineContract("host", {
     "hygiene:list",
     ProjectScopedPayloadSchema,
     z.array(WorktreeHygieneSchema),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   // Slow, per-worktree: the renderer fires one of these per row so each
   // size lands independently instead of the page waiting on the total.
@@ -21,6 +21,6 @@ export const hygieneContract = defineContract("host", {
     "hygiene:diskUsage",
     WorktreeScopedPayloadSchema,
     WorktreeDiskUsageSchema,
-    { remote: true },
+    { remote: true, mutating: false },
   ),
 });

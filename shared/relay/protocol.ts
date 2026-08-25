@@ -84,6 +84,12 @@ export const CLOSE_TICKET_REJECTED = 4101;
 export const CLOSE_DEVICE_REVOKED = 4102;
 export const CLOSE_SUPERSEDED = 4103;
 
+// A relay device id, the enrollment UUID, bounded to the DO accept-tag
+// limit (workerd hard-caps a websocket accept tag at 256 chars, so this
+// stays well under it). The single source for the several wire and IPC
+// sites that route or grant against a device id.
+export const DeviceIdSchema = z.string().min(1).max(200);
+
 // ---- HTTP routes ----
 
 // The one route table both sides consume: the worker matches requests
@@ -175,7 +181,7 @@ export type TicketResponse = z.infer<typeof TicketResponseSchema>;
 // getWebSockets on the relay hot path.
 export const RelaySendEnvelopeSchema = z.object({
   t: z.literal("relay"),
-  to: z.string().min(1).max(200),
+  to: DeviceIdSchema,
   frame: z.unknown(),
 });
 
