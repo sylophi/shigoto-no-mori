@@ -11,6 +11,7 @@ import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
 import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
+import { startRelayDeviceSync } from "./lib/remote/relayDevices";
 import { hostKeyDeviceId, queryKeyDomain, queryKeys } from "./lib/queryKeys";
 import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
@@ -125,6 +126,11 @@ void queryClient.prefetchQuery({
 // inside this call and never enters the query cache. Re-reconcile after a
 // remote-device write happens in the settings section that owns the list.
 void reconcileRemoteDevicesFromConfig();
+
+// Relay devices (v2 step 4, slice C): the same registry's other half,
+// rebuilt from the account's device list plus the relay bridge status,
+// on boot and on every account or relay change.
+startRelayDeviceSync();
 
 // State changed on disk under the app (an CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it

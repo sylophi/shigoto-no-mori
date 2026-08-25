@@ -16,6 +16,7 @@ import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { relayContract } from "@shared/ipc/modules/relay";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
@@ -63,6 +64,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const portPoolClient = c(portPoolContract);
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
+  const relayClient = c(relayContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
   const cliClient = c(cliContract);
@@ -225,6 +227,14 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       worktreeIncludeStatus: (projectId: string) =>
         projectsClient.worktreeIncludeStatus({ projectId }),
       icon: (projectId: string) => projectsClient.icon({ projectId }),
+    },
+
+    relay: {
+      status: relayClient.status,
+      invokePeer: relayClient.invokePeer,
+      peerInfo: relayClient.peerInfo,
+      onStatusChanged: relayClient.statusChanged,
+      onPeerPush: relayClient.peerPush,
     },
 
     runtime: {

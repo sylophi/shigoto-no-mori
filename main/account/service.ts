@@ -37,7 +37,9 @@ export type AccountService = {
   enroll(loginToken: string, fields: EnrollFields): Promise<EnrollResponse>;
   listDevices(credential: string): Promise<DeviceInfo[]>;
   revoke(credential: string, deviceId: string): Promise<void>;
-  mintTicket(credential: string): Promise<TicketResponse>;
+  // signal aborts the mint fetch on stop or on the caller's mint
+  // timeout, so a black-holed route cannot hang the connect (C6).
+  mintTicket(credential: string, signal?: AbortSignal): Promise<TicketResponse>;
 };
 
 // Turns a non-2xx response into a thrown Error carrying the relay's own
@@ -105,10 +107,11 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       if (!response.ok) return fail(response);
     },
 
-    async mintTicket(credential) {
+    async mintTicket(credential, signal) {
       const response = await doFetch(urlFor(RELAY_ROUTES.mintTicket.path), {
         method: RELAY_ROUTES.mintTicket.method,
         headers: { authorization: `Bearer ${credential}` },
+        signal,
       });
       if (!response.ok) return fail(response);
       return TicketResponseSchema.parse(await response.json());

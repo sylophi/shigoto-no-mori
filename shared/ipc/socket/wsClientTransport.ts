@@ -11,7 +11,6 @@
 // frames fanned out to local subscribers. It owns exactly one socket.
 // Reconnect and backoff live one layer up in the supervisor, which is
 // the single owner of retry.
-import { errorMessageOf } from "@shared/errors";
 import {
   CLOSE_AUTH_FAILED,
   decodeFrame,
@@ -19,6 +18,7 @@ import {
   HELLO_TIMEOUT_MS,
   ServerFrameSchema,
 } from "@shared/ipc/socket/frames";
+import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type { ClientTransport } from "@shared/ipc/transport";
 
 // A connect attempt failed before the welcome landed. `code` is the
@@ -98,9 +98,10 @@ export function connectDevice(
       number,
       { resolve: (value: unknown) => void; reject: (error: unknown) => void }
     >();
-    // Push subscribers, purely local: a Set per channel fed by push
-    // frames. Never touches the wire, so unsubscribe is local too.
-    const subscribers = new Map<string, Set<(payload: unknown) => void>>();
+    // Push subscribers, purely local: fed by push frames, never touching
+    // the wire. The shared registry owns the add/remove/fan-out and
+    // isolates a throwing subscriber.
+    const subscribers = createSubscriberRegistry("socket");
 
     // Flips true the instant this socket is unusable (closed or errored),
     // so an invoke after close rejects immediately rather than hanging.
@@ -209,19 +210,7 @@ export function connectDevice(
       }
 
       if (frame.t === "push") {
-        const handlers = subscribers.get(frame.channel);
-        if (handlers === undefined) return;
-        // A handler may unsubscribe itself here: Set iteration tolerates
-        // deletion of the current or a later element mid-loop.
-        for (const handler of handlers) {
-          try {
-            handler(frame.payload);
-          } catch (error) {
-            console.warn(
-              `[socket] push handler threw: ${errorMessageOf(error)}`,
-            );
-          }
-        }
+        subscribers.emit(frame.channel, frame.payload);
         return;
       }
 
@@ -298,18 +287,7 @@ export function connectDevice(
         channel: string,
         handler: (payload: unknown) => void,
       ): () => void {
-        let handlers = subscribers.get(channel);
-        if (handlers === undefined) {
-          handlers = new Set();
-          subscribers.set(channel, handlers);
-        }
-        handlers.add(handler);
-        return () => {
-          const set = subscribers.get(channel);
-          if (set === undefined) return;
-          set.delete(handler);
-          if (set.size === 0) subscribers.delete(channel);
-        };
+        return subscribers.subscribe(channel, handler);
       },
     };
 

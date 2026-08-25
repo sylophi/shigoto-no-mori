@@ -25,6 +25,6 @@
     "src/**/*",
     "test/**/*",
     "vitest.config.ts",
-    "../shared/relay/**/*"
+    "../shared/relay/protocol.ts"
   ]
 }

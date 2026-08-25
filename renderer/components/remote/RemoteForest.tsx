@@ -1,5 +1,6 @@
 import { getRouteApi } from "@tanstack/react-router";
 import { FolderGit2 } from "lucide-react";
+import { errorMessageOf } from "@shared/errors";
 import type { Project, Worktree } from "@shared/schemas";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -23,12 +24,17 @@ const route = getRouteApi("/devices/$deviceId");
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();
-  // The registry is keyed by url. A device's welcome id is what the
-  // route carries, so look it up by that. Guard the empty id explicitly:
-  // an unconnected entry also carries "", so matching on it would pick an
-  // arbitrary disconnected device rather than the not-connected panel.
+  // The registry holds both LAN and relay entries, and a stale LAN entry
+  // (api undefined, in backoff) can share a deviceId with a live relay
+  // entry for the same machine. Prefer a SERVING entry so that stale twin
+  // does not shadow the live one and strand this page (I2). Guard the
+  // empty id explicitly: an unconnected entry also carries "", so
+  // matching on it would pick an arbitrary disconnected device.
   const device =
-    deviceId === "" ? undefined : devices.find((d) => d.deviceId === deviceId);
+    deviceId === ""
+      ? undefined
+      : (devices.find((d) => d.deviceId === deviceId && d.api !== undefined) ??
+        devices.find((d) => d.deviceId === deviceId));
 
   if (device === undefined) {
     return (
@@ -52,7 +58,12 @@ function ConnectedForest({
   deviceId: string;
 }) {
   const api = device.api;
-  const { data: projects = [], isPending } = useRemoteProjects(deviceId, api);
+  const {
+    data: projects = [],
+    isPending,
+    isError,
+    error,
+  } = useRemoteProjects(deviceId, api);
   const worktreeQueries = useAllRemoteWorktrees(deviceId, api, projects);
   const worktreesByProject = new Map<string, Worktree[]>(
     projects.map((project, index) => [
@@ -80,10 +91,19 @@ function ConnectedForest({
         <EmptyPanel>
           {device.status.phase === "blocked"
             ? `Can't connect: ${device.status.message}.`
-            : "Connecting to this device…"}
+            : // The honest phase label, not a blanket "Connecting" that
+              // lies for a stopped or backing-off device (I4).
+              deviceStatusView(device.status).label}
         </EmptyPanel>
       ) : isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : isError ? (
+        // remoteProjectsQueryOptions sets silentError expecting the
+        // forest to render its own inline error, so a failed query shows
+        // the reason rather than a misleading empty "No projects" (I4).
+        <EmptyPanel>
+          Couldn&apos;t load this device&apos;s forest: {errorMessageOf(error)}
+        </EmptyPanel>
       ) : projects.length === 0 ? (
         <EmptyPanel>No projects on this device yet.</EmptyPanel>
       ) : (

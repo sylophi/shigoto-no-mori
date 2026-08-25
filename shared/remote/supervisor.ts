@@ -1,17 +1,19 @@
-// Reconnect supervisor for one remote device (v2 step 3, slice B). It
-// is the SINGLE owner of retry for a device entry: nothing else drives
-// connectDevice for it, so there is exactly one backoff ladder and one
-// timer per device, never a fan of overlapping reconnect loops.
+// Reconnect supervisor for one remote connection (v2 step 3, slice B,
+// moved to shared/ in step 4 so the main-process relay socket reuses
+// it). It is the SINGLE owner of retry for a connection: nothing else
+// drives the connect function for it, so there is exactly one backoff
+// ladder and one timer per connection, never a fan of overlapping
+// reconnect loops.
 //
 // State machine, copying t3's discipline:
 //   idle -> connecting -> connected -> backoff -> connecting -> ...
 //                              \-> blocked (terminal until inputs change)
 // A connection that STAYS OPEN past the stable threshold resets the
 // ladder to the bottom, so a healthy link that blips once does not
-// inherit a punishing delay. A wrong token (CLOSE_AUTH_FAILED, or any
-// hello rejected as unauthorized) goes to blocked with NO further retry:
-// auth failures must block rather than spin a typo into a hammering
-// loop. Every other close backs off.
+// inherit a punishing delay. A blocking close (a wrong token on the LAN
+// path, a revoked device on the relay path) goes to blocked with NO
+// further retry: those failures must block rather than spin into a
+// hammering loop. Every other close backs off.
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
 // (the renderer runtime forbids Math.random anyway), and time is read
@@ -47,8 +49,9 @@ export type SupervisorStatus =
 // node. The supervisor only ever hands it back to clearTimeout.
 export type SupervisorTimer = unknown;
 
-// Injected time source. The default binds the platform globals; tests
-// pass a controllable clock to advance time and fire timers by hand.
+// Injected time source. The default binds the platform globals, and
+// tests pass a controllable clock to advance time and fire timers by
+// hand.
 export type SupervisorClock = {
   now(): number;
   setTimeout(fn: () => void, ms: number): SupervisorTimer;
@@ -76,10 +79,27 @@ export type ConnectFn = (
   opts: ConnectDeviceOptions,
 ) => Promise<DeviceConnection>;
 
+// The block-vs-retry verdict for a close code, injectable because each
+// wire has its own terminal codes. A non-null verdict blocks with its
+// message. The default is the LAN rule: only a wrong token blocks.
+// The relay connection supplies its own classifier for the revoked and
+// superseded close codes.
+export type CloseClassifier = (
+  code: number | null,
+) => { message: string } | null;
+
+const AUTH_FAILED_MESSAGE = "authentication failed";
+
+// Not exported: it is only the default classifier for this module. The
+// relay path injects its own, and nothing else references it.
+const lanCloseClassifier: CloseClassifier = (code) =>
+  code === CLOSE_AUTH_FAILED ? { message: AUTH_FAILED_MESSAGE } : null;
+
 export type SupervisorOptions = {
   params: SupervisorParams;
   connect?: ConnectFn;
   clock?: SupervisorClock;
+  classifyClose?: CloseClassifier;
   // Status observer for a device registry / a live UI.
   onStatus?: (status: SupervisorStatus) => void;
   // The live connection on a successful handshake, and null the moment
@@ -102,6 +122,7 @@ function backoffDelayMs(attempt: number): number {
 export function createSupervisor(options: SupervisorOptions): Supervisor {
   const connect = options.connect ?? connectDevice;
   const clock = options.clock ?? defaultSupervisorClock;
+  const classifyClose = options.classifyClose ?? lanCloseClassifier;
 
   let status: SupervisorStatus = { phase: "idle" };
   // True between start() and stop(). Guards every async continuation so
@@ -136,6 +157,10 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   }
 
   function scheduleBackoff(resetLadder: boolean): void {
+    // Clear any live retry first so this is the ONLY timer: the module
+    // header promises exactly one backoff ladder, and two overlapping
+    // schedules would fan into parallel connect attempts (C3).
+    clearRetry();
     if (resetLadder) attempt = 0;
     const delayMs = backoffDelayMs(attempt);
     attempt += 1;
@@ -152,8 +177,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     if (!running) return;
     connection = null;
     options.onConnection?.(null);
-    if (code === CLOSE_AUTH_FAILED) {
-      block("authentication failed");
+    const verdict = classifyClose(code);
+    if (verdict !== null) {
+      block(verdict.message);
       return;
     }
     const openMs = clock.now() - connectedAt;
@@ -179,11 +205,11 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
 
   function onConnectError(error: unknown): void {
     if (!running) return;
-    // The transport tags an auth-failed close as blocking. Anything else
+    // The transport tags a blocking close as blocked. Anything else
     // (hello timeout, host restart, network blip) is retryable, and a
     // failed attempt never counts as a stable connection.
     if (error instanceof RemoteConnectError && error.blocked) {
-      block("authentication failed");
+      block(classifyClose(error.code)?.message ?? AUTH_FAILED_MESSAGE);
       return;
     }
     scheduleBackoff(false);

@@ -15,7 +15,9 @@ import { deviceVersionMismatch } from "@/lib/remote/devices";
 // the tokens live only in the local config, so add and remove
 // read-modify-write the unredacted doc and re-reconcile the registry.
 export function RemoteDevicesSection() {
-  const devices = useRemoteDevices();
+  // Only the url-keyed LAN entries belong here. Relay devices live in
+  // the store too but are managed through the Account section.
+  const devices = useRemoteDevices().filter((device) => device.kind === "lan");
   const navigate = useNavigate();
   const update = useLocalGlobalConfigUpdate("Couldn't update remote devices");
 

@@ -1,6 +1,6 @@
+import type { SupervisorStatus } from "@shared/remote/supervisor";
 import { StatusDot } from "@/components/ui/status-dot";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import type { SupervisorStatus } from "@/lib/remote/supervisor";
 
 // The device's supervisor phase as an inline status dot. deviceStatusView
 // already reduces the phase to a tone drawn from the raw families the

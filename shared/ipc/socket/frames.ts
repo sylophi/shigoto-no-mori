@@ -114,6 +114,7 @@ export const PushFrameSchema = z.object({
   // The broadcast payload wire shape. Absent when the payload is void.
   payload: z.unknown().optional(),
 });
+export type PushFrame = z.infer<typeof PushFrameSchema>;
 
 // Not a discriminated union: the two res forms share `t` and split on
 // `ok`.

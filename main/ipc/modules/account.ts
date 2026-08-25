@@ -118,6 +118,39 @@ function readStatus(): AccountStatus {
   };
 }
 
+// What the relay socket needs from the account layer, kept here so the
+// store and config stay module private. Null when unconfigured or
+// signed out, which the relay refresh reads as "stop". mintTicket is a
+// closure that re-reads the stored credential on every call, so a
+// rotated credential is picked up per connect attempt without any
+// refresh plumbing.
+export function relayConnectInputs(): {
+  relayUrl: string;
+  accountId: string;
+  mintTicket: (signal: AbortSignal) => Promise<string>;
+} | null {
+  const config = serviceConfig();
+  if (!isConfigured(config)) return null;
+  const record = store().read();
+  if (record === null) return null;
+  return {
+    relayUrl: config.relayUrl,
+    // Identifies the signed-in account so a re-enroll onto a different
+    // account forces the relay socket to reconnect (C7).
+    accountId: record.accountId,
+    mintTicket: async (signal) => {
+      const fresh = store().read();
+      if (fresh === null) {
+        throw new Error("signed out, no relay credential");
+      }
+      const service = createAccountService({ baseUrl: config.relayUrl });
+      // The signal aborts the mint on stop and on the dial's mint
+      // timeout, so a black-holed route cannot strand the connect (C6).
+      return (await service.mintTicket(fresh.credential, signal)).ticket;
+    },
+  };
+}
+
 export function makeAccountHandlers(
   emitChanged: () => void,
 ): Handlers<typeof accountContract> {

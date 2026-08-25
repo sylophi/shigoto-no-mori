@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { LogIn, LogOut } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowRight, LogIn, LogOut } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
+import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import {
   useAccountDevices,
   useAccountStatus,
@@ -13,14 +15,17 @@ import {
   useSignOut,
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import type { RemoteDevice } from "@/lib/remote/devices";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 
 // "Account": sign in to the relay so this device can reach the account's
 // other devices (v2 step 4, slice B). Three states: not configured (the
 // owner has not set the SM_ACCOUNT_* env vars, so sign-in is impossible
 // on this build), signed out (a Sign in button), and signed in (this
-// device's identity plus the account's device registry, display only).
-// Wiring the remote forest over the relay is a later slice, so the list
-// is not clickable here.
+// device's identity plus the account's device registry). An online
+// device's row links to its remote forest over the relay (slice C),
+// matching the affordance the LAN device list offers.
 export function AccountSection() {
   useWatchAccountChanges();
   const { data: status } = useAccountStatus();
@@ -29,6 +34,15 @@ export function AccountSection() {
 
   const signedIn = status?.signedIn === true;
   const devicesQuery = useAccountDevices(signedIn);
+  // The dot and "View forest" gate derive from the live relay store, not
+  // the account:listDevices HTTP snapshot (which only invalidates on
+  // account:changed), so a device coming online or offline updates
+  // without a refetch (I3).
+  const relayById = new Map(
+    useRemoteDevices()
+      .filter((device) => device.kind === "relay")
+      .map((device) => [device.deviceId, device] as const),
+  );
 
   return (
     <section className="space-y-3">
@@ -88,6 +102,7 @@ export function AccountSection() {
                     key={device.deviceId}
                     device={device}
                     isThisDevice={device.deviceId === window.api.deviceId}
+                    relayDevice={relayById.get(device.deviceId)}
                   />
                 ))}
               </div>
@@ -110,18 +125,33 @@ export function AccountSection() {
 }
 
 // One device row: an online dot, the name, this-device marker, and the
-// platform plus device id as a muted sub-line. Display only until the
-// relay-forest slice lands.
+// platform plus device id as a muted sub-line. An online peer gets the
+// "View forest" affordance, navigating to the same device route the
+// LAN list uses, where the registry serves it over the relay bridge.
 function DeviceRow({
   device,
   isThisDevice,
+  relayDevice,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
+  relayDevice: RemoteDevice | undefined;
 }) {
+  const navigate = useNavigate();
+  // A peer is reachable when its relay entry is in the connected phase
+  // (socket up and the peer in the presence roster), which is also when
+  // its api is serving, so the forest lookup will find it.
+  const reachable =
+    relayDevice !== undefined && deviceStatusView(relayDevice.status).connected;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2">
-      <StatusDot tone={device.online ? "emerald" : "slate"} />
+      {isThisDevice ? (
+        <StatusDot tone="emerald" />
+      ) : relayDevice !== undefined ? (
+        <DeviceStatusDot status={relayDevice.status} />
+      ) : (
+        <StatusDot tone="slate" />
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-sm">
           {device.name}
@@ -135,6 +165,21 @@ function DeviceRow({
           {device.platform} &middot; {device.deviceId}
         </span>
       </div>
+      {reachable && !isThisDevice && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            void navigate({
+              to: "/devices/$deviceId",
+              params: { deviceId: device.deviceId },
+            })
+          }
+        >
+          View forest
+          <ArrowRight />
+        </Button>
+      )}
     </div>
   );
 }

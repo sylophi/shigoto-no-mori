@@ -12,6 +12,7 @@ import { menuContract } from "@shared/ipc/modules/menu";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { relayContract } from "@shared/ipc/modules/relay";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
@@ -42,19 +43,35 @@ import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { makeAccountHandlers } from "./modules/account";
-import { broadcastAll, registerContract } from "./register";
+import { makeRelayHandlers } from "./modules/relay";
+import {
+  broadcastAll,
+  refreshRelayConnection,
+  registerContract,
+  relayConnectPeer,
+  relayStatus,
+} from "./register";
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
   // Client-scoped: sign-in drives the OS browser and writes an
   // OS-keychain credential on this machine, so it never rides the socket
   // wire. The changed broadcast fans out to every window after any
-  // sign-in, sign-out or rename.
+  // sign-in, sign-out or rename, and the relay socket re-reconciles
+  // against the fresh account state at the same moment.
   registerContract(
     accountContract,
-    makeAccountHandlers(() =>
-      broadcastAll(accountContract, "changed", undefined),
-    ),
+    makeAccountHandlers(() => {
+      broadcastAll(accountContract, "changed", undefined);
+      void refreshRelayConnection();
+    }),
+  );
+  // Client-scoped bridge onto the main-process relay socket: status,
+  // lazy peer invokes, and the peerPush/statusChanged fan-outs wired in
+  // register.ts.
+  registerContract(
+    relayContract,
+    makeRelayHandlers({ status: relayStatus, connectPeer: relayConnectPeer }),
   );
   registerContract(windowContract, windowHandlers);
   registerContract(projectsContract, projectsHandlers);

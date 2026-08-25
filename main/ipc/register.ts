@@ -9,6 +9,8 @@ import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { relayContract, type RelayStatus } from "@shared/ipc/modules/relay";
+import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";
 import {
   broadcastAll as broadcastAllCore,
   registerContract as registerContractCore,
@@ -27,7 +29,9 @@ import {
   resolveSocketHostConfig,
 } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
+import { createRelayConnection } from "@host/relay/connection";
 import { createWsServerBinding } from "@host/socket/server";
+import { relayConnectInputs } from "./modules/account";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -101,24 +105,45 @@ const electronServer: ServerTransport = {
 // listener. Listening itself is gated in refreshSocketHost below.
 const wsServer = createWsServerBinding();
 
-// Host-scoped calls are served on both wires. Client-scoped calls stay
-// structurally unreachable over the socket: their channels are never
-// registered on the ws binding, so a remote req gets a no-handler res
-// instead of a native dialog or an app-menu mutation.
+// The relay connection, unconditional for the same reason: handler
+// registration is recorded at boot, connecting itself is gated in
+// refreshRelayConnection below (signed out or unconfigured means no
+// socket). Its callbacks fan status and peer pushes out to every
+// window through the client-scoped relay contract.
+const relayServer = createRelayConnection({
+  onChange: () => {
+    broadcastAll(relayContract, "statusChanged", relayStatus());
+  },
+  onPeerPush: (deviceId, channel, payload) => {
+    broadcastAll(relayContract, "peerPush", { deviceId, channel, payload });
+  },
+});
+
+// Host-scoped calls are served on every wire that may carry them.
+// Client-scoped calls stay structurally unreachable over the socket
+// and the relay: their channels are never registered on either remote
+// binding, so a remote req gets a no-handler res instead of a native
+// dialog or an app-menu mutation.
 const hostServer: ServerTransport = {
-  // The Electron wire always serves host calls. The socket wire serves
-  // a call ONLY when its def opted into remote exposure, so a
-  // host-scoped-but-not-remote channel (runtime:nuke, cli:*,
-  // launchers:launch, globalConfig:write) is never even registered on
-  // the socket. A remote req for it gets the same no-handler res a
-  // client-scoped channel does.
+  // The Electron wire always serves host calls. The remote wires (LAN
+  // socket and relay) serve a call ONLY when its def opted into remote
+  // exposure, so a host-scoped-but-not-remote channel (runtime:nuke,
+  // cli:*, launchers:launch, globalConfig:write) is never even
+  // registered on them. A remote req for it gets the same no-handler
+  // res a client-scoped channel does.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
-    if (opts?.remote === true) wsServer.handle(channel, fn);
+    if (opts?.remote === true) {
+      wsServer.handle(channel, fn);
+      relayServer.server.handle(channel, fn);
+    }
   },
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
-    if (opts?.remote === true) wsServer.broadcastAll(channel, payload);
+    if (opts?.remote === true) {
+      wsServer.broadcastAll(channel, payload);
+      relayServer.server.broadcastAll(channel, payload);
+    }
   },
 };
 
@@ -203,4 +228,61 @@ export async function refreshSocketHost(): Promise<void> {
   } catch (error) {
     console.warn(`[socket] listener refresh failed: ${errorMessageOf(error)}`);
   }
+}
+
+// The relay bridge's status snapshot, shared by the status handler and
+// the statusChanged fan-out so both always report the same shape.
+export function relayStatus(): RelayStatus {
+  const current = relayServer.status();
+  return {
+    socket: current.socket,
+    onlineDeviceIds: current.onlineDeviceIds,
+    // Folded into the snapshot so the renderer stops polling peerInfo per
+    // device on every reconcile (M3).
+    peerAppVersions: current.peerAppVersions,
+  };
+}
+
+// The relay's client role, exposed for the bridge handlers so they
+// never hold the binding itself.
+export function relayConnectPeer(
+  deviceId: string,
+  opts?: ConnectPeerOpts,
+): Promise<PeerConnection> {
+  return relayServer.connectPeer(deviceId, opts);
+}
+
+// Reconciles the relay socket with the account state. Runs at boot and
+// after every account change (sign-in, sign-out, rename), so the
+// socket follows the credential without a relaunch. The account read
+// runs INSIDE the binding's serialized lifecycle, mirroring
+// refreshSocketHost, and a failure degrades to a log line because a
+// connect problem must never fail the account write that triggered it.
+export async function refreshRelayConnection(): Promise<void> {
+  try {
+    await relayServer.refresh(async () => {
+      const inputs = relayConnectInputs();
+      if (inputs === null) return null;
+      return {
+        relayUrl: inputs.relayUrl,
+        // A DIFFERENT account rotates the credential, so accountId is in
+        // RelayConnectOpts/sameOpts to force a reconnect onto the new
+        // account's DO instead of leaving the old socket live (C7).
+        accountId: inputs.accountId,
+        mintTicket: inputs.mintTicket,
+        deviceId: getDeviceId(),
+        // appVersion is an Electron fact, injected here so host/relay
+        // never imports electron.
+        appVersion: app.getVersion(),
+      };
+    });
+  } catch (error) {
+    console.warn(`[relay] connection refresh failed: ${errorMessageOf(error)}`);
+  }
+}
+
+// Teardown for before-quit: closes the relay socket so the DO sees a
+// clean departure instead of waiting out a dead connection.
+export function stopRelayConnection(): Promise<void> {
+  return relayServer.stop();
 }
