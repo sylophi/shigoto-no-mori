@@ -54,6 +54,15 @@ export function makeRelayHandlers(
       return peer.transport.invoke(channel, input);
     },
 
+    // The explicit ensure-session path (dial-on-subscribe): opens or
+    // reuses the peer session WITHOUT invoking anything, so a
+    // subscribe-only client still triggers the sm hello and starts
+    // receiving that peer's pushes. Failures (offline, link down)
+    // reject through so the caller can retry on the next reconnect.
+    ensurePeer: async ({ deviceId }) => {
+      await openPeer(deviceId);
+    },
+
     peerInfo: async ({ deviceId }) => {
       const cached = peers.get(deviceId);
       if (cached === undefined) return null;

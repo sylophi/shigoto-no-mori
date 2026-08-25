@@ -39,6 +39,43 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
   return cache.get();
 }
 
+// Cache-bypassing read for a read-modify-write base. Drops the TTL entry
+// and reloads from disk, then refreshes the cache with what it read.
+// INVARIANT: the device-settings whole-document write MUST base itself on
+// this, never on the 5s-TTL readGlobalConfig, because the CLI clears every
+// registered key the payload omits (see globalConfigWriteViaCli). A base
+// up to the TTL stale would resurrect a just-rotated socketHost.token or
+// re-enable a just-disabled host by writing the stale value back as
+// authoritative. Unlike invalidateGlobalConfigCache this fires no change
+// listeners: it is a read, not a config change.
+export async function readGlobalConfigFresh(): Promise<GlobalConfig> {
+  cache.invalidate();
+  return cache.get();
+}
+
+// INVARIANT: every host-side global-config write runs its whole
+// read-modify-write under this lock. The local whole-document `write`
+// handler and the remote `writeDeviceSettings` patch handler both acquire
+// it, so a remote patch and a local write cannot interleave and lose an
+// update. The CLI's file lock serializes across processes, this serializes
+// the in-process read-then-write window the file lock cannot see:
+// writeDeviceSettings reads a fresh base and then writes the whole
+// document, and the renderer writeChain that serializes local writes never
+// sees the remote path.
+let configWriteChain: Promise<unknown> = Promise.resolve();
+export function withGlobalConfigWriteLock<T>(
+  task: () => Promise<T>,
+): Promise<T> {
+  const run = configWriteChain.then(task, task);
+  // Keep the chain alive past a rejected task so one failure does not
+  // wedge later writes. The caller still sees run's rejection.
+  configWriteChain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
+
 // Config-change reconcilers. Every change path (the IPC write, an
 // external CLI write picked up by the state watcher, and nuke wiping
 // config.json) drops the cache through invalidateGlobalConfigCache, so

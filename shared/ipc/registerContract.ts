@@ -49,9 +49,15 @@ export function registerContract<M extends ContractModule>(
     // The def's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = def.remote === true;
-    // The command-vs-read decision rides too so the relay binding can
-    // gate a mutating channel on a per-peer command grant.
-    const mutating = def.mutating === true;
+    // The command-vs-read decision rides RAW (undefined stays
+    // undefined, never collapsed to false) so the remote bindings'
+    // read-only collections stay fail-closed at the transport level
+    // too: they record a channel as servable-ungated only on an
+    // EXPLICIT mutating:false, so a def that never classified itself is
+    // gated like a command rather than served as a read. The socket
+    // check already forbids untagged remote invokes at the contract
+    // level, and this keeps the property even for a def that escapes it.
+    const mutating = def.mutating;
     server.handle(
       def.channel,
       async (ctx, raw) => {

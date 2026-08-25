@@ -10,6 +10,13 @@
 // caps, failed-auth lockout, backpressure on pushes, and hard
 // termination (not advisory close) on every rejection and shutdown.
 //
+// READ-ONLY WIRE (v2 step 6, slice B): the LAN token has no grant
+// model, so this binding enforces read-only at dispatch, fail-closed:
+// only channels explicitly registered mutating:false are served, and
+// anything else (a mutation, or an untagged channel) is refused with
+// the shared command-refused code before its handler can run. Commands
+// for a remote peer ride the relay's per-peer grant instead.
+//
 // This file must stay Electron free (host:check). The Electron facts a
 // listener needs (appVersion) arrive through start opts instead.
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -23,6 +30,8 @@ import {
   CLOSE_HELLO_FAILED,
   CLOSE_OVER_CAPACITY,
   ClientFrameSchema,
+  COMMAND_REFUSED_CODE,
+  COMMAND_REFUSED_MESSAGE,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -134,6 +143,13 @@ export function createWsServerBinding(): WsServerBinding {
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
+  // The channel names EXPLICITLY registered read-only (mutating:false),
+  // collected fail-closed exactly like the relay binding's set: dispatch
+  // serves a channel over this wire ONLY when it is in here, so a
+  // mutation or an untagged channel is refused even though it is
+  // registered. Registration stays unconditional (the Electron wire
+  // serves everything); only the LAN dispatch consults this.
+  const readOnlyChannels = new Set<string>();
   // Sockets past hello. broadcastAll fans out to exactly this set, so
   // an unauthenticated connection can never receive a push.
   const authed = new Set<WebSocket>();
@@ -246,6 +262,24 @@ export function createWsServerBinding(): WsServerBinding {
       });
       return;
     }
+    if (!readOnlyChannels.has(frame.channel)) {
+      // Fail-closed read-only wire: a channel is served over the LAN
+      // socket ONLY when it was explicitly registered mutating:false.
+      // A mutation, or a channel that never classified itself, is
+      // refused BEFORE its handler runs. The typed code lets the client
+      // transport surface "that machine will not run commands from
+      // here" distinctly from a real failure. The LAN wire has no grant
+      // model, so unlike the relay there is no per-peer predicate to
+      // consult.
+      send(socket, {
+        t: "res",
+        id: frame.id,
+        ok: false,
+        code: COMMAND_REFUSED_CODE,
+        message: COMMAND_REFUSED_MESSAGE,
+      });
+      return;
+    }
     try {
       const result = await fn(ctx, frame.input);
       send(socket, { t: "res", id: frame.id, ok: true, result });
@@ -353,6 +387,10 @@ export function createWsServerBinding(): WsServerBinding {
           leavePreAuth();
           ctx = {
             signal: controller.signal,
+            // This wire is read-only by policy, so no LAN caller ever
+            // holds command access. The preflight read answers false
+            // here without consulting any grant store.
+            isCallerCommandGranted: () => false,
             // Bound to this socket only, so a handler streaming
             // progress reaches its caller rather than every peer. Push
             // delivery is subject to backpressure.
@@ -508,7 +546,7 @@ export function createWsServerBinding(): WsServerBinding {
   }
 
   return {
-    handle(channel, fn) {
+    handle(channel, fn, opts) {
       // Mirrors ipcMain.handle's one-handler-per-channel rule, so a
       // double registration fails at boot on both wires alike.
       if (handlers.has(channel)) {
@@ -517,6 +555,12 @@ export function createWsServerBinding(): WsServerBinding {
         );
       }
       handlers.set(channel, fn);
+      // Record an EXPLICITLY read-only channel (mutating:false) so
+      // dispatch may serve it over this wire. Fail-closed, mirroring
+      // the relay binding: a channel left untagged, or tagged
+      // mutating:true, is deliberately NOT recorded, so the read-only
+      // gate refuses it.
+      if (opts?.mutating === false) readOnlyChannels.add(channel);
     },
     // Payloads arrive already parsed from the shared fan-out path.
     // Encode once, then fan the identical text out to every authed

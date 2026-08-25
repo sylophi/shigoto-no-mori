@@ -22,20 +22,24 @@ export const projectsContract = defineContract("host", {
     mutating: false,
   }),
   add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
   remove: invoke("projects:remove", RemoveProjectPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
   reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
   getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema, {
     remote: true,
     mutating: false,
   }),
   setSort: invoke("projects:setSort", SetProjectSortPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
   getSidebarView: invoke(
     "projects:getSidebarView",
@@ -50,7 +54,7 @@ export const projectsContract = defineContract("host", {
     "projects:setSidebarView",
     SetSidebarViewPayloadSchema,
     z.void(),
-    { remote: false },
+    { remote: true, mutating: true },
   ),
   getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string()), {
     remote: true,
@@ -61,7 +65,7 @@ export const projectsContract = defineContract("host", {
     "projects:toggleCollapsed",
     ToggleCollapsedProjectPayloadSchema,
     z.array(z.string()),
-    { remote: false },
+    { remote: true, mutating: true },
   ),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.

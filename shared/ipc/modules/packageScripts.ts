@@ -32,6 +32,6 @@ export const packageScriptsContract = defineContract("host", {
     "packageScripts:setSort",
     SetPackageScriptSortPayloadSchema,
     z.void(),
-    { remote: false },
+    { remote: true, mutating: true },
   ),
 });
