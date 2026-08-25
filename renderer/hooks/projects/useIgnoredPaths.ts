@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useIgnoredPaths(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<string[]>({
-    queryKey: queryKeys.ignoredPaths(projectId),
+    queryKey: keys.ignoredPaths(projectId),
     queryFn: () => {
       if (!projectId) return [];
-      return window.api.projects.listIgnoredPaths(projectId);
+      return api.projects.listIgnoredPaths(projectId);
     },
     enabled: projectId !== null,
     meta: { errorTitle: "Couldn't list ignored paths" },

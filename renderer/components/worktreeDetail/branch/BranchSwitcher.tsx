@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Combobox } from "@base-ui/react/combobox";
 import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
@@ -24,6 +24,7 @@ export function BranchSwitcher({
   const { data: peerWorktrees = [] } = useWorktrees(worktree.projectId);
   const checkout = useCheckoutBranch();
   const queryClient = useQueryClient();
+  const { keys } = useHostScope();
   const [query, setQuery] = useState("");
 
   // Exclude branches in use by *other* worktrees only; keeping this
@@ -74,10 +75,10 @@ export function BranchSwitcher({
           setQuery("");
           checkout.reset();
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.branches(worktree.projectId),
+            queryKey: keys.branches(worktree.projectId),
           });
           void queryClient.invalidateQueries({
-            queryKey: queryKeys.worktrees(worktree.projectId),
+            queryKey: keys.worktrees(worktree.projectId),
           });
         }
       }}

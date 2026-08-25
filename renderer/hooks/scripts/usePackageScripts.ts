@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PackageScriptsResult } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function usePackageScripts(
   projectId: string | null,
   worktreeId: string | null,
 ) {
+  const { api, keys } = useHostScope();
   return useQuery<PackageScriptsResult | null>({
-    queryKey: queryKeys.packageScripts(projectId, worktreeId),
+    queryKey: keys.packageScripts(projectId, worktreeId),
     queryFn: () => {
       if (!projectId || !worktreeId) return null;
-      return window.api.packageScripts.list({ projectId, worktreeId });
+      return api.packageScripts.list({ projectId, worktreeId });
     },
     enabled: projectId !== null && worktreeId !== null,
     // Lock the sorted order for the route-mount's lifetime so a script

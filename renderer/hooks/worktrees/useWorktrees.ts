@@ -1,33 +1,25 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
-import { hostKeysFor } from "@/lib/queryKeys";
+import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 
-// The slice of the host api these options call. window.api and a remote
-// device's api both satisfy it, so one options builder serves the local
-// sidebar and the read-only remote forest without a parallel fork.
-type WorktreeListApi = {
-  worktrees: { list: (projectId: string) => Promise<Worktree[]> };
-};
-
-// Which device's forest to read, and over which api. Both default to the
-// local machine, so every existing call site stays byte-identical: the
-// key is hostKeysFor(localDeviceId) and the queryFn hits window.api.
-export interface HostForestScope {
-  deviceId?: string;
-  api?: WorktreeListApi | undefined;
-}
+// Which device's forest to read, and over which api. Both default to
+// the local machine, so a scope-less call reads this machine's forest;
+// a scoped caller (a useHostScope consumer, the remote forest) passes a
+// peer's id and api and that device's data caches under its own id.
+export type HostForestScope = Partial<HostScope>;
 
 // Single source of truth for the worktrees-list query, so imperative
 // fetches (e.g. queryClient.ensureQueryData) hit the same cache entry
-// and config as the hooks below. The scope defaults to the local device,
-// so remote callers pass a device id and api to read a peer's forest into
-// its own cache slot under the same key shape.
+// and config as the hooks below. The key registry is derived from the
+// scope's device id, so the key and the queryFn can never name
+// different devices.
 export function worktreesQueryOptions(
   projectId: string | null,
-  { deviceId = window.api.deviceId, api = window.api }: HostForestScope = {},
+  { deviceId = localDeviceId, api = window.api }: HostForestScope = {},
 ) {
   return queryOptions<Worktree[]>({
-    queryKey: hostKeysFor(deviceId)("worktrees", projectId),
+    queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {
       if (!projectId || !api) return [];
       return api.worktrees.list(projectId);
@@ -65,7 +57,8 @@ export function combineFanOut<T>(
 }
 
 export function useWorktrees(projectId: string | null) {
-  return useQuery(worktreesQueryOptions(projectId));
+  const scope = useHostScope();
+  return useQuery(worktreesQueryOptions(projectId, scope));
 }
 
 // One query per project, sharing the per-project cache key with useWorktrees.
@@ -76,9 +69,10 @@ export function useWorktrees(projectId: string | null) {
 // Projecting to the fields consumers read routes it through
 // replaceEqualDeep, which keeps identity when nothing changed.
 export function useAllProjectWorktrees(projects: Project[], enabled = true) {
+  const scope = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({
-      ...worktreesQueryOptions(project.id),
+      ...worktreesQueryOptions(project.id, scope),
       enabled: enabled && project.pathExists !== false,
     })),
     combine: combineFanOut,

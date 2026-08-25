@@ -15,7 +15,7 @@ import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { formatBytes } from "@/lib/formatBytes";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   buildTidyEntries,
   groupByProject,
@@ -48,6 +48,7 @@ const IDLE: RowStatus = { kind: "idle" };
 export function TidyForest() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { keys } = useHostScope();
   const { data: allProjects = [], isLoading: projectsLoading } = useProjects();
   // A project whose folder has moved or been deleted answers every git
   // call with ENOENT. The sidebar already flags those, so here they are
@@ -148,7 +149,7 @@ export function TidyForest() {
     // run never went near.
     for (const projectId of new Set(queue.map((entry) => entry.project.id))) {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktreeHygiene(projectId),
+        queryKey: keys.worktreeHygiene(projectId),
       });
     }
     setPicked(new Set());

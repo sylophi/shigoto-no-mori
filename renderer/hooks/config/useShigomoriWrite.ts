@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ShigomoriConfig } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 interface WriteVariables {
   projectId: string;
@@ -9,17 +9,18 @@ interface WriteVariables {
 
 export function useShigomoriWrite() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation({
     mutationFn: async ({ projectId, config }: WriteVariables) => {
-      await window.api.shigomori.write(projectId, config);
+      await api.shigomori.write(projectId, config);
       return { projectId };
     },
     onSuccess: ({ projectId }) => {
       queryClient.invalidateQueries({
-        queryKey: queryKeys.shigomoriConfig(projectId),
+        queryKey: keys.shigomoriConfig(projectId),
       });
       queryClient.invalidateQueries({
-        queryKey: queryKeys.projectLaunchers(projectId),
+        queryKey: keys.projectLaunchers(projectId),
       });
     },
     meta: { errorTitle: "Couldn't save project config" },

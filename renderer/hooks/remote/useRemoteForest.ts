@@ -1,7 +1,8 @@
 // Device-scoped, read-only forest data (v2 step 3, slice C). Mirrors the
-// local useProjects / useWorktrees hooks, but keys the cache under the
-// remote device id via hostKeysFor(deviceId) so a peer's projects and
-// worktrees sit beside this machine's without colliding, and calls the
+// local useProjects / useWorktrees hooks, but scopes the shared options
+// builders to the peer: they derive the key registry from the passed
+// device id (queryKeysFor), so a peer's projects and worktrees sit
+// beside this machine's without colliding, and the queryFns call the
 // per-device api (host methods routed over the socket) instead of
 // window.api. No mutations live here: the remote forest is read only.
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";

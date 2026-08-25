@@ -24,6 +24,11 @@
 //      shared/, or renderer/.
 //   5. ipcRenderer appears only in main/preloadTransport.ts, the one
 //      sanctioned ClientTransport binding.
+//   6. The HostApi Pick in the renderer's HostScope file names exactly
+//      the host-scoped namespaces buildApi exposes. Both sides are read
+//      from source (the Pick list, and buildApi's return object joined
+//      with each contract's defineContract scope), so the rule fails
+//      when either side drifts.
 import { readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { repoRoot, report, stripComments, walk } from "./lib/checkKit.mjs";
@@ -124,6 +129,130 @@ if (contractModuleCount === 0) {
   failures.push(
     `no contract-exporting files (matching ${CONTRACT_EXPORT}) found under shared/ipc/modules -- the scope rule's predicate no longer matches anything`,
   );
+}
+
+// 6. HostApi drift guard. The expected set is derived, not hardcoded:
+//    every top-level namespace in buildApi's return object is mapped to
+//    the contract its client was built from, and a namespace is
+//    host-scoped when that contract is defineContract("host", ...).
+//    This covers facades too (worktreeData rides shigomoriContract).
+//    The HostApi Pick must equal that set exactly, in either direction.
+const HOST_SCOPE_FILE = "renderer/hooks/remote/useHostScope.tsx";
+
+// contractName -> "host" | "client", read off the module sources.
+const contractScopes = new Map();
+for (const file of walk(modulesDir, SOURCE_EXTENSIONS)) {
+  const src = stripComments(readFileSync(file, "utf8"));
+  for (const m of src.matchAll(
+    /export const (\w+Contract) = defineContract\(\s*["'](host|client)["']/g,
+  )) {
+    contractScopes.set(m[1], m[2]);
+  }
+}
+
+// The namespaces buildApi exposes, each mapped to the contracts its
+// section's clients were built from.
+function buildApiHostNamespaces() {
+  const src = stripComments(
+    readFileSync(join(repoRoot, "shared", "ipc", "client.ts"), "utf8"),
+  );
+  const buildApiIndex = src.indexOf("function buildApi");
+  const returnIndex = src.indexOf("return {", buildApiIndex);
+  if (buildApiIndex === -1 || returnIndex === -1) {
+    failures.push(
+      "shared/ipc/client.ts: buildApi's return object not found -- rule 6's predicate no longer matches, update check-host-boundary",
+    );
+    return null;
+  }
+  // clientVar -> contractName, from `const fooClient = c(fooContract);`.
+  const clientContracts = new Map();
+  for (const m of src.matchAll(/const (\w+) = c\((\w+Contract)\);/g)) {
+    clientContracts.set(m[1], m[2]);
+  }
+  // Slice out the return object by brace balancing, then split it into
+  // top-level `name: { ... }` sections the same way.
+  const openIndex = src.indexOf("{", returnIndex);
+  let depth = 0;
+  let closeIndex = -1;
+  for (let i = openIndex; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) {
+      closeIndex = i;
+      break;
+    }
+  }
+  const body = src.slice(openIndex + 1, closeIndex);
+  const hostNamespaces = new Set();
+  depth = 0;
+  let name = null;
+  for (let i = 0, start = 0; i < body.length; i++) {
+    if (body[i] === "{") {
+      if (depth === 0) {
+        name = /(\w+):\s*$/.exec(body.slice(0, i))?.[1] ?? null;
+        start = i;
+      }
+      depth++;
+    } else if (body[i] === "}" && --depth === 0 && name) {
+      const section = body.slice(start, i + 1);
+      const contracts = [...section.matchAll(/\b(\w+Client)\b/g)].map((m) =>
+        clientContracts.get(m[1]),
+      );
+      if (contracts.length === 0 || contracts.some((c) => !c)) {
+        failures.push(
+          `shared/ipc/client.ts: buildApi namespace "${name}" references no known contract client -- rule 6 can't classify it, update check-host-boundary`,
+        );
+      } else if (contracts.some((c) => contractScopes.get(c) === "host")) {
+        hostNamespaces.add(name);
+      }
+      name = null;
+    }
+  }
+  if (hostNamespaces.size === 0) {
+    failures.push(
+      "shared/ipc/client.ts: no host-scoped buildApi namespaces found -- rule 6's predicate no longer matches anything",
+    );
+    return null;
+  }
+  return hostNamespaces;
+}
+
+function hostApiPickNames() {
+  let src;
+  try {
+    src = stripComments(readFileSync(join(repoRoot, HOST_SCOPE_FILE), "utf8"));
+  } catch {
+    failures.push(
+      `${HOST_SCOPE_FILE} is missing -- the HostApi Pick moved, update HOST_SCOPE_FILE in check-host-boundary`,
+    );
+    return null;
+  }
+  const pick = /type HostApi = Pick<\s*RemoteDeviceApi,([^>]*)>/.exec(src);
+  if (!pick) {
+    failures.push(
+      `${HOST_SCOPE_FILE}: HostApi Pick<RemoteDeviceApi, ...> not found -- rule 6's predicate no longer matches, update check-host-boundary`,
+    );
+    return null;
+  }
+  return new Set([...pick[1].matchAll(/"(\w+)"/g)].map((m) => m[1]));
+}
+
+const expectedHostNamespaces = buildApiHostNamespaces();
+const pickedHostNamespaces = hostApiPickNames();
+if (expectedHostNamespaces && pickedHostNamespaces) {
+  for (const namespace of expectedHostNamespaces) {
+    if (!pickedHostNamespaces.has(namespace)) {
+      failures.push(
+        `${HOST_SCOPE_FILE}: HostApi is missing "${namespace}" -- buildApi exposes it over a host-scoped contract, so host hooks must see it`,
+      );
+    }
+  }
+  for (const namespace of pickedHostNamespaces) {
+    if (!expectedHostNamespaces.has(namespace)) {
+      failures.push(
+        `${HOST_SCOPE_FILE}: HostApi picks "${namespace}", which is not a host-scoped buildApi namespace -- it would reject at runtime on a remote device`,
+      );
+    }
+  }
 }
 
 // A stale allowlist entry means the sanctioned file moved and rule 5 is

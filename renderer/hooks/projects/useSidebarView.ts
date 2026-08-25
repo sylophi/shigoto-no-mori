@@ -3,16 +3,17 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SidebarView } from "@shared/schemas";
 import { isBareKeyEvent } from "@/lib/dom";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Resolved, not the raw query: main already defaults a missing or
 // unreadable preference to "projects", so the only gap left is the first
 // paint before the read lands. Applying the same default here keeps that
 // one literal in one place instead of at each call site.
 export function useSidebarView(): SidebarView {
+  const { api, keys } = useHostScope();
   const { data } = useQuery<SidebarView>({
-    queryKey: queryKeys.sidebarView(),
-    queryFn: () => window.api.projects.getSidebarView(),
+    queryKey: keys.sidebarView(),
+    queryFn: () => api.projects.getSidebarView(),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read the sidebar layout" },
   });
@@ -22,9 +23,10 @@ export function useSidebarView(): SidebarView {
 // Optimistic: the whole sidebar re-lays-out on this value, so waiting a
 // round trip to redraw would read as a hang.
 export function useSetSidebarView() {
+  const { api, keys } = useHostScope();
   return useOptimisticPreference<SidebarView>(
-    queryKeys.sidebarView(),
-    (view) => window.api.projects.setSidebarView(view),
+    keys.sidebarView(),
+    (view) => api.projects.setSidebarView(view),
     "Couldn't save the sidebar layout",
   );
 }
@@ -43,6 +45,7 @@ export function useSetSidebarView() {
 // Shift+Tab still walks backwards, and pointer focus is untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
   const queryClient = useQueryClient();
+  const { keys } = useHostScope();
   const { mutate: setView } = useSetSidebarView();
 
   useEffect(() => {
@@ -57,11 +60,10 @@ export function useSidebarViewHotkey(enabled: boolean): void {
       // Two quick presses off the stale value would write the same
       // layout twice and leave the sidebar one flip behind the keyboard.
       const view =
-        queryClient.getQueryData<SidebarView>(queryKeys.sidebarView()) ??
-        "projects";
+        queryClient.getQueryData<SidebarView>(keys.sidebarView()) ?? "projects";
       setView(view === "inbox" ? "projects" : "inbox");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, queryClient, setView]);
+  }, [enabled, queryClient, setView, keys]);
 }

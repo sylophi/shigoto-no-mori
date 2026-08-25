@@ -1,15 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useWorktreeDiff(
   projectId: string,
   worktreeId: string | undefined,
 ) {
+  const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: queryKeys.worktreeDiff(projectId, worktreeId),
+    queryKey: keys.worktreeDiff(projectId, worktreeId),
     queryFn: () => {
       if (!worktreeId) return "";
-      return window.api.worktrees.diff({ projectId, worktreeId });
+      return api.worktrees.diff({ projectId, worktreeId });
     },
     enabled: !!worktreeId,
     // Diff reflects working-tree state, which mutates outside our control;
@@ -26,11 +27,12 @@ export function useCommitDiff(
   worktreeId: string | undefined,
   hash: string,
 ) {
+  const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: queryKeys.commitDiff(projectId, worktreeId, hash),
+    queryKey: keys.commitDiff(projectId, worktreeId, hash),
     queryFn: () => {
       if (!worktreeId) return "";
-      return window.api.worktrees.commitDiff({ projectId, worktreeId, hash });
+      return api.worktrees.commitDiff({ projectId, worktreeId, hash });
     },
     enabled: !!worktreeId && hash.length > 0,
     staleTime: Infinity,

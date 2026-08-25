@@ -6,18 +6,20 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { Project, PullRequest } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
+import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 
 // Cascading invalidator: the shared key prefix knocks out both the
 // sidebar map and any open per-branch detail in one call, so PR
 // mutations can't desync the two layers by forgetting one.
 export function invalidatePullRequestsForProject(
   qc: ReturnType<typeof useQueryClient>,
+  keys: QueryKeyRegistry,
   projectId: string,
 ) {
   void qc.invalidateQueries({
-    queryKey: queryKeys.pullRequestsForProject(projectId),
+    queryKey: keys.pullRequestsForProject(projectId),
   });
 }
 
@@ -52,10 +54,13 @@ export function useWatchProjectPullRequests(): void {
 // changed; useWatchProjectPullRequests invalidates this query off that
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest instead.
-function projectPullRequestsQueryOptions(projectId: string) {
+function projectPullRequestsQueryOptions(
+  projectId: string,
+  { api, keys }: HostScope,
+) {
   return queryOptions<Record<string, PullRequest>>({
-    queryKey: queryKeys.projectPullRequests(projectId),
-    queryFn: () => window.api.githubCli.projectPullRequests(projectId),
+    queryKey: keys.projectPullRequests(projectId),
+    queryFn: () => api.githubCli.projectPullRequests(projectId),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
@@ -64,7 +69,8 @@ function projectPullRequestsQueryOptions(projectId: string) {
 }
 
 export function useProjectPullRequests(projectId: string) {
-  return useQuery(projectPullRequestsQueryOptions(projectId));
+  const scope = useHostScope();
+  return useQuery(projectPullRequestsQueryOptions(projectId, scope));
 }
 
 // One query per project, sharing the per-project cache key with
@@ -78,9 +84,10 @@ export function useProjectPullRequests(projectId: string) {
 // a caller walking both indexes them the same way.
 // Same combine as useAllProjectWorktrees, and for the same reason.
 export function useAllProjectPullRequests(projects: Project[]) {
+  const scope = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({
-      ...projectPullRequestsQueryOptions(project.id),
+      ...projectPullRequestsQueryOptions(project.id, scope),
       enabled: project.pathExists !== false,
     })),
     combine: combineFanOut,

@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Worktree } from "@shared/schemas";
 
 // Sub-second refetches would otherwise flash on/off too fast to read.
@@ -12,12 +12,10 @@ export function PullRequestRefreshIndicator({
 }: {
   worktree: Worktree;
 }) {
+  const { keys } = useHostScope();
   const fetching =
     useIsFetching({
-      queryKey: queryKeys.worktreePullRequest(
-        worktree.projectId,
-        worktree.branch,
-      ),
+      queryKey: keys.worktreePullRequest(worktree.projectId, worktree.branch),
     }) > 0;
   const visible = useDelayedFlag(fetching, REFRESH_INDICATOR_DELAY_MS);
   if (!visible) return null;
