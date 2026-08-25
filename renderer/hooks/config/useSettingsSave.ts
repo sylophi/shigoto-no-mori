@@ -5,6 +5,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   ClientConfig,
+  DeviceSettingsPatch,
   GlobalConfig,
   LauncherCommand,
   Theme,
@@ -29,7 +30,7 @@ export interface SettingsFormState {
   githubCli: boolean;
 }
 
-// Decode lives beside the two encoders so encode, decode and the dirty
+// Decode lives beside the encoders so encode, decode and the dirty
 // diff below share one file: the diff compares docs produced by these
 // functions, never respelled default literals.
 export function fromConfig(
@@ -60,9 +61,7 @@ export function fromConfig(
 // dirty check ignore socketHost and remoteDevices, which the form never
 // manages and which the redacted read it was built from does not carry.
 function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
-  const valid = state.launchers.filter(
-    (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
-  );
+  const valid = validLaunchers(state);
   return {
     launchers: valid.length > 0 ? valid : undefined,
     // Default is everything shown; omit the key entirely when nothing is
@@ -79,6 +78,37 @@ function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
     portPool: state.portPool ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
     githubCli: state.githubCli ? undefined : false,
+  };
+}
+
+// A launcher row persists only once both halves are filled in.
+// Half-typed rows live purely in form state. Shared by the encoders so
+// local and remote saves agree on what a saveable launcher is.
+function validLaunchers(state: SettingsFormState): LauncherCommand[] {
+  return state.launchers.filter(
+    (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
+  );
+}
+
+// The remote encoding of the same seven managed keys (v2 step 6): the
+// globalConfig.writeDeviceSettings patch. EXPLICIT values throughout,
+// where managedDeviceConfig omits a key at its default: the host
+// applies the patch as absent-means-keep (an undefined key cannot
+// survive the wire), so the omit-on-default encoding would silently
+// fail to revert a remote key back to its default. No default literal
+// is respelled here — the form state already carries every key's
+// concrete value.
+export function toDeviceSettingsPatch(
+  state: SettingsFormState,
+): DeviceSettingsPatch {
+  return {
+    launchers: validLaunchers(state),
+    hiddenLaunchers: state.hiddenLaunchers,
+    launchScripts: state.launchScripts,
+    deleteBranchOnRemove: state.deleteBranchOnRemove,
+    autoPopulateInstall: state.autoPopulateInstall,
+    portPool: state.portPool,
+    githubCli: state.githubCli,
   };
 }
 
