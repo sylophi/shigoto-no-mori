@@ -57,6 +57,13 @@ pre-commit:
     relaylink:
       glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,host/lib/util/limit.ts,scripts/check-relay-link.mjs}"
       run: pnpm run relaylink:check
+    # Drives the pure liveness rate limiters (renderer crash-loop guard
+    # and fatal-relaunch guard) that decide recreate-vs-give-up and
+    # relaunch-vs-stand. Gated to the pure module plus the check itself,
+    # since the Electron wiring around them is a human-verify item.
+    liveness:
+      glob: "{main/liveness/**,scripts/check-liveness.mjs}"
+      run: pnpm run liveness:check
     # Drives the electron-free account layer (main/account/*) end to end
     # with stubs: the PKCE math and authorize-URL params, the redirect
     # parse, the token-exchange form and error path, the relay client's

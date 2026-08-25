@@ -12,6 +12,7 @@ import type {
 import { errorMessageOf } from "@shared/errors";
 import { updateLocalGlobalConfig } from "@/lib/config/localGlobalConfig";
 import { queryKeys } from "@/lib/queryKeys";
+import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
 // the first two fields are client config (appearance), the rest are
@@ -190,14 +191,31 @@ export function useSettingsSave({
         // redacted read the form was built from omits.
         await updateLocalGlobalConfig((base) => toWriteDoc(base, state));
       }
+      // keepReachable rides the same client store but is written
+      // immediately by useKeepReachableUpdate, never staged in this form.
+      // The whole-document write clears every modeled key it does not
+      // carry, so route the appearance keys through mergeClientConfigWrite:
+      // it merges them over the live cached doc, carrying keepReachable
+      // (and any other out-of-band key) through so an appearance save
+      // cannot wipe it. keepReachable never appears in the dirty diff
+      // above, so it cannot trigger a save on its own or get reverted on
+      // discard. The returned merged doc is what onSuccess caches.
+      let persistedClientConfig: ClientConfig = clientConfig;
       if (clientPersisted) {
         try {
-          await window.api.clientConfig.write(clientConfig);
+          persistedClientConfig = await mergeClientConfigWrite(
+            queryClient,
+            clientConfig,
+          );
         } catch (error) {
           throw new SettingsSaveError(devicePersisted, error);
         }
       }
-      return { devicePersisted, clientPersisted, clientConfig };
+      return {
+        devicePersisted,
+        clientPersisted,
+        clientConfig: persistedClientConfig,
+      };
     },
     onSuccess: ({ devicePersisted, clientPersisted, clientConfig }) => {
       if (clientPersisted) {

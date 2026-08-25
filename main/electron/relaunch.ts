@@ -10,8 +10,17 @@ import { app } from "electron";
 
 let requested = false;
 
-export function relaunchApp(): void {
+// Record that a relaunch is in flight WITHOUT initiating the quit. The
+// data-folder move (relaunchApp) quits through Electron so its reply is
+// delivered first. The fatal-recovery path in liveness.ts instead exits
+// hard, but it still sets this flag so if before-quit does fire it takes
+// index.ts's fast reap path rather than the busy-action prompt.
+export function markRelaunching(): void {
   requested = true;
+}
+
+export function relaunchApp(): void {
+  markRelaunching();
   app.relaunch();
   app.quit();
 }

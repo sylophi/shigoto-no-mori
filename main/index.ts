@@ -46,6 +46,12 @@ import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
+import {
+  attachRenderProcessRecovery,
+  installChildProcessLogging,
+  installFatalRecovery,
+  reconcileLaunchAtLogin,
+} from "./electron/liveness";
 import { errorMessageOf } from "@shared/errors";
 import {
   installUpdaterImpl,
@@ -178,7 +184,52 @@ const createWindow = () => {
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
 
+  // Recover the UI from a renderer crash (v2 step 4, slice E). Attached
+  // per window, including the ones recreated below, so a second crash
+  // still lands on a live handler. The recreate budget lives in the
+  // liveness module, so re-attaching does not reset the loop guard.
+  attachRenderProcessRecovery(mainWindow, {
+    isShuttingDown,
+    recreateWindow: recreateAfterRendererCrash,
+    onGiveUp: showCrashGiveUpDialog,
+  });
+
   attachContextMenu(mainWindow);
+};
+
+// True while the app is on any teardown or restart path, so the crash
+// handlers never fight a quit: an update-install and a relaunch both
+// take before-quit's fast path without setting isQuitting, so they are
+// checked explicitly alongside it.
+function isShuttingDown(): boolean {
+  return isQuitting || isInstallingUpdate() || isRelaunching();
+}
+
+// Recreate the window after its renderer crashed. The crashed shell can
+// linger with a dead renderer, so destroy the previous one after the new
+// window has taken its place, leaving no ghost behind.
+const recreateAfterRendererCrash = () => {
+  const previous = mainWindow;
+  createWindow();
+  if (previous && !previous.isDestroyed()) previous.destroy();
+};
+
+// Set when the renderer crash-loop guard gives up: mainWindow then points
+// at a shell whose renderer is gone but whose isDestroyed() is still
+// false, so second-instance must recreate rather than raise a dead frame.
+// Cleared on the next successful recreate.
+let gaveUp = false;
+
+// Last resort when the renderer crash-loops: stop recreating and tell the
+// user, rather than thrash a window that dies as fast as it opens.
+const showCrashGiveUpDialog = () => {
+  gaveUp = true;
+  dialog.showErrorBox(
+    "Shigoto no Mori keeps crashing",
+    "The window crashed several times in a row, so it was not reopened " +
+      "to avoid a crash loop. Quit and relaunch the app. If it keeps " +
+      "happening, restart your machine or reinstall.",
+  );
 };
 
 // Launching the app again while a copy runs is a request to see it, so
@@ -188,12 +239,24 @@ const createWindow = () => {
 // call is already on its way, and racing it here would leave two windows
 // open instead of one.
 app.on("second-instance", () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
+  // After the crash-loop guard gave up, or if the renderer has crashed,
+  // mainWindow is a live handle to a dead shell: isDestroyed() is false
+  // but its renderer is gone, so show()/focus() would raise an empty
+  // frame. Recreate instead (and clear the give-up latch on success).
+  const deadShell =
+    !!mainWindow &&
+    !mainWindow.isDestroyed() &&
+    (gaveUp || mainWindow.webContents.isCrashed());
+  if (mainWindow && !mainWindow.isDestroyed() && !deadShell) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
   } else if (hasBooted) {
-    createWindow();
+    // recreateAfterRendererCrash destroys the dead shell (if any) after
+    // the fresh window takes its place, leaving no ghost behind. When no
+    // window exists it is just a createWindow.
+    recreateAfterRendererCrash();
+    gaveUp = false;
   }
   // macOS won't raise a background app just because one of its windows
   // asked for focus, and the launch the user just made is already gone.
@@ -233,7 +296,15 @@ app.on("ready", async () => {
   // values migrated out of the pre-split device config.
   await seedClientConfigFromLegacy();
   buildAppMenu();
+  // Host liveness (v2 step 4, slice E). Install the crash guards before
+  // the window exists so an early fatal error is still caught, then
+  // reconcile the login item to the saved keepReachable opt-in. The same
+  // reconcile reruns after every clientConfig write (the write handler),
+  // making this the boot-time pass only.
+  installChildProcessLogging();
+  installFatalRecovery({ isShuttingDown });
   createWindow();
+  reconcileLaunchAtLogin();
   startBackgroundFetch();
   startUpdater();
   // Remote hosting (v2 step 3, slice A): serve host-scoped calls over
