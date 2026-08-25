@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shigoto no Mori</title>
+    <!-- External on purpose: the deploy's CSP is script-src 'self'
+         with no inline allowance, and a blocking head script keeps the
+         pre-paint theme guarantee. See public/boot-theme.js. -->
+    <script src="/boot-theme.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

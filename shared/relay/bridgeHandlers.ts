@@ -1,8 +1,11 @@
-// Handlers for the renderer's relay bridge (v2 step 4, slice C). Thin
-// by design: status reads the connection's snapshot, invokePeer
+// Handlers for the renderer-facing relay bridge (v2 step 4, slice C).
+// Thin by design: status reads the connection's snapshot, invokePeer
 // forwards over the relay's client role, and the peer session cache
-// lives here so the renderer never owns a connection the Durable
-// Object would supersede.
+// lives here so the view layer never owns a connection the Durable
+// Object would supersede. Pure aside from the injected deps (no
+// electron, no node builtins), which is why both bindings share it:
+// the Electron main process serves it over IPC (main/ipc/index.ts) and
+// the web bridge serves it in-page (web/bridge/createWebBridge.ts).
 import type { relayContract, RelayStatus } from "@shared/ipc/modules/relay";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";
@@ -46,7 +49,7 @@ export function makeRelayHandlers(
     invokePeer: async ({ deviceId, channel, input }) => {
       const peer = await openPeer(deviceId);
       // Offline, oversize and disconnect errors reject through here,
-      // and their messages ride Electron's error serialization to the
+      // and their messages ride each wire's error serialization to the
       // renderer unchanged.
       return peer.transport.invoke(channel, input);
     },

@@ -39,6 +39,40 @@ import type {
   Theme,
 } from "@shared/schemas";
 
+// Every contract module the api surface is built from, in one list, so
+// a platform binding that needs the full channel inventory (the web
+// bridge's stub fallback walks every def to answer unhandled channels
+// with a typed default) reads the same set buildApi consumes instead of
+// keeping a second import list that could drift. Kept beside buildApi
+// on purpose: adding a module means touching both in this one file.
+export const allContractModules: readonly ContractModule[] = [
+  accountContract,
+  branchesContract,
+  clientConfigContract,
+  dialogContract,
+  fsContract,
+  gitContract,
+  githubCliContract,
+  globalConfigContract,
+  hygieneContract,
+  launchersContract,
+  menuContract,
+  navContract,
+  packageScriptsContract,
+  portPoolContract,
+  projectLauncherContract,
+  projectsContract,
+  relayContract,
+  runtimeContract,
+  scriptsContract,
+  cliContract,
+  shellContract,
+  shigomoriContract,
+  updaterContract,
+  windowContract,
+  worktreesContract,
+];
+
 // Ergonomic namespaces over the raw contract clients. Each module's
 // scope selects its transport, so the caller wires one transport per
 // scope and every contract lands on the right wire. The Electron

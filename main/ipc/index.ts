@@ -42,8 +42,8 @@ import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import { makeAccountHandlers } from "./modules/account";
-import { makeRelayHandlers } from "./modules/relay";
 import {
   broadcastAll,
   refreshRelayConnection,
