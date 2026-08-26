@@ -29,6 +29,7 @@ import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
 import { DetectedToolsSection } from "./DetectedToolsSection";
+import { AccountSection } from "./AccountSection";
 import { HostingSection } from "./HostingSection";
 import { RemoteDevicesSection } from "./RemoteDevicesSection";
 import { PortPoolLink } from "./PortPoolLink";
@@ -205,6 +206,8 @@ export function SettingsForm({
           <HostingSection />
 
           <RemoteDevicesSection />
+
+          <AccountSection />
 
           <DetectedToolsSection
             tools={availableTools}

@@ -1,5 +1,6 @@
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ContractModule, ContractScope } from "@shared/ipc/contract";
+import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
@@ -46,6 +47,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const c = <M extends ContractModule>(m: M) =>
     buildClient(m, transports[m.scope]);
 
+  const accountClient = c(accountContract);
   const branchesClient = c(branchesContract);
   const clientConfigClient = c(clientConfigContract);
   const dialogClient = c(dialogContract);
@@ -71,6 +73,15 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const worktreesClient = c(worktreesContract);
 
   return {
+    account: {
+      status: accountClient.status,
+      signIn: accountClient.signIn,
+      signOut: accountClient.signOut,
+      listDevices: accountClient.listDevices,
+      setDeviceName: accountClient.setDeviceName,
+      onChanged: accountClient.changed,
+    },
+
     branches: {
       create: branchesClient.create,
       rename: branchesClient.rename,

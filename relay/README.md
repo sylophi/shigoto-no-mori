@@ -51,6 +51,39 @@ Optional var: set `ALLOWED_WEB_ORIGIN` to the exact origin of the
 future web client. Unset, only Origin-less clients (the desktop app)
 are accepted.
 
+## App-side account configuration
+
+The desktop app's Account settings (sign in, enroll this device, view the
+account's device registry) are driven by non-secret environment variables
+read at launch. They are empty by default, so a build ships with the
+Account section showing a "not configured" state and sign-in disabled
+until the owner sets them. None of these are secrets, so they are safe to
+bake into a build's launch environment. Never commit real values.
+
+- `SM_ACCOUNT_RELAY_URL` - the deployed Worker's base URL, e.g.
+  `https://sm-relay.<account>.workers.dev`. The app joins the device and
+  ticket routes onto this.
+- `SM_ACCOUNT_OAUTH_AUTHORIZE_URL` - the OAuth authorization endpoint.
+- `SM_ACCOUNT_OAUTH_TOKEN_URL` - the OAuth token endpoint.
+- `SM_ACCOUNT_OAUTH_CLIENT_ID` - the public client id of the native-app
+  OAuth application the owner creates.
+- `SM_ACCOUNT_OAUTH_SCOPES` - optional, space-separated. Defaults to
+  `openid profile email`.
+
+The owner must create an OAuth application (a native or public client,
+with PKCE and no client secret) at the same identity provider the Worker
+verifies tokens against. Register `http://127.0.0.1` as an allowed
+loopback redirect (RFC 8252 uses an ephemeral loopback port and a
+`/callback` path). The app runs the standard authorization-code-with-PKCE
+(S256) flow and forwards the resulting access token to the Worker as the
+enroll bearer, so the token type the provider issues must be one the
+Worker's `verifyToken` accepts (a Clerk session token for the default
+build). The Worker verifies it, the app never does.
+
+For local development, the app also reads a gitignored `.env.account`
+file in the repo root if present (simple `KEY=value` lines). Real
+environment variables override it.
+
 ## Develop and test
 
 ```sh
