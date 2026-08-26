@@ -4,6 +4,7 @@ import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
 import { isSameOrInside } from "@shared/worktreeLayout";
 import { PROJECTS_KEY, registryStore } from "../config/store";
+import { getRepoIdentity } from "../git/repoIdentity";
 import {
   findWorktreeIdentityOrThrow,
   type WorktreeIdentity,
@@ -16,22 +17,52 @@ export function loadProjects(): Project[] {
 }
 
 // Decorated with `pathExists` for renderer-side "this project is missing"
-// affordances, plus `lastUsed` / `recentCount` for the sidebar sort modes.
-// Only the ProjectsList IPC handler should call this. The list comes from
-// registry.json and the usage from state.json, and usageFor falls back to
-// zeros rather than throwing, so trouble in the second file can't take the
-// list down with it.
-export function listProjectsWithStatus(): Project[] {
+// affordances, plus `lastUsed` / `recentCount` for the sidebar sort modes
+// and `identity` for cross-device repo matching (the pull-a-worktree
+// gate). Only the ProjectsList IPC handler should call this. The list
+// comes from registry.json and the usage from state.json, and usageFor
+// falls back to zeros rather than throwing, so trouble in the second file
+// can't take the list down with it. Identity degrades the same way: a
+// missing path or a failing probe reads as null (never matches), and the
+// TTL cache in repoIdentity keeps the git cost off the steady state.
+export function listProjectsWithStatus(): Promise<Project[]> {
   const projects = loadProjects();
   const usage = usageFor(projects.map((p) => p.id));
-  return projects.map((p) => ({
-    id: p.id,
-    name: p.name,
-    path: p.path,
-    pathExists: existsSync(p.path),
-    lastUsed: usage[p.id]?.lastUsed ?? 0,
-    recentCount: usage[p.id]?.recentCount ?? 0,
-  }));
+  return Promise.all(
+    projects.map(async (p) => {
+      const pathExists = existsSync(p.path);
+      return {
+        id: p.id,
+        name: p.name,
+        path: p.path,
+        pathExists,
+        lastUsed: usage[p.id]?.lastUsed ?? 0,
+        recentCount: usage[p.id]?.recentCount ?? 0,
+        identity: pathExists
+          ? await getRepoIdentity(p.path).catch(() => null)
+          : null,
+      };
+    }),
+  );
+}
+
+// Resolves which LOCAL project a peer's project corresponds to, by repo
+// identity (shared/repoIdentity.mts). First registry match wins: two
+// local clones of the same repo are both legitimate targets, so the
+// ambiguity is benign. Recomputed here from disk rather than trusted
+// from the caller, so a pull can never be aimed at a non-matching repo.
+export async function findProjectByIdentityOrThrow(
+  identity: string,
+): Promise<Project> {
+  for (const project of loadProjects()) {
+    if (!existsSync(project.path)) continue;
+    // oxlint-disable-next-line no-await-in-loop -- first match wins, and the TTL cache absorbs repeats
+    const candidate = await getRepoIdentity(project.path).catch(() => null);
+    if (candidate !== null && candidate === identity) return project;
+  }
+  throw new Error(
+    "No local project matches this repository. Add a clone of it to this device first.",
+  );
 }
 
 // A project repo registered from inside the state root (nothing stops

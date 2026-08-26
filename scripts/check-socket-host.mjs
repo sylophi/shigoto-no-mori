@@ -709,10 +709,12 @@ async function main() {
       }
       assert.equal(packageScriptsContract.calls.setSort.remote, true);
       assert.equal(packageScriptsContract.calls.setSort.mutating, true);
-      // The step-7 sync transfer surface (v2 slice B): every call is a
-      // command, so the whole bundle-transfer path rides the per-peer
-      // grant and the read-only LAN wire refuses it outright.
+      // The step-7 sync transfer surface (v2 slice B, refTips added by
+      // slice C): every call is a command, so the whole bundle-transfer
+      // path rides the per-peer grant and the read-only LAN wire
+      // refuses it outright.
       for (const key of [
+        "refTips",
         "captureDirty",
         "bundleStart",
         "bundleChunk",
@@ -729,6 +731,12 @@ async function main() {
           `sync.${key} must require the command grant`,
         );
       }
+      // The pull orchestrator (v2 step 7, slice C) is LOCAL-only: a
+      // device's own renderer drives it, and it must never be servable
+      // to a peer -- a remote:false host invoke is simply not
+      // registered on either remote wire.
+      assert.equal(syncContract.calls.pullWorktree.remote, false);
+      assert.equal(syncContract.calls.pullWorktree.mutating, true);
       // The preflight read is remote and explicitly a read, so every
       // wire serves it ungated.
       assert.equal(remoteAccessContract.calls.commandAccess.remote, true);

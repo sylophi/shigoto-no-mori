@@ -47,6 +47,8 @@ import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
+import { buildClient } from "@shared/ipc/buildClient";
+import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
@@ -88,10 +90,28 @@ export function registerIpcHandlers(): void {
   // Client-scoped bridge onto the main-process relay socket: status,
   // lazy peer invokes, and the peerPush/statusChanged fan-outs wired in
   // register.ts.
-  registerContract(
-    relayContract,
-    makeRelayHandlers({ status: relayStatus, connectPeer: relayConnectPeer }),
-  );
+  const relayHandlers = makeRelayHandlers({
+    status: relayStatus,
+    connectPeer: relayConnectPeer,
+  });
+  registerContract(relayContract, relayHandlers);
+  // The pull orchestration's peer reach (host/ipc/peerSync.ts), routed
+  // through the SAME invokePeer path (and so the same cached peer
+  // session) the renderer's remote-device api uses. Dialing
+  // relayConnectPeer directly here would silently replace that session
+  // mid-view -- the link keeps one client peer per deviceId.
+  setPeerSyncApiImpl({
+    syncApiFor: (deviceId) =>
+      buildClient(syncContract, {
+        invoke: (channel, input) =>
+          Promise.resolve(
+            relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
+          ),
+        subscribe: () => {
+          throw new Error("the peer sync api is invoke-only");
+        },
+      }),
+  });
   registerContract(windowContract, windowHandlers);
   // Host-scoped preflight for the remote execution surface: each wire's
   // binding supplies the calling peer's grant verdict on the context.

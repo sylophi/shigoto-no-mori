@@ -119,12 +119,18 @@ function finalOkDoc(
 // Streamed create/adopt: resolve the IPC promise on the "created"
 // document (the app navigates immediately) and keep forwarding
 // lifecycle events to the renderer until the process exits.
+// resolveOn "exit" waits out the WHOLE run instead (carry-over and
+// setup included) for callers that sequence more work after the
+// create, like the pull orchestration's dirty apply; a post-created
+// setup failure still resolves, matching the early-resolve semantics
+// where such failures only surface as lifecycle events.
 function runStreamingCreate(
   args: string[],
   project: Project,
   worktreeId: string | undefined,
   notify: WorktreeOperationNotifiers,
   failureLabel: string,
+  resolveOn: "created" | "exit" = "created",
 ): Promise<CreateWorktreeResult> {
   return new Promise((resolve, reject) => {
     let created: Worktree | null = null;
@@ -132,7 +138,7 @@ function runStreamingCreate(
       switch (doc.event) {
         case "created": {
           created = WorktreeSchema.parse(doc["worktree"]);
-          resolve({ worktree: created });
+          if (resolveOn === "created") resolve({ worktree: created });
           break;
         }
         case "phase": {
@@ -176,6 +182,8 @@ function runStreamingCreate(
       .then((result) => {
         if (created === null) {
           reject(cliFailure(result, failureLabel, { worktreeId }));
+        } else if (resolveOn === "exit") {
+          resolve({ worktree: created });
         }
       }, reject);
   });
@@ -190,6 +198,7 @@ export function createViaCli(
     checkout?: boolean;
   },
   notify: WorktreeOperationNotifiers,
+  opts: { resolveOn?: "created" | "exit" } = {},
 ): Promise<CreateWorktreeResult> {
   const args = ["create", "--project-id", project.id];
   if (input.branchName) args.push("--branch", input.branchName);
@@ -207,6 +216,7 @@ export function createViaCli(
     undefined,
     notify,
     "sm create failed",
+    opts.resolveOn,
   );
 }
 
@@ -444,6 +454,32 @@ export async function dirtyCaptureViaCli(
   return doc.captured
     ? { captured: true, commit: doc.commit }
     : { captured: false };
+}
+
+// Mirrors dirtyCaptureViaCli: replays refs/shigomori/dirty/<id> onto
+// the worktree and consumes the ref (`sm dirty apply`, cli/cmd_dirty.go).
+// The CLI's own guards (HEAD must be the capture's parent, tree clean,
+// no added-path collisions) are the failure surface here.
+export async function dirtyApplyViaCli(
+  project: Project,
+  worktreeId: string,
+): Promise<{ applied: boolean; commit: string; changedFiles: number }> {
+  const result = await runner().runCli([
+    "dirty",
+    "apply",
+    "--project-id",
+    project.id,
+    "--worktree-id",
+    worktreeId,
+  ]);
+  const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
+  return z
+    .object({
+      applied: z.literal(true),
+      commit: CommitHashSchema,
+      changedFiles: z.number().int().nonnegative(),
+    })
+    .parse(final);
 }
 
 const RefTipDocSchema = z.object({ ref: z.string(), commit: CommitHashSchema });

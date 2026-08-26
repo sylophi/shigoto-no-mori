@@ -7,10 +7,34 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { syncContract } from "@shared/ipc/modules/sync";
+import {
+  SyncCaptureDirtyResultSchema,
+  SyncRefTipsResultSchema,
+  syncContract,
+} from "@shared/ipc/modules/sync";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { bundleCreateViaCli, dirtyCaptureViaCli } from "@host/ipc/cliDelegate";
-import { findProjectOrThrow } from "@host/lib/projects";
+import {
+  bundleCreateViaCli,
+  createViaCli,
+  dirtyApplyViaCli,
+  dirtyCaptureViaCli,
+} from "@host/ipc/cliDelegate";
+import { peerSyncApiFor } from "@host/ipc/peerSync";
+import { run } from "@host/lib/git/core";
+import { listBranches } from "@host/lib/git/branches";
+import {
+  deleteRef,
+  hasCommit,
+  localBranchTips,
+  updateRef,
+} from "@host/lib/git/refs";
+import {
+  findProjectByIdentityOrThrow,
+  findProjectOrThrow,
+} from "@host/lib/projects";
+import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import { notifierFor } from "./worktrees";
 
 // Raw bytes per chunk. The relay caps the SERIALIZED envelope at
 // MAX_RELAY_MESSAGE_BYTES = 1_000_000 (shared/relay/protocol.ts), and
@@ -71,7 +95,24 @@ async function dropTransfer(transferId: string): Promise<void> {
   await rm(transfer.dir, { recursive: true, force: true }).catch(() => {});
 }
 
-export const syncHandlers: Handlers<typeof syncContract> = {
+export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
+  refTips: async ({ projectId, refs }) => {
+    const project = findProjectOrThrow(projectId);
+    const tips: { ref: string; commit: string }[] = [];
+    for (const ref of refs) {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
+      const commit = await run(project.path, [
+        "rev-parse",
+        "--verify",
+        "--quiet",
+        "--end-of-options",
+        ref,
+      ]).catch(() => null);
+      if (commit !== null) tips.push({ ref, commit: commit.trim() });
+    }
+    return { tips };
+  },
+
   captureDirty: async ({ projectId, worktreeId }) => {
     const project = findProjectOrThrow(projectId);
     return dirtyCaptureViaCli(project, worktreeId);
@@ -139,5 +180,140 @@ export const syncHandlers: Handlers<typeof syncContract> = {
   // receiver's best-effort cleanup resolves regardless of the outcome.
   bundleAbort: async ({ transferId }) => {
     await dropTransfer(transferId);
+  },
+
+  // The pull orchestration (v2 step 7, slice C): bring a peer device's
+  // worktree here. Local-only by contract (remote:false); the peer's
+  // half is the grant-gated transfer surface above, driven through the
+  // injected peer api. Sequenced: verify local target -> capture the
+  // peer's dirty state -> land branch + capture under refs/shigomori/
+  // -> create the worktree through the ordinary CLI create (carry-over
+  // and setup ride along) -> re-key and apply the capture -> sweep the
+  // incoming ref. The incoming ref is swept in a finally: a survivor
+  // is NOT harmless, since a stale refs/shigomori/incoming/foo blocks
+  // any later ref named incoming/foo/bar at git's directory/file
+  // boundary. A failure before the create leaves at most the capture
+  // ref (a retry overwrites it). After the create, an apply failure
+  // resolves with dirtyApplied:false rather than throwing: the
+  // worktree and branch are real and useful, and the dirty state is
+  // still safe on the source device.
+  pullWorktree: async (
+    {
+      sourceDeviceId,
+      sourceProjectId,
+      sourceWorktreeId,
+      sourceIdentity,
+      branch,
+    },
+    ctx,
+  ) => {
+    // 1. The local target repo, re-resolved by identity from disk.
+    const project = await findProjectByIdentityOrThrow(sourceIdentity);
+
+    // 2. Updating an existing branch is out of scope. Refuse up front
+    // with the state the user can act on.
+    const { local } = await listBranches(project.path);
+    if (local.includes(branch)) {
+      throw new Error(
+        `${branch} already exists on this device. Delete that branch (or its worktree) first, or open it and pull normally.`,
+      );
+    }
+
+    const peer = peerSyncApiFor(sourceDeviceId);
+    const branchRef = `refs/heads/${branch}`;
+
+    // 3. Tip negotiation, then capture. The tip decides whether the
+    // branch needs transferring at all: `git bundle create` silently
+    // drops a ref covered by a have, so requesting a branch whose tip
+    // we already hold would corrupt the transfer, not thin it.
+    // Both answers are re-parsed here because their hashes flow into
+    // LOCAL git argv: the peer's own dev-build output validation is not
+    // this device's wall.
+    const { tips } = SyncRefTipsResultSchema.parse(
+      await peer.refTips({
+        projectId: sourceProjectId,
+        refs: [branchRef],
+      }),
+    );
+    const branchTip = tips.find((tip) => tip.ref === branchRef)?.commit;
+    if (branchTip === undefined) {
+      throw new Error(`${branch} no longer exists on the source device.`);
+    }
+    const capture = SyncCaptureDirtyResultSchema.parse(
+      await peer.captureDirty({
+        projectId: sourceProjectId,
+        worktreeId: sourceWorktreeId,
+      }),
+    );
+
+    // 4. Fetch what's missing. Tip already here + clean worktree means
+    // nothing crosses at all.
+    const tipIsLocal = await hasCommit(project.path, branchTip);
+    const sourceDirtyRef = `refs/shigomori/dirty/${sourceWorktreeId}`;
+    const wantRefs = [
+      ...(tipIsLocal ? [] : [branchRef]),
+      ...(capture.captured ? [sourceDirtyRef] : []),
+    ];
+    if (wantRefs.length > 0) {
+      await fetchBundleFromPeer(peer, {
+        sourceProjectId,
+        targetProjectId: project.id,
+        refs: wantRefs,
+        // With the tip local the only novel commit is the capture, so
+        // the tip itself is the perfect (and safe) have. Otherwise every
+        // local branch tip thins the bundle, and none can cover the
+        // branch tip: covering it would mean we already hold it. The
+        // exception is a shallow clone, where a have can cover a tip
+        // hasCommit said we lack; that surfaces as a loud bundle error
+        // before anything is mutated, never as silent corruption.
+        haves: tipIsLocal ? [branchTip] : await localBranchTips(project.path),
+      });
+    }
+    const incomingRef = `refs/shigomori/incoming/${branch}`;
+    if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
+
+    try {
+      // 5. The ordinary create, on a new branch at the incoming ref.
+      // checkout stays UNSET: checkout:true would leave the worktree ON
+      // the incoming ref instead of the new branch. resolveOn "exit"
+      // holds the mutation until carry-over and setup finished, so the
+      // dirty apply below never races the setup scripts.
+      const { worktree } = await createViaCli(
+        project,
+        { branchName: branch, base: incomingRef },
+        notifierFor(ctx),
+        { resolveOn: "exit" },
+      );
+
+      // 6. Capture refs are keyed by worktree id, and ids are derived
+      // from paths (sha256(path)[:12]), so the source's id can never
+      // name the worktree just created. Re-key the ref to the local id,
+      // then apply and let the CLI consume it. An apply refusal (a
+      // setup script left an untracked file, say) does NOT throw away
+      // the successful create: the worktree is real, the capture stays
+      // parked under the local id for sm dirty apply, and the caller
+      // learns via dirtyApplied:false.
+      let dirtyApplied = false;
+      if (capture.captured && capture.commit !== undefined) {
+        await updateRef(
+          project.path,
+          `refs/shigomori/dirty/${worktree.id}`,
+          capture.commit,
+        );
+        await deleteRef(project.path, sourceDirtyRef);
+        try {
+          await dirtyApplyViaCli(project, worktree.id);
+          dirtyApplied = true;
+        } catch (error) {
+          console.warn("[sync] dirty apply failed after create:", error);
+        }
+      }
+      return { worktree, captured: capture.captured, dirtyApplied };
+    } finally {
+      // Sweep the landing ref success or fail. A survivor is not
+      // harmless: a stale incoming/foo blocks any later incoming/foo/bar
+      // at git's directory/file ref boundary.
+      await deleteRef(project.path, incomingRef).catch(() => {});
+    }
   },
 };

@@ -1,5 +1,7 @@
 import { getRouteApi } from "@tanstack/react-router";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDownToLine,
   FolderGit2,
   Loader2,
   Plus,
@@ -8,7 +10,7 @@ import {
 import { useState } from "react";
 import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import type { Project, Worktree } from "@shared/schemas";
+import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
@@ -19,8 +21,9 @@ import { DeviceStatusDot } from "./DeviceStatusDot";
 import { EmptyPanel } from "./EmptyPanel";
 import { RemoteDeviceSettings } from "./RemoteDeviceSettings";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import {
   useCreateWorktree,
   useDeleteWorktree,
@@ -37,7 +40,8 @@ import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useWatchRemoteHost } from "@/hooks/remote/useWatchRemoteHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { deviceVersionMismatch } from "@/lib/remote/devices";
-import { notifyError } from "@/lib/toast";
+import { queryKeys } from "@/lib/queryKeys";
+import { notifyError, toast } from "@/lib/toast";
 
 const route = getRouteApi("/devices/$deviceId");
 
@@ -230,6 +234,12 @@ function ForestBody({
   worktreesByProject: Map<string, Worktree[]>;
 }) {
   const { granted, isLoading } = useCommandAccess();
+  // The LOCAL device's projects (explicitly scope-less despite the
+  // surrounding provider), for the pull-here gate: a remote worktree is
+  // pullable only into a local project sharing the repo's identity. On
+  // the web the local list stubs to [], so the control structurally
+  // never renders there.
+  const { data: localProjects = [] } = useQuery(projectsQueryOptions({}));
   return (
     <div className="flex flex-col gap-4">
       {!granted && !isLoading && (
@@ -244,6 +254,15 @@ function ForestBody({
           project={project}
           worktrees={worktreesByProject.get(project.id) ?? []}
           granted={granted}
+          localProject={
+            project.identity != null
+              ? localProjects.find(
+                  (local) =>
+                    local.identity != null &&
+                    local.identity === project.identity,
+                )
+              : undefined
+          }
         />
       ))}
     </div>
@@ -254,10 +273,13 @@ function RemoteProjectGroup({
   project,
   worktrees,
   granted,
+  localProject,
 }: {
   project: Project;
   worktrees: Worktree[];
   granted: boolean;
+  // The first local project with the same repo identity, if any.
+  localProject: Project | undefined;
 }) {
   return (
     <div className="flex flex-col gap-2">
@@ -282,6 +304,8 @@ function RemoteProjectGroup({
               key={worktree.id}
               worktree={worktree}
               granted={granted}
+              project={project}
+              localProject={localProject}
             />
           ))}
         </div>
@@ -299,10 +323,25 @@ function RemoteProjectGroup({
 function RemoteWorktreeRow({
   worktree,
   granted,
+  project,
+  localProject,
 }: {
   worktree: Worktree;
   granted: boolean;
+  project: Project;
+  localProject: Project | undefined;
 }) {
+  // Pull-here gate: command access, a real (non-detached) branch the
+  // bundle allowlist can carry, and a local identity match. Primary
+  // rows keep their land control instead -- pulling the primary makes
+  // no sense here.
+  const pullTarget =
+    localProject !== undefined &&
+    project.identity != null &&
+    isRealBranch(worktree.branch) &&
+    !worktree.detached
+      ? { sourceIdentity: project.identity, localProjectId: localProject.id }
+      : undefined;
   return (
     <div className="flex items-center gap-2 px-2 py-1 text-xs">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -328,9 +367,95 @@ function RemoteWorktreeRow({
           // that is free of PR-merge and navigation.
           <MergedPrimaryBranchBox worktree={worktree} />
         ) : (
-          <DeleteWorktreeControl worktree={worktree} />
+          <>
+            {pullTarget && (
+              <PullWorktreeControl
+                worktree={worktree}
+                sourceProjectId={project.id}
+                sourceIdentity={pullTarget.sourceIdentity}
+                localProjectId={pullTarget.localProjectId}
+              />
+            )}
+            <DeleteWorktreeControl worktree={worktree} />
+          </>
         ))}
     </div>
+  );
+}
+
+// Brings a peer's worktree to THIS device (v2 step 7, slice C): one
+// mutation covers capture, transfer, create, and dirty apply, so the
+// whole pull rides this button's pending state -- create-phase progress
+// streams to the local worktree's own detail page, not this forest. The
+// handler re-verifies the identity match; the gate here is UX, not the
+// wall. Refusals surface centrally, everything else toasts locally.
+function PullWorktreeControl({
+  worktree,
+  sourceProjectId,
+  sourceIdentity,
+  localProjectId,
+}: {
+  worktree: Worktree;
+  sourceProjectId: string;
+  sourceIdentity: string;
+  localProjectId: string;
+}) {
+  const { deviceId } = useHostScope();
+  const queryClient = useQueryClient();
+  const pull = useMutation({
+    mutationFn: () =>
+      window.api.sync.pullWorktree({
+        sourceDeviceId: deviceId,
+        sourceProjectId,
+        sourceWorktreeId: worktree.id,
+        sourceIdentity,
+        branch: worktree.branch,
+      }),
+    onSuccess: ({ captured, dirtyApplied }) => {
+      // The new worktree and branch are LOCAL, so this invalidates the
+      // local device's registry (module-level queryKeys), never the
+      // surrounding remote scope's.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.worktrees(localProjectId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.branches(localProjectId),
+      });
+      // The result lands on another page (the local forest), so the
+      // toast is the only visible conclusion here. An unapplied capture
+      // is a partial success: the worktree is real, the uncommitted
+      // changes stayed safe on the source device.
+      if (dirtyApplied || !captured) {
+        toast.success(`Brought ${worktree.branch} here`);
+      } else {
+        notifyError(
+          `Brought ${worktree.branch} here, without its uncommitted changes`,
+          "They could not be applied and are still on the other device.",
+        );
+      }
+    },
+    onError: (err) => {
+      if (!isCommandRefusedError(err)) {
+        notifyError("Couldn't bring worktree here", err);
+      }
+    },
+    meta: { silentError: true },
+  });
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant="ghost"
+      aria-label="Bring this worktree here"
+      disabled={pull.isPending}
+      onClick={() => pull.mutate()}
+    >
+      {pull.isPending ? (
+        <Loader2 className="animate-spin" />
+      ) : (
+        <ArrowDownToLine />
+      )}
+    </Button>
   );
 }
 

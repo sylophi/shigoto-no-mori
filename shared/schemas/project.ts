@@ -27,6 +27,10 @@ export const ProjectSchema = z.object({
   // Populated by ProjectsList only — `false` means the project's path is
   // missing on disk (deleted/moved/unmounted). Other handlers don't set it.
   pathExists: z.boolean().optional(),
+  // Repo identity (shared/repoIdentity.mts), populated by ProjectsList
+  // only. `null` means the repo has none (or the probe failed), so it
+  // never matches across devices. Other handlers don't set it.
+  identity: z.string().nullable().optional(),
   // Usage stats, populated by ProjectsList only, feeding the sidebar
   // "most recently used" / "most used" sorts. `lastUsed` is the newest
   // action timestamp (0 if never); `recentCount` is the rolling-window

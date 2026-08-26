@@ -26,7 +26,13 @@
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -36,8 +42,10 @@ import { syncContract } from "@shared/ipc/modules/sync";
 import { registerContract } from "@shared/ipc/registerContract";
 import { createRelayConnection } from "@host/relay/connection";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
+import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { syncHandlers, SYNC_CHUNK_BYTES } from "@host/ipc/modules/sync";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initShigomoriRootAt } from "@host/lib/util/paths";
 import { startStubRelay } from "./lib/relayStub.mjs";
@@ -54,11 +62,14 @@ const smBinary = join(sandbox, "sm");
 
 // Scrub inherited GIT_* (a lefthook run exports GIT_DIR and would point
 // fixture git at THIS repo) and pin idents so commit-tree in `sm dirty
-// capture` never depends on the machine's git config.
-const baseEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-);
-Object.assign(baseEnv, {
+// capture` never depends on the machine's git config. Mutated on
+// process.env itself (not just a filtered copy): the slice-C pull
+// orchestration drives the app's OWN git layer (host/lib/git/core),
+// which spawns git with process.env.
+for (const key of Object.keys(process.env)) {
+  if (key.startsWith("GIT_")) delete process.env[key];
+}
+Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
   GIT_AUTHOR_NAME: "t",
@@ -66,6 +77,7 @@ Object.assign(baseEnv, {
   GIT_COMMITTER_NAME: "t",
   GIT_COMMITTER_EMAIL: "t@t",
 });
+const baseEnv = { ...process.env };
 const smEnv = { ...baseEnv, SHIGOMORI_ROOT: stateRoot };
 
 async function git(cwd, args, opts = {}) {
@@ -80,6 +92,15 @@ async function git(cwd, args, opts = {}) {
 async function gitOut(cwd, ...args) {
   const { stdout } = await git(cwd, args);
   return stdout.trim();
+}
+
+async function refExists(repo, ref) {
+  try {
+    await git(repo, ["rev-parse", "--verify", "--quiet", ref]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // Every ref in a repo as a Set of "refname sha" lines. The transfer
@@ -240,6 +261,22 @@ async function main() {
     "scratch",
     worktreePath,
   ]);
+  // A second worktree whose branch carries a commit the target has
+  // never seen, for the pull proof's branch-transfer path (scratch sits
+  // at the shared base commit, exercising the tip-already-local path).
+  const worktree2Path = join(sandbox, "wt2");
+  await git(sourceRepo, [
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "feature2",
+    worktree2Path,
+  ]);
+  writeFileSync(join(worktree2Path, "second.txt"), "second feature\n");
+  await git(worktree2Path, ["add", "-A"]);
+  await git(worktree2Path, ["commit", "-qm", "second feature"]);
+  const feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
   // The real app derivation (host/lib/git/worktrees.ts, Go twin in
   // cli/worktree.go), imported straight from its home now that
   // tsAliasLoader handles the transitive JSON import. The capture ref
@@ -258,8 +295,12 @@ async function main() {
     assert.ok(doc, `projects add emitted no project doc for ${path}`);
     return doc.id;
   };
-  const sourceProjectId = await projectIdOf(sourceRepo);
+  // Target first: both fixture projects share one registry AND one repo
+  // identity (target is a clone), and the pull handler's identity scan
+  // takes the first registry match -- which must be the pull's local
+  // target for the round-trip proof below.
   const targetProjectId = await projectIdOf(targetRepo);
+  const sourceProjectId = await projectIdOf(sourceRepo);
 
   // ---- The relay pair: A hosts the real sync surface, B receives ----
   const stub = await startStubRelay();
@@ -431,6 +472,145 @@ async function main() {
     const errorDoc = result.docs.find((doc) => doc.ok === false);
     assert.equal(errorDoc?.code, "bad-bundle");
     ok('corrupted bundle: unpack fails with the coded "bad-bundle" error');
+
+    // ---- The slice-C pull orchestration, end to end. The handler runs
+    // HERE as device B (the registered surface above is A's), with its
+    // two real seams injected: the CLI runner (already set) and the
+    // peer sync api, which is the SAME relay-wire client the transfer
+    // tests drove. Everything in between -- refTips negotiation,
+    // captureDirty, the chunked bundle, `sm create`, the capture
+    // re-key, `sm dirty apply` -- is production code against real git.
+    setPeerSyncApiImpl({
+      syncApiFor: (deviceId) => {
+        assert.equal(deviceId, "A", "the pull dialed an unexpected device");
+        return sync;
+      },
+    });
+    const pullCtx = {
+      signal: new AbortController().signal,
+      notifier: () => () => {},
+    };
+    const identity = await getRepoIdentity(sourceRepo);
+    assert.ok(identity, "fixture repos should carry a non-null identity");
+    assert.equal(
+      identity,
+      await getRepoIdentity(targetRepo),
+      "clone and source must share a repo identity",
+    );
+
+    // (6) Branch-transfer path: a clean worktree on a branch whose tip
+    // the receiver lacks. The branch crosses as a thin bundle, the
+    // worktree lands on it, and the incoming ref is swept.
+    const cleanPull = await syncHandlers.pullWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeIdFromPath(worktree2Path),
+        sourceIdentity: identity,
+        branch: "feature2",
+      },
+      pullCtx,
+    );
+    assert.equal(cleanPull.dirtyApplied, false);
+    assert.equal(cleanPull.worktree.branch, "feature2");
+    assert.equal(
+      await gitOut(cleanPull.worktree.path, "rev-parse", "HEAD"),
+      feature2Tip,
+    );
+    assert.equal(
+      await gitOut(cleanPull.worktree.path, "status", "--porcelain"),
+      "",
+      "a clean pull must land a clean worktree",
+    );
+    assert.equal(
+      await refExists(targetRepo, "refs/shigomori/incoming/feature2"),
+      false,
+      "the incoming ref must be swept after a successful pull",
+    );
+    ok(
+      "pull round trip (clean): the branch crosses the relay and the worktree lands on it with the incoming ref swept",
+    );
+
+    // (7) Dirty + tip-already-local path: scratch sits at the base
+    // commit the receiver already holds, so no branch bundle crosses;
+    // the fresh capture does, gets re-keyed from the source worktree id
+    // to the new local one, and lands unstaged.
+    const dirtyPull = await syncHandlers.pullWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeId,
+        sourceIdentity: identity,
+        branch: "scratch",
+      },
+      pullCtx,
+    );
+    assert.equal(dirtyPull.dirtyApplied, true);
+    assert.equal(dirtyPull.worktree.branch, "scratch");
+    assert.equal(
+      await gitOut(dirtyPull.worktree.path, "rev-parse", "HEAD"),
+      baseSha,
+    );
+    assert.equal(
+      readFileSync(join(dirtyPull.worktree.path, "dirty.txt"), "utf8"),
+      "uncommitted work\n",
+    );
+    // Restored UNSTAGED, exactly as `sm dirty apply` flattens it.
+    assert.match(
+      await gitOut(dirtyPull.worktree.path, "status", "--porcelain"),
+      /^\?\? dirty\.txt$/m,
+    );
+    // Consumed and swept: the source-keyed capture ref, the re-keyed
+    // local one, and the landing ref are all gone.
+    for (const ref of [
+      dirtyRef,
+      `refs/shigomori/dirty/${dirtyPull.worktree.id}`,
+      "refs/shigomori/incoming/scratch",
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of git probes
+      const survived = await refExists(targetRepo, ref);
+      assert.equal(survived, false, `${ref} survived the pull`);
+    }
+    ok(
+      "pull round trip (dirty): no branch bundle for a locally-known tip, and the capture is re-keyed, applied unstaged, and consumed",
+    );
+
+    // (8) The update-existing case is out of scope by design: a second
+    // pull of the same branch refuses up front with the actionable
+    // message, before touching the peer.
+    await assert.rejects(
+      () =>
+        syncHandlers.pullWorktree(
+          {
+            sourceDeviceId: "A",
+            sourceProjectId,
+            sourceWorktreeId: worktreeId,
+            sourceIdentity: identity,
+            branch: "scratch",
+          },
+          pullCtx,
+        ),
+      /already exists on this device/,
+    );
+    // And an identity nothing local matches is refused before anything
+    // else runs.
+    await assert.rejects(
+      () =>
+        syncHandlers.pullWorktree(
+          {
+            sourceDeviceId: "A",
+            sourceProjectId,
+            sourceWorktreeId: worktreeId,
+            sourceIdentity: "root:0000000000000000000000000000000000000000",
+            branch: "scratch-two",
+          },
+          pullCtx,
+        ),
+      /No local project matches/,
+    );
+    ok(
+      "pull refusals: an already-existing branch and an unmatched repo identity both refuse up front",
+    );
   } finally {
     await b.stop();
     await a.stop();
