@@ -4,6 +4,7 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
+import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
@@ -53,6 +54,7 @@ export const allContractModules: readonly ContractModule[] = [
   branchesContract,
   clientConfigContract,
   dialogContract,
+  forwardContract,
   fsContract,
   gitContract,
   githubCliContract,
@@ -91,6 +93,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const branchesClient = c(branchesContract);
   const clientConfigClient = c(clientConfigContract);
   const dialogClient = c(dialogContract);
+  const forwardClient = c(forwardContract);
   const fsClient = c(fsContract);
   const gitClient = c(gitContract);
   const githubCliClient = c(githubCliContract);
@@ -155,6 +158,13 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       // re-declaring here.
       pickFolder: (options?: PickFolderPayload) =>
         dialogClient.pickFolder(options),
+    },
+
+    forward: {
+      open: forwardClient.open,
+      send: forwardClient.send,
+      poll: forwardClient.poll,
+      close: forwardClient.close,
     },
 
     fs: {

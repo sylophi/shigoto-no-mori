@@ -2,6 +2,7 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
+import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
@@ -26,6 +27,7 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "@host/ipc/modules/branches";
 import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
+import { forwardHandlers } from "@host/ipc/modules/forward";
 import { fsHandlers } from "@host/ipc/modules/fs";
 import { gitHandlers } from "@host/ipc/modules/git";
 import { githubCliHandlers } from "@host/ipc/modules/githubCli";
@@ -135,5 +137,9 @@ export function registerIpcHandlers(): void {
   registerContract(cliContract, cliHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(syncContract, syncHandlers);
+  // Host side of the port-forward wire: host-scoped, so it mounts on
+  // the Electron wire and both remote wires, where the grant model
+  // gates every verb (all mutating:true).
+  registerContract(forwardContract, forwardHandlers);
   registerContract(updaterContract, updaterHandlers);
 }

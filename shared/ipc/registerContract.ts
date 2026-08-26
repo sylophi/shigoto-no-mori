@@ -27,7 +27,10 @@ export type RegisterContractOpts = {
   // exists to keep the app's own writes from echoing), so without this
   // a remote viewer would never learn the host's state moved. Optional,
   // since bindings with no remote push surface (the web bridge) omit
-  // it.
+  // it. A def tagged movesHostState:false skips the hook: it is still a
+  // command on the grant axis, but its effects are invisible to viewers
+  // (forward's byte shuttling), so pinging on it would re-invalidate a
+  // peer's whole cached view on every poll or send.
   onMutationResolved?: () => void;
 };
 
@@ -52,8 +55,12 @@ export function registerContract<M extends ContractModule>(
     const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
     // Same shape for the mutation hook: only an EXPLICIT mutating:true
     // def carries it, so reads and untagged local channels pay nothing.
+    // An explicit movesHostState:false opts a mutating def out, since
+    // its effects are invisible to remote viewers' caches.
     const onMutated =
-      def.mutating === true ? opts.onMutationResolved : undefined;
+      def.mutating === true && def.movesHostState !== false
+        ? opts.onMutationResolved
+        : undefined;
     const handler = (
       handlers as unknown as Record<
         string,
