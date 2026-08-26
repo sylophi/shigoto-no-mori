@@ -23,7 +23,11 @@ import {
 // worktree here, driving the remote verbs above against that peer.
 // Tagged {remote:false}, so it is never registered on any remote wire
 // (main/ipc/register.ts only forwards remote:true) and the web
-// loopback refuses it as a mutation.
+// loopback refuses it as a mutation. transplantWorktree (step 9) is
+// the same local orchestrator shape: the pull plus tearing the source
+// worktree down on the peer afterwards, where the teardown runs only
+// when nothing can be lost (the dirty state landed here, or there was
+// none) and rides the peer's ordinary grant-gated worktrees:delete.
 
 // The refs a peer may request into a bundle, fail-closed: a branch
 // (refs/heads/<name>) or a dirty-state capture
@@ -143,6 +147,24 @@ export const SyncPullWorktreeResultSchema = z.strictObject({
   captured: z.boolean(),
   dirtyApplied: z.boolean(),
 });
+export type SyncPullWorktreeResult = z.infer<
+  typeof SyncPullWorktreeResultSchema
+>;
+
+// The pull result plus the teardown's fate. A refused or failed
+// teardown never fails the call: by then the pull succeeded and the
+// state is safe on both sides, so the caller learns via
+// sourceRemoved:false with sourceError carrying the stable marker or
+// message ("scripts-running", a cleanup-script failure, a dirty state
+// that did not land here).
+export const SyncTransplantWorktreeResultSchema =
+  SyncPullWorktreeResultSchema.extend({
+    sourceRemoved: z.boolean(),
+    sourceError: z.string().optional(),
+  });
+export type SyncTransplantWorktreeResult = z.infer<
+  typeof SyncTransplantWorktreeResultSchema
+>;
 
 export const syncContract = defineContract("host", {
   refTips: invoke(
@@ -189,6 +211,15 @@ export const syncContract = defineContract("host", {
     "sync:pullWorktree",
     SyncPullWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
+    { remote: false, mutating: true },
+  ),
+  // Pull plus source teardown (see the header note). Same payload as
+  // pullWorktree: the teardown targets exactly the source worktree the
+  // pull captured from.
+  transplantWorktree: invoke(
+    "sync:transplantWorktree",
+    SyncPullWorktreePayloadSchema,
+    SyncTransplantWorktreeResultSchema,
     { remote: false, mutating: true },
   ),
 });

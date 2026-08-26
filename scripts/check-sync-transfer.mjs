@@ -18,6 +18,11 @@
 //     refused) and bundleAbort cleans up an abandoned one;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle".
 //
+// The pull orchestration (slice C) and the transplant orchestration on
+// top of it (step 9: pull plus source teardown over the peer's
+// grant-gated worktrees:delete) run end to end below, against the same
+// wire and the same real CLI.
+//
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_ROOT holding two projects (source and target repos); what
 // separates them is the relay wire between their connections, which is
@@ -27,6 +32,8 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -34,16 +41,23 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
 import { syncContract } from "@shared/ipc/modules/sync";
+import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { createRelayConnection } from "@host/relay/connection";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { syncHandlers, SYNC_CHUNK_BYTES } from "@host/ipc/modules/sync";
+import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import {
+  getRunningScriptWorktrees,
+  killScriptsForWorktree,
+  startScript,
+} from "@host/lib/scripts";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
@@ -309,10 +323,18 @@ async function main() {
   registerContract(syncContract, syncHandlers, a.server, {
     validateOutputs: true,
   });
+  // The teardown half of the transplant proof: the REAL worktrees
+  // surface on A's wire, beside the sync surface. The usage hook is the
+  // Electron binding's concern, so a no-op satisfies the registrar.
+  registerContract(worktreesContract, worktreesHandlers, a.server, {
+    validateOutputs: true,
+    onUsageTracked: () => {},
+  });
   const b = await bootDevice(stub, "B");
   try {
     const peer = await b.connectPeer("A");
     const sync = buildClient(syncContract, peer.transport);
+    const worktreesOverWire = buildClient(worktreesContract, peer.transport);
     const dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
     // (1) Ungranted: the whole surface is refused typed, before any
@@ -333,8 +355,15 @@ async function main() {
       () => sync.captureDirty({ projectId: sourceProjectId, worktreeId }),
       (error) => error instanceof CommandRefusedError,
     );
+    // The transplant teardown rides the same gate: worktrees:delete over
+    // the wire is refused typed for an ungranted peer too.
+    await assert.rejects(
+      () =>
+        worktreesOverWire.delete({ projectId: sourceProjectId, worktreeId }),
+      (error) => error instanceof CommandRefusedError,
+    );
     ok(
-      "ungranted peer: bundleStart and captureDirty are refused with the typed CommandRefusedError",
+      "ungranted peer: bundleStart, captureDirty and worktrees:delete are refused with the typed CommandRefusedError",
     );
 
     granted = true;
@@ -485,6 +514,11 @@ async function main() {
         assert.equal(deviceId, "A", "the pull dialed an unexpected device");
         return sync;
       },
+      // The transplant teardown's reach, over the same relay wire.
+      worktreesApiFor: (deviceId) => {
+        assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
+        return worktreesOverWire;
+      },
     });
     const pullCtx = {
       signal: new AbortController().signal,
@@ -610,6 +644,187 @@ async function main() {
     );
     ok(
       "pull refusals: an already-existing branch and an unmatched repo identity both refuse up front",
+    );
+
+    // ---- The transplant orchestration (step 9): the pull above plus
+    // tearing the source worktree down on A through its wire-served
+    // worktrees:delete. Fresh worktrees per scenario, since the earlier
+    // tests consumed wt and wt2.
+
+    // (9) Clean transplant: the branch crosses, the worktree lands, and
+    // the SOURCE side loses the worktree directory, its sm worktree
+    // data, and the branch. A MANAGED worktree (sm create, the realistic
+    // transplant source): `sm rm` only deletes the branch for managed
+    // worktrees, and the sandbox's unset DeleteBranchOnRemove defaults
+    // to delete (cli/cmd_rm.go).
+    const wt3Create = await sm(
+      "create",
+      "--project-id",
+      sourceProjectId,
+      "--branch",
+      "feature3",
+    );
+    const wt3Doc = wt3Create.docs.find((doc) => doc.event === "created");
+    assert.ok(wt3Doc, "sm create emitted no created doc");
+    const wt3Path = wt3Doc.worktree.path;
+    const wt3Id = wt3Doc.worktree.id;
+    writeFileSync(join(wt3Path, "third.txt"), "third feature\n");
+    await git(wt3Path, ["add", "-A"]);
+    await git(wt3Path, ["commit", "-qm", "third feature"]);
+    const feature3Tip = await gitOut(wt3Path, "rev-parse", "HEAD");
+    // Seed the app-written per-worktree data file (the CLI only ever
+    // deletes it), so the teardown's state sweep is observable.
+    const wt3DataPath = join(
+      stateRoot,
+      "projects",
+      sourceProjectId,
+      "worktrees",
+      `${wt3Id}.json`,
+    );
+    mkdirSync(dirname(wt3DataPath), { recursive: true });
+    writeFileSync(wt3DataPath, "{}\n");
+    const cleanTransplant = await syncHandlers.transplantWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: wt3Id,
+        sourceIdentity: identity,
+        branch: "feature3",
+      },
+      pullCtx,
+    );
+    assert.equal(cleanTransplant.sourceRemoved, true);
+    assert.equal(cleanTransplant.sourceError, undefined);
+    assert.equal(cleanTransplant.dirtyApplied, false);
+    assert.equal(cleanTransplant.worktree.branch, "feature3");
+    assert.equal(
+      await gitOut(cleanTransplant.worktree.path, "rev-parse", "HEAD"),
+      feature3Tip,
+    );
+    assert.equal(
+      await gitOut(cleanTransplant.worktree.path, "status", "--porcelain"),
+      "",
+      "a clean transplant must land a clean worktree",
+    );
+    assert.equal(
+      existsSync(wt3Path),
+      false,
+      "the source worktree directory must be gone",
+    );
+    assert.equal(
+      existsSync(wt3DataPath),
+      false,
+      "the source sm worktree data must be gone",
+    );
+    assert.equal(
+      await refExists(sourceRepo, "refs/heads/feature3"),
+      false,
+      "the source branch must be deleted (DeleteBranchOnRemove default)",
+    );
+    ok(
+      "transplant (clean): the worktree lands here and the source worktree, its sm data, and its branch are torn down",
+    );
+
+    // (10) Dirty transplant: staged + unstaged + untracked dirt on the
+    // source. The capture lands here applied, and the teardown's
+    // captured-driven force removes the (legitimately still dirty)
+    // source anyway.
+    const wt4Path = join(sandbox, "wt4");
+    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature4", wt4Path]);
+    writeFileSync(join(wt4Path, "committed.txt"), "committed\n");
+    await git(wt4Path, ["add", "-A"]);
+    await git(wt4Path, ["commit", "-qm", "fourth feature"]);
+    writeFileSync(join(wt4Path, "staged.txt"), "staged\n");
+    await git(wt4Path, ["add", "staged.txt"]);
+    writeFileSync(join(wt4Path, "committed.txt"), "committed, then edited\n");
+    writeFileSync(join(wt4Path, "untracked.txt"), "untracked\n");
+    const dirtyTransplant = await syncHandlers.transplantWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeIdFromPath(wt4Path),
+        sourceIdentity: identity,
+        branch: "feature4",
+      },
+      pullCtx,
+    );
+    assert.equal(dirtyTransplant.captured, true);
+    assert.equal(dirtyTransplant.dirtyApplied, true);
+    assert.equal(dirtyTransplant.sourceRemoved, true);
+    for (const [file, content] of [
+      ["staged.txt", "staged\n"],
+      ["committed.txt", "committed, then edited\n"],
+      ["untracked.txt", "untracked\n"],
+    ]) {
+      assert.equal(
+        readFileSync(join(dirtyTransplant.worktree.path, file), "utf8"),
+        content,
+      );
+    }
+    assert.equal(
+      existsSync(wt4Path),
+      false,
+      "the dirty source worktree must be gone (the teardown's force path)",
+    );
+    ok(
+      "transplant (dirty): the capture lands applied and force removes the still-dirty source worktree",
+    );
+
+    // (11) Scripts-running refusal: a live script in the source worktree
+    // makes the teardown refuse (never kill), so the pull half succeeds
+    // and the source survives with the worktree on both sides.
+    const wt5Path = join(sandbox, "wt5");
+    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature5", wt5Path]);
+    const wt5Id = worktreeIdFromPath(wt5Path);
+    // A REAL long-lived script through the app's registry (the registry
+    // is what the refusal flag consults), reaped in the finally below.
+    startScript({
+      command: 'node -e "setTimeout(() => {}, 30000)"',
+      scriptName: "sleep",
+      worktree: { id: wt5Id, name: "wt5", branch: "feature5", path: wt5Path },
+      project: { id: sourceProjectId, path: sourceRepo, name: "source" },
+      projectBranch: "main",
+      defaultBranch: "main",
+      notify: () => {},
+    });
+    try {
+      const refusedTransplant = await syncHandlers.transplantWorktree(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: wt5Id,
+          sourceIdentity: identity,
+          branch: "feature5",
+        },
+        pullCtx,
+      );
+      assert.equal(refusedTransplant.worktree.branch, "feature5");
+      assert.equal(
+        existsSync(refusedTransplant.worktree.path),
+        true,
+        "the pull half must still land the worktree here",
+      );
+      assert.equal(refusedTransplant.sourceRemoved, false);
+      assert.match(
+        refusedTransplant.sourceError ?? "",
+        /scripts-running/,
+        "the refusal must carry the stable scripts-running marker",
+      );
+      assert.equal(
+        existsSync(wt5Path),
+        true,
+        "the source worktree must survive a refused teardown",
+      );
+      assert.equal(
+        getRunningScriptWorktrees().some((w) => w.worktreeId === wt5Id),
+        true,
+        "the refused teardown must leave the source's scripts running",
+      );
+    } finally {
+      await killScriptsForWorktree(wt5Id);
+    }
+    ok(
+      "transplant (scripts running): the teardown refuses with the scripts-running marker and the source survives",
     );
   } finally {
     await b.stop();

@@ -784,6 +784,10 @@ async function main() {
       // registered on either remote wire.
       assert.equal(syncContract.calls.pullWorktree.remote, false);
       assert.equal(syncContract.calls.pullWorktree.mutating, true);
+      // The transplant orchestrator (v2 step 9) is the same local-only
+      // shape: its remote half is the peer's ordinary worktrees:delete.
+      assert.equal(syncContract.calls.transplantWorktree.remote, false);
+      assert.equal(syncContract.calls.transplantWorktree.mutating, true);
       // The preflight read is remote and explicitly a read, so every
       // wire serves it ungated.
       assert.equal(remoteAccessContract.calls.commandAccess.remote, true);

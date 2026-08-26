@@ -103,22 +103,25 @@ export function registerIpcHandlers(): void {
     connectPeer: relayConnectPeer,
   });
   registerContract(relayContract, relayHandlers);
-  // The pull orchestration's peer reach (host/ipc/peerSync.ts), routed
-  // through the SAME invokePeer path (and so the same cached peer
+  // The pull/transplant orchestrations' peer reach (host/ipc/peerSync.ts),
+  // routed through the SAME invokePeer path (and so the same cached peer
   // session) the renderer's remote-device api uses. Dialing
   // relayConnectPeer directly here would silently replace that session
   // mid-view -- the link keeps one client peer per deviceId.
+  const peerTransportFor = (deviceId: string) => ({
+    invoke: (channel: string, input: unknown) =>
+      Promise.resolve(
+        relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
+      ),
+    subscribe: (): (() => void) => {
+      throw new Error("the peer sync api is invoke-only");
+    },
+  });
   setPeerSyncApiImpl({
     syncApiFor: (deviceId) =>
-      buildClient(syncContract, {
-        invoke: (channel, input) =>
-          Promise.resolve(
-            relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
-          ),
-        subscribe: () => {
-          throw new Error("the peer sync api is invoke-only");
-        },
-      }),
+      buildClient(syncContract, peerTransportFor(deviceId)),
+    worktreesApiFor: (deviceId) =>
+      buildClient(worktreesContract, peerTransportFor(deviceId)),
   });
   // The port-forward engine's peer reach, built over the SAME cached
   // peer sessions as the sync wiring above and for the same reason: a
