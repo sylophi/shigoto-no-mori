@@ -3,7 +3,7 @@
 // what lets this run headlessly under node 22: in-memory localStorage
 // and sessionStorage shims, a recording fetch, and no DOM.
 //
-// Asserts: the bridge surface matches buildApi plus the preload's three
+// Asserts: the bridge surface matches buildApi plus the preload's
 // scalar facts (so renderer components mount unmodified), the
 // localStorage-backed clientConfig store round-trips and heals corrupt
 // JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
@@ -147,7 +147,7 @@ async function main() {
   console.log("web bridge proof\n");
 
   await check(
-    "surface: the bridge exposes exactly buildApi's namespaces and members plus deviceId, appVersion and isDev",
+    "surface: the bridge exposes exactly buildApi's namespaces and members plus deviceId, appVersion, isDev and isElectron",
     () => {
       const bridge = createWebBridge(makeDeps());
       const dummy = {
@@ -157,7 +157,13 @@ async function main() {
       const golden = buildApi({ host: dummy, client: dummy });
       assert.deepEqual(
         Object.keys(bridge.api).toSorted(),
-        [...Object.keys(golden), "deviceId", "appVersion", "isDev"].toSorted(),
+        [
+          ...Object.keys(golden),
+          "deviceId",
+          "appVersion",
+          "isDev",
+          "isElectron",
+        ].toSorted(),
         "the bridge's top-level keys drifted from the preload surface",
       );
       for (const [ns, members] of Object.entries(golden)) {
@@ -177,6 +183,9 @@ async function main() {
       assert.equal(typeof bridge.api.deviceId, "string");
       assert.equal(typeof bridge.api.appVersion, "string");
       assert.equal(typeof bridge.api.isDev, "boolean");
+      // The app-only gate must read false here, or shared pages would
+      // mount port-forward controls the browser cannot honor.
+      assert.equal(bridge.api.isElectron, false);
     },
   );
 
@@ -297,6 +306,14 @@ async function main() {
       // "installed").
       await assert.rejects(bridge.api.cli.status(), refused);
       await assert.rejects(bridge.api.updater.get(), refused);
+      // The port-forward engine binds real TCP listeners, so its whole
+      // client-scoped surface must refuse on the web (the UI never
+      // mounts there, gated on isElectron, but the wire is the wall).
+      await assert.rejects(bridge.api.portForward.list(), refused);
+      await assert.rejects(
+        bridge.api.portForward.start({ deviceId: "d1", remotePort: 3000 }),
+        refused,
+      );
       // The step-6 flips (v2 slice B): these were unclassified-rejects
       // before (remote:false, no mutating tag) and are mutating-rejects
       // now (remote:true, mutating:true). Either way the loopback wire

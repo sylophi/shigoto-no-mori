@@ -14,6 +14,7 @@ import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { navContract } from "@shared/ipc/modules/nav";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
+import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
@@ -64,6 +65,7 @@ export const allContractModules: readonly ContractModule[] = [
   menuContract,
   navContract,
   packageScriptsContract,
+  portForwardContract,
   portPoolContract,
   projectLauncherContract,
   projectsContract,
@@ -103,6 +105,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const menuClient = c(menuContract);
   const navClient = c(navContract);
   const packageScriptsClient = c(packageScriptsContract);
+  const portForwardClient = c(portForwardContract);
   const portPoolClient = c(portPoolContract);
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
@@ -246,6 +249,13 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         packageScriptsClient.getSort({ projectId }),
       setSort: (projectId: string, mode: PackageScriptSortMode) =>
         packageScriptsClient.setSort({ projectId, mode }),
+    },
+
+    portForward: {
+      start: portForwardClient.start,
+      stop: (forwardId: string) => portForwardClient.stop({ forwardId }),
+      list: portForwardClient.list,
+      onChanged: portForwardClient.changed,
     },
 
     portPool: {

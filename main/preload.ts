@@ -28,6 +28,13 @@ const api = {
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).
   isDev: process.argv.includes(DEV_BUILD_FLAG),
+  // Client fact, constant per bridge: true here, false on the web
+  // bridge. App-only UI (the port-forward controls, which need a real
+  // local TCP listener) gates its mount on it, since the shared pages
+  // render on both shells and cannot tell the bridges apart otherwise.
+  // Widened past the `as const` below so RendererApi says boolean and
+  // the web bridge's false assigns.
+  isElectron: true as boolean,
   // Both scopes ride the same IPC bridge while host and client live in
   // one process. Step 3 swaps the host entry for a socket transport and
   // nothing else changes.

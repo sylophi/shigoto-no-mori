@@ -21,13 +21,29 @@
 //     eof.
 //   - the surface still serves a fresh conn after full teardown.
 //
+// Slice B adds the CLIENT ENGINE (main/portForward/engine.ts), which is
+// electron-free and driven here over the same peer transport, so every
+// engine scenario exercises the full chain: a plain local TCP client ->
+// engine listener -> relay stub -> host verbs -> loopback fixture.
+// Asserts on top of the slice A set:
+//   - a local dial round-trips an echo through the whole chain, and a
+//     duplicate startForward returns the existing forward.
+//   - a ~1.5 MB local transfer lands byte-identical.
+//   - the fixture server closing its socket ends the local client
+//     socket (eof propagation).
+//   - stopForward closes the listener and live conns, and the host
+//     registry does not leak (a fresh forward still round-trips).
+//   - the 9th concurrent local socket is destroyed at the client-side
+//     per-device cap of 8 while the first eight stand, with no wire
+//     traffic spent on the doomed dial.
+//
 // Both "devices" share one node process. What separates them is the
 // relay wire between their connections, which is exactly the surface
 // this slice adds. Runs under scripts/lib/register-ts-alias.mjs. See
 // package.json "forward:check".
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
@@ -35,6 +51,7 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
 import { createRelayConnection } from "@host/relay/connection";
 import { forwardHandlers } from "@host/ipc/modules/forward";
+import { createPortForwardEngine } from "../main/portForward/engine.ts";
 import { startStubRelay } from "./lib/relayStub.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -47,6 +64,21 @@ async function waitFor(predicate, what, timeoutMs = 5_000) {
     await delay(25);
   }
   throw new Error(`timed out waiting for ${what}`);
+}
+
+// once() with waitFor's deadline treatment: an event that never fires
+// fails loudly with a descriptive message instead of hanging the check.
+function onceWithin(emitter, event, what, timeoutMs = 10_000) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`timed out waiting for ${what}`)),
+      timeoutMs,
+    );
+    emitter.once(event, () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 async function bootDevice(stub, deviceId, opts = {}) {
@@ -141,6 +173,43 @@ async function pollBytes(forward, connId, total, timeoutMs = 15_000) {
   return Buffer.concat(parts, size);
 }
 
+// Dials a local listener, writes `payload`, and resolves with the first
+// `total` echoed bytes. The deadline turns a wedged chain into a
+// descriptive failure instead of a hang. resetAndDestroy, not destroy:
+// a plain destroy on a drained socket sends a FIN, which the engine's
+// allowHalfOpen listener treats as a live half-open conn held until the
+// forward stops, so the collector must RST to release its conn and keep
+// the later connCount and cap scenarios honest.
+function dialAndCollect(port, payload, total, timeoutMs = 20_000) {
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const parts = [];
+    let size = 0;
+    const timer = setTimeout(() => {
+      socket.resetAndDestroy();
+      reject(
+        new Error(
+          `dialAndCollect: ${size} of ${total} bytes after ${timeoutMs}ms`,
+        ),
+      );
+    }, timeoutMs);
+    socket.on("connect", () => socket.write(payload));
+    socket.on("data", (chunk) => {
+      parts.push(chunk);
+      size += chunk.length;
+      if (size >= total) {
+        clearTimeout(timer);
+        socket.resetAndDestroy();
+        resolve(Buffer.concat(parts, size));
+      }
+    });
+    socket.on("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
 const passed = [];
 function ok(name) {
   passed.push(name);
@@ -159,6 +228,9 @@ async function main() {
     validateOutputs: true,
   });
   const b = await bootDevice(stub, "B");
+  // Torn down in the finally so an assertion failure mid-scenario does
+  // not leave listeners and parked polls holding the process open.
+  let engine = null;
   try {
     const peer = await b.connectPeer("A");
     const forward = buildClient(forwardContract, peer.transport);
@@ -322,7 +394,178 @@ async function main() {
     assert.equal(still.toString("utf8"), "still here");
     await forward.close({ connId: again.connId });
     ok("end state: a fresh conn opens and round-trips after full teardown");
+
+    // ---- Slice B: the client engine over the same wire ----
+
+    // The engine on device B, its forward api the SAME peer client the
+    // direct scenarios drove, so nothing on the forward path is a
+    // double. deviceId is ignored on purpose: this check has one peer.
+    engine = createPortForwardEngine({ forwardApiFor: () => forward });
+
+    // (9) Local round trip through the whole chain, and duplicate
+    // startForward semantics (one forward per device+port pair).
+    const started = await engine.startForward({
+      deviceId: "A",
+      remotePort: echo.port,
+    });
+    assert.match(started.forwardId, /^[0-9a-f]{32}$/);
+    const dup = await engine.startForward({
+      deviceId: "A",
+      remotePort: echo.port,
+    });
+    assert.equal(dup.forwardId, started.forwardId);
+    assert.equal(dup.localPort, started.localPort);
+    assert.equal(engine.listForwards().length, 1);
+    const enginePing = await dialAndCollect(
+      started.localPort,
+      Buffer.from("engine ping"),
+      11,
+    );
+    assert.equal(enginePing.toString("utf8"), "engine ping");
+    ok(
+      "engine: a local dial round-trips through the whole chain, and a duplicate start returns the existing forward",
+    );
+
+    // (10) A ~1.5 MB transfer through the local listener, chunked by
+    // the engine's uplink pump and reassembled off its poll loop.
+    const bigLocal = randomBytes(1_500_000);
+    const echoedLocal = await dialAndCollect(
+      started.localPort,
+      bigLocal,
+      bigLocal.length,
+      30_000,
+    );
+    assert.ok(
+      Buffer.compare(bigLocal, echoedLocal) === 0,
+      "engine-echoed bytes differ byte-for-byte",
+    );
+    ok("engine: a ~1.5 MB transfer lands byte-identical");
+
+    // (11) eof propagation: the fixture ends its socket after a tail,
+    // and the local client must see the bytes AND its own 'end'.
+    const byeServer = await startFixtureServer((socket) => {
+      socket.end("bye");
+    });
+    const byeForward = await engine.startForward({
+      deviceId: "A",
+      remotePort: byeServer.port,
+    });
+    const bye = await new Promise((resolve, reject) => {
+      const socket = connect({ host: "127.0.0.1", port: byeForward.localPort });
+      const parts = [];
+      const timer = setTimeout(() => {
+        socket.destroy();
+        reject(new Error("no local eof within 15s"));
+      }, 15_000);
+      socket.on("data", (chunk) => parts.push(chunk));
+      socket.on("end", () => {
+        clearTimeout(timer);
+        socket.destroy();
+        resolve(Buffer.concat(parts));
+      });
+      socket.on("error", (error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+    });
+    assert.equal(bye.toString("utf8"), "bye");
+    engine.stopForward(byeForward.forwardId);
+    await byeServer.close();
+    ok("engine: the fixture closing its socket ends the local client socket");
+
+    // (12) stopForward closes the listener and live conns, and the host
+    // registry does not leak: a fresh forward still round-trips.
+    const lingering = connect({ host: "127.0.0.1", port: started.localPort });
+    lingering.on("error", () => {});
+    const lingeringClosed = onceWithin(
+      lingering,
+      "close",
+      "stopForward to tear down the lingering conn's local socket",
+    );
+    await waitFor(
+      () =>
+        engine.listForwards().find((f) => f.forwardId === started.forwardId)
+          ?.connCount === 1,
+      "the lingering conn to register",
+    );
+    engine.stopForward(started.forwardId);
+    assert.equal(engine.listForwards().length, 0);
+    await lingeringClosed;
+    await assert.rejects(
+      () =>
+        new Promise((resolve, reject) => {
+          const probe = connect({ host: "127.0.0.1", port: started.localPort });
+          probe.once("connect", () => {
+            probe.destroy();
+            resolve();
+          });
+          probe.once("error", reject);
+        }),
+      undefined,
+      "the stopped forward's listener still accepts",
+    );
+    const fresh = await engine.startForward({
+      deviceId: "A",
+      remotePort: echo.port,
+    });
+    const freshEcho = await dialAndCollect(
+      fresh.localPort,
+      Buffer.from("fresh"),
+      5,
+    );
+    assert.equal(freshEcho.toString("utf8"), "fresh");
+    ok(
+      "engine: stopForward closes the listener and live conns, and a fresh forward still works",
+    );
+
+    // (13) The client-side per-device cap: the 9th concurrent local
+    // socket is destroyed immediately while the first eight stand.
+    // Mirrors the host's MAX_CONNS without spending a relay round trip
+    // on the doomed dial.
+    const capFramesBefore = stub.received.length;
+    const capSockets = [];
+    for (let i = 0; i < 8; i += 1) {
+      const socket = connect({ host: "127.0.0.1", port: fresh.localPort });
+      socket.on("error", () => {});
+      capSockets.push(socket);
+    }
+    // Also wait out the eight open frames so the 9th socket's zero-frame
+    // assertion below cannot miscount a straggler from these dials.
+    await waitFor(
+      () =>
+        engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
+          ?.connCount === 8 &&
+        reqFramesSince(stub, capFramesBefore, "forward:open") === 8,
+      "eight conns and their open frames to register",
+      10_000,
+    );
+    const ninthFramesBefore = stub.received.length;
+    const ninth = connect({ host: "127.0.0.1", port: fresh.localPort });
+    ninth.on("error", () => {});
+    await onceWithin(
+      ninth,
+      "close",
+      "the 9th socket to be destroyed at the accept cap",
+    );
+    // Destroyed at accept means no wire traffic: the doomed dial spent
+    // no forward:open round trip.
+    assert.equal(
+      reqFramesSince(stub, ninthFramesBefore, "forward:open"),
+      0,
+      "the capped 9th socket still spent a forward:open round trip",
+    );
+    assert.equal(
+      engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
+        ?.connCount,
+      8,
+      "the cap tore down an established conn instead of the 9th dial",
+    );
+    for (const socket of capSockets) socket.destroy();
+    engine.stopAll();
+    assert.equal(engine.listForwards().length, 0);
+    ok("engine: the 9th concurrent local socket is destroyed at the cap of 8");
   } finally {
+    engine?.stopAll();
     await b.stop();
     await a.stop();
     await stub.close();

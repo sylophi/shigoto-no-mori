@@ -74,10 +74,12 @@ pre-commit:
     # dial, echo round trips, server-initiated bytes over the long-poll
     # downlink, a ~1.5 MB transfer chunked under the relay frame cap,
     # drain-then-eof on server close, the coded connect failure, and
-    # idempotent teardown. Gated to the forward surface plus the stub
-    # relay it rides.
+    # idempotent teardown. Slice B adds the client engine (local
+    # listeners, both pumps, eof propagation, stopForward teardown and
+    # the per-forward conn cap) driven over the same wire. Gated to the
+    # forward surface plus the stub relay it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,host/ipc/modules/forward.ts,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,host/ipc/modules/forward.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs}"
       run: pnpm run forward:check
     # Boots the same stub Durable Object and drives the BROWSER relay
     # connection (web/relay/connection.ts, built on the global WebSocket)
