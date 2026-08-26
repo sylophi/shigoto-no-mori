@@ -27,11 +27,13 @@
     "sourceMap": true,
     "paths": {
       "@/*": ["./renderer/*"],
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./shared/*"],
+      "@host/*": ["./host/*"]
     }
   },
   "include": [
     "main/**/*",
+    "host/**/*",
     "renderer/**/*",
     "shared/**/*",
     "forge.config.ts",

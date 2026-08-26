@@ -6,13 +6,13 @@ import type { WebContents } from "electron";
 import { unknownWorktreeError } from "@shared/errors";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
-import { readShigomoriConfig } from "../lib/config/project";
-import { resolveDefaultBranch } from "../lib/git/remotes";
+import { readShigomoriConfig } from "@host/lib/config/project";
+import { resolveDefaultBranch } from "@host/lib/git/remotes";
 import {
   listWorktreeIdentities,
   type WorktreeIdentity,
-} from "../lib/git/worktrees";
-import type { NotifyScriptEvent } from "../lib/scripts";
+} from "@host/lib/git/worktrees";
+import type { NotifyScriptEvent } from "@host/lib/scripts";
 import { guardedNotifier } from "./register";
 
 export interface ScriptRunContext {

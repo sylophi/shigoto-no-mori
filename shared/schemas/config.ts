@@ -130,7 +130,7 @@ export const GlobalConfigSchema = z.object({
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
   // use by another worktree). ON by default -- unset means delete, in
-  // both engines (cli/cmd_config.go and main/lib/nuke.ts).
+  // both engines (cli/cmd_config.go and host/lib/nuke.ts).
   deleteBranchOnRemove: z.boolean().optional(),
   // When true, adding a project with a package.json seeds its setup
   // script with `<detected-pm> install`. Only fires at project-add

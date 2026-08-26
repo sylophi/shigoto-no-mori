@@ -1,7 +1,7 @@
 package main
 
 // Lifecycle script execution (setup / teardown / port-pool), ported
-// from main/lib/scripts/. The CLI runs scripts in the foreground and
+// from host/lib/scripts/. The CLI runs scripts in the foreground and
 // shares the terminal's process group, so Ctrl-C reaches the whole
 // tree naturally -- none of the app's background kill machinery is
 // needed. Env, shell selection, and event shapes match the app so
@@ -63,7 +63,7 @@ func resolveShell() (string, []string) {
 // isn't part of the contract and passes through untouched: when a
 // caller has sandboxed the root, the sandbox should cover the whole
 // tree. Nothing on either side adds one -- see initShigomoriRoot
-// (main/lib/util/paths.ts) for why injecting it is the bug.
+// (host/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
 	contract := map[string]string{
 		"SHIGOMORI_SCRIPT_NAME":     in.scriptName,
@@ -208,7 +208,7 @@ func emitExit(runID string, slot scriptSlot, code int) {
 	}
 }
 
-// --- port-pool integration (main/lib/portPool.ts + command.ts) ---
+// --- port-pool integration (host/lib/portPool.ts + command.ts) ---
 
 func portPoolInstalled() bool {
 	_, err := exec.LookPath("port-pool")

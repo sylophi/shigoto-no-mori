@@ -59,7 +59,7 @@ export function isValidWorktreeDirName(name: string): boolean {
 
 // Local branch names a fork PR head can land on, in the order the
 // resolver tries them (pickForkBranchName in
-// main/lib/githubCli/pullRequestCheckout.ts). A fork head is named by
+// host/lib/githubCli/pullRequestCheckout.ts). A fork head is named by
 // its author, so collisions with local branches are routine --
 // "patch-1", or "main" when the PR was opened off the fork's default
 // branch -- hence the owner-prefixed fallback. Shared so the form's

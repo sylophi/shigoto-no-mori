@@ -409,7 +409,7 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 }
 
 // Lockfile priority matches detectPackageManager in
-// main/lib/scripts/packageScripts.ts; "" when there's no package.json.
+// host/lib/scripts/packageScripts.ts; "" when there's no package.json.
 func detectPackageManager(dir string) string {
 	if _, err := os.Lstat(filepath.Join(dir, "package.json")); err != nil {
 		return ""

@@ -1,10 +1,10 @@
 import type { ScriptName, ShigomoriConfig } from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
-import { findProjectOrThrow } from "../../lib/projects";
-import { cancelScript, startScript } from "../../lib/scripts";
-import { takeOrphanSweepReport } from "../../lib/scripts/persistence";
-import { shellQuote } from "../../lib/scripts/process";
+import { findProjectOrThrow } from "@host/lib/projects";
+import { cancelScript, startScript } from "@host/lib/scripts";
+import { takeOrphanSweepReport } from "@host/lib/scripts/persistence";
+import { shellQuote } from "@host/lib/scripts/process";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 import type { HandlerContext } from "../register";
 

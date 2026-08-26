@@ -3,7 +3,7 @@ import type { Handlers } from "@shared/ipc/types";
 import {
   invalidateGlobalConfigCache,
   readGlobalConfig,
-} from "../../lib/config/global";
+} from "@host/lib/config/global";
 import { globalConfigWriteViaCli } from "../cliDelegate";
 
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {

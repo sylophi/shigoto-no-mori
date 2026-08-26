@@ -33,7 +33,7 @@ import {
   type CliResult,
   cliFailureMessage,
 } from "../electron/cliRunner";
-import { shellQuote } from "../lib/scripts/process";
+import { shellQuote } from "@host/lib/scripts/process";
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the CLI's streamed lifecycle documents.

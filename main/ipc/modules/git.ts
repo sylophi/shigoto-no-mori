@@ -1,7 +1,7 @@
 import { gitContract } from "@shared/ipc/modules/git";
 import type { Handlers } from "@shared/ipc/types";
 import { maybeFetchProject } from "../../electron/fetch";
-import { findProjectOrThrow } from "../../lib/projects";
+import { findProjectOrThrow } from "@host/lib/projects";
 import type { HandlerContext } from "../register";
 
 export const gitHandlers: Handlers<typeof gitContract, HandlerContext> = {

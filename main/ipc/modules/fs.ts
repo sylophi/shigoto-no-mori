@@ -2,8 +2,8 @@ import { access, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { fsContract } from "@shared/ipc/modules/fs";
 import type { Handlers } from "@shared/ipc/types";
-import { isGitRepo } from "../../lib/git/core";
-import { toAbsolute } from "../../lib/util/paths";
+import { isGitRepo } from "@host/lib/git/core";
+import { toAbsolute } from "@host/lib/util/paths";
 
 // Directories that virtually never contain git repos but are huge and slow to
 // walk. Skipped during the scan to keep it responsive.

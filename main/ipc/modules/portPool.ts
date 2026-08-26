@@ -1,9 +1,9 @@
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import type { Handlers } from "@shared/ipc/types";
-import { readGlobalConfig } from "../../lib/config/global";
-import { findWorktreeIdentityOrThrow } from "../../lib/git/worktrees";
-import { isPortPoolConfigured, isPortPoolInstalled } from "../../lib/portPool";
-import { findProjectOrThrow } from "../../lib/projects";
+import { readGlobalConfig } from "@host/lib/config/global";
+import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
+import { isPortPoolConfigured, isPortPoolInstalled } from "@host/lib/portPool";
+import { findProjectOrThrow } from "@host/lib/projects";
 
 export const portPoolHandlers: Handlers<typeof portPoolContract> = {
   isActive: async ({ projectId, worktreeId }) => {

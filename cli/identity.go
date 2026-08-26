@@ -180,7 +180,7 @@ func joinHostPath(host, path string) string {
 	folded := lowerASCIIHost(host)
 	// "ssh.<host>" is the host's SSH-over-443 alias (github.com
 	// publishes ssh.github.com, and GHE mirrors the shape): same repo,
-	// one key. Mirrors normalizeHost in main/lib/githubCli/remote.ts.
+	// one key. Mirrors normalizeHost in host/lib/githubCli/remote.ts.
 	folded = strings.TrimPrefix(folded, "ssh.")
 	if folded == "" || repo == "" {
 		return ""

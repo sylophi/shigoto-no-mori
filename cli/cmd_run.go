@@ -174,7 +174,7 @@ func listPackageScripts(manager string, scripts []packageScript) (int, error) {
 	return 0, nil
 }
 
-// Ordered port of readPackageScripts (main/lib/scripts/
+// Ordered port of readPackageScripts (host/lib/scripts/
 // packageScripts.ts): only string-valued entries count, and a missing
 // or non-object scripts block means "no scripts". The TS side returns
 // null for a missing or unparseable file. Here those are real errors
@@ -238,7 +238,7 @@ func runArgv(manager, script string, extra []string) []string {
 	return append(argv, extra...)
 }
 
-// Port of bumpScriptUseCount (main/lib/scripts/packageScriptStats.ts):
+// Port of bumpScriptUseCount (host/lib/scripts/packageScriptStats.ts):
 // same state.json key, same rolling window, so the app's "most used"
 // sort counts terminal runs too.
 func bumpPackageScriptUse(projectID, script string) {

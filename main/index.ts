@@ -5,15 +5,15 @@ import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
-import { ensureShigomoriRoot } from "./lib/bootstrap";
-import { getDeviceId } from "./lib/config/deviceId";
+import { ensureShigomoriRoot } from "@host/lib/bootstrap";
+import { getDeviceId } from "@host/lib/config/deviceId";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
 import {
   refreshAllProjectGitRefs,
   startBackgroundFetch,
 } from "./electron/fetch";
-import { readThemeSync } from "./lib/config/global";
+import { readThemeSync } from "@host/lib/config/global";
 import { registerIpcHandlers } from "./ipc";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { broadcast, broadcastAll } from "./ipc/register";
@@ -23,10 +23,10 @@ import {
   killScriptsForWorktree,
   markShuttingDown,
   signalAllScriptsBestEffort,
-} from "./lib/scripts";
-import { startOrphanScriptSweep } from "./lib/scripts/persistence";
-import { reapScriptsForRemovedWorktrees } from "./lib/scripts/removedWorktrees";
-import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
+} from "@host/lib/scripts";
+import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
+import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
+import { initShigomoriRoot, shigomoriRoot } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";

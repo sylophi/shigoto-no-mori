@@ -7,10 +7,10 @@ import { uninstallCliEverything } from "../../electron/cliInstall";
 import { relaunchApp } from "../../electron/relaunch";
 import { stopStateWatcher } from "../../electron/stateWatcher";
 import { stopUpdaterBridge } from "../../electron/updaterBridge";
-import { nukeEverything } from "../../lib/nuke";
-import { moveShigomoriRoot } from "../../lib/rootMove";
+import { nukeEverything } from "@host/lib/nuke";
+import { moveShigomoriRoot } from "@host/lib/rootMove";
 import { broadcastAll } from "../register";
-import { shigomoriRoot } from "../../lib/util/paths";
+import { shigomoriRoot } from "@host/lib/util/paths";
 
 export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   info: () => ({

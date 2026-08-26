@@ -1,7 +1,7 @@
 package main
 
-// Carry-over, ported from main/lib/worktrees/{carryOver,
-// worktreeInclude}.ts and main/lib/git/{branches,exclude}.ts: manual
+// Carry-over, ported from host/lib/worktrees/{carryOver,
+// worktreeInclude}.ts and host/lib/git/{branches,exclude}.ts: manual
 // entries (symlink/copy) from project.json merged with the repo's
 // .worktreeinclude resolution, applied best-effort into the new
 // worktree, with directory symlinks hidden via .git/info/exclude.

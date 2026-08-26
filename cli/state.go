@@ -1,7 +1,7 @@
 package main
 
-// On-disk state access, ported from main/lib/config/{store,global,
-// project}.ts and main/lib/util/{jsonFile,lockFile}.ts. Layout under
+// On-disk state access, ported from host/lib/config/{store,global,
+// project}.ts and host/lib/util/{jsonFile,lockFile}.ts. Layout under
 // the root:
 //   registry.json                           projects, shelved worktrees
 //   state.json                              use logs, sort/collapse prefs
@@ -76,7 +76,7 @@ func readRootPointer() string {
 // that doesn't exist yet, is empty, or already holds shigomori state.
 // A pointer at ~/Documents must fall back to the default rather than
 // adopt a directory full of unrelated files as the state root. Mirror
-// of main/lib/util/paths.ts looksLikeRootTarget -- keep in sync.
+// of host/lib/util/paths.ts looksLikeRootTarget -- keep in sync.
 func looksLikeRootTarget(target string) bool {
 	entries, err := os.ReadDir(target)
 	if err != nil {
@@ -155,7 +155,7 @@ type launcherCommand struct {
 // anything yet. It exists so a later format change can tell an old
 // file from a new one instead of inferring the shape from whichever
 // keys happen to be present. The app stamps the
-// same key with the same value (main/lib/util/jsonFile.ts). The two
+// same key with the same value (host/lib/util/jsonFile.ts). The two
 // writers have to move together, since a marker the two disagree on is
 // worse than no marker at all.
 const schemaVersion = 1
@@ -210,13 +210,13 @@ func noteNewerSchema(path string, raw []byte) {
 }
 
 // The registry's two keys. The app names the same two in
-// main/lib/config/store.ts.
+// host/lib/config/store.ts.
 const (
 	projectsKey = "projects"
 	shelvedKey  = "shelvedWorktrees"
 )
 
-// deviceId (app-written, main/lib/config/deviceId.ts) is deliberately
+// deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
 // absent: this list drives only the state.json→registry.json split,
 // which deviceId postdates.
 var registryKeys = []string{projectsKey, shelvedKey}
@@ -675,7 +675,7 @@ func atomicWriteJSON(path string, value any) error {
 	return nil
 }
 
-// --- cross-process file locks (main/lib/util/lockFile.ts protocol) ---
+// --- cross-process file locks (host/lib/util/lockFile.ts protocol) ---
 
 const (
 	lockStale   = 10 * time.Second
