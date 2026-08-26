@@ -158,6 +158,9 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	if err := dropShelved(id.ID); err != nil {
 		vlog("[state] drop shelved: %v", err)
 	}
+	// A dirty-state capture describes a worktree that no longer exists;
+	// best-effort, and absent for most worktrees.
+	dropDirtyCapture(proj.Path, id.ID)
 	deleteBranch := !opts.keepBranch &&
 		(global.DeleteBranchOnRemove == nil || *global.DeleteBranchOnRemove)
 	deleteBranchAfterWorktreeRemoval(proj.Path, id, deleteBranch)
