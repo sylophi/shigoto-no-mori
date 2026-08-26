@@ -52,6 +52,7 @@ import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 
 const TOKEN = "correct-horse-battery-staple-token-of-good-length";
@@ -708,6 +709,26 @@ async function main() {
       }
       assert.equal(packageScriptsContract.calls.setSort.remote, true);
       assert.equal(packageScriptsContract.calls.setSort.mutating, true);
+      // The step-7 sync transfer surface (v2 slice B): every call is a
+      // command, so the whole bundle-transfer path rides the per-peer
+      // grant and the read-only LAN wire refuses it outright.
+      for (const key of [
+        "captureDirty",
+        "bundleStart",
+        "bundleChunk",
+        "bundleAbort",
+      ]) {
+        assert.equal(
+          syncContract.calls[key].remote,
+          true,
+          `sync.${key} remote`,
+        );
+        assert.equal(
+          syncContract.calls[key].mutating,
+          true,
+          `sync.${key} must require the command grant`,
+        );
+      }
       // The preflight read is remote and explicitly a read, so every
       // wire serves it ungated.
       assert.equal(remoteAccessContract.calls.commandAccess.remote, true);

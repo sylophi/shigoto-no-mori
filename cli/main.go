@@ -415,6 +415,9 @@ var commands = []command{
 	{name: "adopt", worktree: true, run: cmdAdopt},
 	{name: "setup", worktree: true, run: cmdSetup},
 	{name: "dirty", worktree: true, run: cmdDirty},
+	// App plumbing for device sync (bundle create/unpack); hidden from
+	// the help catalog on purpose, like the config `write --data` verbs.
+	{name: "bundle", run: cmdBundle},
 	{name: "shelve", worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, true) }},
 	{name: "unshelve", worktree: true,

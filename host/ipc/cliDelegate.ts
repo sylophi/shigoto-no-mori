@@ -11,6 +11,7 @@ import { z } from "zod";
 import {
   CarryOverReportSchema,
   CleanupErrorSchema,
+  CommitHashSchema,
   CreatePhaseSchema,
   type CreateWorktreeResult,
   type DeleteWorktreeResult,
@@ -409,6 +410,89 @@ export async function shigomoriWriteViaCli(
     JSON.stringify(config),
   ]);
   finalOkDoc(result, "sm projects config write failed", { projectId });
+}
+
+// The device-sync verbs (v2 step 7, slice B). Each shells the CLI and
+// re-validates the crossing document with a zod schema, like every
+// other Go/TS boundary in this file. The paths handed to bundle
+// create/unpack are ALWAYS app-chosen temp paths (the sync host module
+// and fetchBundle own them); the CLI writes/reads exactly where told,
+// so path discipline lives on this side of the trust boundary.
+
+export async function dirtyCaptureViaCli(
+  project: Project,
+  worktreeId: string,
+): Promise<{ captured: boolean; commit?: string }> {
+  const result = await runner().runCli([
+    "dirty",
+    "capture",
+    "--project-id",
+    project.id,
+    "--worktree-id",
+    worktreeId,
+  ]);
+  const final = finalOkDoc(result, "sm dirty capture failed", { worktreeId });
+  // A capture doc carries its commit; a clean worktree omits it. The
+  // refine makes a captured:true document WITHOUT a commit an engine
+  // drift error here, never a silent "clean" report.
+  const doc = z
+    .object({ captured: z.boolean(), commit: z.string().optional() })
+    .refine((d) => !d.captured || d.commit !== undefined, {
+      message: "captured without a commit",
+    })
+    .parse(final);
+  return doc.captured
+    ? { captured: true, commit: doc.commit }
+    : { captured: false };
+}
+
+const RefTipDocSchema = z.object({ ref: z.string(), commit: CommitHashSchema });
+
+export async function bundleCreateViaCli(
+  project: Project,
+  outPath: string,
+  refs: string[],
+  haves: string[],
+): Promise<{ bytes: number; refs: { ref: string; commit: string }[] }> {
+  const result = await runner().runCli([
+    "bundle",
+    "create",
+    "--project-id",
+    project.id,
+    "--out",
+    outPath,
+    ...refs.flatMap((ref) => ["--ref", ref]),
+    ...haves.flatMap((have) => ["--have", have]),
+  ]);
+  const final = finalOkDoc(result, "sm bundle create failed", {
+    projectId: project.id,
+  });
+  return z
+    .object({
+      bytes: z.number().int().nonnegative(),
+      refs: z.array(RefTipDocSchema),
+    })
+    .parse(final);
+}
+
+export async function bundleUnpackViaCli(
+  project: Project,
+  inPath: string,
+  refspecs: string[],
+): Promise<{ fetched: { ref: string; commit: string }[] }> {
+  const result = await runner().runCli([
+    "bundle",
+    "unpack",
+    "--project-id",
+    project.id,
+    "--in",
+    inPath,
+    ...refspecs.flatMap((spec) => ["--refspec", spec]),
+  ]);
+  const final = finalOkDoc(result, "sm bundle unpack failed", {
+    projectId: project.id,
+  });
+  return z.object({ fetched: z.array(RefTipDocSchema) }).parse(final);
 }
 
 // Registry removal and per-project state deletion only; the app-side

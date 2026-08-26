@@ -23,6 +23,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
+import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
@@ -71,6 +72,7 @@ export const allContractModules: readonly ContractModule[] = [
   cliContract,
   shellContract,
   shigomoriContract,
+  syncContract,
   updaterContract,
   windowContract,
   worktreesContract,
@@ -108,6 +110,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const cliClient = c(cliContract);
   const shellClient = c(shellContract);
   const shigomoriClient = c(shigomoriContract);
+  const syncClient = c(syncContract);
   const updaterClient = c(updaterContract);
   const windowClient = c(windowContract);
   const worktreesClient = c(worktreesContract);
@@ -316,6 +319,13 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       read: (projectId: string) => shigomoriClient.read({ projectId }),
       write: (projectId: string, config: ShigomoriConfig) =>
         shigomoriClient.write({ projectId, config }),
+    },
+
+    sync: {
+      captureDirty: syncClient.captureDirty,
+      bundleStart: syncClient.bundleStart,
+      bundleChunk: syncClient.bundleChunk,
+      bundleAbort: syncClient.bundleAbort,
     },
 
     updater: {

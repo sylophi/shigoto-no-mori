@@ -11,28 +11,39 @@ type argSpec struct {
 	// canonical name -> aliases (all forms accepted with - or --)
 	strings map[string][]string
 	bools   map[string][]string
+	// Valued flags that may repeat (`--ref a --ref b`); occurrences
+	// accumulate in order instead of last-wins.
+	lists map[string][]string
 }
 
 type parsedArgs struct {
 	strings     map[string]string
 	bools       map[string]bool
+	lists       map[string][]string
 	positionals []string
 }
 
 func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
-	result := parsedArgs{strings: map[string]string{}, bools: map[string]bool{}}
+	result := parsedArgs{
+		strings: map[string]string{},
+		bools:   map[string]bool{},
+		lists:   map[string][]string{},
+	}
 	canonical := map[string]string{}
 	takesValue := map[string]bool{}
-	register := func(names map[string][]string, valued bool) {
+	isList := map[string]bool{}
+	register := func(names map[string][]string, valued, list bool) {
 		for name, aliases := range names {
 			for _, alias := range append(aliases, name) {
 				canonical[alias] = name
 				takesValue[alias] = valued
+				isList[alias] = list
 			}
 		}
 	}
-	register(spec.strings, true)
-	register(spec.bools, false)
+	register(spec.strings, true, false)
+	register(spec.bools, false, false)
+	register(spec.lists, true, true)
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -69,7 +80,11 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 				}
 				value = args[i]
 			}
-			result.strings[canon] = value
+			if isList[name] {
+				result.lists[canon] = append(result.lists[canon], value)
+			} else {
+				result.strings[canon] = value
+			}
 		} else {
 			if hasInline {
 				return result, usageErrf("Option %q takes no value.", arg)
