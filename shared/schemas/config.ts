@@ -245,6 +245,15 @@ export const ClientConfigSchema = z.object({
   // `false` is the opt-out back to the v1 look. Mirrored to
   // localStorage so startup paints without a flash.
   doubutsu: z.boolean().optional(),
+  // "Keep this device reachable": the single opt-in behind two liveness
+  // capabilities the main process reconciles (main/electron/liveness.ts).
+  // When on, the app registers a login item so it starts when the user
+  // logs in, and it best-effort relaunches itself after a recoverable
+  // crash so a machine the user hosts stays online for the account
+  // relay. Per-machine and never synced, like the rest of client config:
+  // the CLI never reads it and it does not ride any sync path. Default is
+  // off (absent = off), explicit `true` is the opt-in.
+  keepReachable: z.boolean().optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 

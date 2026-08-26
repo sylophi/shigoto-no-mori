@@ -6,9 +6,19 @@ import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { ToggleRow } from "./ToggleRow";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
+import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
 import { useLocalGlobalConfigUpdate } from "@/hooks/config/useLocalGlobalConfigUpdate";
 import { toast } from "@/lib/toast";
+
+// Launch-at-login via setLoginItemSettings only takes on macOS and
+// Windows. It is a no-op on Linux in Electron. The crash-recovery half
+// of keepReachable works everywhere, so the toggle stays enabled and the
+// helper text is what stays honest about the login-item half.
+const launchAtLoginSupported =
+  typeof navigator !== "undefined" &&
+  /Macintosh|Windows/.test(navigator.userAgent);
 
 // "This device (hosting)": the local machine serving its forest to
 // remote clients over the websocket host transport. Display state (on,
@@ -18,6 +28,9 @@ import { toast } from "@/lib/toast";
 export function HostingSection() {
   const { data: config } = useGlobalConfig();
   const update = useLocalGlobalConfigUpdate("Couldn't update hosting");
+  const { data: clientConfig } = useClientConfig();
+  const keepReachableUpdate = useKeepReachableUpdate();
+  const keepReachable = clientConfig?.keepReachable === true;
   const [revealed, setRevealed] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
 
@@ -198,6 +211,20 @@ export function HostingSection() {
           </div>
         </div>
       )}
+
+      <div className="space-y-3 border-t border-border pt-3">
+        <ToggleRow
+          checked={keepReachable}
+          onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
+          disabled={keepReachableUpdate.isPending}
+          label="Keep this device reachable"
+          description={
+            launchAtLoginSupported
+              ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account. Applies to this machine only."
+              : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform. Applies to this machine only."
+          }
+        />
+      </div>
     </section>
   );
 }

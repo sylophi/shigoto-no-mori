@@ -36,6 +36,24 @@ export function* walk(dir, extensions) {
   }
 }
 
+// The failure-collecting harness every check script hand-rolls: a
+// `failures` list and a `check(label, fn)` that runs one assertion group
+// and records its message instead of throwing, so one failing group does
+// not hide the rest. Returns both so the script can hand `failures` to
+// `report` below. Synchronous, matching the assertion callbacks that use
+// it.
+export function makeChecker() {
+  const failures = [];
+  function check(label, fn) {
+    try {
+      fn();
+    } catch (error) {
+      failures.push(`${label}: ${error.message}`);
+    }
+  }
+  return { check, failures };
+}
+
 // `name` is the lowercase check phrase, like "host boundary". Failures
 // print a capitalized header, each failure line, and the hint, then set
 // a nonzero exit code. Setting exitCode instead of calling
