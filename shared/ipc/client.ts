@@ -348,6 +348,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       bundleChunk: syncClient.bundleChunk,
       bundleAbort: syncClient.bundleAbort,
       pullWorktree: syncClient.pullWorktree,
+      transplantWorktree: syncClient.transplantWorktree,
     },
 
     updater: {

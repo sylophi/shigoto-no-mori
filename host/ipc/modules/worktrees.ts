@@ -26,7 +26,10 @@ import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
 } from "@host/lib/projects";
-import { withDeleteInflight } from "@host/lib/scripts";
+import {
+  getRunningScriptWorktrees,
+  withDeleteInflight,
+} from "@host/lib/scripts";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { scriptEventNotifier } from "../scriptRun";
 import {
@@ -80,8 +83,27 @@ export const worktreesHandlers: Handlers<
     return relocateWorktreeToManagedPath(project, worktreeId, destinationPath);
   },
 
-  delete: async ({ projectId, worktreeId, force, skipCleanup }, ctx) => {
+  delete: async (
+    { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
+    ctx,
+  ) => {
     const project = findProjectOrThrow(projectId);
+    // Local delete kills scripts by design (withDeleteInflight reaps
+    // them). The transplant orchestrator refuses instead, since its
+    // teardown must never take down work still running on the source
+    // device. The lookup is app-registry-only, so the CLI stays
+    // ignorant of the flag. "scripts-running" is a stable marker the
+    // orchestrator and the UI match on, not prose.
+    if (refuseRunningScripts) {
+      const running = getRunningScriptWorktrees().find(
+        (entry) => entry.worktreeId === worktreeId,
+      );
+      if (running !== undefined) {
+        throw new Error(
+          `scripts-running: ${running.scriptCount} script(s) are running in this worktree`,
+        );
+      }
+    }
     // The CLI can't see the app's script registry, so the delete runs
     // under the shared tombstone protocol (see withDeleteInflight).
     return withDeleteInflight(

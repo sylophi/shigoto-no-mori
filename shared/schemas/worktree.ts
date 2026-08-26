@@ -260,6 +260,12 @@ export const RelocateWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend(
 export const DeleteWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend({
   force: z.boolean().optional(),
   skipCleanup: z.boolean().optional(),
+  // Refuse the delete outright (stable "scripts-running" message
+  // marker) when the app's registry shows live scripts in the worktree,
+  // instead of the default kill-then-delete. Set by the transplant
+  // orchestrator, which must never take down work still running on the
+  // source device. App-registry-only, so it never reaches `sm rm`.
+  refuseRunningScripts: z.boolean().optional(),
 });
 
 export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({

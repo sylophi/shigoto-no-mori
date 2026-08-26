@@ -8,12 +8,17 @@ import {
   Loader2,
   Plus,
   Settings as SettingsIcon,
+  Shovel,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { errorMessageOf } from "@shared/errors";
 import { PortSchema } from "@shared/ipc/modules/portForward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import type {
+  SyncPullWorktreeResult,
+  SyncTransplantWorktreeResult,
+} from "@shared/ipc/modules/sync";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { Button } from "@/components/ui/button";
@@ -378,12 +383,20 @@ function RemoteWorktreeRow({
         ) : (
           <>
             {pullTarget && (
-              <PullWorktreeControl
-                worktree={worktree}
-                sourceProjectId={project.id}
-                sourceIdentity={pullTarget.sourceIdentity}
-                localProjectId={pullTarget.localProjectId}
-              />
+              <>
+                <PullWorktreeControl
+                  worktree={worktree}
+                  sourceProjectId={project.id}
+                  sourceIdentity={pullTarget.sourceIdentity}
+                  localProjectId={pullTarget.localProjectId}
+                />
+                <TransplantWorktreeControl
+                  worktree={worktree}
+                  sourceProjectId={project.id}
+                  sourceIdentity={pullTarget.sourceIdentity}
+                  localProjectId={pullTarget.localProjectId}
+                />
+              </>
             )}
             <DeleteWorktreeControl worktree={worktree} />
           </>
@@ -392,49 +405,79 @@ function RemoteWorktreeRow({
   );
 }
 
-// Brings a peer's worktree to THIS device (v2 step 7, slice C): one
-// mutation covers capture, transfer, create, and dirty apply, so the
-// whole pull rides this button's pending state -- create-phase progress
-// streams to the local worktree's own detail page, not this forest. The
-// handler re-verifies the identity match; the gate here is UX, not the
-// wall. Refusals surface centrally, everything else toasts locally.
-function PullWorktreeControl({
+// The one bring-a-peer's-worktree-here mutation behind both controls
+// below (pull: v2 step 7 slice C, transplant: step 9): capture,
+// transfer, create, and dirty apply ride a single pending state --
+// create-phase progress streams to the local worktree's own detail
+// page, not this forest. The handler re-verifies the identity match;
+// the gate in the controls is UX, not the wall. Refusals surface
+// centrally, everything else toasts here. The result lands on another
+// page (the local forest), so the toast is the only visible conclusion.
+function useBringWorktreeHere({
   worktree,
   sourceProjectId,
   sourceIdentity,
   localProjectId,
+  transplant,
 }: {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
   localProjectId: string;
+  transplant: boolean;
 }) {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
-  const pull = useMutation({
-    mutationFn: () =>
-      window.api.sync.pullWorktree({
+  return useMutation({
+    // The explicit union return type keeps the transplant-only fields
+    // narrowable via "sourceRemoved" in result below.
+    mutationFn: (): Promise<
+      SyncPullWorktreeResult | SyncTransplantWorktreeResult
+    > => {
+      const payload = {
         sourceDeviceId: deviceId,
         sourceProjectId,
         sourceWorktreeId: worktree.id,
         sourceIdentity,
         branch: worktree.branch,
-      }),
-    onSuccess: ({ captured, dirtyApplied }) => {
+      };
+      return transplant
+        ? window.api.sync.transplantWorktree(payload)
+        : window.api.sync.pullWorktree(payload);
+    },
+    onSuccess: (result) => {
       // The new worktree and branch are LOCAL, so this invalidates the
       // local device's registry (module-level queryKeys), never the
-      // surrounding remote scope's.
+      // surrounding remote scope's. On a transplant the source side
+      // refreshes off the host's own resolved-mutation ping
+      // (useWatchRemoteHost).
       void queryClient.invalidateQueries({
         queryKey: queryKeys.worktrees(localProjectId),
       });
       void queryClient.invalidateQueries({
         queryKey: queryKeys.branches(localProjectId),
       });
-      // The result lands on another page (the local forest), so the
-      // toast is the only visible conclusion here. An unapplied capture
-      // is a partial success: the worktree is real, the uncommitted
-      // changes stayed safe on the source device.
-      if (dirtyApplied || !captured) {
+      if ("sourceRemoved" in result) {
+        // Transplant: a refused or failed teardown (including a dirty
+        // state that did not land here) is a partial success the
+        // handler reports via sourceRemoved/sourceError instead of
+        // throwing, so it lands in onSuccess with its own voice.
+        if (result.sourceRemoved) {
+          toast.success(`Transplanted ${worktree.branch} here`);
+        } else {
+          notifyError(
+            `Brought ${worktree.branch} here, but the source worktree stayed`,
+            result.sourceError !== undefined &&
+              result.sourceError.includes("scripts-running")
+              ? "Scripts are still running there."
+              : result.sourceError,
+          );
+        }
+        return;
+      }
+      // Pull: an unapplied capture is a partial success, the worktree
+      // is real and the uncommitted changes stayed safe on the source.
+      if (result.dirtyApplied || !result.captured) {
         toast.success(`Brought ${worktree.branch} here`);
       } else {
         notifyError(
@@ -445,11 +488,25 @@ function PullWorktreeControl({
     },
     onError: (err) => {
       if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't bring worktree here", err);
+        notifyError(
+          transplant
+            ? "Couldn't transplant worktree"
+            : "Couldn't bring worktree here",
+          err,
+        );
       }
     },
     meta: { silentError: true },
   });
+}
+
+function PullWorktreeControl(props: {
+  worktree: Worktree;
+  sourceProjectId: string;
+  sourceIdentity: string;
+  localProjectId: string;
+}) {
+  const pull = useBringWorktreeHere({ ...props, transplant: false });
   return (
     <Button
       type="button"
@@ -464,6 +521,37 @@ function PullWorktreeControl({
       ) : (
         <ArrowDownToLine />
       )}
+    </Button>
+  );
+}
+
+// Destructive on the remote side, so it two-step confirms like the
+// delete control. The armed state rides the ghost-destructive variant
+// (aria-pressed and the swapped aria-label carry it for screen
+// readers) to keep the row's compact icon look.
+function TransplantWorktreeControl(props: {
+  worktree: Worktree;
+  sourceProjectId: string;
+  sourceIdentity: string;
+  localProjectId: string;
+}) {
+  const transplant = useBringWorktreeHere({ ...props, transplant: true });
+  const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant={armed ? "ghost-destructive" : "ghost"}
+      aria-label={
+        armed
+          ? "Click again to confirm transplant"
+          : "Transplant this worktree here"
+      }
+      aria-pressed={armed}
+      disabled={transplant.isPending}
+      onClick={() => trigger(() => transplant.mutate())}
+    >
+      {transplant.isPending ? <Loader2 className="animate-spin" /> : <Shovel />}
     </Button>
   );
 }

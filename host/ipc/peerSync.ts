@@ -7,6 +7,7 @@
 // exactly one client peer per deviceId, and a second dial silently
 // destroys the session every remote-forest query is riding on.
 import type { syncContract } from "@shared/ipc/modules/sync";
+import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
 
 // The remote verbs the orchestration drives. Superset of
@@ -16,8 +17,13 @@ export type PeerSyncApi = Pick<
   "refTips" | "captureDirty" | "bundleStart" | "bundleChunk" | "bundleAbort"
 >;
 
+// The transplant orchestration's teardown reach: the peer's ordinary
+// worktrees:delete, riding the same grant-gated wire as the sync verbs.
+export type PeerWorktreesApi = Pick<Client<typeof worktreesContract>, "delete">;
+
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
+  worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
 };
 
 let impl: PeerSyncImpl | null = null;
@@ -26,9 +32,17 @@ export function setPeerSyncApiImpl(next: PeerSyncImpl): void {
   impl = next;
 }
 
-export function peerSyncApiFor(deviceId: string): PeerSyncApi {
+function requireImpl(): PeerSyncImpl {
   if (impl === null) {
-    throw new Error("peer sync api requested before setPeerSyncApiImpl ran");
+    throw new Error("peer api requested before setPeerSyncApiImpl ran");
   }
-  return impl.syncApiFor(deviceId);
+  return impl;
+}
+
+export function peerSyncApiFor(deviceId: string): PeerSyncApi {
+  return requireImpl().syncApiFor(deviceId);
+}
+
+export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
+  return requireImpl().worktreesApiFor(deviceId);
 }
