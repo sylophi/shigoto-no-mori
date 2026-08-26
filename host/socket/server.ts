@@ -22,8 +22,8 @@ import {
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   CLOSE_OVER_CAPACITY,
-  type ClientFrame,
   ClientFrameSchema,
+  decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
   MAX_INBOUND_FRAME_BYTES,
@@ -127,17 +127,6 @@ function toText(data: RawData): string {
 function send(socket: WebSocket, frame: ServerFrame): void {
   if (socket.readyState !== WebSocket.OPEN) return;
   socket.send(encodeFrame(frame));
-}
-
-function parseClientFrame(text: string): ClientFrame | null {
-  let raw: unknown;
-  try {
-    raw = JSON.parse(text);
-  } catch {
-    return null;
-  }
-  const parsed = ClientFrameSchema.safeParse(raw);
-  return parsed.success ? parsed.data : null;
 }
 
 export function createWsServerBinding(): WsServerBinding {
@@ -338,7 +327,9 @@ export function createWsServerBinding(): WsServerBinding {
       });
       socket.on("message", (data, isBinary) => {
         if (dead) return;
-        const frame = isBinary ? null : parseClientFrame(toText(data));
+        const frame = isBinary
+          ? null
+          : decodeFrame(toText(data), ClientFrameSchema);
         if (ctx === null) {
           if (frame === null || frame.t !== "hello") {
             dead = true;

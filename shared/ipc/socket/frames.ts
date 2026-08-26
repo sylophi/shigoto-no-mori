@@ -130,3 +130,20 @@ export type ServerFrame = z.infer<typeof ServerFrameSchema>;
 export function encodeFrame(frame: ClientFrame | ServerFrame): string {
   return JSON.stringify(frame);
 }
+
+// The one sanctioned reader for both directions. A frame that is not
+// valid JSON, or parses but fails its schema, is malformed and returns
+// null. Callers treat a null as a dropped frame, never as fatal: one
+// bad message must not tear down a socket carrying live traffic. Each
+// side passes its own inbound schema (ServerFrameSchema on the client,
+// ClientFrameSchema on the host).
+export function decodeFrame<T>(text: string, schema: z.ZodType<T>): T | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const parsed = schema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
