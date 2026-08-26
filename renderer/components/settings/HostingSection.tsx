@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Eye, RefreshCw } from "lucide-react";
 import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,14 @@ export function HostingSection() {
   const busy = update.isPending;
 
   const [portDraft, setPortDraft] = useState(String(effectivePort));
+
+  // Track the persisted port whenever it changes out from under the
+  // draft (toggling hosting off clears socketHost, so re-enabling would
+  // otherwise show the old port while the listener runs on the default,
+  // and a stray blur would write the stale draft back).
+  useEffect(() => {
+    setPortDraft(String(effectivePort));
+  }, [effectivePort]);
 
   const setEnabled = (next: boolean) => {
     setRevealed(null);

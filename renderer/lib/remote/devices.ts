@@ -219,11 +219,3 @@ export const remoteDeviceStore = {
     return snapshot;
   },
 };
-
-export function getRemoteDevice(url: string): RemoteDevice | undefined {
-  return entries.get(url)?.device;
-}
-
-export function getRemoteDeviceApi(url: string): RemoteDeviceApi | undefined {
-  return entries.get(url)?.device.api;
-}

@@ -51,10 +51,15 @@ export function useWatchAccountChanges(): void {
 // broadcast, and useWatchAccountChanges invalidates the whole "account"
 // prefix off that reliable local IPC, so a per-mutation invalidation
 // would only duplicate it.
-export function useSignIn() {
+// silentError mirrors useGlobalConfig: a call site that renders its own
+// inline failure banner (the web login page) suppresses the global
+// toast so the error is signalled once, not twice.
+export function useSignIn({ silentError = false } = {}) {
   return useMutation<AccountStatus, Error, void>({
     mutationFn: () => window.api.account.signIn(),
-    meta: { errorTitle: "Couldn't sign in" },
+    meta: silentError
+      ? { silentError: true }
+      : { errorTitle: "Couldn't sign in" },
   });
 }
 

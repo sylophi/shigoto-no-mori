@@ -2,12 +2,11 @@
 // explains that this build carries no account service configuration.
 // Signed-in visitors are bounced straight to the devices page.
 import { useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { CloudOff, LogIn } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { useAccountStatus } from "@/hooks/account/useAccount";
+import { useAccountStatus, useSignIn } from "@/hooks/account/useAccount";
 import { redirectTo, webPaths } from "./nav";
 
 export function LoginPage() {
@@ -19,10 +18,8 @@ export function LoginPage() {
 
   // The bridge's signIn navigates the whole page away on success, so
   // this mutation only ever settles when the redirect could not start.
-  const signIn = useMutation({
-    mutationFn: () => window.api.account.signIn(),
-    meta: { silentError: true },
-  });
+  // silentError keeps the failure in the inline banner below.
+  const signIn = useSignIn({ silentError: true });
 
   return (
     <div className="flex h-full items-center justify-center p-6">
