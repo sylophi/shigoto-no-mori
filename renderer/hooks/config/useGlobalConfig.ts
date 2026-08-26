@@ -9,11 +9,16 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 // from window.api.globalConfig.readLocal instead. Writes go through
 // useSettingsSave, which owns the dirty diff and the post-save
 // invalidations.
-export function useGlobalConfig() {
+// silentError lets a call site that renders its own inline read error
+// (the remote settings pane) suppress the global error toast, so a
+// failed read is signalled once, not twice.
+export function useGlobalConfig({ silentError = false } = {}) {
   const { api, keys } = useHostScope();
   return useQuery<ReadGlobalConfig>({
     queryKey: keys.globalConfig(),
     queryFn: () => api.globalConfig.read(),
-    meta: { errorTitle: "Couldn't load settings" },
+    meta: silentError
+      ? { silentError: true }
+      : { errorTitle: "Couldn't load settings" },
   });
 }

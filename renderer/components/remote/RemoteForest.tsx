@@ -1,5 +1,10 @@
 import { getRouteApi } from "@tanstack/react-router";
-import { FolderGit2, Loader2, Plus } from "lucide-react";
+import {
+  FolderGit2,
+  Loader2,
+  Plus,
+  Settings as SettingsIcon,
+} from "lucide-react";
 import { useState } from "react";
 import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
@@ -11,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { MergedPrimaryBranchBox } from "@/components/worktreeDetail/pullRequests/MergedPrimaryBranchBox";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { DeviceStatusDot } from "./DeviceStatusDot";
+import { EmptyPanel } from "./EmptyPanel";
+import { RemoteDeviceSettings } from "./RemoteDeviceSettings";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
@@ -81,6 +88,11 @@ function ConnectedForest({
   deviceId: string;
 }) {
   const api = device.api;
+  // Forest or settings body, toggled by the header gear (v2 step 6).
+  // Plain component state on the SAME route: the settings body is a
+  // view of this page, not a place, so the web shell needs no new
+  // route and closing it never navigates.
+  const [showSettings, setShowSettings] = useState(false);
   const {
     data: projects = [],
     isPending,
@@ -97,51 +109,109 @@ function ConnectedForest({
 
   const { connected } = deviceStatusView(device.status);
   const mismatch = deviceVersionMismatch(device);
+  // Settings needs a live connection to read and write; fall back to
+  // the forest's status panels whenever the link lapses so the toggle
+  // can't strand a dead editor.
+  const settingsOpen = showSettings && connected && api !== undefined;
 
-  return (
+  const shell = (
     <ForestShell
       title={device.label}
       status={<DeviceStatusDot status={device.status} />}
-    >
-      {mismatch && (
-        <p className="text-xs text-amber-500">
-          This device is running a different app version. Update the other
-          machine if something looks off.
-        </p>
-      )}
-
-      {!connected ? (
-        <EmptyPanel>
-          {device.status.phase === "blocked"
-            ? `Can't connect: ${device.status.message}.`
-            : // The honest phase label, not a blanket "Connecting" that
-              // lies for a stopped or backing-off device (I4).
-              deviceStatusView(device.status).label}
-        </EmptyPanel>
-      ) : isPending ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : isError ? (
-        // remoteProjectsQueryOptions sets silentError expecting the
-        // forest to render its own inline error, so a failed query shows
-        // the reason rather than a misleading empty "No projects" (I4).
-        <EmptyPanel>
-          Couldn&apos;t load this device&apos;s forest: {errorMessageOf(error)}
-        </EmptyPanel>
-      ) : projects.length === 0 ? (
-        <EmptyPanel>No projects on this device yet.</EmptyPanel>
-      ) : (
-        // A loaded forest always has an api (the listing queries route
-        // through it); the guard just narrows it for the provider prop.
-        api && (
-          <HostScopeProvider deviceId={deviceId} api={api}>
-            <ForestBody
-              projects={projects}
-              worktreesByProject={worktreesByProject}
-            />
-          </HostScopeProvider>
+      actions={
+        connected &&
+        api !== undefined && (
+          <DeviceSettingsToggle
+            open={settingsOpen}
+            onToggle={() => setShowSettings((prev) => !prev)}
+          />
         )
+      }
+      full={settingsOpen}
+    >
+      {settingsOpen ? (
+        <RemoteDeviceSettings />
+      ) : (
+        <>
+          {mismatch && (
+            <p className="text-xs text-amber-500">
+              This device is running a different app version. Update the other
+              machine if something looks off.
+            </p>
+          )}
+
+          {!connected ? (
+            <EmptyPanel>
+              {device.status.phase === "blocked"
+                ? `Can't connect: ${device.status.message}.`
+                : // The honest phase label, not a blanket "Connecting" that
+                  // lies for a stopped or backing-off device (I4).
+                  deviceStatusView(device.status).label}
+            </EmptyPanel>
+          ) : isPending ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : isError ? (
+            // remoteProjectsQueryOptions sets silentError expecting the
+            // forest to render its own inline error, so a failed query shows
+            // the reason rather than a misleading empty "No projects" (I4).
+            <EmptyPanel>
+              Couldn&apos;t load this device&apos;s forest:{" "}
+              {errorMessageOf(error)}
+            </EmptyPanel>
+          ) : projects.length === 0 ? (
+            <EmptyPanel>No projects on this device yet.</EmptyPanel>
+          ) : (
+            // A loaded forest always has an api (the listing queries route
+            // through it); the guard narrows it for the provider branch below.
+            api && (
+              <ForestBody
+                projects={projects}
+                worktreesByProject={worktreesByProject}
+              />
+            )
+          )}
+        </>
       )}
     </ForestShell>
+  );
+
+  // One provider around the whole shell (rather than around ForestBody
+  // alone) so the header's grant-gated gear and the settings body share
+  // the same scope as the forest's mutation controls.
+  return api === undefined ? (
+    shell
+  ) : (
+    <HostScopeProvider deviceId={deviceId} api={api}>
+      {shell}
+    </HostScopeProvider>
+  );
+}
+
+// The header gear: opens the device's settings, so it only exists when
+// this device holds command access on the host (the settings body is a
+// write surface; a read-only visitor gets no dangling entry point).
+// While OPEN it stays rendered even if the verdict flips to refused
+// mid-session, so the user can always toggle back to the forest.
+function DeviceSettingsToggle({
+  open,
+  onToggle,
+}: {
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { granted } = useCommandAccess();
+  if (!granted && !open) return null;
+  return (
+    <Button
+      type="button"
+      size="icon-xs"
+      variant={open ? "secondary" : "ghost"}
+      aria-label={open ? "Back to forest" : "Device settings"}
+      aria-pressed={open}
+      onClick={onToggle}
+    >
+      <SettingsIcon />
+    </Button>
   );
 }
 
@@ -370,10 +440,18 @@ function CreateWorktreeForm({
 function ForestShell({
   title,
   status,
+  actions,
+  full = false,
   children,
 }: {
   title: string;
   status?: React.ReactNode;
+  actions?: React.ReactNode;
+  // Default: children flow in the shell's scrollable column. `full`
+  // hands the whole below-header area to the children instead, for a
+  // body that brings its own scroll region and pinned footer (the
+  // settings editor).
+  full?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -388,6 +466,9 @@ function ForestShell({
           </h1>
         </div>
         {status && <div className="relative z-[1] shrink-0">{status}</div>}
+        {actions && (
+          <div className="relative z-[1] ml-auto shrink-0">{actions}</div>
+        )}
         <span
           aria-hidden
           className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
@@ -395,17 +476,13 @@ function ForestShell({
           端末
         </span>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="flex max-w-3xl flex-col gap-6">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-      {children}
+      {full ? (
+        children
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="flex max-w-3xl flex-col gap-6">{children}</div>
+        </div>
+      )}
     </div>
   );
 }
