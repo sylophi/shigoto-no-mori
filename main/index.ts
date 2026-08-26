@@ -22,7 +22,7 @@ import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { broadcast, broadcastAll } from "./ipc/register";
+import { broadcast, broadcastAll, refreshSocketHost } from "./ipc/register";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -225,6 +225,12 @@ app.on("ready", async () => {
   createWindow();
   startBackgroundFetch();
   startUpdater();
+  // Remote hosting (v2 step 3, slice A): serve host-scoped calls over
+  // the LAN when the device config enables it. After getDeviceId so
+  // the welcome frame's identity is final. The same reconcile reruns
+  // after every globalConfig write (hostImpls wiring), making this the
+  // boot-time pass only.
+  void refreshSocketHost();
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be

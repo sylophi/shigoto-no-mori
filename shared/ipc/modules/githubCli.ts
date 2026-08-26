@@ -16,16 +16,20 @@ import {
 } from "@shared/schemas";
 
 export const githubCliContract = defineContract("host", {
-  readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema),
+  readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema, {
+    remote: true,
+  }),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
     ProjectScopedPayloadSchema,
     z.record(z.string(), PullRequestSchema),
+    { remote: true },
   ),
   worktreePullRequest: invoke(
     "githubCli:worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
     PullRequestDetailSchema.nullable(),
+    { remote: true },
   ),
   // Open PRs offered as a source in the new-worktree form. Uncached and
   // fired only when the user picks that mode, so opening the form stays
@@ -34,6 +38,7 @@ export const githubCliContract = defineContract("host", {
     "githubCli:pullRequestCandidates",
     ProjectScopedPayloadSchema,
     PullRequestCandidateListSchema,
+    { remote: true },
   ),
   // Fetches the PR head and lands it on a local branch. Separate from
   // worktrees.create so the create itself still runs through the bundled
@@ -42,31 +47,35 @@ export const githubCliContract = defineContract("host", {
     "githubCli:resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,
     PullRequestCheckoutRefSchema,
+    { remote: true },
   ),
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
     ProjectScopedPayloadSchema,
     RepoMergeConfigSchema.nullable(),
+    { remote: true },
   ),
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
     z.void(),
-    { tracksProjectUsage: true },
+    { tracksProjectUsage: true, remote: true },
   ),
   pullRequestDiff: invoke(
     "githubCli:pullRequestDiff",
     GithubCliPullRequestDiffPayloadSchema,
     z.string(),
+    { remote: true },
   ),
   setPullRequestDraft: invoke(
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
     z.void(),
-    { tracksProjectUsage: true },
+    { tracksProjectUsage: true, remote: true },
   ),
   projectPullRequestsRefreshed: broadcast(
     "githubCli:projectPullRequestsRefreshed",
     ProjectScopedPayloadSchema,
+    { remote: true },
   ),
 });

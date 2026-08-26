@@ -45,27 +45,35 @@ export type ShellIntegrationStatus = z.infer<
   typeof ShellIntegrationStatusSchema
 >;
 
+// Local-only module: every call stays on the Electron wire (remote
+// false). These edit shell rc files and CLI symlinks on the host, so they are never served to a remote peer.
 export const cliContract = defineContract("host", {
-  status: invoke("cli:status", z.void(), CliStatusSchema),
+  status: invoke("cli:status", z.void(), CliStatusSchema, { remote: false }),
   install: invoke(
     "cli:install",
     z.object({ force: z.boolean() }),
     CliStatusSchema,
+    { remote: false },
   ),
-  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema),
+  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, {
+    remote: false,
+  }),
   shellStatus: invoke(
     "cli:shellStatus",
     z.void(),
     ShellIntegrationStatusSchema,
+    { remote: false },
   ),
   shellInstall: invoke(
     "cli:shellInstall",
     z.void(),
     ShellIntegrationStatusSchema,
+    { remote: false },
   ),
   shellUninstall: invoke(
     "cli:shellUninstall",
     z.void(),
     ShellIntegrationStatusSchema,
+    { remote: false },
   ),
 });

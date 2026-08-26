@@ -21,10 +21,13 @@ export type HandlerContext = {
     module: M,
     key: K,
   ): (payload: BroadcastProducerPayload<M, K>) => void;
-  // Aborts when the calling page goes away, meaning a cross-document
-  // navigation (reload included) or window close. It is shared by every
-  // call from the same page, not a per-call cancellation. Consumers
-  // that attach listeners should remove them when the call completes.
+  // Aborts when the calling peer is gone. The granularity follows the
+  // wire: on the Electron transport that is the page generation, so a
+  // cross-document navigation (reload included) or window close; on
+  // the websocket transport it is the connection, aborting when the
+  // socket closes. It is shared by every call from the same peer, not
+  // a per-call cancellation. Consumers that attach listeners should
+  // remove them when the call completes.
   signal: AbortSignal;
 };
 
@@ -33,10 +36,24 @@ export type HandlerContext = {
 // `broadcastAll` ships one payload to every connected peer. Both
 // directions take wire shapes: parsing happens in registerContract.ts
 // before anything reaches a transport.
+//
+// `opts.remote` is the exposure axis: the registrar passes each call's
+// `def.remote` here so a composite transport can decide whether the
+// channel reaches a remote (websocket) peer at all. Scope answers "runs
+// where the files live"; remote answers "safe to serve a remote peer",
+// and the two are independent decisions. Single-wire transports ignore
+// it (they already know their reach).
+export type TransportCallOpts = { remote?: boolean };
+
 export type ServerTransport = {
   handle(
     channel: string,
     fn: (ctx: HandlerContext, raw: unknown) => Promise<unknown>,
+    opts?: TransportCallOpts,
   ): void;
-  broadcastAll(channel: string, payload: unknown): void;
+  broadcastAll(
+    channel: string,
+    payload: unknown,
+    opts?: TransportCallOpts,
+  ): void;
 };

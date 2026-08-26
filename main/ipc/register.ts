@@ -1,9 +1,12 @@
-// Electron binding of the shared contract registrar. This module owns
-// the only sanctioned calls to `webContents.send` in main/. Anything
-// else that needs to push to the renderer should go through `broadcast`
-// / `broadcastAll` below so the payload runs through the contract's
-// payload schema before it crosses the bridge.
+// Transport wiring for the shared contract registrar: the Electron
+// binding, the websocket binding (host/socket/server.ts), and the
+// scope routing that decides which modules ride which wires. This
+// module owns the only sanctioned calls to `webContents.send` in
+// main/. Anything else that needs to push to the renderer should go
+// through `broadcast` / `broadcastAll` below so the payload runs
+// through the contract's payload schema before it crosses the bridge.
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
+import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import {
@@ -17,7 +20,14 @@ import type {
   BroadcastProducerPayload,
   Handlers,
 } from "@shared/ipc/types";
+import { getDeviceId } from "@host/lib/config/deviceId";
+import {
+  ensureSocketHostToken,
+  readGlobalConfig,
+  resolveSocketHostConfig,
+} from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
+import { createWsServerBinding } from "@host/socket/server";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -86,11 +96,40 @@ const electronServer: ServerTransport = {
   },
 };
 
+// The websocket binding exists unconditionally so registration can
+// record handlers whether or not the device config ever enables the
+// listener. Listening itself is gated in refreshSocketHost below.
+const wsServer = createWsServerBinding();
+
+// Host-scoped calls are served on both wires. Client-scoped calls stay
+// structurally unreachable over the socket: their channels are never
+// registered on the ws binding, so a remote req gets a no-handler res
+// instead of a native dialog or an app-menu mutation.
+const hostServer: ServerTransport = {
+  // The Electron wire always serves host calls. The socket wire serves
+  // a call ONLY when its def opted into remote exposure, so a
+  // host-scoped-but-not-remote channel (runtime:nuke, cli:*,
+  // launchers:launch, globalConfig:write) is never even registered on
+  // the socket. A remote req for it gets the same no-handler res a
+  // client-scoped channel does.
+  handle(channel, fn, opts) {
+    electronServer.handle(channel, fn);
+    if (opts?.remote === true) wsServer.handle(channel, fn);
+  },
+  broadcastAll(channel, payload, opts) {
+    electronServer.broadcastAll(channel, payload);
+    if (opts?.remote === true) wsServer.broadcastAll(channel, payload);
+  },
+};
+
+const serverFor = (module: ContractModule): ServerTransport =>
+  module.scope === "host" ? hostServer : electronServer;
+
 export function registerContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
 ): void {
-  registerContractCore(module, handlers, electronServer, {
+  registerContractCore(module, handlers, serverFor(module), {
     validateOutputs: VALIDATE_OUTPUTS,
     // Actions that opt in via `tracksProjectUsage` rank their project for
     // the sidebar "most used" / "most recently used" sorts. Tell renderers
@@ -120,13 +159,48 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 }
 
 // Fan-out broadcast for state every window cares about (updater,
-// background refreshes). Rides the shared transport seam so host-scoped
-// broadcasts keep flowing when the host side moves behind a socket.
-// This wrapper only pins the Electron server transport for the existing
-// call sites.
+// background refreshes). Scope picks the wire set: host-scoped
+// fan-outs (git refresh, script events, nuke progress) reach every
+// window AND every authenticated socket peer, while client-scoped ones
+// (updater state) stay on the Electron wire -- an update prompt is
+// about THIS install, not the host a remote client is looking at.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,
 >(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
-  broadcastAllCore(module, key, payload, electronServer);
+  broadcastAllCore(module, key, payload, serverFor(module));
+}
+
+// Reconciles the websocket listener with the device config. Runs at
+// boot (the ready handler) and on every config change (the host-side
+// onGlobalConfigChange subscriber, wired in installHostImpls), so
+// toggling the setting through the app, the CLI or a nuke needs no
+// relaunch. The config read runs INSIDE the binding's serialized
+// lifecycle (the resolver below), so a token rotation can never be
+// reverted by an overlapping refresh applying a stale read last.
+// Never throws -- a bind failure must not fail the write that requested
+// it, so it degrades to a log line (the binding also records status).
+export async function refreshSocketHost(): Promise<void> {
+  try {
+    await wsServer.refresh(async () => {
+      // Secure by default at enable time: generate and persist a token
+      // if hosting is on without one. ensureSocketHostToken drops the
+      // module cache itself, so the read below sees the fresh document.
+      ensureSocketHostToken();
+      const config = await readGlobalConfig();
+      const resolved = resolveSocketHostConfig(config);
+      if (resolved === null) return null;
+      return {
+        port: resolved.port,
+        bindAddress: resolved.bindAddress,
+        token: resolved.token,
+        deviceId: getDeviceId(),
+        // appVersion is an Electron fact, injected here so host/socket
+        // never imports electron.
+        appVersion: app.getVersion(),
+      };
+    });
+  } catch (error) {
+    console.warn(`[socket] listener refresh failed: ${errorMessageOf(error)}`);
+  }
 }

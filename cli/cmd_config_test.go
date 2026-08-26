@@ -158,6 +158,61 @@ func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 	}
 }
 
+// The socketHost kill switch and omit-on-default contract: setting the
+// nested enabled flag creates the object, setting it back to its false
+// default deletes just that leaf, unsetting the last leaf prunes the
+// whole object, and a whole-document write that omits socketHost clears
+// a previously enabled listener rather than leaving a stale token.
+func TestSocketHostConfigKeys(t *testing.T) {
+	sandboxRoot(t)
+	// Enable and set a token (the app normally generates the token, but
+	// a set must still land it for the whole-document write to validate).
+	if code, err := runConfigSet(globalConfigScope(), "socketHost.enabled", "true"); code != 0 || err != nil {
+		t.Fatalf("set socketHost.enabled true: %d, %v", code, err)
+	}
+	if code, err := runConfigSet(globalConfigScope(), "socketHost.token", "s3cret-token"); code != 0 || err != nil {
+		t.Fatalf("set socketHost.token: %d, %v", code, err)
+	}
+	if got, _ := configDocGet(readDoc(t, configJSONPath()), "socketHost.enabled"); got != true {
+		t.Errorf("socketHost.enabled = %v, want true", got)
+	}
+
+	// The kill switch: setting enabled to its false default deletes the
+	// leaf, so the app resolver sees no enabled:true and stops the
+	// listener. The token leaf must survive that (only enabled changed).
+	if code, err := runConfigSet(globalConfigScope(), "socketHost.enabled", "false"); code != 0 || err != nil {
+		t.Fatalf("set socketHost.enabled false: %d, %v", code, err)
+	}
+	doc := readDoc(t, configJSONPath())
+	if _, ok := configDocGet(doc, "socketHost.enabled"); ok {
+		t.Error("socketHost.enabled still present after being set to its false default")
+	}
+	if got, _ := configDocGet(doc, "socketHost.token"); got != "s3cret-token" {
+		t.Errorf("socketHost.token = %v, want it to survive the enabled toggle", got)
+	}
+
+	// Unsetting the last remaining leaf prunes the emptied parent object.
+	if code, err := runConfigUnset(globalConfigScope(), "socketHost.token"); code != 0 || err != nil {
+		t.Fatalf("unset socketHost.token: %d, %v", code, err)
+	}
+	if _, ok := readDoc(t, configJSONPath())["socketHost"]; ok {
+		t.Error("socketHost object still present after its last leaf was unset")
+	}
+
+	// Omit-on-default write path: a whole-document save that omits
+	// socketHost must clear a previously enabled listener, not leave a
+	// stale enabled:true and token on disk.
+	if code, err := runConfigSet(globalConfigScope(), "socketHost.enabled", "true"); code != 0 || err != nil {
+		t.Fatalf("re-enable socketHost: %d, %v", code, err)
+	}
+	if code, err := runConfigWrite(globalConfigScope(), `{"launchScripts": false}`); code != 0 || err != nil {
+		t.Fatalf("write omitting socketHost: %d, %v", code, err)
+	}
+	if _, ok := readDoc(t, configJSONPath())["socketHost"]; ok {
+		t.Error("socketHost survived a whole-document write that omitted it")
+	}
+}
+
 func TestGlobalConfigSetRejects(t *testing.T) {
 	sandboxRoot(t)
 	for name, raw := range map[string]string{

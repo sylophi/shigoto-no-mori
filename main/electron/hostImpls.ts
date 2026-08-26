@@ -7,11 +7,12 @@
 import { shell } from "electron";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
+import { onGlobalConfigChange } from "@host/lib/config/global";
 import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
 import { setLaunchersImpl } from "@host/ipc/modules/launchers";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
-import { broadcastAll } from "../ipc/register";
+import { broadcastAll, refreshSocketHost } from "../ipc/register";
 import {
   cliLinkStatus,
   installCliLinks,
@@ -37,6 +38,14 @@ export function installHostImpls(): void {
     uninstallShellIntegration,
   });
   setGitImpl({ maybeFetchProject });
+  // Reconcile the socket listener on every config change, whatever the
+  // path: the IPC write handler, an external CLI write picked up by the
+  // state watcher, and nuke wiping config.json all fan out through
+  // invalidateGlobalConfigCache to this one subscriber. registered once
+  // here, and refreshSocketHost never rejects, so fire and forget is
+  // safe. The boot-time pass is main/index.ts's own refreshSocketHost
+  // call, since this fires only on a subsequent change.
+  onGlobalConfigChange(() => void refreshSocketHost());
   setLaunchersImpl({ openExternal: (url) => shell.openExternal(url) });
   setRuntimeImpl({
     uninstallCliEverything,

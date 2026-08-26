@@ -13,14 +13,15 @@ export const scriptsContract = defineContract("host", {
     "scripts:run",
     RunScriptPayloadSchema,
     z.object({ runId: z.string() }),
-    { tracksProjectUsage: true },
+    { tracksProjectUsage: true, remote: true },
   ),
   cancel: invoke(
     "scripts:cancel",
     CancelScriptPayloadSchema,
     z.object({ cancelled: z.boolean() }),
+    { remote: true },
   ),
-  event: broadcast("scripts:event", ScriptEventSchema),
+  event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
   // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The
   // run's own console goes away with the worktree row, so this is the
@@ -28,6 +29,7 @@ export const scriptsContract = defineContract("host", {
   stoppedForRemovedWorktree: broadcast(
     "scripts:stoppedForRemovedWorktree",
     RemovedWorktreeScriptsSchema,
+    { remote: true },
   ),
   // One-shot: the renderer asks once at startup whether the boot sweep
   // stopped anything, so the user hears about dev servers that outlived
@@ -36,5 +38,6 @@ export const scriptsContract = defineContract("host", {
     "scripts:orphanReport",
     z.void(),
     OrphanScriptReportSchema,
+    { remote: true },
   ),
 });

@@ -14,21 +14,24 @@ export const packageScriptsContract = defineContract("host", {
     "packageScripts:list",
     WorktreeScopedPayloadSchema,
     PackageScriptsResultSchema.nullable(),
+    { remote: true },
   ),
   run: invoke(
     "packageScripts:run",
     RunPackageScriptPayloadSchema,
     z.object({ runId: z.string() }),
-    { tracksProjectUsage: true },
+    { tracksProjectUsage: true, remote: true },
   ),
   getSort: invoke(
     "packageScripts:getSort",
     ProjectScopedPayloadSchema,
     PackageScriptSortModeSchema,
+    { remote: true },
   ),
   setSort: invoke(
     "packageScripts:setSort",
     SetPackageScriptSortPayloadSchema,
     z.void(),
+    { remote: false },
   ),
 });
