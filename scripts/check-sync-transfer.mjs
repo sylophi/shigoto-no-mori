@@ -48,7 +48,6 @@ import { buildClient } from "@shared/ipc/buildClient";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
-import { createRelayConnection } from "@host/relay/connection";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
@@ -63,6 +62,8 @@ import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initShigomoriRootAt } from "@host/lib/util/paths";
+import { makeProof } from "./lib/checkKit.mjs";
+import { bootDevice } from "./lib/relayBoot.mjs";
 import { startStubRelay } from "./lib/relayStub.mjs";
 
 const execFileP = promisify(execFile);
@@ -186,45 +187,7 @@ async function sm(...args) {
   return result;
 }
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate, what, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-async function bootDevice(stub, deviceId, opts = {}) {
-  let mints = 0;
-  const connection = createRelayConnection({
-    isCommandGranted: opts.isCommandGranted,
-  });
-  await connection.refresh(async () => ({
-    relayUrl: stub.relayUrl,
-    accountId: "acct",
-    mintTicket: async () => {
-      mints += 1;
-      return `t:${deviceId}:${mints}`;
-    },
-    deviceId,
-    appVersion: "1.0.0",
-  }));
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `${deviceId} to connect`,
-  );
-  return connection;
-}
-
-const passed = [];
-function ok(name) {
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { ok, done, fail } = makeProof("sync-transfer proof");
 
 async function main() {
   console.log("sync-transfer proof\n");
@@ -320,7 +283,9 @@ async function main() {
   // ---- The relay pair: A hosts the real sync surface, B receives ----
   const stub = await startStubRelay();
   let granted = false;
-  const a = await bootDevice(stub, "A", { isCommandGranted: () => granted });
+  const { connection: a } = await bootDevice(stub, "A", {
+    isCommandGranted: () => granted,
+  });
   registerContract(syncContract, syncHandlers, a.server, {
     validateOutputs: true,
   });
@@ -331,7 +296,7 @@ async function main() {
     validateOutputs: true,
     onUsageTracked: () => {},
   });
-  const b = await bootDevice(stub, "B");
+  const { connection: b } = await bootDevice(stub, "B");
   try {
     const peer = await b.connectPeer("A");
     const sync = buildClient(syncContract, peer.transport);
@@ -833,14 +798,11 @@ async function main() {
     await stub.close();
   }
 
-  console.log(`\nsync-transfer proof OK (${passed.length} assertions)`);
+  done();
 }
 
 main()
-  .catch((error) => {
-    console.error(`\nsync-transfer proof FAILED: ${error?.message ?? error}`);
-    process.exitCode = 1;
-  })
+  .catch(fail)
   .finally(() => {
     rmSync(sandbox, { recursive: true, force: true });
   });

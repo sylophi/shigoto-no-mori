@@ -50,25 +50,14 @@ import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { registerContract } from "@shared/ipc/registerContract";
 import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
-import { createRelayConnection } from "@host/relay/connection";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
 } from "../main/portForward/engine.ts";
+import { makeProof } from "./lib/checkKit.mjs";
+import { bootDevice, delay, waitFor } from "./lib/relayBoot.mjs";
 import { startStubRelay } from "./lib/relayStub.mjs";
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate, what, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
 
 // once() with waitFor's deadline treatment: an event that never fires
 // fails loudly with a descriptive message instead of hanging the check.
@@ -83,28 +72,6 @@ function onceWithin(emitter, event, what, timeoutMs = 10_000) {
       resolve();
     });
   });
-}
-
-async function bootDevice(stub, deviceId, opts = {}) {
-  let mints = 0;
-  const connection = createRelayConnection({
-    isCommandGranted: opts.isCommandGranted,
-  });
-  await connection.refresh(async () => ({
-    relayUrl: stub.relayUrl,
-    accountId: "acct",
-    mintTicket: async () => {
-      mints += 1;
-      return `t:${deviceId}:${mints}`;
-    },
-    deviceId,
-    appVersion: "1.0.0",
-  }));
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `${deviceId} to connect`,
-  );
-  return connection;
 }
 
 // A loopback fixture server on an ephemeral port. `onConnection` is
@@ -214,11 +181,7 @@ function dialAndCollect(port, payload, total, timeoutMs = 20_000) {
   });
 }
 
-const passed = [];
-function ok(name) {
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { ok, done, fail } = makeProof("port-forward proof");
 
 async function main() {
   console.log("port-forward proof\n");
@@ -227,11 +190,13 @@ async function main() {
 
   const stub = await startStubRelay();
   let granted = false;
-  const a = await bootDevice(stub, "A", { isCommandGranted: () => granted });
+  const { connection: a } = await bootDevice(stub, "A", {
+    isCommandGranted: () => granted,
+  });
   registerContract(forwardContract, forwardHandlers, a.server, {
     validateOutputs: true,
   });
-  const b = await bootDevice(stub, "B");
+  const { connection: b } = await bootDevice(stub, "B");
   // Torn down in the finally so an assertion failure mid-scenario does
   // not leave listeners and parked polls holding the process open.
   let engine = null;
@@ -581,10 +546,7 @@ async function main() {
     await echo.close();
   }
 
-  console.log(`\nport-forward proof OK (${passed.length} assertions)`);
+  done();
 }
 
-main().catch((error) => {
-  console.error(`\nport-forward proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);
