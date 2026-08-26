@@ -19,9 +19,18 @@
 // writes, globalConfig.writeDeviceSettings with its strict patch schema
 // that structurally rejects socketHost and remoteDevices).
 //
+// The golden read surface: every channel servable ungated (remote:true,
+// mutating:false) is pinned in read-surface.golden.json, so flipping a
+// mutating tag shows up as a reviewed diff instead of silently opening
+// or closing the ungated wire. Regenerate deliberately with
+// `pnpm socket:check --update`.
+//
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "socket:check".
 import assert from "node:assert/strict";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import {
   CLOSE_AUTH_FAILED,
@@ -828,6 +837,54 @@ async function main() {
         true,
         "a managed-keys patch must parse",
       );
+    },
+  );
+
+  await check(
+    "golden read surface: the ungated read channels match read-surface.golden.json",
+    async () => {
+      // The spot-checks above prove chosen tags, but nothing proved the
+      // WHOLE read/mutate axis: a single mutating:true flipped to false
+      // would serve that channel ungated to any account peer with the
+      // battery still green. Pinning the full ungated surface in a
+      // committed golden file turns any such flip into a reviewed diff.
+      const goldenPath = join(
+        dirname(fileURLToPath(import.meta.url)),
+        "read-surface.golden.json",
+      );
+      const derived = allContractModules
+        .filter((module) => module.scope === "host")
+        .flatMap((module) => Object.values(module.calls))
+        .filter(
+          (def) =>
+            def.kind === "invoke" &&
+            def.remote === true &&
+            def.mutating === false,
+        )
+        .map((def) => def.channel)
+        .toSorted();
+      if (process.argv.includes("--update")) {
+        writeFileSync(goldenPath, `${JSON.stringify(derived, null, 2)}\n`);
+        console.log(
+          `      wrote ${derived.length} channels to read-surface.golden.json`,
+        );
+        return;
+      }
+      const golden = JSON.parse(readFileSync(goldenPath, "utf8"));
+      const goldenSet = new Set(golden);
+      const derivedSet = new Set(derived);
+      const opened = derived.filter((channel) => !goldenSet.has(channel));
+      const closed = golden.filter((channel) => !derivedSet.has(channel));
+      if (opened.length > 0 || closed.length > 0) {
+        assert.fail(
+          [
+            "the ungated read surface drifted from scripts/read-surface.golden.json",
+            ...opened.map((channel) => `  now servable ungated: ${channel}`),
+            ...closed.map((channel) => `  no longer servable:   ${channel}`),
+            "if the change is deliberate, regenerate with: pnpm socket:check --update",
+          ].join("\n"),
+        );
+      }
     },
   );
 
