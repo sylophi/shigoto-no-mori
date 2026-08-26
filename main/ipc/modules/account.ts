@@ -4,6 +4,7 @@
 // builds the at-rest cipher, shell opens the OAuth browser, app names the
 // userData store path, and process.env supplies the service config. The
 // handlers themselves stay thin, delegating to the pure orchestration.
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import { join } from "node:path";
@@ -166,6 +167,18 @@ function readStatus(): AccountStatus {
   };
 }
 
+// The reconnect key for a credential that derived no accountId. An
+// opaque (non-JWT) access token leaves record.accountId empty, and the
+// relay connection's sameOpts compares accountId to decide whether an
+// account change forces a reconnect, so a constant "" would leave the
+// live socket on the OLD account's DO after a re-sign-in until restart.
+// The credential rotates on every enroll, so a credential-derived key
+// changes on any re-sign-in and forces the reconnect. Hashed and
+// truncated so the bearer secret itself never rides in connect opts.
+function credentialConnectKey(credential: string): string {
+  return `cred:${createHash("sha256").update(credential).digest("hex").slice(0, 16)}`;
+}
+
 // What the relay socket needs from the account layer, kept here so the
 // store and config stay module private. Null when unconfigured or
 // signed out, which the relay refresh reads as "stop". mintTicket is a
@@ -184,8 +197,13 @@ export function relayConnectInputs(): {
   return {
     relayUrl: config.relayUrl,
     // Identifies the signed-in account so a re-enroll onto a different
-    // account forces the relay socket to reconnect (C7).
-    accountId: record.accountId,
+    // account forces the relay socket to reconnect (C7). When the token
+    // was opaque and derived no accountId, fall back to a key derived
+    // from the rotating credential so the reconnect still fires.
+    accountId:
+      record.accountId !== ""
+        ? record.accountId
+        : credentialConnectKey(record.credential),
     mintTicket: async (signal) => {
       const fresh = store().read();
       if (fresh === null) {

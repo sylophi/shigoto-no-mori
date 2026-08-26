@@ -25,9 +25,11 @@ export const AccountStatusSchema = z.object({
 export type AccountStatus = z.infer<typeof AccountStatusSchema>;
 
 export const accountContract = defineContract("client", {
-  // Reads local state only: the stored credential metadata and the
-  // resolved service config, both cached, so it is cheap. The device list
-  // is a separate call so a status poll never hits the relay.
+  // Reads local state only: the resolved service config is cached, but
+  // the stored credential metadata is a readFileSync plus an OS-keychain
+  // decrypt on EVERY call, so invoke this on account events, not on a
+  // poll. The device list is a separate call so a status read never
+  // hits the relay.
   status: invoke("account:status", z.void(), AccountStatusSchema),
   // Runs the full OAuth + enroll flow. Opens the user's browser, awaits
   // the loopback redirect, exchanges the code, enrolls this device and

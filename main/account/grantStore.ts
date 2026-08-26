@@ -103,7 +103,10 @@ export function createGrantStore(opts: { filePath: string }): GrantStore {
     // The helper handles the tempPathFor collision guard and the
     // rename-failure cleanup; mode:0o600 matches the credential file so
     // the grant list is not world-readable in a shared userData directory.
-    atomicWriteJsonSync(filePath, disk, { mode: 0o600 });
+    // selfWrite:false because this file lives in userData, outside the
+    // watched shigomori root: claiming a self-write here would blind the
+    // state watcher to a genuine external write for the echo window.
+    atomicWriteJsonSync(filePath, disk, { mode: 0o600, selfWrite: false });
   }
 
   // The record to mutate for `accountId`: the stored one when the

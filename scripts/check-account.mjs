@@ -620,6 +620,69 @@ async function main() {
     );
 
     await check(
+      "login: a replayed /callback mid-exchange is answered 404 and the first sign-in still lands",
+      async () => {
+        const store = createAccountStore({
+          filePath: join(tmp, "login-replay.json"),
+          cipher: PLAINTEXT_CIPHER,
+        });
+        // The token exchange blocks on this gate until the replay has
+        // been answered, so the second /callback provably arrives while
+        // the first exchange is still in flight (the reload/prefetch
+        // window where a re-entered exchange would burn the code and
+        // drop the first flow's credential).
+        let releaseExchange;
+        const exchangeGate = new Promise((resolve) => {
+          releaseExchange = resolve;
+        });
+        const fetchImpl = async (url) => {
+          if (String(url) === CONFIG.tokenUrl) {
+            await exchangeGate;
+            return json({ access_token: jwtWithSub(LOGIN_SUB) });
+          }
+          if (String(url).endsWith(RELAY_ROUTES.enroll.path)) {
+            return json({ credential: LOGIN_CREDENTIAL, device: DEVICE });
+          }
+          throw new Error(`unexpected fetch to ${url}`);
+        };
+        let replayStatus = null;
+        const result = await runLoginFlow({
+          config: CONFIG,
+          deviceId: "device-uuid",
+          deviceName: "My Mac",
+          platform: "darwin",
+          openBrowser: async (authorizeUrl) => {
+            const u = new URL(authorizeUrl);
+            const redirect = u.searchParams.get("redirect_uri");
+            const state = u.searchParams.get("state");
+            const callback = `${redirect}?code=auth-code&state=${encodeURIComponent(state)}`;
+            await httpGetDone(callback);
+            // The replay: same state, already-redeemed code.
+            replayStatus = await httpGetStatus(callback);
+            releaseExchange();
+          },
+          service: createAccountService({
+            baseUrl: CONFIG.relayUrl,
+            fetchImpl,
+          }),
+          store,
+          fetchImpl,
+        });
+        assert.equal(
+          replayStatus,
+          404,
+          "the replayed callback was not refused with a 404",
+        );
+        assert.equal(result.accountId, LOGIN_SUB);
+        assert.equal(
+          store.read().credential,
+          LOGIN_CREDENTIAL,
+          "the replay disturbed the first sign-in's credential",
+        );
+      },
+    );
+
+    await check(
       "login: the loopback server binds 127.0.0.1 only, reachable there but not on a routable address",
       async () => {
         const store = createAccountStore({
@@ -957,6 +1020,19 @@ function httpGetDone(url) {
     const req = httpGet(url, (res) => {
       res.resume();
       res.on("end", resolve);
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+  });
+}
+
+// GET a URL and resolve with the response status once fully drained,
+// for the assertions that care how the loopback answered a replay.
+function httpGetStatus(url) {
+  return new Promise((resolve, reject) => {
+    const req = httpGet(url, (res) => {
+      res.resume();
+      res.on("end", () => resolve(res.statusCode));
       res.on("error", reject);
     });
     req.on("error", reject);
