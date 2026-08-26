@@ -29,6 +29,16 @@ export type HandlerContext = {
   // a per-call cancellation. Consumers that attach listeners should
   // remove them when the call completes.
   signal: AbortSignal;
+  // Whether the CALLING peer currently holds command access on the
+  // process serving this call, supplied by the transport binding so a
+  // handler can answer the preflight "am I granted?" read per caller
+  // without ever seeing the grant list. The Electron binding says yes
+  // (a local window commands its own machine), the LAN socket says no
+  // (that wire is read-only by policy), and the relay reads the host's
+  // live per-peer grant for the calling deviceId. Optional and
+  // FAIL-CLOSED: a transport that supplies no verdict reads as not
+  // granted.
+  isCallerCommandGranted?: () => boolean;
 };
 
 // A server transport owns the wire. `handle` mounts one channel and
@@ -45,10 +55,12 @@ export type HandlerContext = {
 // it (they already know their reach).
 //
 // `opts.mutating` is the command-vs-read axis: the registrar passes each
-// call's `def.mutating` here so the relay binding can collect the
-// mutating channel names and gate them on a per-peer command grant.
-// Bindings with no grant model (the Electron binding, the LAN socket)
-// ignore it.
+// call's `def.mutating` here so a remote binding can gate commands. The
+// relay binding gates them on a per-peer command grant. The LAN binding
+// has no grant model, so it serves ONLY channels explicitly registered
+// mutating:false and refuses everything else (fail-closed read-only).
+// The Electron binding ignores it: a local window commands its own
+// machine.
 export type TransportCallOpts = { remote?: boolean; mutating?: boolean };
 
 export type ServerTransport = {

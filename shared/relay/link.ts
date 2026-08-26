@@ -30,6 +30,9 @@ import { errorMessageOf } from "@shared/errors";
 import {
   type ClientFrame,
   ClientFrameSchema,
+  COMMAND_REFUSED_CODE,
+  COMMAND_REFUSED_MESSAGE,
+  CommandRefusedError,
   HELLO_TIMEOUT_MS,
   type PushFrame,
   type ReqFrame,
@@ -413,6 +416,12 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       controller,
       ctx: {
         signal: controller.signal,
+        // The preflight verdict for THIS calling peer, read live from
+        // the injected grant predicate (never cached on the session) so
+        // a grant or revoke changes the answer without a re-hello. The
+        // handler sees one boolean about its caller. The grant list
+        // itself never crosses the wire.
+        isCallerCommandGranted: () => deps.isCommandGranted(from),
         // Bound to the calling peer only, so a handler streaming progress
         // reaches its caller rather than every peer. A notifier that
         // fires after a re-hello or a presence drop must not push into
@@ -465,12 +474,16 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       // low-severity and quickly noticed, a wrongly-served mutation is
       // high-severity and silent, so the security-critical axis is the one
       // that defaults closed.
+      // The code is additive (an old peer sends none) and the message
+      // constant is the exact text this gate has always sent, so old
+      // clients keep matching on the message while new ones get the
+      // typed CommandRefusedError from their client role.
       answer = {
         t: "res",
         id: frame.id,
         ok: false,
-        message:
-          "this device is not permitted to run commands on the remote machine",
+        code: COMMAND_REFUSED_CODE,
+        message: COMMAND_REFUSED_MESSAGE,
       };
     } else {
       try {
@@ -689,6 +702,13 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       peer.pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
+      } else if (frame.code === COMMAND_REFUSED_CODE) {
+        // The peer's gate refused the command (no grant for us on that
+        // host). Typed, message preserved, so the caller can prompt
+        // "ask that machine to allow commands" instead of showing a
+        // generic failure. An old peer sends no code and falls through
+        // to the plain Error below.
+        entry.reject(new CommandRefusedError(frame.message));
       } else {
         // A plain Error carrying the host's message text, so the
         // shared/errors.ts matchers degrade a remote handler failure

@@ -19,6 +19,14 @@
 // further handler, and a malformed inbound frame does not kill the
 // process.
 //
+// v2 step 6, slice B adds: the grant refusal carries the shared
+// command-refused code on the wire and maps to the typed
+// CommandRefusedError in the client role, the preflight
+// remoteAccess:commandAccess reflects the live per-peer grant (false
+// pre-grant, true post-grant, no reconnect), and the explicit
+// ensure-session path (bridgeHandlers.ensurePeer) lets a
+// subscribe-only peer receive broadcast pushes with no prior invoke.
+//
 // Every sm frame the relay carries is wrapped as { epoch, sm } (see the
 // SESSION EPOCH note in shared/relay/link.ts), so the stub forwards that
 // wrapper verbatim and the assertions read the inner frame at
@@ -37,10 +45,18 @@ import {
   relayTextWithinLimit,
 } from "@shared/relay/protocol";
 import {
+  COMMAND_REFUSED_CODE,
+  CommandRefusedError,
+} from "@shared/ipc/socket/frames";
+import { registerContract } from "@shared/ipc/registerContract";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
+import {
   RelayMessageTooLargeError,
   RelayPeerOfflineError,
 } from "@shared/relay/link";
+import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import { createRelayConnection } from "@host/relay/connection";
+import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -874,14 +890,41 @@ async function main() {
       // to an ungranted peer.
       assert.equal(await peer.transport.invoke("test:echo", "read"), "read");
       // (b) A mutating call from the ungranted peer is refused ok:false
-      // with the permission message, and the handler body never ran.
+      // with the permission message, the refusal is TYPED in the client
+      // role (CommandRefusedError, message preserved), and the handler
+      // body never ran.
       await assert.rejects(
         () => peer.transport.invoke("test:mutate", undefined),
         (error) =>
-          error instanceof Error &&
+          error instanceof CommandRefusedError &&
           /not permitted to run commands/.test(error.message),
       );
       assert.equal(mutations, 0, "the mutating handler ran while ungranted");
+      // The refusal frame on the wire carries the machine-readable code
+      // beside the message, so an old client (which ignores the code)
+      // still sees the exact text it always matched on.
+      const refusal = stub.received.find(
+        (entry) =>
+          entry.from === "B" &&
+          smOf(entry)?.t === "res" &&
+          smOf(entry).ok === false &&
+          /not permitted to run commands/.test(smOf(entry).message),
+      );
+      assert.ok(refusal, "the refusal res never reached the stub");
+      assert.equal(
+        smOf(refusal).code,
+        COMMAND_REFUSED_CODE,
+        "the grant refusal did not carry the typed code",
+      );
+      // A real handler failure on the same wire stays a plain Error, so
+      // the typed refusal remains distinguishable.
+      await assert.rejects(
+        () => peer.transport.invoke("test:fail", undefined),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof CommandRefusedError) &&
+          error.message === "boom",
+      );
       // (c) Once this host grants the peer, the SAME mutating channel is
       // served and the handler runs, with no reconnect.
       granted = true;
@@ -922,6 +965,96 @@ async function main() {
           /not permitted to run commands/.test(error.message),
       );
       assert.equal(ran, 0, "an untagged channel ran for an ungranted peer");
+    },
+  );
+
+  await check(
+    "preflight: remoteAccess:commandAccess reflects the live grant for the calling peer, false pre-grant and true post-grant without a reconnect",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      const a = await bootDevice(stub, "A", {}, track);
+      let granted = false;
+      const b = await bootDevice(
+        stub,
+        "B",
+        { registerHandlers: true, isCommandGranted: () => granted },
+        track,
+      );
+      // The REAL contract and handler through the shared registrar: the
+      // channel registers mutating:false (served ungated) and the
+      // verdict rides HandlerContext from the link's session, which
+      // reads the grant predicate live at each call.
+      registerContract(
+        remoteAccessContract,
+        remoteAccessHandlers,
+        b.connection.server,
+        { validateOutputs: true },
+      );
+      const peer = await a.connection.connectPeer("B");
+      assert.deepEqual(
+        await peer.transport.invoke("remoteAccess:commandAccess", undefined),
+        { granted: false },
+        "an ungranted peer read granted:true",
+      );
+      granted = true;
+      // Same session, no reconnect: the answer must flip with the store.
+      assert.deepEqual(
+        await peer.transport.invoke("remoteAccess:commandAccess", undefined),
+        { granted: true },
+        "the preflight did not follow a live grant",
+      );
+      granted = false;
+      assert.deepEqual(
+        await peer.transport.invoke("remoteAccess:commandAccess", undefined),
+        { granted: false },
+        "the preflight did not follow a live revoke",
+      );
+    },
+  );
+
+  await check(
+    "dial-on-subscribe: ensurePeer opens the session with no prior invoke, so a subscribe-only peer receives broadcast pushes",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      const pushes = [];
+      const a = await bootDevice(
+        stub,
+        "A",
+        {
+          onPeerPush: (deviceId, channel, payload) =>
+            pushes.push({ deviceId, channel, payload }),
+        },
+        track,
+      );
+      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
+      // No session yet: B's broadcast reaches nobody, so a subscriber on
+      // A that never invokes would starve without the ensure path.
+      b.connection.server.broadcastAll("test:ping", { n: 1 });
+      await delay(150);
+      assert.equal(pushes.length, 0, "a push arrived before any session");
+      // The bridge's explicit ensure-session path (shared by the
+      // Electron main bridge and the web bridge): open the session
+      // WITHOUT invoking anything.
+      const bridge = makeRelayHandlers({
+        status: () => a.connection.status(),
+        connectPeer: (deviceId, opts) =>
+          a.connection.connectPeer(deviceId, opts),
+      });
+      await bridge.ensurePeer({ deviceId: "B" });
+      b.connection.server.broadcastAll("test:ping", { n: 7 });
+      await waitFor(() => pushes.length > 0, "the subscribe-only push");
+      assert.deepEqual(pushes[0], {
+        deviceId: "B",
+        channel: "test:ping",
+        payload: { n: 7 },
+      });
+      // No req frame ever left A: the session came from hello alone.
+      const reqFromA = stub.received.find(
+        (entry) => entry.from === "A" && smOf(entry)?.t === "req",
+      );
+      assert.equal(reqFromA, undefined, "ensurePeer sent an invoke");
     },
   );
 

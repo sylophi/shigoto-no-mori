@@ -88,6 +88,19 @@ export const relayContract = defineContract("client", {
     }),
     z.unknown(),
   ),
+  // Ensure a peer session exists WITHOUT invoking anything (v2 step 6,
+  // slice B): pushes only reach helloed sessions, so a subscribe-only
+  // view must be able to open the session on its own instead of waiting
+  // for a first invoke that may never come. The renderer's relay
+  // transport calls this on subscribe, and again after a reconnect for
+  // every device with live subscribers, so subscriptions survive a
+  // relay socket drop. Resolves once the session is up. An offline peer
+  // rejects and the caller retries on the next status change.
+  ensurePeer: invoke(
+    "relay:ensurePeer",
+    z.object({ deviceId: DeviceIdSchema }),
+    z.void(),
+  ),
   // The cached peer connection's identity, or null when no session is
   // open. Deliberately does not dial: the first real invoke opens the
   // session, and this only reports what the hello already confirmed.

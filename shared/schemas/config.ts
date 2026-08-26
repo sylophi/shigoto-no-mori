@@ -231,6 +231,30 @@ export const WriteGlobalConfigPayloadSchema = z.object({
   config: GlobalConfigSchema,
 });
 
+// The device-scoped settings subset a REMOTE peer may write: exactly
+// the keys the Settings form manages (managedDeviceConfig in
+// renderer/hooks/config/useSettingsSave.ts). STRICT on purpose, unlike
+// GlobalConfigSchema: an unknown key REJECTS rather than strips, so the
+// schema itself proves `socketHost` (the hosting token) and
+// `remoteDevices` (this machine's outbound connect list) can never ride
+// a remote write. Patch semantics: every key optional, only provided
+// keys change, and the host handler spreads them over the local unredacted
+// document so everything the patch does not name rides through intact.
+export const DeviceSettingsPatchSchema = z.strictObject({
+  launchers: z.array(LauncherCommandSchema).optional(),
+  hiddenLaunchers: z.array(z.string()).optional(),
+  launchScripts: z.boolean().optional(),
+  deleteBranchOnRemove: z.boolean().optional(),
+  autoPopulateInstall: z.boolean().optional(),
+  portPool: z.boolean().optional(),
+  githubCli: z.boolean().optional(),
+});
+export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatchSchema>;
+
+export const WriteDeviceSettingsPayloadSchema = z.object({
+  patch: DeviceSettingsPatchSchema,
+});
+
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.

@@ -3,6 +3,7 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ReadGlobalConfigSchema,
   StoredGlobalConfigSchema,
+  WriteDeviceSettingsPayloadSchema,
   WriteGlobalConfigPayloadSchema,
 } from "@shared/schemas";
 
@@ -32,8 +33,11 @@ export const globalConfigContract = defineContract("host", {
       remote: false,
     },
   ),
-  // write is remote false: config writes stay local so a remote peer
-  // cannot flip hosting settings or the token.
+  // write is remote false: the WHOLE-document write stays local so a
+  // remote peer can never flip hosting settings, the token or the
+  // outbound device list. The remote surface gets writeDeviceSettings
+  // below instead, whose input schema structurally cannot carry those
+  // keys.
   write: invoke(
     "globalConfig:write",
     WriteGlobalConfigPayloadSchema,
@@ -41,5 +45,21 @@ export const globalConfigContract = defineContract("host", {
     {
       remote: false,
     },
+  ),
+  // The remote-writable subset (v2 step 6, slice B): a patch-style
+  // write of exactly the device-scoped settings the Settings form
+  // manages. remote:true, mutating:true, so it only ever runs for a
+  // peer this host granted command access. The STRICT patch schema
+  // (DeviceSettingsPatchSchema) rejects unknown keys outright, so
+  // socketHost and remoteDevices are structurally unreachable from this
+  // channel no matter who calls it. Only provided keys change. The host
+  // handler spreads them over the unredacted local document and writes
+  // through the same CLI path as `write`, so listener reconciliation
+  // still runs.
+  writeDeviceSettings: invoke(
+    "globalConfig:writeDeviceSettings",
+    WriteDeviceSettingsPayloadSchema,
+    z.void(),
+    { remote: true, mutating: true },
   ),
 });

@@ -13,6 +13,8 @@
 // the single owner of retry.
 import {
   CLOSE_AUTH_FAILED,
+  COMMAND_REFUSED_CODE,
+  CommandRefusedError,
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
@@ -200,6 +202,13 @@ export function connectDevice(
         pending.delete(frame.id);
         if (frame.ok) {
           entry.resolve(frame.result);
+        } else if (frame.code === COMMAND_REFUSED_CODE) {
+          // The host's gate refused the command (the LAN wire is
+          // read-only). Typed, message preserved, so a caller can
+          // distinguish "that machine will not run commands from here"
+          // from a real handler failure. An old host sends no code and
+          // falls through to the plain Error below.
+          entry.reject(new CommandRefusedError(frame.message));
         } else {
           // A plain Error carrying the host's message text, so the
           // shared/errors.ts matchers degrade a remote handler failure

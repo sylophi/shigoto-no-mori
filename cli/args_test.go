@@ -28,6 +28,25 @@ func TestParseCmdArgsDoubleDashIsNeverAValue(t *testing.T) {
 	}
 }
 
+func TestParseCmdArgsTerminatorGuardsFlagShapedPositional(t *testing.T) {
+	// `projects add` registers --all/--yes, and cliDelegate prefixes the
+	// caller-influenced path with `--` (host/ipc/cliDelegate.ts). A
+	// flag-shaped path must land as the positional path, never toggle the
+	// flag. Same guard the create worktree-name argv relies on.
+	spec := argSpec{bools: map[string][]string{"all": {"a"}, "yes": {"y"}}}
+	parsed, err := parseCmdArgs([]string{"--", "--all"}, spec)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if parsed.bools["all"] {
+		t.Error("a flag-shaped path after -- toggled the --all flag")
+	}
+	want := []string{"--all"}
+	if !reflect.DeepEqual(parsed.positionals, want) {
+		t.Errorf("positionals = %v, want %v", parsed.positionals, want)
+	}
+}
+
 func TestParseCmdArgsDoubleDashOnly(t *testing.T) {
 	parsed, err := parseCmdArgs([]string{"--"}, argSpec{})
 	if err != nil {

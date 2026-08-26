@@ -97,15 +97,56 @@ export const ResOkFrameSchema = z.object({
   result: z.unknown().optional(),
 });
 
-// The err form carries only a message string because that is exactly
-// what survives Electron's IPC error serialization too: the matchers
-// in shared/errors.ts key on message text, so both wires degrade
-// handler failures identically.
+// The one refusal code either remote gate stamps on a res error today:
+// the relay's per-peer command-grant gate and the LAN wire's read-only
+// gate (v2 step 6, slice B). One shared constant so both client roles
+// mint one typed error for "that machine will not run commands from
+// here", distinct from a real handler failure.
+export const COMMAND_REFUSED_CODE = "command-refused";
+
+// The refusal message both gates carry. The exact text predates the
+// code (the relay grant gate shipped it in step 4), so an OLD peer
+// still sends it WITHOUT a code and message-based matching keeps
+// working across version skew in both directions.
+export const COMMAND_REFUSED_MESSAGE =
+  "this device is not permitted to run commands on the remote machine";
+
+// The typed client-side surface of a command refusal, minted by both
+// client roles (the LAN socket client transport and the relay link's
+// client role) when a res error carries COMMAND_REFUSED_CODE. The
+// message is preserved verbatim so every message-text matcher keeps
+// behaving as before.
+export class CommandRefusedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CommandRefusedError";
+  }
+}
+
+// Matcher that survives Electron's IPC error serialization (which
+// flattens an error to its message text): the renderer behind the relay
+// bridge sees a plain Error carrying the refusal message, not the
+// instance minted in main, and an OLD peer sends the message with no
+// code at all. Either form means "ask that machine to allow commands".
+export function isCommandRefusedError(error: unknown): boolean {
+  if (error instanceof CommandRefusedError) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(COMMAND_REFUSED_MESSAGE);
+}
+
+// The err form carries a message string because that is exactly what
+// survives Electron's IPC error serialization too: the matchers in
+// shared/errors.ts key on message text, so both wires degrade handler
+// failures identically. `code` is the machine-readable refusal
+// classification, ADDITIVE per the version-skew policy: an old peer
+// sends no code, and a reader treats absence as an unclassified
+// failure, falling back to the message text.
 export const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(false),
   message: z.string(),
+  code: z.string().optional(),
 });
 
 export const PushFrameSchema = z.object({

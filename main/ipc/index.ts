@@ -13,6 +13,7 @@ import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { relayContract } from "@shared/ipc/modules/relay";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
@@ -34,6 +35,7 @@ import { menuHandlers } from "./modules/menu";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { projectsHandlers } from "@host/ipc/modules/projects";
+import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { cliHandlers } from "@host/ipc/modules/cli";
@@ -89,6 +91,9 @@ export function registerIpcHandlers(): void {
     makeRelayHandlers({ status: relayStatus, connectPeer: relayConnectPeer }),
   );
   registerContract(windowContract, windowHandlers);
+  // Host-scoped preflight for the remote execution surface: each wire's
+  // binding supplies the calling peer's grant verdict on the context.
+  registerContract(remoteAccessContract, remoteAccessHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);

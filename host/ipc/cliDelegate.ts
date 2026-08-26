@@ -191,10 +191,15 @@ export function createViaCli(
   notify: WorktreeOperationNotifiers,
 ): Promise<CreateWorktreeResult> {
   const args = ["create", "--project-id", project.id];
-  if (input.worktreeName) args.push(input.worktreeName);
   if (input.branchName) args.push("--branch", input.branchName);
   if (input.base) args.push("--base", input.base);
   if (input.checkout) args.push("--checkout");
+  // End-of-options terminator before the caller-influenced worktree name
+  // so a flag-shaped name can never be read as an option. Pushed last,
+  // after every flag, because `--` makes the parser treat the rest as
+  // positionals. Matches the `--`-pinned argv convention the git guards
+  // and cliRunScriptSpawn use.
+  if (input.worktreeName) args.push("--", input.worktreeName);
   return runStreamingCreate(
     args,
     project,
@@ -310,7 +315,12 @@ export async function setShelvedViaCli(
 }
 
 export async function projectsAddViaCli(path: string): Promise<Project> {
-  const result = await runner().runCli(["projects", "add", path]);
+  // End-of-options terminator before the caller-influenced path so a
+  // flag-shaped path (`--all`, `--yes`) can never be read as an option:
+  // PathPayloadSchema puts no constraint on the string, so this guard is
+  // what neutralizes it rather than luck. Matches the `--`-pinned argv
+  // convention the git guards use.
+  const result = await runner().runCli(["projects", "add", "--", path]);
   const doc = result.docs.findLast(
     (d) => typeof d["id"] === "string" && typeof d["path"] === "string",
   );
@@ -359,16 +369,20 @@ export function cliRunScriptSpawn(args: {
 // --data` verbs, so both surfaces run one write path (validation,
 // lock+atomic merge, and -- for project config -- the in-project
 // exclude side effect). The payloads were already zod-parsed at the
-// IPC boundary. The CLI merges the payload into the file rather than
-// replacing it, so a key written by a newer version survives a save
-// from an older one, and it re-checks the shape so engine drift fails
-// loudly. Callers must invalidate the TTL caches themselves: runCli's
-// self-write note suppresses the state watcher for these writes.
+// IPC boundary. The CLI's merge is NOT a plain overlay: for every
+// REGISTERED key the payload omits it CLEARS that key on disk (that is
+// how a settings save serializes a default by omission), so only
+// UNREGISTERED keys the payload does not carry survive untouched. A
+// caller must therefore hand a COMPLETE, unredacted base or a registered
+// key it left out (socketHost.token, an enabled it meant to keep) is
+// written away. It re-checks the shape so engine drift fails loudly.
+// Callers must invalidate the TTL caches themselves: runCli's self-write
+// note suppresses the state watcher for these writes.
 //
 // globalConfig carries device fields only, which the narrowed
-// GlobalConfigSchema enforces at the IPC boundary. The merge-on-write
-// is also what keeps any legacy client keys (theme, doubutsu) in
-// config.json intact when a device-only payload lands.
+// GlobalConfigSchema enforces at the IPC boundary. The keep-unregistered
+// half of the merge is what keeps any legacy client keys (theme,
+// doubutsu) in config.json intact when a device-only payload lands.
 export async function globalConfigWriteViaCli(
   config: GlobalConfig,
 ): Promise<void> {

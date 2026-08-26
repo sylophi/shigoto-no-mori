@@ -78,6 +78,9 @@ function contextFor(sender: WebContents): HandlerContext {
   const controller = new AbortController();
   const ctx: HandlerContext = {
     signal: controller.signal,
+    // A local window always commands its own machine, so the preflight
+    // read answers granted:true over the Electron wire.
+    isCallerCommandGranted: () => true,
     notifier: (module, key) => (payload) => {
       if (sender.isDestroyed()) return;
       broadcast(module, key, payload, sender);
@@ -138,12 +141,15 @@ const hostServer: ServerTransport = {
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
-      // The LAN socket serves every remote channel to an authenticated
-      // LAN peer, so it takes no mutating info: LAN hosting is a single
-      // trusted token and the grant model is relay-only. The relay
-      // binding needs the mutating flag to gate a command on a per-peer
-      // grant, so only it receives opts.
-      wsServer.handle(channel, fn);
+      // Both remote wires receive the mutating flag. The relay binding
+      // gates a mutating channel on a per-peer command grant. The LAN
+      // binding has no grant model at all, so it enforces read-only at
+      // dispatch, fail-closed: only channels explicitly registered
+      // mutating:false are served over the LAN socket, and everything
+      // else (mutating, or untagged) is refused with the shared
+      // command-refused code before its handler runs
+      // (host/socket/server.ts).
+      wsServer.handle(channel, fn, { mutating: opts.mutating });
       relayServer.server.handle(channel, fn, { mutating: opts.mutating });
     }
   },

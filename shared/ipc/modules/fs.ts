@@ -7,26 +7,36 @@ import {
   PathPayloadSchema,
 } from "@shared/schemas";
 
-// Every fs call is remote false this slice: the handlers read arbitrary
-// absolute paths, and remote path confinement is deferred, so remote fs browsing waits until that lands.
+// Every fs call is remote:true, mutating:true (v2 step 6, slice B).
+// They are reads, but the `mutating` axis is enforced as "requires the
+// command grant", and these handlers disclose ARBITRARY absolute paths,
+// which exceeds the read-only mirror's charter. So instead of waiting
+// for remote path confinement they ride the per-peer command grant: a
+// peer this host has not granted command access is refused, exactly as
+// for a mutation.
 export const fsContract = defineContract("host", {
   listDirectory: invoke(
     "fs:listDirectory",
     PathPayloadSchema,
     DirectoryListingSchema,
-    { remote: false },
+    { remote: true, mutating: true },
   ),
   scanForGitRepos: invoke(
     "fs:scanForGitRepos",
     PathPayloadSchema,
     z.array(z.string()),
-    { remote: false },
+    { remote: true, mutating: true },
   ),
   isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean(), {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
-  stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema, { remote: false }),
+  stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema, {
+    remote: true,
+    mutating: true,
+  }),
   listEntries: invoke("fs:listEntries", PathPayloadSchema, FsListingSchema, {
-    remote: false,
+    remote: true,
+    mutating: true,
   }),
 });

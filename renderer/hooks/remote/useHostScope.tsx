@@ -48,6 +48,7 @@ export type HostApi = Pick<
   | "packageScripts"
   | "portPool"
   | "projects"
+  | "remoteAccess"
   | "runtime"
   | "scripts"
   | "shigomori"
