@@ -19,11 +19,3 @@ export function writeStored(key: string, value: string): void {
     // Unavailable storage costs the next launch its boot hint, nothing more.
   }
 }
-
-export function removeStored(key: string): void {
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // See writeStored.
-  }
-}

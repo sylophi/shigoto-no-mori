@@ -7,7 +7,6 @@ export const RuntimeInfoSchema = z.object({
   // parse the path.
   rootDirName: z.string().min(1),
   homedir: z.string().min(1),
-  isDev: z.boolean(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 

@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { cn, dragRegion } from "@/lib/utils";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 
 // Dev builds mark the title so a stray window is never mistaken for the
 // packaged app. Both themes also carry a one-way peek at prod styling:
@@ -14,8 +13,9 @@ type DevAffordance = {
 // shows. A JS branch on the theme would fork this component per theme
 // and be invisible to `pnpm theme:check`.
 export function SidebarHeader() {
-  const { data: runtime } = useRuntimeInfo();
-  const isDev = runtime?.isDev ?? false;
+  // A client fact off the preload bridge, not runtime.info: the badge
+  // marks this build, never the host it talks to.
+  const isDev = window.api.isDev;
   // Reset on unmount (window reload).
   const [revealProd, setRevealProd] = useState(false);
   const dev: DevAffordance = {

@@ -1,9 +1,10 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
-import { useGlobalConfig } from "../config/useGlobalConfig";
+import { useClientConfig } from "../config/useClientConfig";
 import { readStored, writeStored } from "@/lib/localStorage";
 
 interface DoubutsuState {
-  // Persisted value from config.json: what Settings considers "saved".
+  // Persisted value from clientConfig.json: what Settings considers
+  // "saved".
   saved: boolean;
   // Live value driving the `.doubutsu` class on <html>. Equals
   // `override ?? saved`.
@@ -14,7 +15,7 @@ interface DoubutsuState {
 }
 
 const DoubutsuContext = createContext<DoubutsuState | null>(null);
-export const DOUBUTSU_STORAGE_KEY = "shigomori.doubutsu";
+const DOUBUTSU_STORAGE_KEY = "shigomori.doubutsu";
 
 function readBootHint(): boolean {
   // Default is ON: only an explicit "false" (a saved opt-out) disables
@@ -24,16 +25,20 @@ function readBootHint(): boolean {
 }
 
 export function DoubutsuProvider({ children }: { children: ReactNode }) {
-  const { data: config, isLoading } = useGlobalConfig();
-  // Avoid a one-frame v1-look flash while globalConfig fetches by trusting
-  // the last cached value. Config wins as soon as it arrives.
-  const [bootHint] = useState<boolean>(() => readBootHint());
-  const saved: boolean = isLoading ? bootHint : (config?.doubutsu ?? true);
+  const { data: config, isLoading } = useClientConfig();
+  // Avoid a one-frame v1-look flash while clientConfig fetches by
+  // trusting the localStorage mirror. Read live at evaluation time, not
+  // captured at mount: a later cache clear (nuke) must fall back to the
+  // current mirror, not flash the launch-time value. Config wins as
+  // soon as it arrives.
+  const saved: boolean = isLoading
+    ? readBootHint()
+    : (config?.doubutsu ?? true);
   const [override, setOverride] = useState<boolean | null>(null);
   const applied = override ?? saved;
 
   // Once a save lands and `saved` catches up to the staged override,
-  // drop the override so future updates to `saved` (e.g. nuke) flow.
+  // drop the override so future updates to `saved` flow.
   // Adjusted during render (not in an effect) so no committed frame holds
   // the stale pair; `applied` is identical either way.
   if (override !== null && saved === override) setOverride(null);
@@ -48,7 +53,7 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
   }, [applied]);
 
   // Mirror the saved value into localStorage so the next launch can
-  // paint without waiting for globalConfig to load.
+  // paint without waiting for clientConfig to load.
   useEffect(() => {
     if (isLoading) return;
     writeStored(DOUBUTSU_STORAGE_KEY, saved ? "true" : "false");

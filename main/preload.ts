@@ -3,6 +3,7 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { buildApi } from "@shared/ipc/client";
+import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { electronClientTransport } from "./preloadTransport";
 
@@ -21,6 +22,10 @@ if (!deviceId) {
 
 const api = {
   deviceId,
+  // Client fact delivered the same way as the device id: dev-only
+  // affordances key off the build showing the window, never the host
+  // (a packaged client on a dev host must not grow dev hotkeys).
+  isDev: process.argv.includes(DEV_BUILD_FLAG),
   // Both scopes ride the same IPC bridge while host and client live in
   // one process. Step 3 swaps the host entry for a socket transport and
   // nothing else changes.

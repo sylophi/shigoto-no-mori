@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { isEditableTarget } from "@/lib/dom";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
 
@@ -10,12 +9,13 @@ import { useTheme } from "@/hooks/ui/useTheme";
 //   Ctrl+D  toggle doubutsu
 //   Ctrl+R  drop both previews back to the saved appearance
 // They stage the same non-persisted overrides the Settings page uses,
-// so nothing is written to config.json; a window reload also resets.
-// Bare Ctrl (not Cmd) keeps clear of the real menu accelerators.
+// so nothing is written to clientConfig.json, and a window reload also
+// resets. Bare Ctrl (not Cmd) keeps clear of the real menu accelerators.
 // e.code keeps the physical key stable across keyboard layouts.
 export function DevThemeHotkeys() {
-  const { data: runtime } = useRuntimeInfo();
-  const isDev = runtime?.isDev ?? false;
+  // A client fact off the preload bridge, not runtime.info: the hotkeys
+  // must key off this build, never the host it talks to.
+  const isDev = window.api.isDev;
   const { resolved, setOverride: setTheme } = useTheme();
   const { applied: doubutsuApplied, setOverride: setDoubutsu } = useDoubutsu();
 

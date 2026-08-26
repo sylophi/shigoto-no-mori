@@ -1,10 +1,11 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import type { Theme } from "@shared/schemas";
 import { readStored, writeStored } from "@/lib/localStorage";
-import { useGlobalConfig } from "../config/useGlobalConfig";
+import { useClientConfig } from "../config/useClientConfig";
 
 interface ThemeState {
-  // Persisted value from config.json — what the settings UI considers "saved".
+  // Persisted value from clientConfig.json: what the settings UI
+  // considers "saved".
   saved: Theme;
   // Live value driving <html class="dark"> and the BrowserWindow background.
   // Equals `override ?? saved`.
@@ -16,7 +17,7 @@ interface ThemeState {
 }
 
 const ThemeContext = createContext<ThemeState | null>(null);
-export const THEME_STORAGE_KEY = "shigomori.theme";
+const THEME_STORAGE_KEY = "shigomori.theme";
 
 function getSystemTheme(): "light" | "dark" {
   if (typeof window === "undefined") return "light";
@@ -35,16 +36,18 @@ function readBootHint(): Theme {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { data: config, isLoading } = useGlobalConfig();
-  // Avoid a one-frame light-mode flash while globalConfig fetches by trusting
-  // the last value we cached locally. Config wins as soon as it arrives.
-  const [bootHint] = useState<Theme>(() => readBootHint());
-  const saved: Theme = isLoading ? bootHint : (config?.theme ?? "system");
+  const { data: config, isLoading } = useClientConfig();
+  // Avoid a one-frame light-mode flash while clientConfig fetches by
+  // trusting the localStorage mirror. Read live at evaluation time, not
+  // captured at mount: a later cache clear (nuke) must fall back to the
+  // current mirror, not flash the launch-time value. Config wins as
+  // soon as it arrives.
+  const saved: Theme = isLoading ? readBootHint() : (config?.theme ?? "system");
   const [override, setOverride] = useState<Theme | null>(null);
   const applied = override ?? saved;
 
   // Once a save lands and `saved` catches up to the staged override, drop the
-  // override so future updates to `saved` (e.g. nuke) flow through. Adjusted
+  // override so future updates to `saved` flow through. Adjusted
   // during render (not in an effect) so no committed frame holds the stale
   // pair; `applied` is identical either way, so nothing visibly changes.
   if (override && saved === override) setOverride(null);
@@ -73,13 +76,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks
-  // the applied theme (including unsaved previews).
+  // the applied theme (including unsaved previews). Non-persisting: the
+  // saved value lands through the clientConfig write instead.
   useEffect(() => {
-    void window.api.runtime.setTheme(applied);
+    void window.api.window.previewTheme(applied);
   }, [applied]);
 
   // Mirror the saved value into localStorage so the next launch can paint
-  // without waiting for globalConfig to load.
+  // without waiting for clientConfig to load.
   useEffect(() => {
     if (isLoading) return;
     writeStored(THEME_STORAGE_KEY, saved);

@@ -1,6 +1,12 @@
 // Atomic JSON read/write helpers used by globalConfig.ts and shigomori.ts.
 // Both files keep their own caches; only the disk IO is shared here.
-import { mkdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { z } from "zod";
@@ -68,19 +74,55 @@ export function noteNewerSchema(filePath: string, parsed: unknown): void {
   );
 }
 
-export async function readJsonOrNull<T>(
+// The shared tail of the async and sync readers, so the twins cannot
+// drift: JSON-parse, note a newer schemaVersion, validate, absent reads
+// as null, and anything else is wrapped with the path attached. `read`
+// returns the raw text or throws the reader's own IO failure into the
+// same handling.
+function finishJsonRead<T>(
   filePath: string,
   schema: z.ZodType<T>,
-): Promise<T | null> {
+  read: () => string,
+): T | null {
   try {
-    const raw = await readFile(filePath, "utf8");
-    const parsed: unknown = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(read());
     noteNewerSchema(filePath, parsed);
     return schema.parse(parsed);
   } catch (error) {
     if (isENOENT(error)) return null;
     throw new Error(`Failed to read ${filePath}`, { cause: error });
   }
+}
+
+export async function readJsonOrNull<T>(
+  filePath: string,
+  schema: z.ZodType<T>,
+): Promise<T | null> {
+  // The await happens out here because the shared tail is sync. A read
+  // failure is rethrown from inside it so ENOENT-vs-wrap stays in one
+  // place.
+  let read: () => string;
+  try {
+    const raw = await readFile(filePath, "utf8");
+    read = () => raw;
+  } catch (error) {
+    read = () => {
+      throw error;
+    };
+  }
+  return finishJsonRead(filePath, schema, read);
+}
+
+// The synchronous twin of readJsonOrNull, for readers that can't await
+// (the boot path needs the client config before the BrowserWindow
+// exists). Same semantics: an absent file reads as null, a newer-schema
+// file is noted and read anyway, and anything else throws with the path
+// attached.
+export function readJsonOrNullSync<T>(
+  filePath: string,
+  schema: z.ZodType<T>,
+): T | null {
+  return finishJsonRead(filePath, schema, () => readFileSync(filePath, "utf8"));
 }
 
 // Monotonic counter so two parallel callers can't pick the same tmp

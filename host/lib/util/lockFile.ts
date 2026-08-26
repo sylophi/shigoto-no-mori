@@ -1,8 +1,9 @@
 // Advisory cross-process file lock for read-modify-write cycles on
 // shared JSON state. The app and the CLI can both mutate registry.json
 // and state.json; without a lock, whichever process writes last
-// silently drops the other's change. Lock acquisition is sync because the only
-// caller (config/store.ts) is sync end to end.
+// silently drops the other's change. Lock acquisition is sync because
+// the callers (config/store.ts, the config.json drain in
+// config/global.ts) are sync end to end.
 //
 // Mechanics: O_EXCL-create a sibling `<file>.lock` holding our pid.
 // Contenders spin with a short sleep; a lock older than STALE_MS is

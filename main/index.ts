@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, nativeTheme } from "electron";
+import { app, BrowserWindow, dialog } from "electron";
 import path from "node:path";
 import { cliRootDirName } from "@shared/cliDist.mts";
+import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -13,7 +14,11 @@ import {
   refreshAllProjectGitRefs,
   startBackgroundFetch,
 } from "./electron/fetch";
-import { readThemeSync } from "@host/lib/config/global";
+import {
+  applyThemeSource,
+  readClientConfigSync,
+} from "./electron/clientConfig";
+import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { broadcast, broadcastAll } from "./ipc/register";
@@ -90,8 +95,8 @@ const createWindow = () => {
   hasBooted = true;
   // Drive the native appearance from the saved theme before constructing
   // the window so the macOS vibrancy material picks the right light/dark
-  // variant on first paint. A value of "system" delegates back to the OS.
-  nativeTheme.themeSource = readThemeSync();
+  // variant on first paint. Absent or "system" delegates back to the OS.
+  applyThemeSource(readClientConfigSync().theme);
   mainWindow = new BrowserWindow({
     width: 920,
     height: 600,
@@ -116,7 +121,13 @@ const createWindow = () => {
       // The id itself is read in the ready handler, whose try/catch
       // turns a corrupt registry into the error dialog instead of a
       // throw out of createWindow with no window.
-      additionalArguments: [`${DEVICE_ID_FLAG}${deviceId}`],
+      // The dev flag rides the same channel: isDev is a fact about this
+      // client build, not the host, so it must not travel via
+      // runtime.info.
+      additionalArguments: [
+        `${DEVICE_ID_FLAG}${deviceId}`,
+        ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
+      ],
     },
   });
 
@@ -205,6 +216,9 @@ app.on("ready", async () => {
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
   startOrphanScriptSweep();
+  // Before the first createWindow, whose theme read must already see
+  // values migrated out of the pre-split device config.
+  await seedClientConfigFromLegacy();
   buildAppMenu();
   createWindow();
   startBackgroundFetch();
