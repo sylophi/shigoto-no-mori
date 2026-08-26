@@ -14,15 +14,9 @@ import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
 import { signalTreeBestEffort } from "@host/lib/scripts/process";
-
-// One NDJSON document from the CLI's --json stream. `event` is set on
-// streamed progress documents (created/phase/carryOver/script/done);
-// single-document commands (rm, done, merge) emit result objects
-// without it.
-export interface CliDoc {
-  event?: string;
-  [key: string]: unknown;
-}
+// The injection seam in the CLI delegate owns the document shapes;
+// this runner is the Electron-side implementation wired in at boot.
+import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
 
 function candidateBinary(): string {
   return app.isPackaged
@@ -123,12 +117,6 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
       resolve();
     });
   });
-}
-
-export interface CliResult {
-  code: number;
-  docs: CliDoc[];
-  stderrTail: string;
 }
 
 // Runs `sm --json <args>`, parsing each stdout line as a document and

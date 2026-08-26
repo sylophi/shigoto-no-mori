@@ -1,4 +1,3 @@
-import { shell } from "electron";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import type { Handlers } from "@shared/ipc/types";
 import {
@@ -30,6 +29,28 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { countWithin, pruneAndPush } from "@host/lib/util/useLog";
+
+// The electron layer injects shell.openExternal at boot. Keeping it
+// behind a setter keeps this module and lib/launchers free of
+// Electron imports.
+type LaunchersImpl = {
+  openExternal: (url: string) => Promise<void>;
+};
+
+let impl: LaunchersImpl | null = null;
+
+export function setLaunchersImpl(next: LaunchersImpl): void {
+  impl = next;
+}
+
+function launchersImpl(): LaunchersImpl {
+  if (impl === null) {
+    throw new Error(
+      "launchers handler invoked before setLaunchersImpl registered one",
+    );
+  }
+  return impl;
+}
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the
@@ -157,11 +178,11 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       const app = findDetected(appId, apps);
       if (!app) throw new Error(`Launcher not detected: ${appId}`);
       // Protocol-based apps (Codex, Claude) open via the OS URL handler.
-      // shell.openExternal lives here rather than in lib/launchers so
-      // that module stays Electron-free.
+      // The injected openExternal lives here rather than in
+      // lib/launchers so that module stays free of launch plumbing.
       const deepLink = deepLinkFor(appId, worktree.path);
       if (deepLink) {
-        await shell.openExternal(deepLink);
+        await launchersImpl().openExternal(deepLink);
       } else {
         await launchDetected(app, worktree.path);
       }
@@ -175,7 +196,7 @@ export const launchersHandlers: Handlers<typeof launchersContract> = {
       }
       const info = await getGithubRepoInfo(project.path);
       if (!info) throw new Error(`GitHub remote not found: ${project.name}`);
-      await shell.openExternal(githubRepoUrl(info));
+      await launchersImpl().openExternal(githubRepoUrl(info));
       bumpUseCount(launcherId);
       return;
     }

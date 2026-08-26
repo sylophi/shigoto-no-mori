@@ -3,7 +3,7 @@ package main
 // sm run: run (or list) the package.json scripts of the worktree
 // containing the cwd -- the CLI face of the app's scripts panel, and
 // the engine behind it (the app delegates its own runs through
-// `sm run --worktree-id ...`, see main/ipc/modules/packageScripts.ts).
+// `sm run --worktree-id ...`, see host/ipc/modules/packageScripts.ts).
 // The CLI picks the package manager, injects the SHIGOMORI_* env
 // contract, bumps the shared use log, then replaces itself with the
 // manager via exec: the script owns the terminal, signals, and exit

@@ -20,6 +20,7 @@ import {
 } from "./electron/clientConfig";
 import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
+import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import { broadcast, broadcastAll } from "./ipc/register";
 import {
@@ -73,6 +74,7 @@ initShigomoriRoot(app.isPackaged);
 // the first renderer call never lands on the throwing default.
 installMenuImpl();
 installUpdaterImpl();
+installHostImpls();
 registerIpcHandlers();
 
 let mainWindow: BrowserWindow | null = null;
