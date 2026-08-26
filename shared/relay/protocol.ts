@@ -11,18 +11,18 @@
 // socket frames (frames.ts) once the app-side transport lands, but
 // nothing here may depend on that shape.
 //
-// TRUST MODEL: the Durable Object relay is LESS trusted than a LAN peer.
-// It sees every req and res in plaintext, it can forge the `from` on a
-// deliver, it can forge or replay a res or a push, and it can lie about
-// presence. The app ignores the hello token precisely because the DO
-// already authenticated the account when it consumed the connect ticket,
-// so every deliverable peer is by construction a device of the same
-// account. That decision is safe for authentication only. Per-frame
-// integrity is NOT verified in this slice, so a compromised DO can still
-// tamper with or fabricate frame content. Per-device frame signing is
-// the longer-term mitigation. The session epoch on the sm frames (see
-// shared/relay/link.ts) defends against cross-session mismatch and
-// replay of a prior pairing, not against a live tampering relay.
+// TRUST MODEL: the relay is our own managed service, not an adversary.
+// Enrollment requires a Clerk-verified login, each device holds a
+// long-lived credential it exchanges for short-lived single-use connect
+// tickets, and the DO authenticates the account when it burns the
+// ticket, so every deliverable peer is by construction a device of the
+// same account. That is why the app-level hello token is ignored on the
+// relay path. Authorization stays host-local: mutating calls are gated
+// on per-peer command grants and dispatch fails closed (see
+// shared/relay/link.ts). The size and count bounds in this file are
+// sanity bounds that keep a bug or a runaway client from ballooning
+// allocations, and the session epoch on the sm frames defends against
+// cross-session mismatch after a redial, not against the relay itself.
 //
 // Ticket and credential string mechanics live in relay/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the

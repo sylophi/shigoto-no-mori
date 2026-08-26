@@ -317,7 +317,8 @@ export function createWorker(deps: RelayDeps): RelayWorker {
     // so zero changes uniquely means the guard suppressed a
     // cross-account bind. Same verdict as the fast-path 409.
     if (!wrote) {
-      void presence.catch(() => {});
+      // The abandoned presence promise needs no guard: accountPresenceSafe
+      // never rejects.
       return jsonError(409, {
         error:
           "deviceId is enrolled under a different account, revoke it there first",

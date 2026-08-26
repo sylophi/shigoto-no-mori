@@ -39,6 +39,7 @@ import {
   COMMAND_REFUSED_CODE,
   CommandRefusedError,
   encodeFrame,
+  MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
 import { z } from "zod";
@@ -434,25 +435,25 @@ async function main() {
   );
 
   await check(
-    "in-flight cap: the 33rd concurrent request is refused rather than dispatched",
+    "in-flight cap: one request past the shared per-peer cap is refused rather than dispatched",
     async () => {
       hangResolvers = [];
       const { binding, url } = await startBinding();
       try {
         const { client } = await authenticate(url);
-        // Fill the per-socket cap (32) with requests that never resolve,
-        // then send one more.
-        for (let id = 1; id <= 32; id += 1) {
+        // Fill the shared per-socket cap with requests that never
+        // resolve, then send one more.
+        for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER; id += 1) {
           client.send({ t: "req", id, channel: "test:hang", input: undefined });
         }
         client.send({
           t: "req",
-          id: 33,
+          id: MAX_IN_FLIGHT_PER_PEER + 1,
           channel: "test:hang",
           input: undefined,
         });
         const res = await client.nextFrame();
-        assert.equal(res.id, 33);
+        assert.equal(res.id, MAX_IN_FLIGHT_PER_PEER + 1);
         assert.equal(res.ok, false);
         assert.match(res.message, /too many in-flight/);
         // Release the held requests so shutdown is quick.

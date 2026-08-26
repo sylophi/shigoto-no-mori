@@ -38,19 +38,6 @@ export async function getDeviceByCredentialHash(
     .first<DeviceRow>();
 }
 
-export async function listDevices(
-  db: D1Database,
-  accountId: string,
-): Promise<DeviceRow[]> {
-  const result = await db
-    .prepare(
-      `SELECT ${DEVICE_COLUMNS} FROM devices WHERE account_id = ? ORDER BY created_at`,
-    )
-    .bind(accountId)
-    .all<DeviceRow>();
-  return result.results;
-}
-
 // Auth and list in one round trip for GET /devices. The subquery
 // resolves the caller's account from the presented credential hash and
 // the outer query returns that whole account's devices. An empty

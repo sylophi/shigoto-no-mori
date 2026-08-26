@@ -301,12 +301,14 @@ export class AccountRelay implements DurableObject {
     for (const target of targets) this.safeSend(target, outbound);
   }
 
-  // Client-initiated close. Skip the departure work for the two
-  // server-initiated codes: closeAndAnnounce already rebroadcast
-  // presence and, for revoke, deleted the D1 row, so re-running here
-  // would double-broadcast and UPDATE a deleted row.
-  webSocketClose(ws: WebSocket, code: number): void {
-    if (code === CLOSE_DEVICE_REVOKED || code === CLOSE_SUPERSEDED) return;
+  // Client-initiated close. Runs the departure path for EVERY code,
+  // including the two the server also uses (revoked, superseded): the
+  // code here is the CLIENT's frame, so a client closing with one of
+  // those codes for its own reasons must not stay ghost-online in every
+  // peer's roster. Re-running after a server-initiated close is
+  // harmless anyway: presence is a full-roster rebroadcast and
+  // touchLastSeen on a deleted row updates nothing.
+  webSocketClose(ws: WebSocket): void {
     this.handleDeparture(ws);
   }
 
