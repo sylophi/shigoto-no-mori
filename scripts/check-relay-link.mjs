@@ -53,21 +53,14 @@ import {
   RelayPeerOfflineError,
 } from "@shared/relay/link";
 import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
-import { createRelayConnection } from "@host/relay/connection";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
+import { makeProof } from "./lib/checkKit.mjs";
+import {
+  bootDevice as bootRelayDevice,
+  delay,
+  waitFor,
+} from "./lib/relayBoot.mjs";
 import { startStubRelay } from "./lib/relayStub.mjs";
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate, what, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
 
 // The inner sm frame of a recorded device envelope, unwrapped from the
 // epoch wrapper the relay carries.
@@ -109,34 +102,22 @@ function registerTestHandlers(server) {
   });
 }
 
-async function bootDevice(stub, deviceId, opts = {}, track) {
-  let mints = 0;
-  const connection = createRelayConnection({
-    onChange: opts.onChange,
-    onPeerPush: opts.onPeerPush,
-    // The grant predicate the host role consults live at dispatch. Tests
-    // pass a toggleable one to drive the command-grant enforcement.
-    isCommandGranted: opts.isCommandGranted,
-  });
-  // Register the connection's teardown immediately, so a boot that fails
-  // its wait still gets cleaned up and cannot leak the event loop.
-  if (track) track(() => connection.stop());
-  if (opts.registerHandlers) registerTestHandlers(connection.server);
-  await connection.refresh(async () => ({
-    relayUrl: stub.relayUrl,
-    accountId: opts.accountId ?? "acct",
-    mintTicket: async () => {
-      mints += 1;
-      return `t:${deviceId}:${mints}`;
-    },
+// The shared boot (scripts/lib/relayBoot.mjs) with this check's
+// registerHandlers:true shorthand mapped onto its handler callback, so
+// the many call sites below stay as they were when the helper lived
+// here.
+function bootDevice(stub, deviceId, opts = {}, track) {
+  return bootRelayDevice(
+    stub,
     deviceId,
-    appVersion: opts.appVersion ?? "1.0.0",
-  }));
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `${deviceId} to connect`,
+    {
+      ...opts,
+      registerHandlers: opts.registerHandlers
+        ? registerTestHandlers
+        : undefined,
+    },
+    track,
   );
-  return { connection, mints: () => mints };
 }
 
 // A raw stub-side device socket, for driving hand-built envelopes.
@@ -175,31 +156,7 @@ function rawDevice(stub, deviceId) {
   };
 }
 
-const passed = [];
-async function check(name, fn) {
-  // A cleanup stack so setup (booting a device, opening a stub) that
-  // fails before the assertions still tears everything down, with no
-  // event-loop leak and no one failure masking another.
-  const cleanups = [];
-  const track = (cleanup) => {
-    cleanups.push(cleanup);
-    return cleanup;
-  };
-  try {
-    await fn(track);
-  } finally {
-    for (const cleanup of cleanups.toReversed()) {
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- cleanups run serially by design
-        await cleanup();
-      } catch {
-        // A cleanup failure must not mask the test outcome.
-      }
-    }
-  }
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { check, done, fail } = makeProof("relay-link proof");
 
 async function main() {
   console.log("relay-link transport proof\n");
@@ -943,10 +900,7 @@ async function main() {
     },
   );
 
-  console.log(`\nrelay-link proof OK (${passed.length} assertions)`);
+  done();
 }
 
-main().catch((error) => {
-  console.error(`\nrelay-link proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);

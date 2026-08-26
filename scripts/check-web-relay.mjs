@@ -30,6 +30,7 @@ import {
 } from "@shared/relay/protocol";
 import { createRelayConnection as createHostConnection } from "@host/relay/connection";
 import { createRelayConnection as createWebConnection } from "../web/relay/connection.ts";
+import { makeProof } from "./lib/checkKit.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -189,28 +190,7 @@ async function bootWeb(stub, deviceId, opts = {}, track) {
   return { connection, mints: () => mints };
 }
 
-const passed = [];
-async function check(name, fn) {
-  const cleanups = [];
-  const track = (cleanup) => {
-    cleanups.push(cleanup);
-    return cleanup;
-  };
-  try {
-    await fn(track);
-  } finally {
-    for (const cleanup of cleanups.toReversed()) {
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- cleanups run serially by design
-        await cleanup();
-      } catch {
-        // A cleanup failure must not mask the test outcome.
-      }
-    }
-  }
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { check, done, fail } = makeProof("web relay proof");
 
 async function main() {
   console.log("web relay connection proof\n");
@@ -346,10 +326,7 @@ async function main() {
     },
   );
 
-  console.log(`\nweb relay proof OK (${passed.length} assertions)`);
+  done();
 }
 
-main().catch((error) => {
-  console.error(`\nweb relay proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);

@@ -26,10 +26,12 @@ pre-commit:
     # auth/dispatch/broadcast/framing paths plus the hardening (terminate
     # on bad token, oversized-frame and Origin rejection, in-flight cap,
     # generation guard) and the explicit remote-tag contract. Gated to
-    # the socket surface plus the contract axis that decides remote
-    # exposure, so adding an untagged host invoke also trips it.
+    # the socket surface plus the whole contract layer (shared/ipc/**
+    # and the shared/schemas the contracts are built from, which feed
+    # the invariant through allContractModules), so adding an untagged
+    # host invoke also trips it.
     socket:
-      glob: "{host/socket/**,shared/ipc/socket/**,host/ipc/modules/globalConfig.ts,shared/ipc/modules/**,shared/ipc/contract.ts,shared/ipc/registerContract.ts,main/ipc/register.ts}"
+      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/relay/protocol.ts,main/ipc/register.ts,scripts/check-socket-host.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run socket:check
     # Typechecks the relay Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
@@ -55,7 +57,7 @@ pre-commit:
     # hello token and the per-peer in-flight cap. Gated to the relay
     # transport surface plus the sm frame layer it multiplexes.
     relaylink:
-      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs}"
+      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run relaylink:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
@@ -66,7 +68,7 @@ pre-commit:
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/cliDelegate.ts,host/lib/sync/**,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs}"
+      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/relay/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run sync:check
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL relay connections against real
@@ -79,7 +81,7 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub relay it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,host/ipc/modules/forward.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/forward.ts,host/relay/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run forward:check
     # Boots the same stub Durable Object and drives the BROWSER relay
     # connection (web/relay/connection.ts, built on the global WebSocket)
@@ -89,7 +91,7 @@ pre-commit:
     # per-dial ticket mint. Gated to the browser connection plus the relay
     # transport surface it drives.
     web-relay:
-      glob: "{web/**,shared/relay/**,shared/remote/**,shared/util/limit.ts,scripts/check-web-relay.mjs}"
+      glob: "{web/**,shared/relay/**,shared/remote/**,shared/util/limit.ts,host/relay/**,scripts/check-web-relay.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:relay:check
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),
@@ -100,7 +102,7 @@ pre-commit:
     # and the typed unconfigured/origin-blocked access states that keep
     # a misconfigured deployment from looping the relay supervisor.
     web-bridge:
-      glob: "{web/**,shared/account/**,scripts/check-web-bridge.mjs}"
+      glob: "{web/**,shared/account/**,shared/ipc/**,shared/relay/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:bridge:check
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
@@ -119,5 +121,5 @@ pre-commit:
     # commits. Proves sign-in, enrollment and storage cannot drift from
     # shared/relay/protocol.ts without electron or a browser.
     account:
-      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,scripts/check-account.mjs}"
+      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/relay/protocol.ts,scripts/check-account.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run account:check

@@ -31,6 +31,7 @@ import {
   NO_STRUCTURAL_STUB,
   stubValueFor,
 } from "../web/bridge/stubDefaults.ts";
+import { makeProof } from "./lib/checkKit.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -118,30 +119,9 @@ function base64UrlOfDigest(bytes) {
   return Buffer.from(bytes).toString("base64url");
 }
 
-// ---- harness (mirrors check-web-relay.mjs) ----
+// ---- harness (scripts/lib/checkKit.mjs) ----
 
-const passed = [];
-async function check(name, fn) {
-  const cleanups = [];
-  const track = (cleanup) => {
-    cleanups.push(cleanup);
-    return cleanup;
-  };
-  try {
-    await fn(track);
-  } finally {
-    for (const cleanup of cleanups.toReversed()) {
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- cleanups run serially by design
-        await cleanup();
-      } catch {
-        // A cleanup failure must not mask the test outcome.
-      }
-    }
-  }
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { check, done, fail } = makeProof("web bridge proof");
 
 async function main() {
   console.log("web bridge proof\n");
@@ -642,10 +622,7 @@ async function main() {
     },
   );
 
-  console.log(`\nweb bridge proof OK (${passed.length} assertions)`);
+  done();
 }
 
-main().catch((error) => {
-  console.error(`\nweb bridge proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);

@@ -54,6 +54,60 @@ export function makeChecker() {
   return { check, failures };
 }
 
+// The async sibling of makeChecker, for the e2e proof scripts: named
+// scenario groups that drive real transports sequentially, where the
+// first failure aborts the run. `name` is the proof phrase the summary
+// lines print, like "sync-transfer proof".
+//
+//   - check(label, fn) awaits fn(track) and prints the "  ok" line.
+//     track(cleanup) registers teardown that runs in reverse order even
+//     when the assertions throw, so a failed check cannot leak the
+//     event loop, and a cleanup failure never masks the test outcome.
+//   - ok(label) records an assertion group the script ran inline, for
+//     proofs whose scenarios share long-lived fixtures instead of
+//     per-check setup.
+//   - done() prints the "<name> OK (N assertions)" summary.
+//   - fail(error) prints the FAILED epilogue and sets a nonzero exit
+//     code, shaped for main().catch(fail).
+export function makeProof(name) {
+  const passed = [];
+  function ok(label) {
+    passed.push(label);
+    console.log(`  ok  ${label}`);
+  }
+  async function check(label, fn) {
+    const cleanups = [];
+    const track = (cleanup) => {
+      cleanups.push(cleanup);
+      return cleanup;
+    };
+    try {
+      await fn(track);
+    } finally {
+      for (const cleanup of cleanups.toReversed()) {
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- cleanups run serially by design
+          await cleanup();
+        } catch {
+          // A cleanup failure must not mask the test outcome.
+        }
+      }
+    }
+    ok(label);
+  }
+  return {
+    check,
+    ok,
+    done: () => {
+      console.log(`\n${name} OK (${passed.length} assertions)`);
+    },
+    fail: (error) => {
+      console.error(`\n${name} FAILED: ${error?.message ?? error}`);
+      process.exitCode = 1;
+    },
+  };
+}
+
 // `name` is the lowercase check phrase, like "host boundary". Failures
 // print a capitalized header, each failure line, and the hint, then set
 // a nonzero exit code. Setting exitCode instead of calling

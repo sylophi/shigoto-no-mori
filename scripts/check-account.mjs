@@ -55,6 +55,7 @@ import {
   accountContract,
 } from "@shared/ipc/modules/account";
 import { DeviceInfoSchema, RELAY_ROUTES } from "@shared/relay/protocol";
+import { makeProof } from "./lib/checkKit.mjs";
 
 // A resolved config that isConfigured accepts, for the flows that need
 // one. The URLs are never dialled: fetch is always stubbed.
@@ -186,12 +187,7 @@ function nonLoopbackIpv4() {
   return null;
 }
 
-const passed = [];
-async function check(name, fn) {
-  await fn();
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { check, done, fail } = makeProof("account layer proof");
 
 async function main() {
   console.log("account layer proof\n");
@@ -1009,7 +1005,7 @@ async function main() {
     },
   );
 
-  console.log(`\naccount layer proof OK (${passed.length} assertions)`);
+  done();
 }
 
 // GET a URL and resolve once the response is fully drained, so the
@@ -1039,7 +1035,4 @@ function httpGetStatus(url) {
   });
 }
 
-main().catch((error) => {
-  console.error(`\naccount layer proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);

@@ -66,6 +66,7 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { makeProof } from "./lib/checkKit.mjs";
 
 const TOKEN = "correct-horse-battery-staple-token-of-good-length";
 const WS_CLOSE_TOO_BIG = 1009;
@@ -192,12 +193,7 @@ async function authenticate(url, token = TOKEN) {
   return { client, welcome };
 }
 
-const passed = [];
-async function check(name, fn) {
-  await fn();
-  passed.push(name);
-  console.log(`  ok  ${name}`);
-}
+const { check, done, fail } = makeProof("socket-host proof");
 
 async function main() {
   console.log("socket-host security proof\n");
@@ -947,10 +943,7 @@ async function main() {
     },
   );
 
-  console.log(`\nsocket-host proof OK (${passed.length} assertions)`);
+  done();
 }
 
-main().catch((error) => {
-  console.error(`\nsocket-host proof FAILED: ${error?.message ?? error}`);
-  process.exitCode = 1;
-});
+main().catch(fail);
