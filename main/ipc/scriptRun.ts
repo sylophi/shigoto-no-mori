@@ -1,10 +1,10 @@
 // Shared plumbing for the two script-run entry points (configured
 // project scripts and package.json scripts). Both need the same
 // project-level context resolved before startScript, and the same
-// destroyed-sender-guarded notifier; only command resolution differs.
-import type { WebContents } from "electron";
+// connection-guarded notifier. Only command resolution differs.
 import { unknownWorktreeError } from "@shared/errors";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
 import { readShigomoriConfig } from "@host/lib/config/project";
 import { resolveDefaultBranch } from "@host/lib/git/remotes";
@@ -13,7 +13,6 @@ import {
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import type { NotifyScriptEvent } from "@host/lib/scripts";
-import { guardedNotifier } from "./register";
 
 export interface ScriptRunContext {
   config: ShigomoriConfig | null;
@@ -49,6 +48,6 @@ export async function prepareScriptRun(
   };
 }
 
-export function scriptEventNotifier(sender: WebContents): NotifyScriptEvent {
-  return guardedNotifier(scriptsContract, "event", sender);
+export function scriptEventNotifier(ctx: HandlerContext): NotifyScriptEvent {
+  return ctx.notifier(scriptsContract, "event");
 }

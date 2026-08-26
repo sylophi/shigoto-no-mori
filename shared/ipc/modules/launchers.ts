@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   DetectedLauncherSchema,
   LauncherEntrySchema,
@@ -7,7 +7,12 @@ import {
   ProjectScopedPayloadSchema,
 } from "@shared/schemas";
 
-export const launchersContract = {
+// Tagged host: launch executes where the project files live, which is
+// the host by design. Which launcher kinds make sense against a remote
+// host is deliberately unresolved until the remote-actions step, since
+// stream or port-carried output can travel but a GUI app opens on the
+// host machine.
+export const launchersContract = defineContract("host", {
   detect: invoke("launchers:detect", z.void(), z.array(DetectedLauncherSchema)),
   forProject: invoke(
     "launchers:forProject",
@@ -23,4 +28,4 @@ export const launchersContract = {
   launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
   }),
-} as const;
+});

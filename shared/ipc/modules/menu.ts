@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import { SetLaunchToolsEnabledPayloadSchema } from "@shared/schemas";
 
-export const menuContract = {
+export const menuContract = defineContract("client", {
   setLaunchToolsEnabled: invoke(
     "menu:setLaunchToolsEnabled",
     SetLaunchToolsEnabledPayloadSchema,
     z.void(),
   ),
-} as const;
+});

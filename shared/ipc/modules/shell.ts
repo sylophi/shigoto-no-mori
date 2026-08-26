@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PathPayloadSchema,
   ShellOpenExternalPayloadSchema,
 } from "@shared/schemas";
 
-export const shellContract = {
+export const shellContract = defineContract("client", {
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,
@@ -16,4 +16,4 @@ export const shellContract = {
     PathPayloadSchema,
     z.void(),
   ),
-} as const;
+});

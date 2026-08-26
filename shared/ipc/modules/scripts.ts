@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { broadcast, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
   OrphanScriptReportSchema,
@@ -8,7 +8,7 @@ import {
   ScriptEventSchema,
 } from "@shared/schemas";
 
-export const scriptsContract = {
+export const scriptsContract = defineContract("host", {
   run: invoke(
     "scripts:run",
     RunScriptPayloadSchema,
@@ -37,4 +37,4 @@ export const scriptsContract = {
     z.void(),
     OrphanScriptReportSchema,
   ),
-} as const;
+});

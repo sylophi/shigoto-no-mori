@@ -15,9 +15,10 @@
 //      scripts/dmg-background.html -- must still find the tokens and
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { report, walk } from "./lib/checkKit.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Strip comments: only selectors are contract, prose may name anything.
@@ -26,16 +27,8 @@ const css = readFileSync(join(root, "renderer/doubutsu.css"), "utf8").replace(
   "",
 );
 
-function* walk(dir) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) yield* walk(path);
-    else if (/\.(tsx?|css)$/.test(entry.name)) yield path;
-  }
-}
-
 let rendererSource = "";
-for (const file of walk(join(root, "renderer"))) {
+for (const file of walk(join(root, "renderer"), /\.(tsx?|css)$/)) {
   if (file.endsWith("doubutsu.css")) continue;
   rendererSource += readFileSync(file, "utf8");
 }
@@ -160,12 +153,8 @@ for (const { needle, what } of ART_RULES) {
   }
 }
 
-if (failures.length > 0) {
-  console.error("Theme contract check failed:\n");
-  for (const f of failures) console.error(`  ✗ ${f}`);
-  console.error(
-    "\nEither restore the hook, or update renderer/doubutsu.css (and its CONTRACT header) to the new one.",
-  );
-  process.exit(1);
-}
-console.log("theme contract OK");
+report({
+  name: "theme contract",
+  failures,
+  hint: "Either restore the hook, or update renderer/doubutsu.css (and its CONTRACT header) to the new one.",
+});

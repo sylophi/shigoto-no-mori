@@ -1,5 +1,5 @@
-import type { WebContents } from "electron";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { Project, Worktree } from "@shared/schemas";
 import { readShigomoriConfig } from "@host/lib/config/project";
@@ -28,7 +28,6 @@ import {
 } from "@host/lib/projects";
 import { withDeleteInflight } from "@host/lib/scripts";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
-import { guardedNotifier, type HandlerContext } from "../register";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
@@ -38,15 +37,14 @@ import {
   setShelvedViaCli,
 } from "../cliDelegate";
 
-function notifierFor(sender: WebContents) {
+function notifierFor(ctx: HandlerContext) {
   return {
-    notifyPhase: guardedNotifier(worktreesContract, "lifecyclePhase", sender),
-    notifyCarryOverComplete: guardedNotifier(
+    notifyPhase: ctx.notifier(worktreesContract, "lifecyclePhase"),
+    notifyCarryOverComplete: ctx.notifier(
       worktreesContract,
       "carryOverComplete",
-      sender,
     ),
-    notifyScript: scriptEventNotifier(sender),
+    notifyScript: scriptEventNotifier(ctx),
   };
 }
 
@@ -63,16 +61,16 @@ export const worktreesHandlers: Handlers<
   // terminal run the same engine.
   create: async (
     { projectId, worktreeName, branchName, base, checkout },
-    { event },
+    ctx,
   ) => {
     const project = findProjectOrThrow(projectId);
     const input = { worktreeName, branchName, base, checkout };
-    return createViaCli(project, input, notifierFor(event.sender));
+    return createViaCli(project, input, notifierFor(ctx));
   },
 
-  convertExternal: async ({ projectId, worktreeId }, { event }) => {
+  convertExternal: async ({ projectId, worktreeId }, ctx) => {
     const project = findProjectOrThrow(projectId);
-    return adoptViaCli(project, worktreeId, notifierFor(event.sender));
+    return adoptViaCli(project, worktreeId, notifierFor(ctx));
   },
 
   relocate: async ({ projectId, worktreeId, destinationPath }) => {
@@ -80,7 +78,7 @@ export const worktreesHandlers: Handlers<
     return relocateWorktreeToManagedPath(project, worktreeId, destinationPath);
   },
 
-  delete: async ({ projectId, worktreeId, force, skipCleanup }, { event }) => {
+  delete: async ({ projectId, worktreeId, force, skipCleanup }, ctx) => {
     const project = findProjectOrThrow(projectId);
     // The CLI can't see the app's script registry, so the delete runs
     // under the shared tombstone protocol (see withDeleteInflight).
@@ -91,7 +89,7 @@ export const worktreesHandlers: Handlers<
         deleteViaCli(
           project,
           { worktreeId, force, skipCleanup },
-          notifierFor(event.sender),
+          notifierFor(ctx),
         ),
     );
   },

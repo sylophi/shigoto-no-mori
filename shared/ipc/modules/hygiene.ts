@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
   WorktreeDiskUsageSchema,
@@ -7,7 +7,7 @@ import {
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
 
-export const hygieneContract = {
+export const hygieneContract = defineContract("host", {
   // Fast, all-git: safe to await before the tidy list renders.
   list: invoke(
     "hygiene:list",
@@ -21,4 +21,4 @@ export const hygieneContract = {
     WorktreeScopedPayloadSchema,
     WorktreeDiskUsageSchema,
   ),
-} as const;
+});

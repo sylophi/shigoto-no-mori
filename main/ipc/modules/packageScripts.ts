@@ -15,9 +15,9 @@ import {
   readPackageScriptNames,
   readPackageScripts,
 } from "@host/lib/scripts/packageScripts";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { cliRunScriptSpawn } from "../cliDelegate";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
-import type { HandlerContext } from "../register";
 
 export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,
@@ -46,7 +46,7 @@ export const packageScriptsHandlers: Handlers<
     writeScriptSort(project.id, mode);
   },
 
-  run: async ({ projectId, worktreeId, scriptName }, { event }) => {
+  run: async ({ projectId, worktreeId, scriptName }, handlerCtx) => {
     const project = findProjectOrThrow(projectId);
     const ctx = await prepareScriptRun(project, worktreeId);
 
@@ -77,7 +77,7 @@ export const packageScriptsHandlers: Handlers<
       project,
       projectBranch: ctx.projectBranch,
       defaultBranch: ctx.defaultBranch,
-      notify: scriptEventNotifier(event.sender),
+      notify: scriptEventNotifier(handlerCtx),
     });
     bumpScriptUseCount(project.id, scriptName);
     return { runId };

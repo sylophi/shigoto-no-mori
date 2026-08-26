@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DMG_ART_DIR, dmgBackgroundName } from "../shared/dmgLayout.mts";
+import { report } from "./lib/checkKit.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -51,32 +52,31 @@ export function artInputsHash() {
 }
 
 function check() {
+  const failures = [];
   const missing = ART_FILES.filter((file) => !existsSync(join(ROOT, file)));
   if (missing.length > 0) {
-    fail(
+    // Hashing reads every art file, so a missing twin short-circuits
+    // before the stamp comparison.
+    failures.push(
       `the installer artwork is incomplete -- missing ${missing.join(", ")}.`,
     );
+  } else {
+    const stamped = existsSync(ART_STAMP_FILE)
+      ? readFileSync(ART_STAMP_FILE, "utf8").trim()
+      : null;
+    if (stamped !== artInputsHash()) {
+      failures.push(
+        stamped === null
+          ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
+          : "the installer artwork predates a change to the design it is rendered from.",
+      );
+    }
   }
-  const stamped = existsSync(ART_STAMP_FILE)
-    ? readFileSync(ART_STAMP_FILE, "utf8").trim()
-    : null;
-  if (stamped === artInputsHash()) {
-    console.log("dmg art OK");
-    return;
-  }
-  fail(
-    stamped === null
-      ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
-      : "the installer artwork predates a change to the design it is rendered from.",
-  );
-}
-
-function fail(reason) {
-  console.error(`Dmg art check failed: ${reason}`);
-  console.error(
-    "\nRe-render it with `pnpm dmg:background` and commit the result.",
-  );
-  process.exit(1);
+  report({
+    name: "dmg art",
+    failures,
+    hint: "Re-render it with `pnpm dmg:background` and commit the result.",
+  });
 }
 
 if (

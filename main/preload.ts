@@ -2,32 +2,9 @@
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
-import {
-  branches,
-  dialog,
-  fs,
-  git,
-  githubCli,
-  globalConfig,
-  hygiene,
-  launchers,
-  menu,
-  nav,
-  packageScripts,
-  portPool,
-  projectLauncher,
-  projects,
-  runtime,
-  scripts,
-  cli,
-  shell,
-  shigomori,
-  updater,
-  windowApi,
-  worktreeData,
-  worktrees,
-} from "@shared/ipc/client";
+import { buildApi } from "@shared/ipc/client";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
+import { electronClientTransport } from "./preloadTransport";
 
 // The device id arrives on argv (main passes --sm-device-id=<uuid> via
 // webPreferences.additionalArguments, which reaches sandboxed preloads)
@@ -44,29 +21,13 @@ if (!deviceId) {
 
 const api = {
   deviceId,
-  projects,
-  worktrees,
-  branches,
-  dialog,
-  runtime,
-  fs,
-  shigomori,
-  worktreeData,
-  globalConfig,
-  shell,
-  projectLauncher,
-  nav,
-  menu,
-  window: windowApi,
-  git,
-  packageScripts,
-  portPool,
-  githubCli,
-  scripts,
-  cli,
-  updater,
-  launchers,
-  hygiene,
+  // Both scopes ride the same IPC bridge while host and client live in
+  // one process. Step 3 swaps the host entry for a socket transport and
+  // nothing else changes.
+  ...buildApi({
+    host: electronClientTransport,
+    client: electronClientTransport,
+  }),
 } as const;
 
 export type RendererApi = typeof api;

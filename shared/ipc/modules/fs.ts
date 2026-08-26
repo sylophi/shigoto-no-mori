@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { invoke } from "@shared/ipc/contract";
+import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   DirectoryListingSchema,
   FsListingSchema,
@@ -7,7 +7,7 @@ import {
   PathPayloadSchema,
 } from "@shared/schemas";
 
-export const fsContract = {
+export const fsContract = defineContract("host", {
   listDirectory: invoke(
     "fs:listDirectory",
     PathPayloadSchema,
@@ -21,4 +21,4 @@ export const fsContract = {
   isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean()),
   stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema),
   listEntries: invoke("fs:listEntries", PathPayloadSchema, FsListingSchema),
-} as const;
+});

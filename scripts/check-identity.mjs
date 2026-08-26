@@ -15,6 +15,7 @@ import {
   computeRepoIdentity,
   normalizeRemoteUrl,
 } from "../shared/repoIdentity.mts";
+import { report } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -108,12 +109,8 @@ try {
   rmSync(temp, { recursive: true, force: true });
 }
 
-if (failures.length > 0) {
-  console.error("Repo identity check failed:\n");
-  for (const f of failures) console.error(`  ✗ ${f}`);
-  console.error(
-    "\nEither fix shared/repoIdentity.mts (and its Go twin cli/identity.go), or update the fixtures in shared/fixtures/ for both harnesses.",
-  );
-  process.exit(1);
-}
-console.log("repo identity OK");
+report({
+  name: "repo identity",
+  failures,
+  hint: "Either fix shared/repoIdentity.mts (and its Go twin cli/identity.go), or update the fixtures in shared/fixtures/ for both harnesses.",
+});

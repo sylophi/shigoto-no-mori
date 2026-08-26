@@ -5,8 +5,8 @@ import { findProjectOrThrow } from "@host/lib/projects";
 import { cancelScript, startScript } from "@host/lib/scripts";
 import { takeOrphanSweepReport } from "@host/lib/scripts/persistence";
 import { shellQuote } from "@host/lib/scripts/process";
+import type { HandlerContext } from "@shared/ipc/transport";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
-import type { HandlerContext } from "../register";
 
 // The shell command behind each ScriptName.
 function resolveScriptCommand(
@@ -28,7 +28,7 @@ function resolveScriptCommand(
 
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {
-    run: async ({ projectId, worktreeId, script }, { event }) => {
+    run: async ({ projectId, worktreeId, script }, handlerCtx) => {
       const project = findProjectOrThrow(projectId);
       const ctx = await prepareScriptRun(project, worktreeId);
 
@@ -48,7 +48,7 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
         project,
         projectBranch: ctx.projectBranch,
         defaultBranch: ctx.defaultBranch,
-        notify: scriptEventNotifier(event.sender),
+        notify: scriptEventNotifier(handlerCtx),
       });
       return { runId };
     },

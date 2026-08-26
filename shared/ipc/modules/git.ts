@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { broadcast, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
-export const gitContract = {
+export const gitContract = defineContract("host", {
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
@@ -18,4 +18,4 @@ export const gitContract = {
   // can't cover this, since the window may already be focused while an
   // agent works in a terminal beside it.
   externalChange: broadcast("git:externalChange", z.void()),
-} as const;
+});
