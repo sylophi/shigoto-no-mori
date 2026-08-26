@@ -68,6 +68,17 @@ pre-commit:
     sync-transfer:
       glob: "{cli/**,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/cliDelegate.ts,host/lib/sync/**,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs}"
       run: pnpm run sync:check
+    # End-to-end proof for the port-forward wire: drives the host-side
+    # forward verbs between two REAL relay connections against real
+    # loopback TCP fixture servers, asserting grant refusal before any
+    # dial, echo round trips, server-initiated bytes over the long-poll
+    # downlink, a ~1.5 MB transfer chunked under the relay frame cap,
+    # drain-then-eof on server close, the coded connect failure, and
+    # idempotent teardown. Gated to the forward surface plus the stub
+    # relay it rides.
+    port-forward:
+      glob: "{shared/ipc/modules/forward.ts,host/ipc/modules/forward.ts,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs}"
+      run: pnpm run forward:check
     # Boots the same stub Durable Object and drives the BROWSER relay
     # connection (web/relay/connection.ts, built on the global WebSocket)
     # under node against a real node host peer, asserting connect,

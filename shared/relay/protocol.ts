@@ -66,6 +66,15 @@ export function utf8ByteLength(text: string): number {
   return utf8.encode(text).byteLength;
 }
 
+// One raw chunk of bulk app data per relay message, for callers that
+// move byte streams as base64 inside a JSON frame inside the relay
+// envelope (the port-forward wire and its slice B client engine). The
+// base64 form is ceil(640_000/3)*4 = 853_336 chars, leaving ~146 KB of
+// headroom under MAX_RELAY_MESSAGE_BYTES for the frame and envelope
+// fields around it. The two values must move together.
+export const RELAY_CHUNK_BYTES = 640_000;
+export const RELAY_CHUNK_B64_MAX = 853_336;
+
 // The most online devices a presence roster may name. An account's
 // device count is small in practice, so this sits far above any real
 // roster while still bounding what a hostile DO can force a client to

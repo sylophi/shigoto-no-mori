@@ -44,6 +44,7 @@ import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { allContractModules } from "@shared/ipc/client";
 // Contract modules referenced by the explicit spot-checks below.
 import { cliContract } from "@shared/ipc/modules/cli";
+import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
 import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
@@ -576,6 +577,13 @@ async function main() {
           remote: true,
           mutating: true,
         }),
+        // A command whose effects are invisible to remote viewers, the
+        // forward-verb shape: still grant-gated, never pinged.
+        shuttle: invoke("pingtest:shuttle", z.void(), z.void(), {
+          remote: true,
+          mutating: true,
+          movesHostState: false,
+        }),
       });
       let resolved = 0;
       registerContract(
@@ -586,6 +594,7 @@ async function main() {
           failMutate: async () => {
             throw new Error("boom");
           },
+          shuttle: async () => {},
         },
         server,
         {
@@ -604,6 +613,12 @@ async function main() {
         handlers.get("pingtest:failMutate")(ctx, undefined),
       );
       assert.equal(resolved, 1, "a failed mutation must not trip the hook");
+      await handlers.get("pingtest:shuttle")(ctx, undefined);
+      assert.equal(
+        resolved,
+        1,
+        "a movesHostState:false mutation must not trip the hook",
+      );
     },
   );
 
@@ -645,6 +660,16 @@ async function main() {
               typeof def.mutating,
               "boolean",
               `${name}.${key} (${def.channel}) is remote but not explicitly tagged mutating`,
+            );
+          }
+          // movesHostState opts a mutating def out of the remote-viewer
+          // cache ping. On a non-mutating def it is meaningless, so its
+          // presence there is a tagging mistake.
+          if (def.movesHostState !== undefined) {
+            assert.equal(
+              def.mutating,
+              true,
+              `${name}.${key} (${def.channel}) tags movesHostState without mutating:true`,
             );
           }
         }
@@ -729,6 +754,28 @@ async function main() {
           syncContract.calls[key].mutating,
           true,
           `sync.${key} must require the command grant`,
+        );
+      }
+      // The step-8 port-forward surface (v2 slice A): every verb is a
+      // grant-gated command, but none moves state a remote viewer
+      // caches, so all four opt out of the mutation cache ping. A flip
+      // to pinging would re-invalidate a peer's whole cached view on
+      // every poll and send of an open forward.
+      for (const key of ["open", "send", "poll", "close"]) {
+        assert.equal(
+          forwardContract.calls[key].remote,
+          true,
+          `forward.${key} remote`,
+        );
+        assert.equal(
+          forwardContract.calls[key].mutating,
+          true,
+          `forward.${key} must require the command grant`,
+        );
+        assert.equal(
+          forwardContract.calls[key].movesHostState,
+          false,
+          `forward.${key} must opt out of the viewer cache ping`,
         );
       }
       // The pull orchestrator (v2 step 7, slice C) is LOCAL-only: a

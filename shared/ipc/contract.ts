@@ -29,6 +29,15 @@ export type InvokeDef<
   // remote invoke classifies itself), while client-scoped and
   // remote:false calls never reach the grant check.
   mutating?: boolean;
+  // Whether a resolved mutating call moved host state a remote viewer
+  // caches. Defaults to true for mutating invokes: the registrar fires
+  // onMutationResolved (the remote-viewer cache ping) unless a def sets
+  // exactly false. Set false only on mutating channels whose effects
+  // are invisible to viewers, like forward's byte shuttling, so an open
+  // stream does not re-invalidate a peer's cached view of this host on
+  // every poll or send resolution. Orthogonal to `mutating`, which is
+  // the grant axis and stays true on such channels.
+  movesHostState?: boolean;
 };
 
 export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
@@ -61,7 +70,12 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   channel: string,
   input: I,
   output: O,
-  opts?: { tracksProjectUsage?: boolean; remote?: boolean; mutating?: boolean },
+  opts?: {
+    tracksProjectUsage?: boolean;
+    remote?: boolean;
+    mutating?: boolean;
+    movesHostState?: boolean;
+  },
 ): InvokeDef<I, O> => ({
   kind: "invoke",
   channel,
@@ -78,6 +92,9 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   // cannot silently join the wire without declaring whether it mutates.
   // Reads and remote:false calls leave it undefined.
   mutating: opts?.mutating,
+  // Undefined means "moves host state" for a mutating def. Only an
+  // explicit false opts a channel out of the cache ping.
+  movesHostState: opts?.movesHostState,
 });
 
 export const broadcast = <P extends z.ZodTypeAny>(
