@@ -5,7 +5,7 @@
 // registry the relay sync maintains, so status semantics cannot drift
 // between the two clients.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { MonitorSmartphone, TreePine } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
+import { PageHeader } from "@/components/shared/PageHeader";
 import {
   useAccountDevices,
   useAccountStatus,
@@ -21,7 +22,6 @@ import {
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { queryKeys } from "@/lib/queryKeys";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isOriginBlockedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
@@ -29,7 +29,8 @@ import { navigateTo, redirectTo, webPaths } from "./nav";
 
 // The relay socket's live snapshot for THIS browser's own row. Kept
 // local: the remote registry deliberately excludes the local device, so
-// its own status comes straight off the bridge.
+// its own status comes straight off the bridge. One subscription at the
+// page level, since every row reads the same shared value.
 function useRelayStatus(): RelayStatus | null {
   const [status, setStatus] = useState<RelayStatus | null>(null);
   useEffect(() => {
@@ -61,6 +62,7 @@ export function DevicesPage() {
 
   const devices = useAccountDevices(signedIn);
   const webAccess = useWebAccess();
+  const relayStatus = useRelayStatus();
 
   if (statusPending || !signedIn) {
     return (
@@ -89,7 +91,11 @@ export function DevicesPage() {
       ) : devices.data !== undefined && devices.data.length > 0 ? (
         <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
           {devices.data.map((info) => (
-            <DeviceRow key={info.deviceId} info={info} />
+            <DeviceRow
+              key={info.deviceId}
+              info={info}
+              relayStatus={relayStatus}
+            />
           ))}
         </div>
       ) : devices.isError ? null : (
@@ -123,10 +129,15 @@ function reachabilityMessage(error: unknown): string {
   return `Couldn't load the device list: ${errorMessageOf(error)}`;
 }
 
-function DeviceRow({ info }: { info: DeviceInfo }) {
+function DeviceRow({
+  info,
+  relayStatus,
+}: {
+  info: DeviceInfo;
+  relayStatus: RelayStatus | null;
+}) {
   const isSelf = info.deviceId === window.api.deviceId;
   const remoteDevices = useRemoteDevices();
-  const relayStatus = useRelayStatus();
   const entry = remoteDevices.find((d) => d.deviceId === info.deviceId);
   // Own row: the relay socket IS this device's presence. Peers: the
   // registry's derived status, or the socket phase before the registry
@@ -136,12 +147,12 @@ function DeviceRow({ info }: { info: DeviceInfo }) {
     : (entry?.status ?? { phase: "stopped" as const });
   const { connected } = deviceStatusView(supervisorStatus);
 
-  const queryClient = useQueryClient();
+  // No onSuccess invalidation: the revoke ends with the bridge's
+  // account.changed broadcast, and useWatchAccountChanges (mounted in
+  // the shell) invalidates the whole account prefix off it, exactly as
+  // useAccount.ts documents for the desktop mutations.
   const revoke = useMutation({
     mutationFn: () => webBridge().revokeDevice(info.deviceId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.account() });
-    },
     meta: { errorTitle: "Couldn't revoke the device" },
   });
   const confirm = useConfirmTwice();
@@ -197,22 +208,12 @@ function PageShell({
 }) {
   return (
     <div className="flex h-full flex-col">
-      <header className="relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-5 pb-4">
-        <div className="relative z-[1] flex min-w-0 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            {accountId ? `Signed in as ${accountId}` : "Account"}
-          </span>
-          <h1 className="truncate text-lg font-medium tracking-tight">
-            Devices
-          </h1>
-        </div>
-        <span
-          aria-hidden
-          className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
-        >
-          端末
-        </span>
-      </header>
+      <PageHeader
+        eyebrow={accountId ? `Signed in as ${accountId}` : "Account"}
+        title="Devices"
+        watermark="端末"
+        topPadding="pt-5"
+      />
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-4">{children}</div>
       </div>

@@ -1,16 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  focusManager,
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
-import { isEntityGoneError } from "@shared/errors";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { App } from "./App";
+import { createAppQueryClient } from "./lib/queryClientOptions";
 import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
 import { startRelayDeviceSync } from "./lib/remote/relayDevices";
 import {
@@ -18,7 +11,7 @@ import {
   localDeviceId,
   queryKeys,
 } from "./lib/queryKeys";
-import { notifyError, toast } from "./lib/toast";
+import { toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
@@ -71,62 +64,9 @@ focusManager.setEventListener((handleFocus) => {
   };
 });
 
-// Per-query opt-out: pass `meta: { silentError: true }` to suppress the
-// global toast (use when the call site renders a richer inline error).
-// `meta: { errorTitle: "Couldn't load X" }` overrides the default title.
-declare module "@tanstack/react-query" {
-  interface Register {
-    queryMeta: { silentError?: boolean; errorTitle?: string };
-    mutationMeta: { silentError?: boolean; errorTitle?: string };
-  }
-}
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Local git/fs state can change at any moment via another tool;
-      // there's no "TTL" that's meaningful. Refetch whenever an observer
-      // mounts, the window regains focus, or a mutation invalidates us.
-      // Hooks for genuinely-static data (runtime info, detected launchers,
-      // project icons) opt out via their own staleTime. `true` rather than
-      // "always": "always" short-circuits ahead of the staleness check, so it
-      // silently defeats every staleTime a hook sets.
-      refetchOnWindowFocus: true,
-      refetchOnMount: true,
-      staleTime: 0,
-      // An entity-gone failure (project/worktree deleted out from under
-      // an in-flight query) is deterministic; retrying only delays the
-      // toast until well after the UI has moved on. Keep the default
-      // three retries for everything else.
-      retry: (failureCount, error) =>
-        failureCount < 3 && !isEntityGoneError(error),
-    },
-  },
-  queryCache: new QueryCache({
-    onError: (err, query) => {
-      if (query.meta?.silentError) return;
-      notifyError(query.meta?.errorTitle ?? "Something went wrong", err);
-    },
-  }),
-  mutationCache: new MutationCache({
-    onError: (err, _vars, _ctx, mutation) => {
-      // A command refusal (a remote host that hasn't granted this device
-      // command access) is always worth surfacing plainly, ahead of the
-      // silentError opt-out: the mutations that suppress the global toast
-      // do so to show an inline retry/force prompt that doesn't apply to
-      // a refusal, so silence would leave the click looking like a no-op.
-      if (isCommandRefusedError(err)) {
-        notifyError(
-          "That machine hasn't granted this device command access",
-          err,
-        );
-        return;
-      }
-      if (mutation.meta?.silentError) return;
-      notifyError(mutation.meta?.errorTitle ?? "Something went wrong", err);
-    },
-  }),
-});
+// The shared config (defaults, global error toasts, the meta opt-outs)
+// lives in lib/queryClientOptions.ts, one module for both boots.
+const queryClient = createAppQueryClient();
 
 // Boot warmth for the device config: the appearance providers moved to
 // the client store and no longer keep this query alive, but the first

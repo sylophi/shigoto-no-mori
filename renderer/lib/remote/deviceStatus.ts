@@ -4,18 +4,12 @@
 // stay within the four raw families the theme remaps (emerald, rose,
 // amber, sky) plus slate for off, per the doubutsu contract.
 import type { SupervisorStatus } from "@shared/remote/supervisor";
-import type { PillTone } from "@/components/sidebar/StatusPill";
-
-// The tones this view actually emits, a subset of PillTone. Named so the
-// status dot maps over exactly these and carries no unreachable branch
-// for a tone the state machine can never produce.
-export type DeviceTone = Extract<
-  PillTone,
-  "emerald" | "sky" | "amber" | "rose" | "slate"
->;
+import type { StatusTone } from "@/components/ui/status-dot";
 
 export type DeviceStatusView = {
-  tone: DeviceTone;
+  // Exactly the closed tone set the StatusDot primitive draws, so every
+  // phase maps to a renderable dot by construction.
+  tone: StatusTone;
   label: string;
   // True only when the socket handshake has completed, so a caller can
   // gate a "View forest" affordance on a real connection.

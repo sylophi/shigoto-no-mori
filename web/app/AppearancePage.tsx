@@ -7,6 +7,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ClientConfig, Theme } from "@shared/schemas";
 import { AppearanceSection } from "@/components/settings/AppearanceSection";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
@@ -40,22 +41,12 @@ export function AppearancePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-5 pb-4">
-        <div className="relative z-[1] flex min-w-0 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            This browser
-          </span>
-          <h1 className="truncate text-lg font-medium tracking-tight">
-            Appearance
-          </h1>
-        </div>
-        <span
-          aria-hidden
-          className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
-        >
-          設定
-        </span>
-      </header>
+      <PageHeader
+        eyebrow="This browser"
+        title="Appearance"
+        watermark="設定"
+        topPadding="pt-5"
+      />
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div
           className="flex max-w-3xl flex-col gap-6"

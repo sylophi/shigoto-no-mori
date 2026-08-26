@@ -7,51 +7,24 @@
 // the provider tree around the router.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  MutationCache,
-  QueryCache,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Toaster } from "sonner";
-import { isEntityGoneError } from "@shared/errors";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
+import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { startRelayDeviceSync } from "@/lib/remote/relayDevices";
-import { notifyError } from "@/lib/toast";
 import { webRouter } from "./router";
 import "@/index.css";
 
-// Same per-query opt-outs as the desktop boot: silentError suppresses
-// the global toast, errorTitle overrides the default headline.
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: true,
-      refetchOnMount: true,
-      staleTime: 0,
-      retry: (failureCount, error) =>
-        failureCount < 3 && !isEntityGoneError(error),
-    },
-  },
-  queryCache: new QueryCache({
-    onError: (err, query) => {
-      if (query.meta?.silentError) return;
-      notifyError(query.meta?.errorTitle ?? "Something went wrong", err);
-    },
-  }),
-  mutationCache: new MutationCache({
-    onError: (err, _vars, _ctx, mutation) => {
-      if (mutation.meta?.silentError) return;
-      notifyError(mutation.meta?.errorTitle ?? "Something went wrong", err);
-    },
-  }),
-});
+// The exact desktop configuration (defaults, error toasts, the
+// command-refusal branch and the per-query meta opt-outs), from the one
+// shared module rather than a copy that could drift.
+const queryClient = createAppQueryClient();
 
 // The registry's relay half: enrolled devices plus live presence, from
 // the bridge's account and relay modules, exactly as on desktop.

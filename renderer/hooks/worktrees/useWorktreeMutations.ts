@@ -136,13 +136,19 @@ interface DeleteWorktreeInput {
   skipCleanup?: boolean;
 }
 
-const DELETE_WORKTREE_MUTATION_KEY = ["delete-worktree"] as const;
+// Scoped by device: worktree ids are content hashes of the absolute
+// path, so the same username and layout on two of the owner's machines
+// yields colliding ids. An unscoped key would let a remote delete flip
+// the local sidebar row of the same-named local worktree into its
+// deleting state.
+const deleteWorktreeMutationKey = (deviceId: string) =>
+  ["delete-worktree", deviceId] as const;
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
   const { api, deviceId, keys } = useHostScope();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
-    mutationKey: DELETE_WORKTREE_MUTATION_KEY,
+    mutationKey: deleteWorktreeMutationKey(deviceId),
     mutationFn: (input) => api.worktrees.delete(input),
     onMutate: async (vars) => {
       // Cancel this worktree's in-flight fetches (a focus-triggered
@@ -194,9 +200,10 @@ export function useDeleteWorktree() {
 }
 
 export function useIsDeletingWorktree(worktreeId: string): boolean {
+  const { deviceId } = useHostScope();
   return (
     useIsMutating({
-      mutationKey: DELETE_WORKTREE_MUTATION_KEY,
+      mutationKey: deleteWorktreeMutationKey(deviceId),
       predicate: (m) =>
         (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
         worktreeId,

@@ -5,10 +5,10 @@
 // in v1 vocabulary (theme tokens only), per the theming contract.
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { LogOut, MonitorSmartphone, Palette, TreePine } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   useAccountStatus,
+  useSignOut,
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
@@ -41,11 +41,11 @@ export function WebShell() {
   const { pathname } = useLocation();
   const signedIn = status?.signedIn === true;
 
-  const signOut = useMutation({
-    mutationFn: () => window.api.account.signOut(),
-    onSuccess: () => navigateTo(webPaths.login),
-    meta: { errorTitle: "Couldn't sign out" },
-  });
+  const signOut = useSignOut();
+  const onSignOut = () =>
+    signOut.mutate(undefined, {
+      onSuccess: () => navigateTo(webPaths.login),
+    });
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
@@ -80,7 +80,7 @@ export function WebShell() {
               size="sm"
               className="text-muted-foreground"
               disabled={signOut.isPending}
-              onClick={() => signOut.mutate()}
+              onClick={onSignOut}
             >
               <LogOut />
               Sign out

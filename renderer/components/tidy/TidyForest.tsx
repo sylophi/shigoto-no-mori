@@ -5,6 +5,7 @@ import type { Worktree } from "@shared/schemas";
 import type { RowStatus } from "@/components/ui/row-status";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
   useAllProjectHygiene,
@@ -173,22 +174,11 @@ export function TidyForest() {
 
   return (
     <div data-doubutsu-page="tidy" className="flex h-full flex-col">
-      <header className="relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4">
-        <div className="relative z-[1] flex min-w-0 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            Shigoto no Mori
-          </span>
-          <h1 className="text-lg font-medium tracking-tight">
-            Tidy the forest
-          </h1>
-        </div>
-        <span
-          aria-hidden
-          className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
-        >
-          掃除
-        </span>
-      </header>
+      <PageHeader
+        eyebrow="Shigoto no Mori"
+        title="Tidy the forest"
+        watermark="掃除"
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-6">
