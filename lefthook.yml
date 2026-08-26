@@ -55,8 +55,19 @@ pre-commit:
     # hello token and the per-peer in-flight cap. Gated to the relay
     # transport surface plus the sm frame layer it multiplexes.
     relaylink:
-      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/util/limit.ts,scripts/check-relay-link.mjs}"
+      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs}"
       run: pnpm run relaylink:check
+    # End-to-end proof for the device-sync transfer plumbing: builds the
+    # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
+    # and moves a >1.5 MB git bundle between two REAL relay connections
+    # as chunked grant-gated invokes (real handlers, real CLI, real
+    # git), asserting grant refusal for ungranted peers, the
+    # refs/shigomori/-only landing namespace, byte-identical objects,
+    # transfer cleanup, and the coded corrupted-bundle error. Gated to
+    # the sync surface plus the CLI engine it shells.
+    sync-transfer:
+      glob: "{cli/**,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/cliDelegate.ts,host/lib/sync/**,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs}"
+      run: pnpm run sync:check
     # Boots the same stub Durable Object and drives the BROWSER relay
     # connection (web/relay/connection.ts, built on the global WebSocket)
     # under node against a real node host peer, asserting connect,

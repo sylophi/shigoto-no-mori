@@ -19,6 +19,7 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
+import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
@@ -41,6 +42,7 @@ import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { shellHandlers } from "./modules/shell";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
+import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -112,5 +114,6 @@ export function registerIpcHandlers(): void {
   registerContract(scriptsContract, scriptsHandlers);
   registerContract(cliContract, cliHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
+  registerContract(syncContract, syncHandlers);
   registerContract(updaterContract, updaterHandlers);
 }

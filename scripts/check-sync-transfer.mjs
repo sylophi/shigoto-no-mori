@@ -1,0 +1,450 @@
+// Durable proof for the device-sync transfer plumbing (v2 step 7,
+// slice B): git bundles as chunked, grant-gated invoke responses over
+// the REAL relay transport. Nothing here is a double on the sync path
+// itself: the stub relay (scripts/lib/relayStub.mjs) carries two real
+// relay connections, device A registers the REAL sync contract and
+// handlers, the handlers shell the REAL sm binary (built from cli/ by
+// this check), sm runs REAL git against fixture repos, and the
+// receiver drives the REAL fetchBundleFromPeer helper. Asserts:
+//   - an ungranted peer is refused (typed CommandRefusedError) and the
+//     transfer surface never serves it;
+//   - sync:captureDirty over the wire snapshots a dirty worktree to
+//     its refs/shigomori/dirty/<id> ref;
+//   - a >1.5 MB bundle (branch + dirty capture, thinned by a have)
+//     crosses in >= 3 chunks and lands ONLY under refs/shigomori/ on
+//     the receiver with the source's exact tips, byte-identical
+//     content via git cat-file, and no branch materialized;
+//   - the host drops a finished transfer (a stale chunk request is
+//     refused) and bundleAbort cleans up an abandoned one;
+//   - unpacking a corrupted bundle fails with the coded "bad-bundle".
+//
+// Both "devices" share one node process and one sandboxed
+// SHIGOMORI_ROOT holding two projects (source and target repos); what
+// separates them is the relay wire between their connections, which is
+// exactly the surface this slice adds. Runs under
+// scripts/lib/register-ts-alias.mjs. See package.json "sync:check".
+import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { buildClient } from "@shared/ipc/buildClient";
+import { syncContract } from "@shared/ipc/modules/sync";
+import { registerContract } from "@shared/ipc/registerContract";
+import { createRelayConnection } from "@host/relay/connection";
+import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
+import { syncHandlers, SYNC_CHUNK_BYTES } from "@host/ipc/modules/sync";
+import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { initShigomoriRootAt } from "@host/lib/util/paths";
+import { startStubRelay } from "./lib/relayStub.mjs";
+
+const execFileP = promisify(execFile);
+const cliDir = join(import.meta.dirname, "..", "cli");
+
+// Sandbox: everything (state root, repos, the built binary) under one
+// temp tree. realpath because worktree ids derive from git's resolved
+// paths (/var/folders is a symlink on macOS).
+const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-sync-check-")));
+const stateRoot = join(sandbox, "root");
+const smBinary = join(sandbox, "sm");
+
+// Scrub inherited GIT_* (a lefthook run exports GIT_DIR and would point
+// fixture git at THIS repo) and pin idents so commit-tree in `sm dirty
+// capture` never depends on the machine's git config.
+const baseEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+);
+Object.assign(baseEnv, {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+  GIT_AUTHOR_NAME: "t",
+  GIT_AUTHOR_EMAIL: "t@t",
+  GIT_COMMITTER_NAME: "t",
+  GIT_COMMITTER_EMAIL: "t@t",
+});
+const smEnv = { ...baseEnv, SHIGOMORI_ROOT: stateRoot };
+
+async function git(cwd, args, opts = {}) {
+  return execFileP("git", args, {
+    cwd,
+    env: baseEnv,
+    maxBuffer: 16 * 1024 * 1024,
+    ...opts,
+  });
+}
+
+async function gitOut(cwd, ...args) {
+  const { stdout } = await git(cwd, args);
+  return stdout.trim();
+}
+
+// Every ref in a repo as a Set of "refname sha" lines. The transfer
+// proof snapshots this before and after unpack and asserts the delta is
+// EXACTLY the wanted refs -- a stray refs/tags/* (git's tag auto-follow,
+// the M1 hole) would show up here as an unexpected extra line.
+async function refSnapshot(repo) {
+  const out = await gitOut(
+    repo,
+    "for-each-ref",
+    "--format=%(refname) %(objectname)",
+  );
+  return new Set(out ? out.split("\n") : []);
+}
+
+// The real CLI runner seam: same NDJSON-per-line protocol as the
+// Electron implementation (main/electron/cliRunner.ts), minus the
+// child bookkeeping the app needs.
+function runCli(args, onDoc) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(smBinary, ["--json", ...args], { env: smEnv });
+    const docs = [];
+    let buffer = "";
+    child.stdout.on("data", (chunk) => {
+      buffer += chunk.toString("utf8");
+      for (
+        let newline = buffer.indexOf("\n");
+        newline >= 0;
+        newline = buffer.indexOf("\n")
+      ) {
+        const line = buffer.slice(0, newline).trim();
+        buffer = buffer.slice(newline + 1);
+        if (!line) continue;
+        try {
+          const doc = JSON.parse(line);
+          docs.push(doc);
+          onDoc?.(doc);
+        } catch {
+          // Non-JSON stdout line; the assertions read docs only.
+        }
+      }
+    });
+    let stderrTail = "";
+    child.stderr.on("data", (chunk) => {
+      stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
+    });
+    child.on("error", reject);
+    child.on("close", (code) =>
+      resolve({ code: code ?? -1, docs, stderrTail }),
+    );
+  });
+}
+
+function cliFailureMessage(result, fallback) {
+  const errorDoc = result.docs.find(
+    (doc) => doc.ok === false && typeof doc.error === "string",
+  );
+  return errorDoc ? errorDoc.error : `${fallback} (CLI exit ${result.code})`;
+}
+
+async function sm(...args) {
+  const result = await runCli(args);
+  if (result.code !== 0) {
+    throw new Error(
+      `sm ${args.join(" ")} failed: ${cliFailureMessage(result, "no error doc")}\n${result.stderrTail}`,
+    );
+  }
+  return result;
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitFor(predicate, what, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
+    await delay(25);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+async function bootDevice(stub, deviceId, opts = {}) {
+  let mints = 0;
+  const connection = createRelayConnection({
+    isCommandGranted: opts.isCommandGranted,
+  });
+  await connection.refresh(async () => ({
+    relayUrl: stub.relayUrl,
+    accountId: "acct",
+    mintTicket: async () => {
+      mints += 1;
+      return `t:${deviceId}:${mints}`;
+    },
+    deviceId,
+    appVersion: "1.0.0",
+  }));
+  await waitFor(
+    () => connection.status().socket.phase === "connected",
+    `${deviceId} to connect`,
+  );
+  return connection;
+}
+
+const passed = [];
+function ok(name) {
+  passed.push(name);
+  console.log(`  ok  ${name}`);
+}
+
+async function main() {
+  console.log("sync-transfer proof\n");
+
+  // ---- Fixtures: build the CLI, seed repos, register projects ----
+  await execFileP("go", ["build", "-o", smBinary, "."], {
+    cwd: cliDir,
+    env: baseEnv,
+  });
+
+  // Source repo: base commit on main, a "feature" branch carrying
+  // ~1.7 MB of incompressible bytes (so the thin bundle still crosses
+  // in >= 3 chunks), a linked worktree for the dirty capture.
+  const sourceRepo = join(sandbox, "source");
+  await git(sandbox, ["init", "-q", "-b", "main", "source"]);
+  for (const args of [
+    ["config", "gc.auto", "0"],
+    ["config", "maintenance.auto", "false"],
+    ["commit", "-q", "--allow-empty", "-m", "init"],
+  ]) {
+    // oxlint-disable-next-line no-await-in-loop -- repo setup is ordered
+    await git(sourceRepo, args);
+  }
+  writeFileSync(join(sourceRepo, "readme.txt"), "base\n");
+  await git(sourceRepo, ["add", "-A"]);
+  await git(sourceRepo, ["commit", "-qm", "base"]);
+  const baseSha = await gitOut(sourceRepo, "rev-parse", "HEAD");
+
+  // Target repo: a clone holding only the base history -- the
+  // receiving device's copy of the same project.
+  const targetRepo = join(sandbox, "target");
+  await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
+  await git(targetRepo, ["config", "gc.auto", "0"]);
+  await git(targetRepo, ["config", "maintenance.auto", "false"]);
+
+  await git(sourceRepo, ["checkout", "-q", "-b", "feature"]);
+  writeFileSync(join(sourceRepo, "big.bin"), randomBytes(1_700_000));
+  await git(sourceRepo, ["add", "-A"]);
+  await git(sourceRepo, ["commit", "-qm", "big feature"]);
+  const featureTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
+  await git(sourceRepo, ["checkout", "-q", "main"]);
+
+  const worktreePath = join(sandbox, "wt");
+  await git(sourceRepo, [
+    "worktree",
+    "add",
+    "-q",
+    "-b",
+    "scratch",
+    worktreePath,
+  ]);
+  // The real app derivation (host/lib/git/worktrees.ts, Go twin in
+  // cli/worktree.go), imported straight from its home now that
+  // tsAliasLoader handles the transitive JSON import. The capture ref
+  // must land at refs/shigomori/dirty/<this id>, asserted below.
+  const worktreeId = worktreeIdFromPath(worktreePath);
+
+  initShigomoriRootAt(stateRoot);
+  setCliRunnerImpl({
+    runCli,
+    requireCliBinary: () => smBinary,
+    cliFailureMessage,
+  });
+  const projectIdOf = async (path) => {
+    const result = await sm("projects", "add", "--", path);
+    const doc = result.docs.findLast((d) => typeof d.id === "string");
+    assert.ok(doc, `projects add emitted no project doc for ${path}`);
+    return doc.id;
+  };
+  const sourceProjectId = await projectIdOf(sourceRepo);
+  const targetProjectId = await projectIdOf(targetRepo);
+
+  // ---- The relay pair: A hosts the real sync surface, B receives ----
+  const stub = await startStubRelay();
+  let granted = false;
+  const a = await bootDevice(stub, "A", { isCommandGranted: () => granted });
+  registerContract(syncContract, syncHandlers, a.server, {
+    validateOutputs: true,
+  });
+  const b = await bootDevice(stub, "B");
+  try {
+    const peer = await b.connectPeer("A");
+    const sync = buildClient(syncContract, peer.transport);
+    const dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
+
+    // (1) Ungranted: the whole surface is refused typed, before any
+    // handler runs -- fetchBundleFromPeer fails on its first call.
+    await assert.rejects(
+      () =>
+        fetchBundleFromPeer(sync, {
+          sourceProjectId,
+          targetProjectId,
+          refs: ["refs/heads/feature"],
+          haves: [],
+        }),
+      (error) =>
+        error instanceof CommandRefusedError &&
+        /not permitted to run commands/.test(error.message),
+    );
+    await assert.rejects(
+      () => sync.captureDirty({ projectId: sourceProjectId, worktreeId }),
+      (error) => error instanceof CommandRefusedError,
+    );
+    ok(
+      "ungranted peer: bundleStart and captureDirty are refused with the typed CommandRefusedError",
+    );
+
+    granted = true;
+
+    // (2) captureDirty over the wire: a dirty worktree snapshots to
+    // its capture ref on the host, tip echoed back.
+    writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted work\n");
+    const capture = await sync.captureDirty({
+      projectId: sourceProjectId,
+      worktreeId,
+    });
+    assert.equal(capture.captured, true, "capture reported clean");
+    const captureTip = await gitOut(sourceRepo, "rev-parse", dirtyRef);
+    assert.equal(capture.commit, captureTip);
+    ok("captureDirty over the relay snapshots the worktree to its capture ref");
+
+    // (3) The full transfer: branch + capture ref, thinned by the
+    // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces
+    // only, byte-identical objects.
+    const refsBefore = await refSnapshot(targetRepo);
+    const { fetched } = await fetchBundleFromPeer(sync, {
+      sourceProjectId,
+      targetProjectId,
+      refs: ["refs/heads/feature", dirtyRef],
+      haves: [baseSha],
+    });
+    const chunkReqs = stub.received.filter(
+      (entry) =>
+        entry.frame?.sm?.t === "req" &&
+        entry.frame.sm.channel === "sync:bundleChunk",
+    );
+    assert.ok(
+      chunkReqs.length >= 3,
+      `expected >= 3 chunks for a >1.5 MB bundle, saw ${chunkReqs.length}`,
+    );
+    const wantTips = {
+      "refs/shigomori/incoming/feature": featureTip,
+      [dirtyRef]: captureTip,
+    };
+    assert.deepEqual(
+      Object.fromEntries(fetched.map(({ ref, commit }) => [ref, commit])),
+      wantTips,
+    );
+    for (const [ref, tip] of Object.entries(wantTips)) {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of git probes
+      assert.equal(await gitOut(targetRepo, "rev-parse", "--verify", ref), tip);
+    }
+    let branchMaterialized = true;
+    try {
+      await git(targetRepo, ["rev-parse", "--verify", "refs/heads/feature"]);
+    } catch {
+      branchMaterialized = false;
+    }
+    assert.equal(
+      branchMaterialized,
+      false,
+      "the transfer materialized a branch on the receiver",
+    );
+    // The ref set grew by EXACTLY the wanted refs and nothing else: no
+    // stray refs/tags/* auto-followed, no ref outside refs/shigomori/.
+    const refsAfter = await refSnapshot(targetRepo);
+    const appeared = [...refsAfter].filter((line) => !refsBefore.has(line));
+    assert.deepEqual(
+      new Set(appeared),
+      new Set([
+        `refs/shigomori/incoming/feature ${featureTip}`,
+        `${dirtyRef} ${captureTip}`,
+      ]),
+      `unpack changed refs beyond the wanted set: ${appeared.join(", ")}`,
+    );
+    const blob = (repo) =>
+      git(repo, ["cat-file", "blob", `${featureTip}:big.bin`], {
+        encoding: "buffer",
+      });
+    const [{ stdout: sourceBlob }, { stdout: targetBlob }] = await Promise.all([
+      blob(sourceRepo),
+      blob(targetRepo),
+    ]);
+    assert.equal(sourceBlob.length, 1_700_000);
+    assert.ok(
+      Buffer.compare(sourceBlob, targetBlob) === 0,
+      "transferred blob differs byte-for-byte",
+    );
+    ok(
+      "granted transfer: >1.5 MB bundle crosses in >= 3 chunks and lands only under refs/shigomori/ with byte-identical objects",
+    );
+
+    // (4) Transfer lifecycle: eof drops the host entry (a stale chunk
+    // is refused), abort drops an abandoned one.
+    const manual = await sync.bundleStart({
+      projectId: sourceProjectId,
+      refs: ["refs/heads/feature"],
+      haves: [baseSha],
+    });
+    assert.ok(
+      manual.bytes > 1_500_000,
+      `thin bundle unexpectedly small: ${manual.bytes} bytes`,
+    );
+    const firstChunk = await sync.bundleChunk({
+      transferId: manual.transferId,
+      offset: 0,
+    });
+    assert.equal(firstChunk.eof, false);
+    assert.equal(
+      Buffer.from(firstChunk.dataB64, "base64").length,
+      SYNC_CHUNK_BYTES,
+    );
+    await sync.bundleAbort({ transferId: manual.transferId });
+    await assert.rejects(
+      () => sync.bundleChunk({ transferId: manual.transferId, offset: 0 }),
+      /unknown transfer/,
+    );
+    // Idempotent abort: a second abort (or one for a finished
+    // transfer) is a no-op, never a failure.
+    await sync.bundleAbort({ transferId: manual.transferId });
+    ok(
+      "lifecycle: a chunk is SYNC_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
+    );
+
+    // (5) A corrupted bundle refuses with the coded kind, straight from
+    // the CLI's json error document.
+    const corrupt = join(sandbox, "corrupt.bundle");
+    writeFileSync(corrupt, randomBytes(4096));
+    const result = await runCli([
+      "bundle",
+      "unpack",
+      "--project-id",
+      targetProjectId,
+      "--in",
+      corrupt,
+      "--refspec",
+      "refs/heads/feature:refs/shigomori/incoming/feature",
+    ]);
+    assert.notEqual(result.code, 0);
+    const errorDoc = result.docs.find((doc) => doc.ok === false);
+    assert.equal(errorDoc?.code, "bad-bundle");
+    ok('corrupted bundle: unpack fails with the coded "bad-bundle" error');
+  } finally {
+    await b.stop();
+    await a.stop();
+    await stub.close();
+  }
+
+  console.log(`\nsync-transfer proof OK (${passed.length} assertions)`);
+}
+
+main()
+  .catch((error) => {
+    console.error(`\nsync-transfer proof FAILED: ${error?.message ?? error}`);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    rmSync(sandbox, { recursive: true, force: true });
+  });

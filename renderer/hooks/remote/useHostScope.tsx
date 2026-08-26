@@ -52,6 +52,7 @@ export type HostApi = Pick<
   | "runtime"
   | "scripts"
   | "shigomori"
+  | "sync"
   | "worktreeData"
   | "worktrees"
 >;

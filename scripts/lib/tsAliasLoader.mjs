@@ -58,6 +58,16 @@ export async function resolve(specifier, context, nextResolve) {
       dirname(fileURLToPath(context.parentURL)),
       specifier,
     );
+    // A bundler-style JSON import (host/lib/worktrees/names.ts): the
+    // TS graph writes it bare, but Node's ESM loader refuses JSON
+    // without the `type: "json"` attribute, so supply it here.
+    if (base.endsWith(".json") && existsSync(base)) {
+      return {
+        url: pathToFileURL(base).href,
+        importAttributes: { type: "json" },
+        shortCircuit: true,
+      };
+    }
     const file = withResolvedExtension(base);
     if (file !== null && file !== base) {
       return { url: pathToFileURL(file).href, shortCircuit: true };
