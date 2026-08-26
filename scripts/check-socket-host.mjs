@@ -3,7 +3,8 @@
 // ws client against it, asserting the auth, dispatch, broadcast and
 // framing paths PLUS the security behaviors the hardening added:
 // terminate-on-bad-token, post-timeout hello rejection, oversized-frame
-// rejection, Origin-bearing upgrade rejection, empty-token start
+// rejection, the Origin gate (the app's own renderer origins pass and
+// reach welcome, a foreign web origin is refused), empty-token start
 // refusal, the no-handler answer a non-remote channel gets, the
 // per-socket in-flight cap, the stopped-listener generation guard, and
 // the contract invariant that every host invoke is explicitly tagged
@@ -376,11 +377,46 @@ async function main() {
   );
 
   await check(
-    "Origin gate: a handshake carrying an Origin header is rejected",
+    "Origin gate: the app's own renderer origins complete hello/welcome",
+    async () => {
+      // The renderer's LAN client (renderer/lib/remote/devices.ts) is
+      // built on the browser-global WebSocket, which ALWAYS sends
+      // Origin: "file://" in the packaged app, the vite dev server's
+      // loopback origin in dev. Both must be able to authenticate, or
+      // the real app can never connect over LAN at all.
+      const { binding, url } = await startBinding();
+      const helloFrom = async (origin) => {
+        const client = connect(url, { origin });
+        await client.opened;
+        client.send({
+          t: "hello",
+          token: TOKEN,
+          deviceId: "client",
+          appVersion: "1",
+        });
+        const welcome = await client.nextFrame();
+        assert.equal(
+          welcome.t,
+          "welcome",
+          `no welcome for a hello from origin ${origin}`,
+        );
+        client.close();
+      };
+      try {
+        await helloFrom("file://");
+        await helloFrom("http://localhost:5173");
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "Origin gate: a handshake from a foreign web origin is rejected",
     async () => {
       const { binding, url } = await startBinding();
       try {
-        const client = connect(url, { origin: "http://evil.example" });
+        const client = connect(url, { origin: "https://evil.example" });
         await assert.rejects(client.opened);
       } finally {
         await binding.stop();
