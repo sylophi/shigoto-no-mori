@@ -8,6 +8,7 @@
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
+import { gitContract } from "@shared/ipc/modules/git";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { relayContract, type RelayStatus } from "@shared/ipc/modules/relay";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";
@@ -165,6 +166,42 @@ const hostServer: ServerTransport = {
 const serverFor = (module: ContractModule): ServerTransport =>
   module.scope === "host" ? hostServer : electronServer;
 
+// App-driven host mutations never reach remote viewers through the fs
+// watcher: its self-write suppression exists precisely so the app's own
+// writes don't echo (stateWatcher.ts). So after any mutating host
+// invoke resolves (whichever wire carried it, this window's own
+// Electron calls included), ping the REMOTE wires with the existing
+// git:externalChange broadcast, the same signal a truly external write
+// produces. Deliberately not the Electron wire: the acting local
+// renderer is already fresh via its mutation's targeted invalidation
+// and must not start paying a broad invalidation for every one of its
+// own writes. Known asymmetry: when the acting client is a REMOTE
+// peer, this window is neither the actor nor pinged, so the local view
+// of a peer-driven change waits for focus refetch. A trailing coalesce
+// folds a burst of mutations into one ping without re-arming, so a
+// steady stream still pings at a bounded rate. If the watcher fires
+// for the same change anyway, viewer-side invalidation is idempotent,
+// so the overlap is harmless.
+const MUTATION_PING_MS = 300;
+let mutationPingTimer: NodeJS.Timeout | null = null;
+function pingRemoteViewers(): void {
+  if (mutationPingTimer !== null) return;
+  mutationPingTimer = setTimeout(() => {
+    mutationPingTimer = null;
+    // resolveBroadcast runs the (void) payload through the contract
+    // schema, exactly like the composite broadcastAll path.
+    // externalChange is remote:true by contract, and must stay that
+    // way: this path pushes to the remote wires unconditionally.
+    const { channel, parsed } = resolveBroadcast(
+      gitContract,
+      "externalChange",
+      undefined,
+    );
+    wsServer.broadcastAll(channel, parsed);
+    relayServer.server.broadcastAll(channel, parsed);
+  }, MUTATION_PING_MS);
+}
+
 export function registerContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
@@ -182,6 +219,10 @@ export function registerContract<M extends ContractModule>(
         });
       }
     },
+    // Only host-scoped modules can move host state a remote viewer
+    // caches. Client-scoped defs never tag mutating anyway, so this
+    // gate is belt and braces.
+    onMutationResolved: module.scope === "host" ? pingRemoteViewers : undefined,
   });
 }
 

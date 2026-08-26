@@ -19,6 +19,16 @@ export type RegisterContractOpts = {
   // forgets the hook fails at startup instead of silently freezing the
   // usage sorts.
   onUsageTracked?: (parsedInput: unknown) => void;
+  // Runs after a handler whose def is tagged `mutating: true` resolves
+  // (before output validation, which only dev builds run: the mutation
+  // happened either way), whichever wire carried the call. The Electron
+  // binding hangs the remote-viewer cache ping here: an app-driven
+  // mutation never trips the fs watcher (its self-write suppression
+  // exists to keep the app's own writes from echoing), so without this
+  // a remote viewer would never learn the host's state moved. Optional,
+  // since bindings with no remote push surface (the web bridge) omit
+  // it.
+  onMutationResolved?: () => void;
 };
 
 export function registerContract<M extends ContractModule>(
@@ -40,6 +50,10 @@ export function registerContract<M extends ContractModule>(
     // Resolved once at registration, so untracked channels pay nothing
     // per call.
     const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
+    // Same shape for the mutation hook: only an EXPLICIT mutating:true
+    // def carries it, so reads and untagged local channels pay nothing.
+    const onMutated =
+      def.mutating === true ? opts.onMutationResolved : undefined;
     const handler = (
       handlers as unknown as Record<
         string,
@@ -67,6 +81,7 @@ export function registerContract<M extends ContractModule>(
         const input = def.input.parse(raw);
         const result = await handler(input, ctx);
         onSuccess?.(input);
+        onMutated?.();
         return opts.validateOutputs ? def.output.parse(result) : result;
       },
       { remote, mutating },

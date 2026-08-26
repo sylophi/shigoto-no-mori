@@ -13,7 +13,11 @@ import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { App } from "./App";
 import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
 import { startRelayDeviceSync } from "./lib/remote/relayDevices";
-import { hostKeyDeviceId, queryKeyDomain, queryKeys } from "./lib/queryKeys";
+import {
+  invalidateHostDevice,
+  localDeviceId,
+  queryKeys,
+} from "./lib/queryKeys";
 import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
@@ -145,48 +149,13 @@ void reconcileRemoteDevicesFromConfig();
 // on boot and on every account or relay change.
 startRelayDeviceSync();
 
-// State changed on disk under the app (an CLI run in a terminal):
+// State changed on disk under the app (a CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it
-// without a focus change. Deliberately broad within that scope (the
-// main process debounces the signal, and only active queries actually
-// refetch), but network-backed and static domains sit it out: a disk
-// change says nothing about GitHub or the updater, and refetching PR
-// lists here turns every external write into a burst of gh calls.
-//
-// The hygiene domains sit it out for cost, not scope: both cache for 60s
-// (a sweep is several git calls or a directory walk per worktree) and
-// invalidation ignores staleTime. Focus, mount and the removal flow
-// still cover them.
-//
-// clientConfig sits it out for scope: the store lives in this app
-// instance's userData and the CLI never writes it, so an external
-// change over the shigomori root can't touch it. Including it would
-// defeat the query's staleTime Infinity on every external CLI write.
-const externalChangeExempt = new Set([
-  "clientConfig",
-  "githubCli",
-  "runtime",
-  "updater",
-  "worktreeHygiene",
-  "worktreeDiskUsage",
-]);
-
-// The external-change signal is this machine's git/fs watcher, so it
-// speaks only to the local device's forest. A remote device's queries
-// cache under ITS own id in the same host families, so leaving the
-// predicate domain-only would invalidate a peer's worktrees on a purely
-// local change. Gate host-scoped keys on the local device id. Client-
-// scoped keys carry no id and keep the domain-exempt behavior unchanged.
-const localDeviceId = window.api.deviceId;
-
+// without a focus change. window.api only ever carries this machine's
+// watcher signal, so the sweep is scoped to the local device id. See
+// invalidateHostDevice for the breadth and exemption rationale.
 window.api.git.onExternalChange(() => {
-  void queryClient.invalidateQueries({
-    predicate: (query) => {
-      const deviceId = hostKeyDeviceId(query.queryKey);
-      if (deviceId !== undefined && deviceId !== localDeviceId) return false;
-      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
-    },
-  });
+  invalidateHostDevice(queryClient, localDeviceId);
 });
 
 // Main rewrote project.json (carry-over entries removed in favor of

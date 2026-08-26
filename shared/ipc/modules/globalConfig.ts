@@ -44,6 +44,12 @@ export const globalConfigContract = defineContract("host", {
     z.void(),
     {
       remote: false,
+      // Never rides a wire (remote:false channels are not registered on
+      // the remote bindings), so this tag cannot widen exposure. It
+      // marks the write as a state mutation for the registrar's
+      // resolved-mutation ping, so a peer viewing this device's
+      // settings sees a local settings save without waiting for focus.
+      mutating: true,
     },
   ),
   // The remote-writable subset (v2 step 6, slice B): a patch-style

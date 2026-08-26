@@ -34,6 +34,7 @@ import {
   useRemoteProjects,
 } from "@/hooks/remote/useRemoteForest";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useWatchRemoteHost } from "@/hooks/remote/useWatchRemoteHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { deviceVersionMismatch } from "@/lib/remote/devices";
 import { notifyError } from "@/lib/toast";
@@ -88,6 +89,10 @@ function ConnectedForest({
   deviceId: string;
 }) {
   const api = device.api;
+  // Push-driven refresh: while connected, the host's externalChange and
+  // refsRefreshed broadcasts invalidate this device's cached queries in
+  // place, instead of waiting out staleTime or a window focus.
+  useWatchRemoteHost(device);
   // Forest or settings body, toggled by the header gear (v2 step 6).
   // Plain component state on the SAME route: the settings body is a
   // view of this page, not a place, so the web shell needs no new
