@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
+import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { App } from "./App";
 import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
 import { startRelayDeviceSync } from "./lib/remote/relayDevices";
@@ -105,6 +106,18 @@ const queryClient = new QueryClient({
   }),
   mutationCache: new MutationCache({
     onError: (err, _vars, _ctx, mutation) => {
+      // A command refusal (a remote host that hasn't granted this device
+      // command access) is always worth surfacing plainly, ahead of the
+      // silentError opt-out: the mutations that suppress the global toast
+      // do so to show an inline retry/force prompt that doesn't apply to
+      // a refusal, so silence would leave the click looking like a no-op.
+      if (isCommandRefusedError(err)) {
+        notifyError(
+          "That machine hasn't granted this device command access",
+          err,
+        );
+        return;
+      }
       if (mutation.meta?.silentError) return;
       notifyError(mutation.meta?.errorTitle ?? "Something went wrong", err);
     },
