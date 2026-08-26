@@ -49,6 +49,9 @@ export function registerContract<M extends ContractModule>(
     // The def's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = def.remote === true;
+    // The command-vs-read decision rides too so the relay binding can
+    // gate a mutating channel on a per-peer command grant.
+    const mutating = def.mutating === true;
     server.handle(
       def.channel,
       async (ctx, raw) => {
@@ -60,7 +63,7 @@ export function registerContract<M extends ContractModule>(
         onSuccess?.(input);
         return opts.validateOutputs ? def.output.parse(result) : result;
       },
-      { remote },
+      { remote, mutating },
     );
   }
 }

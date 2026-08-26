@@ -61,10 +61,25 @@ export function registerIpcHandlers(): void {
   // against the fresh account state at the same moment.
   registerContract(
     accountContract,
-    makeAccountHandlers(() => {
-      broadcastAll(accountContract, "changed", undefined);
-      void refreshRelayConnection();
-    }),
+    makeAccountHandlers(
+      () => {
+        broadcastAll(accountContract, "changed", undefined);
+        // A direct account switch that stays signed in changes which
+        // grants apply, so refresh the renderer's granted-set query too.
+        // Main's grant cache is already invalidated in makeAccountHandlers
+        // (enforcement is correct without this); this only keeps the
+        // renderer display fresh, since `changed` invalidates the
+        // ["account"] prefix but not ["accountGrants"].
+        broadcastAll(accountContract, "grantsChanged", undefined);
+        void refreshRelayConnection();
+      },
+      // A grant or revoke fans out on its own channel so a toggle does
+      // not thrash the account status and device queries. No relay
+      // reconnect: the link reads the grant predicate live.
+      () => {
+        broadcastAll(accountContract, "grantsChanged", undefined);
+      },
+    ),
   );
   // Client-scoped bridge onto the main-process relay socket: status,
   // lazy peer invokes, and the peerPush/statusChanged fan-outs wired in

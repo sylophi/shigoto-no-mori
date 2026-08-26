@@ -17,6 +17,7 @@ import {
   type AccountStore,
   type StoreCipher,
 } from "../../account/credentialStore";
+import { createGrantStore, type GrantStore } from "../../account/grantStore";
 import { runLoginFlow } from "../../account/login";
 import { createAccountService } from "../../account/service";
 import {
@@ -33,6 +34,7 @@ import {
 // the dev userData suffix are only reliable once the app is ready, which
 // is guaranteed by the time any renderer call lands.
 let cachedStore: AccountStore | null = null;
+let cachedGrantStore: GrantStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
@@ -70,6 +72,52 @@ function store(): AccountStore {
     cipher: buildCipher(),
   });
   return cachedStore;
+}
+
+// The command-grant store, plaintext in userData (a grant list is not a
+// bearer secret, see grantStore.ts). Built lazily for the same
+// app-ready reason as the credential store.
+function grantStore(): GrantStore {
+  if (cachedGrantStore) return cachedGrantStore;
+  cachedGrantStore = createGrantStore({
+    filePath: join(app.getPath("userData"), "grants.json"),
+  });
+  return cachedGrantStore;
+}
+
+// In-memory mirror of the granted peers for the CURRENT account, so the
+// relay link's synchronous dispatch predicate (isPeerCommandGranted)
+// never hits the disk or the OS keychain on the hot path. Null means not
+// yet built (an empty set is a real built-empty answer, not "unbuilt").
+// Invalidated on every event that can change the answer: a grant or
+// revoke, and any account change (sign-in, sign-out, rename), so a grant
+// takes effect immediately without a relay reconnect.
+let grantCache: ReadonlySet<string> | null = null;
+
+function invalidateGrantCache(): void {
+  grantCache = null;
+}
+
+function currentGrantedPeers(): ReadonlySet<string> {
+  if (grantCache !== null) return grantCache;
+  const record = store().read();
+  // Signed out has no grants, even if a stale grants.json lingers under
+  // a previous account's id. Signed in, the store's per-account scoping
+  // yields an empty list whenever the stored account no longer matches.
+  const peers =
+    record !== null
+      ? new Set(grantStore().list(record.accountId))
+      : new Set<string>();
+  grantCache = peers;
+  return peers;
+}
+
+// The predicate the relay link consults live at dispatch to decide
+// whether a peer may run a mutating call on this host. Reads the cached
+// granted set, rebuilding it from disk on the first call after an
+// invalidation.
+export function isPeerCommandGranted(peerDeviceId: string): boolean {
+  return currentGrantedPeers().has(peerDeviceId);
 }
 
 // The resolved service config, resolved once and cached. Reads the
@@ -153,7 +201,16 @@ export function relayConnectInputs(): {
 
 export function makeAccountHandlers(
   emitChanged: () => void,
+  emitGrantsChanged: () => void,
 ): Handlers<typeof accountContract> {
+  // Fires the account-changed fan-out and invalidates the grant cache
+  // together, since any account transition (sign-in, sign-out, rename)
+  // may change which grants apply (a new account scopes to a different
+  // grant list, sign-out drops them all).
+  const accountChanged = (): void => {
+    invalidateGrantCache();
+    emitChanged();
+  };
   return {
     status: () => readStatus(),
 
@@ -183,7 +240,7 @@ export function makeAccountHandlers(
           service,
           store: store(),
         });
-        emitChanged();
+        accountChanged();
         return readStatus();
       })();
       try {
@@ -217,7 +274,12 @@ export function makeAccountHandlers(
         }
       }
       store().clear();
-      emitChanged();
+      // Drop this host's command grants too, so re-signing into the SAME
+      // account does not resurrect the prior grants from a lingering
+      // grants.json. accountChanged() below also invalidates the grant
+      // cache, so the in-memory mirror is dropped in the same breath.
+      grantStore().clear();
+      accountChanged();
     },
 
     listDevices: async () => {
@@ -235,9 +297,37 @@ export function makeAccountHandlers(
       // out, the name is the hostname default until the next sign-in.
       if (record) {
         store().write({ ...record, deviceName: name });
-        emitChanged();
+        accountChanged();
       }
       return readStatus();
+    },
+
+    grantCommands: (deviceId) => {
+      const record = store().read();
+      // A grant is meaningless with no account to scope it to, and would
+      // silently write under the empty account. Fail loudly instead.
+      if (record === null) {
+        throw new Error("cannot grant command access while signed out");
+      }
+      grantStore().grant(record.accountId, deviceId);
+      invalidateGrantCache();
+      emitGrantsChanged();
+    },
+
+    revokeCommands: (deviceId) => {
+      const record = store().read();
+      if (record === null) {
+        throw new Error("cannot revoke command access while signed out");
+      }
+      grantStore().revoke(record.accountId, deviceId);
+      invalidateGrantCache();
+      emitGrantsChanged();
+    },
+
+    listGrantedDevices: () => {
+      const record = store().read();
+      if (record === null) return [];
+      return grantStore().list(record.accountId);
     },
   };
 }

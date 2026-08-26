@@ -13,13 +13,13 @@ export const scriptsContract = defineContract("host", {
     "scripts:run",
     RunScriptPayloadSchema,
     z.object({ runId: z.string() }),
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   cancel: invoke(
     "scripts:cancel",
     CancelScriptPayloadSchema,
     z.object({ cancelled: z.boolean() }),
-    { remote: true },
+    { remote: true, mutating: true },
   ),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
@@ -38,6 +38,6 @@ export const scriptsContract = defineContract("host", {
     "scripts:orphanReport",
     z.void(),
     OrphanScriptReportSchema,
-    { remote: true },
+    { remote: true, mutating: false },
   ),
 });

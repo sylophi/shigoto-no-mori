@@ -22,7 +22,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { get as httpGet } from "node:http";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { connect as netConnect } from "node:net";
 import { networkInterfaces, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -41,6 +47,7 @@ import {
 import { exchangeCodeForToken } from "../main/account/tokenExchange.ts";
 import { createAccountService } from "../main/account/service.ts";
 import { createAccountStore } from "../main/account/credentialStore.ts";
+import { createGrantStore } from "../main/account/grantStore.ts";
 import { deriveAccountId, runLoginFlow } from "../main/account/login.ts";
 import {
   AccountStatusSchema,
@@ -644,6 +651,121 @@ async function main() {
           /timed out/,
         );
         assert.equal(store.read(), null, "a timed-out flow must store nothing");
+      },
+    );
+
+    await check(
+      "grants: grant then list returns the peer, revoke removes it, and a mismatched account yields no grants",
+      () => {
+        const filePath = join(tmp, "grants.json");
+        const grants = createGrantStore({ filePath });
+        assert.deepEqual(
+          grants.list("acct-1"),
+          [],
+          "a fresh store has no grants",
+        );
+        grants.grant("acct-1", "peer-a");
+        grants.grant("acct-1", "peer-b");
+        // A repeat grant is idempotent, not a duplicate.
+        grants.grant("acct-1", "peer-a");
+        assert.deepEqual(grants.list("acct-1").toSorted(), [
+          "peer-a",
+          "peer-b",
+        ]);
+        grants.revoke("acct-1", "peer-a");
+        assert.deepEqual(grants.list("acct-1"), ["peer-b"]);
+        // A different account never sees acct-1's grants, so grants cannot
+        // leak across accounts even from the same file.
+        assert.deepEqual(
+          grants.list("acct-2"),
+          [],
+          "a mismatched account saw another account's grants",
+        );
+        const record = grants.read();
+        assert.equal(record.accountId, "acct-1");
+      },
+    );
+
+    await check(
+      "grants: a grant under a new account resets the record, dropping the old account's grants",
+      () => {
+        const filePath = join(tmp, "grants-reset.json");
+        const grants = createGrantStore({ filePath });
+        grants.grant("acct-1", "peer-a");
+        grants.grant("acct-1", "peer-b");
+        // Granting under a DIFFERENT account resets to the new account, so
+        // the old grants are gone rather than merged in.
+        grants.grant("acct-2", "peer-c");
+        assert.deepEqual(grants.list("acct-2"), ["peer-c"]);
+        assert.deepEqual(
+          grants.list("acct-1"),
+          [],
+          "the old account's grants survived a reset",
+        );
+        assert.equal(grants.read().accountId, "acct-2");
+      },
+    );
+
+    await check(
+      "grants: a missing file and corrupt JSON both read as null, and clear removes the file",
+      () => {
+        const missing = createGrantStore({
+          filePath: join(tmp, "grants-missing.json"),
+        });
+        assert.equal(missing.read(), null, "missing file should read null");
+        assert.deepEqual(
+          missing.list("acct-1"),
+          [],
+          "missing file has no grants",
+        );
+
+        const corruptPath = join(tmp, "grants-corrupt.json");
+        writeFileSync(corruptPath, "{ not valid json");
+        const corrupt = createGrantStore({ filePath: corruptPath });
+        assert.equal(corrupt.read(), null, "corrupt JSON should read null");
+
+        const clearPath = join(tmp, "grants-clear.json");
+        const store = createGrantStore({ filePath: clearPath });
+        store.grant("acct-1", "peer-a");
+        assert.notEqual(store.read(), null);
+        store.clear();
+        assert.equal(store.read(), null, "clear should remove the file");
+      },
+    );
+
+    await check("grants: the atomic write leaves the file mode 0o600", () => {
+      const filePath = join(tmp, "grants-mode.json");
+      const grants = createGrantStore({ filePath });
+      grants.grant("acct-1", "peer-a");
+      // The grant list is not world-readable in a shared userData dir.
+      // Mode bits are a unix concept, so skip the check on win32.
+      if (process.platform !== "win32") {
+        assert.equal(statSync(filePath).mode & 0o777, 0o600);
+      }
+    });
+
+    await check(
+      "grants: the list is capped, so a runaway write past the ceiling is refused while a re-grant at the cap stays idempotent",
+      () => {
+        const filePath = join(tmp, "grants-cap.json");
+        const grants = createGrantStore({ filePath });
+        // Fill exactly to the 1024 ceiling.
+        for (let i = 0; i < 1024; i += 1) grants.grant("acct-1", `peer-${i}`);
+        assert.equal(grants.list("acct-1").length, 1024);
+        // A NEW peer past the cap is refused rather than growing the file.
+        assert.throws(
+          () => grants.grant("acct-1", "peer-over"),
+          /cannot grant more than 1024/,
+        );
+        assert.equal(
+          grants.list("acct-1").length,
+          1024,
+          "the cap was exceeded",
+        );
+        // Re-granting an already-trusted peer at the cap is still a no-op,
+        // not a spurious over-cap throw.
+        grants.grant("acct-1", "peer-0");
+        assert.equal(grants.list("acct-1").length, 1024);
       },
     );
   } finally {

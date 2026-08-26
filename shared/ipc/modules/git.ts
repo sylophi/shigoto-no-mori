@@ -3,11 +3,14 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
 export const gitContract = defineContract("host", {
+  // mutating: it spawns git and performs a network fetch, so it counts
+  // as a command rather than a pure read even though the caller reads
+  // the refreshed refs afterward.
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
     z.void(),
-    { remote: true },
+    { remote: true, mutating: true },
   ),
   refsRefreshed: broadcast("git:refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,

@@ -12,6 +12,7 @@ export const globalConfigContract = defineContract("host", {
   // for it), so the secret can never ride out on a read, remote or local.
   read: invoke("globalConfig:read", z.void(), ReadGlobalConfigSchema, {
     remote: true,
+    mutating: false,
   }),
   // The local unredacted path. Output is the FULL stored document,
   // including remoteDevices and the real socketHost.token. It is remote

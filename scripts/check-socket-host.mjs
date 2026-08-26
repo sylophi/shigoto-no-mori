@@ -415,6 +415,18 @@ async function main() {
             "boolean",
             `${name}.${key} (${def.channel}) is not explicitly tagged remote`,
           );
+          // Every remote:true invoke also classifies itself as a command
+          // or a read, so a new remote call cannot silently join the wire
+          // without declaring whether the relay grant model must gate it.
+          // remote:false invokes never reach the grant check, so theirs
+          // may stay undefined.
+          if (def.remote === true) {
+            assert.equal(
+              typeof def.mutating,
+              "boolean",
+              `${name}.${key} (${def.channel}) is remote but not explicitly tagged mutating`,
+            );
+          }
         }
       }
       // Spot-check the load-bearing decisions so a silent flip is caught.
@@ -427,6 +439,15 @@ async function main() {
       assert.equal(globalConfigContract.calls.read.remote, true);
       assert.equal(worktreesContract.calls.create.remote, true);
       assert.equal(fsContract.calls.listDirectory.remote, false);
+      // Spot-check the mutating classification so a read cannot silently
+      // become a command (served ungated to every peer) or a command a
+      // read (served ungated too).
+      assert.equal(worktreesContract.calls.create.mutating, true);
+      assert.equal(worktreesContract.calls.list.mutating, false);
+      assert.equal(worktreesContract.calls.push.mutating, true);
+      assert.equal(scriptsContract.calls.run.mutating, true);
+      assert.equal(gitContract.calls.refreshProject.mutating, true);
+      assert.equal(globalConfigContract.calls.read.mutating, false);
     },
   );
 

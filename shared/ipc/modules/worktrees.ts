@@ -25,6 +25,7 @@ const worktreeMutation = (channel: string) =>
   invoke(channel, WorktreeScopedPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,
+    mutating: true,
   });
 
 export const worktreesContract = defineContract("host", {
@@ -32,52 +33,53 @@ export const worktreesContract = defineContract("host", {
     "worktrees:list",
     ProjectScopedPayloadSchema,
     z.array(WorktreeSchema),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   create: invoke(
     "worktrees:create",
     CreateWorktreePayloadSchema,
     CreateWorktreeResultSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   convertExternal: invoke(
     "worktrees:convertExternal",
     WorktreeScopedPayloadSchema,
     CreateWorktreeResultSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   relocate: invoke(
     "worktrees:relocate",
     RelocateWorktreePayloadSchema,
     WorktreeSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   delete: invoke(
     "worktrees:delete",
     DeleteWorktreePayloadSchema,
     DeleteWorktreeResultSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   renameBranch: invoke(
     "worktrees:renameBranch",
     RenameBranchPayloadSchema,
     WorktreeSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   setShelved: invoke(
     "worktrees:setShelved",
     SetShelvedPayloadSchema,
     WorktreeSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   checkoutBranch: invoke(
     "worktrees:checkoutBranch",
     CheckoutBranchPayloadSchema,
     WorktreeSchema,
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   diff: invoke("worktrees:diff", WorktreeScopedPayloadSchema, z.string(), {
     remote: true,
+    mutating: false,
   }),
   commitDiff: invoke(
     "worktrees:commitDiff",
@@ -85,13 +87,14 @@ export const worktreesContract = defineContract("host", {
     z.string(),
     {
       remote: true,
+      mutating: false,
     },
   ),
   listCommits: invoke(
     "worktrees:listCommits",
     ListCommitsPayloadSchema,
     z.array(CommitSummarySchema),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   push: worktreeMutation("worktrees:push"),
   pull: worktreeMutation("worktrees:pull"),

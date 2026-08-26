@@ -10,13 +10,16 @@ export const branchesContract = defineContract("host", {
   create: invoke("branches:create", CreateBranchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
     remote: true,
+    mutating: true,
   }),
   rename: invoke("branches:rename", RenameAnyBranchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
     remote: true,
+    mutating: true,
   }),
   delete: invoke("branches:delete", DeleteBranchPayloadSchema, z.void(), {
     tracksProjectUsage: true,
     remote: true,
+    mutating: true,
   }),
 });

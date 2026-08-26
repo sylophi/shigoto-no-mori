@@ -14,22 +14,23 @@ export const shigomoriContract = defineContract("host", {
     "shigomori:read",
     ProjectScopedPayloadSchema,
     StoredShigomoriConfigSchema.nullable(),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
     tracksProjectUsage: true,
     remote: true,
+    mutating: true,
   }),
   worktreeDataRead: invoke(
     "worktreeData:read",
     ReadWorktreeDataPayloadSchema,
     ShigomoriWorktreeDataSchema.nullable(),
-    { remote: true },
+    { remote: true, mutating: false },
   ),
   worktreeDataWrite: invoke(
     "worktreeData:write",
     WriteWorktreeDataPayloadSchema,
     z.void(),
-    { tracksProjectUsage: true, remote: true },
+    { tracksProjectUsage: true, remote: true, mutating: true },
   ),
 });

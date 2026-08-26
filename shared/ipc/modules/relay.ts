@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
+import { DeviceIdSchema } from "@shared/relay/protocol";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 
 // The renderer's bridge onto the main-process relay socket (v2 step 4,
@@ -79,9 +80,9 @@ export const relayContract = defineContract("client", {
   invokePeer: invoke(
     "relay:invokePeer",
     z.object({
-      // Bounded like RelaySendEnvelopeSchema.to, since it is routed to a
-      // peer session keyed by this id (M6).
-      deviceId: z.string().min(1).max(200),
+      // Routed to a peer session keyed by this id (M6), so it carries the
+      // shared device-id bound.
+      deviceId: DeviceIdSchema,
       channel: z.string().min(1),
       input: z.unknown().optional(),
     }),
@@ -92,7 +93,7 @@ export const relayContract = defineContract("client", {
   // session, and this only reports what the hello already confirmed.
   peerInfo: invoke(
     "relay:peerInfo",
-    z.object({ deviceId: z.string().min(1).max(200) }),
+    z.object({ deviceId: DeviceIdSchema }),
     z.object({ appVersion: z.string() }).nullable(),
   ),
   // Fan-out on every supervisor or presence transition, carrying the
