@@ -8,7 +8,8 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { hostKeyDeviceId } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { scriptRuns } from "@/store/scriptRuns";
 
 interface CreateWorktreeInput {
@@ -21,11 +22,12 @@ interface CreateWorktreeInput {
 
 export function useCreateWorktree() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
-    mutationFn: (input) => window.api.worktrees.create(input),
+    mutationFn: (input) => api.worktrees.create(input),
     onSuccess: (_result, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
+        queryKey: keys.worktrees(vars.projectId),
       });
     },
     meta: { errorTitle: "Couldn't create worktree" },
@@ -46,17 +48,18 @@ interface CreateWorktreeFromPullRequestInput {
 // have left, and a retry reuses it.
 export function useCreateWorktreeFromPullRequest() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<
     CreateWorktreeResult,
     Error,
     CreateWorktreeFromPullRequestInput
   >({
     mutationFn: async ({ projectId, worktreeName, number }) => {
-      const { branch } = await window.api.githubCli.resolvePullRequestCheckout({
+      const { branch } = await api.githubCli.resolvePullRequestCheckout({
         projectId,
         number,
       });
-      return window.api.worktrees.create({
+      return api.worktrees.create({
         projectId,
         worktreeName,
         base: branch,
@@ -65,12 +68,12 @@ export function useCreateWorktreeFromPullRequest() {
     },
     onSuccess: (_result, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
+        queryKey: keys.worktrees(vars.projectId),
       });
       // The resolve step created a local branch, so the branch list and
       // the "already checked out" bookkeeping behind it are both stale.
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(vars.projectId),
+        queryKey: keys.branches(vars.projectId),
       });
     },
     meta: { errorTitle: "Couldn't check out pull request" },
@@ -84,12 +87,13 @@ interface ConvertExternalWorktreeInput {
 
 export function useConvertExternalWorktree() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<CreateWorktreeResult, Error, ConvertExternalWorktreeInput>(
     {
-      mutationFn: (input) => window.api.worktrees.convertExternal(input),
+      mutationFn: (input) => api.worktrees.convertExternal(input),
       onSuccess: (_result, vars) => {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.worktrees(vars.projectId),
+          queryKey: keys.worktrees(vars.projectId),
         });
         // The old external worktree's id no longer maps to anything on disk
         // -- drop any cached script runs so they don't linger in the UI.
@@ -109,11 +113,12 @@ interface RelocateWorktreeInput {
 
 export function useRelocateWorktree() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<Worktree, Error, RelocateWorktreeInput>({
-    mutationFn: (input) => window.api.worktrees.relocate(input),
+    mutationFn: (input) => api.worktrees.relocate(input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
+        queryKey: keys.worktrees(vars.projectId),
       });
       // The relocated worktree's id changes (it's derived from path), so
       // any cached script runs keyed by the pre-move id are stranded.
@@ -135,16 +140,21 @@ const DELETE_WORKTREE_MUTATION_KEY = ["delete-worktree"] as const;
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
+  const { api, deviceId, keys } = useHostScope();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: DELETE_WORKTREE_MUTATION_KEY,
-    mutationFn: (input) => window.api.worktrees.delete(input),
+    mutationFn: (input) => api.worktrees.delete(input),
     onMutate: async (vars) => {
       // Cancel this worktree's in-flight fetches (a focus-triggered
       // diff/data refetch) before main starts removing it: left to
       // settle, they'd reject with "Unknown worktree" and toast, while
-      // cancellation is swallowed silently.
+      // cancellation is swallowed silently. Gated on the scoped device
+      // so another device's queries never match on a coincidentally
+      // equal worktree id.
       await queryClient.cancelQueries({
-        predicate: (query) => query.queryKey.includes(vars.worktreeId),
+        predicate: (query) =>
+          hostKeyDeviceId(query.queryKey) === deviceId &&
+          query.queryKey.includes(vars.worktreeId),
       });
     },
     onSuccess: (data, vars) => {
@@ -156,12 +166,12 @@ export function useDeleteWorktree() {
         // first-worktree resolver) don't read the stale list during the
         // invalidate's background refetch.
         queryClient.setQueryData<Worktree[]>(
-          queryKeys.worktrees(vars.projectId),
+          keys.worktrees(vars.projectId),
           (current) =>
             current ? current.filter((w) => w.id !== vars.worktreeId) : current,
         );
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.worktrees(vars.projectId),
+          queryKey: keys.worktrees(vars.projectId),
         });
         scriptRuns.clearForWorktree(vars.worktreeId);
         // Same treatment as project removal: drop the deleted
@@ -171,7 +181,9 @@ export function useDeleteWorktree() {
         // navigation) are left to go inactive and gc naturally.
         queryClient.removeQueries({
           type: "inactive",
-          predicate: (query) => query.queryKey.includes(vars.worktreeId),
+          predicate: (query) =>
+            hostKeyDeviceId(query.queryKey) === deviceId &&
+            query.queryKey.includes(vars.worktreeId),
         });
       }
     },
@@ -200,13 +212,14 @@ interface SetShelvedInput {
 
 export function useSetShelved() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<Worktree, Error, SetShelvedInput>({
-    mutationFn: (input) => window.api.worktrees.setShelved(input),
+    mutationFn: (input) => api.worktrees.setShelved(input),
     onMutate: (vars) => {
       // Optimistic flip so the row's appearance and the sidebar group
       // both update before the IPC round-trip lands.
       queryClient.setQueryData<Worktree[]>(
-        queryKeys.worktrees(vars.projectId),
+        keys.worktrees(vars.projectId),
         (current) =>
           current
             ? current.map((w) =>
@@ -221,14 +234,14 @@ export function useSetShelved() {
       // Worktree so cache state stays accurate without an N-git-call
       // round trip.
       queryClient.setQueryData<Worktree[]>(
-        queryKeys.worktrees(vars.projectId),
+        keys.worktrees(vars.projectId),
         (current) => current?.map((w) => (w.id === data.id ? data : w)),
       );
     },
     onError: (_err, vars) => {
       // Roll the stuck-optimistic row back to truth.
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(vars.projectId),
+        queryKey: keys.worktrees(vars.projectId),
       });
     },
     meta: { errorTitle: "Couldn't update shelved state" },

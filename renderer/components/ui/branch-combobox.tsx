@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useBranches } from "@/hooks/git/useBranches";
 import type { BranchList } from "@shared/schemas";
 
@@ -71,6 +71,7 @@ export function BranchCombobox({
 }: BranchComboboxProps) {
   const { data: branches, isFetching } = useBranches(projectId);
   const queryClient = useQueryClient();
+  const { keys } = useHostScope();
   const [query, setQuery] = useState("");
 
   const all = pinFirst(
@@ -94,7 +95,7 @@ export function BranchCombobox({
           setQuery("");
           if (projectId) {
             void queryClient.invalidateQueries({
-              queryKey: queryKeys.branches(projectId),
+              queryKey: keys.branches(projectId),
             });
           }
         }

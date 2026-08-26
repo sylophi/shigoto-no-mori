@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { MergeMethod, PullRequestDetail } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import type { QueryKeyRegistry } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateBranchState } from "../git/useBranches";
 import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
 
@@ -15,17 +16,18 @@ interface MergeVariables {
 }
 
 type Context = {
-  key: ReturnType<typeof queryKeys.worktreePullRequest>;
+  key: ReturnType<QueryKeyRegistry["worktreePullRequest"]>;
   prev: PullRequestDetail | null | undefined;
 };
 
 export function useMergePullRequest() {
   const qc = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<void, Error, MergeVariables, Context>({
     mutationFn: ({ projectId, number, method }) =>
-      window.api.githubCli.mergePullRequest({ projectId, number, method }),
+      api.githubCli.mergePullRequest({ projectId, number, method }),
     onMutate: async ({ projectId, branch }) => {
-      const key = queryKeys.worktreePullRequest(projectId, branch);
+      const key = keys.worktreePullRequest(projectId, branch);
       // Cancel in-flight refetches so they don't clobber the
       // optimistic value before the mutation lands.
       await qc.cancelQueries({ queryKey: key });
@@ -45,10 +47,10 @@ export function useMergePullRequest() {
       // delete), and rewrites the per-project ShigomoriConfig with the
       // new lastMergeMethod. Invalidate everything downstream so the
       // sidebar dot, sync pill, and merge button all catch up.
-      invalidatePullRequestsForProject(qc, vars.projectId);
-      invalidateBranchState(qc, vars.projectId);
+      invalidatePullRequestsForProject(qc, keys, vars.projectId);
+      invalidateBranchState(qc, keys, vars.projectId);
       void qc.invalidateQueries({
-        queryKey: queryKeys.shigomoriConfig(vars.projectId),
+        queryKey: keys.shigomoriConfig(vars.projectId),
       });
     },
     // The section surfaces failures inline; a toast on top would be noise.

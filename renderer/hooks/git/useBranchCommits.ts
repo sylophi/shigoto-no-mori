@@ -1,6 +1,7 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CommitSummary } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import type { QueryKeyRegistry } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export const BRANCH_COMMITS_PAGE_SIZE = 50;
 
@@ -21,18 +22,19 @@ export function useBranchCommits(
   headHash: string | undefined,
   enabled: boolean,
 ) {
+  const { api, keys } = useHostScope();
   return useInfiniteQuery<
     CommitSummary[],
     Error,
     { pages: CommitSummary[][]; pageParams: number[] },
-    ReturnType<typeof queryKeys.branchCommits>,
+    ReturnType<QueryKeyRegistry["branchCommits"]>,
     number
   >({
-    queryKey: queryKeys.branchCommits(projectId, worktreeId, headHash),
+    queryKey: keys.branchCommits(projectId, worktreeId, headHash),
     enabled,
     initialPageParam: 0,
     queryFn: ({ pageParam }) =>
-      window.api.worktrees.listCommits({
+      api.worktrees.listCommits({
         projectId,
         worktreeId,
         skip: pageParam,

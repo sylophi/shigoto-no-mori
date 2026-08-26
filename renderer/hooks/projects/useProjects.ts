@@ -8,32 +8,29 @@ import {
 import { useRouter } from "@tanstack/react-router";
 import type { Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
-import { hostKeysFor, queryKeys } from "@/lib/queryKeys";
-
-// The slice of the host api the projects list calls. window.api and a
-// remote device's api both satisfy it, so one options builder serves the
-// local sidebar and the read-only remote forest without a parallel fork.
-type ProjectListApi = {
-  projects: { list: () => Promise<Project[]> };
-};
+import {
+  hostKeyDeviceId,
+  localDeviceId,
+  queryKeys,
+  queryKeysFor,
+} from "@/lib/queryKeys";
+import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 
 // Which device's projects to read, and over which api. Both default to
-// the local machine, so the local call site below stays byte-identical:
-// the key is hostKeysFor(localDeviceId) and the queryFn hits window.api.
-export interface ProjectsScope {
-  deviceId?: string;
-  api?: ProjectListApi | undefined;
-}
+// the local machine, so a scope-less call reads this machine's list; a
+// scoped caller (a useHostScope consumer, the remote forest) passes a
+// peer's id and api and that device's data caches under its own id.
+export type ProjectsScope = Partial<HostScope>;
 
-// Single source of truth for the projects-list query, keyed under the
-// scoped device so a remote caller can read a peer's projects into their
-// own cache slot under the same key shape.
+// Single source of truth for the projects-list query. The key registry
+// is derived from the scope's device id, so the key and the queryFn can
+// never name different devices.
 export function projectsQueryOptions({
-  deviceId = window.api.deviceId,
+  deviceId = localDeviceId,
   api = window.api,
 }: ProjectsScope = {}) {
   return queryOptions<Project[]>({
-    queryKey: hostKeysFor(deviceId)("projects"),
+    queryKey: queryKeysFor(deviceId).projects(),
     queryFn: () => (api ? api.projects.list() : []),
     // Local: api and id are always present, so this stays always-enabled.
     // Remote: an unconnected device never fetches.
@@ -43,7 +40,8 @@ export function projectsQueryOptions({
 }
 
 export function useProjects() {
-  return useQuery(projectsQueryOptions());
+  const scope = useHostScope();
+  return useQuery(projectsQueryOptions(scope));
 }
 
 // Refetch the projects list whenever main records a project action, so the
@@ -62,13 +60,14 @@ export function useWatchProjectUsage(): void {
 
 export function useAddProject() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<Project, Error, string>({
-    mutationFn: (path) => window.api.projects.add(path),
+    mutationFn: (path) => api.projects.add(path),
     // Returned (not void-ed) so mutateAsync resolves only after the
     // projects list is fresh: callers navigate into the new project right
     // away, and routes render "not found" against a stale list.
     onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: queryKeys.projects() }),
+      queryClient.invalidateQueries({ queryKey: keys.projects() }),
     meta: { errorTitle: "Couldn't add project" },
   });
 }
@@ -76,15 +75,20 @@ export function useAddProject() {
 export function useRemoveProject() {
   const queryClient = useQueryClient();
   const router = useRouter();
+  const { api, deviceId, keys } = useHostScope();
   return useMutation<void, Error, string>({
-    mutationFn: (id) => window.api.projects.remove(id),
+    mutationFn: (id) => api.projects.remove(id),
     onMutate: async (id) => {
       // Cancel this project's in-flight fetches before main starts the
       // removal (mirrors the nuke path): left to settle, one would
       // reject with "Unknown project" during the awaits below and
-      // toast, while cancellation is swallowed silently.
+      // toast, while cancellation is swallowed silently. Gated on the
+      // scoped device so another device's queries never match on a
+      // coincidentally equal project id.
       await queryClient.cancelQueries({
-        predicate: (query) => query.queryKey.includes(id),
+        predicate: (query) =>
+          hostKeyDeviceId(query.queryKey) === deviceId &&
+          query.queryKey.includes(id),
       });
     },
     onSuccess: async (_data, id) => {
@@ -96,14 +100,18 @@ export function useRemoveProject() {
       if (pathname.startsWith(`/projects/${id}`)) {
         await router.navigate({ to: "/" });
       }
-      await queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+      await queryClient.invalidateQueries({
+        queryKey: keys.projects(),
+      });
       // With the route and sidebar row gone nothing observes the
       // removed project's queries; drop the leftovers so nothing can
       // replay them. Only inactive ones -- removing a query that still
       // has an observer (a row mid-unmount) would refetch it instead.
       queryClient.removeQueries({
         type: "inactive",
-        predicate: (query) => query.queryKey.includes(id),
+        predicate: (query) =>
+          hostKeyDeviceId(query.queryKey) === deviceId &&
+          query.queryKey.includes(id),
       });
     },
     meta: { errorTitle: "Couldn't remove project" },
@@ -112,24 +120,25 @@ export function useRemoveProject() {
 
 export function useReorderProjects() {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useMutation<
     void,
     Error,
     { draggedId: string; targetId: string; position: "before" | "after" },
     { previous?: Project[] }
   >({
-    mutationFn: (input) => window.api.projects.reorder(input),
+    mutationFn: (input) => api.projects.reorder(input),
     onMutate: ({ draggedId, targetId, position }) => {
       // Synchronous on purpose: dnd-kit reads the active item's rect for
       // the drop animation right after onDragEnd returns. If the optimistic
       // reorder is awaited, React hasn't flushed by then and the overlay
       // animates back to the old slot before snapping. Cancel without
       // awaiting; cancelled in-flight fetches can't overwrite the cache.
-      void queryClient.cancelQueries({ queryKey: queryKeys.projects() });
-      const previous = queryClient.getQueryData<Project[]>(
-        queryKeys.projects(),
-      );
-      queryClient.setQueryData<Project[]>(queryKeys.projects(), (current) =>
+      void queryClient.cancelQueries({
+        queryKey: keys.projects(),
+      });
+      const previous = queryClient.getQueryData<Project[]>(keys.projects());
+      queryClient.setQueryData<Project[]>(keys.projects(), (current) =>
         current
           ? reorderProjects(current, draggedId, targetId, position)
           : current,
@@ -137,10 +146,12 @@ export function useReorderProjects() {
       return { previous };
     },
     onError: (_error, _vars, context) => {
-      queryClient.setQueryData(queryKeys.projects(), context?.previous);
+      queryClient.setQueryData(keys.projects(), context?.previous);
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+      void queryClient.invalidateQueries({
+        queryKey: keys.projects(),
+      });
     },
     meta: { errorTitle: "Couldn't reorder projects" },
   });

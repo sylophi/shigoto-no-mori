@@ -1,6 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import type { Worktree } from "@shared/schemas";
@@ -25,11 +25,12 @@ export function WorktreeActivityIndicator({
 }
 
 function useActivityLabel(worktree: Worktree): string | null {
+  const { keys } = useHostScope();
   const branchesFetching = useIsFetching({
-    queryKey: queryKeys.branches(worktree.projectId),
+    queryKey: keys.branches(worktree.projectId),
   });
   const worktreesFetching = useIsFetching({
-    queryKey: queryKeys.worktrees(worktree.projectId),
+    queryKey: keys.worktrees(worktree.projectId),
   });
   const gitFetching = useProjectGitFetching(worktree.projectId);
 

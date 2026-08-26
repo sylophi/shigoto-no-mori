@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { useAddProject, useProjects } from "@/hooks/projects/useProjects";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { notifyError } from "@/lib/toast";
@@ -45,6 +46,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
   const queryClient = useQueryClient();
+  const scope = useHostScope();
   const { data: existingProjects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
@@ -89,7 +91,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   const selectPrimary = async (projectId: string) => {
     try {
       const worktrees = await queryClient.ensureQueryData(
-        worktreesQueryOptions(projectId),
+        worktreesQueryOptions(projectId, scope),
       );
       // A bare repo registers fine but has no primary checkout, so
       // offer worktree creation instead (same fallback as ProjectLauncher).

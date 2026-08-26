@@ -1,11 +1,12 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { DetectedLauncher, LauncherEntry } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useDetectedLaunchers() {
+  const { api, keys } = useHostScope();
   return useQuery<DetectedLauncher[]>({
-    queryKey: queryKeys.detectedLaunchers(),
-    queryFn: () => window.api.launchers.detect(),
+    queryKey: keys.detectedLaunchers(),
+    queryFn: () => api.launchers.detect(),
     // Detection spawns ~15 `which` calls; cache for the session. The
     // answer only changes when the user installs/removes an app.
     staleTime: Number.POSITIVE_INFINITY,
@@ -21,11 +22,12 @@ interface LauncherForProjectResult {
 }
 
 export function useLauncherForProject(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<LauncherForProjectResult>({
-    queryKey: queryKeys.projectLaunchers(projectId),
+    queryKey: keys.projectLaunchers(projectId),
     queryFn: () => {
       if (!projectId) return { entries: [], hiddenCount: 0 };
-      return window.api.launchers.forProject(projectId);
+      return api.launchers.forProject(projectId);
     },
     enabled: projectId !== null,
     // Lock the order for the lifetime of the route mount. The page picks
@@ -46,9 +48,10 @@ interface LaunchInput {
 }
 
 export function useLaunch() {
+  const { api } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- by design: useLauncherForProject pins order for the route mount so the visible list doesn't reshuffle mid-interaction when bumpUseCount fires
   return useMutation<void, Error, LaunchInput>({
-    mutationFn: (input) => window.api.launchers.launch(input),
+    mutationFn: (input) => api.launchers.launch(input),
     meta: { errorTitle: "Couldn't launch" },
   });
 }

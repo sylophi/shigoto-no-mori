@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // PR diffs are immutable from the user's POV once fetched (any new
 // commit on the branch produces a different diff but we'd re-fetch on
@@ -9,11 +9,12 @@ export function usePullRequestDiff(
   projectId: string,
   number: number | undefined,
 ) {
+  const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: queryKeys.pullRequestDiff(projectId, number),
+    queryKey: keys.pullRequestDiff(projectId, number),
     queryFn: () => {
       if (number === undefined) return "";
-      return window.api.githubCli.pullRequestDiff({ projectId, number });
+      return api.githubCli.pullRequestDiff({ projectId, number });
     },
     enabled: number !== undefined,
     staleTime: 30_000,

@@ -16,27 +16,15 @@ const HOST_SCOPE = "host";
 
 // The local device's id, delivered synchronously by the preload bridge
 // (main passes it via additionalArguments), so it is a constant before
-// any module can build a key. Module-level rather than a builder
-// parameter so single-device call sites stay unchanged. When remote
-// devices land, host builders can grow an explicit deviceId argument
-// that defaults to this one.
-const localDeviceId: string = window.api.deviceId;
+// any module can build a key.
+export const localDeviceId: string = window.api.deviceId;
 
-// A host-scoped tuple builder bound to the local device id: the
-// sentinel, the id, then the segments the builder names. It is
-// hostKeysFor(localDeviceId) so the tuple-building body lives in exactly
-// one place, and the <const T> inference at every call site is unchanged.
-// Prefix invalidation through these builders still works because the id
-// is a constant within a session.
-const host = hostKeysFor(localDeviceId);
-
-// A host-scoped key builder for an ARBITRARY device id, the remote
-// counterpart of the module-level host() above. A remote device's data
-// caches under its OWN id (its welcome deviceId), in exactly the
-// families the local builders use, so it sits beside this machine's
-// data without colliding. queryKeyDomain still classifies these
-// correctly: it reads the domain off the third slot whatever id sits in
-// the second. The local builders and their call sites stay unchanged.
+// A host-scoped key builder for an ARBITRARY device id, the tuple body
+// behind every host builder below. A remote device's data caches under
+// its OWN id (its welcome deviceId), in exactly the families the local
+// builders use, so it sits beside this machine's data without
+// colliding. queryKeyDomain still classifies these correctly: it reads
+// the domain off the third slot whatever id sits in the second.
 export function hostKeysFor(
   deviceId: string,
 ): <const T extends readonly unknown[]>(
@@ -63,116 +51,146 @@ export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[1] : undefined;
 }
 
-export const queryKeys = {
-  globalConfig: () => host("globalConfig"),
+// The full builder set, bound to one device id. Host builders key
+// through hostKeysFor(deviceId), so a registry names exactly one
+// device's cache slots. The client-scoped builders carry no device id
+// and build the same tuple in every registry. They live here anyway so
+// one object answers for the whole key namespace wherever it came from.
+function buildQueryKeys(deviceId: string) {
+  const host = hostKeysFor(deviceId);
+  return {
+    globalConfig: () => host("globalConfig"),
 
-  projects: () => host("projects"),
-  projectsSort: () => host("projectsSort"),
-  projectsCollapsed: () => host("projectsCollapsed"),
-  sidebarView: () => host("sidebarView"),
-  projectIcon: (projectId: string) => host("projectIcon", projectId),
+    projects: () => host("projects"),
+    projectsSort: () => host("projectsSort"),
+    projectsCollapsed: () => host("projectsCollapsed"),
+    sidebarView: () => host("sidebarView"),
+    projectIcon: (projectId: string) => host("projectIcon", projectId),
 
-  shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
+    shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
 
-  worktrees: (projectId: string | null) => host("worktrees", projectId),
-  worktreeData: (projectId: string | null, worktreeId: string | null) =>
-    host("worktreeData", projectId, worktreeId),
-  worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
-    host("worktreeDiff", projectId, worktreeId),
-  commitDiff: (
-    projectId: string,
-    worktreeId: string | undefined,
-    hash: string,
-  ) => host("commitDiff", projectId, worktreeId, hash),
-  pickedWorktreeName: (projectId: string | null) =>
-    host("pickedWorktreeName", projectId),
+    worktrees: (projectId: string | null) => host("worktrees", projectId),
+    worktreeData: (projectId: string | null, worktreeId: string | null) =>
+      host("worktreeData", projectId, worktreeId),
+    worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
+      host("worktreeDiff", projectId, worktreeId),
+    commitDiff: (
+      projectId: string,
+      worktreeId: string | undefined,
+      hash: string,
+    ) => host("commitDiff", projectId, worktreeId, hash),
+    pickedWorktreeName: (projectId: string | null) =>
+      host("pickedWorktreeName", projectId),
 
-  // Tidy-the-forest data. Split in two because the git facts are cheap
-  // and the disk walk is not: one key per worktree lets each size land
-  // on its own instead of the page waiting for the slowest checkout.
-  worktreeHygiene: (projectId: string | null) =>
-    host("worktreeHygiene", projectId),
-  worktreeDiskUsage: (projectId: string, worktreeId: string) =>
-    host("worktreeDiskUsage", projectId, worktreeId),
+    // Tidy-the-forest data. Split in two because the git facts are cheap
+    // and the disk walk is not: one key per worktree lets each size land
+    // on its own instead of the page waiting for the slowest checkout.
+    worktreeHygiene: (projectId: string | null) =>
+      host("worktreeHygiene", projectId),
+    worktreeDiskUsage: (projectId: string, worktreeId: string) =>
+      host("worktreeDiskUsage", projectId, worktreeId),
 
-  branches: (projectId: string | null) => host("branches", projectId),
-  defaultBranch: (projectId: string | null) => host("defaultBranch", projectId),
-  branchCommits: (
-    projectId: string,
-    worktreeId: string,
-    headHash: string | undefined,
-  ) => host("branchCommits", projectId, worktreeId, headHash),
+    branches: (projectId: string | null) => host("branches", projectId),
+    defaultBranch: (projectId: string | null) =>
+      host("defaultBranch", projectId),
+    branchCommits: (
+      projectId: string,
+      worktreeId: string,
+      headHash: string | undefined,
+    ) => host("branchCommits", projectId, worktreeId, headHash),
 
-  packageScripts: (projectId: string | null, worktreeId: string | null) =>
-    host("packageScripts", projectId, worktreeId),
-  packageScriptSort: (projectId: string | null) =>
-    host("packageScriptSort", projectId),
+    packageScripts: (projectId: string | null, worktreeId: string | null) =>
+      host("packageScripts", projectId, worktreeId),
+    packageScriptSort: (projectId: string | null) =>
+      host("packageScriptSort", projectId),
 
-  portPoolInstalled: () => host("portPoolInstalled"),
-  cli: () => host("cli"),
-  cliShell: () => host("cliShell"),
-  portPoolActive: (projectId: string, worktreeId: string) =>
-    host("portPoolActive", projectId, worktreeId),
+    portPoolInstalled: () => host("portPoolInstalled"),
+    cli: () => host("cli"),
+    cliShell: () => host("cliShell"),
+    portPoolActive: (projectId: string, worktreeId: string) =>
+      host("portPoolActive", projectId, worktreeId),
 
-  // Every "launchers" key: detected catalog plus the merged per-project
-  // list. Invalidating launchersAll() prefix-matches both.
-  launchersAll: () => host("launchers"),
-  detectedLaunchers: () => host("launchers", "detected"),
-  projectLaunchers: (projectId: string | null) => host("launchers", projectId),
+    // Every "launchers" key: detected catalog plus the merged per-project
+    // list. Invalidating launchersAll() prefix-matches both.
+    launchersAll: () => host("launchers"),
+    detectedLaunchers: () => host("launchers", "detected"),
+    projectLaunchers: (projectId: string | null) =>
+      host("launchers", projectId),
 
-  // All GitHub CLI queries share the "githubCli" prefix so toggling the
-  // integration can invalidate the whole subtree in one call.
-  githubCliAll: () => host("githubCli"),
-  githubCliReadiness: () => host("githubCli", "readiness"),
-  repoMergeConfig: (projectId: string) =>
-    host("githubCli", "repoMergeConfig", projectId),
-  pullRequestDiff: (projectId: string, number: number | undefined) =>
-    host("githubCli", "pullRequestDiff", projectId, number),
-  // PR queries share a project-scoped prefix so invalidating
-  // pullRequestsForProject cascades to both projectPullRequests and
-  // any open worktreePullRequest.
-  pullRequestsAll: () => host("githubCli", "pullRequests"),
-  pullRequestsForProject: (projectId: string) =>
-    host("githubCli", "pullRequests", projectId),
-  projectPullRequests: (projectId: string) =>
-    host("githubCli", "pullRequests", projectId, "project"),
-  worktreePullRequest: (projectId: string, branch: string) =>
-    host("githubCli", "pullRequests", projectId, PR_BRANCH_SCOPE, branch),
-  pullRequestCandidates: (projectId: string) =>
-    host("githubCli", "pullRequests", projectId, "candidates"),
+    // All GitHub CLI queries share the "githubCli" prefix so toggling the
+    // integration can invalidate the whole subtree in one call.
+    githubCliAll: () => host("githubCli"),
+    githubCliReadiness: () => host("githubCli", "readiness"),
+    repoMergeConfig: (projectId: string) =>
+      host("githubCli", "repoMergeConfig", projectId),
+    pullRequestDiff: (projectId: string, number: number | undefined) =>
+      host("githubCli", "pullRequestDiff", projectId, number),
+    // PR queries share a project-scoped prefix so invalidating
+    // pullRequestsForProject cascades to both projectPullRequests and
+    // any open worktreePullRequest.
+    pullRequestsAll: () => host("githubCli", "pullRequests"),
+    pullRequestsForProject: (projectId: string) =>
+      host("githubCli", "pullRequests", projectId),
+    projectPullRequests: (projectId: string) =>
+      host("githubCli", "pullRequests", projectId, "project"),
+    worktreePullRequest: (projectId: string, branch: string) =>
+      host("githubCli", "pullRequests", projectId, PR_BRANCH_SCOPE, branch),
+    pullRequestCandidates: (projectId: string) =>
+      host("githubCli", "pullRequests", projectId, "candidates"),
 
-  fsListDirectory: (path: string) => host("fs", "listDirectory", path),
-  fsIsGitRepo: (path: string) => host("fs", "isGitRepo", path),
-  fsListEntries: (path: string) => host("fs", "listEntries", path),
-  fsStat: (path: string | null) => host("fs", "stat", path),
+    fsListDirectory: (path: string) => host("fs", "listDirectory", path),
+    fsIsGitRepo: (path: string) => host("fs", "isGitRepo", path),
+    fsListEntries: (path: string) => host("fs", "listEntries", path),
+    fsStat: (path: string | null) => host("fs", "stat", path),
 
-  ignoredPaths: (projectId: string | null) => host("ignoredPaths", projectId),
-  worktreeIncludeStatus: (projectId: string | null) =>
-    host("worktreeIncludeStatus", projectId),
+    ignoredPaths: (projectId: string | null) => host("ignoredPaths", projectId),
+    worktreeIncludeStatus: (projectId: string | null) =>
+      host("worktreeIncludeStatus", projectId),
 
-  // Host-scoped: the payload (shigomoriRoot, rootDirName, homedir) is
-  // a set of per-host facts served by the host-scoped runtime contract.
-  runtimeInfo: () => host("runtime", "info"),
+    // Host-scoped: the payload (shigomoriRoot, rootDirName, homedir) is
+    // a set of per-host facts served by the host-scoped runtime contract.
+    runtimeInfo: () => host("runtime", "info"),
 
-  // Client-scoped: the store lives in this app instance's userData, so
-  // no host sentinel and no device id.
-  clientConfig: () => ["clientConfig"] as const,
+    // Client-scoped: the store lives in this app instance's userData, so
+    // no host sentinel and no device id.
+    clientConfig: () => ["clientConfig"] as const,
 
-  // Client-scoped: the relay account credential lives in this app
-  // instance's userData, not a host's state. Status and the device list
-  // share the "account" prefix so the changed broadcast can invalidate
-  // both at once.
-  account: () => ["account"] as const,
-  accountStatus: () => ["account", "status"] as const,
-  accountDevices: () => ["account", "devices"] as const,
-  // The peer deviceIds this host grants command access. Kept OUTSIDE the
-  // "account" prefix so a grant toggle (which fans out on grantsChanged)
-  // invalidates only this query and never thrashes status or the device
-  // list.
-  accountGrantedDevices: () => ["accountGrants"] as const,
+    // Client-scoped: the relay account credential lives in this app
+    // instance's userData, not a host's state. Status and the device list
+    // share the "account" prefix so the changed broadcast can invalidate
+    // both at once.
+    account: () => ["account"] as const,
+    accountStatus: () => ["account", "status"] as const,
+    accountDevices: () => ["account", "devices"] as const,
+    // The peer deviceIds this host grants command access. Kept OUTSIDE the
+    // "account" prefix so a grant toggle (which fans out on grantsChanged)
+    // invalidates only this query and never thrashes status or the device
+    // list.
+    accountGrantedDevices: () => ["accountGrants"] as const,
 
-  updaterState: () => ["updater", "state"] as const,
-} as const;
+    updaterState: () => ["updater", "state"] as const,
+  } as const;
+}
+
+export type QueryKeyRegistry = ReturnType<typeof buildQueryKeys>;
+
+// One registry per device id, so a registry is referentially stable for
+// a device's lifetime and safe in dependency arrays and context values.
+const registries = new Map<string, QueryKeyRegistry>();
+
+export function queryKeysFor(deviceId: string): QueryKeyRegistry {
+  const cached = registries.get(deviceId);
+  if (cached) return cached;
+  const built = buildQueryKeys(deviceId);
+  registries.set(deviceId, built);
+  return built;
+}
+
+// The local device's registry: for module-scope, broadcast-driven and
+// deliberately local call sites, which always mean this machine's
+// cache. Anything rendered under a HostScopeProvider must use the
+// scoped registry from useHostScope instead.
+export const queryKeys = queryKeysFor(localDeviceId);
 
 // Matchers live beside the builders they mirror and share their segment
 // constants: a predicate that indexes a key by hand silently stops

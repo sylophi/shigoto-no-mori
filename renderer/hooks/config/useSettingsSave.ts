@@ -140,6 +140,11 @@ interface SettingsSaveResult {
   clientConfig: ClientConfig;
 }
 
+// LOCAL keys on purpose, paired with the write path: the save below
+// goes through updateLocalGlobalConfig, whose readLocal/write are
+// local-only by design, so the caches it staled are exactly the local
+// device's. Must not move to a useHostScope registry while the write
+// stays local (see the exception list in hooks/remote/useHostScope).
 function invalidateDeviceQueries(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: queryKeys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.

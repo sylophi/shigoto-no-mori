@@ -10,7 +10,12 @@ import {
   type PullRequest,
   type PullRequestDetail,
 } from "@shared/schemas";
-import { isWorktreePullRequestKey, queryKeys } from "@/lib/queryKeys";
+import {
+  isWorktreePullRequestKey,
+  queryKeys,
+  type QueryKeyRegistry,
+} from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Invalidates per-branch PR queries, scoped to one project when the
 // caller knows which one. The predicate skips project-map queries,
@@ -64,10 +69,11 @@ export function useWorktreePullRequest(
   options: { enabled?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   return useQuery<PullRequestDetail | null>({
-    queryKey: queryKeys.worktreePullRequest(projectId, branch),
+    queryKey: keys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
-      const pr = await window.api.githubCli.worktreePullRequest({
+      const pr = await api.githubCli.worktreePullRequest({
         projectId,
         branch,
       });
@@ -77,7 +83,7 @@ export function useWorktreePullRequest(
       // reach here with ground truth -- never clobber the project map
       // on a network hiccup. The sweep in main/fetch.ts still covers
       // branches the user hasn't visited.
-      mirrorIntoProjectMap(queryClient, projectId, branch, pr);
+      mirrorIntoProjectMap(queryClient, keys, projectId, branch, pr);
       return pr;
     },
     enabled: options.enabled ?? true,
@@ -93,6 +99,7 @@ export function useWorktreePullRequest(
 
 function mirrorIntoProjectMap(
   queryClient: QueryClient,
+  keys: QueryKeyRegistry,
   projectId: string,
   branch: string,
   pr: PullRequestDetail | null,
@@ -101,7 +108,7 @@ function mirrorIntoProjectMap(
   // changed; even an updater that returns `prev` still bumps
   // dataUpdatedAt and notifies every sidebar row observing the project
   // map.
-  const key = queryKeys.projectPullRequests(projectId);
+  const key = keys.projectPullRequests(projectId);
   const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
   if (!prev) return;
   const current = prev[branch];

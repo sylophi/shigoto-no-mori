@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReadGlobalConfig } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Read side of the device config. The read is REDACTED: socketHost.token
 // is absent (a derived tokenSet boolean stands in) and remoteDevices is
@@ -10,9 +10,10 @@ import { queryKeys } from "@/lib/queryKeys";
 // useSettingsSave, which owns the dirty diff and the post-save
 // invalidations.
 export function useGlobalConfig() {
+  const { api, keys } = useHostScope();
   return useQuery<ReadGlobalConfig>({
-    queryKey: queryKeys.globalConfig(),
-    queryFn: () => window.api.globalConfig.read(),
+    queryKey: keys.globalConfig(),
+    queryFn: () => api.globalConfig.read(),
     meta: { errorTitle: "Couldn't load settings" },
   });
 }

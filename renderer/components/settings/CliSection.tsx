@@ -13,6 +13,11 @@ import type {
 // Install/uninstall of the CLI symlink lives here, not in a launch
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
+//
+// window.api + local `queryKeys` on purpose, NOT useHostScope: the cli
+// module edits shell rc files and symlinks on this machine, so both
+// the calls and the cache keys must stay pinned to the local device
+// (see the exception list in hooks/remote/useHostScope).
 export function CliSection() {
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();

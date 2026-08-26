@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function usePortPoolActive(projectId: string, worktreeId: string) {
+  const { api, keys } = useHostScope();
   return useQuery<boolean>({
-    queryKey: queryKeys.portPoolActive(projectId, worktreeId),
-    queryFn: () => window.api.portPool.isActive({ projectId, worktreeId }),
+    queryKey: keys.portPoolActive(projectId, worktreeId),
+    queryFn: () => api.portPool.isActive({ projectId, worktreeId }),
     meta: { errorTitle: "Couldn't check port-pool config" },
   });
 }

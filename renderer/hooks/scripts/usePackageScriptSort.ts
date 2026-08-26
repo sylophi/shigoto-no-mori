@@ -1,16 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import type { PackageScriptSortMode } from "@shared/schemas";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 const DEFAULT_MODE: PackageScriptSortMode = "frequent";
 
 export function usePackageScriptSort(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<PackageScriptSortMode>({
-    queryKey: queryKeys.packageScriptSort(projectId),
+    queryKey: keys.packageScriptSort(projectId),
     queryFn: () => {
       if (!projectId) return DEFAULT_MODE;
-      return window.api.packageScripts.getSort(projectId);
+      return api.packageScripts.getSort(projectId);
     },
     enabled: projectId !== null,
     staleTime: Number.POSITIVE_INFINITY,
@@ -19,11 +20,12 @@ export function usePackageScriptSort(projectId: string | null) {
 }
 
 export function useSetPackageScriptSort(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useOptimisticPreference<PackageScriptSortMode>(
-    queryKeys.packageScriptSort(projectId),
+    keys.packageScriptSort(projectId),
     async (mode) => {
       if (!projectId) return;
-      await window.api.packageScripts.setSort(projectId, mode);
+      await api.packageScripts.setSort(projectId, mode);
     },
     "Couldn't save script sort preference",
   );

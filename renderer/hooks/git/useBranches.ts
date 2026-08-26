@@ -6,14 +6,16 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
+import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 
 export function useBranches(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<BranchList>({
-    queryKey: queryKeys.branches(projectId),
+    queryKey: keys.branches(projectId),
     queryFn: () => {
       if (!projectId) return { local: [], remote: [] };
-      return window.api.projects.listBranches(projectId);
+      return api.projects.listBranches(projectId);
     },
     enabled: projectId !== null,
     meta: { errorTitle: "Couldn't list branches" },
@@ -27,16 +29,17 @@ export function useBranches(projectId: string | null) {
 // background-fetch update.
 export function invalidateBranchState(
   queryClient: ReturnType<typeof useQueryClient>,
+  keys: QueryKeyRegistry,
   projectId: string,
 ) {
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.branches(projectId),
+    queryKey: keys.branches(projectId),
   });
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.worktrees(projectId),
+    queryKey: keys.worktrees(projectId),
   });
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.defaultBranch(projectId),
+    queryKey: keys.defaultBranch(projectId),
   });
 }
 
@@ -48,7 +51,8 @@ export function useWatchGitRefs(): void {
   useEffect(
     () =>
       window.api.git.onRefsRefreshed(({ projectId }) => {
-        invalidateBranchState(queryClient, projectId);
+        // Broadcasts describe this machine, so the local registry.
+        invalidateBranchState(queryClient, queryKeys, projectId);
       }),
     [queryClient],
   );
@@ -57,15 +61,16 @@ export function useWatchGitRefs(): void {
 // The Manage Branches mutations all share one shape: call the API, then
 // refresh everything derived from refs via invalidateBranchState.
 function useBranchMutation<Input extends { projectId: string }>(
-  mutationFn: (input: Input) => Promise<void>,
+  mutationFn: (api: HostApi, input: Input) => Promise<void>,
   meta: MutationMeta,
 ) {
   const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
   return useMutation<void, Error, Input>({
-    mutationFn,
+    mutationFn: (input) => mutationFn(api, input),
     onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, vars.projectId),
+      invalidateBranchState(queryClient, keys, vars.projectId),
     meta,
   });
 }
@@ -78,7 +83,7 @@ interface CreateBranchInput {
 
 export function useCreateBranch() {
   return useBranchMutation<CreateBranchInput>(
-    (input) => window.api.branches.create(input),
+    (api, input) => api.branches.create(input),
     { errorTitle: "Couldn't create branch" },
   );
 }
@@ -91,7 +96,7 @@ interface RenameAnyBranchInput {
 
 export function useRenameAnyBranch() {
   return useBranchMutation<RenameAnyBranchInput>(
-    (input) => window.api.branches.rename(input),
+    (api, input) => api.branches.rename(input),
     { errorTitle: "Couldn't rename branch" },
   );
 }
@@ -106,7 +111,7 @@ export function useDeleteBranch() {
   // BranchRow's confirm modal swaps into a force-delete prompt on
   // failure -- a toast on top would be noise.
   return useBranchMutation<DeleteBranchInput>(
-    (input) => window.api.branches.delete(input),
+    (api, input) => api.branches.delete(input),
     { silentError: true },
   );
 }

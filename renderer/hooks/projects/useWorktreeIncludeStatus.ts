@@ -1,13 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import type { WorktreeIncludeStatus } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useWorktreeIncludeStatus(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<WorktreeIncludeStatus | null>({
-    queryKey: queryKeys.worktreeIncludeStatus(projectId),
+    queryKey: keys.worktreeIncludeStatus(projectId),
     queryFn: () => {
       if (!projectId) return null;
-      return window.api.projects.worktreeIncludeStatus(projectId);
+      return api.projects.worktreeIncludeStatus(projectId);
     },
     enabled: projectId !== null,
     // Each fetch spawns two `git ls-files` enumerations in main. Dampen

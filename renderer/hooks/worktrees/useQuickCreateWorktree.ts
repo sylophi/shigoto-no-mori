@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { notifyError } from "@/lib/toast";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useCreateWorktree } from "./useWorktreeMutations";
 
 // "Quick create": a worktree off the project's default branch, no form,
@@ -8,6 +9,7 @@ import { useCreateWorktree } from "./useWorktreeMutations";
 // entry points can't drift on error handling.
 export function useQuickCreateWorktree() {
   const navigate = useNavigate();
+  const { api } = useHostScope();
   const create = useCreateWorktree();
 
   // Two failure sources, attributed by scope rather than by inspecting
@@ -19,7 +21,7 @@ export function useQuickCreateWorktree() {
     if (create.isPending) return;
     let defaultBranch: string;
     try {
-      defaultBranch = await window.api.projects.defaultBranch(projectId);
+      defaultBranch = await api.projects.defaultBranch(projectId);
     } catch (err) {
       notifyError("Couldn't resolve default branch", err);
       return;

@@ -22,7 +22,11 @@ export function useLocalGlobalConfigUpdate(errorTitle: string) {
       // wanted list harmlessly.
       await reconcileRemoteDevicesFromConfig();
       // The sections display from the redacted read, so refresh it to
-      // reflect the new enabled/lan/port/tokenSet.
+      // reflect the new enabled/lan/port/tokenSet. LOCAL key on
+      // purpose, paired with the write path: updateLocalGlobalConfig's
+      // readLocal/write are local-only by design, so the stale cache
+      // is the local device's (see the exception list in
+      // hooks/remote/useHostScope).
       void queryClient.invalidateQueries({
         queryKey: queryKeys.globalConfig(),
       });

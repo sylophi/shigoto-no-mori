@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function usePickedWorktreeName(projectId: string | null) {
+  const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: queryKeys.pickedWorktreeName(projectId),
+    queryKey: keys.pickedWorktreeName(projectId),
     queryFn: () => {
       if (!projectId) return "";
-      return window.api.projects.pickWorktreeName(projectId);
+      return api.projects.pickWorktreeName(projectId);
     },
     enabled: projectId !== null,
     // Re-roll on every visit (gcTime drops the pick as soon as the form

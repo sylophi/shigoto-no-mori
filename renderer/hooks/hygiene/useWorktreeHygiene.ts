@@ -4,7 +4,7 @@ import type {
   WorktreeDiskUsage,
   WorktreeHygiene,
 } from "@shared/schemas";
-import { queryKeys } from "@/lib/queryKeys";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Git-derived staleness and merge facts, asked one project at a time and
 // merged into a single lookup for the app-wide tidy page.
@@ -36,10 +36,11 @@ function combineHygiene(
 }
 
 export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
+  const { api, keys } = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({
-      queryKey: queryKeys.worktreeHygiene(project.id),
-      queryFn: () => window.api.hygiene.list(project.id),
+      queryKey: keys.worktreeHygiene(project.id),
+      queryFn: () => api.hygiene.list(project.id),
       // The sweep costs several git calls per worktree per project, and
       // the app's defaults refetch on every mount and window focus. A
       // window matching the disk cache keeps an alt-tab from re-probing
@@ -94,11 +95,11 @@ export interface DiskUsageTarget {
 export function useWorktreeDiskUsage(
   worktrees: DiskUsageTarget[],
 ): DiskUsageTotals {
+  const { api, keys } = useHostScope();
   return useQueries({
     queries: worktrees.map(({ projectId, id }) => ({
-      queryKey: queryKeys.worktreeDiskUsage(projectId, id),
-      queryFn: () =>
-        window.api.hygiene.diskUsage({ projectId, worktreeId: id }),
+      queryKey: keys.worktreeDiskUsage(projectId, id),
+      queryFn: () => api.hygiene.diskUsage({ projectId, worktreeId: id }),
       // Matches the main-side cache TTL, so a remount inside the window
       // reuses the walk instead of paying for it twice.
       staleTime: 60_000,
