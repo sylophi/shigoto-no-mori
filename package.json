@@ -12,6 +12,9 @@
   },
   "private": true,
   "packageManager": "pnpm@11.1.1",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "start": "node scripts/dev-cli.mjs && port-pool ensure . && electron-forge start",
     "dev": "pnpm run start",
@@ -21,6 +24,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint .",
     "theme:check": "node scripts/check-theme-contract.mjs",
+    "identity:check": "node scripts/check-identity.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "licenses": "node scripts/generate-third-party-licenses.mjs",

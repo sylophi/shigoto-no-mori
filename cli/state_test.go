@@ -502,6 +502,22 @@ func TestRegistrySplitOnFreshRoot(t *testing.T) {
 	}
 }
 
+// The app stamps deviceId (a UUID naming the state root) into
+// registry.json. Every registry write is a whole-document rewrite, so
+// a CLI write must carry the key through even though the CLI never
+// models it.
+func TestRegistryWritePreservesDeviceID(t *testing.T) {
+	sandboxRoot(t)
+	const id = `"6f7c2f1e-9a41-4b7a-8f2e-3d5c1b0a9e88"`
+	seedRegistry(t, `{"deviceId": `+id+`}`)
+	if err := shelveViaRegistry(); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(readFile(t, registryPath())["deviceId"]); got != id {
+		t.Errorf("registry.json deviceId after CLI write = %s, want %s", got, id)
+	}
+}
+
 // --- a broken state.json is loud without being fatal ---
 
 // note/vlog write to os.Stderr through the package variable, so

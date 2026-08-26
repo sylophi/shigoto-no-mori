@@ -216,6 +216,9 @@ const (
 	shelvedKey  = "shelvedWorktrees"
 )
 
+// deviceId (app-written, main/lib/config/deviceId.ts) is deliberately
+// absent: this list drives only the state.json→registry.json split,
+// which deviceId postdates.
 var registryKeys = []string{projectsKey, shelvedKey}
 
 // Every path under the state root in one place, so a layout change never

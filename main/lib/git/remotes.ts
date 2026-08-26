@@ -1,53 +1,31 @@
+import {
+  listRemotes as listRemotesWith,
+  localBranchExists as localBranchExistsWith,
+  remoteRefExists as remoteRefExistsWith,
+  resolveDefaultBranch as resolveDefaultBranchWith,
+  resolveDefaultRef as resolveDefaultRefWith,
+} from "@shared/defaultBranch.mts";
 import { run } from "./core";
 
-const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
-
-export async function localBranchExists(
+// Default-branch policy lives in shared/defaultBranch.mts so the
+// identity parity harness resolves through the same code. These
+// wrappers bind the app's git runner.
+export function localBranchExists(
   projectPath: string,
   branch: string,
 ): Promise<boolean> {
-  try {
-    await run(projectPath, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      `refs/heads/${branch}`,
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
+  return localBranchExistsWith(run, projectPath, branch);
 }
 
-export async function remoteRefExists(
+export function remoteRefExists(
   projectPath: string,
   ref: string,
 ): Promise<boolean> {
-  try {
-    await run(projectPath, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      `refs/remotes/${ref}`,
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
+  return remoteRefExistsWith(run, projectPath, ref);
 }
 
-export async function listRemotes(projectPath: string): Promise<string[]> {
-  try {
-    const stdout = await run(projectPath, ["remote"]);
-    const remotes: string[] = [];
-    for (const line of stdout.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed.length > 0) remotes.push(trimmed);
-    }
-    return remotes;
-  } catch {
-    return [];
-  }
+export function listRemotes(projectPath: string): Promise<string[]> {
+  return listRemotesWith(run, projectPath);
 }
 
 // Every row of `git remote -v` as a name + URL pair. git emits two rows
@@ -75,49 +53,20 @@ export async function listRemoteEntries(
   }
 }
 
-async function firstLocalBranch(projectPath: string): Promise<string | null> {
-  try {
-    const stdout = await run(projectPath, [
-      "for-each-ref",
-      "--format=%(refname:short)",
-      "--count=1",
-      "refs/heads/",
-    ]);
-    const name = stdout.trim();
-    return name.length > 0 ? name : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function resolveDefaultBranch(
+export function resolveDefaultBranch(
   projectPath: string,
   override?: string,
 ): Promise<string> {
-  const trimmed = override?.trim();
-  if (trimmed) {
-    // User explicitly picked it — accept whether it's local or remote.
-    if (await localBranchExists(projectPath, trimmed)) return trimmed;
-    if (await remoteRefExists(projectPath, trimmed)) return trimmed;
-  }
-  // No (valid) override. Prefer a remote-tracking ref (the source of
-  // truth) over the local copy, which tends to drift. Try each remote
-  // in the order `git remote` lists them — usually that's the project's
-  // canonical "origin"-equivalent first.
-  const remotes = await listRemotes(projectPath);
-  for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
-    for (const remote of remotes) {
-      const ref = `${remote}/${candidate}`;
-      // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters
-      const exists = await remoteRefExists(projectPath, ref); // oxlint-disable-line no-await-in-loop -- priority order matters
-      if (exists) return ref;
-    }
-    // oxlint-disable-next-line no-await-in-loop -- priority order matters
-    if (await localBranchExists(projectPath, candidate)) return candidate;
-  }
-  const first = await firstLocalBranch(projectPath);
-  if (first) return first;
-  throw new Error(`No local branches found in ${projectPath}`);
+  return resolveDefaultBranchWith(run, projectPath, override);
+}
+
+// Qualified, fallback-free variant for repo identity. See
+// shared/defaultBranch.mts for the contract split.
+export function resolveDefaultRef(
+  projectPath: string,
+  override?: string,
+): Promise<string | null> {
+  return resolveDefaultRefWith(run, projectPath, override);
 }
 
 // Coalesces overlapping callers onto a single in-flight fetch so the

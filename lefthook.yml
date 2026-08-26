@@ -11,3 +11,11 @@ pre-commit:
       run: pnpm run theme:check
     dmg-art:
       run: pnpm run dmg:check
+    # Both parity checks are glob-gated: identity:check alone costs
+    # ~140 git spawns, so neither should run on unrelated commits.
+    identity:
+      glob: "{shared/repoIdentity.mts,shared/defaultBranch.mts,shared/fixtures/**,scripts/check-identity.mjs}"
+      run: pnpm run identity:check
+    go-test:
+      glob: "{cli/**,shared/fixtures/**}"
+      run: go test -C cli ./...

@@ -27,8 +27,23 @@ import {
   worktreeData,
   worktrees,
 } from "@shared/ipc/client";
+import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
+
+// The device id arrives on argv (main passes --sm-device-id=<uuid> via
+// webPreferences.additionalArguments, which reaches sandboxed preloads)
+// so the renderer can read it synchronously at module scope. Missing or
+// empty means main and preload disagree on the flag, so fail loudly
+// rather than hand out keys scoped to nothing. Unreachable in practice:
+// main's ready handler resolves the id (minting or throwing) before
+// any window is created.
+const deviceIdArg = process.argv.find((arg) => arg.startsWith(DEVICE_ID_FLAG));
+const deviceId = deviceIdArg?.slice(DEVICE_ID_FLAG.length) ?? "";
+if (!deviceId) {
+  throw new Error("preload started without --sm-device-id");
+}
 
 const api = {
+  deviceId,
   projects,
   worktrees,
   branches,

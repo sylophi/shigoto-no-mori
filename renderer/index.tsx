@@ -10,7 +10,7 @@ import {
 import { Toaster } from "sonner";
 import { isEntityGoneError } from "@shared/errors";
 import { App } from "./App";
-import { queryKeys } from "./lib/queryKeys";
+import { queryKeyDomain, queryKeys } from "./lib/queryKeys";
 import { notifyError, toast } from "./lib/toast";
 import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
@@ -128,9 +128,11 @@ const externalChangeExempt = new Set([
   "worktreeHygiene",
   "worktreeDiskUsage",
 ]);
+
 window.api.git.onExternalChange(() => {
   void queryClient.invalidateQueries({
-    predicate: (query) => !externalChangeExempt.has(String(query.queryKey[0])),
+    predicate: (query) =>
+      !externalChangeExempt.has(String(queryKeyDomain(query.queryKey))),
   });
 });
 

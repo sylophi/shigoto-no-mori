@@ -528,46 +528,98 @@ var defaultBranchCandidates = []string{"main", "master", "dev"}
 
 // One for-each-ref spawn replaces the per-candidate show-ref probes:
 // the full local + remote branch list is read once and every existence
-// check happens in memory. Precedence matches remotes.ts: a valid
-// override wins, then each candidate remote-first in `git remote`
-// order, then the first local branch as a fallback.
-func resolveDefaultBranchWithRemotes(projectPath, override string, remotes []string) string {
+// check happens in memory. Shared by both resolver variants below.
+type branchRefScan struct {
+	locals     []string // ref order, for resolveDefaultBranch's fallback
+	localSet   map[string]bool
+	remoteRefs map[string]bool
+}
+
+func scanBranchRefs(projectPath string) (branchRefScan, error) {
 	stdout, err := runGit(projectPath, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
 	if err != nil {
-		return ""
+		return branchRefScan{}, err
 	}
-	var locals []string // ref order, for the first-branch fallback
-	localSet := map[string]bool{}
-	remoteRefs := map[string]bool{}
+	scan := branchRefScan{localSet: map[string]bool{}, remoteRefs: map[string]bool{}}
 	for _, line := range strings.Split(stdout, "\n") {
 		ref := strings.TrimSpace(line)
 		switch {
 		case strings.HasPrefix(ref, "refs/heads/"):
 			name := strings.TrimPrefix(ref, "refs/heads/")
-			locals = append(locals, name)
-			localSet[name] = true
+			scan.locals = append(scan.locals, name)
+			scan.localSet[name] = true
 		case strings.HasPrefix(ref, "refs/remotes/"):
-			remoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = true
+			scan.remoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = true
 		}
 	}
+	return scan, nil
+}
+
+// Precedence shared with shared/defaultBranch.mts: a valid override
+// wins, then each candidate remote-first in `git remote` order. Fully
+// qualified so a tag sharing a branch's name can't shadow it, and
+// WITHOUT the first-local-branch fallback: "" means no default ref.
+func pickDefaultRef(scan branchRefScan, override string, remotes []string) string {
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
-		if localSet[trimmed] || remoteRefs[trimmed] {
-			return trimmed
+		if scan.localSet[trimmed] {
+			return "refs/heads/" + trimmed
+		}
+		if scan.remoteRefs[trimmed] {
+			return "refs/remotes/" + trimmed
 		}
 	}
 	for _, candidate := range defaultBranchCandidates {
 		for _, remote := range remotes {
 			ref := remote + "/" + candidate
-			if remoteRefs[ref] {
-				return ref
+			if scan.remoteRefs[ref] {
+				return "refs/remotes/" + ref
 			}
 		}
-		if localSet[candidate] {
-			return candidate
+		if scan.localSet[candidate] {
+			return "refs/heads/" + candidate
 		}
 	}
-	if len(locals) > 0 {
-		return locals[0]
+	return ""
+}
+
+// pickDefaultRef only yields these two namespaces, so a two-branch
+// strip recovers exactly the short names ("main", "origin/main").
+func shortRefName(fullRef string) string {
+	if name, ok := strings.CutPrefix(fullRef, "refs/heads/"); ok {
+		return name
+	}
+	return strings.TrimPrefix(fullRef, "refs/remotes/")
+}
+
+// Identity-facing variant, mirroring resolveDefaultRef in
+// shared/defaultBranch.mts: "" with a nil error is semantic "no default
+// ref". A scan failure propagates so identity can tell a broken git
+// from a repo with no candidates.
+func resolveDefaultRefWithRemotes(projectPath, override string, remotes []string) (string, error) {
+	scan, err := scanBranchRefs(projectPath)
+	if err != nil {
+		return "", err
+	}
+	return pickDefaultRef(scan, override, remotes), nil
+}
+
+func resolveDefaultRef(projectPath, override string) (string, error) {
+	return resolveDefaultRefWithRemotes(projectPath, override, listRemotes(projectPath))
+}
+
+// Short-name variant for merge-target callers, who additionally accept
+// the first local branch as a last resort (a merge target only has to
+// exist, while an identity must be stable across devices).
+func resolveDefaultBranchWithRemotes(projectPath, override string, remotes []string) string {
+	scan, err := scanBranchRefs(projectPath)
+	if err != nil {
+		return ""
+	}
+	if ref := pickDefaultRef(scan, override, remotes); ref != "" {
+		return shortRefName(ref)
+	}
+	if len(scan.locals) > 0 {
+		return scan.locals[0]
 	}
 	return ""
 }

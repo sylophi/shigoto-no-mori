@@ -25,7 +25,7 @@ export function useBranchCommits(
     CommitSummary[],
     Error,
     { pages: CommitSummary[][]; pageParams: number[] },
-    readonly ["branchCommits", string, string, string | undefined],
+    ReturnType<typeof queryKeys.branchCommits>,
     number
   >({
     queryKey: queryKeys.branchCommits(projectId, worktreeId, headHash),
