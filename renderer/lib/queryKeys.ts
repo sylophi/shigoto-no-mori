@@ -55,6 +55,14 @@ export function queryKeyDomain(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[2] : queryKey[0];
 }
 
+// The device id a host-scoped key is bound to, or undefined for a
+// client-scoped key. Keyed off the sentinel so the second slot is read
+// only where it holds a device id, keeping the sentinel encapsulated for
+// predicates that must tell a local host key from a remote one.
+export function hostKeyDeviceId(queryKey: readonly unknown[]): unknown {
+  return queryKey[0] === HOST_SCOPE ? queryKey[1] : undefined;
+}
+
 export const queryKeys = {
   globalConfig: () => host("globalConfig"),
 

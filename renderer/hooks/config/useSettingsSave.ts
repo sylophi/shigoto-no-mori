@@ -10,6 +10,7 @@ import type {
   Theme,
 } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
+import { updateLocalGlobalConfig } from "@/lib/config/localGlobalConfig";
 import { queryKeys } from "@/lib/queryKeys";
 
 // The settings form's staged state. One flat shape across both stores:
@@ -51,15 +52,17 @@ export function fromConfig(
   };
 }
 
-function toConfig(
-  original: GlobalConfig,
-  state: SettingsFormState,
-): GlobalConfig {
+// The managed device keys only, without a base document under them. Two
+// jobs: it is the dirty projection (an unchanged managed set skips the
+// CLI spawn), and it is what gets spread over the unredacted base at
+// save time to form the write. Keeping it base free is what lets the
+// dirty check ignore socketHost and remoteDevices, which the form never
+// manages and which the redacted read it was built from does not carry.
+function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
   const valid = state.launchers.filter(
     (l) => l.label.trim().length > 0 && l.command.trim().length > 0,
   );
   return {
-    ...original,
     launchers: valid.length > 0 ? valid : undefined,
     // Default is everything shown; omit the key entirely when nothing is
     // hidden rather than persisting an empty array.
@@ -78,8 +81,24 @@ function toConfig(
   };
 }
 
+// The full write document: the managed keys spread over an unredacted
+// base. The CLI write is whole document for its registered keys (an
+// omitted registered key is deleted, socketHost.token included), so the
+// base MUST be the unredacted local doc rather than the redacted read
+// the form was built from. Spread order matters: the managed keys carry
+// their own undefined defaults, which override the base so the omit on
+// default serialization still holds. Everything the form does not
+// manage (socketHost with its token, remoteDevices, any unknown key)
+// rides through from the base untouched.
+function toWriteDoc(
+  base: GlobalConfig,
+  state: SettingsFormState,
+): GlobalConfig {
+  return { ...base, ...managedDeviceConfig(state) };
+}
+
 // Appearance saves through the client-scoped store, not the device
-// config. Same omit-on-default serialization as toConfig.
+// config. Same omit-on-default serialization as managedDeviceConfig.
 function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
     // Default is "system"; omit when on the default to keep the file tidy.
@@ -148,19 +167,28 @@ export function useSettingsSave({
 }) {
   const queryClient = useQueryClient();
   const initialState = fromConfig(initialConfig, initialClientConfig);
-  const initialDeviceDoc = serialize(toConfig(initialConfig, initialState));
+  // Dirty against the managed projection, not a base-spread doc: the base
+  // is read fresh at save time and carries keys the form never touches.
+  const initialManagedDoc = serialize(managedDeviceConfig(initialState));
   const initialClientDoc = serialize(toClientConfig(initialState));
 
   return useMutation({
     mutationFn: async (
       state: SettingsFormState,
     ): Promise<SettingsSaveResult> => {
-      const deviceConfig = toConfig(initialConfig, state);
       const clientConfig = toClientConfig(state);
-      const devicePersisted = serialize(deviceConfig) !== initialDeviceDoc;
+      const devicePersisted =
+        serialize(managedDeviceConfig(state)) !== initialManagedDoc;
       const clientPersisted = serialize(clientConfig) !== initialClientDoc;
       if (devicePersisted) {
-        await window.api.globalConfig.write(deviceConfig);
+        // Route through the single serialized writer so this save cannot
+        // race a hosting or remote-device write and clobber its domain.
+        // updateLocalGlobalConfig owns the read-unredacted-base-then-write
+        // -full-doc invariant: it reads the base imperatively (so the
+        // token never lands in a cached query) and the whole-document CLI
+        // write keeps socketHost.token and remoteDevices, which the
+        // redacted read the form was built from omits.
+        await updateLocalGlobalConfig((base) => toWriteDoc(base, state));
       }
       if (clientPersisted) {
         try {

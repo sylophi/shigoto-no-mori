@@ -1,16 +1,49 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import type { Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
-import { queryKeys } from "@/lib/queryKeys";
+import { hostKeysFor, queryKeys } from "@/lib/queryKeys";
 
-export function useProjects() {
-  return useQuery<Project[]>({
-    queryKey: queryKeys.projects(),
-    queryFn: () => window.api.projects.list(),
+// The slice of the host api the projects list calls. window.api and a
+// remote device's api both satisfy it, so one options builder serves the
+// local sidebar and the read-only remote forest without a parallel fork.
+type ProjectListApi = {
+  projects: { list: () => Promise<Project[]> };
+};
+
+// Which device's projects to read, and over which api. Both default to
+// the local machine, so the local call site below stays byte-identical:
+// the key is hostKeysFor(localDeviceId) and the queryFn hits window.api.
+export interface ProjectsScope {
+  deviceId?: string;
+  api?: ProjectListApi | undefined;
+}
+
+// Single source of truth for the projects-list query, keyed under the
+// scoped device so a remote caller can read a peer's projects into their
+// own cache slot under the same key shape.
+export function projectsQueryOptions({
+  deviceId = window.api.deviceId,
+  api = window.api,
+}: ProjectsScope = {}) {
+  return queryOptions<Project[]>({
+    queryKey: hostKeysFor(deviceId)("projects"),
+    queryFn: () => (api ? api.projects.list() : []),
+    // Local: api and id are always present, so this stays always-enabled.
+    // Remote: an unconnected device never fetches.
+    enabled: api !== undefined && deviceId !== "",
     meta: { errorTitle: "Couldn't load projects" },
   });
+}
+
+export function useProjects() {
+  return useQuery(projectsQueryOptions());
 }
 
 // Refetch the projects list whenever main records a project action, so the
