@@ -324,5 +324,41 @@
       }
     ],
     "checks": [{ "dir": "trunk", "expected": null }]
+  },
+  {
+    "name": "a remote sorting before origin cannot steal the default ref",
+    "repos": [
+      {
+        "dir": "template",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "template-root"]
+        ]
+      },
+      {
+        "dir": "canonical",
+        "git": [
+          ["init", "-q", "-b", "main"],
+          ["commit", "-q", "--allow-empty", "-m", "canonical-root"]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [["clone", "-q", "{{root}}/canonical", "work"]]
+      },
+      {
+        "dir": "work",
+        "git": [
+          ["remote", "add", "alt", "{{root}}/template"],
+          ["fetch", "-q", "alt"]
+        ]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "work",
+        "expected": "root:2743c1e001ac8ea9957cb252f5a0a3f257471229"
+      }
+    ]
   }
 ]

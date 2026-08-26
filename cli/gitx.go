@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -581,10 +583,35 @@ func scanBranchRefs(projectPath string) (branchRefScan, error) {
 	return scan, nil
 }
 
+// Candidate remotes in the SAME precedence remoteKey applies in
+// identity.go: upstream first, then origin, then the rest
+// alphabetically. `git remote` prints alphabetically, so without this a
+// remote sorting before "origin" would win the default-ref race, flip
+// the root commit, and the two halves of identity would disagree about
+// the canonical remote. Mirrors orderRemotesByPrecedence in
+// shared/defaultBranch.mts.
+func orderRemotesByPrecedence(remotes []string) []string {
+	ordered := make([]string, 0, len(remotes))
+	for _, name := range []string{"upstream", "origin"} {
+		if slices.Contains(remotes, name) {
+			ordered = append(ordered, name)
+		}
+	}
+	var rest []string
+	for _, name := range remotes {
+		if name != "upstream" && name != "origin" {
+			rest = append(rest, name)
+		}
+	}
+	sort.Strings(rest)
+	return append(ordered, rest...)
+}
+
 // Precedence shared with shared/defaultBranch.mts: a valid override
-// wins, then each candidate remote-first in `git remote` order. Fully
-// qualified so a tag sharing a branch's name can't shadow it, and
-// WITHOUT the first-local-branch fallback: "" means no default ref.
+// wins, then each candidate remote-first in identity's remote
+// precedence order. Fully qualified so a tag sharing a branch's name
+// can't shadow it, and WITHOUT the first-local-branch fallback: ""
+// means no default ref.
 func pickDefaultRef(scan branchRefScan, override string, remotes []string) string {
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
 		if scan.localSet[trimmed] {
@@ -594,8 +621,9 @@ func pickDefaultRef(scan branchRefScan, override string, remotes []string) strin
 			return "refs/remotes/" + trimmed
 		}
 	}
+	orderedRemotes := orderRemotesByPrecedence(remotes)
 	for _, candidate := range defaultBranchCandidates {
-		for _, remote := range remotes {
+		for _, remote := range orderedRemotes {
 			ref := remote + "/" + candidate
 			if scan.remoteRefs[ref] {
 				return "refs/remotes/" + ref

@@ -63,6 +63,22 @@ export async function listRemotes(
   }
 }
 
+// Candidate remotes in the SAME precedence remoteKey applies in
+// shared/repoIdentity.mts: upstream first, then origin, then the rest
+// alphabetically. `git remote` prints alphabetically, so without this a
+// remote sorting before "origin" (say "base") would win the default-ref
+// race, flip the root commit, and the two halves of identity would
+// disagree about the canonical remote.
+export function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
+  const preferred = ["upstream", "origin"].filter((name) =>
+    remotes.includes(name),
+  );
+  const rest = remotes
+    .filter((name) => name !== "upstream" && name !== "origin")
+    .toSorted();
+  return [...preferred, ...rest];
+}
+
 async function firstLocalBranch(
   run: GitRunner,
   projectPath: string,
@@ -105,10 +121,10 @@ export async function resolveDefaultRef(
     }
   }
   // No (valid) override. Prefer a remote-tracking ref (the source of
-  // truth) over the local copy, which tends to drift. Try each remote
-  // in the order `git remote` lists them (usually that's the project's
-  // canonical "origin"-equivalent first).
-  const remotes = await listRemotes(run, projectPath);
+  // truth) over the local copy, which tends to drift. Try remotes in
+  // identity's precedence order so both halves of identity key off the
+  // same canonical remote.
+  const remotes = orderRemotesByPrecedence(await listRemotes(run, projectPath));
   for (const candidate of DEFAULT_BRANCH_CANDIDATES) {
     for (const remote of remotes) {
       const ref = `${remote}/${candidate}`;
