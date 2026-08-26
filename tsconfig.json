@@ -36,6 +36,7 @@
     "host/**/*",
     "renderer/**/*",
     "shared/**/*",
+    "web/**/*",
     "forge.config.ts",
     "forge.env.d.ts",
     "vite.*.config.ts"

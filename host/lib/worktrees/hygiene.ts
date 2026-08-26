@@ -26,7 +26,7 @@ import {
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { measureDirectory } from "../util/dirSize";
-import { createLimiter } from "../util/limit";
+import { createLimiter } from "@shared/util/limit";
 import { ttlMapCache } from "../util/ttlCache";
 
 interface HeadCommit {

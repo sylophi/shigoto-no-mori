@@ -14,7 +14,7 @@
 // fall back to the apparent size.
 import { lstat, opendir } from "node:fs/promises";
 import { join } from "node:path";
-import { createLimiter } from "./limit";
+import { createLimiter } from "@shared/util/limit";
 
 // Names whose contents are real disk usage but not evidence that anyone
 // touched the worktree. A fresh `pnpm install` rewrites every mtime

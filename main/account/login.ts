@@ -10,11 +10,11 @@ import {
   generatePkcePair,
   generateState,
   parseRedirectQuery,
-} from "./pkce";
-import type { AccountServiceConfig } from "./serviceConfig";
-import { exchangeCodeForToken } from "./tokenExchange";
-import type { AccountService } from "./service";
-import type { AccountStore } from "./credentialStore";
+} from "@shared/account/pkce";
+import type { AccountServiceConfig } from "@shared/account/serviceConfig";
+import { exchangeCodeForToken } from "@shared/account/tokenExchange";
+import type { AccountService } from "@shared/account/service";
+import type { AccountStore } from "@shared/account/credentialStore";
 
 // How long the flow waits for the browser redirect before giving up. A
 // user who abandons the browser tab must not leave a loopback server
@@ -67,9 +67,11 @@ export function deriveAccountId(token: string): string {
   }
 }
 
-export function runLoginFlow(deps: LoginDeps): Promise<LoginResult> {
+export async function runLoginFlow(deps: LoginDeps): Promise<LoginResult> {
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const { verifier, challenge } = generatePkcePair();
+  // The S256 challenge is computed through the async WebCrypto digest, so
+  // the pair is awaited before the loopback flow starts.
+  const { verifier, challenge } = await generatePkcePair();
   const state = generateState();
 
   return new Promise<LoginResult>((resolve, reject) => {

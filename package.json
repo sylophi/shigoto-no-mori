@@ -30,6 +30,7 @@
     "account:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-account.mjs",
     "relay:check": "pnpm -C relay install --frozen-lockfile --prefer-offline && pnpm -C relay run check",
     "relaylink:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-relay-link.mjs",
+    "web:relay:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-web-relay.mjs",
     "liveness:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-liveness.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",

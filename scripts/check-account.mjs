@@ -37,16 +37,17 @@ import {
   generatePkcePair,
   generateState,
   parseRedirectQuery,
-} from "../main/account/pkce.ts";
+} from "../shared/account/pkce.ts";
 import {
   isConfigured,
   mergeServiceEnv,
   parseDotenv,
   resolveServiceConfig,
-} from "../main/account/serviceConfig.ts";
-import { exchangeCodeForToken } from "../main/account/tokenExchange.ts";
-import { createAccountService } from "../main/account/service.ts";
+} from "../shared/account/serviceConfig.ts";
+import { exchangeCodeForToken } from "../shared/account/tokenExchange.ts";
+import { createAccountService } from "../shared/account/service.ts";
 import { createAccountStore } from "../main/account/credentialStore.ts";
+import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
 import { createGrantStore } from "../main/account/grantStore.ts";
 import { deriveAccountId, runLoginFlow } from "../main/account/login.ts";
 import {
@@ -197,9 +198,12 @@ async function main() {
 
   await check(
     "pkce: verifier is 43-128 base64url chars and challenge is S256(verifier)",
-    () => {
+    async () => {
       for (let i = 0; i < 50; i += 1) {
-        const { verifier, challenge } = generatePkcePair();
+        // generatePkcePair is async now that the S256 challenge runs
+        // through the WebCrypto digest.
+        // oxlint-disable-next-line no-await-in-loop -- each pair is independent, the loop just samples
+        const { verifier, challenge } = await generatePkcePair();
         assert.match(
           verifier,
           /^[A-Za-z0-9_-]{43,128}$/,
@@ -534,6 +538,59 @@ async function main() {
         assert.notEqual(store.read(), null);
         store.clear();
         assert.equal(store.read(), null, "clear should remove the file");
+      },
+    );
+
+    await check(
+      "store core: an in-memory backing round trips under both an encrypting and a plaintext cipher, and the envelope matches the fs adapter",
+      () => {
+        // Drive the storage-agnostic core directly with an in-memory
+        // backing, the exact seam the browser localStorage store will use,
+        // and prove the document shape is identical to the desktop file.
+        for (const available of [true, false]) {
+          let stored = null;
+          const storage = {
+            readRaw: () => stored,
+            writeRaw: (text) => {
+              stored = text;
+            },
+            removeRaw: () => {
+              stored = null;
+            },
+          };
+          const cipher = {
+            available,
+            encrypt: (s) => Buffer.from(s).toString("base64"),
+            decrypt: (p) => Buffer.from(p, "base64").toString("utf8"),
+          };
+          const store = createCoreAccountStore({ storage, cipher });
+          store.write({
+            credential: "secret",
+            accountId: "acct-core",
+            deviceName: "Web",
+          });
+          const doc = JSON.parse(stored);
+          assert.equal(doc.v, 1);
+          assert.equal(doc.enc, available);
+          // enc:true stores ciphertext, enc:false stores the plaintext.
+          assert.equal(
+            doc.credential !== "secret",
+            available,
+            "the enc flag did not match whether the credential was encrypted",
+          );
+          assert.deepEqual(store.read(), {
+            credential: "secret",
+            accountId: "acct-core",
+            deviceName: "Web",
+          });
+          // Corrupt bytes read as signed out, and clear empties the backing.
+          stored = "{ not valid json";
+          assert.equal(store.read(), null, "corrupt backing should read null");
+          store.write({ credential: "c", accountId: "a", deviceName: "d" });
+          store.clear();
+          assert.equal(stored, null, "clear should empty the backing");
+          assert.equal(store.read(), null, "a cleared store reads null");
+        }
       },
     );
 
