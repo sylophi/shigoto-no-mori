@@ -44,6 +44,7 @@ import {
 import {
   COMMAND_REFUSED_CODE,
   CommandRefusedError,
+  MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
 import { registerContract } from "@shared/ipc/registerContract";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
@@ -491,7 +492,7 @@ async function main() {
   );
 
   await check(
-    "in-flight cap: the 33rd concurrent request to one peer is refused",
+    "in-flight cap: one request past the shared per-peer cap is refused",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
@@ -501,10 +502,13 @@ async function main() {
       hangResolvers = [];
       const peer = await a.connection.connectPeer("B");
       const held = [];
-      for (let i = 0; i < 32; i += 1) {
+      for (let i = 0; i < MAX_IN_FLIGHT_PER_PEER; i += 1) {
         held.push(peer.transport.invoke("test:hang", undefined));
       }
-      await waitFor(() => hangResolvers.length === 32, "the held dispatches");
+      await waitFor(
+        () => hangResolvers.length === MAX_IN_FLIGHT_PER_PEER,
+        "the held dispatches",
+      );
       await assert.rejects(
         () => peer.transport.invoke("test:hang", undefined),
         /too many in-flight/,
@@ -526,7 +530,7 @@ async function main() {
       hangResolvers = [];
       const peer1 = await a.connection.connectPeer("B");
       const held = [];
-      for (let i = 0; i < 32; i += 1) {
+      for (let i = 0; i < MAX_IN_FLIGHT_PER_PEER; i += 1) {
         // The old pairing is torn down on the re-connect, rejecting these;
         // the HOST's dispatches keep running (test:hang ignores the abort
         // signal) and hold the cap.
@@ -534,12 +538,15 @@ async function main() {
           peer1.transport.invoke("test:hang", undefined).catch(() => {}),
         );
       }
-      await waitFor(() => hangResolvers.length === 32, "the held dispatches");
+      await waitFor(
+        () => hangResolvers.length === MAX_IN_FLIGHT_PER_PEER,
+        "the held dispatches",
+      );
       // A hostile relay flaps A's presence as seen by B: it forges a
       // roster that drops A (which runs dropHostSession on B, aborting the
       // still-hanging dispatches) then one that re-adds A. If dropHostSession
       // zeroed the in-flight count this would reset B's cap for A, so the
-      // forged flap is the exact attack the fix defends against. The 32
+      // forged flap is the exact attack the fix defends against. The
       // hanging dispatches still count because they never settle on abort.
       stub.injectTo("B", { t: "presence", online: ["B"] });
       await delay(100);

@@ -127,6 +127,11 @@ const relayServer = createRelayConnection({
   isCommandGranted: isPeerCommandGranted,
 });
 
+// The two remote wires (LAN socket and relay), looped wherever a
+// channel or broadcast must reach both so a third wire lands in one
+// place.
+const remoteWires: readonly ServerTransport[] = [wsServer, relayServer.server];
+
 // Host-scoped calls are served on every wire that may carry them.
 // Client-scoped calls stay structurally unreachable over the socket
 // and the relay: their channels are never registered on either remote
@@ -150,15 +155,15 @@ const hostServer: ServerTransport = {
       // else (mutating, or untagged) is refused with the shared
       // command-refused code before its handler runs
       // (host/socket/server.ts).
-      wsServer.handle(channel, fn, { mutating: opts.mutating });
-      relayServer.server.handle(channel, fn, { mutating: opts.mutating });
+      for (const wire of remoteWires) {
+        wire.handle(channel, fn, { mutating: opts.mutating });
+      }
     }
   },
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
     if (opts?.remote === true) {
-      wsServer.broadcastAll(channel, payload);
-      relayServer.server.broadcastAll(channel, payload);
+      for (const wire of remoteWires) wire.broadcastAll(channel, payload);
     }
   },
 };
@@ -197,8 +202,7 @@ function pingRemoteViewers(): void {
       "externalChange",
       undefined,
     );
-    wsServer.broadcastAll(channel, parsed);
-    relayServer.server.broadcastAll(channel, parsed);
+    for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
   }, MUTATION_PING_MS);
 }
 

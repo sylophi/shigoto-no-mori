@@ -223,6 +223,24 @@ describe("presence", () => {
     b.socket.close();
     await a.socket.untilPresence(["dev-depart-a"]);
   });
+
+  it("rebroadcasts presence even when a client closes with a server-owned code", async () => {
+    // The close code on webSocketClose is the CLIENT's frame, so a
+    // client closing with the codes the server also uses (revoked,
+    // superseded) must still run the departure path. A guard on those
+    // codes once left such a device ghost-online in every peer's
+    // roster.
+    const a = await enrollAndConnect("acct-code", "dev-code-a");
+    await a.socket.untilPresence(["dev-code-a"]);
+    const b = await enrollAndConnect("acct-code", "dev-code-b");
+    await a.socket.untilPresence(["dev-code-a", "dev-code-b"]);
+    b.socket.ws.close(CLOSE_SUPERSEDED, "client picked this code");
+    await a.socket.untilPresence(["dev-code-a"]);
+    const c = await enrollAndConnect("acct-code", "dev-code-c");
+    await a.socket.untilPresence(["dev-code-a", "dev-code-c"]);
+    c.socket.ws.close(CLOSE_DEVICE_REVOKED, "client picked this code");
+    await a.socket.untilPresence(["dev-code-a"]);
+  });
 });
 
 describe("ticket storage bounds", () => {

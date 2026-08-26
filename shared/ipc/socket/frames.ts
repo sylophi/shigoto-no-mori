@@ -9,8 +9,9 @@
 // the registrar's `def.input.parse(undefined)` behaves exactly as it
 // does on the Electron wire.
 //
-// Frame size: an eventual internet relay will impose a per-frame limit
-// of about 1 MiB, which means chunking large res/push frames then.
+// Frame size: the relay imposes MAX_RELAY_MESSAGE_BYTES per message
+// (shared/relay/protocol.ts), so large res/push frames must chunk to
+// ride that wire.
 // The server caps INBOUND frames at 1 MiB (server.ts maxPayload). That
 // bound is about the hostile direction: client frames (hello, req) are
 // tiny, so a small ceiling denies a pre-auth peer a large buffering
@@ -33,6 +34,26 @@ export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // A shared two-sided protocol fact: slice B's client must send within
 // it. Tests override via WsServerStartOpts.helloTimeoutMs.
 export const HELLO_TIMEOUT_MS = 10_000;
+
+// Concurrent dispatched requests per connection, shared by the LAN
+// binding (per socket) and the relay link (per peer). Over the cap a
+// request is refused rather than spawning yet another git or CLI
+// subprocess. 64, raised from 32: each forwarded TCP connection parks a
+// long-poll in this budget (host/ipc/modules/forward.ts), so 32 starved
+// a peer's ordinary invokes once a forwarded browser tab and the forest
+// UI were active together.
+export const MAX_IN_FLIGHT_PER_PEER = 64;
+
+// Skip a push once the outbound socket buffer passes this, shared by
+// the LAN binding and the relay link, so a stalled peer or relay cannot
+// grow main-process memory without bound via queued pushes. Pushes are
+// recoverable refresh signals, so dropping one is safe.
+export const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
+
+// After a shutdown or owner close, how long a non-cooperating peer or a
+// stalled relay has before its socket is terminated, so it cannot wedge
+// a lifecycle queue for ws's ~30s close window.
+export const TERMINATE_GRACE_MS = 1_500;
 
 // Application close codes (the 4000-4999 range websockets reserve for
 // apps). AUTH_FAILED means the token was wrong: the client must

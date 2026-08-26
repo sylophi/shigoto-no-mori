@@ -8,18 +8,18 @@
 // the inner sm frame's `t` field: hello and req are requests TO us,
 // welcome, res and push are replies FOR us. One decoder, one switch.
 //
-// COMPROMISED-RELAY TRUST MODEL: the Durable Object is LESS trusted than
-// a LAN peer, see the TRUST MODEL note in protocol.ts. It sees all req
-// and res plaintext, it can forge the `from` on a deliver, forge or
-// replay a res or push, and lie about presence. The ignored hello token
-// is safe only because the DO already authenticated the account when it
-// burned the connect ticket, so every deliverable peer is by
-// construction a device of the same account. Frame integrity is NOT
-// verified in this slice. Per-device frame signing is the longer-term
-// mitigation. What this file does defend: a per-session epoch stamped on
-// every sm frame so a stale res or push from a prior peer pairing can
-// never be matched against a fresh one, a presence-roster gate on hello
-// so a forged `from` cannot allocate a host session, and per-peer caps.
+// TRUST MODEL (see also protocol.ts): the relay is our own managed
+// service. Enrollment is Clerk-verified, the per-device credential is
+// exchanged for short-lived connect tickets, so every deliverable peer
+// is by construction a device of the same account, which is why the
+// hello token is ignored here. Authorization is host-local: mutating
+// calls are gated on a per-peer command grant, and dispatch fails
+// closed (only channels explicitly classified read-only are served
+// ungranted). The remaining defenses are sanity bounds, not armor: a
+// per-session epoch stamped on every sm frame so a stale res or push
+// from a prior peer pairing is never matched against a fresh one, a
+// presence-roster gate on hello so a misrouted `from` cannot allocate a
+// host session, and per-peer size and in-flight caps.
 //
 // Pure on purpose: zod, the shared frame and envelope schemas, and an
 // injected send function. No node builtins, no ws, no electron, so the
@@ -34,13 +34,18 @@ import {
   COMMAND_REFUSED_MESSAGE,
   CommandRefusedError,
   HELLO_TIMEOUT_MS,
+  MAX_IN_FLIGHT_PER_PEER,
+  PUSH_BUFFER_LIMIT_BYTES,
   type PushFrame,
   type ReqFrame,
   type ServerFrame,
   ServerFrameSchema,
 } from "@shared/ipc/socket/frames";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
-import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import {
+  createSubscriberRegistry,
+  type SubscriberRegistry,
+} from "@shared/ipc/socket/subscriberRegistry";
 import type { DeviceConnection } from "@shared/ipc/socket/wsClientTransport";
 import type { HandlerContext } from "@shared/ipc/transport";
 import {
@@ -52,19 +57,11 @@ import {
   utf8ByteLength,
 } from "./protocol";
 
-// Concurrent dispatched requests per peer, mirroring the LAN binding's
-// per-socket cap so a chatty peer cannot spawn unbounded subprocesses.
-// The count is tracked per deviceId and survives both a re-hello and a
-// presence flap, so neither a peer re-helloing nor a hostile relay
-// dropping and re-adding that peer from presence can reset the cap while
-// old dispatches are still running.
-const MAX_IN_FLIGHT_PER_PEER = 32;
-
-// Skip a push once the outbound socket buffer passes this, mirroring the
-// LAN binding's PUSH_BUFFER_LIMIT_BYTES, so a stalled relay cannot grow
-// main-process memory without bound via queued pushes. Pushes are
-// recoverable refresh signals, so dropping one is safe.
-const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
+// The per-peer in-flight and push-backpressure bounds are the shared
+// wire caps in frames.ts, one source with the LAN binding. The
+// in-flight count is tracked per deviceId and survives both a re-hello
+// and a presence flap, so neither a peer re-helloing nor a flapping
+// roster can reset the cap while old dispatches are still running.
 
 // The inner frame union both roles decode from a delivered envelope.
 const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
@@ -207,7 +204,7 @@ type ClientPeer = {
   epoch: number;
   nextId: number;
   pending: Map<number, PendingCall>;
-  subscribers: ReturnType<typeof createSubscriberRegistry>;
+  subscribers: SubscriberRegistry;
   // Non-null once the peer's welcome landed. remoteAppVersion is
   // informational; the peer identity is the DIALED deviceId, never the
   // welcome's self-asserted one (M5).
@@ -258,9 +255,9 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
   let droppedPushes = 0;
   let droppedInbound = 0;
 
-  // Throttled warn for the hostile inbound paths (forged/unparseable
-  // frames, un-helloed or off-roster peers), so a flood cannot spam the
-  // log the way an unthrottled warn per drop would.
+  // Throttled warn for the dropped inbound paths (unparseable frames,
+  // off-roster peers), so a flood cannot spam the log the way an
+  // unthrottled warn per drop would.
   function warnDrop(message: string): void {
     droppedInbound += 1;
     if (droppedInbound % 50 === 1) {
@@ -333,17 +330,32 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     }
   }
 
-  // Answers a caller is awaiting (welcome, res). A send failure here is
-  // logged, not thrown: the peer's side times out or sees the
-  // disconnect, exactly as it would on a dead LAN socket.
-  function sendAnswer(to: string, frame: ServerFrame, epoch: number): void {
+  // The one send path for pre-encoded answers a caller is awaiting
+  // (welcome, res). A send failure here is logged, not thrown: the
+  // peer's side times out or sees the disconnect, exactly as it would
+  // on a dead LAN socket.
+  function sendAnswerText(to: string, text: string): void {
     try {
-      sendFrameToPeer(to, frame, epoch);
+      deps.send(text);
     } catch (error) {
       console.warn(
         `[relay] failed to answer ${truncateId(to)}: ${errorMessageOf(error)}`,
       );
     }
+  }
+
+  // The frame form of sendAnswerText. Everything answered through here
+  // is tiny (welcomes, ok:false messages), so the size guard is a
+  // backstop folded into the same warn, never an expected path.
+  function sendAnswer(to: string, frame: ServerFrame, epoch: number): void {
+    const { sendText, fits } = relayFrameTexts(to, frame, epoch);
+    if (!fits) {
+      console.warn(
+        `[relay] failed to answer ${truncateId(to)}: answer exceeds the relay message limit`,
+      );
+      return;
+    }
+    sendAnswerText(to, sendText);
   }
 
   // Kill one client peer. fireClose distinguishes the peer dying on its
@@ -526,26 +538,28 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       );
       return;
     }
-    try {
-      deps.send(encoded.sendText);
-    } catch (error) {
-      console.warn(
-        `[relay] failed to answer ${truncateId(from)}: ${errorMessageOf(error)}`,
-      );
-    }
+    sendAnswerText(from, encoded.sendText);
   }
 
   function handleReq(from: string, frame: ReqFrame, epoch: number): void {
     const session = hostSessions.get(from);
-    if (session === undefined) {
-      // A req before hello is a protocol violation. There is no socket
-      // of theirs to close here, so it is dropped with a throttled log.
-      warnDrop(`dropping req from un-helloed peer ${truncateId(from)}`);
-      return;
-    }
-    if (epoch !== session.epoch) {
-      // A stale req from a prior pairing, arriving after a re-hello.
-      warnDrop(`dropping stale-epoch req from ${truncateId(from)}`);
+    if (session === undefined || epoch !== session.epoch) {
+      // A req with no live session: before any hello, or stamped with a
+      // prior pairing's epoch after a re-hello. A roster peer is a real
+      // device whose invoke would otherwise hang forever (there is no
+      // per-call timeout), so it gets a terminal ok:false stamped with
+      // its own epoch, which its client accepts only while that pairing
+      // is still current. An off-roster `from` is a misrouted or
+      // spoofable routing field, so it stays a silent throttled drop.
+      if (online.has(from)) {
+        sendAnswer(
+          from,
+          { t: "res", id: frame.id, ok: false, message: "no live session" },
+          epoch,
+        );
+      } else {
+        warnDrop(`dropping req from off-roster peer ${truncateId(from)}`);
+      }
       return;
     }
     const inFlight = hostInFlight.get(from) ?? 0;

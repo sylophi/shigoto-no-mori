@@ -9,9 +9,13 @@
 // or account flavored (deviceId, appVersion, accountId, the
 // credential-backed ticket mint) arrives through RelayConnectOpts, which
 // main composes.
-import { type RawData, WebSocket } from "ws";
+import { WebSocket } from "ws";
 import { errorMessageOf } from "@shared/errors";
-import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
+import {
+  HELLO_TIMEOUT_MS,
+  TERMINATE_GRACE_MS,
+} from "@shared/ipc/socket/frames";
+import { toText } from "@host/socket/rawData";
 import {
   type DeviceConnection,
   RemoteConnectError,
@@ -48,10 +52,8 @@ import { createLimiter } from "@shared/util/limit";
 // ws accept (the first presence envelope). Named rather than a bare knob
 // because the relay has one honest value here, HELLO_TIMEOUT_MS.
 const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
-// After an owner close, how long a stalled relay has before its socket
-// is terminated, so a compromised relay that stalls the close handshake
-// cannot keep the socket (and its handlers) alive for ws's ~30s window.
-const TERMINATE_GRACE_MS = 1_500;
+// The post-close terminate grace is the shared TERMINATE_GRACE_MS wire
+// cap in frames.ts, one source with the LAN listener's shutdown path.
 
 // Re-exported so existing importers keep resolving the option and status
 // shapes from this module while the one definition lives in shared/ for
@@ -126,12 +128,6 @@ function sameOpts(a: RelayConnectOpts, b: RelayConnectOpts): boolean {
     a.deviceId === b.deviceId &&
     a.appVersion === b.appVersion
   );
-}
-
-function toText(data: RawData): string {
-  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
-  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
-  return data.toString("utf8");
 }
 
 export function createRelayConnection(

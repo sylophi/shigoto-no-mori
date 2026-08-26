@@ -1,11 +1,11 @@
 // A push-subscriber registry: a keyed set of handlers with add, an
 // unsubscribe that deletes an empty set, and a fan-out that isolates a
 // throwing handler so one bad subscriber cannot stop delivery to the
-// rest. Written once here because three transports need the identical
+// rest. Written once here because four transports need the identical
 // bookkeeping (the LAN client transport, the relay link's per-peer
-// subscribers, and the renderer's relay transport), and one copy had
-// drifted without the try/catch that keeps a throwing subscriber from
-// halting the loop.
+// subscribers, the renderer's relay transport, and the web bridge's
+// loopback), and one copy had drifted without the try/catch that keeps
+// a throwing subscriber from halting the loop.
 //
 // Pure on purpose: it knows nothing about sockets or the wire. The
 // caller keys by whatever it likes, a bare channel on the LAN and relay

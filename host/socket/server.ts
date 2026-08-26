@@ -21,7 +21,7 @@
 // listener needs (appVersion) arrive through start opts instead.
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
-import { type RawData, WebSocket, WebSocketServer } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
@@ -35,12 +35,16 @@ import {
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
+  MAX_IN_FLIGHT_PER_PEER,
   MAX_INBOUND_FRAME_BYTES,
+  PUSH_BUFFER_LIMIT_BYTES,
   type ReqFrame,
   type ServerFrame,
+  TERMINATE_GRACE_MS,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
+import { toText } from "./rawData";
 
 export type WsServerStartOpts = {
   port: number;
@@ -93,16 +97,9 @@ const MAX_CONNECTIONS = 64;
 // Un-welcomed sockets held at once. A separate, tighter cap so a flood
 // of connections that never say hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
-// Concurrent dispatched requests per socket. Over this a request is
-// refused rather than spawning yet another git or CLI subprocess.
-const MAX_IN_FLIGHT_PER_SOCKET = 32;
-// Skip a push once a socket's outbound buffer passes this, so a stalled
-// peer watching verbose output cannot grow main-process memory without
-// bound. Pushes are recoverable refresh signals.
-const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
-// After a shutdown close, how long a non-cooperating peer has before it
-// is terminated, so it cannot wedge the lifecycle queue for ~30s.
-const TERMINATE_GRACE_MS = 1_500;
+// The in-flight, push-backpressure and terminate-grace bounds are the
+// shared wire caps in frames.ts, so this binding and the relay link
+// cannot drift apart on them.
 // Let a rejection's close frame flush before the socket is destroyed,
 // so the peer sees the code. The dead flag already blocks any frame
 // arriving in this gap, so correctness does not depend on the delay.
@@ -145,12 +142,6 @@ export function isAllowedOrigin(origin: string | undefined): boolean {
   } catch {
     return false;
   }
-}
-
-function toText(data: RawData): string {
-  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
-  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
-  return data.toString("utf8");
 }
 
 // Unconditional send for res and welcome frames: these are answers a
@@ -201,18 +192,28 @@ export function createWsServerBinding(): WsServerBinding {
   function isLockedOut(ip: string): boolean {
     const entry = failedAuth.get(ip);
     if (entry === undefined) return false;
-    if (entry.until > Date.now()) return true;
-    // Lockout elapsed: forget so a later genuine attempt starts clean.
-    if (entry.until !== 0) failedAuth.delete(ip);
-    return false;
+    if (entry.until <= Date.now()) {
+      // The window elapsed, whether the entry ever reached the limit or
+      // not: forget it so a later genuine attempt starts clean.
+      failedAuth.delete(ip);
+      return false;
+    }
+    return entry.count >= AUTH_FAILURE_LIMIT;
   }
 
   function recordAuthFailure(ip: string): void {
+    const now = Date.now();
+    // Every failure stamps an expiry, so an IP that fails a few times
+    // and never returns cannot leave a permanent entry, and expired
+    // entries are pruned here so the map stays bounded by the IPs seen
+    // within one window. Locked means count over the limit AND a live
+    // window.
+    for (const [key, entry] of failedAuth) {
+      if (entry.until <= now) failedAuth.delete(key);
+    }
     const entry = failedAuth.get(ip) ?? { count: 0, until: 0 };
     entry.count += 1;
-    if (entry.count >= AUTH_FAILURE_LIMIT) {
-      entry.until = Date.now() + AUTH_LOCKOUT_MS;
-    }
+    entry.until = now + AUTH_LOCKOUT_MS;
     failedAuth.set(ip, entry);
   }
 
@@ -443,7 +444,7 @@ export function createWsServerBinding(): WsServerBinding {
           console.warn("[socket] dropping unparseable frame");
           return;
         }
-        if (inFlight >= MAX_IN_FLIGHT_PER_SOCKET) {
+        if (inFlight >= MAX_IN_FLIGHT_PER_PEER) {
           send(socket, {
             t: "res",
             id: frame.id,

@@ -19,9 +19,9 @@ const POLL_WAIT_MS = 10_000;
 const CONN_IDLE_MS = 10 * 60_000;
 // Grant-gated already (a trusted peer), so the cap is a sanity bound
 // against a runaway client loop, not a quota. It must sit well under
-// the relay's MAX_IN_FLIGHT_PER_PEER = 32 (shared/relay/link.ts):
-// each conn parks a long-poll in one of the peer's 32 shared in-flight
-// slots, so a cap near that starves the peer's ordinary UI invokes.
+// MAX_IN_FLIGHT_PER_PEER = 64 (shared/ipc/socket/frames.ts): each conn
+// parks a long-poll in one of the peer's shared in-flight slots, so a
+// cap near that starves the peer's ordinary UI invokes.
 const MAX_CONNS = 8;
 // How long a dial may sit unanswered before the open refuses.
 const DIAL_TIMEOUT_MS = 5_000;
