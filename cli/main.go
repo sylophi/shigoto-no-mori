@@ -69,6 +69,14 @@ var worktreeItems = []helpItem{
 		"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
 	{"worktrees setup [<name>]", "Re-run the setup script",
 		"Also re-provisions the port-pool port."},
+	{"worktrees dirty <capture|apply> [<name>] [-f]", "Snapshot or restore uncommitted changes",
+		"The device-sync primitive. capture commits the worktree's dirty state -- untracked files " +
+			"included, ignored files excluded, staged and unstaged flattened together -- to a hidden " +
+			"ref (refs/shigomori/dirty/<id>, one per worktree, overwritten each time) without touching " +
+			"the real index; on a clean worktree it just removes any stale capture. apply restores a " +
+			"capture, unstaged, onto a clean worktree whose HEAD matches the capture's parent, then " +
+			"deletes the ref. -f skips apply's clean check only. git still refuses where local changes " +
+			"overlap the capture, and a HEAD mismatch always refuses (sync the branch first)."},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. With no tool, shows the row as a menu."},
@@ -406,6 +414,7 @@ var commands = []command{
 	{name: "land", worktree: true, run: cmdLand},
 	{name: "adopt", worktree: true, run: cmdAdopt},
 	{name: "setup", worktree: true, run: cmdSetup},
+	{name: "dirty", worktree: true, run: cmdDirty},
 	{name: "shelve", worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, true) }},
 	{name: "unshelve", worktree: true,

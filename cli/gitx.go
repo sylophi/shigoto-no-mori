@@ -28,10 +28,21 @@ const unknownBranch = "(unknown)"
 var gitSlots = make(chan struct{}, max(4, runtime.NumCPU()))
 
 func runGit(cwd string, args ...string) (string, error) {
+	return runGitEnv(cwd, nil, args...)
+}
+
+// runGit with per-call extra environment entries appended to the
+// inherited one (the dirty-state capture points GIT_INDEX_FILE at a
+// temporary index). LC_ALL=C pins git's messages to English on every
+// spawn: removeWorktreeForce matches "Directory not empty" on stderr,
+// which gettext would otherwise translate. The TS twin pins it in
+// host/lib/git/core.ts for the same reason.
+func runGitEnv(cwd string, extraEnv []string, args ...string) (string, error) {
 	gitSlots <- struct{}{}
 	defer func() { <-gitSlots }()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = cwd
+	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), extraEnv...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -291,7 +302,22 @@ func changedCount(worktreePath string) (int, error) {
 // display probes and the destructive-op guards can never read the
 // working tree differently.
 func statusEntries(worktreePath string) ([]statusEntry, error) {
-	stdout, err := runGit(worktreePath, "status", "--porcelain=v1", "-z")
+	return porcelainStatus(worktreePath)
+}
+
+// statusEntries pinning --untracked-files=normal, for guards ahead of
+// a working-tree overwrite (dirty apply): those must see untracked
+// files even where the user configured `status.showUntrackedFiles no`,
+// because the overwrite would destroy them (same rationale as
+// overwriteFromUpstream in host/lib/git/sync.ts). statusEntries
+// deliberately doesn't pin it -- `-uno` is a setting people choose to
+// make the display probes cheap.
+func statusEntriesUntracked(worktreePath string) ([]statusEntry, error) {
+	return porcelainStatus(worktreePath, "--untracked-files=normal")
+}
+
+func porcelainStatus(worktreePath string, extra ...string) ([]statusEntry, error) {
+	stdout, err := runGit(worktreePath, append([]string{"status", "--porcelain=v1", "-z"}, extra...)...)
 	if err != nil {
 		return nil, err
 	}
