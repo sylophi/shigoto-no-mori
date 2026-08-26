@@ -125,6 +125,28 @@ function tokenMatches(given: string, expected: string): boolean {
   return timingSafeEqual(digest(given), digest(expected));
 }
 
+// Origin pre-filter for the upgrade, NOT the security boundary: the
+// hello token is what actually authenticates a peer (a bad token
+// terminates the socket). Legitimate clients are node and main-process
+// sockets, which send no Origin, plus the app's own renderer, whose
+// browser-global WebSocket always sends one: "file://" from the
+// packaged app's loadFile page, a loopback http origin from the vite
+// dev server. Anything else is a drive-by browser page, refused before
+// it can even attempt a hello.
+export function isAllowedOrigin(origin: string | undefined): boolean {
+  if (origin === undefined) return true;
+  if (origin === "file://") return true;
+  try {
+    const url = new URL(origin);
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1")
+    );
+  } catch {
+    return false;
+  }
+}
+
 function toText(data: RawData): string {
   if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
   if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
@@ -458,12 +480,12 @@ export function createWsServerBinding(): WsServerBinding {
         // tiny, so a small ceiling costs nothing and denies a hostile
         // peer a large buffer. Outbound frames are unaffected.
         maxPayload: MAX_INBOUND_FRAME_BYTES,
-        // Origin gate: browsers always send Origin on a websocket
-        // handshake, the legitimate node and Electron clients never do.
-        // Refusing any Origin-bearing upgrade closes cross-site
-        // websocket hijacking from a drive-by page.
+        // Origin gate: no Origin (node and main-process clients) or
+        // one of the app's own renderer origins passes, anything else
+        // is refused. See isAllowedOrigin for why this is a coarse
+        // pre-filter and the hello token is the real auth.
         verifyClient: (info: { req: IncomingMessage }) =>
-          info.req.headers.origin === undefined,
+          isAllowedOrigin(info.req.headers.origin),
       });
       attach(wss, opts, generation);
       const onBindError = (error: Error) => {
