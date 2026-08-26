@@ -67,6 +67,17 @@ pre-commit:
     web-relay:
       glob: "{web/**,shared/relay/**,shared/remote/**,shared/util/limit.ts,scripts/check-web-relay.mjs}"
       run: pnpm run web:relay:check
+    # Drives the web client's window.api bridge headlessly: the surface
+    # parity against buildApi (so renderer components mount unmodified),
+    # the localStorage-backed clientConfig and credential stores, the
+    # stable per-browser deviceId, the redirect login flow's PKCE and
+    # state discipline plus the enroll fields (platform "web"), the
+    # sign-out revoke, the schema-derived stubs for OS-bound channels,
+    # and the typed unconfigured/origin-blocked access states that keep
+    # a misconfigured deployment from looping the relay supervisor.
+    web-bridge:
+      glob: "{web/**,shared/account/**,scripts/check-web-bridge.mjs}"
+      run: pnpm run web:bridge:check
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,

@@ -93,6 +93,9 @@ typings/
 .vite/
 dist/
 
+# Web client build output (vite.web.config.ts)
+dist-web/
+
 # Synced from node_modules/material-icon-theme by
 # scripts/copy-material-icons.mjs (postinstall). Vite serves public/ as a
 # static asset root, which avoids the 1238 per-icon ESM wrappers an eager
