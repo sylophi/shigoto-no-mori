@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
+import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/relay/protocol";
 
 // Client-scoped control surface for the port-forward engine (v2 step 8,
@@ -12,10 +13,10 @@ import { DeviceIdSchema } from "@shared/relay/protocol";
 // browser cannot bind a local port, so the feature is app-only and the
 // UI additionally gates itself on window.api.isElectron.
 
-// forwardIds are engine-minted (16 random bytes, hex), pinned to that
-// shape for the same reason forward.ts pins connIds: a caller can only
-// name a forward it was told about.
-const ForwardIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
+// forwardIds are engine-minted (shared/ipc/hexId.ts pins the shape)
+// for the same reason forward.ts pins connIds: a caller can only name
+// a forward it was told about.
+const ForwardIdSchema = HexId32Schema;
 
 // Exported so the UI's port-input parsing shares this exact bound
 // instead of restating 1..65535.

@@ -1,9 +1,8 @@
 // Host side of the device-sync transfer plumbing: bundles are built by
 // the CLI into a host-owned temp file and streamed out as chunked
-// invoke responses. The transfer registry is a plain in-memory Map in
-// this (host/main) process -- transfers are ephemeral by design, so
-// nothing survives a restart and nothing is persisted.
-import { randomBytes } from "node:crypto";
+// invoke responses. The transfer registry rides the shared idle
+// registry (host/lib/idleRegistry.ts) -- transfers are ephemeral by
+// design, so nothing survives a restart and nothing is persisted.
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,6 +24,8 @@ import {
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
+import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { run } from "@host/lib/git/core";
 import { listBranches } from "@host/lib/git/branches";
 import {
@@ -40,25 +41,13 @@ import {
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { notifierFor } from "./worktrees";
 
-// Raw bytes per chunk. The relay caps the SERIALIZED envelope at
-// MAX_RELAY_MESSAGE_BYTES = 1_000_000 (shared/relay/protocol.ts), and
-// chunk data rides as base64 inside a JSON res frame inside the relay
-// envelope: 640_000 raw bytes -> ceil(640_000/3)*4 = 853_336 base64
-// chars, leaving ~146 KB of headroom for the frame and envelope
-// fields (tens of bytes in practice) -- comfortably under the cap
-// without shaving the margin thin.
-export const SYNC_CHUNK_BYTES = 640_000;
-
 // A registered transfer: the bundle file (inside its own mkdtemp dir,
-// 0700, so the data is no more readable than the repo it came from)
-// and a last-touched stamp for the idle sweep.
-type Transfer = { dir: string; path: string; bytes: number; touched: number };
+// 0700, so the data is no more readable than the repo it came from).
+type Transfer = { dir: string; path: string; bytes: number };
 
-const transfers = new Map<string, Transfer>();
-
-// One idle sweep is the entire lifecycle bookkeeping: a receiver that
-// vanished mid-transfer (crash, network) leaks at most one temp file
-// for TRANSFER_IDLE_MS. Grant-gated already, so no per-peer quotas.
+// The idle sweep is the entire lifecycle bookkeeping (see the
+// idleRegistry header): a receiver that vanished mid-transfer (crash,
+// network) leaks at most one temp file for the idle window.
 //
 // Two accepted caveats, both by design, neither worth machinery here:
 //   - A hard crash of THIS process skips the sweep entirely, so its
@@ -68,36 +57,16 @@ const transfers = new Map<string, Transfer>();
 //     while actively chunking them. That is grant-gated (a trusted
 //     peer), so there is deliberately no size or count quota.
 const TRANSFER_IDLE_MS = 10 * 60_000;
-let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
-function ensureSweep(): void {
-  if (sweepTimer !== null) return;
-  sweepTimer = setInterval(() => {
-    const now = Date.now();
-    for (const [id, transfer] of transfers) {
-      if (now - transfer.touched > TRANSFER_IDLE_MS) void dropTransfer(id);
-    }
-    if (transfers.size === 0 && sweepTimer !== null) {
-      clearInterval(sweepTimer);
-      sweepTimer = null;
-    }
-  }, 60_000);
-  // Never hold the process open for housekeeping.
-  sweepTimer.unref?.();
-}
-
-async function dropTransfer(transferId: string): Promise<void> {
-  const transfer = transfers.get(transferId);
-  if (transfer === undefined) return;
-  // Forget the entry first, unconditionally: the Map must shrink even if
-  // the unlink loses a race. rm({force:true}) swallows ENOENT but still
-  // throws on EPERM/EBUSY, and this runs from a void'd call on the idle
-  // sweep timer, where a rejection would be an unhandled rejection that
-  // takes down the main process. Best-effort cleanup, so swallow it: the
-  // worst case is a temp dir the OS reclaims later.
-  transfers.delete(transferId);
-  await rm(transfer.dir, { recursive: true, force: true }).catch(() => {});
-}
+const transfers = createIdleRegistry<Transfer>({
+  idleMs: TRANSFER_IDLE_MS,
+  // Best-effort cleanup: rm({force:true}) swallows ENOENT but still
+  // throws on EPERM/EBUSY, and a drop can run void'd from the sweep
+  // timer, so swallow the rejection -- the worst case is a temp dir
+  // the OS reclaims later.
+  onDrop: (transfer) =>
+    rm(transfer.dir, { recursive: true, force: true }).catch(() => {}),
+});
 
 export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   refTips: async ({ projectId, refs }) => {
@@ -131,15 +100,13 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     try {
       const path = join(dir, "transfer.bundle");
       const created = await bundleCreateViaCli(project, path, refs, haves);
-      const transferId = randomBytes(16).toString("hex");
-      transfers.set(transferId, {
-        dir,
-        path,
-        bytes: created.bytes,
-        touched: Date.now(),
-      });
-      ensureSweep();
-      return { transferId, bytes: created.bytes, refs: created.refs };
+      // Only the transfer handle and the byte count travel back. The
+      // CLI also reports the refs it resolved, but that list is
+      // computed against the repo AFTER `git bundle create` silently
+      // dropped any have-covered ref, so it can name refs the bundle
+      // lacks -- and no consumer reads it.
+      const transferId = transfers.mint({ dir, path, bytes: created.bytes });
+      return { transferId, bytes: created.bytes };
     } catch (error) {
       await rm(dir, { recursive: true, force: true });
       throw error;
@@ -148,21 +115,20 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   bundleChunk: async ({ transferId, offset }) => {
     const transfer = transfers.get(transferId);
-    // Stable marker, not prose: the id resolves to no live transfer,
-    // which after a valid start means it was dropped (eof-finished or
-    // idle-swept), NOT a malformed request. Electron IPC only preserves
-    // the message string, so slice C distinguishes "expired, restart the
-    // transfer" from a real failure by matching this exact text. Keep it
-    // in sync with the checks that assert on /unknown transfer/.
-    if (transfer === undefined) throw new Error("unknown transfer");
-    transfer.touched = Date.now();
+    // Stable marker, not prose, matching the wire's hyphenated marker
+    // family (unknown-conn, conn-closed): the id resolves to no live
+    // transfer, which after a valid start means it was dropped
+    // (eof-finished or idle-swept), NOT a malformed request. Asserted
+    // by the sync check; no client branches on it yet.
+    if (transfer === undefined) throw new Error("unknown-transfer");
+    transfers.touch(transferId);
     // Clamp: the schema pinned offset to a nonnegative int, so the only
     // remaining bad shape is past-the-end, which reads zero bytes.
     const remaining = Math.max(
       0,
       transfer.bytes - Math.min(offset, transfer.bytes),
     );
-    const length = Math.min(SYNC_CHUNK_BYTES, remaining);
+    const length = Math.min(RELAY_CHUNK_BYTES, remaining);
     let data = Buffer.alloc(0);
     if (length > 0) {
       const handle = await open(transfer.path, "r");
@@ -175,15 +141,15 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       }
     }
     const eof = offset + data.length >= transfer.bytes;
-    if (eof) await dropTransfer(transferId);
+    if (eof) await transfers.drop(transferId);
     return { dataB64: data.toString("base64"), eof };
   },
 
   // Idempotent and non-throwing: aborting an unknown or already-finished
-  // transfer is a no-op, and dropTransfer swallows rm failures, so a
-  // receiver's best-effort cleanup resolves regardless of the outcome.
+  // transfer is a no-op, and the drop callback swallows rm failures, so
+  // a receiver's best-effort cleanup resolves regardless of the outcome.
   bundleAbort: async ({ transferId }) => {
-    await dropTransfer(transferId);
+    await transfers.drop(transferId);
   },
 
   pullWorktree: runPullWorktree,
@@ -259,8 +225,11 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 // state -> land branch + capture under refs/shigomori/ -> create the
 // worktree through the ordinary CLI create (carry-over and setup ride
 // along) -> re-key and apply the capture -> sweep the incoming ref.
-// The incoming ref is swept in a finally: a survivor is NOT harmless,
-// since a stale refs/shigomori/incoming/foo blocks any later ref named
+// The incoming ref is swept in a finally that opens BEFORE the fetch:
+// the CLI's bundle unpack runs one non-atomic git fetch over several
+// refspecs, so a partial fetch can land the incoming ref and then
+// throw, and a survivor is NOT harmless -- a stale
+// refs/shigomori/incoming/foo blocks any later ref named
 // incoming/foo/bar at git's directory/file boundary. A failure before
 // the create leaves at most the capture ref (a retry overwrites it).
 // After the create, an apply failure resolves with dirtyApplied:false
@@ -323,25 +292,25 @@ async function runPullWorktree(
     ...(tipIsLocal ? [] : [branchRef]),
     ...(capture.captured ? [sourceDirtyRef] : []),
   ];
-  if (wantRefs.length > 0) {
-    await fetchBundleFromPeer(peer, {
-      sourceProjectId,
-      targetProjectId: project.id,
-      refs: wantRefs,
-      // With the tip local the only novel commit is the capture, so
-      // the tip itself is the perfect (and safe) have. Otherwise every
-      // local branch tip thins the bundle, and none can cover the
-      // branch tip: covering it would mean we already hold it. The
-      // exception is a shallow clone, where a have can cover a tip
-      // hasCommit said we lack, and that surfaces as a loud bundle error
-      // before anything is mutated, never as silent corruption.
-      haves: tipIsLocal ? [branchTip] : await localBranchTips(project.path),
-    });
-  }
   const incomingRef = `refs/shigomori/incoming/${branch}`;
-  if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
-
   try {
+    if (wantRefs.length > 0) {
+      await fetchBundleFromPeer(peer, {
+        sourceProjectId,
+        targetProjectId: project.id,
+        refs: wantRefs,
+        // With the tip local the only novel commit is the capture, so
+        // the tip itself is the perfect (and safe) have. Otherwise every
+        // local branch tip thins the bundle, and none can cover the
+        // branch tip: covering it would mean we already hold it. The
+        // exception is a shallow clone, where a have can cover a tip
+        // hasCommit said we lack, and that surfaces as a loud bundle error
+        // before anything is mutated, never as silent corruption.
+        haves: tipIsLocal ? [branchTip] : await localBranchTips(project.path),
+      });
+    }
+    if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
+
     // 5. The ordinary create, on a new branch at the incoming ref.
     // checkout stays UNSET: checkout:true would leave the worktree ON
     // the incoming ref instead of the new branch. resolveOn "exit"
@@ -355,21 +324,24 @@ async function runPullWorktree(
     );
 
     // 6. Capture refs are keyed by worktree id, and ids are derived
-    // from paths (sha256(path)[:12]), so the source's id can never
-    // name the worktree just created. Re-key the ref to the local id,
-    // then apply and let the CLI consume it. An apply refusal (a
-    // setup script left an untracked file, say) does NOT throw away
-    // the successful create: the worktree is real, the capture stays
-    // parked under the local id for sm dirty apply, and the caller
-    // learns via dirtyApplied:false.
+    // from paths (sha256(path)[:12]), so the source's id names the
+    // worktree just created only when both devices minted the SAME
+    // managed path (root/worktrees/<project>/<name> with the name from
+    // a shared pool) -- rare, but real across same-username machines.
+    // Re-key the ref to the local id, then apply and let the CLI
+    // consume it. On that collision the re-key is a no-op and the
+    // delete below is skipped, or it would discard the capture it just
+    // parked. An apply refusal (a setup script left an untracked file,
+    // say) does NOT throw away the successful create: the worktree is
+    // real, the capture stays parked under the local id for sm dirty
+    // apply, and the caller learns via dirtyApplied:false.
     let dirtyApplied = false;
     if (capture.captured && capture.commit !== undefined) {
-      await updateRef(
-        project.path,
-        `refs/shigomori/dirty/${worktree.id}`,
-        capture.commit,
-      );
-      await deleteRef(project.path, sourceDirtyRef);
+      const localDirtyRef = `refs/shigomori/dirty/${worktree.id}`;
+      await updateRef(project.path, localDirtyRef, capture.commit);
+      if (localDirtyRef !== sourceDirtyRef) {
+        await deleteRef(project.path, sourceDirtyRef);
+      }
       try {
         await dirtyApplyViaCli(project, worktree.id);
         dirtyApplied = true;

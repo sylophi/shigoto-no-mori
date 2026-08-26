@@ -10,13 +10,6 @@ import type { Client } from "@shared/ipc/types";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
 import { findProjectOrThrow } from "@host/lib/projects";
 
-// The transfer slice of a peer's sync client -- window.api-shaped
-// device apis and a bare contract client both satisfy it.
-export type PeerSyncApi = Pick<
-  Client<typeof syncContract>,
-  "bundleStart" | "bundleChunk" | "bundleAbort"
->;
-
 export interface FetchBundleInput {
   // The project id on the PEER (ids differ per device registry;
   // identity matching across devices is the orchestration's job).
@@ -44,9 +37,15 @@ function landingRefspec(ref: string): string {
 
 // Sequential chunk loop (one request in flight), abort on any error
 // (best effort -- the host's idle sweep is the backstop), temp file
-// always removed.
+// always removed. The peer parameter is the transfer slice of a peer's
+// sync client (a subset of host/ipc/peerSync.ts's PeerSyncApi) --
+// window.api-shaped device apis and a bare contract client both
+// satisfy it.
 export async function fetchBundleFromPeer(
-  peer: PeerSyncApi,
+  peer: Pick<
+    Client<typeof syncContract>,
+    "bundleStart" | "bundleChunk" | "bundleAbort"
+  >,
   input: FetchBundleInput,
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
   const project = findProjectOrThrow(input.targetProjectId);

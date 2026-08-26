@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdSchema } from "@shared/relay/protocol";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { ChunkB64Schema, DeviceIdSchema } from "@shared/relay/protocol";
 import {
   CommitHashSchema,
   GitRefNameSchema,
@@ -15,6 +16,12 @@ import {
 // transfer verb (refTips through bundleAbort) is {remote:true,
 // mutating:true}, so that whole surface rides the per-peer command
 // grant -- and the LAN wire, read-only by policy, refuses it outright.
+// The transfer verbs also set movesHostState:false: serving a transfer
+// moves no state a remote viewer caches, and without the opt-out every
+// chunk resolution of a multi-minute pull would fire the registrar's
+// cache ping (git:externalChange to every viewing peer). captureDirty
+// is the exception and KEEPS the ping -- it writes a capture ref, real
+// host state.
 // Responses to awaited invokes are reliable on the relay link (pushes
 // are droppable), which is why the transfer is invoke/response only.
 //
@@ -49,10 +56,10 @@ export const SyncBundleRefSchema = z
     message: "Ref outside the sync allowlist",
   });
 
-// transferIds are host-minted (16 random bytes, hex), so the schema
-// pins exactly that shape: a peer can only replay an id it was given,
-// never probe with crafted ones.
-const TransferIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
+// transferIds are host-minted (shared/ipc/hexId.ts pins the shape), so
+// a peer can only replay an id it was given, never probe with crafted
+// ones.
+const TransferIdSchema = HexId32Schema;
 
 export const SyncRefTipSchema = z.strictObject({
   ref: SyncBundleRefSchema,
@@ -110,12 +117,11 @@ export type SyncCaptureDirtyResult = z.infer<
 export const SyncBundleStartResultSchema = z.strictObject({
   transferId: TransferIdSchema,
   bytes: z.number().int().nonnegative(),
-  refs: z.array(SyncRefTipSchema),
 });
 export type SyncBundleStartResult = z.infer<typeof SyncBundleStartResultSchema>;
 
 export const SyncBundleChunkResultSchema = z.strictObject({
-  dataB64: z.string(),
+  dataB64: ChunkB64Schema,
   eof: z.boolean(),
 });
 
@@ -173,8 +179,10 @@ export const syncContract = defineContract("host", {
     SyncRefTipsResultSchema,
     // A read, but it discloses repo state, so it rides the command
     // grant with the rest of the transfer surface.
-    { remote: true, mutating: true },
+    { remote: true, mutating: true, movesHostState: false },
   ),
+  // Writes a capture ref, so unlike the transfer verbs around it this
+  // one KEEPS the viewer cache ping (no movesHostState opt-out).
   captureDirty: invoke(
     "sync:captureDirty",
     SyncCaptureDirtyPayloadSchema,
@@ -185,7 +193,7 @@ export const syncContract = defineContract("host", {
     "sync:bundleStart",
     SyncBundleStartPayloadSchema,
     SyncBundleStartResultSchema,
-    { remote: true, mutating: true },
+    { remote: true, mutating: true, movesHostState: false },
   ),
   bundleChunk: invoke(
     "sync:bundleChunk",
@@ -193,16 +201,13 @@ export const syncContract = defineContract("host", {
     SyncBundleChunkResultSchema,
     // Reads a host temp file, but it rides the command grant with the
     // rest of the transfer surface: chunk data is repo content.
-    { remote: true, mutating: true },
+    { remote: true, mutating: true, movesHostState: false },
   ),
   bundleAbort: invoke(
     "sync:bundleAbort",
     SyncBundleAbortPayloadSchema,
     z.void(),
-    {
-      remote: true,
-      mutating: true,
-    },
+    { remote: true, mutating: true, movesHostState: false },
   ),
   // The local orchestrator (see the header note): remote:false keeps
   // it off every remote wire, mutating:true documents intent and keeps

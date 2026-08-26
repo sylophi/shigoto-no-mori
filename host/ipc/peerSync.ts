@@ -10,8 +10,8 @@ import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
 
-// The remote verbs the orchestration drives. Superset of
-// fetchBundleFromPeer's PeerSyncApi, so one client serves both.
+// The remote verbs the orchestration drives. Superset of the transfer
+// slice fetchBundleFromPeer takes, so one client serves both.
 export type PeerSyncApi = Pick<
   Client<typeof syncContract>,
   "refTips" | "captureDirty" | "bundleStart" | "bundleChunk" | "bundleAbort"

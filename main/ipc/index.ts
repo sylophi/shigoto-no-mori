@@ -114,7 +114,7 @@ export function registerIpcHandlers(): void {
         relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
       ),
     subscribe: (): (() => void) => {
-      throw new Error("the peer sync api is invoke-only");
+      throw new Error("the peer api is invoke-only");
     },
   });
   setPeerSyncApiImpl({
@@ -123,24 +123,16 @@ export function registerIpcHandlers(): void {
     worktreesApiFor: (deviceId) =>
       buildClient(worktreesContract, peerTransportFor(deviceId)),
   });
-  // The port-forward engine's peer reach, built over the SAME cached
-  // peer sessions as the sync wiring above and for the same reason: a
-  // direct relayConnectPeer would silently replace the session the
+  // The port-forward engine's peer reach, riding the same
+  // peerTransportFor as the sync wiring above and for the same reason:
+  // a direct relayConnectPeer would silently replace the session the
   // renderer's remote-forest queries ride. The engine itself is
   // electron-free (main/portForward/engine.ts), and this is its only
   // binding to the relay and to the renderer's changed signal.
   setPortForwardEngine(
     createPortForwardEngine({
       forwardApiFor: (deviceId) =>
-        buildClient(forwardContract, {
-          invoke: (channel, input) =>
-            Promise.resolve(
-              relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
-            ),
-          subscribe: () => {
-            throw new Error("the port-forward peer api is invoke-only");
-          },
-        }),
+        buildClient(forwardContract, peerTransportFor(deviceId)),
       onChange: () => {
         broadcastAll(portForwardContract, "changed", undefined);
       },

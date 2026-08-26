@@ -51,7 +51,8 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { createRelayConnection } from "@host/relay/connection";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { syncHandlers, SYNC_CHUNK_BYTES } from "@host/ipc/modules/sync";
+import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
   getRunningScriptWorktrees,
@@ -469,18 +470,18 @@ async function main() {
     assert.equal(firstChunk.eof, false);
     assert.equal(
       Buffer.from(firstChunk.dataB64, "base64").length,
-      SYNC_CHUNK_BYTES,
+      RELAY_CHUNK_BYTES,
     );
     await sync.bundleAbort({ transferId: manual.transferId });
     await assert.rejects(
       () => sync.bundleChunk({ transferId: manual.transferId, offset: 0 }),
-      /unknown transfer/,
+      /unknown-transfer/,
     );
     // Idempotent abort: a second abort (or one for a finished
     // transfer) is a no-op, never a failure.
     await sync.bundleAbort({ transferId: manual.transferId });
     ok(
-      "lifecycle: a chunk is SYNC_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
+      "lifecycle: a chunk is RELAY_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
     );
 
     // (5) A corrupted bundle refuses with the coded kind, straight from

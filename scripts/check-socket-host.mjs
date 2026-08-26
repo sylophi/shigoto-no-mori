@@ -802,6 +802,28 @@ async function main() {
           `sync.${key} must require the command grant`,
         );
       }
+      // The transfer verbs opt out of the viewer cache ping: serving a
+      // transfer moves no state a remote viewer caches, and without the
+      // opt-out every chunk resolution of a multi-minute pull would
+      // re-invalidate every viewing peer's cached forest. captureDirty
+      // stays opted in -- it writes a capture ref, real host state.
+      for (const key of [
+        "refTips",
+        "bundleStart",
+        "bundleChunk",
+        "bundleAbort",
+      ]) {
+        assert.equal(
+          syncContract.calls[key].movesHostState,
+          false,
+          `sync.${key} must opt out of the viewer cache ping`,
+        );
+      }
+      assert.notEqual(
+        syncContract.calls.captureDirty.movesHostState,
+        false,
+        "sync.captureDirty writes a ref and must keep the viewer cache ping",
+      );
       // The step-8 port-forward surface (v2 slice A): every verb is a
       // grant-gated command, but none moves state a remote viewer
       // caches, so all four opt out of the mutation cache ping. A flip
