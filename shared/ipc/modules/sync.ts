@@ -1,17 +1,29 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import { CommitHashSchema } from "@shared/schemas";
+import { DeviceIdSchema } from "@shared/relay/protocol";
+import {
+  CommitHashSchema,
+  GitRefNameSchema,
+  WorktreeSchema,
+} from "@shared/schemas";
 
 // Device-sync transfer plumbing (v2 step 7, slice B): git bundles move
 // between devices as chunked, grant-gated invoke responses over the
 // existing device connection. No new wire protocol, no sidecar port:
 // start registers a bundle on the host, chunk streams it out in
 // relay-sized pieces, abort cleans up a receiver that gave up. Every
-// call is {remote:true, mutating:true}, so the whole surface rides the
-// per-peer command grant -- and the LAN wire, read-only by policy,
-// refuses it outright. Responses to awaited invokes are reliable on
-// the relay link (pushes are droppable), which is why the transfer is
-// invoke/response only.
+// transfer verb (refTips through bundleAbort) is {remote:true,
+// mutating:true}, so that whole surface rides the per-peer command
+// grant -- and the LAN wire, read-only by policy, refuses it outright.
+// Responses to awaited invokes are reliable on the relay link (pushes
+// are droppable), which is why the transfer is invoke/response only.
+//
+// pullWorktree (slice C) is the odd one out: it is the LOCAL
+// orchestrator a device's own renderer invokes to pull a peer's
+// worktree here, driving the remote verbs above against that peer.
+// Tagged {remote:false}, so it is never registered on any remote wire
+// (main/ipc/register.ts only forwards remote:true) and the web
+// loopback refuses it as a mutation.
 
 // The refs a peer may request into a bundle, fail-closed: a branch
 // (refs/heads/<name>) or a dirty-state capture
@@ -47,6 +59,23 @@ export type SyncRefTip = z.infer<typeof SyncRefTipSchema>;
 export const SyncCaptureDirtyPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   worktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+});
+
+// Tip negotiation for the pull orchestration. Load bearing for
+// thinness AND correctness: `git bundle create` silently DROPS a
+// requested ref whose tip is already covered by a have (and refuses an
+// all-covered bundle outright), so the receiver must learn the tip
+// first and only request the branch when it lacks that commit.
+export const SyncRefTipsPayloadSchema = z.strictObject({
+  projectId: z.string().min(1),
+  refs: z.array(SyncBundleRefSchema).min(1).max(64),
+});
+
+export const SyncRefTipsResultSchema = z.strictObject({
+  // Requested refs that exist on the host, with their tips. A missing
+  // ref is simply absent, not an error: the caller decides what a gone
+  // branch means.
+  tips: z.array(SyncRefTipSchema),
 });
 
 export const SyncBundleStartPayloadSchema = z.strictObject({
@@ -86,7 +115,44 @@ export const SyncBundleChunkResultSchema = z.strictObject({
   eof: z.boolean(),
 });
 
+// The local pull orchestration's input: which peer, which of ITS
+// project/worktree ids, and the branch to land here. sourceIdentity is
+// the repo identity the renderer matched a local project on; the
+// handler recomputes the local side and refuses on mismatch, so the
+// call structurally cannot be aimed at a non-matching local repo. The
+// branch refine pins it to the bundle allowlist up front, so a name
+// the transfer surface would reject fails here with a clear message
+// instead of deep inside the peer's schema.
+export const SyncPullWorktreePayloadSchema = z.strictObject({
+  sourceDeviceId: DeviceIdSchema,
+  sourceProjectId: z.string().min(1),
+  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+  sourceIdentity: z.string().min(1),
+  branch: GitRefNameSchema.refine(
+    (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
+    { message: "Branch name outside the sync allowlist" },
+  ),
+});
+
+export const SyncPullWorktreeResultSchema = z.strictObject({
+  worktree: WorktreeSchema,
+  // captured && !dirtyApplied is the partial-success case: the source
+  // had uncommitted changes, the worktree landed, but the apply was
+  // refused. The capture stays parked under the local worktree id and
+  // the source still holds the original dirty state.
+  captured: z.boolean(),
+  dirtyApplied: z.boolean(),
+});
+
 export const syncContract = defineContract("host", {
+  refTips: invoke(
+    "sync:refTips",
+    SyncRefTipsPayloadSchema,
+    SyncRefTipsResultSchema,
+    // A read, but it discloses repo state, so it rides the command
+    // grant with the rest of the transfer surface.
+    { remote: true, mutating: true },
+  ),
   captureDirty: invoke(
     "sync:captureDirty",
     SyncCaptureDirtyPayloadSchema,
@@ -115,5 +181,14 @@ export const syncContract = defineContract("host", {
       remote: true,
       mutating: true,
     },
+  ),
+  // The local orchestrator (see the header note): remote:false keeps
+  // it off every remote wire, mutating:true documents intent and keeps
+  // the web loopback's fail-closed refusal.
+  pullWorktree: invoke(
+    "sync:pullWorktree",
+    SyncPullWorktreePayloadSchema,
+    SyncPullWorktreeResultSchema,
+    { remote: false, mutating: true },
   ),
 });

@@ -37,7 +37,9 @@ import {
   setShelvedViaCli,
 } from "../cliDelegate";
 
-function notifierFor(ctx: HandlerContext) {
+// Exported for the sync module's pull orchestration, whose createViaCli
+// call streams the same lifecycle events.
+export function notifierFor(ctx: HandlerContext) {
   return {
     notifyPhase: ctx.notifier(worktreesContract, "lifecyclePhase"),
     notifyCarryOverComplete: ctx.notifier(
