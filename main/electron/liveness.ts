@@ -182,7 +182,13 @@ function consumeRelaunchBudget(now: number): boolean {
   try {
     // 0o600: the marker lives in userData beside other per-user state and
     // holds nothing secret, but there is no reason to widen it.
-    atomicWriteJsonSync(relaunchMarkerPath(), next, { mode: 0o600 });
+    // selfWrite:false because userData sits outside the watched
+    // shigomori root, so a self-write claim here would only blind the
+    // state watcher to a genuine external write for the echo window.
+    atomicWriteJsonSync(relaunchMarkerPath(), next, {
+      mode: 0o600,
+      selfWrite: false,
+    });
   } catch (error) {
     console.error(
       `[liveness] could not persist the relaunch marker, not relaunching: ${errorMessageOf(error)}`,

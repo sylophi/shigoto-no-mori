@@ -18,6 +18,7 @@ import {
   isConfigured,
   type AccountServiceConfig,
 } from "@shared/account/serviceConfig";
+import { deriveAccountId } from "@shared/account/token";
 import { exchangeCodeForToken } from "@shared/account/tokenExchange";
 import type { AccountStore } from "@shared/account/credentialStore";
 import {
@@ -99,24 +100,6 @@ export async function beginLogin(deps: BeginLoginDeps): Promise<void> {
   );
 }
 
-// Best-effort account identity from the OAuth token, the browser twin
-// of the desktop's deriveAccountId: when the token is a JWT its `sub`
-// claim names the account for display, anything else yields "". Never
-// verified here, the relay is the sole authority on identity.
-export function deriveAccountIdFromToken(token: string): string {
-  const parts = token.split(".");
-  if (parts.length !== 3) return "";
-  try {
-    // atob wants plain base64: undo the base64url alphabet and repad.
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded)) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : "";
-  } catch {
-    return "";
-  }
-}
-
 export type CompleteLoginDeps = {
   config: AccountServiceConfig;
   sessionStorage: KeyValueStorage;
@@ -127,16 +110,16 @@ export type CompleteLoginDeps = {
   fetchImpl?: typeof fetch;
 };
 
-export type WebLoginResult = { accountId: string; deviceName: string };
-
 // Completes the flow on the callback route: verify the returned state
 // against the parked one, exchange the code, enroll this browser and
 // persist the credential. The pending record is consumed up front so a
 // reloaded callback page cannot re-run the exchange with a burnt code.
+// The caller reads the outcome back out of the store (the bridge
+// re-reads status after this resolves), so there is nothing to return.
 export async function completeLogin(
   deps: CompleteLoginDeps,
   rawRedirectUrl: string,
-): Promise<WebLoginResult> {
+): Promise<void> {
   const pending = readPending(deps.sessionStorage);
   removeKey(deps.sessionStorage, PENDING_KEY);
   if (pending === null) {
@@ -162,13 +145,11 @@ export async function completeLogin(
     name: deps.deviceName,
     platform: WEB_PLATFORM,
   });
-  const accountId = deriveAccountIdFromToken(token);
   deps.store.write({
     credential: enrollment.credential,
-    accountId,
+    accountId: deriveAccountId(token),
     deviceName: deps.deviceName,
   });
-  return { accountId, deviceName: deps.deviceName };
 }
 
 // The token exchange must present the exact redirect_uri the authorize

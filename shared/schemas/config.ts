@@ -240,15 +240,21 @@ export const WriteGlobalConfigPayloadSchema = z.object({
 // a remote write. Patch semantics: every key optional, only provided
 // keys change, and the host handler spreads them over the local unredacted
 // document so everything the patch does not name rides through intact.
-export const DeviceSettingsPatchSchema = z.strictObject({
-  launchers: z.array(LauncherCommandSchema).optional(),
-  hiddenLaunchers: z.array(z.string()).optional(),
-  launchScripts: z.boolean().optional(),
-  deleteBranchOnRemove: z.boolean().optional(),
-  autoPopulateInstall: z.boolean().optional(),
-  portPool: z.boolean().optional(),
-  githubCli: z.boolean().optional(),
-});
+// Derived by picking from GlobalConfigSchema rather than respelling the
+// field types, so a managed key's shape cannot drift between the local
+// write and the remote patch. A NEW managed device setting still has to
+// be named here, or the strict reject makes it un-writable remotely.
+export const DeviceSettingsPatchSchema = z.strictObject(
+  GlobalConfigSchema.pick({
+    launchers: true,
+    hiddenLaunchers: true,
+    launchScripts: true,
+    deleteBranchOnRemove: true,
+    autoPopulateInstall: true,
+    portPool: true,
+    githubCli: true,
+  }).shape,
+);
 export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatchSchema>;
 
 export const WriteDeviceSettingsPayloadSchema = z.object({

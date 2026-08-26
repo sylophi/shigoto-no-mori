@@ -141,33 +141,41 @@ export function resolveSocketHostConfig(
 // Secure by default at enable time: when hosting is enabled but no token
 // is set, generate a high-entropy one (32 random bytes, base64url) and
 // persist it, rather than leaving an enabled-but-unauthable config that
-// the resolver treats as off. Runs under the CLI's sibling .lock (the
-// takeLegacyAppearance precedent) so app and CLI writes exclude each
-// other. Returns true when it wrote, so the caller can re-read. The
-// token is NOT logged: retrieve it with `sm config get socketHost.token`
-// to copy to the client device. Invalidates the module cache directly
-// rather than through the subscriber-firing helper, since the caller is
+// the resolver treats as off. Runs under the in-process
+// withGlobalConfigWriteLock (the INVARIANT above: every host-side
+// read-modify-write serializes on it, or a queued app-side write based
+// on a pre-mint read could clobber the fresh token) and, inside that,
+// the CLI's sibling .lock (the takeLegacyAppearance precedent) so app
+// and CLI writes exclude each other. Async only for the write lock,
+// which is why the caller (refreshSocketHost's resolver) awaits it.
+// Resolves true when it wrote, so the caller can re-read. The token is
+// NOT logged: retrieve it with `sm config get socketHost.token` to copy
+// to the client device. Invalidates the module cache directly rather
+// than through the subscriber-firing helper, since the caller is
 // already inside a reconcile.
-export function ensureSocketHostToken(): boolean {
+export function ensureSocketHostToken(): Promise<boolean> {
   const path = configPath();
-  return withFileLock(`${path}.lock`, () => {
-    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
-    if (doc === null) return false;
-    const socketHost = doc.socketHost;
-    if (socketHost?.enabled !== true) return false;
-    const token = typeof socketHost.token === "string" ? socketHost.token : "";
-    if (token !== "") return false;
-    doc.socketHost = {
-      ...socketHost,
-      token: randomBytes(32).toString("base64url"),
-    };
-    atomicWriteJsonSync(path, withSchemaVersion(doc));
-    cache.invalidate();
-    console.info(
-      "[socket] generated a hosting token. Copy it to the client device with `sm config get socketHost.token`.",
-    );
-    return true;
-  });
+  return withGlobalConfigWriteLock(async () =>
+    withFileLock(`${path}.lock`, () => {
+      const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
+      if (doc === null) return false;
+      const socketHost = doc.socketHost;
+      if (socketHost?.enabled !== true) return false;
+      const token =
+        typeof socketHost.token === "string" ? socketHost.token : "";
+      if (token !== "") return false;
+      doc.socketHost = {
+        ...socketHost,
+        token: randomBytes(32).toString("base64url"),
+      };
+      atomicWriteJsonSync(path, withSchemaVersion(doc));
+      cache.invalidate();
+      console.info(
+        "[socket] generated a hosting token. Copy it to the client device with `sm config get socketHost.token`.",
+      );
+      return true;
+    }),
+  );
 }
 
 // Read-boundary redaction: a secret never crosses any wire. socketHost

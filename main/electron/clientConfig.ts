@@ -30,15 +30,11 @@ export function clientConfigPath(): string {
 }
 
 // This module is the store's only writer, so a read is valid until the
-// next writeClientConfig in this process updates it.
+// next writeClientConfig in this process updates it. An external
+// mutation path would need a cache invalidation hook here (the
+// invalidateGlobalConfigCache precedent in host/lib/config/global.ts),
+// but none exists today.
 let memo: ClientConfig | null = null;
-
-// Matches invalidateGlobalConfigCache (host/lib/config/global.ts). No
-// caller yet: this process is the store's only writer today, so the
-// memo can only go stale once an external mutation path appears.
-export function invalidateClientConfigCache(): void {
-  memo = null;
-}
 
 // Mirrors noteHintFailure in host/lib/config/store.ts: a store that
 // stays broken is hit on every boot and every save, so warn once per

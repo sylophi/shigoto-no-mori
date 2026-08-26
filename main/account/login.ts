@@ -1,9 +1,9 @@
 // The sign-in orchestration: RFC 8252 loopback authorization code flow
 // with PKCE, then relay enrollment, then credential storage. Pure aside
-// from node:http (the loopback server) and node:crypto (via pkce.ts):
-// the browser opener, the account service, the store and fetch are all
-// injected, so the account check script runs the whole flow against
-// stubs with no electron, no real browser and no network.
+// from node:http (the loopback server): the browser opener, the account
+// service, the store and fetch are all injected, so the account check
+// script runs the whole flow against stubs with no electron, no real
+// browser and no network.
 import { createServer, type Server } from "node:http";
 import {
   buildAuthorizeUrl,
@@ -12,9 +12,14 @@ import {
   parseRedirectQuery,
 } from "@shared/account/pkce";
 import type { AccountServiceConfig } from "@shared/account/serviceConfig";
+import { deriveAccountId } from "@shared/account/token";
 import { exchangeCodeForToken } from "@shared/account/tokenExchange";
 import type { AccountService } from "@shared/account/service";
 import type { AccountStore } from "@shared/account/credentialStore";
+
+// Re-exported so the account check script and the handler module keep
+// one import site for the login-flow surface.
+export { deriveAccountId };
 
 // How long the flow waits for the browser redirect before giving up. A
 // user who abandons the browser tab must not leave a loopback server
@@ -48,25 +53,6 @@ export type LoginDeps = {
 // The stored result the renderer surfaces as post-sign-in status.
 export type LoginResult = { accountId: string; deviceName: string };
 
-// Best-effort account identity from the OAuth token. When the token is a
-// JWT (three base64url segments) its `sub` claim names the account, which
-// makes a friendlier signed-in display. Anything else, including an
-// opaque non-JWT token, yields "" and the UI falls back to the device
-// list. The token is never verified here, it is only read for display,
-// and the relay is the sole authority on identity.
-export function deriveAccountId(token: string): string {
-  const parts = token.split(".");
-  if (parts.length !== 3) return "";
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf8"),
-    ) as { sub?: unknown };
-    return typeof payload.sub === "string" ? payload.sub : "";
-  } catch {
-    return "";
-  }
-}
-
 export async function runLoginFlow(deps: LoginDeps): Promise<LoginResult> {
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // The S256 challenge is computed through the async WebCrypto digest, so
@@ -76,6 +62,15 @@ export async function runLoginFlow(deps: LoginDeps): Promise<LoginResult> {
 
   return new Promise<LoginResult>((resolve, reject) => {
     let settled = false;
+    // Redemption latch for the callback. The authorization code is
+    // single use, so only the FIRST valid redirect may run the
+    // exchange. Separate from `settled` because the exchange and the
+    // enroll take real time: a replay arriving in that window would
+    // otherwise re-enter completeExchange, the provider would refuse
+    // the burnt code (invalid_grant), abort() would reject the flow,
+    // and the first exchange's success would then hit the settled
+    // guard and silently drop the credential it obtained.
+    let redeemed = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let server: Server | null = null;
     // Only known once the OS assigns the ephemeral port, so the authorize
@@ -135,6 +130,16 @@ export async function runLoginFlow(deps: LoginDeps): Promise<LoginResult> {
         fail400("authorization state mismatch");
         return;
       }
+      // A second redirect with the correct state (a tab reload, a
+      // prefetch, a browser session restore) lands here after the first
+      // already started the exchange. Answer it like any stray path and
+      // leave the in-flight or completed sign-in untouched.
+      if (redeemed) {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
+      redeemed = true;
       // Answer the browser first so the user sees the done page even if
       // the exchange or enroll below is slow, then run the rest.
       res.statusCode = 200;

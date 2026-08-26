@@ -267,7 +267,9 @@ export async function refreshSocketHost(): Promise<void> {
       // Secure by default at enable time: generate and persist a token
       // if hosting is on without one. ensureSocketHostToken drops the
       // module cache itself, so the read below sees the fresh document.
-      ensureSocketHostToken();
+      // Awaited because the mint serializes on the global-config write
+      // lock, and the read below must see the post-mint document.
+      await ensureSocketHostToken();
       const config = await readGlobalConfig();
       const resolved = resolveSocketHostConfig(config);
       if (resolved === null) return null;
