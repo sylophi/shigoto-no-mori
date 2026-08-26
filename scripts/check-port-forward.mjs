@@ -33,9 +33,10 @@
 //     socket (eof propagation).
 //   - stopForward closes the listener and live conns, and the host
 //     registry does not leak (a fresh forward still round-trips).
-//   - the 9th concurrent local socket is destroyed at the client-side
-//     per-device cap of 8 while the first eight stand, with no wire
-//     traffic spent on the doomed dial.
+//   - the first concurrent local socket OVER the client-side
+//     per-device cap (MAX_CONNS_PER_DEVICE, derived from the engine's
+//     exported constant) is destroyed while the capped set stands,
+//     with no wire traffic spent on the doomed dial.
 //
 // Both "devices" share one node process. What separates them is the
 // relay wire between their connections, which is exactly the surface
@@ -51,7 +52,10 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
 import { createRelayConnection } from "@host/relay/connection";
 import { forwardHandlers } from "@host/ipc/modules/forward";
-import { createPortForwardEngine } from "../main/portForward/engine.ts";
+import {
+  createPortForwardEngine,
+  MAX_CONNS_PER_DEVICE,
+} from "../main/portForward/engine.ts";
 import { startStubRelay } from "./lib/relayStub.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -518,52 +522,57 @@ async function main() {
       "engine: stopForward closes the listener and live conns, and a fresh forward still works",
     );
 
-    // (13) The client-side per-device cap: the 9th concurrent local
-    // socket is destroyed immediately while the first eight stand.
-    // Mirrors the host's MAX_CONNS without spending a relay round trip
-    // on the doomed dial.
+    // (13) The client-side per-device cap, derived from the engine's
+    // exported MAX_CONNS_PER_DEVICE so this scenario tracks the
+    // constant: the first local socket OVER the cap is destroyed
+    // immediately while the capped set stands. Mirrors the host's
+    // MAX_CONNS without spending a relay round trip on the doomed dial.
     const capFramesBefore = stub.received.length;
     const capSockets = [];
-    for (let i = 0; i < 8; i += 1) {
+    for (let i = 0; i < MAX_CONNS_PER_DEVICE; i += 1) {
       const socket = connect({ host: "127.0.0.1", port: fresh.localPort });
       socket.on("error", () => {});
       capSockets.push(socket);
     }
-    // Also wait out the eight open frames so the 9th socket's zero-frame
-    // assertion below cannot miscount a straggler from these dials.
+    // Also wait out the capped set's open frames so the over-cap
+    // socket's zero-frame assertion below cannot miscount a straggler
+    // from these dials.
     await waitFor(
       () =>
         engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
-          ?.connCount === 8 &&
-        reqFramesSince(stub, capFramesBefore, "forward:open") === 8,
-      "eight conns and their open frames to register",
+          ?.connCount === MAX_CONNS_PER_DEVICE &&
+        reqFramesSince(stub, capFramesBefore, "forward:open") ===
+          MAX_CONNS_PER_DEVICE,
+      "the capped conns and their open frames to register",
       10_000,
     );
-    const ninthFramesBefore = stub.received.length;
-    const ninth = connect({ host: "127.0.0.1", port: fresh.localPort });
-    ninth.on("error", () => {});
+    const overCapFramesBefore = stub.received.length;
+    const overCap = connect({ host: "127.0.0.1", port: fresh.localPort });
+    overCap.on("error", () => {});
     await onceWithin(
-      ninth,
+      overCap,
       "close",
-      "the 9th socket to be destroyed at the accept cap",
+      "the over-cap socket to be destroyed at the accept cap",
     );
     // Destroyed at accept means no wire traffic: the doomed dial spent
     // no forward:open round trip.
     assert.equal(
-      reqFramesSince(stub, ninthFramesBefore, "forward:open"),
+      reqFramesSince(stub, overCapFramesBefore, "forward:open"),
       0,
-      "the capped 9th socket still spent a forward:open round trip",
+      "the capped over-cap socket still spent a forward:open round trip",
     );
     assert.equal(
       engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
         ?.connCount,
-      8,
-      "the cap tore down an established conn instead of the 9th dial",
+      MAX_CONNS_PER_DEVICE,
+      "the cap tore down an established conn instead of the over-cap dial",
     );
     for (const socket of capSockets) socket.destroy();
     engine.stopAll();
     assert.equal(engine.listForwards().length, 0);
-    ok("engine: the 9th concurrent local socket is destroyed at the cap of 8");
+    ok(
+      `engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of ${MAX_CONNS_PER_DEVICE}`,
+    );
   } finally {
     engine?.stopAll();
     await b.stop();

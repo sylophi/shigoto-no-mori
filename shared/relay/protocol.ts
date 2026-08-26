@@ -75,6 +75,18 @@ export function utf8ByteLength(text: string): number {
 export const RELAY_CHUNK_BYTES = 640_000;
 export const RELAY_CHUNK_B64_MAX = 853_336;
 
+// The base64 form of one raw chunk, bounded by the cap above and
+// pinned to the base64 charset so a non-base64 payload fails at the
+// schema instead of silently decoding to garbage bytes. The ONE schema
+// for every bulk-data field on both chunked wires (forward's send
+// payload and poll result, sync's bundleChunk result), so an uplink
+// write can never exceed what a downlink chunk may carry and vice
+// versa.
+export const ChunkB64Schema = z
+  .string()
+  .max(RELAY_CHUNK_B64_MAX)
+  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
+
 // The most online devices a presence roster may name. An account's
 // device count is small in practice, so this sits far above any real
 // roster while still bounding what a hostile DO can force a client to

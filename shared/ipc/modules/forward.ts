@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import { RELAY_CHUNK_B64_MAX } from "@shared/relay/protocol";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { ChunkB64Schema } from "@shared/relay/protocol";
 
 // Port-forward wire protocol (v2 step 8, slice A): TCP bytes move
 // between devices as chunked, grant-gated invoke/response calls over
@@ -33,20 +34,12 @@ import { RELAY_CHUNK_B64_MAX } from "@shared/relay/protocol";
 // the registrar's cache ping (git:externalChange to every peer) on
 // every poll and send resolution.
 
-// connIds are host-minted (16 random bytes, hex), so the schema pins
-// exactly that shape: a peer can only replay an id it was given, never
-// probe with crafted ones.
-const ConnIdSchema = z.string().regex(/^[0-9a-f]{32}$/);
-
-// The base64 form of one raw chunk, bounded by the shared cap and
-// pinned to the base64 charset so a non-base64 payload fails at the
-// schema instead of silently decoding to garbage bytes. Used on BOTH
+// connIds are host-minted (shared/ipc/hexId.ts pins the shape), so a
+// peer can only replay an id it was given, never probe with crafted
+// ones. ChunkB64Schema (shared/relay/protocol.ts) bounds BOTH
 // directions (send payload and poll result), so an uplink write can
 // never exceed what a downlink chunk may carry and vice versa.
-const ChunkB64Schema = z
-  .string()
-  .max(RELAY_CHUNK_B64_MAX)
-  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
+const ConnIdSchema = HexId32Schema;
 
 export const ForwardOpenPayloadSchema = z.strictObject({
   port: z.number().int().min(1).max(65535),

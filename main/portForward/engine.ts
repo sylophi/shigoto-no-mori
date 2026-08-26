@@ -15,22 +15,34 @@
 // host-side: after eof or an "unknown-conn" refusal the host has
 // already dropped it (that message is one of the stable markers the
 // host side promises to keep, see the note above its handlers).
-import { randomBytes } from "node:crypto";
 import { createServer, type Server, type Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
 import type { forwardContract } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
 import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { mintHexId } from "@host/lib/idleRegistry";
+import { waitForDrainOrClose } from "@host/lib/net";
 
 export type ForwardApi = Client<typeof forwardContract>;
 
 // Client-side mirror of the host's MAX_CONNS (host/ipc/modules/
-// forward.ts). That ceiling is per host process, so this count spans
-// ALL forwards to one device, not each forward alone. The 9th conn
-// would be refused there anyway, but only after a full open round trip
-// that burns one of the peer's shared relay in-flight slots, so an
-// accepted socket over the cap is destroyed immediately instead.
-const MAX_CONNS_PER_DEVICE = 8;
+// forward.ts): sized so one browser tab's ~6 keepalive sockets plus an
+// HMR websocket fit with headroom, and kept under the relay's per-peer
+// in-flight budget (raised 32 -> 64 in the paired relay change) since
+// each conn parks a long-poll there. That ceiling is per host process,
+// so this count spans ALL forwards to one device, not each forward
+// alone. A conn over the cap would be refused there anyway, but only
+// after a full open round trip that burns one of the peer's shared
+// relay in-flight slots, so an accepted socket over the cap is
+// destroyed immediately instead. Exported so the port-forward check's
+// cap scenario tracks this value.
+export const MAX_CONNS_PER_DEVICE = 16;
+
+// Trailing coalesce for the changed signal: accepts and closes arrive
+// in bursts (one page load moves ~a dozen conns), and each signal
+// triggers a renderer list refetch, so burst members collapse into one
+// signal shortly after the first.
+const CHANGE_COALESCE_MS = 150;
 
 // Uplink backlog bound: bytes read off the local socket, queued and
 // not yet handed to a send. Over it the local socket pauses, and TCP flow
@@ -86,7 +98,17 @@ export function createPortForwardEngine(deps: {
   onChange?: () => void;
 }) {
   const forwards = new Map<string, Forward>();
-  const changed = () => deps.onChange?.();
+  // The trailing debounce (CHANGE_COALESCE_MS above). unref'd so a
+  // pending signal never holds the process open on quit.
+  let changeTimer: ReturnType<typeof setTimeout> | null = null;
+  const changed = () => {
+    if (deps.onChange === undefined || changeTimer !== null) return;
+    changeTimer = setTimeout(() => {
+      changeTimer = null;
+      deps.onChange?.();
+    }, CHANGE_COALESCE_MS);
+    changeTimer.unref?.();
+  };
 
   function liveConnsTo(deviceId: string): number {
     let count = 0;
@@ -175,18 +197,9 @@ export function createPortForwardEngine(deps: {
         if (result.dataB64 !== "") {
           const data = Buffer.from(result.dataB64, "base64");
           if (!socket.write(data)) {
-            // 'close' releases a wait the socket died under, exactly
-            // like the host's send-side drain wait.
+            // The shared drain wait, exactly like the host's send side.
             // oxlint-disable-next-line no-await-in-loop -- sequential by design
-            await new Promise<void>((resolve) => {
-              const done = () => {
-                socket.off("drain", done);
-                socket.off("close", done);
-                resolve();
-              };
-              socket.once("drain", done);
-              socket.once("close", done);
-            });
+            await waitForDrainOrClose(socket);
             if (conn.dead) return;
           }
         }
@@ -308,7 +321,7 @@ export function createPortForwardEngine(deps: {
       }
     }
     const forward: Forward = {
-      forwardId: randomBytes(16).toString("hex"),
+      forwardId: mintHexId(),
       deviceId: input.deviceId,
       remotePort: input.remotePort,
       localPort,
