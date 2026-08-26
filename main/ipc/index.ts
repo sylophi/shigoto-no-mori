@@ -11,6 +11,7 @@ import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
+import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { relayContract } from "@shared/ipc/modules/relay";
@@ -36,6 +37,10 @@ import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
+import {
+  portForwardHandlers,
+  setPortForwardEngine,
+} from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
@@ -51,6 +56,7 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { createPortForwardEngine } from "../portForward/engine";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
@@ -114,6 +120,33 @@ export function registerIpcHandlers(): void {
         },
       }),
   });
+  // The port-forward engine's peer reach, built over the SAME cached
+  // peer sessions as the sync wiring above and for the same reason: a
+  // direct relayConnectPeer would silently replace the session the
+  // renderer's remote-forest queries ride. The engine itself is
+  // electron-free (main/portForward/engine.ts), and this is its only
+  // binding to the relay and to the renderer's changed signal.
+  setPortForwardEngine(
+    createPortForwardEngine({
+      forwardApiFor: (deviceId) =>
+        buildClient(forwardContract, {
+          invoke: (channel, input) =>
+            Promise.resolve(
+              relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
+            ),
+          subscribe: () => {
+            throw new Error("the port-forward peer api is invoke-only");
+          },
+        }),
+      onChange: () => {
+        broadcastAll(portForwardContract, "changed", undefined);
+      },
+    }),
+  );
+  // Client-scoped like dialog and updater: the listeners belong to the
+  // machine the window runs on, so the surface never mounts on a
+  // remote wire.
+  registerContract(portForwardContract, portForwardHandlers);
   registerContract(windowContract, windowHandlers);
   // Host-scoped preflight for the remote execution surface: each wire's
   // binding supplies the calling peer's grant verdict on the context.

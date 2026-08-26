@@ -177,6 +177,12 @@ function buildQueryKeys(deviceId: string) {
     accountGrantedDevices: () => ["accountGrants"] as const,
 
     updaterState: () => ["updater", "state"] as const,
+
+    // Client-scoped: the port-forward engine (its listeners and conns)
+    // lives in this app instance's main process, whichever device a
+    // forward targets, so no host sentinel and no device id. One key
+    // for the whole list, and the UI filters per device.
+    portForwards: () => ["portForwards"] as const,
   } as const;
 }
 
@@ -216,6 +222,9 @@ export const queryKeys = queryKeysFor(localDeviceId);
 //   still cover them.
 // - runtime and updater: static per-host facts and this install's
 //   updater state. No host state change touches either.
+// - portForwards for the same reason as updater: the forward set is
+//   this install's engine state, driven by its own changed broadcast,
+//   and no host git-state ping moves it.
 // - clientConfig for scope: the store lives in this app instance's
 //   userData, so no host's state change can touch it. Including it
 //   would defeat the query's staleTime Infinity on every ping.
@@ -228,6 +237,7 @@ const externalChangeExempt = new Set([
   "clientConfig",
   "fs",
   "githubCli",
+  "portForwards",
   "runtime",
   "updater",
   "worktreeHygiene",

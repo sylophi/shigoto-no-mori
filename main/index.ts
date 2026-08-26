@@ -21,6 +21,7 @@ import {
 } from "./electron/clientConfig";
 import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
+import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
 import {
@@ -377,6 +378,10 @@ app.on("before-quit", (event) => {
   // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
+    // Local listeners die with the process anyway. Stopping before the
+    // relay teardown gives the best-effort host-side conn closes a
+    // socket to ride out on.
+    stopAllPortForwards();
     // Fire and forget: the relay close frame either flushes in the
     // handoff window or the DO notices the dead socket on its own.
     void stopRelayConnection();
@@ -402,6 +407,9 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
+  // Same rationale as the install branch: forward teardown first, so
+  // its close frames ride the relay socket while it is still up.
+  stopAllPortForwards();
   // Close the relay socket alongside the script reaping so the DO sees
   // a clean departure. Fire and forget for the same reason as above.
   void stopRelayConnection();

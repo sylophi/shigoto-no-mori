@@ -7,9 +7,9 @@
 //
 // Three categories deliberately do NOT route through here:
 // - Client-scoped calls (dialog, shell, menu, nav, window, updater,
-//   account, relay, clientConfig, projectLauncher): they belong to the
-//   machine the window runs on, so their call sites keep window.api
-//   and HostApi excludes them.
+//   account, relay, clientConfig, projectLauncher, portForward): they
+//   belong to the machine the window runs on, so their call sites keep
+//   window.api and HostApi excludes them.
 // - Broadcast subscriptions: main only emits this machine's events, so
 //   watchers subscribe via window.api and invalidate with the local
 //   `queryKeys` registry explicitly; scoped invalidations stay limited

@@ -1,6 +1,6 @@
 // The web client's window.api factory (v2 step 5, slice B). It builds
 // the SAME surface the Electron preload exposes, by the same means: the
-// three scalar facts (deviceId, appVersion, isDev) plus buildApi over
+// scalar facts (deviceId, appVersion, isDev, isElectron) plus buildApi over
 // one ClientTransport per scope. The transports are in-page loopback
 // wires instead of the IPC bridge, with the browser-servable client
 // modules (clientConfig, account, relay, shell) registered through the
@@ -71,6 +71,7 @@ export type WebBridge = {
     deviceId: string;
     appVersion: string;
     isDev: boolean;
+    isElectron: boolean;
   } & ReturnType<typeof buildApi>;
   // The deployment-level access state the shell surfaces when the
   // build is unconfigured or the relay refuses this origin.
@@ -327,6 +328,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     deviceId,
     appVersion: deps.appVersion,
     isDev: deps.isDev,
+    // App-only UI (the port-forward controls) gates its mount on this:
+    // a browser cannot bind a local TCP listener, and the loopback wire
+    // rejects the client-scoped portForward channels anyway.
+    isElectron: false,
     ...buildApi({ host: hostWire.client, client: clientWire.client }),
   };
 
