@@ -31,3 +31,17 @@ pre-commit:
     socket:
       glob: "{host/socket/**,shared/ipc/socket/**,host/ipc/modules/globalConfig.ts,shared/ipc/modules/**,shared/ipc/contract.ts,shared/ipc/registerContract.ts,main/ipc/register.ts}"
       run: pnpm run socket:check
+    # Typechecks the relay Worker package and runs its vitest suite
+    # inside workerd (real D1, Durable Object and websocket bindings)
+    # against the shared app-to-worker protocol, so enrollment, ticket,
+    # relay, presence and revocation semantics cannot drift from
+    # shared/relay/protocol.ts. relay/ is a standalone pnpm project with
+    # its own lockfile, which the check installs first. One caveat: the
+    # shared files it imports (shared/relay/protocol.ts and the frames.ts
+    # it re-exports) live outside relay/, so their `zod` import resolves
+    # from the repo-root node_modules, not relay/node_modules. The two
+    # installs pin the same zod, so a root install is a prerequisite for
+    # those shared files.
+    relay:
+      glob: "{relay/**,shared/relay/**}"
+      run: pnpm run relay:check

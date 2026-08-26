@@ -27,6 +27,7 @@
     "host:check": "node scripts/check-host-boundary.mjs",
     "identity:check": "node scripts/check-identity.mjs",
     "socket:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-socket-host.mjs",
+    "relay:check": "pnpm -C relay install --frozen-lockfile --prefer-offline && pnpm -C relay run check",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "licenses": "node scripts/generate-third-party-licenses.mjs",
