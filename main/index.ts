@@ -23,7 +23,13 @@ import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
-import { broadcast, broadcastAll, refreshSocketHost } from "./ipc/register";
+import {
+  broadcast,
+  broadcastAll,
+  refreshRelayConnection,
+  refreshSocketHost,
+  stopRelayConnection,
+} from "./ipc/register";
 import {
   getInflightDeleteIds,
   killAllScripts,
@@ -236,6 +242,11 @@ app.on("ready", async () => {
   // after every globalConfig write (hostImpls wiring), making this the
   // boot-time pass only.
   void refreshSocketHost();
+  // The relay socket (v2 step 4, slice C): connect to the account's
+  // Durable Object when a credential is stored. The same reconcile
+  // reruns after every account change (the emitChanged path in
+  // main/ipc/index.ts), making this the boot-time pass only.
+  void refreshRelayConnection();
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be
@@ -295,6 +306,9 @@ app.on("before-quit", (event) => {
   // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
+    // Fire and forget: the relay close frame either flushes in the
+    // handoff window or the DO notices the dead socket on its own.
+    void stopRelayConnection();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
     return;
@@ -317,6 +331,9 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
+  // Close the relay socket alongside the script reaping so the DO sees
+  // a clean departure. Fire and forget for the same reason as above.
+  void stopRelayConnection();
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);

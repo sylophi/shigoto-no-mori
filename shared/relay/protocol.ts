@@ -11,6 +11,19 @@
 // socket frames (frames.ts) once the app-side transport lands, but
 // nothing here may depend on that shape.
 //
+// TRUST MODEL: the Durable Object relay is LESS trusted than a LAN peer.
+// It sees every req and res in plaintext, it can forge the `from` on a
+// deliver, it can forge or replay a res or a push, and it can lie about
+// presence. The app ignores the hello token precisely because the DO
+// already authenticated the account when it consumed the connect ticket,
+// so every deliverable peer is by construction a device of the same
+// account. That decision is safe for authentication only. Per-frame
+// integrity is NOT verified in this slice, so a compromised DO can still
+// tamper with or fabricate frame content. Per-device frame signing is
+// the longer-term mitigation. The session epoch on the sm frames (see
+// shared/relay/link.ts) defends against cross-session mismatch and
+// replay of a prior pairing, not against a live tampering relay.
+//
 // Ticket and credential string mechanics live in relay/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
 // Authorization header and the ticket in the connect URL, unchanged.
@@ -34,11 +47,30 @@ export const MAX_RELAY_MESSAGE_BYTES = 1_000_000;
 // and at most three UTF-8 bytes, so only the band in between needs a
 // real count.
 const utf8 = new TextEncoder();
-export function relayTextWithinLimit(text: string): boolean {
-  if (text.length > MAX_RELAY_MESSAGE_BYTES) return false;
-  if (text.length * 3 <= MAX_RELAY_MESSAGE_BYTES) return true;
-  return utf8.encode(text).byteLength <= MAX_RELAY_MESSAGE_BYTES;
+export function relayTextWithinLimit(text: string, extraBytes = 0): boolean {
+  // extraBytes lets the sender measure a shape it does not literally
+  // encode. The DO measures the DELIVER envelope (from = our id) while
+  // the sender only encodes the SEND envelope (to = the target), and the
+  // two differ by a fixed routing-field delta, so one encode plus the
+  // delta serves both without a second full stringify on the hot path.
+  const budget = MAX_RELAY_MESSAGE_BYTES - extraBytes;
+  if (text.length > budget) return false;
+  if (text.length * 3 <= budget) return true;
+  return utf8.encode(text).byteLength <= budget;
 }
+
+// Byte length of a string under UTF-8, for the small routing-field delta
+// the relay link measures with. Not on the large-payload hot path, so a
+// direct encode is fine here.
+export function utf8ByteLength(text: string): number {
+  return utf8.encode(text).byteLength;
+}
+
+// The most online devices a presence roster may name. An account's
+// device count is small in practice, so this sits far above any real
+// roster while still bounding what a hostile DO can force a client to
+// allocate from one presence envelope.
+export const MAX_ONLINE_DEVICES = 1024;
 
 // Application close codes for the relay socket. Deliberately disjoint
 // from the LAN socket's 4001/4002 (frames.ts) so a log line's code
@@ -159,7 +191,10 @@ export type DeviceEnvelope = z.infer<typeof DeviceEnvelopeSchema>;
 // copies `frame` verbatim, it never parses or rewrites it.
 export const RelayDeliverEnvelopeSchema = z.object({
   t: z.literal("relay"),
-  from: z.string(),
+  // Bounded like RelaySendEnvelopeSchema.to: a hostile DO can forge this,
+  // and it is fed straight into per-peer routing and log lines, so it is
+  // never left unbounded.
+  from: z.string().min(1).max(200),
   frame: z.unknown(),
 });
 
@@ -169,7 +204,12 @@ export const RelayDeliverEnvelopeSchema = z.object({
 // client only ever replaces its copy, never merges deltas.
 export const PresenceEnvelopeSchema = z.object({
   t: z.literal("presence"),
-  online: z.array(z.string()),
+  // Each entry is a deviceId, bounded like RelaySendEnvelopeSchema.to,
+  // and the roster length is capped so a hostile DO cannot force an
+  // unbounded allocation from one presence envelope. The DO always names
+  // real account devices, so both bounds are additive tightenings it
+  // already satisfies.
+  online: z.array(z.string().min(1).max(200)).max(MAX_ONLINE_DEVICES),
 });
 
 // DO to device: a send could not be delivered. `offline` means no
@@ -177,7 +217,9 @@ export const PresenceEnvelopeSchema = z.object({
 // forward exceeded MAX_RELAY_MESSAGE_BYTES.
 export const NackEnvelopeSchema = z.object({
   t: z.literal("nack"),
-  to: z.string(),
+  // Echoes the `to` the sender used, already bounded on send, so the
+  // same bound applies coming back.
+  to: z.string().min(1).max(200),
   reason: z.enum(["offline", "too-large"]),
 });
 

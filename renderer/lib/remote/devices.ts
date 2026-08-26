@@ -1,9 +1,12 @@
-// Renderer registry of remote devices (v2 step 3, slice B). A singleton
-// Map keyed by a device entry's url (the hand-typed identity this slice;
-// step 4's pairing gives a stable id). Each entry owns one reconnect
-// supervisor and one live RemoteDevice snapshot. The registry is the
-// external store a React binding reads through useSyncExternalStore, so
-// device status renders live without prop threading.
+// Renderer registry of remote devices. The store holds BOTH kinds of
+// entries: LAN devices (v2 step 3, url-keyed, each owning a reconnect
+// supervisor) and relay devices (v2 step 4, deviceId-keyed, no renderer
+// supervisor because the one relay socket lives in main and status
+// derives from the bridge, see relayDevices.ts). One snapshot serves
+// both so DeviceStatusDot and RemoteForest read them identically. The
+// registry is the external store a React binding reads through
+// useSyncExternalStore, so device status renders live without prop
+// threading.
 //
 // This file is renderer-only: it reads window.api for the local device's
 // facts and builds a per-device api. It is NOT the transport machinery
@@ -11,27 +14,37 @@
 // wiring around it, so it stays out of the headless proof.
 import { buildApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
+import type { SupervisorStatus } from "@shared/remote/supervisor";
+import { createSupervisor } from "@shared/remote/supervisor";
 import type { RemoteDeviceEntry } from "@shared/schemas";
-import { createSupervisor, type SupervisorStatus } from "./supervisor";
 
 // The per-device api buildApi returns. Same shape as window.api's
 // contract methods, minus the bridge-only extras (deviceId, appVersion).
 export type RemoteDeviceApi = ReturnType<typeof buildApi>;
 
 export type RemoteDevice = {
-  // The remote host's device id from its welcome, "" until the first
-  // handshake. This is what hostKeysFor scopes a remote device's query
-  // cache under.
+  // "lan" entries come from the config's remoteDevices list and are
+  // url-keyed. "relay" entries come from the account's device registry
+  // and are deviceId-keyed. The settings sections filter by kind, the
+  // forest page does not care.
+  kind: "lan" | "relay";
+  // The remote host's device id: from its welcome for a LAN entry (""
+  // until the first handshake), from the account registry for a relay
+  // entry (always set). This is what hostKeysFor scopes a remote
+  // device's query cache under.
   deviceId: string;
-  // Display label: the config label, falling back to the url.
+  // Display label: the config label (falling back to the url) for LAN,
+  // the account device name for relay.
   label: string;
-  // The ws:// url, also this entry's registry key this slice.
+  // The ws:// url and LAN registry key. Empty for relay entries.
   url: string;
   status: SupervisorStatus;
-  // The remote host app's version from its welcome, "" until connected.
+  // The remote host app's version from its welcome, "" until connected
+  // (for relay entries, until the lazily opened peer session confirms).
   appVersion: string;
-  // Present only while connected. Host calls route over the socket;
-  // client-scoped calls reject (see rejectingClientTransport).
+  // Present only while connected. Host calls route over the socket or
+  // the relay bridge. Client-scoped calls reject (see
+  // rejectingClientTransport).
   api?: RemoteDeviceApi;
 };
 
@@ -50,7 +63,7 @@ export function deviceVersionMismatch(device: RemoteDevice): boolean {
 const REMOTE_CLIENT_SCOPE_MESSAGE =
   "client-scoped call is not available for a remote device";
 
-const rejectingClientTransport: ClientTransport = {
+export const rejectingClientTransport: ClientTransport = {
   // Reject rather than throw synchronously so a client-scoped call on a
   // remote device fails through the same promise path as any other
   // transport error, matching the ClientTransport contract.
@@ -79,14 +92,27 @@ type Entry = {
 };
 
 const entries = new Map<string, Entry>();
+// Relay entries, rebuilt wholesale by relayDevices.ts. No per-entry
+// machinery here: their status derives from the relay bridge.
+let relayDevices: readonly RemoteDevice[] = [];
 const listeners = new Set<() => void>();
 // Cached immutable snapshot for useSyncExternalStore: it must return a
 // stable reference between changes, and a NEW reference on every change.
 let snapshot: readonly RemoteDevice[] = [];
 
 function rebuildSnapshot(): void {
-  snapshot = [...entries.values()].map((entry) => entry.device);
+  snapshot = [
+    ...[...entries.values()].map((entry) => entry.device),
+    ...relayDevices,
+  ];
   for (const listener of listeners) listener();
+}
+
+// Replace the relay half of the store. Called by relayDevices.ts on
+// boot, on account changes and on relay status changes.
+export function setRelayDevices(devices: readonly RemoteDevice[]): void {
+  relayDevices = [...devices];
+  rebuildSnapshot();
 }
 
 // Replace an entry's device with a patched copy (never mutate in place,
@@ -104,6 +130,7 @@ function patchDevice(
 
 function createEntry(config: RemoteDeviceEntry): void {
   const initialDevice: RemoteDevice = {
+    kind: "lan",
     deviceId: "",
     label: config.label ?? config.url,
     url: config.url,

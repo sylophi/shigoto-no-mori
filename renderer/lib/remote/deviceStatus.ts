@@ -3,8 +3,8 @@
 // label so the settings chip and the forest page read the same. Tones
 // stay within the four raw families the theme remaps (emerald, rose,
 // amber, sky) plus slate for off, per the doubutsu contract.
+import type { SupervisorStatus } from "@shared/remote/supervisor";
 import type { PillTone } from "@/components/sidebar/StatusPill";
-import type { SupervisorStatus } from "./supervisor";
 
 // The tones this view actually emits, a subset of PillTone. Named so the
 // status dot maps over exactly these and carries no unreachable branch
