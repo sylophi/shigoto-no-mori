@@ -13,21 +13,6 @@ export const LauncherCommandSchema = z.object({
 });
 export type LauncherCommand = z.infer<typeof LauncherCommandSchema>;
 
-// A remote device this client connects OUT to over the websocket host
-// transport (v2 step 3, slice B). Hand-typed this slice: the host's
-// ws:// url plus the shared token it serves. Step 4 replaces the token
-// with pairing, so nothing else should grow to depend on the token's
-// shape. `token` is a secret this client holds to reach the host, so it
-// is redacted out of a read exactly like socketHost.token (see
-// RedactedRemoteDeviceSchema below): it must never ride out on a read a
-// remote peer can call.
-export const RemoteDeviceEntrySchema = z.object({
-  label: z.string().optional(),
-  url: z.string(),
-  token: z.string(),
-});
-export type RemoteDeviceEntry = z.infer<typeof RemoteDeviceEntrySchema>;
-
 // Files/folders to carry over from the primary checkout into newly-created
 // worktrees. `path` is relative to the project root; gitignored entries are
 // the expected source. `symlink` keeps state shared; `copy` snapshots.
@@ -182,12 +167,6 @@ export const GlobalConfigSchema = z.object({
       token: z.string().optional(),
     })
     .optional(),
-  // Remote devices this client connects OUT to (v2 step 3, slice B).
-  // The renderer's device registry reconciles its live socket
-  // connections against this list. Each entry carries a token secret,
-  // redacted out of the read (see ReadGlobalConfigSchema). Absent = no
-  // remote devices.
-  remoteDevices: z.array(RemoteDeviceEntrySchema).optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 
@@ -212,19 +191,13 @@ export type RedactedSocketHost = z.infer<typeof RedactedSocketHostSchema>;
 
 // Output schema for globalConfig:read. Loose like the stored variant so
 // legacy and newer keys pass through, but with socketHost forced to the
-// redacted shape so a token can never ride out on a read. remoteDevices
-// is dropped ENTIRELY from a read (not just its tokens): the outbound
-// device list is this client's private connect config, so a remote peer
-// calling this read learns nothing about which other hosts this client
-// reaches. The renderer's device registry reads that list from a local
-// unredacted path, never this wire.
-export const ReadGlobalConfigSchema = GlobalConfigSchema.omit({
-  remoteDevices: true,
-})
-  .extend({
-    socketHost: RedactedSocketHostSchema.optional(),
-  })
-  .loose();
+// redacted shape so a token can never ride out on a read. The read
+// handler also drops the legacy `remoteDevices` key wholesale
+// (host/lib/config/global.ts): the removed LAN feature stored per-host
+// tokens under it, and an old config may still carry them.
+export const ReadGlobalConfigSchema = GlobalConfigSchema.extend({
+  socketHost: RedactedSocketHostSchema.optional(),
+}).loose();
 export type ReadGlobalConfig = z.infer<typeof ReadGlobalConfigSchema>;
 
 export const WriteGlobalConfigPayloadSchema = z.object({
@@ -235,9 +208,9 @@ export const WriteGlobalConfigPayloadSchema = z.object({
 // the keys the Settings form manages (managedDeviceConfig in
 // renderer/hooks/config/useSettingsSave.ts). STRICT on purpose, unlike
 // GlobalConfigSchema: an unknown key REJECTS rather than strips, so the
-// schema itself proves `socketHost` (the hosting token) and
-// `remoteDevices` (this machine's outbound connect list) can never ride
-// a remote write. Patch semantics: every key optional, only provided
+// schema itself proves `socketHost` (the hosting token) — and any other
+// unmanaged or legacy key — can never ride a remote write. Patch
+// semantics: every key optional, only provided
 // keys change, and the host handler spreads them over the local unredacted
 // document so everything the patch does not name rides through intact.
 // Derived by picking from GlobalConfigSchema rather than respelling the

@@ -5,21 +5,23 @@ import {
   MonitorSmartphone,
   Settings as SettingsIcon,
 } from "lucide-react";
-import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { SidebarView } from "@shared/schemas";
-import { cn } from "@/lib/utils";
 import {
   SegmentedControl,
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useAccountStatus } from "@/hooks/account/useAccount";
+import {
+  useAccountStatus,
+  useWatchAccountChanges,
+} from "@/hooks/account/useAccount";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
   useSetSidebarView,
   useSidebarView,
 } from "@/hooks/projects/useSidebarView";
 import { useUpdater } from "@/hooks/system/useUpdater";
+import { NavIconButton } from "./NavIconButton";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 interface SidebarFooterProps {
@@ -40,24 +42,22 @@ const VIEW_OPTIONS = [
   },
 ] as const satisfies ReadonlyArray<SegmentedOption<SidebarView>>;
 
-// What both views share: the layout toggle, and the two app-level
-// actions. Anything that only answers a question the project tree asks
-// lives in SidebarToolbar, above the tree.
+// What both views share: the layout toggle, and the app-level actions.
+// Anything that only answers a question the project tree asks lives in
+// SidebarToolbar, above the tree.
 export function SidebarFooter({
   arrangeMode,
   onToggleArrange,
 }: SidebarFooterProps) {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { openAddProject } = useOverlays();
   const view = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
-  const settingsActive = location.pathname === "/settings";
-  // Also true on a device's forest: that page belongs to the same "your
-  // machines" surface the button opens.
-  const devicesActive = location.pathname.startsWith("/devices");
+  // The account-status query is staleTime-Infinity, so this always-
+  // mounted watch is what keeps it (and every other account read) fresh
+  // across sign-in, sign-out and renames, wherever they happen.
+  useWatchAccountChanges();
   // The multi-device UI exists only on a build with an account service
   // (the SM_ACCOUNT_* launch env). Unconfigured, the app looks and
   // behaves like the single-machine app: no Devices button, no page to
@@ -105,44 +105,30 @@ export function SidebarFooter({
         </button>
       </SimpleTooltip>
       {devicesEnabled && (
-        <SimpleTooltip tip="Devices">
-          <button
-            type="button"
-            onClick={() => void navigate({ to: "/devices" })}
-            aria-label="Devices"
-            aria-current={devicesActive ? "page" : undefined}
-            className={cn(
-              SIDEBAR_ICON_BUTTON,
-              devicesActive && "bg-accent text-foreground",
-            )}
-          >
-            <MonitorSmartphone className="size-3.5" />
-          </button>
-        </SimpleTooltip>
-      )}
-      <SimpleTooltip
-        tip={updateReady ? "Settings — update available" : "Settings"}
-      >
-        <button
-          type="button"
-          onClick={() => void navigate({ to: "/settings" })}
-          aria-label={updateReady ? "Settings (update available)" : "Settings"}
-          aria-current={settingsActive ? "page" : undefined}
-          className={cn(
-            SIDEBAR_ICON_BUTTON,
-            "relative",
-            settingsActive && "bg-accent text-foreground",
-          )}
+        // Prefix match: a device's forest belongs to the same "your
+        // machines" surface this button opens.
+        <NavIconButton
+          to="/devices"
+          tip="Devices"
+          label="Devices"
+          exact={false}
         >
-          <SettingsIcon className="size-3.5" />
-          {updateReady && (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
-            />
-          )}
-        </button>
-      </SimpleTooltip>
+          <MonitorSmartphone className="size-3.5" />
+        </NavIconButton>
+      )}
+      <NavIconButton
+        to="/settings"
+        tip={updateReady ? "Settings — update available" : "Settings"}
+        label={updateReady ? "Settings (update available)" : "Settings"}
+      >
+        <SettingsIcon className="size-3.5" />
+        {updateReady && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
+          />
+        )}
+      </NavIconButton>
     </div>
   );
 }

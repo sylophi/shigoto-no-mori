@@ -18,7 +18,7 @@
 // answers granted:false over this wire, and the contract spot-checks
 // pin the step-6 flips (fs, the projects and packageScripts preference
 // writes, globalConfig.writeDeviceSettings with its strict patch schema
-// that structurally rejects socketHost and remoteDevices).
+// that structurally rejects socketHost and any unmanaged key).
 //
 // The golden read surface: every channel servable ungated (remote:true,
 // mutating:false) is pinned in read-surface.golden.json, so flipping a
@@ -385,11 +385,11 @@ async function main() {
   await check(
     "Origin gate: the app's own renderer origins complete hello/welcome",
     async () => {
-      // The renderer's LAN client (renderer/lib/remote/devices.ts) is
-      // built on the browser-global WebSocket, which ALWAYS sends
+      // Browser-global WebSocket clients (the web client's relay path,
+      // and any future in-app consumer of this listener) ALWAYS send
       // Origin: "file://" in the packaged app, the vite dev server's
       // loopback origin in dev. Both must be able to authenticate, or
-      // the real app can never connect over LAN at all.
+      // an in-app client could never connect at all.
       const { binding, url } = await startBinding();
       const helloFrom = async (origin) => {
         const client = connect(url, { origin });
@@ -878,6 +878,8 @@ async function main() {
           },
         }).success,
         false,
+        // Legacy key of the removed LAN feature; as an unknown key the
+        // strict patch schema must keep rejecting it.
         "writeDeviceSettings accepted a remoteDevices key",
       );
       assert.equal(

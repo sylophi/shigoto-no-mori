@@ -17,7 +17,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
-import { startRelayDeviceSync } from "@/lib/remote/relayDevices";
+import { startRemoteDeviceSync } from "@/lib/remote/remoteDeviceSync";
 import { webRouter } from "./router";
 import "@/index.css";
 
@@ -28,7 +28,7 @@ const queryClient = createAppQueryClient();
 
 // The registry's relay half: enrolled devices plus live presence, from
 // the bridge's account and relay modules, exactly as on desktop.
-startRelayDeviceSync();
+startRemoteDeviceSync();
 
 function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));

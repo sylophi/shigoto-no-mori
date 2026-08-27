@@ -22,7 +22,7 @@ import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-bu
 import { Input } from "@/components/ui/input";
 import { MergedPrimaryBranchBox } from "@/components/worktreeDetail/pullRequests/MergedPrimaryBranchBox";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageShell } from "@/components/shared/PageShell";
 import { DeviceStatusDot } from "./DeviceStatusDot";
 import { EmptyPanel } from "./EmptyPanel";
 import { PortForwardSection } from "./PortForwardSection";
@@ -66,11 +66,7 @@ const route = getRouteApi("/devices/$deviceId");
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();
-  // Relay entries are deviceId-keyed and unique. Guard the empty id
-  // explicitly anyway: matching on "" would pick an arbitrary entry
-  // instead of falling through to the not-connected panel.
-  const device =
-    deviceId === "" ? undefined : devices.find((d) => d.deviceId === deviceId);
+  const device = devices.find((d) => d.deviceId === deviceId);
 
   if (device === undefined) {
     return (
@@ -659,29 +655,22 @@ function ForestShell({
   title: string;
   status?: React.ReactNode;
   actions?: React.ReactNode;
-  // Default: children flow in the shell's scrollable column. `full`
-  // hands the whole below-header area to the children instead, for a
+  // `full` hands the whole below-header area to the children, for a
   // body that brings its own scroll region and pinned footer (the
   // settings editor).
   full?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        eyebrow="Remote device"
-        title={title}
-        watermark="端末"
-        status={status}
-        actions={actions}
-      />
-      {full ? (
-        children
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="flex max-w-3xl flex-col gap-6">{children}</div>
-        </div>
-      )}
-    </div>
+    <PageShell
+      eyebrow="Remote device"
+      title={title}
+      watermark="端末"
+      status={status}
+      actions={actions}
+      full={full}
+    >
+      {children}
+    </PageShell>
   );
 }

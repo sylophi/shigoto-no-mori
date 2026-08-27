@@ -58,8 +58,8 @@ export function fromConfig(
 // jobs: it is the dirty projection (an unchanged managed set skips the
 // CLI spawn), and it is what gets spread over the unredacted base at
 // save time to form the write. Keeping it base free is what lets the
-// dirty check ignore socketHost and remoteDevices, which the form never
-// manages and which the redacted read it was built from does not carry.
+// dirty check ignore socketHost, which the form never manages and which
+// the redacted read it was built from carries only in redacted form.
 function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
   const valid = validLaunchers(state);
   return {
@@ -119,8 +119,8 @@ export function toDeviceSettingsPatch(
 // the form was built from. Spread order matters: the managed keys carry
 // their own undefined defaults, which override the base so the omit on
 // default serialization still holds. Everything the form does not
-// manage (socketHost with its token, remoteDevices, any unknown key)
-// rides through from the base untouched.
+// manage (socketHost with its token, any unknown key) rides through
+// from the base untouched.
 function toWriteDoc(
   base: GlobalConfig,
   state: SettingsFormState,
@@ -222,8 +222,8 @@ export function useSettingsSave({
         // updateLocalGlobalConfig owns the read-unredacted-base-then-write
         // -full-doc invariant: it reads the base imperatively (so the
         // token never lands in a cached query) and the whole-document CLI
-        // write keeps socketHost.token and remoteDevices, which the
-        // redacted read the form was built from omits.
+        // write keeps socketHost.token, which the redacted read the
+        // form was built from omits.
         await updateLocalGlobalConfig((base) => toWriteDoc(base, state));
       }
       // keepReachable rides the same client store but is written

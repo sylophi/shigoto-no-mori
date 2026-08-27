@@ -4,7 +4,7 @@ import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
 import { createAppQueryClient } from "./lib/queryClientOptions";
-import { startRelayDeviceSync } from "./lib/remote/relayDevices";
+import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import {
   invalidateHostDevice,
   localDeviceId,
@@ -79,7 +79,7 @@ void queryClient.prefetchQuery({
 // Relay devices (v2 step 4, slice C): the remote device registry,
 // rebuilt from the account's device list plus the relay bridge status,
 // on boot and on every account or relay change.
-startRelayDeviceSync();
+startRemoteDeviceSync();
 
 // State changed on disk under the app (a CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it

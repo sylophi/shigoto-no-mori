@@ -1,7 +1,7 @@
 // Renderer registry of remote devices: the account's devices,
 // deviceId-keyed. There is no per-device supervisor in the renderer —
 // the one relay socket lives in main and a device's status DERIVES from
-// the bridge (relayDevices.ts rebuilds the list wholesale on boot, on
+// the bridge (remoteDeviceSync.ts rebuilds the list wholesale on boot, on
 // account changes and on every relay status change). The registry is
 // the external store a React binding reads through useSyncExternalStore,
 // so device status renders live without prop threading.
@@ -75,9 +75,9 @@ const listeners = new Set<() => void>();
 // stable reference between changes, and a NEW reference on every change.
 let snapshot: readonly RemoteDevice[] = [];
 
-// Replace the store wholesale. Called by relayDevices.ts on boot, on
-// account changes and on relay status changes.
-export function setRelayDevices(devices: readonly RemoteDevice[]): void {
+// Replace the store wholesale. Called by remoteDeviceSync.ts on boot,
+// on account changes and on relay status changes.
+export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
   snapshot = [...devices];
   for (const listener of listeners) listener();
 }
