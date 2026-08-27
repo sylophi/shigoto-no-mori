@@ -1,10 +1,10 @@
-// Read-modify-write for the local global config, used by the hosting and
-// remote-device settings sections (v2 step 3, slice C). Those sections
-// own keys the redacted read cannot round-trip: socketHost.token and the
-// remoteDevices tokens. The CLI write is whole document for its
-// registered keys, so an omitted socketHost.token is DELETED, which is
-// why the base MUST be the unredacted readLocal doc rather than the
-// redacted read the rest of settings is built from.
+// Read-modify-write for the local global config (v2 step 3, slice C).
+// The config can carry keys the redacted read cannot round-trip (the
+// engine-level socketHost.token and remoteDevices tokens, writable via
+// the CLI even though no UI edits them). The CLI write is whole document
+// for its registered keys, so an omitted socketHost.token is DELETED,
+// which is why the base MUST be the unredacted readLocal doc rather than
+// the redacted read the rest of settings is built from.
 //
 // The token bearing base is read imperatively here and handed straight
 // to the write. It never enters the React Query cache, so the secrets
@@ -12,11 +12,9 @@
 import type { GlobalConfig } from "@shared/schemas";
 
 // Module-level serializer so every global-config write queues through one
-// path. Three callers (the settings Save button, the hosting section, the
-// remote-devices section) each read-modify-write the WHOLE document, so
-// two overlapping writes would each read the same base and the second to
-// land would clobber the first's domain (toggle hosting while adding a
-// remote device and one reverts). Chaining the read-apply-write here is
+// path. Every caller read-modify-writes the WHOLE document, so two
+// overlapping writes would each read the same base and the second to
+// land would clobber the first's domain. Chaining the read-apply-write here is
 // the single owner of that invariant. The next task's readLocal runs only
 // after the prior task's write resolved, and the write handler drops the
 // host read cache before it resolves, so each base reflects the write

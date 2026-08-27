@@ -28,8 +28,7 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 // owner has not set the SM_ACCOUNT_* env vars, so sign-in is impossible
 // on this build), signed out (a Sign in button), and signed in (this
 // device's identity plus the account's device registry). An online
-// device's row links to its remote forest over the relay (slice C),
-// matching the affordance the LAN device list offers.
+// device's row links to its remote forest over the relay (slice C).
 export function AccountSection() {
   useWatchAccountChanges();
   useWatchGrantsChanges();
@@ -50,9 +49,7 @@ export function AccountSection() {
   // account:changed), so a device coming online or offline updates
   // without a refetch (I3).
   const relayById = new Map(
-    useRemoteDevices()
-      .filter((device) => device.kind === "relay")
-      .map((device) => [device.deviceId, device] as const),
+    useRemoteDevices().map((device) => [device.deviceId, device] as const),
   );
 
   return (
@@ -146,8 +143,8 @@ export function AccountSection() {
 
 // One device row: an online dot, the name, this-device marker, and the
 // platform plus device id as a muted sub-line. An online peer gets the
-// "View forest" affordance, navigating to the same device route the
-// LAN list uses, where the registry serves it over the relay bridge. A
+// "View forest" affordance, navigating to the device route the registry
+// serves over the relay bridge. A
 // peer that is not this device also gets a command-grant toggle: until
 // this host grants it, the peer sees a read-only mirror and its mutating
 // calls are refused at the relay link (transport-enforced, slice D).

@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AccountSection } from "./AccountSection";
+import { ReachableSection } from "./ReachableSection";
 
 // "/devices": everything about this account's machines, on its own page.
 // The account (sign in, this device's name, the device registry with its
@@ -13,6 +14,7 @@ export function DevicesPage() {
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-10">
           <AccountSection />
+          <ReachableSection />
         </div>
       </div>
     </div>

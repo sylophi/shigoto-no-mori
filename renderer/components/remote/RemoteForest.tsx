@@ -66,24 +66,18 @@ const route = getRouteApi("/devices/$deviceId");
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();
-  // The registry holds both LAN and relay entries, and a stale LAN entry
-  // (api undefined, in backoff) can share a deviceId with a live relay
-  // entry for the same machine. Prefer a SERVING entry so that stale twin
-  // does not shadow the live one and strand this page (I2). Guard the
-  // empty id explicitly: an unconnected entry also carries "", so
-  // matching on it would pick an arbitrary disconnected device.
+  // Relay entries are deviceId-keyed and unique. Guard the empty id
+  // explicitly anyway: matching on "" would pick an arbitrary entry
+  // instead of falling through to the not-connected panel.
   const device =
-    deviceId === ""
-      ? undefined
-      : (devices.find((d) => d.deviceId === deviceId && d.api !== undefined) ??
-        devices.find((d) => d.deviceId === deviceId));
+    deviceId === "" ? undefined : devices.find((d) => d.deviceId === deviceId);
 
   if (device === undefined) {
     return (
       <ForestShell title="Remote forest">
         <EmptyPanel>
-          This device isn&apos;t connected. Open Settings to add or reconnect
-          it, then try again.
+          This device isn&apos;t connected. Check it on the Devices page, then
+          try again.
         </EmptyPanel>
       </ForestShell>
     );

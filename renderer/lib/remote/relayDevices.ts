@@ -1,7 +1,7 @@
 // Relay entries for the remote device registry (v2 step 4, slice C).
-// Rebuilds the store's relay half from the account's device registry
-// plus the relay bridge's live status, on boot, on account changes and
-// on every relay statusChanged broadcast. There is no per-device
+// Rebuilds the store from the account's device registry plus the relay
+// bridge's live status, on boot, on account changes and on every relay
+// statusChanged broadcast. There is no per-device
 // supervisor here: the one relay socket lives in main, so a relay
 // device's status DERIVES from the bridge instead of being driven.
 //
@@ -124,10 +124,8 @@ function buildEntry(
     api = apiFor(info.deviceId);
   }
   return {
-    kind: "relay",
     deviceId: info.deviceId,
     label: info.name,
-    url: "",
     status,
     appVersion,
     api,
