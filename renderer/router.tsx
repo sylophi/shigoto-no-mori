@@ -17,6 +17,7 @@ import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
+import { DevicesPage } from "@/components/remote/DevicesPage";
 import { RemoteForest } from "@/components/remote/RemoteForest";
 import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
@@ -117,6 +118,15 @@ const tidyRoute = createRoute({
   component: TidyForest,
 });
 
+// App-wide like settings: the account and its device registry span
+// machines rather than describing this one, so they get their own page
+// off the root.
+const devicesIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices",
+  component: DevicesPage,
+});
+
 // App-wide like /tidy, but device-scoped: a read-only view of another
 // machine's forest. Carries a param, so it takes remountDeps like the
 // project routes so switching devices swaps the data rather than showing
@@ -204,6 +214,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   settingsRoute,
   tidyRoute,
+  devicesIndexRoute,
   devicesRoute,
   newWorktreeRoute,
   configureProjectRoute,

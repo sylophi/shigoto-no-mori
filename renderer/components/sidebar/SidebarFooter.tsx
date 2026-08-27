@@ -2,6 +2,7 @@ import {
   FolderPlus,
   Inbox,
   ListTree,
+  MonitorSmartphone,
   Settings as SettingsIcon,
 } from "lucide-react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
@@ -53,6 +54,9 @@ export function SidebarFooter({
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
   const settingsActive = location.pathname === "/settings";
+  // Also true on a device's forest: that page belongs to the same "your
+  // machines" surface the button opens.
+  const devicesActive = location.pathname.startsWith("/devices");
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
@@ -90,6 +94,20 @@ export function SidebarFooter({
           className={SIDEBAR_ICON_BUTTON}
         >
           <FolderPlus className="size-3.5" />
+        </button>
+      </SimpleTooltip>
+      <SimpleTooltip tip="Devices">
+        <button
+          type="button"
+          onClick={() => void navigate({ to: "/devices" })}
+          aria-label="Devices"
+          aria-current={devicesActive ? "page" : undefined}
+          className={cn(
+            SIDEBAR_ICON_BUTTON,
+            devicesActive && "bg-accent text-foreground",
+          )}
+        >
+          <MonitorSmartphone className="size-3.5" />
         </button>
       </SimpleTooltip>
       <SimpleTooltip

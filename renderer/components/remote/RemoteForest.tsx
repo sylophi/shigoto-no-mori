@@ -57,7 +57,7 @@ const route = getRouteApi("/devices/$deviceId");
 // land) render only when this device holds command access on the host,
 // resolved per-caller by useCommandAccess. When the host has NOT granted
 // this device, the page stays read-only and shows an inline note instead:
-// granting is host-side (the target's Settings > Account) and there is no
+// granting is host-side (the target's Devices page) and there is no
 // request-over-wire mechanism here. Every control acts through the
 // scope-clean mutation hooks (targeting this device via HostScopeProvider)
 // and relies on their device-scoped key invalidation to refresh the forest
@@ -257,7 +257,7 @@ function ForestBody({
       {!granted && !isLoading && (
         <p className="text-xs text-muted-foreground">
           You have read-only access to this device. Command access is granted
-          from its Settings &gt; Account.
+          from its Devices page.
         </p>
       )}
       {projects.map((project) => (
