@@ -1,4 +1,5 @@
 [
+  "direct:connectInfo",
   "githubCli:projectPullRequests",
   "githubCli:pullRequestCandidates",
   "githubCli:pullRequestDiff",

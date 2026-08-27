@@ -17,6 +17,15 @@
 // the shared command-refused code before its handler can run. Commands
 // for a remote peer ride the relay's per-peer grant instead.
 //
+// DIRECT DATA PLANE (v2 step 10, slice A): the same binding, created
+// with a WsServerTicketAuth, serves a SECOND instance for direct
+// device-to-device data. It differs from the legacy LAN instance in
+// auth (single-use connect tickets bound to the hello deviceId instead
+// of the static token), in dispatch (mutating channels served under a
+// live per-peer command grant instead of hardcoded read-only), and in
+// peer tracking (one authed socket per deviceId with supersede). All
+// the hardening above is shared between both instances.
+//
 // This file must stay Electron free (host:check). The Electron facts a
 // listener needs (appVersion) arrive through start opts instead.
 import { createHash, timingSafeEqual } from "node:crypto";
@@ -46,22 +55,50 @@ import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
 import { toText } from "./rawData";
 
+// Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
+// SECOND binding instance serves device-to-device data over direct
+// sockets, brokered by short-lived single-use connect tickets minted
+// over the relay. Injected at binding creation so this module stays
+// free of the ticket store and the grant store alike. Absent means the
+// legacy LAN behavior: static-token auth and the read-only dispatch
+// gate, unchanged.
+export type WsServerTicketAuth = {
+  // Verifies the connect ticket presented in hello.token against the
+  // claimed hello deviceId. The implementation must consume the ticket
+  // on first presentation regardless of outcome (single use).
+  verifyTicket(ticket: string, deviceId: string): boolean;
+  // Whether the named peer may run MUTATING calls on this host, read
+  // live at every dispatch (never cached on the session) so a grant or
+  // revoke takes effect without a reconnect, mirroring the relay link.
+  isCommandGranted(peerDeviceId: string): boolean;
+};
+
 export type WsServerStartOpts = {
   port: number;
   // Where the listener binds. Loopback ("127.0.0.1") is the default the
   // config resolver picks. "0.0.0.0" only under the explicit LAN opt-in
-  // (socketHost.lan). Kept as a resolved string so this module never
-  // reads config.
+  // (socketHost.lan). The direct listener binds "::" (dual stack: both
+  // families accept), because it advertises IPv6 candidates too and an
+  // IPv4-only bind would make every one of them guaranteed dead. Kept
+  // as a resolved string so this module never reads config.
   bindAddress: string;
   // Shared secret from the device config. Never empty: startNow throws
   // on an empty token, so an unset config can never degrade into an
   // accept-everything listener even if a caller forgets the gate.
+  // Ignored in ticket mode (the injected verifier is the auth), where
+  // callers pass "".
   token: string;
   // The host root's id and the host app's version, echoed in the
   // welcome frame. appVersion is an Electron fact, so the caller
   // injects it here rather than this module importing electron.
   deviceId: string;
   appVersion: string;
+  // Ticket mode: the account the listener serves. An IDENTITY field,
+  // compared in sameListener, so an account switch restarts the
+  // listener and drops every authed socket from the old account
+  // instead of leaving them live under the new one. The legacy LAN
+  // listener has no account and leaves it unset.
+  accountId?: string;
   // Test seam. Real callers take the 10s default.
   helloTimeoutMs?: number;
 };
@@ -89,6 +126,13 @@ export type WsServerBinding = ServerTransport & {
   // already matches them.
   refresh(resolve: () => Promise<WsServerStartOpts | null>): Promise<void>;
   status(): WsServerStatus;
+  // Ticket mode: kill the authed sockets whose peer deviceId is not in
+  // the given roster. Presence scopes the data plane (v2 step 10): the
+  // relay brokers membership, so a peer absent from a live roster (a
+  // revoked device, an account switch on its side) loses its direct
+  // socket within one presence broadcast. The caller must only pass a
+  // roster it trusts as live, see shared/relay/directPresence.ts.
+  closePeersNotIn(online: readonly string[]): void;
 };
 
 // Total sockets (authed plus pending) the listener will hold. Over this
@@ -151,7 +195,9 @@ function send(socket: WebSocket, frame: ServerFrame): void {
   socket.send(encodeFrame(frame));
 }
 
-export function createWsServerBinding(): WsServerBinding {
+export function createWsServerBinding(
+  auth?: WsServerTicketAuth,
+): WsServerBinding {
   const handlers = new Map<
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
@@ -166,6 +212,20 @@ export function createWsServerBinding(): WsServerBinding {
   // Sockets past hello. broadcastAll fans out to exactly this set, so
   // an unauthenticated connection can never receive a push.
   const authed = new Set<WebSocket>();
+  // Ticket mode only: the one authed peer per deviceId. A device dials
+  // at most one direct socket to a given peer, so a duplicate authed
+  // connection from the same deviceId supersedes the older one,
+  // mirroring the DO's behavior for its own sockets. The entry carries
+  // the connection's kill function (its dead flag and AbortController
+  // are closure locals of that connection), so supersede and the
+  // roster close can END the old connection: closeThenTerminate alone
+  // would let the old socket keep dispatching req frames for the close
+  // grace window, and a mutating invoke could execute twice.
+  type AuthedPeer = {
+    socket: WebSocket;
+    kill(code: number, reason: string): void;
+  };
+  const authedByDevice = new Map<string, AuthedPeer>();
   let listener: {
     wss: WebSocketServer;
     opts: WsServerStartOpts;
@@ -286,22 +346,28 @@ export function createWsServerBinding(): WsServerBinding {
       return;
     }
     if (!readOnlyChannels.has(frame.channel)) {
-      // Fail-closed read-only wire: a channel is served over the LAN
-      // socket ONLY when it was explicitly registered mutating:false.
-      // A mutation, or a channel that never classified itself, is
-      // refused BEFORE its handler runs. The typed code lets the client
-      // transport surface "that machine will not run commands from
-      // here" distinctly from a real failure. The LAN wire has no grant
-      // model, so unlike the relay there is no per-peer predicate to
-      // consult.
-      send(socket, {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        code: COMMAND_REFUSED_CODE,
-        message: COMMAND_REFUSED_MESSAGE,
-      });
-      return;
+      // Fail-closed gate on anything not proven a read (explicitly
+      // registered mutating:false). Legacy mode: the LAN wire has no
+      // grant model, so a mutation or an untagged channel is always
+      // refused BEFORE its handler runs. Ticket mode (the direct data
+      // plane): mirror the relay link's dispatch and consult the
+      // injected per-peer grant LIVE at each call, never cached on the
+      // session, so a grant or revoke takes effect without a
+      // reconnect. Either refusal carries the typed code so the client
+      // transport surfaces "that machine will not run commands from
+      // here" distinctly from a real failure. The session's context
+      // already carries the live verdict, so dispatch asks it rather
+      // than re-deriving from the auth seam.
+      if (ctx.isCallerCommandGranted?.() !== true) {
+        send(socket, {
+          t: "res",
+          id: frame.id,
+          ok: false,
+          code: COMMAND_REFUSED_CODE,
+          message: COMMAND_REFUSED_MESSAGE,
+        });
+        return;
+      }
     }
     try {
       const result = await fn(ctx, frame.input);
@@ -371,12 +437,41 @@ export function createWsServerBinding(): WsServerBinding {
         closeThenTerminate(socket, CLOSE_HELLO_FAILED, "hello timeout");
       }, helloTimeoutMs);
 
+      // End THIS connection now: no frame it delivers after this runs
+      // a handler (dead), its in-flight handlers unwind (the abort),
+      // and it is out of every map before the close frame even
+      // flushes. Registered on the per-device entry so supersede and
+      // the roster close reach it, satisfying closeThenTerminate's
+      // precondition that the caller sets its dead flag first.
+      const kill = (code: number, reason: string): void => {
+        if (dead) return;
+        dead = true;
+        clearTimeout(helloTimer);
+        leavePreAuth();
+        authed.delete(socket);
+        const id = ctx?.callerDeviceId;
+        if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
+          authedByDevice.delete(id);
+        }
+        controller.abort();
+        closeThenTerminate(socket, code, reason);
+      };
+
       socket.on("close", () => {
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
+        // A superseded socket must not evict its replacement, so the
+        // per-device entry is dropped only while it still names THIS
+        // socket, mirroring the DO. The authed identity lives on the
+        // context, ticket mode only.
+        const id = ctx?.callerDeviceId;
+        if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
+          authedByDevice.delete(id);
+        }
         // ctx.signal is connection scoped: one controller per socket,
-        // aborted exactly here.
+        // aborted exactly here (or in kill, which is idempotent with
+        // this cleanup).
         controller.abort();
       });
       socket.on("error", (error) => {
@@ -395,7 +490,16 @@ export function createWsServerBinding(): WsServerBinding {
             closeThenTerminate(socket, CLOSE_HELLO_FAILED, "malformed hello");
             return;
           }
-          if (!tokenMatches(frame.token, opts.token)) {
+          // Legacy mode compares the static token. Ticket mode hands
+          // hello.token to the injected verifier as a connect ticket
+          // bound to the claimed hello deviceId, which the verifier
+          // consumes single-use regardless of outcome. Both failures
+          // take the same lockout-counted auth path.
+          const authenticated =
+            auth === undefined
+              ? tokenMatches(frame.token, opts.token)
+              : auth.verifyTicket(frame.token, frame.deviceId);
+          if (!authenticated) {
             dead = true;
             clearTimeout(helloTimer);
             leavePreAuth();
@@ -408,16 +512,11 @@ export function createWsServerBinding(): WsServerBinding {
           clearTimeout(helloTimer);
           failedAuth.delete(ip);
           leavePreAuth();
-          ctx = {
-            signal: controller.signal,
-            // This wire is read-only by policy, so no LAN caller ever
-            // holds command access. The preflight read answers false
-            // here without consulting any grant store.
-            isCallerCommandGranted: () => false,
-            // Bound to this socket only, so a handler streaming
-            // progress reaches its caller rather than every peer. Push
-            // delivery is subject to backpressure.
-            notifier: (module, key) => (payload) => {
+          // Bound to this socket only, so a handler streaming progress
+          // reaches its caller rather than every peer. Push delivery
+          // is subject to backpressure.
+          const notifier: HandlerContext["notifier"] =
+            (module, key) => (payload) => {
               const { channel, parsed } = resolveBroadcast(
                 module,
                 key,
@@ -427,8 +526,39 @@ export function createWsServerBinding(): WsServerBinding {
                 socket,
                 encodeFrame({ t: "push", channel, payload: parsed }),
               );
-            },
+            };
+          // Legacy wire: the static token proves nothing about
+          // identity, so callerDeviceId stays undefined and the grant
+          // predicate answers false without consulting any store (the
+          // LAN wire is read-only by policy). Ticket mode: the ticket
+          // bound this hello to a deviceId, so the context carries the
+          // authenticated peer identity and the per-peer grant answer,
+          // read live from the injected predicate so a toggle applies
+          // without a reconnect.
+          const callerDeviceId =
+            auth === undefined ? undefined : frame.deviceId;
+          ctx = {
+            signal: controller.signal,
+            isCallerCommandGranted:
+              auth === undefined
+                ? () => false
+                : () => auth.isCommandGranted(frame.deviceId),
+            callerDeviceId,
+            notifier,
           };
+          if (callerDeviceId !== undefined) {
+            // A device dials at most one direct socket to a given
+            // peer, so a duplicate authed connection from the same
+            // deviceId supersedes the older one, like the DO does for
+            // its own sockets. The old connection is KILLED, not just
+            // closed: kill sets its dead flag and aborts its signal,
+            // so nothing it delivers during the close grace window
+            // executes, and no push reaches it either.
+            authedByDevice
+              .get(callerDeviceId)
+              ?.kill(CLOSE_GOING_AWAY, "superseded");
+            authedByDevice.set(callerDeviceId, { socket, kill });
+          }
           authed.add(socket);
           send(socket, {
             t: "welcome",
@@ -437,6 +567,10 @@ export function createWsServerBinding(): WsServerBinding {
           });
           return;
         }
+        // bye is a relay-wire frame (the relay has no per-peer socket
+        // close). This wire has a real socket close, so a bye here is
+        // meaningless and silently ignored.
+        if (frame !== null && frame.t === "bye") return;
         // Past hello, a bad frame is dropped rather than fatal: one
         // malformed message must not kill a connection carrying other
         // in-flight calls.
@@ -468,8 +602,10 @@ export function createWsServerBinding(): WsServerBinding {
         return;
       }
       // The invariant, enforced where WsServerBinding owns it: an empty
-      // token can never open a listener, whatever config said upstream.
-      if (opts.token === "") {
+      // token can never open a legacy listener, whatever config said
+      // upstream. Ticket mode has no static token at all (the injected
+      // verifier is the auth), so the guard does not apply there.
+      if (auth === undefined && opts.token === "") {
         reject(new Error("[socket] refusing to start with an empty token"));
         return;
       }
@@ -538,6 +674,7 @@ export function createWsServerBinding(): WsServerBinding {
     // rotated listener.
     listener = null;
     authed.clear();
+    authedByDevice.clear();
     status = { listening: false, port: null, bindAddress: null, error: null };
     for (const socket of wss.clients) {
       socket.close(CLOSE_GOING_AWAY, "server stopping");
@@ -559,12 +696,16 @@ export function createWsServerBinding(): WsServerBinding {
   function sameListener(opts: WsServerStartOpts): boolean {
     if (listener === null) return false;
     const current = listener.opts;
-    // deviceId and appVersion are process constants, so port, token and
-    // bindAddress are the only fields a config write can change under us.
+    // deviceId and appVersion are process constants, so port, token,
+    // bindAddress and accountId are the fields a config write or an
+    // account switch can change under us. accountId is an identity
+    // field: a switch must restart the listener so every socket authed
+    // under the old account drops.
     return (
       current.port === opts.port &&
       current.token === opts.token &&
-      current.bindAddress === opts.bindAddress
+      current.bindAddress === opts.bindAddress &&
+      current.accountId === opts.accountId
     );
   }
 
@@ -589,8 +730,22 @@ export function createWsServerBinding(): WsServerBinding {
     // Encode once, then fan the identical text out to every authed
     // socket rather than re-stringifying per peer.
     broadcastAll(channel, payload) {
+      // The steady state of an idle listener (up, nobody connected)
+      // must not pay a stringify per broadcast.
+      if (authed.size === 0) return;
       const text = encodeFrame({ t: "push", channel, payload });
       for (const socket of authed) sendPushText(socket, text);
+    },
+    closePeersNotIn(online) {
+      // Deleting the visited entry (kill does) is fine under Map
+      // iteration. Ticket mode only in practice: the legacy wire never
+      // populates authedByDevice.
+      const live = new Set(online);
+      for (const [deviceId, peer] of authedByDevice) {
+        if (!live.has(deviceId)) {
+          peer.kill(CLOSE_GOING_AWAY, "no longer in the account roster");
+        }
+      }
     },
     start: (opts) => lifecycle(() => startNow(opts)),
     stop: () => lifecycle(() => stopNow()),

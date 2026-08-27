@@ -55,6 +55,11 @@ export const RelayStatusSchema = z.object({
   // welcome, keyed by deviceId. Empty for a peer with no open session,
   // so the renderer reads it here instead of polling peerInfo per device.
   peerAppVersions: z.record(z.string(), z.string()),
+  // The peers whose cached session rides a DIRECT socket rather than
+  // the relay (v2 step 10, slice A). Optional per the version-skew
+  // policy: absent means the serving side predates the direct plane,
+  // and the web bridge never sets it.
+  directDeviceIds: z.array(z.string()).optional(),
 });
 export type RelayStatus = z.infer<typeof RelayStatusSchema> &
   SocketStatusMatchesSupervisor;

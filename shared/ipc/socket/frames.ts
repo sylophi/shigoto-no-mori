@@ -95,9 +95,22 @@ export const ReqFrameSchema = z.object({
 });
 export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 
+// Sent by a client peer when it closes its side on purpose (v2 step
+// 10, slice A). The relay carries no per-peer socket close, so without
+// this a host would keep a hostSession for a departed peer until the
+// next presence drop and fan every broadcast at it through the Durable
+// Object. Additive per the version-skew policy: an old host fails to
+// parse the frame and drops it, so the session then dies on presence
+// exactly as before. The direct and LAN sockets have a real socket
+// close, so they never need it and ignore it.
+export const ByeFrameSchema = z.object({
+  t: z.literal("bye"),
+});
+
 export const ClientFrameSchema = z.discriminatedUnion("t", [
   HelloFrameSchema,
   ReqFrameSchema,
+  ByeFrameSchema,
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 

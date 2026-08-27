@@ -254,6 +254,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
   let nextEpoch = 1;
   let droppedPushes = 0;
   let droppedInbound = 0;
+  let peerPushThrew = 0;
 
   // Throttled warn for the dropped inbound paths (unparseable frames,
   // off-roster peers), so a flood cannot spam the log the way an
@@ -358,6 +359,24 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     sendAnswerText(to, sendText);
   }
 
+  // Owner-initiated close of a client peer: tell the host we are gone
+  // (a bye frame), then destroy locally. Without the bye the host's
+  // hostSession for this peer would survive until the next presence
+  // drop and keep fanning every broadcast at a dead client peer over
+  // the relay. Best effort: a downed link just means the host finds
+  // out via presence as before.
+  function closeClientPeer(peer: ClientPeer): void {
+    if (!peer.closed) {
+      try {
+        sendFrameToPeer(peer.deviceId, { t: "bye" }, peer.epoch);
+      } catch {
+        // The link is down or the frame did not fit. The host's
+        // session then dies on presence, exactly the pre-bye behavior.
+      }
+    }
+    destroyClientPeer(peer, new RelayLinkDownError(), false);
+  }
+
   // Kill one client peer. fireClose distinguishes the peer dying on its
   // own (close callback owed, post-welcome only) from an owner close or
   // a replacement (silent). The relay carries no per-peer close code.
@@ -434,6 +453,11 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
         // handler sees one boolean about its caller. The grant list
         // itself never crosses the wire.
         isCallerCommandGranted: () => deps.isCommandGranted(from),
+        // The authenticated peer identity: the DO consumed this peer's
+        // connect ticket and stamps `from`, and the roster gate above
+        // already bounded it to a real account device. Handlers that
+        // need a caller identity (direct:connectInfo) read it here.
+        callerDeviceId: from,
         // Bound to the calling peer only, so a handler streaming progress
         // reaches its caller rather than every peer. A notifier that
         // fires after a re-hello or a presence drop must not push into
@@ -455,6 +479,16 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       },
       epoch,
     );
+  }
+
+  // The peer's client role closed on purpose (a bye frame): tear its
+  // host session down now instead of fanning broadcasts at a dead peer
+  // until presence notices. Epoch-guarded so a late bye from a prior
+  // pairing cannot kill the session a fresh hello just built.
+  function handleBye(from: string, epoch: number): void {
+    const session = hostSessions.get(from);
+    if (session === undefined || session.epoch !== epoch) return;
+    dropHostSession(from);
   }
 
   async function dispatch(
@@ -704,7 +738,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       peer.welcome = { remoteAppVersion: frame.appVersion };
       waiter.resolve({
         transport: peer.transport,
-        close: () => destroyClientPeer(peer, new RelayLinkDownError(), false),
+        close: () => closeClientPeer(peer),
         remoteDeviceId: peer.deviceId,
         remoteAppVersion: frame.appVersion,
       });
@@ -738,7 +772,14 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       try {
         deps.onPeerPush(from, frame.channel, frame.payload);
       } catch (error) {
-        console.warn(`[relay] onPeerPush threw: ${errorMessageOf(error)}`);
+        // Throttled like warnDrop: a bridge callback throwing per push
+        // must not turn a chatty stream into a log flood.
+        peerPushThrew += 1;
+        if (peerPushThrew % 50 === 1) {
+          console.warn(
+            `[relay] onPeerPush threw: ${errorMessageOf(error)} (threw ${peerPushThrew} so far)`,
+          );
+        }
       }
     }
     peer.subscribers.emit(frame.channel, frame.payload);
@@ -815,12 +856,14 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
         return;
       }
       const { epoch, sm } = parsed.data;
-      // The one role switch: hello and req are requests TO us (host
-      // role), everything else is a reply FOR us (client role).
+      // The one role switch: hello, req and bye are requests TO us
+      // (host role), everything else is a reply FOR us (client role).
       if (sm.t === "hello") {
         handleHello(envelope.from, epoch);
       } else if (sm.t === "req") {
         handleReq(envelope.from, sm, epoch);
+      } else if (sm.t === "bye") {
+        handleBye(envelope.from, epoch);
       } else {
         handleServerFrame(envelope.from, sm, epoch);
       }

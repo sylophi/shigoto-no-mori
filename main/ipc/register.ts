@@ -30,8 +30,16 @@ import {
   resolveSocketHostConfig,
 } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
+import { createConnectTicketStore } from "@host/direct/tickets";
 import { createRelayConnection } from "@host/relay/connection";
 import { createWsServerBinding } from "@host/socket/server";
+import { makeDirectHandlers } from "@host/ipc/modules/direct";
+import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
+import {
+  createDirectDialer,
+  type DirectDialer,
+} from "@shared/relay/directDial";
+import { applyDirectPresence } from "@shared/relay/directPresence";
 import { isPeerCommandGranted, relayConnectInputs } from "./modules/account";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
@@ -116,7 +124,12 @@ const wsServer = createWsServerBinding();
 // window through the client-scoped relay contract.
 const relayServer = createRelayConnection({
   onChange: () => {
-    broadcastAll(relayContract, "statusChanged", relayStatus());
+    notifyRelayStatusChanged();
+    // Presence scopes the data plane (v2 step 10): every roster change
+    // reconciles the direct sessions on both sides, gated inside on a
+    // LIVE roster so our own relay outage never severs working direct
+    // connections.
+    reconcileDirectPresence();
   },
   onPeerPush: (deviceId, channel, payload) => {
     broadcastAll(relayContract, "peerPush", { deviceId, channel, payload });
@@ -127,10 +140,34 @@ const relayServer = createRelayConnection({
   isCommandGranted: isPeerCommandGranted,
 });
 
-// The two remote wires (LAN socket and relay), looped wherever a
-// channel or broadcast must reach both so a third wire lands in one
-// place.
-const remoteWires: readonly ServerTransport[] = [wsServer, relayServer.server];
+// The direct data plane (v2 step 10, slice A): a SECOND ws listener
+// instance in ticket mode. Auth consumes single-use connect tickets
+// minted by direct:connectInfo over the relay, and dispatch gates
+// mutating channels on the same live per-peer grant the relay link
+// reads. Unconditional like the other bindings so registration records
+// handlers at boot, while listening is gated on enrollment in
+// refreshDirectHost below.
+const directTickets = createConnectTicketStore();
+const directWsServer = createWsServerBinding({
+  verifyTicket: (ticket, deviceId) => directTickets.consume(ticket, deviceId),
+  isCommandGranted: isPeerCommandGranted,
+});
+
+// The remote wires (LAN socket, relay, direct listener), looped
+// wherever a channel or broadcast must reach them all so a new wire
+// lands in one place. A peer holds at most ONE of the two account
+// wires at a time beyond a transient overlap: when its direct dial
+// wins, its client role sends bye on the throwaway relay session it
+// brokered through, which tears down our relay hostSession for it, so
+// broadcasts reach it over the direct socket only. The overlap window
+// is the dial itself (both sessions briefly live), and the pushes
+// possibly doubled there are cache-invalidation pings that coalesce
+// viewer side.
+const remoteWires: readonly ServerTransport[] = [
+  wsServer,
+  relayServer.server,
+  directWsServer,
+];
 
 // Host-scoped calls are served on every wire that may carry them.
 // Client-scoped calls stay structurally unreachable over the socket
@@ -292,22 +329,57 @@ export async function refreshSocketHost(): Promise<void> {
   }
 }
 
+// The statusChanged fan-out, shared by the relay connection's own
+// onChange and the bridge's direct session transitions so both emit
+// the same snapshot shape.
+function notifyRelayStatusChanged(): void {
+  broadcastAll(relayContract, "statusChanged", relayStatus());
+}
+
 // The relay bridge's status snapshot, shared by the status handler and
 // the statusChanged fan-out so both always report the same shape.
-export function relayStatus(): RelayStatus {
+function relayStatus(): RelayStatus {
   const current = relayServer.status();
   return {
     socket: current.socket,
     onlineDeviceIds: current.onlineDeviceIds,
     // Folded into the snapshot so the renderer stops polling peerInfo per
-    // device on every reconcile (M3).
-    peerAppVersions: current.peerAppVersions,
+    // device on every reconcile (M3). The relay link only knows its own
+    // client peers, so direct sessions merge their welcome-confirmed
+    // versions in here, or the skew check would silently never fire for
+    // exactly the peers on the best wire.
+    peerAppVersions: {
+      ...current.peerAppVersions,
+      ...relayHandlers.directPeerVersions(),
+    },
+    directDeviceIds: relayHandlers.directPeerIds(),
   };
 }
 
-// The relay's client role, exposed for the bridge handlers so they
+// The presence half of the direct plane's membership enforcement: on
+// every relay transition, close host-side direct sockets and cached
+// outbound direct sessions for peers no longer in a LIVE roster, and
+// clear the dialer's failure memo for peers that just came online. The
+// rule itself (including the do-nothing-when-our-relay-is-down gate)
+// lives in shared/relay/directPresence.ts, where the direct-plane
+// check pins it.
+function reconcileDirectPresence(): void {
+  const current = relayServer.status();
+  applyDirectPresence(
+    current.socket.phase === "connected",
+    current.onlineDeviceIds,
+    {
+      closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
+      dropClientPeersNotIn: (online) =>
+        relayHandlers.dropDirectPeersNotIn(online),
+      notePresence: (online) => directDialer?.notePresence(online),
+    },
+  );
+}
+
+// The relay's client role, handed to the bridge handlers below so they
 // never hold the binding itself.
-export function relayConnectPeer(
+function relayConnectPeer(
   deviceId: string,
   opts?: ConnectPeerOpts,
 ): Promise<PeerConnection> {
@@ -341,6 +413,11 @@ export async function refreshRelayConnection(): Promise<void> {
   } catch (error) {
     console.warn(`[relay] connection refresh failed: ${errorMessageOf(error)}`);
   }
+  // The direct listener follows the same enrollment condition (it
+  // reads relayConnectInputs too), so it reconciles on exactly the
+  // relay's cadence: boot and every account change. Folded here so
+  // call sites cannot forget one half.
+  await refreshDirectHost();
 }
 
 // Teardown for before-quit: closes the relay socket so the DO sees a
@@ -348,3 +425,112 @@ export async function refreshRelayConnection(): Promise<void> {
 export function stopRelayConnection(): Promise<void> {
   return relayServer.stop();
 }
+
+// Teardown for before-quit, alongside stopRelayConnection: closes the
+// direct listener so connected peers see a clean going-away instead of
+// a dead socket, AND the cached outbound direct sessions, or each
+// remote host would keep a dead socket in its per-device slot and land
+// our relaunch on the supersede path instead of a clean reconnect.
+export function stopDirectHost(): Promise<void> {
+  relayHandlers.closeDirectPeers();
+  return directWsServer.stop();
+}
+
+// Reconciles the direct data-plane listener with the account and
+// device state: run from refreshRelayConnection's tail (enrollment is
+// exactly the relay's condition: a device with no relay peers has
+// nobody to serve directly) and on every global-config change (the
+// hostImpls subscriber), so the directConnections opt-out applies
+// without a relaunch. Dual-stack bind ("::", both families accept)
+// because connectInfo advertises IPv6 candidates too, on an ephemeral
+// port read back from status. accountId rides the opts as an identity
+// field, so an account switch restarts the listener and drops every
+// socket authed under the old account. A failure degrades to a log
+// line like the other refresh functions.
+export async function refreshDirectHost(): Promise<void> {
+  try {
+    await directWsServer.refresh(async () => {
+      const inputs = relayConnectInputs();
+      if (inputs === null) return null;
+      // The device-scoped opt-out: absent means enrolled, explicit
+      // false stops the listener (peers then get available:false and
+      // stay on the relay).
+      const config = await readGlobalConfig();
+      if (config.directConnections === false) return null;
+      return {
+        port: 0,
+        bindAddress: "::",
+        // Ticket mode has no static token, the injected verifier is
+        // the auth.
+        token: "",
+        deviceId: getDeviceId(),
+        appVersion: app.getVersion(),
+        accountId: inputs.accountId,
+      };
+    });
+  } catch (error) {
+    console.warn(`[direct] listener refresh failed: ${errorMessageOf(error)}`);
+  }
+}
+
+// The direct broker (direct:connectInfo), constructed here like
+// relayHandlers below because every dep is owned by this module:
+// index.ts only registers it on the contract. The roster predicate is
+// what stops a peer that fell off the control plane (revoked, account
+// switch) from re-minting tickets over its own still-open direct
+// socket.
+export const directHandlers = makeDirectHandlers({
+  listenerPort: () => {
+    const current = directWsServer.status();
+    return current.listening ? current.port : null;
+  },
+  mintTickets: (peerDeviceId, count) => directTickets.mint(peerDeviceId, count),
+  isPeerOnline: (peerDeviceId) =>
+    relayServer.status().onlineDeviceIds.includes(peerDeviceId),
+});
+
+// The direct dialer the bridge tries before the relay. Stateful (it
+// remembers failed dials per peer so the bridge falls back to the
+// relay without paying the dial cost again within the window), so ONE
+// instance, created lazily because it captures getDeviceId, a
+// post-boot fact. Pushes received on a direct connection feed the SAME
+// peerPush fan-out the relay feeds, tagged with the peer's deviceId,
+// so the renderer's subscriber registry cannot tell the wires apart.
+let directDialer: DirectDialer | null = null;
+function getDirectDialer(): DirectDialer {
+  directDialer ??= createDirectDialer({
+    connectRelayPeer: (id) => relayServer.connectPeer(id),
+    localDeviceId: getDeviceId(),
+    localAppVersion: app.getVersion(),
+    onAnyPush: (peerDeviceId, channel, payload) => {
+      broadcastAll(relayContract, "peerPush", {
+        deviceId: peerDeviceId,
+        channel,
+        payload,
+      });
+    },
+  });
+  return directDialer;
+}
+
+function connectDirectPeer(
+  deviceId: string,
+  opts?: ConnectPeerOpts,
+): Promise<PeerConnection> {
+  return getDirectDialer().connectDirect(deviceId, opts);
+}
+
+// The renderer-facing relay bridge, constructed here rather than in
+// main/ipc/index.ts because every dep is owned by this module and the
+// status snapshot above reads its directPeerIds back. index.ts only
+// registers it on the contract and lends its invokePeer to the peer
+// transports. connectDirect makes openPeer direct-first with relay
+// fallback (v2 step 10, slice A), and a direct session opening or
+// closing fires the same statusChanged fan-out a relay transition does
+// so the renderer's snapshot stays live.
+export const relayHandlers = makeRelayHandlers({
+  status: relayStatus,
+  connectPeer: relayConnectPeer,
+  connectDirect: connectDirectPeer,
+  onDirectChange: notifyRelayStatusChanged,
+});

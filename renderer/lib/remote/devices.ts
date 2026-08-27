@@ -29,6 +29,9 @@ export type RemoteDevice = {
   // The remote host app's version, "" until the lazily opened peer
   // session confirms it.
   appVersion: string;
+  // True while the cached peer session rides a DIRECT socket instead
+  // of the relay (v2 step 10, slice A). Display only.
+  direct?: boolean;
   // Present only while connected. Host calls route over the relay
   // bridge. Client-scoped calls reject (see rejectingClientTransport).
   api?: RemoteDeviceApi;

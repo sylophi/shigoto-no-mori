@@ -39,6 +39,14 @@ export type HandlerContext = {
   // FAIL-CLOSED: a transport that supplies no verdict reads as not
   // granted.
   isCallerCommandGranted?: () => boolean;
+  // The AUTHENTICATED deviceId of the calling peer, supplied only by
+  // wires that verified one: the relay link (the DO authenticated the
+  // account and stamps `from`) and the direct data-plane listener (the
+  // connect ticket bound the hello to a deviceId). The Electron wire,
+  // the legacy LAN socket and in-page loopbacks leave it undefined, so
+  // a handler that needs a peer identity (direct:connectInfo minting a
+  // ticket for its caller) fails closed on absence.
+  callerDeviceId?: string;
 };
 
 // A server transport owns the wire. `handle` mounts one channel and
