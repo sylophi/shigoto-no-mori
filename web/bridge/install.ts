@@ -5,6 +5,7 @@
 // bridge satisfies the preload's RendererApi surface, since window.api
 // is declared with that exact type (renderer/window.d.ts).
 import { viteEnv } from "../account/config";
+import { ACCOUNT_KEY } from "../account/store";
 import { createWebBridge, type WebBridge } from "./createWebBridge";
 
 let installed: WebBridge | null = null;
@@ -35,6 +36,15 @@ export function installWebBridge(): WebBridge {
   // Boot reconcile: connect the relay socket when a credential is
   // already stored, mirroring the desktop's ready-handler refresh.
   void bridge.refreshRelay();
+  // Cross-tab correction: sign-in/out in another tab rewrites the
+  // shared localStorage key, and the storage event fires only in the
+  // OTHER tabs. Fan it out like a local transition so every tab's
+  // shell follows without a reload (key === null is a full clear).
+  window.addEventListener("storage", (event) => {
+    if (event.key === ACCOUNT_KEY || event.key === null) {
+      bridge.notifyAccountChanged();
+    }
+  });
   return bridge;
 }
 

@@ -202,6 +202,25 @@ export function redactGlobalConfigForRead(
   return redacted;
 }
 
+// One-shot drain of the removed LAN feature's outbound device list out
+// of config.json. Nothing reads or writes `remoteDevices` anymore, but
+// an old config may still carry it — per-host tokens in plaintext — and
+// both writers preserve keys they don't manage (the CLI's merge only
+// clears registered keys, the app's write parses through a schema that
+// no longer models this one), so an explicit delete is the only thing
+// that ever removes them. Runs every boot; a no-op read when the key is
+// absent. Same lock and atomic-write discipline as takeLegacyAppearance.
+export function dropLegacyRemoteDevices(): void {
+  const path = configPath();
+  withFileLock(`${path}.lock`, () => {
+    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
+    if (doc === null || !("remoteDevices" in doc)) return;
+    delete doc["remoteDevices"];
+    atomicWriteJsonSync(path, withSchemaVersion(doc));
+    cache.invalidate();
+  });
+}
+
 // One-shot drain of the pre-split appearance keys out of config.json,
 // for the client config migration (main/electron/clientConfigMigration.ts).
 // Extracts theme and doubutsu, deletes them from the doc, writes it
