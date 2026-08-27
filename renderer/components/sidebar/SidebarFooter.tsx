@@ -13,6 +13,7 @@ import {
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
   useSetSidebarView,
@@ -57,6 +58,13 @@ export function SidebarFooter({
   // Also true on a device's forest: that page belongs to the same "your
   // machines" surface the button opens.
   const devicesActive = location.pathname.startsWith("/devices");
+  // The multi-device UI exists only on a build with an account service
+  // (the SM_ACCOUNT_* launch env). Unconfigured, the app looks and
+  // behaves like the single-machine app: no Devices button, no page to
+  // reach, nothing to explain. Hidden too while the status loads, so an
+  // unconfigured build never flashes the button it is about to drop.
+  const { data: accountStatus } = useAccountStatus();
+  const devicesEnabled = accountStatus?.configured === true;
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
@@ -96,20 +104,22 @@ export function SidebarFooter({
           <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
-      <SimpleTooltip tip="Devices">
-        <button
-          type="button"
-          onClick={() => void navigate({ to: "/devices" })}
-          aria-label="Devices"
-          aria-current={devicesActive ? "page" : undefined}
-          className={cn(
-            SIDEBAR_ICON_BUTTON,
-            devicesActive && "bg-accent text-foreground",
-          )}
-        >
-          <MonitorSmartphone className="size-3.5" />
-        </button>
-      </SimpleTooltip>
+      {devicesEnabled && (
+        <SimpleTooltip tip="Devices">
+          <button
+            type="button"
+            onClick={() => void navigate({ to: "/devices" })}
+            aria-label="Devices"
+            aria-current={devicesActive ? "page" : undefined}
+            className={cn(
+              SIDEBAR_ICON_BUTTON,
+              devicesActive && "bg-accent text-foreground",
+            )}
+          >
+            <MonitorSmartphone className="size-3.5" />
+          </button>
+        </SimpleTooltip>
+      )}
       <SimpleTooltip
         tip={updateReady ? "Settings — update available" : "Settings"}
       >
