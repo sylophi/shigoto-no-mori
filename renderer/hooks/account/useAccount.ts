@@ -15,8 +15,8 @@ import { queryKeys } from "@/lib/queryKeys";
 // emit account:changed, which useWatchAccountChanges (always mounted,
 // SidebarFooter on desktop and WebShell on web) turns into an
 // invalidation. Without the opt-out, an observer in an always-mounted
-// component would re-run the read — a main-process credential-file
-// read plus keychain decrypt — on every window focus.
+// component would re-run the read (a main-process credential-file read
+// plus keychain decrypt) on every window focus.
 export function useAccountStatus() {
   return useQuery<AccountStatus>({
     queryKey: queryKeys.accountStatus(),
@@ -114,9 +114,9 @@ export function useWatchGrantsChanges(): void {
   );
 }
 
-// Grant and revoke are imperative writes matching the account and
-// hosting sections. They do not invalidate themselves: main emits
-// grantsChanged and useWatchGrantsChanges invalidates off it.
+// Grant and revoke are imperative writes. They do not invalidate
+// themselves: main emits grantsChanged and useWatchGrantsChanges
+// invalidates off it.
 export function useGrantCommands() {
   return useMutation<void, Error, string>({
     mutationFn: (deviceId) => window.api.account.grantCommands(deviceId),

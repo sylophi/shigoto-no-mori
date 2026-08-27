@@ -878,7 +878,7 @@ async function main() {
           },
         }).success,
         false,
-        // Legacy key of the removed LAN feature; as an unknown key the
+        // Legacy key of the removed LAN feature. As an unknown key the
         // strict patch schema must keep rejecting it.
         "writeDeviceSettings accepted a remoteDevices key",
       );

@@ -5,8 +5,8 @@ import { ReachableSection } from "./ReachableSection";
 // "/devices": the account's machines, on their own page. The account
 // (sign in, this device's name, the device registry with its grants) is
 // a fact about the account, not a preference of this machine, so it
-// lives here rather than under Settings — along with the one device
-// fact the other machines depend on, whether this one stays reachable
+// lives here rather than under Settings, along with the one device
+// fact the other machines depend on: whether this one stays reachable
 // to them.
 export function DevicesPage() {
   return (

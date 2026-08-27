@@ -297,7 +297,7 @@ app.on("ready", async () => {
   // Before the first createWindow, whose theme read must already see
   // values migrated out of the pre-split device config.
   await seedClientConfigFromLegacy();
-  // Scrub the removed LAN feature's plaintext tokens off disk; an
+  // Scrub the removed LAN feature's plaintext tokens off disk. An
   // unreadable config must never block boot, and the drain retries
   // next boot.
   try {

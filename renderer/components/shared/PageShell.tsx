@@ -23,7 +23,7 @@ export function PageShell({
   gap = "gap-6",
   children,
 }: {
-  // The data-doubutsu-page marker picking the canvas wallpaper; absent
+  // The data-doubutsu-page marker picking the canvas wallpaper, absent
   // for pages without one.
   page?: string;
   eyebrow: React.ReactNode;

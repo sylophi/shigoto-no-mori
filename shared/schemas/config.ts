@@ -208,8 +208,8 @@ export const WriteGlobalConfigPayloadSchema = z.object({
 // the keys the Settings form manages (managedDeviceConfig in
 // renderer/hooks/config/useSettingsSave.ts). STRICT on purpose, unlike
 // GlobalConfigSchema: an unknown key REJECTS rather than strips, so the
-// schema itself proves `socketHost` (the hosting token) — and any other
-// unmanaged or legacy key — can never ride a remote write. Patch
+// schema itself proves that `socketHost` (the hosting token), like any
+// other unmanaged or legacy key, can never ride a remote write. Patch
 // semantics: every key optional, only provided
 // keys change, and the host handler spreads them over the local unredacted
 // document so everything the patch does not name rides through intact.

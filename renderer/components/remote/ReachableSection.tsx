@@ -13,7 +13,7 @@ const launchAtLoginSupported =
 
 // "This device": how this machine stays available to the account's
 // other devices. Written immediately through the client store, never
-// staged in a form — flipping it is the whole action.
+// staged in a form: flipping it is the whole action.
 export function ReachableSection() {
   const { data: clientConfig } = useClientConfig();
   const keepReachableUpdate = useKeepReachableUpdate();

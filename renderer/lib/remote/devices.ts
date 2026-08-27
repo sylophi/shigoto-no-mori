@@ -1,6 +1,6 @@
 // Renderer registry of remote devices: the account's devices,
-// deviceId-keyed. There is no per-device supervisor in the renderer —
-// the one relay socket lives in main and a device's status DERIVES from
+// deviceId-keyed. There is no per-device supervisor in the renderer.
+// The one relay socket lives in main and a device's status DERIVES from
 // the bridge (remoteDeviceSync.ts rebuilds the list wholesale on boot, on
 // account changes and on every relay status change). The registry is
 // the external store a React binding reads through useSyncExternalStore,
