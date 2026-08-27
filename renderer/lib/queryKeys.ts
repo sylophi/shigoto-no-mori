@@ -228,12 +228,16 @@ export const queryKeys = queryKeysFor(localDeviceId);
 // - clientConfig for scope: the store lives in this app instance's
 //   userData, so no host's state change can touch it. Including it
 //   would defeat the query's staleTime Infinity on every ping.
+// - account for the same two reasons: credential state lives outside
+//   any forest and moves only on account:changed, and the status
+//   query's staleTime Infinity would be defeated on every ping.
 // - fs for loop-safety as well as relevance: a git-state ping says
 //   nothing about a directory listing, and because fs reads are tagged
 //   mutating (they ride the command grant), a ping-driven fs refetch on
 //   a remote scope would itself trigger the host's resolved-mutation
 //   ping, refetching forever.
 const externalChangeExempt = new Set([
+  "account",
   "clientConfig",
   "fs",
   "githubCli",

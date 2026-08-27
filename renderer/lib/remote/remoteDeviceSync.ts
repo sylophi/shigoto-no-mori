@@ -1,7 +1,7 @@
-// Relay entries for the remote device registry (v2 step 4, slice C).
-// Rebuilds the store's relay half from the account's device registry
-// plus the relay bridge's live status, on boot, on account changes and
-// on every relay statusChanged broadcast. There is no per-device
+// Producer for the remote device registry (v2 step 4, slice C).
+// Rebuilds the store from the account's device registry plus the relay
+// bridge's live status, on boot, on account changes and on every relay
+// statusChanged broadcast. There is no per-device
 // supervisor here: the one relay socket lives in main, so a relay
 // device's status DERIVES from the bridge instead of being driven.
 //
@@ -27,7 +27,7 @@ import {
   rejectingClientTransport,
   type RemoteDevice,
   type RemoteDeviceApi,
-  setRelayDevices,
+  setRemoteDevices,
 } from "./devices";
 import { createRelayClientTransport } from "./relayTransport";
 
@@ -94,7 +94,7 @@ async function reconcileNow(status?: RelayStatus): Promise<void> {
     (info) => info.deviceId !== localDeviceId,
   );
   const devices = others.map((info) => buildEntry(info, current, online));
-  setRelayDevices(devices);
+  setRemoteDevices(devices);
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status
@@ -124,10 +124,8 @@ function buildEntry(
     api = apiFor(info.deviceId);
   }
   return {
-    kind: "relay",
     deviceId: info.deviceId,
     label: info.name,
-    url: "",
     status,
     appVersion,
     api,
@@ -160,7 +158,7 @@ async function drainReconciles(): Promise<void> {
 // Boot wiring: reconcile once now, then follow account and relay
 // changes for the life of the window. Never unsubscribed on purpose,
 // exactly like the other boot-scope subscriptions in index.tsx.
-export function startRelayDeviceSync(): void {
+export function startRemoteDeviceSync(): void {
   window.api.account.onChanged(() => {
     cachedList = null;
     reconcile();

@@ -42,10 +42,11 @@
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy" picking
- *    the canvas wallpaper (settings/Settings, tidy/TidyForest), the
- *    `doubutsu-only` / `v1-only` classes (per-theme markup shipped side
- *    by side), li[data-row-idx] (configure/PickerRow.tsx).
+ *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices"
+ *    picking the canvas wallpaper (settings/Settings, tidy/TidyForest,
+ *    remote/DevicesPage), the `doubutsu-only` / `v1-only` classes
+ *    (per-theme markup shipped side by side), li[data-row-idx]
+ *    (configure/PickerRow.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
@@ -571,14 +572,11 @@
   --doubutsu-drift-time: 24s;
 }
 
-/* Apples, drawn and tuned but not yet spoken for. Left here so the next
-   page that wants a wallpaper of its own has one ready: paste these six
-   values into a data-doubutsu-page rule and it works. It is the one
-   uniform tile in the set, a single stamp at one size and one angle on a
-   half-drop lattice, so swapping in another fruit is a change of shape
-   and nothing else.
-
-.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="APPLES"]) {
+/* Devices: apples, falling straight down. The one uniform tile in the
+   set, a single stamp at one size and one angle on a half-drop lattice.
+   An orchard of identical fruit for the page about the account's
+   machines, which all run the same app somewhere else. */
+.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="devices"]) {
   --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22120%22%20height%3D%22120%22%20viewBox%3D%220%200%20120%20120%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cg%20id%3D%22fr%22%20fill%3D%22%23000%22%3E%3Cpath%20d%3D%22M-0.55%20-1.8C-0.3-5%200.2-6.8%200.9-8.6L2-8.2C1.3-6.5%200.85-4.8%200.65-1.8Z%22%2F%3E%3Cellipse%20cx%3D%223.4%22%20cy%3D%22-7.2%22%20rx%3D%222.7%22%20ry%3D%221.35%22%20transform%3D%22rotate(-20%203.4%20-7.2)%22%2F%3E%3Cpath%20d%3D%22M0%20-2.4C1.3-5.2%204.2-6%205.8-3.8C7.2-1.6%207.2%203.2%205.2%205.8C3.6%207.9%201.2%208.2%200%207.6C-1.2%208.2-3.6%207.9-5.2%205.8C-7.2%203.2-7.2-1.6-5.8-3.8C-4.2-6-1.3-5.2%200-2.4Z%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(15%2015)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(15%2075)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(45%2045)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(45%20105)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(75%2015)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(75%2075)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(105%2045)%20scale(1.15)%22%2F%3E%3Cuse%20href%3D%22%23fr%22%20transform%3D%22translate(105%20105)%20scale(1.15)%22%2F%3E%3C%2Fsvg%3E");
   --doubutsu-wallpaper-size: 120px 120px;
   --doubutsu-wallpaper-opacity: 0.075;
@@ -586,7 +584,6 @@
   --doubutsu-drift-y: 120px;
   --doubutsu-drift-time: 26s;
 }
-*/
 
 /* Settings: boxes, sliding left. The one square-cornered shape in an
    otherwise round set, so it reads as its own room, and it borrows the

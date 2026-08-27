@@ -22,6 +22,7 @@ import {
   readJsonOrNullSync,
 } from "@host/lib/util/jsonFile";
 import { readClientConfigSync } from "./clientConfig";
+import { accountServiceConfigured } from "../ipc/modules/account";
 import { markRelaunching } from "./relaunch";
 import {
   shouldRecreateWindow,
@@ -29,6 +30,11 @@ import {
 } from "../liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
+  // Inert on a build with no account service: the setting exists so a
+  // machine stays available TO the account, its UI is unreachable when
+  // the SM_ACCOUNT_* env is absent, and boot's reconcile clears a login
+  // item left behind by a previously configured build.
+  if (!accountServiceConfigured()) return false;
   try {
     return readClientConfigSync().keepReachable === true;
   } catch (error) {

@@ -22,7 +22,7 @@ import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-bu
 import { Input } from "@/components/ui/input";
 import { MergedPrimaryBranchBox } from "@/components/worktreeDetail/pullRequests/MergedPrimaryBranchBox";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageShell } from "@/components/shared/PageShell";
 import { DeviceStatusDot } from "./DeviceStatusDot";
 import { EmptyPanel } from "./EmptyPanel";
 import { PortForwardSection } from "./PortForwardSection";
@@ -57,7 +57,7 @@ const route = getRouteApi("/devices/$deviceId");
 // land) render only when this device holds command access on the host,
 // resolved per-caller by useCommandAccess. When the host has NOT granted
 // this device, the page stays read-only and shows an inline note instead:
-// granting is host-side (the target's Settings > Account) and there is no
+// granting is host-side (the target's Devices page) and there is no
 // request-over-wire mechanism here. Every control acts through the
 // scope-clean mutation hooks (targeting this device via HostScopeProvider)
 // and relies on their device-scoped key invalidation to refresh the forest
@@ -66,24 +66,14 @@ const route = getRouteApi("/devices/$deviceId");
 export function RemoteForest() {
   const { deviceId } = route.useParams();
   const devices = useRemoteDevices();
-  // The registry holds both LAN and relay entries, and a stale LAN entry
-  // (api undefined, in backoff) can share a deviceId with a live relay
-  // entry for the same machine. Prefer a SERVING entry so that stale twin
-  // does not shadow the live one and strand this page (I2). Guard the
-  // empty id explicitly: an unconnected entry also carries "", so
-  // matching on it would pick an arbitrary disconnected device.
-  const device =
-    deviceId === ""
-      ? undefined
-      : (devices.find((d) => d.deviceId === deviceId && d.api !== undefined) ??
-        devices.find((d) => d.deviceId === deviceId));
+  const device = devices.find((d) => d.deviceId === deviceId);
 
   if (device === undefined) {
     return (
       <ForestShell title="Remote forest">
         <EmptyPanel>
-          This device isn&apos;t connected. Open Settings to add or reconnect
-          it, then try again.
+          This device isn&apos;t connected. Check it on the Devices page, then
+          try again.
         </EmptyPanel>
       </ForestShell>
     );
@@ -257,7 +247,7 @@ function ForestBody({
       {!granted && !isLoading && (
         <p className="text-xs text-muted-foreground">
           You have read-only access to this device. Command access is granted
-          from its Settings &gt; Account.
+          from its Devices page.
         </p>
       )}
       {projects.map((project) => (
@@ -665,29 +655,22 @@ function ForestShell({
   title: string;
   status?: React.ReactNode;
   actions?: React.ReactNode;
-  // Default: children flow in the shell's scrollable column. `full`
-  // hands the whole below-header area to the children instead, for a
+  // `full` hands the whole below-header area to the children, for a
   // body that brings its own scroll region and pinned footer (the
   // settings editor).
   full?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        eyebrow="Remote device"
-        title={title}
-        watermark="端末"
-        status={status}
-        actions={actions}
-      />
-      {full ? (
-        children
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className="flex max-w-3xl flex-col gap-6">{children}</div>
-        </div>
-      )}
-    </div>
+    <PageShell
+      eyebrow="Remote device"
+      title={title}
+      watermark="端末"
+      status={status}
+      actions={actions}
+      full={full}
+    >
+      {children}
+    </PageShell>
   );
 }

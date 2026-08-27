@@ -16,7 +16,6 @@ import {
   useSetDeviceName,
   useSignIn,
   useSignOut,
-  useWatchAccountChanges,
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -24,14 +23,11 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 
 // "Account": sign in to the relay so this device can reach the account's
-// other devices (v2 step 4, slice B). Three states: not configured (the
-// owner has not set the SM_ACCOUNT_* env vars, so sign-in is impossible
-// on this build), signed out (a Sign in button), and signed in (this
-// device's identity plus the account's device registry). An online
-// device's row links to its remote forest over the relay (slice C),
-// matching the affordance the LAN device list offers.
+// other devices (v2 step 4, slice B). Two states: signed out (a Sign in
+// button) and signed in (this device's identity plus the account's
+// device registry). An online device's row links to its remote forest
+// over the relay (slice C).
 export function AccountSection() {
-  useWatchAccountChanges();
   useWatchGrantsChanges();
   const { data: status } = useAccountStatus();
   const signIn = useSignIn();
@@ -50,10 +46,14 @@ export function AccountSection() {
   // account:changed), so a device coming online or offline updates
   // without a refetch (I3).
   const relayById = new Map(
-    useRemoteDevices()
-      .filter((device) => device.kind === "relay")
-      .map((device) => [device.deviceId, device] as const),
+    useRemoteDevices().map((device) => [device.deviceId, device] as const),
   );
+
+  // Unreachable in practice: the sidebar's Devices button renders only
+  // when the account service is configured, so an unconfigured build
+  // never navigates here. Render nothing rather than keep explanatory
+  // copy alive for a state the nav already prevents.
+  if (status !== undefined && !status.configured) return null;
 
   return (
     <section className="space-y-3">
@@ -67,12 +67,6 @@ export function AccountSection() {
 
       {status === undefined ? (
         <p className="text-xs text-muted-foreground/70">Loading&hellip;</p>
-      ) : !status.configured ? (
-        <p className="text-xs text-muted-foreground/70">
-          Not configured on this build. The owner sets the relay and OAuth
-          environment variables (<span className="font-mono">SM_ACCOUNT_*</span>
-          ) before sign-in is available. No rebuild is needed once they are set.
-        </p>
       ) : !signedIn ? (
         <Button
           variant="outline"
@@ -146,11 +140,11 @@ export function AccountSection() {
 
 // One device row: an online dot, the name, this-device marker, and the
 // platform plus device id as a muted sub-line. An online peer gets the
-// "View forest" affordance, navigating to the same device route the
-// LAN list uses, where the registry serves it over the relay bridge. A
-// peer that is not this device also gets a command-grant toggle: until
-// this host grants it, the peer sees a read-only mirror and its mutating
-// calls are refused at the relay link (transport-enforced, slice D).
+// "View forest" affordance, navigating to the device route the registry
+// serves over the relay bridge. A peer that is not this device also
+// gets a command-grant toggle: until this host grants it, the peer sees
+// a read-only mirror and its mutating calls are refused at the relay
+// link (transport-enforced, slice D).
 function DeviceRow({
   device,
   isThisDevice,

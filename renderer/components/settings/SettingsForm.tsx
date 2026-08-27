@@ -18,9 +18,6 @@ import {
   DeviceLauncherSections,
   DeviceToggleSections,
 } from "./DeviceSettingsSections";
-import { AccountSection } from "./AccountSection";
-import { HostingSection } from "./HostingSection";
-import { RemoteDevicesSection } from "./RemoteDevicesSection";
 import { CliSection } from "./CliSection";
 import { VersionSection } from "./VersionSection";
 
@@ -105,12 +102,6 @@ export function SettingsForm({
           <DeviceToggleSections form={form} setForm={setForm} />
 
           <CliSection />
-
-          <HostingSection />
-
-          <RemoteDevicesSection />
-
-          <AccountSection />
 
           <DeviceLauncherSections form={form} setForm={setForm} />
 

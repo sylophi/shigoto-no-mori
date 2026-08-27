@@ -8,6 +8,7 @@ import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "@host/lib/bootstrap";
+import { dropLegacyRemoteDevices } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
@@ -296,6 +297,14 @@ app.on("ready", async () => {
   // Before the first createWindow, whose theme read must already see
   // values migrated out of the pre-split device config.
   await seedClientConfigFromLegacy();
+  // Scrub the removed LAN feature's plaintext tokens off disk. An
+  // unreadable config must never block boot, and the drain retries
+  // next boot.
+  try {
+    dropLegacyRemoteDevices();
+  } catch (error) {
+    console.warn("[config] legacy remoteDevices drain failed:", error);
+  }
   buildAppMenu();
   // Host liveness (v2 step 4, slice E). Install the crash guards before
   // the window exists so an early fatal error is still caught, then

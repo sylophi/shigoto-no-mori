@@ -153,6 +153,15 @@ function defaultDeviceName(): string {
   return hostname();
 }
 
+// Whether this build has an account service at all, for callers outside
+// the account module (liveness gates keepReachable on it: with no
+// account to stay available to, the toggle is unreachable in the UI and
+// must be inert in the engine). Uses the same resolver as account:status
+// so dev's .env.account file counts.
+export function accountServiceConfigured(): boolean {
+  return isConfigured(serviceConfig());
+}
+
 // Assembles the current status from the stored credential metadata and
 // the resolved config. accountId and the stored deviceName come from the
 // record when signed in, else empty and the hostname default.

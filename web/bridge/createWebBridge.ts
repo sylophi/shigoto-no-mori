@@ -85,6 +85,11 @@ export type WebBridge = {
   // a peer's forest). Revoking this browser's own device also signs it
   // out locally.
   revokeDevice(deviceId: string): Promise<void>;
+  // Cross-tab correction: another tab changed the persisted account
+  // (a storage event); re-read and fan out exactly like a local
+  // transition. The storage event itself only fires in OTHER tabs, so
+  // the local loopback broadcast and this never double-fire.
+  notifyAccountChanged(): void;
   // Reconciles the relay socket with the current account state.
   refreshRelay(): Promise<void>;
   // Tears the relay socket down (tab teardown, tests).
@@ -369,6 +374,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       if (targetDeviceId === deviceId) store.clear();
       accountChanged();
     },
+
+    notifyAccountChanged: accountChanged,
 
     refreshRelay,
 

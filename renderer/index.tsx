@@ -4,8 +4,7 @@ import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
 import { createAppQueryClient } from "./lib/queryClientOptions";
-import { reconcileRemoteDevicesFromConfig } from "./lib/remote/registry";
-import { startRelayDeviceSync } from "./lib/remote/relayDevices";
+import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import {
   invalidateHostDevice,
   localDeviceId,
@@ -77,17 +76,10 @@ void queryClient.prefetchQuery({
   queryFn: () => window.api.globalConfig.read(),
 });
 
-// Remote device registry (v2 step 3, slice C): read the local unredacted
-// config once and reconcile the registry so every configured device
-// starts connecting at boot. The token bearing doc is read imperatively
-// inside this call and never enters the query cache. Re-reconcile after a
-// remote-device write happens in the settings section that owns the list.
-void reconcileRemoteDevicesFromConfig();
-
-// Relay devices (v2 step 4, slice C): the same registry's other half,
+// Relay devices (v2 step 4, slice C): the remote device registry,
 // rebuilt from the account's device list plus the relay bridge status,
 // on boot and on every account or relay change.
-startRelayDeviceSync();
+startRemoteDeviceSync();
 
 // State changed on disk under the app (a CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it

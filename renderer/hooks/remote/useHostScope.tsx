@@ -15,10 +15,10 @@
 //   `queryKeys` registry explicitly; scoped invalidations stay limited
 //   to keys the hooks' own queries and mutations settle.
 // - Host-scoped hooks whose write path is deliberately local-only
-//   (the updateLocalGlobalConfig callers in useSettingsSave and
-//   useLocalGlobalConfigUpdate, the cli module behind CliSection):
-//   the write lands on this machine's disk, so their reads and
-//   invalidations must stay pinned to the local `queryKeys` registry.
+//   (the updateLocalGlobalConfig caller in useSettingsSave, the cli
+//   module behind CliSection): the write lands on this machine's disk,
+//   so their reads and invalidations must stay pinned to the local
+//   `queryKeys` registry.
 import { createContext, use, type ReactNode } from "react";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";
 import {
