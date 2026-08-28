@@ -125,17 +125,22 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
   return currentGrantedPeers().has(peerDeviceId);
 }
 
-// The resolved service config, resolved once and cached. Reads the
-// optional .env.account file (dev convenience) first, then lets real
-// environment variables override it, so a shipped build with real env
-// vars never depends on a file. Caching keeps account:status cheap since
-// it runs on every poll.
+// The resolved service config, resolved once and cached. Three layers,
+// lowest to highest precedence: the optional .env.account file (dev
+// convenience), the SM_ACCOUNT_* values baked into the bundle when it
+// was built, then real environment variables. The baked layer is what
+// configures a shipped build: a packaged .app launched from Finder or
+// the Dock inherits launchd's environment, not a shell's, so runtime
+// process.env carries none of these -- but the env layer on top still
+// lets an owner override a baked build. Caching keeps account:status
+// cheap since it runs on every poll.
 //
 // The file read is gated behind !app.isPackaged for security: in a
 // packaged build an attacker-planted .env.account in the launch directory
 // could both enable sign-in and point the OAuth/relay URLs at hostile
-// infrastructure, so a shipped build sources config ONLY from real
-// environment variables. The dev-convenience file stays in dev.
+// infrastructure, so a shipped build sources config ONLY from the values
+// baked in at build time and real environment variables, neither of
+// which a file can plant. The dev-convenience file stays in dev.
 function serviceConfig(): AccountServiceConfig {
   if (cachedConfig) return cachedConfig;
   let fileEnv: Record<string, string> = {};
@@ -145,10 +150,16 @@ function serviceConfig(): AccountServiceConfig {
         readFileSync(join(process.cwd(), ".env.account"), "utf8"),
       );
     } catch {
-      // No dev file. Environment variables are the only source.
+      // No dev file. Baked and environment values are the only sources.
     }
   }
-  cachedConfig = resolveServiceConfig(mergeServiceEnv(fileEnv, process.env));
+  // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
+  // module only ever loads through that build, so a bare reference is
+  // safe, and it stays out of the pure shared module so serviceConfig.ts
+  // remains drivable under plain node (scripts/check-account.mjs).
+  cachedConfig = resolveServiceConfig(
+    mergeServiceEnv(fileEnv, __SM_ACCOUNT_BAKED_ENV__, process.env),
+  );
   return cachedConfig;
 }
 

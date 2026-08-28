@@ -8,8 +8,9 @@
 // trips plus its corrupt/missing tolerance, the full loopback login flow
 // including the state-mismatch and timeout rejections, the loopback
 // server binding 127.0.0.1 only, deriveAccountId's tolerance of a
-// malformed token, the .env.account parser and the file/process.env merge
-// precedence, the setDeviceName bounds, and the shape guarantee that the
+// malformed token, the .env.account parser and the three-layer
+// file/baked/process.env merge precedence, the setDeviceName bounds, and
+// the shape guarantee that the
 // device credential never appears in a renderer-visible object.
 //
 // The one thing it cannot cover is the safeStorage cipher round trip
@@ -986,18 +987,34 @@ async function main() {
   );
 
   await check(
-    "envFile: mergeServiceEnv lets process.env override the file",
+    "envFile: mergeServiceEnv layers file < baked < process.env",
     () => {
       const merged = mergeServiceEnv(
-        { SM_ACCOUNT_RELAY_URL: "https://file.example", ONLY_FILE: "f" },
+        {
+          SM_ACCOUNT_RELAY_URL: "https://file.example",
+          SM_ACCOUNT_OAUTH_CLIENT_ID: "file-client",
+          ONLY_FILE: "f",
+        },
+        {
+          SM_ACCOUNT_RELAY_URL: "https://baked.example",
+          SM_ACCOUNT_OAUTH_CLIENT_ID: "baked-client",
+          ONLY_BAKED: "b",
+        },
         { SM_ACCOUNT_RELAY_URL: "https://env.example", ONLY_ENV: "e" },
       );
       assert.equal(
         merged.SM_ACCOUNT_RELAY_URL,
         "https://env.example",
-        "process.env did not win over the file",
+        "process.env did not win over baked and file",
       );
+      assert.equal(
+        merged.SM_ACCOUNT_OAUTH_CLIENT_ID,
+        "baked-client",
+        "a baked value did not win over the file",
+      );
+      // Each layer's uncontested keys all survive the merge.
       assert.equal(merged.ONLY_FILE, "f");
+      assert.equal(merged.ONLY_BAKED, "b");
       assert.equal(merged.ONLY_ENV, "e");
     },
   );

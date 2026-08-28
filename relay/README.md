@@ -103,11 +103,16 @@ Revoking a device best-effort deletes its tunnel and DNS record.
 ## App-side account configuration
 
 The desktop app's Account settings (sign in, enroll this device, view the
-account's device registry) are driven by non-secret environment variables
-read at launch. They are empty by default, so a build ships with the
-Account section showing a "not configured" state and sign-in disabled
-until the owner sets them. None of these are secrets, so they are safe to
-bake into a build's launch environment. Never commit real values.
+account's device registry) are driven by non-secret environment variables.
+Packaged builds take them from the environment **at build time**: set them
+when running `pnpm run package` / `pnpm run make` and they are baked into
+the bundle, because an app launched from Finder or the Dock inherits
+launchd's environment, not a shell's, and would otherwise never see them.
+Environment variables present at launch still override the baked values.
+They are empty by default, so a build made without them ships with the
+Account section showing a "not configured" state and sign-in disabled.
+None of these are secrets, so they are safe to bake into a build. Never
+commit real values.
 
 - `SM_ACCOUNT_RELAY_URL` - the deployed Worker's base URL, e.g.
   `https://sm-relay.<account>.workers.dev`. The app joins the device and
@@ -139,8 +144,9 @@ JWT (`at+jwt`) format - not a Clerk session token, M2M token or API
 key. The Worker verifies it, the app never does.
 
 For local development, the app also reads a gitignored `.env.account`
-file in the repo root if present (simple `KEY=value` lines). Real
-environment variables override it.
+file in the repo root if present (simple `KEY=value` lines). Baked and
+real environment variables override it, and packaged builds never read
+it.
 
 ## Develop and test
 
