@@ -279,8 +279,8 @@ export function openDevice(
       ) {
         // The wrong machine answered (a stale address, a NAT
         // surprise). Blocked, not retryable: redialing the same
-        // address cannot change who lives there, and the caller
-        // falls back to the relay instead.
+        // address cannot change who lives there, so the caller
+        // surfaces the failure instead of caching the wrong host.
         closed = true;
         clearTimeout(helloTimer);
         try {

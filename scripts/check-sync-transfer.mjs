@@ -1,11 +1,13 @@
-// Durable proof for the device-sync transfer plumbing (v2 step 7,
-// slice B): git bundles as chunked, grant-gated invoke responses over
-// the REAL relay transport. Nothing here is a double on the sync path
-// itself: the stub relay (scripts/lib/relayStub.mjs) carries two real
-// relay connections, device A registers the REAL sync contract and
-// handlers, the handlers shell the REAL sm binary (built from cli/ by
-// this check), sm runs REAL git against fixture repos, and the
-// receiver drives the REAL fetchBundleFromPeer helper. Asserts:
+// Durable proof for the device-sync transfer plumbing (v2 step 7
+// slice B, direct-only since step 10 slice C): git bundles as chunked,
+// grant-gated invoke responses over a REAL DIRECT websocket between
+// the two fixtures, brokered by the stub relay exactly as production
+// does (scripts/lib/directBoot.mjs). Nothing here is a double on the
+// sync path itself: device A registers the REAL sync contract and
+// handlers on a real ticket-mode listener, the handlers shell the REAL
+// sm binary (built from cli/ by this check), sm runs REAL git against
+// fixture repos, and the receiver drives the REAL fetchBundleFromPeer
+// helper through the real dialer and bridge cache. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) and the
 //     transfer surface never serves it;
 //   - sync:captureDirty over the wire snapshots a dirty worktree to
@@ -13,7 +15,9 @@
 //   - a >1.5 MB bundle (branch + dirty capture, thinned by a have)
 //     crosses in >= 3 chunks and lands ONLY under refs/shigomori/ on
 //     the receiver with the source's exact tips, byte-identical
-//     content via git cat-file, and no branch materialized;
+//     content via git cat-file, and no branch materialized -- while
+//     the stub relay's forwardedCount stays FLAT (nothing but the
+//     one-time broker frames ever rides the relay);
 //   - the host drops a finished transfer (a stale chunk request is
 //     refused) and bundleAbort cleans up an abandoned one;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle".
@@ -25,8 +29,8 @@
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_ROOT holding two projects (source and target repos); what
-// separates them is the relay wire between their connections, which is
-// exactly the surface this slice adds. Runs under
+// separates them is the direct wire between them, which is exactly the
+// surface this proof pins. Runs under
 // scripts/lib/register-ts-alias.mjs. See package.json "sync:check".
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
@@ -43,14 +47,16 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import {
+  CommandRefusedError,
+  WIRE_CHUNK_BYTES,
+} from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
@@ -62,9 +68,8 @@ import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initShigomoriRootAt } from "@host/lib/util/paths";
-import { makeProof } from "./lib/checkKit.mjs";
-import { bootDevice } from "./lib/relayBoot.mjs";
-import { startStubRelay } from "./lib/relayStub.mjs";
+import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import { bootDirectWire } from "./lib/directBoot.mjs";
 
 const execFileP = promisify(execFile);
 const cliDir = join(import.meta.dirname, "..", "cli");
@@ -280,27 +285,30 @@ async function main() {
   const targetProjectId = await projectIdOf(targetRepo);
   const sourceProjectId = await projectIdOf(sourceRepo);
 
-  // ---- The relay pair: A hosts the real sync surface, B receives ----
-  const stub = await startStubRelay();
-  let granted = false;
-  const { connection: a } = await bootDevice(stub, "A", {
-    isCommandGranted: () => granted,
+  // ---- The direct wire: A hosts the real sync surface on a real
+  // ticket-mode listener, B receives through the real dialer and
+  // bridge cache, with the stub relay carrying ONLY the broker
+  // exchange (bootDirectWire, the shared fixture). Teardowns collect
+  // on the shared tracker for the finally below.
+  const { track, teardown } = makeTracker();
+  const { stub, listener, peerA } = await bootDirectWire(track, {
+    registerHandlers: (binding) => {
+      registerContract(syncContract, syncHandlers, binding, {
+        validateOutputs: true,
+      });
+      // The teardown half of the transplant proof: the REAL worktrees
+      // surface on A's wire, beside the sync surface. The usage hook is
+      // the Electron binding's concern, so a no-op satisfies the
+      // registrar.
+      registerContract(worktreesContract, worktreesHandlers, binding, {
+        validateOutputs: true,
+        onUsageTracked: () => {},
+      });
+    },
   });
-  registerContract(syncContract, syncHandlers, a.server, {
-    validateOutputs: true,
-  });
-  // The teardown half of the transplant proof: the REAL worktrees
-  // surface on A's wire, beside the sync surface. The usage hook is the
-  // Electron binding's concern, so a no-op satisfies the registrar.
-  registerContract(worktreesContract, worktreesHandlers, a.server, {
-    validateOutputs: true,
-    onUsageTracked: () => {},
-  });
-  const { connection: b } = await bootDevice(stub, "B");
   try {
-    const peer = await b.connectPeer("A");
-    const sync = buildClient(syncContract, peer.transport);
-    const worktreesOverWire = buildClient(worktreesContract, peer.transport);
+    const sync = buildClient(syncContract, peerA.transport);
+    const worktreesOverWire = buildClient(worktreesContract, peerA.transport);
     const dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
     // (1) Ungranted: the whole surface is refused typed, before any
@@ -332,7 +340,7 @@ async function main() {
       "ungranted peer: bundleStart, captureDirty and worktrees:delete are refused with the typed CommandRefusedError",
     );
 
-    granted = true;
+    listener.granted.add("B");
 
     // (2) captureDirty over the wire: a dirty worktree snapshots to
     // its capture ref on the host, tip echoed back.
@@ -344,11 +352,16 @@ async function main() {
     assert.equal(capture.captured, true, "capture reported clean");
     const captureTip = await gitOut(sourceRepo, "rev-parse", dirtyRef);
     assert.equal(capture.commit, captureTip);
-    ok("captureDirty over the relay snapshots the worktree to its capture ref");
+    ok("captureDirty over the wire snapshots the worktree to its capture ref");
 
     // (3) The full transfer: branch + capture ref, thinned by the
     // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces
-    // only, byte-identical objects.
+    // only, byte-identical objects. The direct session is established
+    // by now (the refusals above dialed it), so the relay must stay
+    // COMPLETELY flat for the whole transfer: no frame of it may ride
+    // the stub.
+    const relayBaseline = stub.forwardedCount();
+    const chunksBefore = peerA.invokeCount("sync:bundleChunk");
     const refsBefore = await refSnapshot(targetRepo);
     const { fetched } = await fetchBundleFromPeer(sync, {
       sourceProjectId,
@@ -356,14 +369,15 @@ async function main() {
       refs: ["refs/heads/feature", dirtyRef],
       haves: [baseSha],
     });
-    const chunkReqs = stub.received.filter(
-      (entry) =>
-        entry.frame?.sm?.t === "req" &&
-        entry.frame.sm.channel === "sync:bundleChunk",
-    );
+    const chunkReqs = peerA.invokeCount("sync:bundleChunk") - chunksBefore;
     assert.ok(
-      chunkReqs.length >= 3,
-      `expected >= 3 chunks for a >1.5 MB bundle, saw ${chunkReqs.length}`,
+      chunkReqs >= 3,
+      `expected >= 3 chunks for a >1.5 MB bundle, saw ${chunkReqs}`,
+    );
+    assert.equal(
+      stub.forwardedCount(),
+      relayBaseline,
+      "the bundle transfer rode the relay instead of the direct socket",
     );
     const wantTips = {
       "refs/shigomori/incoming/feature": featureTip,
@@ -435,7 +449,7 @@ async function main() {
     assert.equal(firstChunk.eof, false);
     assert.equal(
       Buffer.from(firstChunk.dataB64, "base64").length,
-      RELAY_CHUNK_BYTES,
+      WIRE_CHUNK_BYTES,
     );
     await sync.bundleAbort({ transferId: manual.transferId });
     await assert.rejects(
@@ -446,7 +460,7 @@ async function main() {
     // transfer) is a no-op, never a failure.
     await sync.bundleAbort({ transferId: manual.transferId });
     ok(
-      "lifecycle: a chunk is RELAY_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
+      "lifecycle: a chunk is WIRE_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
     );
 
     // (5) A corrupted bundle refuses with the coded kind, straight from
@@ -471,7 +485,7 @@ async function main() {
     // ---- The slice-C pull orchestration, end to end. The handler runs
     // HERE as device B (the registered surface above is A's), with its
     // two real seams injected: the CLI runner (already set) and the
-    // peer sync api, which is the SAME relay-wire client the transfer
+    // peer sync api, which is the SAME direct-wire client the transfer
     // tests drove. Everything in between -- refTips negotiation,
     // captureDirty, the chunked bundle, `sm create`, the capture
     // re-key, `sm dirty apply` -- is production code against real git.
@@ -480,7 +494,7 @@ async function main() {
         assert.equal(deviceId, "A", "the pull dialed an unexpected device");
         return sync;
       },
-      // The transplant teardown's reach, over the same relay wire.
+      // The transplant teardown's reach, over the same direct wire.
       worktreesApiFor: (deviceId) => {
         assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
         return worktreesOverWire;
@@ -528,7 +542,7 @@ async function main() {
       "the incoming ref must be swept after a successful pull",
     );
     ok(
-      "pull round trip (clean): the branch crosses the relay and the worktree lands on it with the incoming ref swept",
+      "pull round trip (clean): the branch crosses the direct wire and the worktree lands on it with the incoming ref swept",
     );
 
     // (7) Dirty + tip-already-local path: scratch sits at the base
@@ -793,9 +807,10 @@ async function main() {
       "transplant (scripts running): the teardown refuses with the scripts-running marker and the source survives",
     );
   } finally {
-    await b.stop();
-    await a.stop();
-    await stub.close();
+    // Reverse creation order via the shared tracker: the direct
+    // sessions and listener first, then the relay connections, then
+    // the stub.
+    await teardown();
   }
 
   done();

@@ -113,7 +113,12 @@ function ConnectedForest({
     ]),
   );
 
-  const { connected } = deviceStatusView(device.status);
+  // Reachable covers "connected" and "online" (in the roster with no
+  // direct session yet): the queries above are dialing one right now,
+  // so render their outcome (loading, the forest, or the dial's typed
+  // error) instead of a status panel that would hide a failed dial
+  // behind "Online".
+  const { connected, reachable, label } = deviceStatusView(device.status);
   const mismatch = deviceVersionMismatch(device);
   // Settings needs a live connection to read and write; fall back to
   // the forest's status panels whenever the link lapses so the toggle
@@ -146,13 +151,13 @@ function ConnectedForest({
             </p>
           )}
 
-          {!connected ? (
+          {!reachable ? (
             <EmptyPanel>
               {device.status.phase === "blocked"
                 ? `Can't connect: ${device.status.message}.`
                 : // The honest phase label, not a blanket "Connecting" that
                   // lies for a stopped or backing-off device (I4).
-                  deviceStatusView(device.status).label}
+                  label}
             </EmptyPanel>
           ) : isPending ? (
             <p className="text-sm text-muted-foreground">Loading…</p>

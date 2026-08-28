@@ -8,12 +8,12 @@ import { connect, type Socket } from "node:net";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { waitForDrainOrClose } from "@host/lib/net";
 
 // How long a poll with nothing to report holds before answering empty.
-// The relay has no per-call timeout, so the long-poll is what keeps a
+// The wire has no per-call timeout, so the long-poll is what keeps a
 // downlink invoke from hanging forever on a quiet socket: the client
 // just re-polls on an empty answer.
 const POLL_WAIT_MS = 10_000;
@@ -109,8 +109,8 @@ function takeBuffered(conn: Conn, limit: number): Buffer {
 }
 
 // Error messages below are stable markers, not prose: Electron IPC and
-// the relay link both preserve only the message string, so the slice B
-// client matches these exact texts to tell "re-dial the conn" from a
+// the device wires both preserve only the message string, so the slice
+// B client matches these exact texts to tell "re-dial the conn" from a
 // real failure. Keep them in sync with the checks.
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
@@ -205,7 +205,7 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
       // gone, so answer the teardown, not the buffer.
       if (conns.get(connId) !== conn) return { dataB64: "", eof: true };
       if (conn.buffered > 0) {
-        const data = takeBuffered(conn, RELAY_CHUNK_BYTES);
+        const data = takeBuffered(conn, WIRE_CHUNK_BYTES);
         // eof only after the buffer is fully drained: bytes that raced
         // the stream's end still reach the client, on earlier polls.
         if (conn.buffered <= BUFFER_HIGH_WATER) conn.socket.resume();

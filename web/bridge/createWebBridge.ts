@@ -20,6 +20,7 @@ import {
   type AccountStatus,
 } from "@shared/ipc/modules/account";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
+import { directContract } from "@shared/ipc/modules/direct";
 import { relayContract } from "@shared/ipc/modules/relay";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
@@ -136,9 +137,11 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const relayHandlers = directPlane.handlers;
 
   const connection = createRelayConnection({
+    // The one channel the wire brokers, supplied here so the binding
+    // stays contract-free: a browser dials the broker leg only, it
+    // never serves it.
+    brokerChannel: directContract.calls.connectInfo.channel,
     onChange: () => directPlane.handleConnectionChange(),
-    onPeerPush: (peerDeviceId, channel, payload) =>
-      directPlane.handlePeerPush(peerDeviceId, channel, payload),
   });
 
   // Mirrors main/ipc/register.ts refreshRelayConnection: reconcile the

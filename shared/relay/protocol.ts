@@ -7,9 +7,11 @@
 // electron.
 //
 // The relay never parses sm traffic. The `frame` field of a relay
-// envelope is opaque to the Worker. It will carry the existing sm
-// socket frames (frames.ts) once the app-side transport lands, but
-// nothing here may depend on that shape.
+// envelope is opaque to the Worker. It carries only the broker-surface
+// sm frames (hello/welcome, the direct:connectInfo req/res, bye), but
+// nothing here may depend on that shape. Contract data never rides
+// this wire (v2 step 10, slice C): the relay is orchestration only,
+// and data flows over the direct sockets it brokers.
 //
 // TRUST MODEL: the relay is our own managed service, not an adversary.
 // Enrollment requires a Clerk-verified login, each device holds a
@@ -17,8 +19,10 @@
 // tickets, and the DO authenticates the account when it burns the
 // ticket, so every deliverable peer is by construction a device of the
 // same account. That is why the app-level hello token is ignored on the
-// relay path. Authorization stays host-local: mutating calls are gated
-// on per-peer command grants and dispatch fails closed (see
+// relay path. Authorization stays host-local: mutating calls ride the
+// direct sockets only, where dispatch gates them on per-peer command
+// grants fail-closed (host/socket/server.ts), and the relay wire
+// itself serves nothing but the broker surface (see
 // shared/relay/link.ts). The size and count bounds in this file are
 // sanity bounds that keep a bug or a runaway client from ballooning
 // allocations, and the session epoch on the sm frames defends against
@@ -30,22 +34,24 @@
 import { z } from "zod";
 
 // Largest relay envelope the DO will forward, in bytes of the
-// serialized JSON. Cloudflare caps websocket messages at 1 MiB
-// (1048576), so this sits under it to leave headroom for the envelope
-// fields around the opaque frame. An oversize forward is answered with
-// a `too-large` nack to the sender. Chunking big sm frames into
-// smaller envelopes is the app-side transport's job in a later step,
-// not the relay's.
-export const MAX_RELAY_MESSAGE_BYTES = 1_000_000;
+// serialized JSON. The relay carries orchestration only (v2 step 10,
+// slice C): hello/welcome, the direct:connectInfo broker exchange, bye
+// and presence, all small control frames, so this is a control-frame
+// budget rather than a data budget. Contract data rides the direct
+// sockets and never this wire. An oversize forward is answered with a
+// `too-large` nack to the sender. The worst legitimate frame is a
+// connectInfo answer (a handful of URLs and tickets), far under this,
+// and the worst-case presence roster fits too (asserted in
+// relay/test/relay.spec.ts against MAX_ONLINE_DEVICES).
+export const MAX_RELAY_MESSAGE_BYTES = 64 * 1024;
 
 // Whether a serialized envelope fits under MAX_RELAY_MESSAGE_BYTES.
 // The one owner of what counts against the limit: the DO measures the
 // serialized DELIVER envelope (`{t:"relay",from,frame}` with the
-// sender's deviceId as `from`), so the sender-side chunker (a later
-// slice) must measure exactly that, not the bare frame. The fast
-// paths avoid a full encode: a UTF-16 code unit becomes at least one
-// and at most three UTF-8 bytes, so only the band in between needs a
-// real count.
+// sender's deviceId as `from`), so the sender-side guard must measure
+// exactly that, not the bare frame. The fast paths avoid a full
+// encode: a UTF-16 code unit becomes at least one and at most three
+// UTF-8 bytes, so only the band in between needs a real count.
 const utf8 = new TextEncoder();
 export function relayTextWithinLimit(text: string, extraBytes = 0): boolean {
   // extraBytes lets the sender measure a shape it does not literally
@@ -66,32 +72,16 @@ export function utf8ByteLength(text: string): number {
   return utf8.encode(text).byteLength;
 }
 
-// One raw chunk of bulk app data per relay message, for callers that
-// move byte streams as base64 inside a JSON frame inside the relay
-// envelope (the port-forward wire and its slice B client engine). The
-// base64 form is ceil(640_000/3)*4 = 853_336 chars, leaving ~146 KB of
-// headroom under MAX_RELAY_MESSAGE_BYTES for the frame and envelope
-// fields around it. The two values must move together.
-export const RELAY_CHUNK_BYTES = 640_000;
-export const RELAY_CHUNK_B64_MAX = 853_336;
-
-// The base64 form of one raw chunk, bounded by the cap above and
-// pinned to the base64 charset so a non-base64 payload fails at the
-// schema instead of silently decoding to garbage bytes. The ONE schema
-// for every bulk-data field on both chunked wires (forward's send
-// payload and poll result, sync's bundleChunk result), so an uplink
-// write can never exceed what a downlink chunk may carry and vice
-// versa.
-export const ChunkB64Schema = z
-  .string()
-  .max(RELAY_CHUNK_B64_MAX)
-  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
-
-// The most online devices a presence roster may name. An account's
-// device count is small in practice, so this sits far above any real
-// roster while still bounding what a hostile DO can force a client to
-// allocate from one presence envelope.
-export const MAX_ONLINE_DEVICES = 1024;
+// The most online devices a presence roster may name, enforced as the
+// CLIENT's presence schema cap (the DO deliberately runs no admission
+// gate against it, see relayObject.ts). One-user scale: an account's
+// device count is a handful in practice, so this still sits far above
+// any real roster while bounding what a hostile DO can force a client
+// to allocate from one presence envelope. It also keeps the worst-case
+// roster envelope (64 ids of 200 chars each) well under
+// MAX_RELAY_MESSAGE_BYTES, so a full roster can never kill the socket
+// that carries it (asserted in relay/test/relay.spec.ts).
+export const MAX_ONLINE_DEVICES = 64;
 
 // Application close codes for the relay socket. Deliberately disjoint
 // from the LAN socket's 4001/4002 (frames.ts) so a log line's code

@@ -32,9 +32,9 @@ export type RelayConnectionStatus = {
   socket: SupervisorStatus;
   // The account's online deviceIds from the latest presence broadcast,
   // the local device filtered out, empty whenever the socket is down.
+  // Peer app versions are NOT here: relay client peers are transient
+  // broker sessions now, so the welcome-confirmed versions the status
+  // surface reports come from the cached direct sessions
+  // (shared/relay/directPlane.ts).
   onlineDeviceIds: string[];
-  // The appVersion each currently connected client peer confirmed in its
-  // welcome, so a status snapshot carries it and the caller does not poll
-  // per device.
-  peerAppVersions: Record<string, string>;
 };

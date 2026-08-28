@@ -1,25 +1,29 @@
 // The relay link: the multiplexing core of the relay transport (v2
 // step 4, slice C). One device holds ONE socket to its account's
-// Durable Object, and both roles share it. The HOST role serves sm
-// hello/req frames arriving from peers, mirroring the LAN binding's
-// session semantics (per-peer notifier, AbortSignal, in-flight cap).
-// The CLIENT role opens sm-level peer connections that carry req/res
-// and push frames to a target deviceId. Role discrimination is purely
-// the inner sm frame's `t` field: hello and req are requests TO us,
-// welcome, res and push are replies FOR us. One decoder, one switch.
+// Durable Object, and both roles share it. Since v2 step 10 slice C
+// the relay is ORCHESTRATION ONLY: the HOST role serves exactly the
+// broker surface (sm hello/req for direct:connectInfo, bye) and
+// refuses every other channel, and the CLIENT role opens the
+// short-lived sm-level peer sessions the direct dialer brokers
+// through (shared/relay/directDial.ts). Contract data, broadcasts and
+// pushes never ride this wire anymore. They belong to the direct
+// sockets the broker hands out. Role discrimination is purely the
+// inner sm frame's `t` field: hello, req and bye are requests TO us,
+// welcome and res are replies FOR us. One decoder, one switch.
 //
 // TRUST MODEL (see also protocol.ts): the relay is our own managed
 // service. Enrollment is Clerk-verified, the per-device credential is
 // exchanged for short-lived connect tickets, so every deliverable peer
 // is by construction a device of the same account, which is why the
-// hello token is ignored here. Authorization is host-local: mutating
-// calls are gated on a per-peer command grant, and dispatch fails
-// closed (only channels explicitly classified read-only are served
-// ungranted). The remaining defenses are sanity bounds, not armor: a
-// per-session epoch stamped on every sm frame so a stale res or push
-// from a prior peer pairing is never matched against a fresh one, a
-// presence-roster gate on hello so a misrouted `from` cannot allocate a
-// host session, and per-peer size and in-flight caps.
+// hello token is ignored here. There is no command surface to
+// authorize here: the broker channel is a read by contract, and every
+// mutating call rides the direct wire, where dispatch gates it on the
+// host's per-peer command grant. The remaining defenses are sanity
+// bounds, not armor: a per-session epoch stamped on every sm frame so
+// a stale res from a prior peer pairing is never matched against a
+// fresh one, a presence-roster gate on hello so a misrouted `from`
+// cannot allocate a host session, and per-peer size and in-flight
+// caps.
 //
 // Pure on purpose: zod, the shared frame and envelope schemas, and an
 // injected send function. No node builtins, no ws, no electron, so the
@@ -30,24 +34,11 @@ import { errorMessageOf } from "@shared/errors";
 import {
   type ClientFrame,
   ClientFrameSchema,
-  COMMAND_REFUSED_CODE,
-  COMMAND_REFUSED_MESSAGE,
-  CommandRefusedError,
   HELLO_TIMEOUT_MS,
-  MAX_IN_FLIGHT_PER_PEER,
-  PUSH_BUFFER_LIMIT_BYTES,
-  type PushFrame,
   type ReqFrame,
   type ServerFrame,
   ServerFrameSchema,
 } from "@shared/ipc/socket/frames";
-import { resolveBroadcast } from "@shared/ipc/registerContract";
-import {
-  createSubscriberRegistry,
-  type SubscriberRegistry,
-} from "@shared/ipc/socket/subscriberRegistry";
-import type { DeviceConnection } from "@shared/ipc/socket/wsClientTransport";
-import type { HandlerContext } from "@shared/ipc/transport";
 import {
   decodeEnvelope,
   encodeEnvelope,
@@ -57,11 +48,15 @@ import {
   utf8ByteLength,
 } from "./protocol";
 
-// The per-peer in-flight and push-backpressure bounds are the shared
-// wire caps in frames.ts, one source with the LAN binding. The
-// in-flight count is tracked per deviceId and survives both a re-hello
-// and a presence flap, so neither a peer re-helloing nor a flapping
-// roster can reset the cap while old dispatches are still running.
+// The relay's own per-peer in-flight bound. Legitimate broker
+// concurrency is ~1 (one connectInfo exchange per dial), so this is a
+// small sanity cap, deliberately NOT the shared data-wire budget in
+// frames.ts (the direct and LAN bindings keep 64 for long-polls and
+// chunk streams). The in-flight count is tracked per deviceId and
+// survives both a re-hello and a presence flap, so neither a peer
+// re-helloing nor a flapping roster can reset the cap while old
+// dispatches are still running.
+export const MAX_RELAY_IN_FLIGHT_PER_PEER = 4;
 
 // The inner frame union both roles decode from a delivered envelope.
 const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
@@ -71,8 +66,8 @@ const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
 // binding never learn about epochs. The DO forwards this whole object
 // verbatim as the opaque `frame`, so the epoch survives the hop exactly
 // as the sm frame does. The CLIENT owns the epoch: it mints a fresh one
-// per connectPeer and sends it in hello, the HOST records it and echoes
-// it on welcome/res/push, and the client drops any inbound frame whose
+// per connectBroker and sends it in hello, the HOST records it and echoes
+// it on welcome and res, and the client drops any inbound frame whose
 // epoch is not its current one. A redial mints a new epoch, so late
 // frames from the prior pairing are dropped rather than mis-matched.
 const RelayFrameSchema = z.object({
@@ -94,9 +89,9 @@ export class RelayPeerOfflineError extends Error {
 
 // An outbound envelope would exceed the relay's message limit. The
 // guard runs BEFORE the frame touches the wire, measuring the same
-// deliver shape the DO measures. Chunking big frames into smaller
-// envelopes is a later step, so today oversize is a hard error
-// surfaced to the caller instead of a round trip ending in a nack.
+// deliver shape the DO measures. Every legitimate broker frame fits
+// with room to spare, so oversize is a hard error surfaced to the
+// caller instead of a round trip ending in a nack.
 export class RelayMessageTooLargeError extends Error {
   constructor() {
     super(`relay message exceeds the ${MAX_RELAY_MESSAGE_BYTES} byte limit`);
@@ -114,18 +109,49 @@ export class RelayLinkDownError extends Error {
   }
 }
 
-// The LAN DeviceConnection shape verbatim, so everything downstream of
-// connectPeer is transport agnostic.
-export type PeerConnection = DeviceConnection;
+// The context a broker dispatch runs under: the authenticated caller
+// and the session's abort signal, nothing more. Deliberately NOT the
+// full HandlerContext: the relay carries no pushes, so a notifier sink
+// would be a lie, and its absence keeps the broker slot's type honest
+// about what this wire can do.
+export type RelayBrokerContext = {
+  // The authenticated peer identity: the DO consumed this peer's
+  // connect ticket and stamps `from`, and the roster gate in
+  // handleHello already bounded it to a real account device.
+  callerDeviceId: string;
+  // Aborts when this peer's session dies (re-hello, presence drop,
+  // bye, link teardown).
+  signal: AbortSignal;
+};
 
-export type ConnectPeerOpts = {
-  // Called once when an ESTABLISHED peer connection dies on its own
-  // (presence drop, nack, socket teardown). Never fires for an owner
-  // initiated close, and never for a failed connect. The relay carries
-  // no per-peer close code, so this takes no argument.
-  onClose?: () => void;
-  // Test seam for the welcome wait. Real callers take the LAN default.
-  helloTimeoutMs?: number;
+// What the client role resolves: the broker leg's whole surface. One
+// typed invoke pinned to the broker channel plus close, so contract
+// traffic structurally cannot ride the relay from this side either.
+// The identity fields are informational facts of the handshake (the
+// dialed deviceId and the welcome's appVersion), not a data path.
+export type RelayBrokerSession = {
+  // Sends one req on the broker channel and resolves its res. Input
+  // and result are both unknown at this layer: the dialer owns the
+  // contract types on either end (it builds the input and parses the
+  // answer against the contract schema), so the link stays a plain
+  // frames-plus-zod core.
+  brokerInvoke(input: unknown): Promise<unknown>;
+  close(): void;
+  remoteDeviceId: string;
+  remoteAppVersion: string;
+};
+
+// The ONE channel-plus-handler pair the relay wire serves, injected by
+// the composition (main/ipc/register.ts, the web bridge) so the link
+// core never imports a contract. The channel is needed by BOTH roles
+// (the host role's dispatch gate and the client role's req frames).
+// The handler is absent on client-only platforms (the web), where
+// every req is answered with the no-handler shape. There is no handler
+// map to mount anything else on, so a data path through the relay is a
+// type error, not a discouraged registration.
+export type RelayBroker = {
+  channel: string;
+  handler?: (ctx: RelayBrokerContext, raw: unknown) => Promise<unknown>;
 };
 
 export type RelayLinkDeps = {
@@ -134,61 +160,23 @@ export type RelayLinkDeps = {
   // Writes one text message to the raw relay socket. May throw when the
   // socket is unusable, and the caller of the failed operation sees it.
   send(text: string): void;
-  // The raw socket's queued-but-unsent byte count, for push backpressure.
-  // Optional so a headless caller without a real socket can omit it.
-  bufferedAmount?: () => number;
-  // The registered host handlers, shared by reference with the owner so
-  // registration at boot survives link recreation across reconnects.
-  handlers: ReadonlyMap<
-    string,
-    (ctx: HandlerContext, raw: unknown) => Promise<unknown>
-  >;
-  // The channel names EXPLICITLY classified read-only (each remote
-  // invoke's `mutating` flag is false), collected fail-closed. The gate
-  // serves a channel to an ungranted peer ONLY when it is in this set, so
-  // anything not proven a read (a mutation, or an untagged channel)
-  // requires a command grant (see isCommandGranted). This is the safe
-  // default: a wrongly-gated read is low-severity and quickly noticed, a
-  // wrongly-served mutation is high-severity and silent, so the
-  // security-critical axis defaults closed. Injected so the link stays
-  // electron-free and the relay-link check drives it with a stub set.
-  readOnlyChannels: ReadonlySet<string>;
-  // Whether the named peer is currently permitted to run mutating calls
-  // on THIS host. Enforcement is host-local: this machine decides which
-  // peers may command it. Read live at dispatch (not cached at link
-  // creation) so a grant or revoke takes effect without a relay
-  // reconnect. Injected from main, which reads the host's grant store
-  // for the current account.
-  isCommandGranted: (peerDeviceId: string) => boolean;
+  // The one broker slot this wire serves (see RelayBroker).
+  broker: RelayBroker;
   // The full online list from every presence envelope, after the link
   // has reconciled its per-peer state against it.
   onPresence?: (online: readonly string[]) => void;
-  // Every push frame delivered to a client peer, before local
-  // subscribers run. The main process bridge forwards these to the
-  // renderer wholesale, and the renderer filters by device and channel.
-  onPeerPush?: (deviceId: string, channel: string, payload: unknown) => void;
 };
 
 export type RelayLink = {
   // Feed one raw text message from the relay socket through the link.
   handleMessage(text: string): void;
-  // CLIENT role: open an sm-level connection to a peer device. Sends
-  // hello, awaits welcome, then invoke correlates req/res by id and
-  // subscribe consumes that peer's push frames.
-  connectPeer(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
-  // HOST role fan-out: one push frame to every peer that has helloed.
-  broadcastAll(channel: string, payload: unknown): void;
+  // CLIENT role: open the short-lived broker session to a peer device.
+  // Sends hello, awaits welcome, then brokerInvoke correlates req/res
+  // by id. The sole real caller is the direct dialer's broker leg.
+  connectBroker(deviceId: string): Promise<RelayBrokerSession>;
   onlineDeviceIds(): readonly string[];
-  // The appVersion each currently connected client peer confirmed in its
-  // welcome, so the owner can fold it into a status snapshot instead of
-  // the renderer polling per device.
-  peerAppVersions(): Record<string, string>;
   // The socket is gone: every peer's state dies, in-flight calls
-  // reject, host sessions abort, and established peer connections see
-  // their close callback.
+  // reject, and host sessions abort.
   teardown(): void;
 };
 
@@ -199,32 +187,30 @@ type PendingCall = {
 
 type ClientPeer = {
   deviceId: string;
-  // This pairing's epoch, minted at connectPeer. Stamped on every
+  // This pairing's epoch, minted at connectBroker. Stamped on every
   // outbound frame and checked against every inbound one.
   epoch: number;
   nextId: number;
   pending: Map<number, PendingCall>;
-  subscribers: SubscriberRegistry;
   // Non-null once the peer's welcome landed. remoteAppVersion is
   // informational; the peer identity is the DIALED deviceId, never the
   // welcome's self-asserted one (M5).
   welcome: { remoteAppVersion: string } | null;
   helloWaiter: {
-    resolve: (connection: PeerConnection) => void;
+    resolve: (session: RelayBrokerSession) => void;
     reject: (error: unknown) => void;
     timer: ReturnType<typeof setTimeout>;
   } | null;
-  onClose: (() => void) | null;
-  transport: PeerConnection["transport"];
+  invoke: (input: unknown) => Promise<unknown>;
   closed: boolean;
 };
 
 type HostSession = {
   // The epoch recorded from this peer's most recent hello, echoed on
-  // every welcome/res/push so the peer can drop a stale one.
+  // every welcome and res so the peer can drop a stale one.
   epoch: number;
   controller: AbortController;
-  ctx: HandlerContext;
+  ctx: RelayBrokerContext;
 };
 
 function rejectAllPending(peer: ClientPeer, error: unknown): void {
@@ -249,21 +235,21 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
   // deletes the key (when it reaches zero).
   const hostInFlight = new Map<string, number>();
   let online = new Set<string>();
-  // A fresh epoch per connectPeer. A monotonic integer is enough: it
+  // A fresh epoch per connectBroker. A monotonic integer is enough: it
   // only needs to differ from the pairing it replaces.
   let nextEpoch = 1;
-  let droppedPushes = 0;
   let droppedInbound = 0;
-  let peerPushThrew = 0;
 
   // Throttled warn for the dropped inbound paths (unparseable frames,
   // off-roster peers), so a flood cannot spam the log the way an
-  // unthrottled warn per drop would.
-  function warnDrop(message: string): void {
+  // unthrottled warn per drop would. Takes a thunk so the message text
+  // (and any id truncation inside it) is only built on the one drop in
+  // fifty that actually logs, never on the hot drop path.
+  function warnDrop(message: () => string): void {
     droppedInbound += 1;
     if (droppedInbound % 50 === 1) {
       console.warn(
-        `[relay] ${message} (dropped ${droppedInbound} inbound so far)`,
+        `[relay] ${message()} (dropped ${droppedInbound} inbound so far)`,
       );
     }
   }
@@ -290,8 +276,10 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     return { sendText, fits: relayTextWithinLimit(sendText, routingDelta(to)) };
   }
 
-  // The one outbound path for sm frames. Oversize is a hard local error
-  // today, never a wire round trip (chunking is a later step).
+  // The one outbound path for sm frames. Oversize is a hard local
+  // error, never a wire round trip. Every legitimate broker frame is
+  // small, so tripping this means a caller aimed bulk data at the
+  // orchestration wire.
   function sendFrameToPeer(
     to: string,
     frame: ClientFrame | ServerFrame,
@@ -300,35 +288,6 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     const { sendText, fits } = relayFrameTexts(to, frame, epoch);
     if (!fits) throw new RelayMessageTooLargeError();
     deps.send(sendText);
-  }
-
-  // Push delivery is best effort, mirroring the LAN binding's
-  // backpressure drops: a push is a recoverable refresh signal, so a
-  // backpressured, oversize or failed one is counted and dropped rather
-  // than thrown into the broadcaster.
-  function trySendPush(to: string, frame: PushFrame, epoch: number): void {
-    if (
-      deps.bufferedAmount !== undefined &&
-      deps.bufferedAmount() > PUSH_BUFFER_LIMIT_BYTES
-    ) {
-      droppedPushes += 1;
-      if (droppedPushes % 50 === 1) {
-        console.warn(
-          `[relay] dropping push under backpressure (dropped ${droppedPushes} so far)`,
-        );
-      }
-      return;
-    }
-    try {
-      sendFrameToPeer(to, frame, epoch);
-    } catch (error) {
-      droppedPushes += 1;
-      if (droppedPushes % 50 === 1) {
-        console.warn(
-          `[relay] dropping push to ${truncateId(to)}: ${errorMessageOf(error)} (dropped ${droppedPushes} so far)`,
-        );
-      }
-    }
   }
 
   // The one send path for pre-encoded answers a caller is awaiting
@@ -361,10 +320,10 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
 
   // Owner-initiated close of a client peer: tell the host we are gone
   // (a bye frame), then destroy locally. Without the bye the host's
-  // hostSession for this peer would survive until the next presence
-  // drop and keep fanning every broadcast at a dead client peer over
-  // the relay. Best effort: a downed link just means the host finds
-  // out via presence as before.
+  // hostSession for this peer (its AbortController and epoch record)
+  // would survive as garbage until the next presence drop. Best
+  // effort: a downed link just means the host finds out via presence
+  // as before.
   function closeClientPeer(peer: ClientPeer): void {
     if (!peer.closed) {
       try {
@@ -374,17 +333,14 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
         // session then dies on presence, exactly the pre-bye behavior.
       }
     }
-    destroyClientPeer(peer, new RelayLinkDownError(), false);
+    destroyClientPeer(peer, new RelayLinkDownError());
   }
 
-  // Kill one client peer. fireClose distinguishes the peer dying on its
-  // own (close callback owed, post-welcome only) from an owner close or
-  // a replacement (silent). The relay carries no per-peer close code.
-  function destroyClientPeer(
-    peer: ClientPeer,
-    error: unknown,
-    fireClose: boolean,
-  ): void {
+  // Kill one client peer. There is no close callback to owe: the one
+  // real broker session lives inside the dialer's try/finally, which
+  // closes it itself, so a session dying on its own only needs its
+  // pending calls rejected.
+  function destroyClientPeer(peer: ClientPeer, error: unknown): void {
     if (peer.closed) return;
     peer.closed = true;
     clientPeers.delete(peer.deviceId);
@@ -396,7 +352,6 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     // Reject all pending with a typed error so no pending entry can
     // survive into a new epoch (E2).
     rejectAllPending(peer, error);
-    if (fireClose && peer.welcome !== null) peer.onClose?.();
   }
 
   function dropHostSession(deviceId: string): void {
@@ -426,7 +381,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     // peer must be online to route a hello to us, so a roster gate is a
     // precise bound on session allocation.
     if (!online.has(from)) {
-      warnDrop(`refusing hello from off-roster peer ${truncateId(from)}`);
+      warnDrop(() => `refusing hello from off-roster peer ${truncateId(from)}`);
       return;
     }
     // A fresh hello from a peer we already served means it reconnected.
@@ -445,28 +400,15 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     const session: HostSession = {
       epoch,
       controller,
+      // The minimal broker context (see RelayBrokerContext): the
+      // authenticated caller (the DO consumed this peer's connect
+      // ticket and stamps `from`, and the roster gate above already
+      // bounded it to a real account device) and the session's abort
+      // signal. No notifier and no grant verdict: the relay serves
+      // only the broker read.
       ctx: {
         signal: controller.signal,
-        // The preflight verdict for THIS calling peer, read live from
-        // the injected grant predicate (never cached on the session) so
-        // a grant or revoke changes the answer without a re-hello. The
-        // handler sees one boolean about its caller. The grant list
-        // itself never crosses the wire.
-        isCallerCommandGranted: () => deps.isCommandGranted(from),
-        // The authenticated peer identity: the DO consumed this peer's
-        // connect ticket and stamps `from`, and the roster gate above
-        // already bounded it to a real account device. Handlers that
-        // need a caller identity (direct:connectInfo) read it here.
         callerDeviceId: from,
-        // Bound to the calling peer only, so a handler streaming progress
-        // reaches its caller rather than every peer. A notifier that
-        // fires after a re-hello or a presence drop must not push into
-        // the new session, so it no-ops unless it is still current (E3).
-        notifier: (module, key) => (payload) => {
-          if (hostSessions.get(from) !== session) return;
-          const { channel, parsed } = resolveBroadcast(module, key, payload);
-          trySendPush(from, { t: "push", channel, payload: parsed }, epoch);
-        },
       },
     };
     hostSessions.set(from, session);
@@ -482,8 +424,8 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
   }
 
   // The peer's client role closed on purpose (a bye frame): tear its
-  // host session down now instead of fanning broadcasts at a dead peer
-  // until presence notices. Epoch-guarded so a late bye from a prior
+  // host session down now instead of keeping it as garbage until
+  // presence notices. Epoch-guarded so a late bye from a prior
   // pairing cannot kill the session a fresh hello just built.
   function handleBye(from: string, epoch: number): void {
     const session = hostSessions.get(from);
@@ -497,44 +439,25 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     frame: ReqFrame,
   ): Promise<void> {
     let answer: ServerFrame;
-    const fn = deps.handlers.get(frame.channel);
+    // The broker slot is the wire's whole serving policy: only the
+    // broker channel ever reaches the handler, so a data channel (a
+    // read, a mutation, anything) is refused with the same no-handler
+    // shape an unregistered channel gets. There is nothing else to
+    // mount on this binding: the slot's type is the wire's surface.
+    const fn =
+      frame.channel === deps.broker.channel ? deps.broker.handler : undefined;
     if (fn === undefined) {
-      // Non-remote and client-scoped channels are never registered on
-      // this binding, so this is also the answer a peer gets for them.
       answer = {
         t: "res",
         id: frame.id,
         ok: false,
         message: `No handler registered for channel "${frame.channel}"`,
       };
-    } else if (
-      !deps.readOnlyChannels.has(frame.channel) &&
-      !deps.isCommandGranted(from)
-    ) {
-      // Fail-closed: a channel is served to this ungranted peer ONLY when
-      // it is an EXPLICITLY known read-only channel. Anything else (a
-      // mutation, or a channel that was never classified) is refused until
-      // this host has granted this peer command access. The grant is
-      // consulted live here, so the handler NEVER runs for an ungranted
-      // peer. The gate defaults closed on purpose: a wrongly-gated read is
-      // low-severity and quickly noticed, a wrongly-served mutation is
-      // high-severity and silent, so the security-critical axis is the one
-      // that defaults closed.
-      // The code is additive (an old peer sends none) and the message
-      // constant is the exact text this gate has always sent, so old
-      // clients keep matching on the message while new ones get the
-      // typed CommandRefusedError from their client role.
-      answer = {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        code: COMMAND_REFUSED_CODE,
-        message: COMMAND_REFUSED_MESSAGE,
-      };
     } else {
       try {
-        // Input parsing is unconditional inside fn (the shared registrar
-        // wraps every handler), exactly as on the LAN binding.
+        // Input parsing is unconditional inside fn (the owner's broker
+        // wiring parses against the contract schema), exactly as the
+        // shared registrar does on the LAN binding.
         const result = await fn(session.ctx, frame.input);
         answer = { t: "res", id: frame.id, ok: true, result };
       } catch (error) {
@@ -592,12 +515,12 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
           epoch,
         );
       } else {
-        warnDrop(`dropping req from off-roster peer ${truncateId(from)}`);
+        warnDrop(() => `dropping req from off-roster peer ${truncateId(from)}`);
       }
       return;
     }
     const inFlight = hostInFlight.get(from) ?? 0;
-    if (inFlight >= MAX_IN_FLIGHT_PER_PEER) {
+    if (inFlight >= MAX_RELAY_IN_FLIGHT_PER_PEER) {
       sendAnswer(
         from,
         {
@@ -620,60 +543,50 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
 
   // ---- CLIENT role ----
 
-  function connectPeer(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection> {
+  function connectBroker(deviceId: string): Promise<RelayBrokerSession> {
     // A fresh connect replaces any previous peer entry for the same
     // device: inbound frames route by deviceId, so there is exactly one
     // live client peer per target. A new epoch means any late frame from
     // the replaced pairing is dropped rather than mis-matched.
     const existing = clientPeers.get(deviceId);
     if (existing !== undefined) {
-      destroyClientPeer(existing, new RelayLinkDownError(), false);
+      destroyClientPeer(existing, new RelayLinkDownError());
     }
-    const helloTimeoutMs = opts?.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
     const epoch = nextEpoch++;
 
-    return new Promise<PeerConnection>((resolve, reject) => {
+    return new Promise<RelayBrokerSession>((resolve, reject) => {
       const peer: ClientPeer = {
         deviceId,
         epoch,
         nextId: 1,
         pending: new Map(),
-        subscribers: createSubscriberRegistry("relay"),
         welcome: null,
         helloWaiter: null,
-        onClose: opts?.onClose ?? null,
         closed: false,
-        transport: {
-          invoke(channel: string, input: unknown): Promise<unknown> {
-            if (peer.closed) {
-              return Promise.reject(new RelayLinkDownError());
-            }
-            const id = peer.nextId++;
-            return new Promise<unknown>((res, rej) => {
-              peer.pending.set(id, { resolve: res, reject: rej });
+        // The channel is pinned to the injected broker surface here,
+        // so no caller can aim another channel's req at the relay: the
+        // session's public invoke takes an input, never a channel.
+        invoke(input: unknown): Promise<unknown> {
+          if (peer.closed) {
+            return Promise.reject(new RelayLinkDownError());
+          }
+          const id = peer.nextId++;
+          return new Promise<unknown>((res, rej) => {
+            peer.pending.set(id, { resolve: res, reject: rej });
+            try {
+              const channel = deps.broker.channel;
               // Omit input when undefined so a void contract input
               // rides as an absent field, matching the LAN wire.
               const frame =
                 input === undefined
                   ? ({ t: "req", id, channel } as const)
                   : ({ t: "req", id, channel, input } as const);
-              try {
-                sendFrameToPeer(deviceId, frame, peer.epoch);
-              } catch (error) {
-                peer.pending.delete(id);
-                rej(error);
-              }
-            });
-          },
-          subscribe(
-            channel: string,
-            handler: (payload: unknown) => void,
-          ): () => void {
-            return peer.subscribers.subscribe(channel, handler);
-          },
+              sendFrameToPeer(deviceId, frame, peer.epoch);
+            } catch (error) {
+              peer.pending.delete(id);
+              rej(error);
+            }
+          });
         },
       };
       peer.helloWaiter = {
@@ -685,9 +598,8 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
           destroyClientPeer(
             peer,
             new Error(`welcome timeout from relay peer ${deviceId}`),
-            false,
           );
-        }, helloTimeoutMs),
+        }, HELLO_TIMEOUT_MS),
       };
       clientPeers.set(deviceId, peer);
       try {
@@ -704,7 +616,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
           peer.epoch,
         );
       } catch (error) {
-        destroyClientPeer(peer, error, false);
+        destroyClientPeer(peer, error);
       }
     });
   }
@@ -724,7 +636,9 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       // A stale frame from a prior pairing (a redial rides the same DO
       // socket), so it is dropped rather than matched against the fresh
       // session (E1/E2). This is the belt to E3's suspenders.
-      warnDrop(`dropping stale-epoch ${frame.t} from ${truncateId(from)}`);
+      warnDrop(
+        () => `dropping stale-epoch ${frame.t} from ${truncateId(from)}`,
+      );
       return;
     }
     if (frame.t === "welcome") {
@@ -737,7 +651,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       // accept tag, so a spoofed value must not be stored (M5).
       peer.welcome = { remoteAppVersion: frame.appVersion };
       waiter.resolve({
-        transport: peer.transport,
+        brokerInvoke: (input) => peer.invoke(input),
         close: () => closeClientPeer(peer),
         remoteDeviceId: peer.deviceId,
         remoteAppVersion: frame.appVersion,
@@ -750,13 +664,6 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       peer.pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
-      } else if (frame.code === COMMAND_REFUSED_CODE) {
-        // The peer's gate refused the command (no grant for us on that
-        // host). Typed, message preserved, so the caller can prompt
-        // "ask that machine to allow commands" instead of showing a
-        // generic failure. An old peer sends no code and falls through
-        // to the plain Error below.
-        entry.reject(new CommandRefusedError(frame.message));
       } else {
         // A plain Error carrying the host's message text, so the
         // shared/errors.ts matchers degrade a remote handler failure
@@ -765,24 +672,11 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       }
       return;
     }
-    // A push from this peer. The bridge callback sees every push, then
-    // local subscribers fan out. The bridge callback is wrapped so a
-    // throw there cannot escape into the socket's message handler (M4).
-    if (deps.onPeerPush !== undefined) {
-      try {
-        deps.onPeerPush(from, frame.channel, frame.payload);
-      } catch (error) {
-        // Throttled like warnDrop: a bridge callback throwing per push
-        // must not turn a chatty stream into a log flood.
-        peerPushThrew += 1;
-        if (peerPushThrew % 50 === 1) {
-          console.warn(
-            `[relay] onPeerPush threw: ${errorMessageOf(error)} (threw ${peerPushThrew} so far)`,
-          );
-        }
-      }
-    }
-    peer.subscribers.emit(frame.channel, frame.payload);
+    // A push frame. Nothing on this wire pushes anymore, so it can
+    // only be a peer running an older app version fanning a cache ping
+    // at us over the relay. Pushes are droppable by contract, so it is
+    // counted and dropped rather than routed anywhere.
+    warnDrop(() => `dropping relay push from ${truncateId(from)}`);
   }
 
   // ---- Envelope routing ----
@@ -795,7 +689,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     // iteration tolerates.
     for (const [deviceId, peer] of clientPeers) {
       if (!online.has(deviceId)) {
-        destroyClientPeer(peer, new RelayPeerOfflineError(deviceId), true);
+        destroyClientPeer(peer, new RelayPeerOfflineError(deviceId));
       }
     }
     for (const deviceId of hostSessions.keys()) {
@@ -816,7 +710,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       // A send to that peer bounced, so every bit of its state dies
       // now rather than waiting for the next presence broadcast.
       if (peer !== undefined) {
-        destroyClientPeer(peer, new RelayPeerOfflineError(to), true);
+        destroyClientPeer(peer, new RelayPeerOfflineError(to));
       }
       dropHostSession(to);
       return;
@@ -826,7 +720,9 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
     // rejects with the typed error. This path should be unreachable:
     // outbound sends pre-measure the exact deliver shape the DO does.
     if (peer !== undefined) {
-      warnDrop(`too-large nack for ${truncateId(to)}, rejecting its pending`);
+      warnDrop(
+        () => `too-large nack for ${truncateId(to)}, rejecting its pending`,
+      );
       rejectAllPending(peer, new RelayMessageTooLargeError());
     }
   }
@@ -837,7 +733,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       if (envelope === null) {
         // Malformed messages are dropped, never fatal, mirroring the
         // LAN socket. One bad message must not kill live traffic.
-        warnDrop("dropping unparseable envelope");
+        warnDrop(() => "dropping unparseable envelope");
         return;
       }
       if (envelope.t === "presence") {
@@ -851,7 +747,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       const parsed = RelayFrameSchema.safeParse(envelope.frame);
       if (!parsed.success) {
         warnDrop(
-          `dropping unparseable frame from ${truncateId(envelope.from)}`,
+          () => `dropping unparseable frame from ${truncateId(envelope.from)}`,
         );
         return;
       }
@@ -869,26 +765,10 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       }
     },
 
-    connectPeer,
-
-    broadcastAll(channel: string, payload: unknown): void {
-      const frame: PushFrame = { t: "push", channel, payload };
-      for (const [deviceId, session] of hostSessions) {
-        trySendPush(deviceId, frame, session.epoch);
-      }
-    },
+    connectBroker,
 
     onlineDeviceIds(): readonly string[] {
       return [...online].toSorted();
-    },
-
-    peerAppVersions(): Record<string, string> {
-      const versions: Record<string, string> = {};
-      for (const [deviceId, peer] of clientPeers) {
-        if (peer.welcome !== null)
-          versions[deviceId] = peer.welcome.remoteAppVersion;
-      }
-      return versions;
     },
 
     teardown(): void {
@@ -896,7 +776,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       // Both loops only ever delete the entry they are visiting, which
       // Map iteration tolerates.
       for (const peer of clientPeers.values()) {
-        destroyClientPeer(peer, error, true);
+        destroyClientPeer(peer, error);
       }
       for (const deviceId of hostSessions.keys()) {
         dropHostSession(deviceId);

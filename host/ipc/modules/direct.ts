@@ -13,9 +13,18 @@ import {
   type DirectConnectInfoInput,
   directContract,
 } from "@shared/ipc/modules/direct";
+import { wrapContractCall } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
+import type { RelayBroker, RelayBrokerContext } from "@shared/relay/link";
 import { candidateAddresses } from "@host/direct/addresses";
+
+// The one context fact connectInfo reads. Both the full HandlerContext
+// (the Electron and direct wires through the shared registrar) and the
+// relay's minimal RelayBrokerContext satisfy it, which is what lets
+// one handler serve every wire without a no-op notifier being minted
+// for the relay's sake.
+export type ConnectInfoContext = Pick<HandlerContext, "callerDeviceId">;
 
 export type DirectHandlerDeps = {
   // The direct listener's bound port, or null while it is not running
@@ -50,7 +59,7 @@ function lanUrlOf(address: string, port: number): string {
 
 export function makeDirectHandlers(
   deps: DirectHandlerDeps,
-): Handlers<typeof directContract, HandlerContext> {
+): Handlers<typeof directContract, ConnectInfoContext> {
   return {
     connectInfo: (input: DirectConnectInfoInput, ctx): DirectConnectInfo => {
       // Fail closed without an authenticated peer identity: a ticket
@@ -80,7 +89,8 @@ export function makeDirectHandlers(
       // cloudflared child is healthy: a stale hostname would only burn
       // a ticket on a dead racer, but a healthy tunnel must always be
       // offered so a peer with no route to any interface address stays
-      // dialable (slice C removes the relay data fallback).
+      // dialable (data is direct or nothing, there is no relay
+      // fallback).
       const tunnelUrl = deps.tunnelUrl?.() ?? null;
       if (callerKinds.has("tunnel") && tunnelUrl !== null) {
         dialable.push({ kind: "tunnel", url: tunnelUrl });
@@ -100,5 +110,32 @@ export function makeDirectHandlers(
         })),
       };
     },
+  };
+}
+
+// The channel-plus-handler pair the relay binding's one broker slot
+// takes (RelayBroker in link.ts), built on the shared registrar's own
+// per-call wrapper so the brokered path serves EXACTLY the policy
+// every other wire does (unconditional input parse, hooks, dev-gated
+// output parse) and can never silently diverge when that policy
+// changes. The hooks no-op here by construction: connectInfo is an
+// untracked read, so wrapContractCall resolves both to undefined. The
+// relay binding is deliberately not a ServerTransport, and both real
+// wirings (main/ipc/register.ts and the check fixtures) share this.
+export function brokerHandlerFor(
+  handlers: Handlers<typeof directContract, ConnectInfoContext>,
+  opts: { validateOutputs: boolean },
+): Required<RelayBroker> {
+  const def = directContract.calls.connectInfo;
+  return {
+    channel: def.channel,
+    handler: wrapContractCall<RelayBrokerContext>(
+      def,
+      // The cast narrows the wrapper's post-parse unknown back to the
+      // schema's own inferred type, mirroring the registrar loop.
+      (input, ctx) =>
+        handlers.connectInfo(input as DirectConnectInfoInput, ctx),
+      opts,
+    ),
   };
 }

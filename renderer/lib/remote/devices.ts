@@ -18,6 +18,15 @@ import type { SupervisorStatus } from "@shared/remote/supervisor";
 // contract methods, minus the bridge-only extras (deviceId, appVersion).
 export type RemoteDeviceApi = ReturnType<typeof buildApi>;
 
+// A remote device's derived status: the supervisor vocabulary the
+// relay socket reports, plus the one renderer-local phase the direct
+// data plane needs. "online" means the peer is in the relay roster but
+// no direct session is established (not dialed yet, or the dial
+// failed), so it is NOT rendered as connected (v2 step 10, slice C:
+// data is direct or nothing, and a roster fact must not claim a data
+// wire).
+export type RemoteDeviceStatus = SupervisorStatus | { phase: "online" };
+
 export type RemoteDevice = {
   // The remote host's device id, from the account registry (always
   // set). This is what hostKeysFor scopes a remote device's query cache
@@ -25,15 +34,15 @@ export type RemoteDevice = {
   deviceId: string;
   // Display label: the account device name.
   label: string;
-  status: SupervisorStatus;
-  // The remote host app's version, "" until the lazily opened peer
+  status: RemoteDeviceStatus;
+  // The remote host app's version, "" until the lazily opened direct
   // session confirms it.
   appVersion: string;
-  // True while the cached peer session rides a DIRECT socket instead
-  // of the relay (v2 step 10, slice A). Display only.
-  direct?: boolean;
-  // Present only while connected. Host calls route over the relay
-  // bridge. Client-scoped calls reject (see rejectingClientTransport).
+  // Present while the peer is online in the roster, whether or not a
+  // direct session exists yet: using the api is exactly what opens the
+  // session (dial on first invoke or subscribe). Host calls route over
+  // the relay bridge onto the direct wire. Client-scoped calls reject
+  // (see rejectingClientTransport).
   api?: RemoteDeviceApi;
 };
 
@@ -78,10 +87,56 @@ const listeners = new Set<() => void>();
 // stable reference between changes, and a NEW reference on every change.
 let snapshot: readonly RemoteDevice[] = [];
 
+// Field equality for the status union, so a rebuild that lands on the
+// same phase (and the same per-phase detail) is recognized as no
+// change. A generic shallow own-key compare instead of a per-phase
+// switch, so a new phase or a new field on an existing one is compared
+// rather than silently landing in a default-true arm. Every arm of the
+// union is a flat object of primitives, which is what makes shallow
+// exact here.
+function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
+  const left = a as unknown as Record<string, unknown>;
+  const right = b as unknown as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return (
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => left[key] === right[key])
+  );
+}
+
+// The api is compared by reference on purpose: remoteDeviceSync builds
+// one api per deviceId and keeps it, so a changed reference is a real
+// change.
+function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
+  return (
+    a.deviceId === b.deviceId &&
+    a.label === b.label &&
+    a.appVersion === b.appVersion &&
+    a.api === b.api &&
+    sameStatus(a.status, b.status)
+  );
+}
+
 // Replace the store wholesale. Called by remoteDeviceSync.ts on boot,
-// on account changes and on relay status changes.
+// on account changes and on relay status changes. The rebuild arrives
+// on every relay transition, most of which change nothing for most
+// devices, so unchanged entries keep their previous object identity
+// (a memoized row skips its re-render) and a fully identical rebuild
+// bails without notifying at all. The dedupe is keyed by deviceId, not
+// array index, so a roster reorder or an add/remove does not churn
+// every row behind the shifted one. A pure reorder still notifies
+// (positions changed) while keeping each row's identity.
 export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
-  snapshot = [...devices];
+  const previous = new Map(snapshot.map((device) => [device.deviceId, device]));
+  let changed = devices.length !== snapshot.length;
+  const next = devices.map((device, index) => {
+    const old = previous.get(device.deviceId);
+    const kept = old !== undefined && sameDevice(old, device) ? old : device;
+    if (kept !== snapshot[index]) changed = true;
+    return kept;
+  });
+  if (!changed) return;
+  snapshot = next;
   for (const listener of listeners) listener();
 }
 

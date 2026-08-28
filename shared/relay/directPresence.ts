@@ -32,8 +32,16 @@ export function applyDirectPresence(
 ): void {
   // No live roster, no verdicts: a downed relay socket reports an
   // empty roster, and closing on that would tear down every working
-  // direct session exactly when the relay cannot help.
-  if (!relayConnected) return;
+  // direct session exactly when the relay cannot help. The dialer's
+  // roster bookkeeping DOES reset though (an empty notePresence, never
+  // the closes): without it, lastOnline would go stale across the
+  // outage and the post-reconnect roster would register no
+  // offline-to-online transitions, so nothing would clear the failure
+  // memos of peers that came back while our own link was down.
+  if (!relayConnected) {
+    deps.notePresence?.([]);
+    return;
+  }
   deps.notePresence?.(online);
   deps.closeHostPeersNotIn?.(online);
   deps.dropClientPeersNotIn(online);

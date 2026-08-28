@@ -1,17 +1,17 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { ChunkB64Schema } from "@shared/relay/protocol";
+import { ChunkB64Schema } from "@shared/ipc/socket/frames";
 
 // Port-forward wire protocol (v2 step 8, slice A): TCP bytes move
 // between devices as chunked, grant-gated invoke/response calls over
 // the existing device connection, exactly like the sync bundle
 // transfer. Invoke/response ONLY, never pushes: responses to awaited
-// invokes are reliable on the relay link, while pushes are droppable
-// under backpressure (shared/relay/link.ts trySendPush), and a dropped
+// invokes are reliable on the device wire, while pushes are droppable
+// under backpressure (the server bindings' push drops), and a dropped
 // frame in a TCP stream is corruption, not degradation. Chunks are
-// RELAY_CHUNK_BYTES raw so their base64 form fits inside a res frame
-// under MAX_RELAY_MESSAGE_BYTES (shared/relay/protocol.ts owns the
+// WIRE_CHUNK_BYTES raw so their base64 form fits inside one frame
+// under MAX_INBOUND_FRAME_BYTES (shared/ipc/socket/frames.ts owns the
 // arithmetic). The downlink is a long-poll (forward:poll) so
 // server-initiated bytes flow without an uplink write first. This is
 // the HOST side a remote peer drives. The client-side listener/engine
@@ -36,7 +36,7 @@ import { ChunkB64Schema } from "@shared/relay/protocol";
 
 // connIds are host-minted (shared/ipc/hexId.ts pins the shape), so a
 // peer can only replay an id it was given, never probe with crafted
-// ones. ChunkB64Schema (shared/relay/protocol.ts) bounds BOTH
+// ones. ChunkB64Schema (shared/ipc/socket/frames.ts) bounds BOTH
 // directions (send payload and poll result), so an uplink write can
 // never exceed what a downlink chunk may carry and vice versa.
 const ConnIdSchema = HexId32Schema;

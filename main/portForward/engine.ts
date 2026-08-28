@@ -4,12 +4,13 @@
 // host/ipc/modules/forward.ts, the wire rules in
 // shared/ipc/modules/forward.ts). Electron-free on purpose, node:net
 // plus injected dependencies, so the e2e check drives the real engine
-// over the stub relay (scripts/check-port-forward.mjs) while main/ipc
-// wires forwardApiFor over the relay bridge's shared peer sessions.
+// over a real device wire (scripts/check-port-forward.mjs) while
+// main/ipc wires forwardApiFor over the bridge's shared direct peer
+// sessions.
 //
 // The wire allows no retries: poll is a destructive read and send is
-// not idempotent, so ANY rejection from either call (relay flap, peer
-// offline, unknown-conn) tears the conn down and destroys the local
+// not idempotent, so ANY rejection from either call (a dropped direct
+// socket, peer offline, unknown-conn) tears the conn down and destroys the local
 // socket, never re-issuing the failed call. Teardown sends
 // forward:close best-effort, and only while the conn might still exist
 // host-side: after eof or an "unknown-conn" refusal the host has
@@ -19,7 +20,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
 import type { forwardContract } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
-import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { mintHexId } from "@host/lib/idleRegistry";
 import { waitForDrainOrClose } from "@host/lib/net";
 
@@ -27,15 +28,15 @@ export type ForwardApi = Client<typeof forwardContract>;
 
 // Client-side mirror of the host's MAX_CONNS (host/ipc/modules/
 // forward.ts): sized so one browser tab's ~6 keepalive sockets plus an
-// HMR websocket fit with headroom, and kept under the relay's per-peer
-// in-flight budget (raised 32 -> 64 in the paired relay change) since
+// HMR websocket fit with headroom, and kept under the wire's per-peer
+// in-flight budget (MAX_IN_FLIGHT_PER_PEER, raised 32 -> 64) since
 // each conn parks a long-poll there. That ceiling is per host process,
 // so this count spans ALL forwards to one device, not each forward
 // alone. A conn over the cap would be refused there anyway, but only
 // after a full open round trip that burns one of the peer's shared
-// relay in-flight slots, so an accepted socket over the cap is
-// destroyed immediately instead. Exported so the port-forward check's
-// cap scenario tracks this value.
+// in-flight slots, so an accepted socket over the cap is destroyed
+// immediately instead. Exported so the port-forward check's cap
+// scenario tracks this value.
 export const MAX_CONNS_PER_DEVICE = 16;
 
 // Trailing coalesce for the changed signal: accepts and closes arrive
@@ -217,9 +218,9 @@ export function createPortForwardEngine(deps: {
     socket.on("data", (data: Buffer) => {
       if (conn.dead) return;
       // Slice at enqueue time so every queued entry already fits one
-      // send frame under the relay cap.
-      for (let offset = 0; offset < data.length; offset += RELAY_CHUNK_BYTES) {
-        conn.queue.push(data.subarray(offset, offset + RELAY_CHUNK_BYTES));
+      // send frame under the wire's inbound cap.
+      for (let offset = 0; offset < data.length; offset += WIRE_CHUNK_BYTES) {
+        conn.queue.push(data.subarray(offset, offset + WIRE_CHUNK_BYTES));
       }
       conn.queuedBytes += data.length;
       if (!conn.paused && conn.queuedBytes > UPLINK_HIGH_WATER) {
@@ -279,7 +280,7 @@ export function createPortForwardEngine(deps: {
     // peer rejects the start with its coded error instead of minting a
     // listener whose conns die on arrival.
     const probe = await api.open({ port: input.remotePort });
-    // Awaited (rejection still ignored) so a relay flap between open
+    // Awaited (rejection still ignored) so a wire flap between open
     // and close cannot leak the probe's host conn slot for the idle
     // sweep to reap ten minutes later.
     await api.close({ connId: probe.connId }).catch(() => {});

@@ -37,7 +37,8 @@ import {
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createRelayConnection } from "@host/relay/connection";
 import { createWsServerBinding } from "@host/socket/server";
-import { makeDirectHandlers } from "@host/ipc/modules/direct";
+import { directContract } from "@shared/ipc/modules/direct";
+import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createDirectPlane } from "@shared/relay/directPlane";
 import {
   allowedWebOrigin,
@@ -124,10 +125,10 @@ const wsServer = createWsServerBinding();
 // The direct data plane (v2 step 10, slice A): a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
 // minted by direct:connectInfo over the relay, and dispatch gates
-// mutating channels on the same live per-peer grant the relay link
-// reads. Unconditional like the other bindings so registration records
-// handlers at boot, while listening is gated on enrollment in
-// refreshDirectHost below.
+// mutating channels on the live per-peer grant this listener reads
+// (isPeerCommandGranted). Unconditional like the other bindings so
+// registration records handlers at boot, while listening is gated on
+// enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const directWsServer = createWsServerBinding({
   verifyTicket: (ticket, deviceId) => directTickets.consume(ticket, deviceId),
@@ -189,58 +190,48 @@ export const relayHandlers = directPlane.handlers;
 // The relay connection, unconditional like the listener bindings:
 // handler registration is recorded at boot, connecting itself is gated
 // in refreshRelayConnection below (signed out or unconfigured means no
-// socket). Its callbacks hand status and peer pushes to the direct
-// plane, which fans them out to every window through the client-scoped
-// relay contract and reconciles direct-session presence on each
-// transition.
+// socket). Its onChange hands status transitions to the direct plane,
+// which fans a fresh snapshot out to every window through the
+// client-scoped relay contract and reconciles direct-session presence
+// on each transition. Peer pushes arrive over direct sessions only
+// (the dialer's onAnyPush inside the plane), never over the relay.
 const relayServer = createRelayConnection({
+  // The one channel the wire brokers, named at creation so the client
+  // role can dial before the handler pair below is registered.
+  brokerChannel: directContract.calls.connectInfo.channel,
   onChange: () => directPlane.handleConnectionChange(),
-  onPeerPush: (deviceId, channel, payload) =>
-    directPlane.handlePeerPush(deviceId, channel, payload),
-  // The relay link refuses a peer's mutating call unless this host has
-  // granted it command access. Read live from the account layer's grant
-  // cache so a grant or revoke applies without a relay reconnect.
-  isCommandGranted: isPeerCommandGranted,
 });
 
-// The remote wires (LAN socket, relay, direct listener), looped
-// wherever a channel or broadcast must reach them all so a new wire
-// lands in one place. A peer holds at most ONE of the two account
-// wires at a time beyond a transient overlap: when its direct dial
-// wins, its client role sends bye on the throwaway relay session it
-// brokered through, which tears down our relay hostSession for it, so
-// broadcasts reach it over the direct socket only. The overlap window
-// is the dial itself (both sessions briefly live), and the pushes
-// possibly doubled there are cache-invalidation pings that coalesce
-// viewer side.
-const remoteWires: readonly ServerTransport[] = [
-  wsServer,
-  relayServer.server,
-  directWsServer,
-];
+// The remote wires (LAN socket, direct listener), looped wherever a
+// channel or broadcast must reach them all so a new wire lands in one
+// place. The relay is deliberately NOT here (v2 step 10, slice C): it
+// is orchestration only, its wire serves nothing but the broker
+// surface registered below, and host broadcasts and viewer pings
+// reach remote peers over their direct sessions alone.
+const remoteWires: readonly ServerTransport[] = [wsServer, directWsServer];
 
 // Host-scoped calls are served on every wire that may carry them.
-// Client-scoped calls stay structurally unreachable over the socket
-// and the relay: their channels are never registered on either remote
-// binding, so a remote req gets a no-handler res instead of a native
-// dialog or an app-menu mutation.
+// Client-scoped calls stay structurally unreachable over the remote
+// wires: their channels are never registered on any remote binding,
+// so a remote req gets a no-handler res instead of a native dialog or
+// an app-menu mutation.
 const hostServer: ServerTransport = {
   // The Electron wire always serves host calls. The remote wires (LAN
-  // socket and relay) serve a call ONLY when its def opted into remote
-  // exposure, so a host-scoped-but-not-remote channel (runtime:nuke,
-  // cli:*, launchers:launch, globalConfig:write) is never even
-  // registered on them. A remote req for it gets the same no-handler
-  // res a client-scoped channel does.
+  // socket and direct listener) serve a call ONLY when its def opted
+  // into remote exposure, so a host-scoped-but-not-remote channel
+  // (runtime:nuke, cli:*, launchers:launch, globalConfig:write) is
+  // never even registered on them. A remote req for it gets the same
+  // no-handler res a client-scoped channel does.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
-      // Both remote wires receive the mutating flag. The relay binding
-      // gates a mutating channel on a per-peer command grant. The LAN
-      // binding has no grant model at all, so it enforces read-only at
-      // dispatch, fail-closed: only channels explicitly registered
-      // mutating:false are served over the LAN socket, and everything
-      // else (mutating, or untagged) is refused with the shared
-      // command-refused code before its handler runs
+      // Both remote wires receive the mutating flag. The direct
+      // listener gates a mutating channel on a per-peer command grant.
+      // The LAN binding has no grant model at all, so it enforces
+      // read-only at dispatch, fail-closed: only channels explicitly
+      // registered mutating:false are served over the LAN socket, and
+      // everything else (mutating, or untagged) is refused with the
+      // shared command-refused code before its handler runs
       // (host/socket/server.ts).
       for (const wire of remoteWires) {
         wire.handle(channel, fn, { mutating: opts.mutating });
@@ -511,3 +502,15 @@ export const directHandlers = makeDirectHandlers({
   // the cloudflared child is currently healthy (probed routable).
   tunnelUrl: () => tunnelRunner.tunnelUrl(),
 });
+
+// The broker surface on the RELAY wire: the binding exposes ONE slot
+// (not a ServerTransport), so direct:connectInfo is the only channel
+// it can ever serve and mounting anything else is a type error.
+// brokerHandlerFor supplies the channel-plus-handler pair, built on
+// the shared registrar's own per-call wrapper so the brokered path
+// serves the same dispatch policy as every other wire. index.ts still
+// registers the same handlers on the Electron and remote wires, where
+// connectInfo fails closed without an authenticated caller.
+relayServer.registerBroker(
+  brokerHandlerFor(directHandlers, { validateOutputs: VALIDATE_OUTPUTS }),
+);

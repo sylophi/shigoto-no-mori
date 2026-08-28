@@ -24,7 +24,7 @@ import {
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
-import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
+import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { run } from "@host/lib/git/core";
 import { listBranches } from "@host/lib/git/branches";
@@ -128,7 +128,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       0,
       transfer.bytes - Math.min(offset, transfer.bytes),
     );
-    const length = Math.min(RELAY_CHUNK_BYTES, remaining);
+    const length = Math.min(WIRE_CHUNK_BYTES, remaining);
     let data = Buffer.alloc(0);
     if (length > 0) {
       const handle = await open(transfer.path, "r");

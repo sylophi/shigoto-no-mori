@@ -29,13 +29,6 @@ let unsubscribeStatus: (() => void) | null = null;
 // the sessions somebody is listening to and nothing else.
 const deviceSubscriberCounts = new Map<string, number>();
 
-// The set of peers seen online on the previous connected snapshot, so a
-// re-ensure fires only on a transition into online (a peer coming back,
-// or every peer after a reconnect) rather than on every snapshot. Reset
-// to empty whenever the socket leaves connected, so the first connected
-// snapshot after a drop re-ensures every subscribed peer that is up.
-let onlinePeersLastSnapshot = new Set<string>();
-
 function keyFor(deviceId: string, channel: string): string {
   return `${deviceId}\n${channel}`;
 }
@@ -56,25 +49,28 @@ function ensureUnderlying(): void {
     );
   }
   if (unsubscribeStatus === null) {
-    // Peer sessions die with the relay socket (teardown) and with the
-    // peer's presence, and main's session cache drops them on close.
-    // Re-ensure a subscribed device's session only when the roster shows
-    // it transitioning into online: after a supervisor reconnect the
-    // reset snapshot makes every online subscribed peer such a
-    // transition, and a peer coming back online is one on its own. A
-    // steady connected stream re-ensures nothing.
+    // Peer sessions die with the relay socket (teardown), with the
+    // peer's presence, and with the direct socket itself, and main's
+    // session cache drops them on close. Re-ensure a subscribed
+    // device's session on any connected snapshot where the roster
+    // shows it online WITHOUT an established direct session (a
+    // peerAppVersions key is what "established" means): that covers a
+    // supervisor reconnect, a peer coming back online, and a dropped
+    // direct socket alike, since the drop itself broadcasts the
+    // snapshot this listener redials from. A steady connected stream
+    // re-ensures nothing (every subscribed peer shows established),
+    // snapshots only arrive on transitions, and a peer that stays
+    // unreachable is bounded by the dialer's failure memo, so this
+    // cannot loop.
     unsubscribeStatus = window.api.relay.onStatusChanged((status) => {
-      if (status.socket.phase !== "connected") {
-        onlinePeersLastSnapshot = new Set();
-        return;
-      }
+      if (status.socket.phase !== "connected") return;
       const online = new Set(status.onlineDeviceIds);
+      const direct = new Set(Object.keys(status.peerAppVersions));
       for (const deviceId of deviceSubscriberCounts.keys()) {
-        if (online.has(deviceId) && !onlinePeersLastSnapshot.has(deviceId)) {
+        if (online.has(deviceId) && !direct.has(deviceId)) {
           ensurePeerSession(deviceId);
         }
       }
-      onlinePeersLastSnapshot = online;
     });
   }
 }
@@ -88,7 +84,6 @@ function releaseUnderlyingIfIdle(): void {
   if (unsubscribeStatus !== null) {
     unsubscribeStatus();
     unsubscribeStatus = null;
-    onlinePeersLastSnapshot = new Set();
   }
 }
 

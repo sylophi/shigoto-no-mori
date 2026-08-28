@@ -5,15 +5,21 @@
 // supervisor here: the one relay socket lives in main, so a relay
 // device's status DERIVES from the bridge instead of being driven.
 //
-// Status mapping, chosen to lie the least given deviceStatusView's
-// fixed vocabulary:
+// Status mapping, chosen to lie the least given the
+// RemoteDeviceStatus vocabulary:
 //   - relay socket not connected: mirror the socket's supervisor phase
 //     (connecting, backoff, blocked and so on), because no peer is
 //     reachable while the socket is down and the socket's state is the
 //     honest reason.
-//   - socket connected and the peer in the presence roster: phase
-//     "connected" with the deviceId and the appVersion the lazily
-//     opened peer session confirmed ("" before that).
+//   - socket connected, the peer in the presence roster AND a direct
+//     session established (a peerAppVersions key): phase "connected"
+//     with the appVersion the session's welcome confirmed. Data is
+//     direct or nothing (v2 step 10, slice C), so an established
+//     direct session is the only thing "connected" may mean.
+//   - socket connected, the peer in the roster, no direct session:
+//     phase "online" (renderer-local). The roster fact shows, nothing
+//     claims a data wire, and the api stays available because using it
+//     is what dials.
 //   - socket connected but the peer absent from the roster: phase
 //     "stopped", which renders as the neutral slate "Off" dot. "idle"
 //     would render as "Connecting" (a lie, nothing is trying) and
@@ -22,7 +28,6 @@
 import { buildApi } from "@shared/ipc/client";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
-import type { SupervisorStatus } from "@shared/remote/supervisor";
 import {
   publishRelayStatus,
   seedRelayStatus,
@@ -31,6 +36,7 @@ import {
   rejectingClientTransport,
   type RemoteDevice,
   type RemoteDeviceApi,
+  type RemoteDeviceStatus,
   setRemoteDevices,
 } from "./devices";
 import { createRelayClientTransport } from "./relayTransport";
@@ -107,7 +113,9 @@ async function reconcileNow(status?: RelayStatus): Promise<void> {
 
 // Pure and synchronous: the peer's appVersion now rides the status
 // snapshot (current.peerAppVersions), so an entry no longer fires a
-// peerInfo IPC per device (M3).
+// peerInfo IPC per device (M3). One lookup answers both questions: a
+// peerAppVersions key IS the established-direct-session fact, and its
+// value is the session's welcome-confirmed version.
 function buildEntry(
   info: DeviceInfo,
   current: RelayStatus,
@@ -115,15 +123,21 @@ function buildEntry(
 ): RemoteDevice {
   const socketConnected = current.socket.phase === "connected";
   const peerOnline = socketConnected && online.has(info.deviceId);
-  let status: SupervisorStatus;
+  const version = current.peerAppVersions[info.deviceId];
+  let status: RemoteDeviceStatus;
   let appVersion = "";
   let api: RemoteDeviceApi | undefined;
   if (!socketConnected) {
     status = current.socket;
   } else if (!peerOnline) {
     status = { phase: "stopped" };
+  } else if (version === undefined) {
+    // In the roster but no direct session: unreachable for data until
+    // a use dials it. The api is present precisely so a use CAN dial.
+    status = { phase: "online" };
+    api = apiFor(info.deviceId);
   } else {
-    appVersion = current.peerAppVersions[info.deviceId] ?? "";
+    appVersion = version;
     status = {
       phase: "connected",
       remoteDeviceId: info.deviceId,
@@ -136,9 +150,6 @@ function buildEntry(
     label: info.name,
     status,
     appVersion,
-    // Optional on the wire (an older host sends none), so absence
-    // simply reads as not-direct.
-    direct: current.directDeviceIds?.includes(info.deviceId) === true,
     api,
   };
 }

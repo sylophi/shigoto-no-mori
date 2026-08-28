@@ -8,6 +8,8 @@ import {
   CLOSE_SUPERSEDED,
   CLOSE_TICKET_REJECTED,
   CONNECT_TICKET_PARAM,
+  encodeEnvelope,
+  MAX_ONLINE_DEVICES,
   MAX_RELAY_MESSAGE_BYTES,
   RELAY_ROUTES,
   relayTextWithinLimit,
@@ -155,12 +157,14 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // Big enough that the outbound envelope crosses the relay's cap,
-    // small enough that workerd still accepts the inbound message.
+    // Just past the relay's control-frame cap (64 KiB since the wire
+    // went orchestration-only): a legitimate broker frame is far
+    // smaller, so anything here is a client aiming data at the wrong
+    // wire and gets the nack.
     a.socket.send({
       t: "relay",
       to: "dev-big-b",
-      frame: "x".repeat(1_005_000),
+      frame: "x".repeat(MAX_RELAY_MESSAGE_BYTES + 1),
     });
     expect(await a.socket.next()).toEqual({
       t: "nack",
@@ -267,11 +271,11 @@ describe("ticket storage bounds", () => {
 
 describe("relayTextWithinLimit UTF-8 band", () => {
   it("rejects a multi-byte string whose real encode crosses the cap", () => {
-    // 400k Japanese characters: length passes the first guard, but the
+    // 25k Japanese characters: length passes the first guard, but the
     // fast upper-bound path does not, so the third branch runs a real
-    // UTF-8 encode. Each character is 3 bytes, so the encode sees about
-    // 1.2 MB and rejects.
-    const text = "木".repeat(400_000);
+    // UTF-8 encode. Each character is 3 bytes, so the encode sees
+    // about 75 KB and rejects against the 64 KiB cap.
+    const text = "木".repeat(25_000);
     expect(text.length).toBeLessThanOrEqual(MAX_RELAY_MESSAGE_BYTES);
     expect(text.length * 3).toBeGreaterThan(MAX_RELAY_MESSAGE_BYTES);
     expect(relayTextWithinLimit(text)).toBe(false);
@@ -281,11 +285,35 @@ describe("relayTextWithinLimit UTF-8 band", () => {
     // Length forces the real encode, but the bytes stay under the cap,
     // so the third branch accepts it. sm mixes Japanese content into
     // otherwise ASCII JSON, so this band is real traffic.
-    const text = "a".repeat(400_000) + "木漏れ日";
+    const text = "a".repeat(22_000) + "木漏れ日";
     expect(text.length).toBeGreaterThan(
       Math.floor(MAX_RELAY_MESSAGE_BYTES / 3),
     );
     expect(relayTextWithinLimit(text)).toBe(true);
+  });
+});
+
+describe("orchestration-only caps", () => {
+  it("keeps the worst-case presence roster under the message cap", () => {
+    // The presence envelope is not size-guarded on send, so a full
+    // roster envelope MUST fit the message cap or presence itself
+    // would trip inbound payload bounds. The DO runs no admission gate
+    // against MAX_ONLINE_DEVICES (stale socket listings make a correct
+    // one cost more than the bound is worth, see relayObject.ts), so
+    // this arithmetic plus the client's presence schema cap IS the
+    // bound. Worst case: MAX_ONLINE_DEVICES ids, each at the
+    // DeviceIdSchema ceiling of 200 characters (a deviceId is
+    // schema-bounded on enroll, so no real id exceeds it). Built with
+    // the real encodeEnvelope so growth in the envelope shape cannot
+    // silently outgrow this guard.
+    const worstCase = encodeEnvelope({
+      t: "presence",
+      online: Array.from({ length: MAX_ONLINE_DEVICES }, () => "x".repeat(200)),
+    });
+    expect(relayTextWithinLimit(worstCase)).toBe(true);
+    // Headroom, not a squeeze: the arithmetic should not sit within a
+    // stray field of the cap.
+    expect(worstCase.length).toBeLessThan(MAX_RELAY_MESSAGE_BYTES / 2);
   });
 });
 

@@ -1,4 +1,4 @@
-import type { CallDef, ContractModule } from "./contract";
+import type { CallDef, ContractModule, InvokeDef } from "./contract";
 import type { HandlerContext, ServerTransport } from "./transport";
 import type {
   BroadcastKeys,
@@ -34,6 +34,37 @@ export type RegisterContractOpts = {
   onMutationResolved?: () => void;
 };
 
+// The per-call wrapper: ONE definition of what serving a contract call
+// means, shared by the registrar loop below and any single-slot
+// binding (the relay broker in host/ipc/modules/direct.ts), so
+// dispatch policy cannot diverge between the wires. Input parsing is
+// UNCONDITIONAL, never gated by build type: the moment handlers are
+// reachable over a socket, this parse is the wall between a malformed
+// payload and git argv. The hooks are resolved once here (an untracked
+// non-mutating def pays nothing per call): onUsageTracked runs only
+// for a def opting in via tracksProjectUsage, and onMutationResolved
+// only for an explicit mutating:true def not opted out via
+// movesHostState:false, exactly the rules RegisterContractOpts
+// documents.
+export function wrapContractCall<Ctx>(
+  def: InvokeDef,
+  handler: (input: unknown, ctx: Ctx) => unknown,
+  opts: RegisterContractOpts,
+): (ctx: Ctx, raw: unknown) => Promise<unknown> {
+  const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
+  const onMutated =
+    def.mutating === true && def.movesHostState !== false
+      ? opts.onMutationResolved
+      : undefined;
+  return async (ctx, raw) => {
+    const input = def.input.parse(raw);
+    const result = await handler(input, ctx);
+    onSuccess?.(input);
+    onMutated?.();
+    return opts.validateOutputs ? def.output.parse(result) : result;
+  };
+}
+
 export function registerContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
@@ -50,17 +81,6 @@ export function registerContract<M extends ContractModule>(
   }
   for (const [key, def] of Object.entries(module.calls)) {
     if (def.kind !== "invoke") continue;
-    // Resolved once at registration, so untracked channels pay nothing
-    // per call.
-    const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
-    // Same shape for the mutation hook: only an EXPLICIT mutating:true
-    // def carries it, so reads and untagged local channels pay nothing.
-    // An explicit movesHostState:false opts a mutating def out, since
-    // its effects are invisible to remote viewers' caches.
-    const onMutated =
-      def.mutating === true && def.movesHostState !== false
-        ? opts.onMutationResolved
-        : undefined;
     const handler = (
       handlers as unknown as Record<
         string,
@@ -79,20 +99,10 @@ export function registerContract<M extends ContractModule>(
     // check already forbids untagged remote invokes at the contract
     // level, and this keeps the property even for a def that escapes it.
     const mutating = def.mutating;
-    server.handle(
-      def.channel,
-      async (ctx, raw) => {
-        // Input parsing is UNCONDITIONAL, never gated by build type. The
-        // moment handlers are reachable over a socket, this parse is the
-        // wall between a malformed payload and git argv.
-        const input = def.input.parse(raw);
-        const result = await handler(input, ctx);
-        onSuccess?.(input);
-        onMutated?.();
-        return opts.validateOutputs ? def.output.parse(result) : result;
-      },
-      { remote, mutating },
-    );
+    server.handle(def.channel, wrapContractCall(def, handler, opts), {
+      remote,
+      mutating,
+    });
   }
 }
 

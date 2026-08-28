@@ -3,8 +3,8 @@ import type { Handlers } from "@shared/ipc/types";
 import type { PortForwardEngine } from "../../portForward/engine";
 
 // Thin shell over the engine (main/portForward/engine.ts), injected at
-// boot following the setUpdaterImpl precedent: the wiring (the relay
-// bridge's peer sessions, the changed broadcast) lives in
+// boot following the setUpdaterImpl precedent: the wiring (the
+// bridge's direct peer sessions, the changed broadcast) lives in
 // main/ipc/index.ts, so this module stays a pure handler map.
 let impl: PortForwardEngine | null = null;
 
