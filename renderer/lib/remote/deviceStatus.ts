@@ -17,8 +17,8 @@ export type DeviceStatusView = {
   connected: boolean;
   // True when using the device's api can work right now: a direct
   // session is up ("connected"), or the peer is in the relay roster
-  // and a use would dial one ("online"). The ONE vocabulary for
-  // reach-gated affordances (showing a forest, offering the View
+  // and the keeper is establishing one ("online"). The ONE vocabulary
+  // for reach-gated affordances (showing a forest, offering the View
   // forest link), so components stop each spelling the same predicate
   // their own way.
   reachable: boolean;
@@ -37,9 +37,9 @@ function presentationOf(status: RemoteDeviceStatus): {
     // The peer is in the relay roster but no direct session is
     // established (v2 step 10, slice C: data is direct or nothing).
     // Honest on both axes: the roster fact shows ("Online"), and
-    // nothing claims a data connection, because none exists yet or the
-    // dial failed. Using the session opens it, and success flips this
-    // to "Connected".
+    // nothing claims a data connection, because the keeper's eager
+    // dial has not landed yet (it dials on presence and redials
+    // forever, so success flips this to "Connected" on its own).
     case "online":
       return { tone: "sky", label: "Online" };
     case "connecting":
@@ -58,8 +58,8 @@ export function deviceStatusView(status: RemoteDeviceStatus): DeviceStatusView {
   return {
     ...presentationOf(status),
     connected: status.phase === "connected",
-    // "online" is reachable because using the api is exactly what
-    // dials a direct session.
+    // "online" is reachable because the keeper is already dialing or
+    // redialing the session a use would ride.
     reachable: status.phase === "connected" || status.phase === "online",
   };
 }

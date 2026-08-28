@@ -28,7 +28,7 @@ const queryClient = createAppQueryClient();
 
 // The registry's relay half: enrolled devices plus live presence, from
 // the bridge's account and relay modules, exactly as on desktop.
-startRemoteDeviceSync();
+startRemoteDeviceSync(queryClient);
 
 function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));

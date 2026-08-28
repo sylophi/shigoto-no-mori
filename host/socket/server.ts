@@ -35,6 +35,7 @@ import { errorMessageOf } from "@shared/errors";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
+  CLOSE_AUTH_LOCKED_OUT,
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   CLOSE_OVER_CAPACITY,
@@ -468,7 +469,20 @@ export function createWsServerBinding(
       }
       if (isLockedOut(ip)) {
         console.warn(`[socket] rejecting connection from locked-out ${ip}`);
-        closeThenTerminate(socket, CLOSE_AUTH_FAILED, "temporarily locked out");
+        // A DISTINCT code from the bad-credential refusal below, and
+        // the distinction is load-bearing: this close happens before
+        // any hello is read, so the client it refuses may hold a
+        // perfectly good ticket and simply share an IP with whoever
+        // burned the attempts. Only this side knows that. Sending
+        // AUTH_FAILED here made a temporary, self-expiring bench look
+        // to the client exactly like a refused credential, which the
+        // direct keeper answers by parking with no timer -- so the
+        // lockout lifted 30s later and nothing ever redialed.
+        closeThenTerminate(
+          socket,
+          CLOSE_AUTH_LOCKED_OUT,
+          "temporarily locked out",
+        );
         return;
       }
 

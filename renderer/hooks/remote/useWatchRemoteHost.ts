@@ -28,13 +28,12 @@ export function useWatchRemoteHost(device: RemoteDevice): void {
   const queryClient = useQueryClient();
   const { deviceId, api } = device;
   // Gate on REACHABLE (a live direct session, or online in the roster
-  // where a use dials one), NOT on `connected`: subscribing while
-  // merely online is exactly the dial-on-subscribe design, and the
-  // subscription is what drives (re-)establishment. A `connected` gate
-  // would defeat itself on a direct-socket drop: unmounting the
-  // subscription removes this device from the transport's subscriber
-  // counts and can release the very statusChanged listener whose
-  // re-ensure would redial (renderer/lib/remote/relayTransport.ts).
+  // where main's keeper is already dialing one), NOT on `connected`:
+  // sessions are supervised desired state, so an online device's
+  // session is typically seconds away and the subscription should be
+  // standing when it lands. A `connected` gate would also churn the
+  // handlers on every direct-socket blip for nothing -- the keeper,
+  // not this subscription, owns (re-)establishment.
   const reachable = deviceStatusView(device.status).reachable;
   useEffect(() => {
     if (!reachable || api === undefined) return;

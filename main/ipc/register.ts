@@ -415,8 +415,10 @@ export function stopRelayConnection(): Promise<void> {
 // a dead socket, AND the cached outbound direct sessions, or each
 // remote host would keep a dead socket in its per-device slot and land
 // our relaunch on the supersede path instead of a clean reconnect.
+// The plane's own stop() owns both halves of that (the keeper's latch
+// and the session close, in the order that matters).
 export function stopDirectHost(): Promise<void> {
-  relayHandlers.closeDirectPeers();
+  directPlane.stop();
   // The cloudflared child stops with the listener it fronts, so quit
   // never leaves an orphan tunnel process behind.
   return Promise.all([tunnelRunner.stop(), directWsServer.stop()]).then(

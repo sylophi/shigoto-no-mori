@@ -21,8 +21,11 @@ export type DirectPresenceDeps = {
   // Close and drop the cached outbound direct sessions for peers not
   // in the roster (the bridge's client half).
   dropClientPeersNotIn(online: readonly string[]): void;
-  // Clear the dialer's failure memo for peers that just came online.
-  notePresence?(online: readonly string[]): void;
+  // Feed the keeper's desired set (shared/relay/directKeeper.ts): the
+  // live roster, or [] when our own link is down. Runs AFTER the
+  // closes so the keeper's eager dials for newly present peers start
+  // against a pruned cache.
+  reconcilePeers(online: readonly string[]): void;
 };
 
 export function applyDirectPresence(
@@ -32,17 +35,19 @@ export function applyDirectPresence(
 ): void {
   // No live roster, no verdicts: a downed relay socket reports an
   // empty roster, and closing on that would tear down every working
-  // direct session exactly when the relay cannot help. The dialer's
-  // roster bookkeeping DOES reset though (an empty notePresence, never
-  // the closes): without it, lastOnline would go stale across the
-  // outage and the post-reconnect roster would register no
-  // offline-to-online transitions, so nothing would clear the failure
-  // memos of peers that came back while our own link was down.
+  // direct session exactly when the relay cannot help. The keeper DOES
+  // reconcile to empty though (never the closes): it cannot dial
+  // without the relay's broker leg anyway, an outage must cancel its
+  // pending retries rather than let them burn against nothing, and the
+  // post-reconnect roster then reads as all-new peers, whose eager
+  // dials no-op through the cache for every session that survived the
+  // outage and redial the rest -- including parked ones, so our own
+  // link coming back is an unpark input.
   if (!relayConnected) {
-    deps.notePresence?.([]);
+    deps.reconcilePeers([]);
     return;
   }
-  deps.notePresence?.(online);
   deps.closeHostPeersNotIn?.(online);
   deps.dropClientPeersNotIn(online);
+  deps.reconcilePeers(online);
 }

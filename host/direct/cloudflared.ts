@@ -67,8 +67,10 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // rung) until the deadline, after which the child is treated exactly
 // like one that died: killed and rescheduled on the backoff ladder. A
 // child that merely survives a spawn says nothing about routability,
-// and a web client whose ONLY candidate is the tunnel would eat a full
-// negative dial memo on a not-yet-routable advertisement.
+// and a web client whose ONLY candidate is the tunnel would burn its
+// keeper's backoff rungs against a not-yet-routable advertisement (a
+// transient failure, so it retries forever -- but each wasted rung
+// pushes the next attempt further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [
   1_000, 2_000, 4_000, 8_000,
 ];

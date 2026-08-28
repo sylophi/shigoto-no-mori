@@ -114,7 +114,8 @@ export function registerIpcHandlers(): void {
     ),
   );
   // Client-scoped bridge onto the main-process relay socket: status,
-  // lazy peer invokes, and the peerPush/statusChanged fan-outs. The
+  // invokes over the keeper-held direct sessions, and the
+  // peerPush/statusChanged fan-outs. The
   // handlers themselves are constructed in register.ts, which owns
   // every dep and folds directPeerVersions back into the status
   // snapshot.

@@ -12,7 +12,7 @@ import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/relay/directPlane";
 import { startStubRelay } from "./relayStub.mjs";
-import { bootDevice } from "./relayBoot.mjs";
+import { bootDevice, waitFor } from "./relayBoot.mjs";
 
 // A REAL ticket-mode listener on an ephemeral loopback port, with its
 // ticket store and a toggleable grant set. `registerHandlers`, when
@@ -81,7 +81,12 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
       },
       track,
     ),
-    bootDevice(stub, opts.clientDeviceId ?? "A", {}, track),
+    bootDevice(
+      stub,
+      opts.clientDeviceId ?? "A",
+      { onChange: opts.clientOnChange },
+      track,
+    ),
   ]);
   return { host, client };
 }
@@ -91,6 +96,11 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 // on device A serving the check's contracts, the brokered relay pair
 // (A hosting the broker, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
+// The plane's presence path is wired to the client connection exactly
+// as production wires it (late-bound, plus one catch-up call for the
+// roster that connected before the plane existed), so the KEEPER is
+// what establishes the B->A session -- eagerly, before any invoke,
+// which is the supervised model the transfer checks now ride.
 // Everything registers its teardown on the caller's tracker.
 export async function bootDirectWire(track, opts = {}) {
   const stub = await startStubRelay();
@@ -99,13 +109,22 @@ export async function bootDirectWire(track, opts = {}) {
     deviceId: "A",
     registerHandlers: opts.registerHandlers,
   });
+  let onPlaneChange = null;
   const { client } = await bootBrokeredPair(stub, track, listener, {
     hostDeviceId: "A",
     clientDeviceId: "B",
+    clientOnChange: () => onPlaneChange?.(),
   });
-  const { bridge } = makeDirectBridge(client, { localDeviceId: "B" });
+  const { plane, bridge } = makeDirectBridge(client, { localDeviceId: "B" });
+  track(() => plane.stop());
+  onPlaneChange = () => plane.handleConnectionChange();
+  plane.handleConnectionChange();
+  await waitFor(
+    () => bridge.directPeerVersions().A !== undefined,
+    "the keeper to establish the direct session to A",
+  );
   const peerA = bridgePeerTransport(bridge, "A");
-  return { stub, listener, client, bridge, peerA };
+  return { stub, listener, client, plane, bridge, peerA };
 }
 
 // The client-side composition under test: the REAL direct plane
@@ -122,6 +141,9 @@ export function makeDirectBridge(client, opts = {}) {
     broadcastPeerPush: (push) => opts.onPeerPush?.(push),
     dialableKinds: opts.dialableKinds,
     deadlineMs: opts.deadlineMs ?? 3000,
+    // The keeper's clock/ladder seam, so retry scenarios advance a
+    // fake clock instead of sleeping the real ladder out.
+    keeper: opts.keeper,
   });
   return { plane, bridge: plane.handlers };
 }

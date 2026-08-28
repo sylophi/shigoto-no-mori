@@ -109,6 +109,31 @@ export class RelayLinkDownError extends Error {
   }
 }
 
+// The answer a wire gives when nothing serves the requested channel.
+// Built through ONE function because both roles need it: the host role
+// puts it on the res frame, and the client role recognizes it on
+// arrival. A res carries a message and nothing else (a code field
+// would be a wire change), so re-typing the answer here is what keeps
+// every caller from pattern-matching a string it does not own.
+function noHandlerMessage(channel: string): string {
+  return `No handler registered for channel "${channel}"`;
+}
+
+// The peer answered "I serve no handler for that channel". STRUCTURAL,
+// not transient: a refuse-all host (the web client, which supplies the
+// broker channel with no handler by construction) answers this to
+// every req and will answer it identically forever. The typed form is
+// what lets the direct dialer tell it apart from a relay blip or a
+// peer mid-boot, whose rejections are plain errors worth retrying.
+export class RelayNoHandlerError extends Error {
+  readonly channel: string;
+  constructor(channel: string) {
+    super(noHandlerMessage(channel));
+    this.name = "RelayNoHandlerError";
+    this.channel = channel;
+  }
+}
+
 // The context a broker dispatch runs under: the authenticated caller
 // and the session's abort signal, nothing more. Deliberately NOT the
 // full HandlerContext: the relay carries no pushes, so a notifier sink
@@ -146,9 +171,11 @@ export type RelayBrokerSession = {
 // core never imports a contract. The channel is needed by BOTH roles
 // (the host role's dispatch gate and the client role's req frames).
 // The handler is absent on client-only platforms (the web), where
-// every req is answered with the no-handler shape. There is no handler
-// map to mount anything else on, so a data path through the relay is a
-// type error, not a discouraged registration.
+// every req is answered with the no-handler shape -- which the dialing
+// side receives as the typed RelayNoHandlerError, because "this peer
+// serves nobody" is permanent and must not be retried like a blip.
+// There is no handler map to mount anything else on, so a data path
+// through the relay is a type error, not a discouraged registration.
 export type RelayBroker = {
   channel: string;
   handler?: (ctx: RelayBrokerContext, raw: unknown) => Promise<unknown>;
@@ -451,7 +478,7 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
         t: "res",
         id: frame.id,
         ok: false,
-        message: `No handler registered for channel "${frame.channel}"`,
+        message: noHandlerMessage(frame.channel),
       };
     } else {
       try {
@@ -664,6 +691,14 @@ export function createRelayLink(deps: RelayLinkDeps): RelayLink {
       peer.pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
+      } else if (frame.message === noHandlerMessage(deps.broker.channel)) {
+        // The one answer that is a STRUCTURAL fact about the peer
+        // rather than a failure of this call, so it is re-typed here
+        // instead of being handed on as prose. The channel is not read
+        // off the res (there is none): the client role only ever sends
+        // reqs on the injected broker channel, so that IS the channel
+        // this verdict is about.
+        entry.reject(new RelayNoHandlerError(deps.broker.channel));
       } else {
         // A plain Error carrying the host's message text, so the
         // shared/errors.ts matchers degrade a remote handler failure

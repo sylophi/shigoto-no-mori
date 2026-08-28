@@ -7,19 +7,29 @@
 // the Electron main process serves it over IPC (main/ipc/index.ts) and
 // the web bridge serves it in-page (web/bridge/createWebBridge.ts).
 //
-// DIRECT OR NOTHING (v2 step 10, slice C): openPeer is the single
-// peer-session chokepoint every consumer shares (renderer invokes and
-// subscriptions, sync, port-forward), and every session it opens is a
-// DIRECT websocket from the injected dialer. There is no relay
-// fallback: when the dial fails, the attempt rejects with the dialer's
-// typed error (NoDialableCandidateError for the structural
+// DIRECT OR NOTHING (v2 step 10, slice C): the session cache here is
+// the single peer-session chokepoint every consumer shares (renderer
+// invokes and subscriptions, sync, port-forward), and every session in
+// it is a DIRECT websocket from the injected dialer. There is no relay
+// fallback: a failed dial rejects with the dialer's typed error
+// (NoDialableCandidateError for the structural
 // nothing-this-platform-can-dial verdict, a transient error
-// otherwise), the cache entry drops, and the next use redials from
-// scratch. The relay rides underneath only as the dialer's broker
-// transport (direct:connectInfo), never as a data path. The web
-// bridge injects the same dialer with a wss-only candidate filter
-// (v2 step 10, slice B): a browser page cannot dial ws:// from https
-// (mixed content), but wss tunnel URLs dial fine.
+// otherwise), and the entry drops. The relay rides underneath only as
+// the dialer's broker transport (direct:connectInfo), never as a data
+// path. The web bridge injects the same dialer with a wss-only
+// candidate filter (v2 step 10, slice B): a browser page cannot dial
+// ws:// from https (mixed content), but wss tunnel URLs dial fine.
+//
+// SUPERVISED, NOT LAZY (v2 step 11): dialPeer is the ONLY entry that
+// starts a dial, and its only caller is the presence-driven keeper
+// (shared/relay/directKeeper.ts, wired in directPlane.ts). The
+// contract surface (invokePeer, the one channel left that touches a
+// session) rides whatever session the keeper holds -- an invoke joins
+// an in-flight dial but a cache miss rejects at once instead of
+// dialing, so no user action is ever what triggers a dial and no
+// renderer retry loop can pace one. The rejection folds in the
+// keeper's last failure so the renderer surfaces the honest cause
+// rather than a bare "not connected".
 import type { relayContract, RelayStatus } from "@shared/ipc/modules/relay";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/directDial";
@@ -38,9 +48,24 @@ export type RelayHandlerDeps = {
   // so the owner can fan a fresh status snapshot out exactly like the
   // relay's own transitions.
   onDirectChange?: () => void;
+  // Fired when an ESTABLISHED session dies on its own (the transport's
+  // self-close): the keeper's redial signal. Owner-initiated closes
+  // (roster sweep, quit) never fire it, or quit would schedule dials
+  // against a host being torn down and a sweep would redial a peer the
+  // control plane just disowned.
+  onPeerDropped?: (deviceId: string) => void;
+  // The keeper's explanation for a rostered peer with no session (its
+  // last dial failure, cleared the moment a dial succeeds), folded
+  // into the no-session rejection.
+  peerUnavailableReason?: (deviceId: string) => string | null;
 };
 
 export type RelayHandlers = Handlers<typeof relayContract> & {
+  // One dial attempt (or a join onto the cached session or in-flight
+  // dial) for one peer. Not a contract channel: the keeper is its only
+  // production caller, which is what makes sessions desired state
+  // instead of use-triggered.
+  dialPeer(deviceId: string): Promise<void>;
   // The appVersion each ESTABLISHED direct session's welcome
   // confirmed, keyed by deviceId. This is the whole per-peer data
   // surface: the owner folds it into RelayStatus.peerAppVersions, and
@@ -56,16 +81,19 @@ export type RelayHandlers = Handlers<typeof relayContract> & {
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
-  // reconnect.
+  // reconnect. Owners do NOT call this -- directPlane.stop() owns
+  // teardown, keeper latch first -- but it stays exported because the
+  // direct-plane check tears its bare bridges down with it.
   closeDirectPeers(): void;
 };
 
 export function makeRelayHandlers(deps: RelayHandlerDeps): RelayHandlers {
-  // Peer sessions opened lazily on first use, cached by deviceId, and
-  // dropped the moment they die (the transport fires onClose on its
-  // own failure mode), so the next call redials with a fresh
-  // handshake. The entry holds the promise, not the connection, so
-  // concurrent first calls share one handshake. The welcome's version
+  // Peer sessions opened by the keeper's dials, cached by deviceId,
+  // and dropped the moment they die (the transport fires onClose on
+  // its own failure mode), so the keeper's redial lands on an empty
+  // slot and handshakes fresh. The entry holds the promise, not the
+  // connection, so a dialPeer overlapping an in-flight dial shares one
+  // handshake. The welcome's version
   // lives on the entry itself, set on the exact entry object the dial
   // belongs to (held lexically, never re-read from the map: a re-read
   // after an await could stamp a NEW entry if this one was dropped and
@@ -78,7 +106,11 @@ export function makeRelayHandlers(deps: RelayHandlerDeps): RelayHandlers {
   };
   const peers = new Map<string, PeerEntry>();
 
-  function dropPeer(deviceId: string, entry?: PeerEntry): void {
+  function dropPeer(
+    deviceId: string,
+    entry?: PeerEntry,
+    selfClosed = false,
+  ): void {
     const cached = peers.get(deviceId);
     if (cached === undefined) return;
     // When the caller names an entry, drop only that one: a stale
@@ -86,8 +118,13 @@ export function makeRelayHandlers(deps: RelayHandlerDeps): RelayHandlers {
     if (entry !== undefined && cached !== entry) return;
     peers.delete(deviceId);
     // Only an actual transition notifies: dropping an entry whose dial
-    // never completed changed nothing on the status surface.
-    if (cached.version !== null) deps.onDirectChange?.();
+    // never completed changed nothing on the status surface. The
+    // keeper hears about SELF-closes only (see onPeerDropped above),
+    // and after the delete, so its redial finds an empty slot.
+    if (cached.version !== null) {
+      deps.onDirectChange?.();
+      if (selfClosed) deps.onPeerDropped?.(deviceId);
+    }
   }
 
   // Close a cached direct session and drop its entry. The transports'
@@ -119,7 +156,7 @@ export function makeRelayHandlers(deps: RelayHandlerDeps): RelayHandlers {
     };
     entry.promise = (async (): Promise<PeerConnection> => {
       const connection = await deps.connectDirect(deviceId, {
-        onClose: () => dropPeer(deviceId, entry),
+        onClose: () => dropPeer(deviceId, entry, true),
       });
       entry.version = connection.remoteAppVersion;
       // A dial can complete after a sweep already evicted this entry
@@ -139,38 +176,39 @@ export function makeRelayHandlers(deps: RelayHandlerDeps): RelayHandlers {
     return entry.promise;
   }
 
+  // The keeper's session, or the honest refusal. A present entry may
+  // still be an in-flight keeper dial: awaiting it is what makes an
+  // invoke racing the eager dial seamless instead of flaky, and a
+  // failed dial rejects the invoke with the dialer's typed error. A
+  // MISS never dials (see the header): the peer is offline, or the
+  // keeper is between attempts, and the rejection says which.
+  function requirePeer(deviceId: string): Promise<PeerConnection> {
+    const entry = peers.get(deviceId);
+    if (entry === undefined) {
+      const reason = deps.peerUnavailableReason?.(deviceId);
+      return Promise.reject(
+        new Error(
+          `no direct connection to ${deviceId}` +
+            (reason == null ? "" : ` (${reason})`),
+        ),
+      );
+    }
+    return entry.promise;
+  }
+
   return {
     status: () => deps.status(),
 
-    invokePeer: async ({ deviceId, channel, input }) => {
-      const peer = await openPeer(deviceId);
-      // Dial failures (unreachable, nothing dialable) and disconnect
-      // errors reject through here, and their messages ride each
-      // wire's error serialization to the renderer unchanged.
-      return peer.transport.invoke(channel, input);
-    },
-
-    // The explicit ensure-session path (dial-on-subscribe): opens or
-    // reuses the peer session WITHOUT invoking anything, so a
-    // subscribe-only client still triggers the direct handshake and
-    // starts receiving that peer's pushes. Failures (unreachable,
-    // offline) reject through so the caller can retry on the next
-    // reconnect.
-    ensurePeer: async ({ deviceId }) => {
+    dialPeer: async (deviceId) => {
       await openPeer(deviceId);
     },
 
-    peerInfo: async ({ deviceId }) => {
-      const cached = peers.get(deviceId);
-      if (cached === undefined) return null;
-      try {
-        const peer = await cached.promise;
-        return { appVersion: peer.remoteAppVersion };
-      } catch {
-        // The cached handshake failed. The catch above already evicted
-        // it, so this reads as "no session".
-        return null;
-      }
+    invokePeer: async ({ deviceId, channel, input }) => {
+      const peer = await requirePeer(deviceId);
+      // Disconnect and no-session errors reject through here, and
+      // their messages ride each wire's error serialization to the
+      // renderer unchanged.
+      return peer.transport.invoke(channel, input);
     },
 
     directPeerVersions: () => {

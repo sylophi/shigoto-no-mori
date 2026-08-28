@@ -1,8 +1,11 @@
 // The direct data plane's shared composition (v2 step 10): one relay
 // connection serving as the dialer's broker transport, the direct
-// dialer, the renderer-facing bridge handlers, the status snapshot
-// that folds the direct-session surface into the connection's own, and
-// the presence reconcile that scopes direct sessions to a live roster.
+// dialer, the renderer-facing bridge handlers, the keeper that
+// supervises a direct session per rostered peer (v2 step 11: eager,
+// forever-retry, presence as desired state -- directKeeper.ts), the
+// status snapshot that folds the direct-session surface into the
+// connection's own, and the presence reconcile that both scopes direct
+// sessions to a live roster and feeds that roster to the keeper.
 // Data is direct or nothing (slice C): the relay connection is handed
 // to the DIALER only, never to the bridge, so no code path here can
 // open a relay peer session for contract traffic. Both owners (the
@@ -27,7 +30,12 @@ import {
   createDirectDialer,
   type DirectDialer,
 } from "@shared/relay/directDial";
+import {
+  createDirectKeeper,
+  type DirectKeeper,
+} from "@shared/relay/directKeeper";
 import { applyDirectPresence } from "@shared/relay/directPresence";
+import type { SupervisorClock } from "@shared/remote/supervisor";
 
 // The slice of a relay connection the plane composes over, common to
 // the node connection (host/relay/connection.ts) and the browser one
@@ -61,6 +69,10 @@ export type DirectPlaneDeps = {
   // shrink it so failure scenarios settle fast, real owners omit it
   // and take the dialer's HELLO_TIMEOUT_MS default.
   deadlineMs?: number;
+  // The keeper's clock, a check seam too: the direct-plane check
+  // drives retries with a fake clock instead of sleeping the real
+  // ladder out. Real owners omit it and take real time.
+  keeper?: { clock?: SupervisorClock };
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.
@@ -71,8 +83,8 @@ export type DirectPlaneDeps = {
 };
 
 export type DirectPlane = {
-  // The renderer-facing relay bridge, for the contract registration
-  // and the owner's teardown calls (closeDirectPeers on quit).
+  // The renderer-facing relay bridge, for the contract registration.
+  // Teardown is stop() below, not a call in here.
   handlers: RelayHandlers;
   // The status snapshot: the connection's own status plus the direct
   // surface (peerAppVersions, whose keys are the live direct sessions)
@@ -83,14 +95,23 @@ export type DirectPlane = {
   // connection (main's tunnel runner state changes).
   notifyStatusChanged(): void;
   // Wire this to the connection's onChange: it fans the fresh snapshot
-  // out AND reconciles direct-session presence, reading the
-  // connection's status once for both.
+  // out AND reconciles direct-session presence (the sweeps and the
+  // keeper's desired set), reading the connection's status once for
+  // both.
   handleConnectionChange(): void;
+  // Tears the whole plane down (quit, tab teardown): latches the
+  // keeper, then closes every cached direct session. The ORDER is the
+  // point and it lives here rather than in each owner: the keeper
+  // supervises a session per rostered peer with pending redial timers,
+  // and an unlatched timer firing during the close would dial fresh
+  // sessions into a teardown. Owners call this alone -- both halves
+  // are here, so neither can forget one.
+  stop(): void;
 };
 
 export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
-  // The dialer is stateful (the per-peer failure memo), so ONE
-  // instance, created lazily because it captures the identity facts.
+  // ONE dialer instance, created lazily because it captures the
+  // identity facts.
   let dialer: DirectDialer | null = null;
   function getDialer(): DirectDialer {
     dialer ??= createDirectDialer({
@@ -154,6 +175,20 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
     connectDirect: (deviceId, opts) =>
       getDialer().connectDirect(deviceId, opts),
     onDirectChange: notifyStatusChanged,
+    // The keeper's redial signal and its no-session explanation. Both
+    // close over the binding below (created after the handlers because
+    // the keeper's dial IS dialPeer), which is resolved lazily and
+    // only ever fires after creation.
+    onPeerDropped: (deviceId) => keeper.peerDropped(deviceId),
+    peerUnavailableReason: (deviceId) => keeper.unavailableReason(deviceId),
+  });
+
+  // The supervisor of the data plane (v2 step 11): the ONLY caller of
+  // dialPeer, so every direct session exists because presence said the
+  // device does, never because a renderer asked.
+  const keeper: DirectKeeper = createDirectKeeper({
+    dial: (deviceId) => handlers.dialPeer(deviceId),
+    ...deps.keeper,
   });
 
   return {
@@ -167,8 +202,8 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       deps.broadcastStatus(buildStatus(current));
       // Presence scopes the data plane: on every relay transition,
       // close direct sessions for peers no longer in a LIVE roster and
-      // clear the dialer's failure memo for peers that just came
-      // online. The rule itself (including the
+      // hand the roster to the keeper as its desired set (which dials
+      // newly present peers at once). The rule itself (including the
       // do-nothing-when-our-relay-is-down gate) lives in
       // directPresence.ts, where the direct-plane check pins it. The
       // host half is narrowed once here, so its absence (the web
@@ -184,9 +219,13 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
               : (online) => host.closeHostPeersNotIn(online),
           dropClientPeersNotIn: (online) =>
             handlers.dropDirectPeersNotIn(online),
-          notePresence: (online) => dialer?.notePresence(online),
+          reconcilePeers: (online) => keeper.reconcile(online),
         },
       );
+    },
+    stop: () => {
+      keeper.stop();
+      handlers.closeDirectPeers();
     },
   };
 }

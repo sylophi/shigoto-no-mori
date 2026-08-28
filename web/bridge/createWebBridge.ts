@@ -93,7 +93,8 @@ export type WebBridge = {
   notifyAccountChanged(): void;
   // Reconciles the relay socket with the current account state.
   refreshRelay(): Promise<void>;
-  // Tears the relay socket down (tab teardown, tests).
+  // Tears the relay socket down (tab teardown, tests), along with the
+  // direct plane it fronts.
   stop(): Promise<void>;
 };
 
@@ -377,6 +378,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     refreshRelay,
 
-    stop: () => connection.stop(),
+    stop: () => {
+      directPlane.stop();
+      return connection.stop();
+    },
   };
 }

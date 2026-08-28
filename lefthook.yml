@@ -59,19 +59,22 @@ pre-commit:
     relaylink:
       glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run relaylink:check
-    # Durable proof for the direct data plane (v2 step 10, slice A):
-    # boots the stub Durable Object plus a REAL ticket-mode listener on
-    # an ephemeral loopback port, brokers connect tickets over the relay
-    # via direct:connectInfo, and asserts the whole plane: fail-closed
-    # brokering without a caller identity, ticket single-use, expiry and
-    # wrong-peer binding, the live grant gate on the direct wire, the
-    # direct-first openPeer routing with relay fallback and cache drop
-    # on close, invokes flowing with the relay's forwardedCount flat,
-    # and pushes reaching a direct-connected client through the shared
-    # peerPush path. Gated to the direct surface plus the socket and
-    # relay layers it composes.
+    # Durable proof for the direct data plane (v2 step 10, supervised
+    # in step 11): boots the stub Durable Object plus a REAL
+    # ticket-mode listener on an ephemeral loopback port, brokers
+    # connect tickets over the relay via direct:connectInfo, and
+    # asserts the whole plane: fail-closed brokering without a caller
+    # identity, ticket single-use, expiry and wrong-peer binding, the
+    # live grant gate on the direct wire, direct-or-nothing routing
+    # (sessionless invokes refuse without dialing) with cache drop on
+    # close, the keeper's supervision (presence-driven eager dials,
+    # the shared forever ladder, parking on terminal verdicts), invokes
+    # flowing with the relay's forwardedCount flat, and pushes reaching
+    # a direct-connected client through the shared peerPush path. Gated
+    # to the direct surface plus the socket and relay layers it
+    # composes.
     direct-plane:
-      glob: "{host/direct/**,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{host/direct/**,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
@@ -82,7 +85,7 @@ pre-commit:
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/relay/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/relay/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run sync:check
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL relay connections against real
@@ -95,7 +98,7 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub relay it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/forward.ts,host/relay/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/forward.ts,host/relay/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run forward:check
     # Boots the same stub Durable Object and drives the BROWSER relay
     # connection (web/relay/connection.ts, built on the global WebSocket)

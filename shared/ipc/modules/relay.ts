@@ -103,10 +103,12 @@ export const relayContract = defineContract("client", {
   // its in-memory snapshot, nothing touches the network.
   status: invoke("relay:status", z.void(), RelayStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
-  // Main opens the session lazily on first use (dialing through the
-  // relay-brokered connect info) and caches it. An unreachable peer,
-  // a failed dial and a disconnect surface as thrown errors whose
-  // messages ride Electron's error serialization.
+  // Sessions are supervised desired state (shared/relay/directKeeper.ts):
+  // the owner dials every rostered peer eagerly and redials forever,
+  // so this NEVER dials -- it rides the session the keeper holds
+  // (joining an in-flight dial), and with none it rejects at once with
+  // the keeper's last failure folded in. Errors ride each wire's error
+  // serialization.
   invokePeer: invoke(
     "relay:invokePeer",
     z.object({
@@ -117,27 +119,6 @@ export const relayContract = defineContract("client", {
       input: z.unknown().optional(),
     }),
     z.unknown(),
-  ),
-  // Ensure a peer session exists WITHOUT invoking anything (v2 step 6,
-  // slice B): pushes only reach helloed sessions, so a subscribe-only
-  // view must be able to open the session on its own instead of waiting
-  // for a first invoke that may never come. The renderer's relay
-  // transport calls this on subscribe, and again after a reconnect for
-  // every device with live subscribers, so subscriptions survive a
-  // relay socket drop. Resolves once the session is up. An offline peer
-  // rejects and the caller retries on the next status change.
-  ensurePeer: invoke(
-    "relay:ensurePeer",
-    z.object({ deviceId: DeviceIdSchema }),
-    z.void(),
-  ),
-  // The cached peer connection's identity, or null when no session is
-  // open. Deliberately does not dial: the first real invoke opens the
-  // session, and this only reports what the hello already confirmed.
-  peerInfo: invoke(
-    "relay:peerInfo",
-    z.object({ deviceId: DeviceIdSchema }),
-    z.object({ appVersion: z.string() }).nullable(),
   ),
   // Fan-out on every supervisor or presence transition, carrying the
   // fresh snapshot so listeners never need a follow-up status call.
