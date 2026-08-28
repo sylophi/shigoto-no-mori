@@ -1,7 +1,7 @@
 // Shared by both node-side builds (main and preload): they need the
 // same @shared alias, and one file means a future node-side option
 // can't be added to just one of them. The account define below is only
-// referenced by main (main/ipc/modules/account.ts); in preload nothing
+// referenced by main (main/ipc/modules/account.ts). In preload nothing
 // names the constant, so nothing is inlined there.
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
@@ -9,7 +9,7 @@ import { defineConfig } from "vite";
 // The SM_ACCOUNT_* values present in the BUILD environment, baked into
 // the bundle. A packaged .app launched from Finder or the Dock inherits
 // launchd's environment, not the owner's shell, so at runtime
-// process.env carries none of these; capturing them at package time is
+// process.env carries none of these. Capturing them at package time is
 // how a shipped build arrives configured. Every value is a public
 // endpoint or a public OAuth client_id by design
 // (shared/account/serviceConfig.ts), so inlining them leaks nothing.

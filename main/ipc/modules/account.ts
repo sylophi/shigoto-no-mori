@@ -153,7 +153,7 @@ function serviceConfig(): AccountServiceConfig {
       // No dev file. Baked and environment values are the only sources.
     }
   }
-  // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define; this
+  // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
   // module only ever loads through that build, so a bare reference is
   // safe, and it stays out of the pure shared module so serviceConfig.ts
   // remains drivable under plain node (scripts/check-account.mjs).
