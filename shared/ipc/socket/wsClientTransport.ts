@@ -27,9 +27,11 @@ import type { ClientTransport } from "@shared/ipc/transport";
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
 // welcome timeout or a pre-open error). `blocked` is the block-vs-retry
-// verdict the supervisor keys on: a wrong token (CLOSE_AUTH_FAILED)
+// verdict the supervisor keys on: a wrong credential (CLOSE_AUTH_FAILED)
 // must never auto-retry, or a typo turns into a hammering loop.
-// Everything else is safe to back off and retry.
+// Everything else is safe to back off and retry, INCLUDING the host's
+// failed-auth lockout (CLOSE_AUTH_LOCKED_OUT), which is a temporary
+// bench keyed on client IP rather than a verdict on our credential.
 export class RemoteConnectError extends Error {
   readonly code: number | null;
   readonly blocked: boolean;
@@ -121,9 +123,18 @@ export type PendingDeviceConnection = {
   abandon(): void;
 };
 
-// The block-vs-retry verdict for a close code. Only a wrong token
-// blocks: the supervisor must not spin on it. Kept here beside the
-// connect logic so the one rule has a single owner.
+// The block-vs-retry verdict for a close code. An ALLOWLIST of the
+// codes that block, so a code this build has never heard of is
+// retryable by default rather than terminal by accident. Only a wrong
+// credential blocks: the supervisor must not spin on it. The lockout
+// (CLOSE_AUTH_LOCKED_OUT) deliberately does NOT block -- it is
+// temporary, it is keyed on client IP so it may have nothing to do
+// with us, and a refused connection does not extend its window, so
+// backing off through it is exactly right. That distinction can only
+// be made by the code on the wire: this side cannot infer it, and the
+// dialer's helloSent predicate never could (it records that we WROTE
+// a hello, not that the host READ one). Kept here beside the connect
+// logic so the one rule has a single owner.
 function isBlockingCloseCode(code: number | null): boolean {
   return code === CLOSE_AUTH_FAILED;
 }

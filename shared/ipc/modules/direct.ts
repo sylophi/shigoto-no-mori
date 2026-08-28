@@ -24,9 +24,11 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // How long a minted connect ticket stays valid. Long enough for the
 // peer's dial to reach us over any candidate address, short enough
 // that a stale connectInfo answer cannot be replayed much later.
-// Matches the relay worker's connect-ticket TTL. Lives here (not in
-// the host's ticket store) so the dialer's failed-dial memo can share
-// the one constant without shared/ importing host/.
+// Matches the relay worker's connect-ticket TTL. Lives here, beside
+// the connectInfo contract whose answers the ticket rides, rather than
+// in its one consumer (host/direct/tickets.ts): the TTL is a fact of
+// the brokered exchange both ends read, and shared/ cannot import
+// host/ to reach it.
 export const DIRECT_TICKET_TTL_MS = 60_000;
 
 // The LAN interface addresses a host advertises, capped so a machine

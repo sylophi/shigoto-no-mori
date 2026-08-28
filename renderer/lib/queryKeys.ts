@@ -248,11 +248,16 @@ const externalChangeExempt = new Set([
   "worktreeDiskUsage",
 ]);
 
-// Host-scoped keys invalidate only when bound to THIS device id: a
-// remote device's queries cache under its own id in the same host
-// families, so a device-blind sweep would invalidate a peer's worktrees
-// on a purely local change (and vice versa). Client-scoped keys carry
-// no id and keep the domain-exempt behavior whichever device pinged.
+// The EXTERNAL-CHANGE sweep, scoped to one device. Host-scoped keys
+// invalidate only when bound to THIS device id: a remote device's
+// queries cache under its own id in the same host families, so a
+// device-blind sweep would invalidate a peer's worktrees on a purely
+// local change (and vice versa). Client-scoped keys carry no id and
+// keep the domain-exempt behavior whichever device pinged. The
+// exemptions above are the whole point of this entry: "state on that
+// device moved" says nothing about GitHub, hygiene, forwards or the
+// updater, so those sit the ping out. See invalidateDeviceSession for
+// the sibling that must NOT sit them out.
 export function invalidateHostDevice(
   queryClient: QueryClient,
   deviceId: string,
@@ -263,6 +268,26 @@ export function invalidateHostDevice(
       if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
       return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
     },
+  });
+}
+
+// The SESSION-LANDED sweep: a device's data wire just came up, so
+// everything host-scoped for it is fetchable now and none of it was a
+// moment ago. Same device-id scoping as invalidateHostDevice and
+// deliberately NO domain exemption, because the exempt list is tuned
+// for "that host's git state moved" and is exactly wrong here: runtime,
+// githubCli, fs, portForwards, updater, worktreeHygiene and
+// worktreeDiskUsage are the queries that hard-failed with "no direct
+// connection" while the keeper was still dialing, so exempting them
+// would skip precisely what needs refetching. Client-scoped keys are
+// left alone in the other direction: they belong to this app instance,
+// never to the peer, so a peer's session says nothing about them.
+export function invalidateDeviceSession(
+  queryClient: QueryClient,
+  deviceId: string,
+): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => hostKeyDeviceId(query.queryKey) === deviceId,
   });
 }
 

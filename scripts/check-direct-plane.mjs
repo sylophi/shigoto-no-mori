@@ -33,19 +33,20 @@
 //   - the dialer opens candidates concurrently under ONE overall
 //     deadline (hellos serialized, see slice B below): a junk
 //     candidate cannot defeat a reachable one, a wedged connectInfo
-//     cannot hang the bridge cache (the attempt rejects typed and the
-//     failure memo short-circuits the next one), and a blocked verdict
-//     whose hello was sent is terminal for the whole attempt.
+//     cannot hang the bridge cache (the attempt rejects typed), and a
+//     blocked verdict whose hello was sent is terminal for the whole
+//     attempt.
 //   - a winning dial closes its throwaway broker session with bye, so
 //     the host's relay-side session dies at once instead of lingering
 //     until presence notices.
 //   - presence scopes the data plane: a peer leaving a LIVE roster
 //     loses its direct sessions host-side and client-side, while our
 //     own relay link going down leaves them alone.
-//   - openPeer is direct or nothing (slice C): a working listener
-//     yields a direct session reported via directPeerVersions, a dead
-//     socket drops the cache, and a FAILED dial rejects with the typed
-//     unreachable outcome with no relay session created for data.
+//   - the session cache is direct or nothing (slice C): a working
+//     listener yields a direct session reported via
+//     directPeerVersions, a dead socket drops the cache, and a FAILED
+//     dial rejects with the typed unreachable outcome with no relay
+//     session created for data.
 //     (The relay wire refusing every non-broker channel is pinned in
 //     check-relay-link.mjs. Here there is nothing left to register on
 //     the wire, so no second proof exists to write.)
@@ -62,9 +63,18 @@
 //     the slower one never sends a hello, so the winner's session
 //     survives (no host-side supersede) and the loser's ticket is
 //     never spent.
-//   - a blocked verdict aborts the race only when that candidate's
-//     hello was actually sent: a connection-time CLOSE_AUTH_FAILED
-//     (the host's lockout shape) retires one candidate, not the race.
+//   - the host NAMES its refusals: a ticket it read and rejected
+//     closes CLOSE_AUTH_FAILED (blocked, terminal, the keeper parks),
+//     while a client benched by the failed-auth window closes
+//     CLOSE_AUTH_LOCKED_OUT (unblocked, transient, the keeper ladders)
+//     even on a single candidate holding a VALID ticket -- the shape
+//     the old helloSent predicate could not call, and the common
+//     permanent-stuck path for a tunnel-only peer.
+//   - the two skew belts behind that, for a peer whose close code
+//     predates CLOSE_AUTH_LOCKED_OUT: an untrustworthy blocked verdict
+//     retires only its own candidate, and when it is the one the
+//     attempt EXHAUSTS on it comes out transient (message and close
+//     code kept, blocked dropped) rather than parking the peer.
 //   - the ticket-mode listener keys lockout on CF-Connecting-IP for
 //     loopback (tunnel-borne) connections, so one hostile client
 //     cannot bench every tunnel dial behind the shared 127.0.0.1.
@@ -75,15 +85,36 @@
 //     dialable kinds. A peer with nothing for this platform answers
 //     available:false and the attempt rejects as unreachable, and an
 //     OLD host's undialable answer yields the typed
-//     NoDialableCandidateError, memoized under the ONE short-TTL
-//     failure memo and cleared early by the peer's offline-to-online
-//     transition.
+//     NoDialableCandidateError, a terminal verdict the keeper parks
+//     on (see SUPERVISION below). A peer that serves no broker handler
+//     at all (the REAL browser binding, a refuse-all host) yields the
+//     same terminal verdict off the link's typed no-handler answer,
+//     while a peer whose broker merely threw stays transient.
 //   - the roster sweeps cover mid-dial entries (a session completing
 //     after its peer left the roster is closed and never reported,
-//     quit closes an in-flight dial's socket), a dropped direct socket
-//     recovers on the next dial-on-subscribe ensure, and the
+//     quit closes an in-flight dial's socket), and the
 //     remoteAccess:commandAccess preflight flips live with the grant
 //     on one direct session.
+//
+// SUPERVISION (v2 step 11) makes sessions desired state, the presence
+// roster the input, and the keeper (shared/relay/directKeeper.ts) the
+// ONLY dial trigger:
+//
+//   - presence alone establishes the session: the roster naming a peer
+//     is followed by an established direct session with NO invoke and
+//     no user action anywhere, and an invoke with no session rejects
+//     at once WITHOUT dialing (no broker traffic), so a renderer retry
+//     loop cannot pace dials.
+//   - a dead direct socket is redialed by the keeper on the shared
+//     backoff ladder with no ensure/invoke involved.
+//   - the keeper's retry discipline against a stub dial and a fake
+//     clock: eager dial on roster entry, the exact shared ladder on
+//     transient failures (capped, forever), stable reset, roster exit
+//     cancels the schedule, relay-down reconciles to empty without
+//     touching sessions, and TERMINAL verdicts (blocked ticket, the
+//     skew NoDialableCandidateError) PARK with no timer -- the
+//     lockout-protection rule -- until the peer's offline-to-online
+//     transition redials it fresh.
 //   - the cloudflared deciders (argv/env secret discipline, the
 //     capped ladder through the supervisor's shared lookup) and the
 //     runner's lifecycle (no-binary, unconfigured cached for the
@@ -106,23 +137,33 @@ import { createServer, connect as netConnect } from "node:net";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import {
   CLOSE_AUTH_FAILED,
+  CLOSE_AUTH_LOCKED_OUT,
   CommandRefusedError,
 } from "@shared/ipc/socket/frames";
 import {
   connectDevice,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import { DirectCandidateSchema } from "@shared/ipc/modules/direct";
+import {
+  DirectCandidateSchema,
+  directContract,
+} from "@shared/ipc/modules/direct";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { registerContract } from "@shared/ipc/registerContract";
 import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import {
   createDirectDialer,
+  isTerminalDialError,
   NoDialableCandidateError,
 } from "@shared/relay/directDial";
+import { createDirectKeeper } from "@shared/relay/directKeeper";
 import { applyDirectPresence } from "@shared/relay/directPresence";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
-import { backoffDelayMs } from "@shared/remote/supervisor";
+import {
+  BACKOFF_LADDER_MS,
+  backoffDelayMs,
+  STABLE_CONNECTION_MS,
+} from "@shared/remote/supervisor";
 import {
   cloudflaredArgs,
   cloudflaredEnv,
@@ -141,6 +182,7 @@ import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,
 } from "@shared/account/service";
+import { createRelayConnection as createWebConnection } from "../web/relay/connection.ts";
 import { fakeClock, makeProof } from "./lib/checkKit.mjs";
 import {
   bootBrokeredPair as bootPair,
@@ -203,7 +245,7 @@ function dialWith(port, ticket, overrides = {}) {
 // scenarios that need per-candidate URLs (different ports, stubs) the
 // real broker's one-listener-port shape cannot express, or a stand-in
 // for an OLD host that ignores the dialableKinds input. Counts broker
-// round trips so memo scenarios can pin who paid what.
+// round trips so a scenario can pin who paid what.
 function fakeBrokerDialer(answer, opts = {}) {
   let brokerCalls = 0;
   const dialer = createDirectDialer({
@@ -221,9 +263,64 @@ function fakeBrokerDialer(answer, opts = {}) {
     localAppVersion: "1.0.0",
     dialableKinds: opts.dialableKinds,
     deadlineMs: opts.deadlineMs ?? 4000,
-    failureTtlMs: opts.failureTtlMs,
   });
   return { dialer, brokerCalls: () => brokerCalls };
+}
+
+// The keeper on a fake clock over a stub dial, the scaffolding the two
+// supervision scenarios below share: they differ only in what a failed
+// dial rejects with (transient vs terminal), which is the whole point
+// of running both. Dials fail until succeed() flips them, so a
+// scenario can walk a failure streak into an established session
+// without rebuilding the keeper.
+function stubKeeper(rejectWith) {
+  const clock = fakeClock();
+  const dials = [];
+  let dialSucceeds = false;
+  const keeper = createDirectKeeper({
+    clock,
+    dial: (deviceId) => {
+      dials.push({ deviceId, at: clock.now() });
+      return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
+    },
+  });
+  return {
+    keeper,
+    clock,
+    dials,
+    succeed: () => {
+      dialSucceeds = true;
+    },
+  };
+}
+
+// A device booted on the BROWSER binding (web/relay/connection.ts):
+// the broker channel with NO handler, so its host role is empty by
+// construction and every req comes back as the no-handler shape. The
+// real binding rather than a stub, because the thing under test is
+// exactly what that binding puts on the wire when a desktop dials a
+// browser tab.
+async function bootWebPeer(stub, deviceId, track) {
+  let mints = 0;
+  const connection = createWebConnection({
+    brokerChannel: directContract.calls.connectInfo.channel,
+  });
+  track(() => connection.stop());
+  await connection.refresh(async () => ({
+    relayUrl: stub.relayUrl,
+    accountId: "acct",
+    mintTicket: async () => {
+      mints += 1;
+      return `t:${deviceId}:${mints}`;
+    },
+    deviceId,
+    appVersion: "1.0.0",
+  }));
+  await waitFor(
+    () => connection.status().socket.phase === "connected",
+    `web ${deviceId} to connect`,
+  );
+  return connection;
 }
 
 // A loopback TCP proxy that delays the ACCEPTED connection before
@@ -419,7 +516,7 @@ async function main() {
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
       track(() => bridge.closeDirectPeers());
-      await bridge.ensurePeer({ deviceId: "B" });
+      await bridge.dialPeer("B");
       // The welcome pinned the dialed identity and confirmed the
       // host's version, surfaced through the one per-peer data fact.
       assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
@@ -467,7 +564,7 @@ async function main() {
       const { bridge } = makeDirectBridge(client, { deadlineMs: 4000 });
       track(() => bridge.closeDirectPeers());
       const startedAt = Date.now();
-      await bridge.ensurePeer({ deviceId: "B" });
+      await bridge.dialPeer("B");
       const elapsed = Date.now() - startedAt;
       assert.ok(
         elapsed < 2000,
@@ -506,7 +603,7 @@ async function main() {
       const { bridge } = makeDirectBridge(client, { deadlineMs: 5000 });
       const startedAt = Date.now();
       await assert.rejects(
-        () => bridge.ensurePeer({ deviceId: "B" }),
+        () => bridge.dialPeer("B"),
         (error) =>
           error instanceof RemoteConnectError &&
           error.blocked &&
@@ -570,7 +667,114 @@ async function main() {
   );
 
   await check(
-    "pre-hello blocked verdicts are not terminal: a connection-time CLOSE_AUTH_FAILED (the lockout shape) retires one candidate while a later candidate still wins the race",
+    "the host names its lockout on the wire: a client inside the failed-auth window is refused CLOSE_AUTH_LOCKED_OUT, so a single-candidate dial rejects unblocked and the keeper LADDERS instead of parking",
+    async (track) => {
+      const listener = await startDirectListener(track);
+      // Bench 127.0.0.1 the way a real client does: five refused
+      // tickets. (The dialer cannot set CF-Connecting-IP, so it keys on
+      // the loopback address, which is exactly the identity these
+      // failures burn.)
+      for (let i = 0; i < 5; i += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- lockout counts sequential failures
+        await assert.rejects(
+          () => dialWith(listener.port, "smpt_wrong"),
+          (error) => error.code === CLOSE_AUTH_FAILED,
+        );
+      }
+      // ONE candidate, a VALID ticket, and a benched IP: the shape the
+      // helloSent predicate could never call correctly, because the
+      // pump writes the hello on a microtask off the open event while
+      // the lockout's close arrives an event later. A tunnel-only peer
+      // has exactly this shape, which is why this was the common
+      // permanent-stuck path.
+      const [ticket] = listener.tickets.mint("A", 1);
+      const { dialer } = fakeBrokerDialer({
+        available: true,
+        candidates: [
+          { kind: "lan", url: `ws://127.0.0.1:${listener.port}`, ticket },
+        ],
+      });
+      let verdict;
+      await assert.rejects(
+        () => dialer.connectDirect("B"),
+        (error) => {
+          verdict = error;
+          return error instanceof RemoteConnectError;
+        },
+      );
+      assert.equal(
+        verdict.code,
+        CLOSE_AUTH_LOCKED_OUT,
+        "the host conflated its temporary lockout with a refused ticket",
+      );
+      assert.equal(
+        verdict.blocked,
+        false,
+        "a temporary lockout was classified as a blocked credential",
+      );
+      assert.equal(isTerminalDialError(verdict), false);
+      // The whole point: the ladder, so the peer comes back on its own
+      // when the window expires. A park would outlive the lockout with
+      // no roster transition to unpark on.
+      const { keeper, clock, dials } = stubKeeper(verdict);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        2,
+        "a lockout parked the peer instead of retrying it",
+      );
+      keeper.stop();
+    },
+  );
+
+  await check(
+    "a genuine ticket refusal still PARKS: a ticket the host read and rejected closes CLOSE_AUTH_FAILED, is blocked and terminal, and the keeper schedules nothing",
+    async (track) => {
+      // The other side of the same line. Same single-candidate shape,
+      // same connection-time close code family, opposite verdict --
+      // and the ONLY thing separating them is what the host put on the
+      // wire, which is the argument for the distinct code.
+      const listener = await startDirectListener(track);
+      const { dialer } = fakeBrokerDialer({
+        available: true,
+        candidates: [
+          {
+            kind: "lan",
+            url: `ws://127.0.0.1:${listener.port}`,
+            ticket: "smpt_never_minted",
+          },
+        ],
+      });
+      let verdict;
+      await assert.rejects(
+        () => dialer.connectDirect("B"),
+        (error) => {
+          verdict = error;
+          return error instanceof RemoteConnectError;
+        },
+      );
+      assert.equal(verdict.code, CLOSE_AUTH_FAILED);
+      assert.equal(verdict.blocked, true, "a refused ticket was not blocked");
+      assert.equal(isTerminalDialError(verdict), true);
+      const { keeper, clock, dials } = stubKeeper(verdict);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      assert.equal(
+        dials.length,
+        1,
+        "a refused ticket retried on a timer, feeding the host's lockout",
+      );
+      keeper.stop();
+    },
+  );
+
+  await check(
+    "skew belt, one candidate: an untrustworthy connection-time CLOSE_AUTH_FAILED (an OLD peer's lockout, which predates CLOSE_AUTH_LOCKED_OUT) retires that candidate while a later one still wins the race",
     async (track) => {
       const listener = await startDirectListener(track);
       // Candidate 1 accepts the hello, then fails NON-blocked after
@@ -584,9 +788,11 @@ async function main() {
       await new Promise((resolve) => slowFail.on("listening", resolve));
       track(() => new Promise((resolve) => slowFail.close(() => resolve())));
       // Candidate 2 is closed with CLOSE_AUTH_FAILED at connection
-      // time (never a hello turn: candidate 1 holds the slot), the
-      // exact shape a locked-out identity produces. Under the old
-      // rule this aborted the ENTIRE race.
+      // time (never a hello turn: candidate 1 holds the slot). A
+      // CURRENT host sends CLOSE_AUTH_LOCKED_OUT here and this is not
+      // blocked at all. This stub is the OLD shape, whose code cannot
+      // be trusted. Under the original rule it aborted the ENTIRE
+      // race.
       const lockout = new WebSocketServer({ host: "127.0.0.1", port: 0 });
       lockout.on("connection", (socket) => {
         socket.close(CLOSE_AUTH_FAILED, "temporarily locked out");
@@ -621,6 +827,88 @@ async function main() {
         await connection.transport.invoke("test:echo", "survived"),
         "survived",
       );
+    },
+  );
+
+  await check(
+    "skew belt, last candidate: an untrustworthy blocked verdict that EXHAUSTS the attempt is converted to transient, so an old peer's lockout still ladders instead of parking",
+    async (track) => {
+      // The same old-peer shape as above, but with no third candidate
+      // to win, so the untrustworthy verdict is the one the attempt
+      // EXHAUSTS on -- the path where it escapes still flagged blocked
+      // and parks the peer forever behind a bench that expires in 30s
+      // and produces no roster transition to unpark on. A current host
+      // never reaches here (its lockout is not blocked). This is the
+      // belt for a peer whose close code predates that.
+      const slowFail = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+      slowFail.on("connection", (socket) => {
+        socket.on("message", () => {
+          setTimeout(() => socket.close(1011, "boom"), 300);
+        });
+      });
+      await new Promise((resolve) => slowFail.on("listening", resolve));
+      track(() => new Promise((resolve) => slowFail.close(() => resolve())));
+      let lockoutSawHello = false;
+      const lockout = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+      lockout.on("connection", (socket) => {
+        socket.on("message", () => {
+          lockoutSawHello = true;
+        });
+        socket.close(CLOSE_AUTH_FAILED, "temporarily locked out");
+      });
+      await new Promise((resolve) => lockout.on("listening", resolve));
+      track(() => new Promise((resolve) => lockout.close(() => resolve())));
+      const { dialer } = fakeBrokerDialer({
+        available: true,
+        candidates: [
+          {
+            kind: "lan",
+            url: `ws://127.0.0.1:${slowFail.address().port}`,
+            ticket: "smpt_junk_1",
+          },
+          {
+            kind: "lan",
+            url: `ws://127.0.0.1:${lockout.address().port}`,
+            ticket: "smpt_junk_2",
+          },
+        ],
+      });
+      let verdict;
+      await assert.rejects(
+        () => dialer.connectDirect("B"),
+        (error) => {
+          verdict = error;
+          return error instanceof RemoteConnectError;
+        },
+      );
+      assert.equal(
+        lockoutSawHello,
+        false,
+        "the lockout candidate presented a ticket after all",
+      );
+      // The REASON survives (message and close code, so the peer's
+      // unavailable text stays truthful). The VERDICT does not.
+      assert.equal(verdict.code, CLOSE_AUTH_FAILED);
+      assert.match(verdict.message, new RegExp(`code ${CLOSE_AUTH_FAILED}`));
+      assert.equal(
+        verdict.blocked,
+        false,
+        "a pre-hello lockout close escaped the attempt still flagged blocked",
+      );
+      assert.equal(isTerminalDialError(verdict), false);
+      // What the keeper then does with it, which is the whole point:
+      // the ladder, not a park.
+      const { keeper, clock, dials } = stubKeeper(verdict);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        2,
+        "an untrustworthy blocked verdict parked the peer",
+      );
+      keeper.stop();
     },
   );
 
@@ -714,7 +1002,20 @@ async function main() {
         "198.51.100.7",
       );
       assert.equal(locked.welcomed, false, "a locked-out identity authed");
-      assert.equal(locked.code, CLOSE_AUTH_FAILED);
+      // A DISTINCT code from the five bad-ticket refusals above. The
+      // host is the only side that can tell "your credential is wrong"
+      // from "you are benched for 30s", and this dial is the proof it
+      // must: the ticket here is VALID and was never even read.
+      assert.equal(
+        locked.code,
+        CLOSE_AUTH_LOCKED_OUT,
+        "the lockout refusal was indistinguishable from a bad ticket",
+      );
+      assert.equal(
+        listener.tickets.consume(lockedTicket, "A"),
+        true,
+        "the lockout refusal spent the valid ticket it never read",
+      );
       // A DIFFERENT identity over the same loopback path dials fine:
       // under remoteAddress keying both would share one 127.0.0.1
       // bucket and this dial would be benched too.
@@ -733,7 +1034,7 @@ async function main() {
   );
 
   await check(
-    "deadline: a wedged connectInfo cannot hang the bridge cache, whose attempt rejects typed within the budget and whose failure memo short-circuits the next one",
+    "deadline: a wedged connectInfo cannot hang the bridge cache, whose attempt rejects typed within the budget, an invoke joins the in-flight dial's fate, and with nothing cached an invoke refuses at once instead of dialing",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
@@ -749,8 +1050,10 @@ async function main() {
       const { bridge } = makeDirectBridge(client, { deadlineMs: 400 });
       const startedAt = Date.now();
       // Direct or nothing: the wedged broker means the peer is
-      // unreachable for data, so the invoke rejects with the deadline
-      // error instead of hanging every consumer of this peer.
+      // unreachable for data. An invoke arriving while the dial is in
+      // flight joins it (the seamless boot race) and shares its typed
+      // deadline rejection instead of hanging every consumer.
+      const dialing = bridge.dialPeer("B");
       await assert.rejects(
         () =>
           bridge.invokePeer({
@@ -760,15 +1063,19 @@ async function main() {
           }),
         /exceeded its 400ms deadline/,
       );
+      await assert.rejects(() => dialing, /exceeded its 400ms deadline/);
       const elapsed = Date.now() - startedAt;
       assert.ok(
         elapsed < 3000,
         `the wedged connectInfo was not bounded by the deadline (${elapsed}ms)`,
       );
       assert.deepEqual(bridge.directPeerVersions(), {});
-      // The failed dial dropped its cache entry (no poisoning) and the
-      // dialer's failure memo answers the retry at once, without a
-      // second broker round trip.
+      // The failed dial dropped its cache entry (no poisoning), and a
+      // bare invoke against the empty slot refuses at once WITHOUT
+      // dialing: the keeper is the only dial trigger, so no user
+      // action or renderer retry loop can pace attempts against a
+      // wedged peer.
+      const baseline = stub.receivedCount();
       const retryStartedAt = Date.now();
       await assert.rejects(
         () =>
@@ -777,11 +1084,16 @@ async function main() {
             channel: "test:echo",
             input: "retry",
           }),
-        /failed recently/,
+        /no direct connection to B/,
       );
       assert.ok(
         Date.now() - retryStartedAt < 200,
-        "the failure memo did not short-circuit the retry",
+        "the sessionless invoke did not refuse at once",
+      );
+      assert.equal(
+        stub.receivedCount(),
+        baseline,
+        "a sessionless invoke started a dial (broker traffic seen)",
       );
       void host;
     },
@@ -981,7 +1293,7 @@ async function main() {
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
       track(() => bridge.closeDirectPeers());
-      await bridge.ensurePeer({ deviceId: "B" });
+      await bridge.dialPeer("B");
       // The broker leg closed its relay session before the dial
       // resolved, and the close carried a bye so B's relay-side host
       // session died at once instead of waiting on presence.
@@ -1023,13 +1335,14 @@ async function main() {
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
       track(() => bridge.closeDirectPeers());
-      const notePresenceCalls = [];
+      const reconcileCalls = [];
       const presenceDeps = {
         closeHostPeersNotIn: (online) =>
           listener.binding.closePeersNotIn(online),
         dropClientPeersNotIn: (online) => bridge.dropDirectPeersNotIn(online),
-        notePresence: (online) => notePresenceCalls.push([...online]),
+        reconcilePeers: (online) => reconcileCalls.push([...online]),
       };
+      await bridge.dialPeer("B");
       assert.deepEqual(
         await bridge.invokePeer({
           deviceId: "B",
@@ -1040,15 +1353,16 @@ async function main() {
       );
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       // Our own relay link down (no live roster): the working direct
-      // session must survive an account-relay outage, but the dialer's
-      // roster bookkeeping resets (an empty notePresence) so the
-      // post-reconnect roster counts as fresh offline-to-online
-      // transitions and clears stale failure memos.
+      // session must survive an account-relay outage, but the keeper
+      // reconciles to EMPTY (its schedule is useless without the
+      // broker leg) so the post-reconnect roster reads as all-new
+      // peers and redials whatever the outage cost, parked peers
+      // included.
       applyDirectPresence(false, [], presenceDeps);
       assert.deepEqual(
-        notePresenceCalls.at(-1),
+        reconcileCalls.at(-1),
         [],
-        "a relay-down reconcile did not reset the dialer's roster",
+        "a relay-down reconcile did not empty the keeper's desired set",
       );
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       assert.deepEqual(
@@ -1059,9 +1373,11 @@ async function main() {
         }),
         "outage",
       );
-      // A live roster still naming the peer: nothing closes.
+      // A live roster still naming the peer: nothing closes, and the
+      // keeper receives the roster as its desired set.
       applyDirectPresence(true, ["A", "B"], presenceDeps);
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
+      assert.deepEqual(reconcileCalls.at(-1), ["A", "B"]);
       // The peer leaves the live roster: the cached client session
       // drops at once.
       applyDirectPresence(true, ["A"], presenceDeps);
@@ -1094,7 +1410,7 @@ async function main() {
       // dial is still in flight. The completing session must not be
       // installed for a device the control plane stopped vouching for.
       const sweep = heldDial();
-      const ensure = sweep.handlers.ensurePeer({ deviceId: "B" });
+      const ensure = sweep.handlers.dialPeer("B");
       sweep.handlers.dropDirectPeersNotIn([]);
       sweep.release();
       await ensure;
@@ -1112,7 +1428,7 @@ async function main() {
       // Quit sweep: closeDirectPeers with a dial still in flight must
       // close the resulting socket instead of leaking it past quit.
       const quit = heldDial();
-      const quitEnsure = quit.handlers.ensurePeer({ deviceId: "B" });
+      const quitEnsure = quit.handlers.dialPeer("B");
       quit.handlers.closeDirectPeers();
       quit.release();
       await quitEnsure;
@@ -1126,15 +1442,32 @@ async function main() {
   );
 
   await check(
-    "drop then recover: a dead direct socket drops the cache and the next dial-on-subscribe ensure re-establishes the session (no memo blocks a drop that was not a dial failure)",
+    "supervised and eager: presence alone establishes the session (no invoke anywhere), a host-side drop is redialed by the keeper on the shared ladder, and quit's stop() latches the schedule",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
       const listener = await startDirectListener(track);
-      const { client } = await bootPair(stub, track, listener);
-      const { bridge } = makeDirectBridge(client);
+      // The plane's presence path wired to the client connection
+      // exactly as production wires it (late-bound plus one catch-up
+      // call), with the keeper on a fake clock so the ladder is
+      // advanced by hand instead of slept out.
+      let onPlaneChange = null;
+      const { client } = await bootPair(stub, track, listener, {
+        clientOnChange: () => onPlaneChange?.(),
+      });
+      const clock = fakeClock();
+      const { plane, bridge } = makeDirectBridge(client, {
+        keeper: { clock },
+      });
       track(() => bridge.closeDirectPeers());
-      await bridge.ensurePeer({ deviceId: "B" });
+      onPlaneChange = () => plane.handleConnectionChange();
+      plane.handleConnectionChange();
+      // Presence alone: the roster names B, so the keeper dials it
+      // with no invoke and no ensure in sight.
+      await waitFor(
+        () => bridge.directPeerVersions().B !== undefined,
+        "the keeper to establish the session off presence alone",
+      );
       assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
       // The established direct socket dies out from under the client
       // (the host closes it), and the cache drops the session.
@@ -1143,12 +1476,16 @@ async function main() {
         () => Object.keys(bridge.directPeerVersions()).length === 0,
         "the dropped session to leave the cache",
       );
-      // The re-ensure the renderer transport fires off the drop's own
-      // status snapshot (an online subscribed peer with no established
-      // session) redials at once: the drop itself was never a dial
-      // failure, so no failure memo stands in the way.
-      await bridge.ensurePeer({ deviceId: "B" });
-      assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
+      // Nothing redials before the ladder's first rung...
+      await clock.settle();
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      // ...and the keeper redials at it, with no ensure/invoke: the
+      // drop was a self-close, so supervision owns the recovery.
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await waitFor(
+        () => bridge.directPeerVersions().B !== undefined,
+        "the keeper to redial the dropped session",
+      );
       assert.deepEqual(
         await bridge.invokePeer({
           deviceId: "B",
@@ -1156,6 +1493,20 @@ async function main() {
           input: "recovered",
         }),
         "recovered",
+      );
+      // Quit: stop() is BOTH halves in the order that matters (latch,
+      // then close every cached session), so the cache empties on the
+      // call and nothing a drop or a pending timer does afterwards can
+      // dial a fresh session into the teardown.
+      plane.stop();
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      listener.binding.closePeersNotIn([]);
+      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 4);
+      await delay(50);
+      assert.deepEqual(
+        bridge.directPeerVersions(),
+        {},
+        "a latched keeper still redialed after stop()",
       );
     },
   );
@@ -1210,7 +1561,7 @@ async function main() {
   );
 
   await check(
-    "routing: openPeer is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache and rejects typed on the next use",
+    "routing: the cache is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache, refuses sessionless invokes and rejects typed on the next dial",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
@@ -1226,8 +1577,9 @@ async function main() {
         },
       });
       track(() => bridge.closeDirectPeers());
-      // Direct available: the cached session is direct and invokes
-      // leave the relay flat once established.
+      // Direct available: the keeper-shaped dial establishes the
+      // session, and invokes ride it leaving the relay flat.
+      await bridge.dialPeer("B");
       assert.deepEqual(
         await bridge.invokePeer({
           deviceId: "B",
@@ -1271,9 +1623,8 @@ async function main() {
         2,
         "closing the direct session never fired onDirectChange",
       );
-      // The next invoke re-decides: the broker answers unavailable now
-      // and there is nothing to fall back to, so the attempt rejects
-      // with the typed unreachable outcome and the cache stays empty.
+      // A sessionless invoke refuses at once and dials nothing: the
+      // keeper owns dialing, so use cannot be a trigger.
       await assert.rejects(
         () =>
           bridge.invokePeer({
@@ -1281,6 +1632,14 @@ async function main() {
             channel: "test:echo",
             input: { n: 3 },
           }),
+        /no direct connection to B/,
+      );
+      // The keeper's next dial re-decides: the broker answers
+      // unavailable now and there is nothing to fall back to, so the
+      // attempt rejects with the typed unreachable outcome and the
+      // cache stays empty.
+      await assert.rejects(
+        () => bridge.dialPeer("B"),
         /offers no direct listener/,
       );
       assert.deepEqual(bridge.directPeerVersions(), {});
@@ -1301,6 +1660,8 @@ async function main() {
       listener.listenerPort = () => deadPort;
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
+      // An invoke racing the in-flight dial shares its typed fate.
+      const dialing = bridge.dialPeer("B");
       await assert.rejects(
         () =>
           bridge.invokePeer({
@@ -1311,6 +1672,10 @@ async function main() {
         // Typed pin: a dead advertised port fails the candidate's
         // socket, so the dial error is the connect error itself, not
         // some incidental throw.
+        (error) => error instanceof RemoteConnectError,
+      );
+      await assert.rejects(
+        () => dialing,
         (error) => error instanceof RemoteConnectError,
       );
       assert.deepEqual(bridge.directPeerVersions(), {});
@@ -1346,9 +1711,10 @@ async function main() {
         onPeerPush: (push) => pushes.push(push),
       });
       track(() => bridge.closeDirectPeers());
-      // Dial-on-subscribe: the session comes up with no invoke, then
-      // the host's fan-out reaches it over the direct socket.
-      await bridge.ensurePeer({ deviceId: "B" });
+      // A keeper-shaped dial and nothing else: the session comes up
+      // with no invoke, then the host's fan-out reaches it over the
+      // direct socket.
+      await bridge.dialPeer("B");
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       const baseline = stub.forwardedCount();
       listener.binding.broadcastAll("test:ping", { n: 7 });
@@ -1490,16 +1856,11 @@ async function main() {
         dialableKinds: ["tunnel"],
         deadlineMs: 2500,
       });
-      // The dial cannot succeed (unroutable hostname), so the invoke
+      // The dial cannot succeed (unroutable hostname), so the attempt
       // rejects as unreachable: direct or nothing. Typed pin: the
       // failed candidate socket surfaces as the connect error.
       await assert.rejects(
-        () =>
-          bridge.invokePeer({
-            deviceId: "B",
-            channel: "test:echo",
-            input: "unroutable",
-          }),
+        () => bridge.dialPeer("B"),
         (error) => error instanceof RemoteConnectError,
       );
       assert.deepEqual(bridge.directPeerVersions(), {});
@@ -1529,7 +1890,7 @@ async function main() {
         deadlineMs: 2000,
       }).bridge;
       await assert.rejects(
-        () => bareBridge.ensurePeer({ deviceId: "B" }),
+        () => bareBridge.dialPeer("B"),
         /offers no direct listener/,
         "a kind-filtered empty answer was not the plain unavailable outcome",
       );
@@ -1538,10 +1899,12 @@ async function main() {
   );
 
   await check(
-    "old-host skew and the ONE failure memo: an answer ignoring dialableKinds yields the typed NoDialableCandidateError, memoized under the same short TTL as any failure and cleared early by the peer's offline-to-online transition",
+    "old-host skew is a terminal verdict: an answer ignoring dialableKinds yields the typed NoDialableCandidateError, and the terminal classification covers exactly the verdicts a redial cannot change",
     async () => {
       // The fake broker stands in for an OLD host: it ignores the
-      // input and answers lan candidates to a tunnel-only caller.
+      // input and answers lan candidates to a tunnel-only caller. One
+      // attempt, one broker trip, one typed rejection -- retry policy
+      // lives in the keeper alone.
       const { dialer, brokerCalls } = fakeBrokerDialer(
         {
           available: true,
@@ -1549,7 +1912,7 @@ async function main() {
             { kind: "lan", url: "ws://127.0.0.1:9", ticket: "smpt_x" },
           ],
         },
-        { dialableKinds: ["tunnel"], failureTtlMs: 300, deadlineMs: 1000 },
+        { dialableKinds: ["tunnel"], deadlineMs: 1000 },
       );
       await assert.rejects(
         () => dialer.connectDirect("B"),
@@ -1557,30 +1920,222 @@ async function main() {
         "an undialable candidate set did not reject with the typed error",
       );
       assert.equal(brokerCalls(), 1);
-      // Within the TTL the memo short-circuits: no broker round trip.
-      // ONE memo for every failure kind (there is no fallback behind a
-      // dial, so an unexpiring structural memo would brick a peer whose
-      // tunnel was merely still starting).
-      await assert.rejects(() => dialer.connectDirect("B"), /failed recently/);
-      assert.equal(brokerCalls(), 1, "the memo did not short-circuit");
-      // The peer going offline and coming back clears the memo EARLY,
-      // before the TTL: its offer may genuinely have changed (a tunnel
-      // came up).
-      dialer.notePresence([]);
-      dialer.notePresence(["B"]);
-      await assert.rejects(
-        () => dialer.connectDirect("B"),
-        (error) => error instanceof NoDialableCandidateError,
+      // The park-vs-retry line the keeper consumes: a blocked verdict
+      // (ticket presented and refused, wrong identity) and the skew
+      // error park. Everything transient (unreachable, deadline, no
+      // listener yet) retries on the ladder. Misclassifying a
+      // transient as terminal would strand a peer whose tunnel was
+      // merely still starting, and the reverse would feed the host's
+      // failed-auth lockout.
+      assert.equal(
+        isTerminalDialError(new NoDialableCandidateError("B")),
+        true,
       );
-      assert.equal(brokerCalls(), 2, "the presence transition did not clear");
-      // And the TTL alone recovers too: past expiry the next dial pays
-      // a real broker round trip instead of the memo answer.
-      await delay(350);
-      await assert.rejects(
-        () => dialer.connectDirect("B"),
-        (error) => error instanceof NoDialableCandidateError,
+      assert.equal(
+        isTerminalDialError(
+          new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),
+        ),
+        true,
       );
-      assert.equal(brokerCalls(), 3, "the expired memo still short-circuited");
+      assert.equal(
+        isTerminalDialError(
+          new RemoteConnectError("connect refused pre-hello", null, false),
+        ),
+        false,
+      );
+      assert.equal(
+        isTerminalDialError(new Error("peer B offers no direct listener")),
+        false,
+      );
+    },
+  );
+
+  await check(
+    "a refuse-all peer is a TERMINAL verdict: the browser binding's no-handler answer yields NoDialableCandidateError and PARKS, while a peer whose broker merely threw stays on the ladder",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      // B is the REAL browser binding: broker channel, no handler, so
+      // its host role is empty by construction. C is a node peer whose
+      // broker THREW (mid-boot, a transient failure of one call). Both
+      // fail the same dial, and telling them apart is the point: eager
+      // supervision would otherwise redial every open browser tab in
+      // the roster at the ladder's cap forever.
+      await bootWebPeer(stub, "B", track);
+      await bootDevice(
+        stub,
+        "C",
+        {
+          brokerHandler: async () => {
+            throw new Error("listener still starting");
+          },
+        },
+        track,
+      );
+      const a = await bootDevice(stub, "A", {}, track);
+      await waitFor(
+        () =>
+          a.connection.status().onlineDeviceIds.includes("B") &&
+          a.connection.status().onlineDeviceIds.includes("C"),
+        "the roster to name both peers",
+      );
+      const { bridge } = makeDirectBridge(a, { deadlineMs: 3000 });
+      let verdict;
+      await assert.rejects(
+        () => bridge.dialPeer("B"),
+        (error) => {
+          verdict = error;
+          return error instanceof NoDialableCandidateError;
+        },
+        "a refuse-all peer did not yield the structural terminal verdict",
+      );
+      // The message says which shape it was, since the keeper hands it
+      // to the UI as the peer's unavailable reason.
+      assert.match(verdict.message, /serves no direct listener/);
+      assert.equal(isTerminalDialError(verdict), true);
+      // The discriminator is the TYPED no-handler answer, never "the
+      // broker call failed": a handler that threw is one bad call, so
+      // it keeps its place on the ladder.
+      await assert.rejects(
+        () => bridge.dialPeer("C"),
+        (error) => {
+          assert.equal(
+            isTerminalDialError(error),
+            false,
+            "a thrown broker handler was misread as structural and parked",
+          );
+          return true;
+        },
+      );
+      // Parked with no timer, and the roster round trip is the only
+      // thing that redials it -- the right lifecycle for a tab that
+      // may later become a host.
+      const { keeper, clock, dials } = stubKeeper(verdict);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      assert.equal(dials.length, 1, "a refuse-all peer redialed on the ladder");
+      keeper.reconcile([]);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 2, "the roster round trip did not redial");
+      keeper.stop();
+    },
+  );
+
+  await check(
+    "keeper discipline: eager dial on roster entry, the exact shared ladder on transient failures (capped, forever), roster exit cancels, and a stable session's drop resets the ladder",
+    async () => {
+      const { keeper, clock, dials, succeed } = stubKeeper(
+        new Error("listener down"),
+      );
+      // Eager: the peer entering the roster dials at once, and a
+      // steady roster re-fed dials nothing new.
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      assert.deepEqual(dials[0], { deviceId: "B", at: 0 });
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1, "a steady roster re-dialed");
+      // Transient failures walk the EXACT shared ladder and cap at its
+      // top forever (the forever-retry rule).
+      const expected = [
+        ...BACKOFF_LADDER_MS,
+        ...Array(3).fill(BACKOFF_LADDER_MS.at(-1)),
+      ];
+      for (const [i, delayMs] of expected.entries()) {
+        const before = dials.length;
+        // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
+        await clock.advance(delayMs - 1);
+        assert.equal(dials.length, before, `rung ${i} fired early`);
+        // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
+        await clock.advance(1);
+        assert.equal(dials.length, before + 1, `rung ${i} never fired`);
+      }
+      // The keeper's last failure is the no-session explanation the
+      // bridge folds into its refusal.
+      assert.equal(keeper.unavailableReason("B"), "listener down");
+      // Roster exit cancels the schedule outright.
+      keeper.reconcile([]);
+      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 4);
+      const settled = dials.length;
+      assert.equal(settled, 1 + expected.length, "a swept peer kept dialing");
+      // Re-entry starts fresh at the bottom rung: dial now, and a
+      // failure waits ladder[0], not the inherited cap.
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, settled + 1);
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        settled + 2,
+        "re-entry inherited the old ladder",
+      );
+      // A session that connects and stays up past the stable threshold
+      // resets the ladder: its drop redials at the bottom rung.
+      succeed();
+      await clock.advance(BACKOFF_LADDER_MS[1]);
+      const connectedAt = dials.length;
+      assert.equal(connectedAt, settled + 3);
+      assert.equal(keeper.unavailableReason("B"), null);
+      await clock.advance(STABLE_CONNECTION_MS);
+      keeper.peerDropped("B");
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        connectedAt + 1,
+        "a stable drop did not redial at the bottom rung",
+      );
+      // An UNSTABLE drop keeps climbing instead: rung 1 next, so a
+      // connect-then-die flapper cannot hammer at the bottom.
+      keeper.peerDropped("B");
+      await clock.advance(BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        connectedAt + 1,
+        "an unstable drop redialed at the bottom rung",
+      );
+      await clock.advance(BACKOFF_LADDER_MS[1] - BACKOFF_LADDER_MS[0]);
+      assert.equal(
+        dials.length,
+        connectedAt + 2,
+        "the unstable drop never redialed",
+      );
+      keeper.stop();
+    },
+  );
+
+  await check(
+    "keeper parks on terminal verdicts with NO timer (the lockout-protection rule), and the peer's roster round trip is what redials it",
+    async () => {
+      const { keeper, clock, dials, succeed } = stubKeeper(
+        new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),
+      );
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 1);
+      // Parked: no amount of time redials a blocked verdict, so eager
+      // supervision can never feed the host's failed-auth lockout a
+      // second refused ticket on a timer.
+      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      assert.equal(dials.length, 1, "a parked peer redialed on a timer");
+      assert.equal(keeper.unavailableReason("B"), "ticket refused");
+      // A steady roster does not unpark either...
+      keeper.reconcile(["B"]);
+      await clock.advance(BACKOFF_LADDER_MS.at(-1));
+      assert.equal(dials.length, 1, "a steady roster unparked a blocked peer");
+      // ...but the peer's offline-to-online transition does (its app
+      // restarted, or our own link came back: both reset the roster
+      // diff), and the fresh dial may now succeed.
+      succeed();
+      keeper.reconcile([]);
+      keeper.reconcile(["B"]);
+      await clock.settle();
+      assert.equal(dials.length, 2, "the roster round trip did not redial");
+      assert.equal(keeper.unavailableReason("B"), null);
+      keeper.stop();
     },
   );
 

@@ -80,12 +80,26 @@ export const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
 export const TERMINATE_GRACE_MS = 1_500;
 
 // Application close codes (the 4000-4999 range websockets reserve for
-// apps). AUTH_FAILED means the token was wrong: the client must
-// surface it and never auto-retry, or a typo'd token turns into a
+// apps). AUTH_FAILED means the credential itself was wrong: the client
+// must surface it and never auto-retry, or a typo'd token turns into a
 // hammering loop. HELLO_FAILED covers a missing, late or malformed
 // hello and is safe to retry.
+//
+// AUTH_LOCKED_OUT is the one the HOST must not conflate with
+// AUTH_FAILED, and the reason it exists as its own code: the failed-auth
+// lockout refuses a connection at CONNECT time, before any hello is
+// read, purely because this client identity spent its attempts
+// recently. It says nothing about the credential the refused client
+// holds -- often nothing at all, since the lockout keys on IP and one
+// device's typo benches every device behind the same NAT. It is
+// TEMPORARY by construction (AUTH_LOCKOUT_MS, and a refused connection
+// does not extend the window), so it is retryable and the client
+// backs off through it. Only the host can tell the two apart, so the
+// host says which one it is instead of leaving the client to guess
+// from a predicate that cannot know.
 export const CLOSE_AUTH_FAILED = 4001;
 export const CLOSE_HELLO_FAILED = 4002;
+export const CLOSE_AUTH_LOCKED_OUT = 4003;
 
 // Standard websocket close codes the host uses on the shutdown and
 // overload paths. GOING_AWAY is a normal retryable shutdown (stop or

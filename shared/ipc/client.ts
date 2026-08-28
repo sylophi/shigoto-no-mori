@@ -311,8 +311,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     relay: {
       status: relayClient.status,
       invokePeer: relayClient.invokePeer,
-      ensurePeer: relayClient.ensurePeer,
-      peerInfo: relayClient.peerInfo,
       onStatusChanged: relayClient.statusChanged,
       onPeerPush: relayClient.peerPush,
     },

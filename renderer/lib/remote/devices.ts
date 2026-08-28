@@ -35,14 +35,20 @@ export type RemoteDevice = {
   // Display label: the account device name.
   label: string;
   status: RemoteDeviceStatus;
-  // The remote host app's version, "" until the lazily opened direct
-  // session confirms it.
+  // The remote host app's version, "" until the direct session's
+  // welcome confirms it.
   appVersion: string;
   // Present while the peer is online in the roster, whether or not a
-  // direct session exists yet: using the api is exactly what opens the
-  // session (dial on first invoke or subscribe). Host calls route over
-  // the relay bridge onto the direct wire. Client-scoped calls reject
-  // (see rejectingClientTransport).
+  // direct session exists yet. Nothing here ever opens one: sessions
+  // are supervised desired state owned by main's keeper
+  // (shared/relay/directKeeper.ts), which dials every rostered peer
+  // eagerly and redials forever. The api ships early anyway so a view
+  // can stand ready through the dial window -- a call landing on the
+  // in-flight dial joins it, one landing on no session rejects, and
+  // the online-to-connected transition refetches it
+  // (remoteDeviceSync.ts). Host calls route over the relay bridge onto
+  // the direct wire. Client-scoped calls reject (see
+  // rejectingClientTransport).
   api?: RemoteDeviceApi;
 };
 

@@ -84,6 +84,10 @@ export type ConnectFn = (
 // message. The default is the LAN rule: only a wrong token blocks.
 // The relay connection supplies its own classifier for the revoked and
 // superseded close codes.
+//
+// Every classifier here is an ALLOWLIST of blocking codes, so an
+// unrecognized code retries rather than wedging a device in a blocked
+// state this build cannot explain.
 export type CloseClassifier = (
   code: number | null,
 ) => { message: string } | null;
@@ -91,7 +95,12 @@ export type CloseClassifier = (
 const AUTH_FAILED_MESSAGE = "authentication failed";
 
 // Not exported: it is only the default classifier for this module. The
-// relay path injects its own, and nothing else references it.
+// relay path injects its own, and nothing else references it. The
+// host's failed-auth lockout (CLOSE_AUTH_LOCKED_OUT) is pointedly NOT
+// here: it is a temporary bench on the client IP, not a verdict on
+// this device's token, so a LAN supervisor rides it out on the ladder
+// instead of surfacing "authentication failed" for a credential that
+// was never even read.
 const lanCloseClassifier: CloseClassifier = (code) =>
   code === CLOSE_AUTH_FAILED ? { message: AUTH_FAILED_MESSAGE } : null;
 

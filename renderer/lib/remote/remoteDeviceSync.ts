@@ -18,13 +18,16 @@
 //     direct session is the only thing "connected" may mean.
 //   - socket connected, the peer in the roster, no direct session:
 //     phase "online" (renderer-local). The roster fact shows, nothing
-//     claims a data wire, and the api stays available because using it
-//     is what dials.
+//     claims a data wire, and main's keeper is already dialing or
+//     backing off toward one (sessions are supervised desired state),
+//     so the normal resolution is the next snapshot flipping the
+//     device to "connected" with no action here.
 //   - socket connected but the peer absent from the roster: phase
 //     "stopped", which renders as the neutral slate "Off" dot. "idle"
 //     would render as "Connecting" (a lie, nothing is trying) and
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
+import type { QueryClient } from "@tanstack/react-query";
 import { buildApi } from "@shared/ipc/client";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
@@ -32,6 +35,7 @@ import {
   publishRelayStatus,
   seedRelayStatus,
 } from "@/hooks/remote/useRelayStatus";
+import { invalidateDeviceSession } from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
   type RemoteDevice,
@@ -49,10 +53,19 @@ import { createRelayClientTransport } from "./relayTransport";
 let cachedList: DeviceInfo[] | null = null;
 let lastSocketPhase = "";
 
-// One api per relay deviceId, built on first connected sighting and
-// kept: the transport forwards through the bridge, which redials
-// lazily, so the api never goes stale the way a dead socket does.
+// One api per relay deviceId, built on first reachable sighting and
+// kept: the transport forwards through the bridge, whose session for
+// that peer is supervised desired state (main's keeper redials it
+// forever), so the api never goes stale the way a dead socket does.
 const apis = new Map<string, RemoteDeviceApi>();
+
+// The query client of the boot that started the sync, for the
+// convergence invalidation below.
+let boundQueryClient: QueryClient | null = null;
+
+// The phase each device was last published with, so a reconcile can
+// spot the ONE transition that needs a nudge: online to connected.
+const lastPhases = new Map<string, RemoteDeviceStatus["phase"]>();
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -108,7 +121,42 @@ async function reconcileNow(status?: RelayStatus): Promise<void> {
     (info) => info.deviceId !== localDeviceId,
   );
   const devices = others.map((info) => buildEntry(info, current, online));
+  noteConvergence(devices);
   setRemoteDevices(devices);
+}
+
+// Converge the views that fired while the keeper was still dialing.
+// A device in phase "online" already carries an api (see buildEntry),
+// so its queries run and hard-reject with "no direct connection". The
+// keeper landing seconds later is invisible to react-query, whose own
+// failure budget is long spent. The status snapshot IS the signal, and
+// this module is its single reader, so the refetch belongs here and
+// NOWHERE else: a per-call-site retry would be a second retry driver
+// racing the keeper's ladder, which is exactly what supervision
+// replaced. Scoped to the device that just landed, through
+// invalidateDeviceSession and NOT the externalChange sweep: a session
+// coming up is not a "that host's state moved" ping, and the sweep's
+// exemptions (runtime, githubCli, fs, portForwards, updater, the two
+// worktree cost domains) name exactly the queries that hard-failed
+// during the dial window, so sweeping through them would refetch
+// everything except what is broken.
+function noteConvergence(devices: readonly RemoteDevice[]): void {
+  const seen = new Set<string>();
+  for (const device of devices) {
+    const phase = device.status.phase;
+    seen.add(device.deviceId);
+    const previous = lastPhases.get(device.deviceId);
+    lastPhases.set(device.deviceId, phase);
+    if (previous !== "online" || phase !== "connected") continue;
+    if (boundQueryClient !== null) {
+      invalidateDeviceSession(boundQueryClient, device.deviceId);
+    }
+  }
+  // Forget devices that left the list (revoked, or the account
+  // changed), so a re-enroll starts from no remembered phase.
+  for (const deviceId of lastPhases.keys()) {
+    if (!seen.has(deviceId)) lastPhases.delete(deviceId);
+  }
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status
@@ -132,8 +180,11 @@ function buildEntry(
   } else if (!peerOnline) {
     status = { phase: "stopped" };
   } else if (version === undefined) {
-    // In the roster but no direct session: unreachable for data until
-    // a use dials it. The api is present precisely so a use CAN dial.
+    // In the roster but no direct session yet: main's keeper is
+    // dialing or backing off toward one. The api is present anyway so
+    // a view can stand ready and the invoke that races the landing
+    // dial joins it -- and when the dial lands a beat later,
+    // noteConvergence refetches whatever failed in the meantime.
     status = { phase: "online" };
     api = apiFor(info.deviceId);
   } else {
@@ -182,8 +233,11 @@ async function drainReconciles(): Promise<void> {
 // exactly like the other boot-scope subscriptions in index.tsx. This
 // subscription is also the ONE writer of the useRelayStatus store:
 // every snapshot it sees is published there, so no hook needs a
-// subscription or an initial fetch of its own.
-export function startRemoteDeviceSync(): void {
+// subscription or an initial fetch of its own. The boot's query client
+// comes in rather than being reached for, because both boots
+// (renderer/index.tsx, web/app/boot.tsx) build their own.
+export function startRemoteDeviceSync(queryClient: QueryClient): void {
+  boundQueryClient = queryClient;
   window.api.account.onChanged(() => {
     cachedList = null;
     reconcile();
