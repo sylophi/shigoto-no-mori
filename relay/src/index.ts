@@ -2,7 +2,7 @@
 // Durable Object class wrangler binds as ACCOUNT_RELAY.
 //
 // verifyMachineAuthToken lives under @clerk/backend/internal in the
-// pinned 3.16.x; the root export only carries verifyToken.
+// pinned 3.16.x. The root export only carries verifyToken.
 import { verifyMachineAuthToken } from "@clerk/backend/internal";
 import { createWorker } from "./worker.ts";
 import type { Env } from "./env.ts";
