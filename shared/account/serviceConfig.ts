@@ -6,7 +6,7 @@
 // is pure (no electron, no node builtins) so the account check script
 // can drive it without a running app.
 
-// The five env vars an owner sets after deploying the relay Worker and
+// The env vars an owner sets after deploying the relay Worker and
 // creating an OAuth application. All non-secret.
 export type AccountServiceConfig = {
   // Base URL of the relay Worker, e.g. https://relay.example.com. The
@@ -20,6 +20,14 @@ export type AccountServiceConfig = {
   clientId: string;
   // Space-separated scopes requested at authorize time.
   scopes: string;
+  // Exact origin of the deployed web client, the same value the
+  // relay Worker's ALLOWED_WEB_ORIGIN carries (v2 step 10, slice B).
+  // The direct listener's Origin gate admits browser dials from
+  // exactly this origin, so a web client can dial wss tunnel URLs.
+  // Empty means no web origin is admitted, which was the only prior
+  // behavior. Not part of isConfigured: the account layer works
+  // without it.
+  webOrigin: string;
 };
 
 // The default scope set for a plain OIDC login. Overridable via
@@ -40,6 +48,7 @@ export function resolveServiceConfig(
     tokenUrl: (env.SM_ACCOUNT_OAUTH_TOKEN_URL ?? "").trim(),
     clientId: (env.SM_ACCOUNT_OAUTH_CLIENT_ID ?? "").trim(),
     scopes: scopes ? scopes : DEFAULT_SCOPES,
+    webOrigin: (env.SM_ACCOUNT_WEB_ORIGIN ?? "").trim(),
   };
 }
 

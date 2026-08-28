@@ -163,6 +163,11 @@ export const GlobalConfigSchema = z.object({
   // Config-only for now (no Settings UI, like socketHost below):
   // toggle by editing config.json or `sm config edit`.
   directConnections: z.boolean().optional(),
+  // Tunnel endpoints (v2 step 10, slice B): absolute path to the
+  // cloudflared binary, for installs not on PATH. Absent means PATH
+  // discovery. A missing binary reads as tunnels off with a typed
+  // status, never an error loop. Config-only, like directConnections.
+  cloudflaredPath: z.string().optional(),
   socketHost: z
     .object({
       enabled: z.boolean().optional(),

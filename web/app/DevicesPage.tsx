@@ -4,7 +4,7 @@
 // hooks the desktop settings use (useAccount) plus the remote device
 // registry the relay sync maintains, so status semantics cannot drift
 // between the two clients.
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { MonitorSmartphone, TreePine } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
@@ -19,6 +19,7 @@ import {
   useAccountDevices,
   useAccountStatus,
 } from "@/hooks/account/useAccount";
+import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -26,26 +27,6 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isOriginBlockedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
 import { navigateTo, redirectTo, webPaths } from "./nav";
-
-// The relay socket's live snapshot for THIS browser's own row. Kept
-// local: the remote registry deliberately excludes the local device, so
-// its own status comes straight off the bridge. One subscription at the
-// page level, since every row reads the same shared value.
-function useRelayStatus(): RelayStatus | null {
-  const [status, setStatus] = useState<RelayStatus | null>(null);
-  useEffect(() => {
-    let alive = true;
-    void window.api.relay.status().then((s) => {
-      if (alive) setStatus(s);
-    });
-    const unsubscribe = window.api.relay.onStatusChanged((s) => setStatus(s));
-    return () => {
-      alive = false;
-      unsubscribe();
-    };
-  }, []);
-  return status;
-}
 
 function useWebAccess() {
   const store = webBridge().webAccess;

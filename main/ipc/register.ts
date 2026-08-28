@@ -5,13 +5,13 @@
 // main/. Anything else that needs to push to the renderer should go
 // through `broadcast` / `broadcastAll` below so the payload runs
 // through the contract's payload schema before it crosses the bridge.
+import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { relayContract, type RelayStatus } from "@shared/ipc/modules/relay";
-import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";
+import { relayContract } from "@shared/ipc/modules/relay";
 import {
   broadcastAll as broadcastAllCore,
   registerContract as registerContractCore,
@@ -30,17 +30,21 @@ import {
   resolveSocketHostConfig,
 } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
+import {
+  createCloudflaredRunner,
+  resolveCloudflaredBinary,
+} from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createRelayConnection } from "@host/relay/connection";
 import { createWsServerBinding } from "@host/socket/server";
 import { makeDirectHandlers } from "@host/ipc/modules/direct";
-import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
+import { createDirectPlane } from "@shared/relay/directPlane";
 import {
-  createDirectDialer,
-  type DirectDialer,
-} from "@shared/relay/directDial";
-import { applyDirectPresence } from "@shared/relay/directPresence";
-import { isPeerCommandGranted, relayConnectInputs } from "./modules/account";
+  allowedWebOrigin,
+  isPeerCommandGranted,
+  provisionDeviceTunnel,
+  relayConnectInputs,
+} from "./modules/account";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -117,29 +121,6 @@ const electronServer: ServerTransport = {
 // listener. Listening itself is gated in refreshSocketHost below.
 const wsServer = createWsServerBinding();
 
-// The relay connection, unconditional for the same reason: handler
-// registration is recorded at boot, connecting itself is gated in
-// refreshRelayConnection below (signed out or unconfigured means no
-// socket). Its callbacks fan status and peer pushes out to every
-// window through the client-scoped relay contract.
-const relayServer = createRelayConnection({
-  onChange: () => {
-    notifyRelayStatusChanged();
-    // Presence scopes the data plane (v2 step 10): every roster change
-    // reconciles the direct sessions on both sides, gated inside on a
-    // LIVE roster so our own relay outage never severs working direct
-    // connections.
-    reconcileDirectPresence();
-  },
-  onPeerPush: (deviceId, channel, payload) => {
-    broadcastAll(relayContract, "peerPush", { deviceId, channel, payload });
-  },
-  // The relay link refuses a peer's mutating call unless this host has
-  // granted it command access. Read live from the account layer's grant
-  // cache so a grant or revoke applies without a relay reconnect.
-  isCommandGranted: isPeerCommandGranted,
-});
-
 // The direct data plane (v2 step 10, slice A): a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
 // minted by direct:connectInfo over the relay, and dispatch gates
@@ -150,6 +131,75 @@ const relayServer = createRelayConnection({
 const directTickets = createConnectTicketStore();
 const directWsServer = createWsServerBinding({
   verifyTicket: (ticket, deviceId) => directTickets.consume(ticket, deviceId),
+  isCommandGranted: isPeerCommandGranted,
+});
+
+// The tunnel endpoint (v2 step 10, slice B): a supervised cloudflared
+// child fronting the direct listener's loopback port through this
+// device's named Cloudflare tunnel. Reconciled from refreshDirectHost
+// so it follows the listener exactly (a new ephemeral port
+// re-provisions, a stopped listener stops the child), and sign-out, an
+// account switch and directConnections off land here as
+// reconcile(null) through the same path. Quit alone calls stop() (the
+// runner's terminal latch, main/index.ts before-quit via
+// stopDirectHost). The connector token stays inside the runner, never
+// here.
+const tunnelRunner = createCloudflaredRunner({
+  // Resolved fresh per start attempt: the probe is one bounded
+  // execFile, already rate-limited by the runner's ladder and its
+  // reconcile no-op rules, and any memo here would leave the
+  // install-cloudflared recovery path (any config write re-probes)
+  // dead for the PATH case.
+  resolveBinary: async () => {
+    const config = await readGlobalConfig();
+    return resolveCloudflaredBinary(config.cloudflaredPath);
+  },
+  provision: (port) => provisionDeviceTunnel(port),
+  // Orphan-reap bookkeeping: the live child's pid, recorded so a
+  // crashed Electron's leftover connector is killed on the next
+  // launch. A getter because userData is an app-ready fact.
+  pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
+  // Tunnel state rides the same status snapshot the relay and direct
+  // transitions feed, so the devices page updates live.
+  onChange: () => directPlane.notifyStatusChanged(),
+});
+
+// The direct plane's shared composition (shared/relay/directPlane.ts):
+// the dialer, the renderer-facing bridge handlers, the status snapshot
+// and the presence reconcile, assembled identically for the web bridge.
+// This side supplies the Electron facts and the host half: the direct
+// listener's roster close and the tunnel runner's state.
+const directPlane = createDirectPlane({
+  connection: () => relayServer,
+  localDeviceId: () => getDeviceId(),
+  localAppVersion: () => app.getVersion(),
+  broadcastStatus: (status) =>
+    broadcastAll(relayContract, "statusChanged", status),
+  broadcastPeerPush: (push) => broadcastAll(relayContract, "peerPush", push),
+  host: {
+    closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
+    tunnelState: () => tunnelRunner.status().state,
+  },
+});
+
+// The renderer-facing relay bridge, exported so index.ts can register
+// it on the contract and lend its invokePeer to the peer transports.
+export const relayHandlers = directPlane.handlers;
+
+// The relay connection, unconditional like the listener bindings:
+// handler registration is recorded at boot, connecting itself is gated
+// in refreshRelayConnection below (signed out or unconfigured means no
+// socket). Its callbacks hand status and peer pushes to the direct
+// plane, which fans them out to every window through the client-scoped
+// relay contract and reconciles direct-session presence on each
+// transition.
+const relayServer = createRelayConnection({
+  onChange: () => directPlane.handleConnectionChange(),
+  onPeerPush: (deviceId, channel, payload) =>
+    directPlane.handlePeerPush(deviceId, channel, payload),
+  // The relay link refuses a peer's mutating call unless this host has
+  // granted it command access. Read live from the account layer's grant
+  // cache so a grant or revoke applies without a relay reconnect.
   isCommandGranted: isPeerCommandGranted,
 });
 
@@ -329,63 +379,6 @@ export async function refreshSocketHost(): Promise<void> {
   }
 }
 
-// The statusChanged fan-out, shared by the relay connection's own
-// onChange and the bridge's direct session transitions so both emit
-// the same snapshot shape.
-function notifyRelayStatusChanged(): void {
-  broadcastAll(relayContract, "statusChanged", relayStatus());
-}
-
-// The relay bridge's status snapshot, shared by the status handler and
-// the statusChanged fan-out so both always report the same shape.
-function relayStatus(): RelayStatus {
-  const current = relayServer.status();
-  return {
-    socket: current.socket,
-    onlineDeviceIds: current.onlineDeviceIds,
-    // Folded into the snapshot so the renderer stops polling peerInfo per
-    // device on every reconcile (M3). The relay link only knows its own
-    // client peers, so direct sessions merge their welcome-confirmed
-    // versions in here, or the skew check would silently never fire for
-    // exactly the peers on the best wire.
-    peerAppVersions: {
-      ...current.peerAppVersions,
-      ...relayHandlers.directPeerVersions(),
-    },
-    directDeviceIds: relayHandlers.directPeerIds(),
-  };
-}
-
-// The presence half of the direct plane's membership enforcement: on
-// every relay transition, close host-side direct sockets and cached
-// outbound direct sessions for peers no longer in a LIVE roster, and
-// clear the dialer's failure memo for peers that just came online. The
-// rule itself (including the do-nothing-when-our-relay-is-down gate)
-// lives in shared/relay/directPresence.ts, where the direct-plane
-// check pins it.
-function reconcileDirectPresence(): void {
-  const current = relayServer.status();
-  applyDirectPresence(
-    current.socket.phase === "connected",
-    current.onlineDeviceIds,
-    {
-      closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
-      dropClientPeersNotIn: (online) =>
-        relayHandlers.dropDirectPeersNotIn(online),
-      notePresence: (online) => directDialer?.notePresence(online),
-    },
-  );
-}
-
-// The relay's client role, handed to the bridge handlers below so they
-// never hold the binding itself.
-function relayConnectPeer(
-  deviceId: string,
-  opts?: ConnectPeerOpts,
-): Promise<PeerConnection> {
-  return relayServer.connectPeer(deviceId, opts);
-}
-
 // Reconciles the relay socket with the account state. Runs at boot and
 // after every account change (sign-in, sign-out, rename), so the
 // socket follows the credential without a relaunch. The account read
@@ -433,7 +426,11 @@ export function stopRelayConnection(): Promise<void> {
 // our relaunch on the supersede path instead of a clean reconnect.
 export function stopDirectHost(): Promise<void> {
   relayHandlers.closeDirectPeers();
-  return directWsServer.stop();
+  // The cloudflared child stops with the listener it fronts, so quit
+  // never leaves an orphan tunnel process behind.
+  return Promise.all([tunnelRunner.stop(), directWsServer.stop()]).then(
+    () => undefined,
+  );
 }
 
 // Reconciles the direct data-plane listener with the account and
@@ -466,15 +463,38 @@ export async function refreshDirectHost(): Promise<void> {
         deviceId: getDeviceId(),
         appVersion: app.getVersion(),
         accountId: inputs.accountId,
+        // Admit the configured web client origin (v2 step 10, slice
+        // B) so a browser can dial the wss tunnel candidate.
+        // Undefined means no extra origin, the slice A behavior.
+        allowedOrigin: allowedWebOrigin(),
       };
     });
   } catch (error) {
     console.warn(`[direct] listener refresh failed: ${errorMessageOf(error)}`);
   }
+  // The tunnel follows the listener (v2 step 10, slice B): a running
+  // listener wants a tunnel fronting its CURRENT ephemeral port (the
+  // runner no-ops when nothing changed and re-provisions when the port
+  // did), and every condition that stopped the listener stops the
+  // child through the same reconcile. Serialized inside the runner.
+  // The runner classifies its own failures onto retry-or-park rails,
+  // and the belt here keeps this function's never-throws contract even
+  // if that classification ever leaks: a tunnel problem must not fail
+  // the config write or account change that triggered the refresh.
+  try {
+    const listener = directWsServer.status();
+    await tunnelRunner.reconcile(
+      listener.listening && listener.port !== null
+        ? { port: listener.port }
+        : null,
+    );
+  } catch (error) {
+    console.warn(`[tunnel] reconcile failed: ${errorMessageOf(error)}`);
+  }
 }
 
-// The direct broker (direct:connectInfo), constructed here like
-// relayHandlers below because every dep is owned by this module:
+// The direct broker (direct:connectInfo), constructed here like the
+// direct plane above because every dep is owned by this module:
 // index.ts only registers it on the contract. The roster predicate is
 // what stops a peer that fell off the control plane (revoked, account
 // switch) from re-minting tickets over its own still-open direct
@@ -487,50 +507,7 @@ export const directHandlers = makeDirectHandlers({
   mintTickets: (peerDeviceId, count) => directTickets.mint(peerDeviceId, count),
   isPeerOnline: (peerDeviceId) =>
     relayServer.status().onlineDeviceIds.includes(peerDeviceId),
-});
-
-// The direct dialer the bridge tries before the relay. Stateful (it
-// remembers failed dials per peer so the bridge falls back to the
-// relay without paying the dial cost again within the window), so ONE
-// instance, created lazily because it captures getDeviceId, a
-// post-boot fact. Pushes received on a direct connection feed the SAME
-// peerPush fan-out the relay feeds, tagged with the peer's deviceId,
-// so the renderer's subscriber registry cannot tell the wires apart.
-let directDialer: DirectDialer | null = null;
-function getDirectDialer(): DirectDialer {
-  directDialer ??= createDirectDialer({
-    connectRelayPeer: (id) => relayServer.connectPeer(id),
-    localDeviceId: getDeviceId(),
-    localAppVersion: app.getVersion(),
-    onAnyPush: (peerDeviceId, channel, payload) => {
-      broadcastAll(relayContract, "peerPush", {
-        deviceId: peerDeviceId,
-        channel,
-        payload,
-      });
-    },
-  });
-  return directDialer;
-}
-
-function connectDirectPeer(
-  deviceId: string,
-  opts?: ConnectPeerOpts,
-): Promise<PeerConnection> {
-  return getDirectDialer().connectDirect(deviceId, opts);
-}
-
-// The renderer-facing relay bridge, constructed here rather than in
-// main/ipc/index.ts because every dep is owned by this module and the
-// status snapshot above reads its directPeerIds back. index.ts only
-// registers it on the contract and lends its invokePeer to the peer
-// transports. connectDirect makes openPeer direct-first with relay
-// fallback (v2 step 10, slice A), and a direct session opening or
-// closing fires the same statusChanged fan-out a relay transition does
-// so the renderer's snapshot stays live.
-export const relayHandlers = makeRelayHandlers({
-  status: relayStatus,
-  connectPeer: relayConnectPeer,
-  connectDirect: connectDirectPeer,
-  onDirectChange: notifyRelayStatusChanged,
+  // The tunnel candidate (v2 step 10, slice B), advertised only while
+  // the cloudflared child is currently healthy (probed routable).
+  tunnelUrl: () => tunnelRunner.tunnelUrl(),
 });

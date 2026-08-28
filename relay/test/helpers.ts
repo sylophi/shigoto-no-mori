@@ -22,28 +22,40 @@ import {
   encodeEnvelope,
 } from "../../shared/relay/protocol.ts";
 import type { Env } from "../src/env.ts";
-import { createWorker } from "../src/worker.ts";
+import { createWorker, type RelayDeps } from "../src/worker.ts";
 
 export const TEST_TOKEN_PREFIX = "test-token:";
 
-const worker = createWorker({
-  verifyLogin: async (token) =>
-    token.startsWith(TEST_TOKEN_PREFIX)
-      ? { accountId: token.slice(TEST_TOKEN_PREFIX.length) }
-      : null,
-});
+// A worker with the stub Clerk verifier, plus whatever extra deps a
+// spec injects (tunnel.spec.ts passes its Cloudflare API stub as
+// cfFetch), so every spec composes the worker the same way.
+export function makeTestWorker(
+  extraDeps: Omit<RelayDeps, "verifyLogin"> = {},
+): ReturnType<typeof createWorker> {
+  return createWorker({
+    verifyLogin: async (token) =>
+      token.startsWith(TEST_TOKEN_PREFIX)
+        ? { accountId: token.slice(TEST_TOKEN_PREFIX.length) }
+        : null,
+    ...extraDeps,
+  });
+}
+
+const worker = makeTestWorker();
 
 export const BASE = "https://relay.test";
 
-// Drives the worker exactly like production would, against the real
+// Drives a worker exactly like production would, against the real
 // bindings. Upgrade responses skip waitOnExecutionContext because the
-// socket outlives the request.
+// socket outlives the request. Defaults to the shared stub worker, and
+// specs with their own deps pass a makeTestWorker instance.
 export async function call(
   request: Request,
   testEnv: Env = env,
+  testWorker: ReturnType<typeof createWorker> = worker,
 ): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch(request, testEnv, ctx);
+  const response = await testWorker.fetch(request, testEnv, ctx);
   if (response.status !== 101) await waitOnExecutionContext(ctx);
   return response;
 }
@@ -66,16 +78,26 @@ export function ticketRequest(credential: string): Request {
   });
 }
 
+export function revokeRequest(credential: string, deviceId: string): Request {
+  return new Request(`${BASE}${RELAY_ROUTES.revokeDevice.path(deviceId)}`, {
+    method: RELAY_ROUTES.revokeDevice.method,
+    headers: { Authorization: `Bearer ${credential}` },
+  });
+}
+
+export function provisionRequest(credential: string, port: number): Request {
+  return new Request(`${BASE}${RELAY_ROUTES.provisionTunnel.path}`, {
+    method: RELAY_ROUTES.provisionTunnel.method,
+    headers: { Authorization: `Bearer ${credential}` },
+    body: JSON.stringify({ port }),
+  });
+}
+
 export async function revoke(
   credential: string,
   deviceId: string,
 ): Promise<Response> {
-  return await call(
-    new Request(`${BASE}${RELAY_ROUTES.revokeDevice.path(deviceId)}`, {
-      method: RELAY_ROUTES.revokeDevice.method,
-      headers: { Authorization: `Bearer ${credential}` },
-    }),
-  );
+  return await call(revokeRequest(credential, deviceId));
 }
 
 export async function enroll(

@@ -20,11 +20,11 @@ import {
   type AccountStatus,
 } from "@shared/ipc/modules/account";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import { relayContract, type RelayStatus } from "@shared/ipc/modules/relay";
+import { relayContract } from "@shared/ipc/modules/relay";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
-import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
+import { createDirectPlane } from "@shared/relay/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
 import { createRelayConnection } from "../relay/connection";
@@ -114,33 +114,32 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // ---- relay socket lifecycle ----
 
-  const connection = createRelayConnection({
-    onChange: () => {
-      broadcastAll(
-        relayContract,
-        "statusChanged",
-        relayStatusSnapshot(),
-        clientWire.server,
-      );
-    },
-    onPeerPush: (peerDeviceId, channel, payload) => {
-      broadcastAll(
-        relayContract,
-        "peerPush",
-        { deviceId: peerDeviceId, channel, payload },
-        clientWire.server,
-      );
-    },
+  // The direct plane's shared composition (shared/relay/directPlane.ts),
+  // the same assembly main/ipc/register.ts uses. The browser
+  // differences are exactly the declared deps: identity facts from
+  // this bridge, fan-out over the loopback wire, dialableKinds
+  // ["tunnel"] (an https page cannot dial ws:// interface candidates,
+  // mixed content, so the broker is asked for wss tunnel candidates
+  // only and a kind-aware host mints no lan ticket for this caller),
+  // and no host half (no direct listener, no cloudflared, so the
+  // status snapshot carries no tunnel state).
+  const directPlane = createDirectPlane({
+    connection: () => connection,
+    localDeviceId: () => deviceId,
+    localAppVersion: () => deps.appVersion,
+    broadcastStatus: (status) =>
+      broadcastAll(relayContract, "statusChanged", status, clientWire.server),
+    broadcastPeerPush: (push) =>
+      broadcastAll(relayContract, "peerPush", push, clientWire.server),
+    dialableKinds: ["tunnel"],
   });
+  const relayHandlers = directPlane.handlers;
 
-  function relayStatusSnapshot(): RelayStatus {
-    const current = connection.status();
-    return {
-      socket: current.socket,
-      onlineDeviceIds: current.onlineDeviceIds,
-      peerAppVersions: current.peerAppVersions,
-    };
-  }
+  const connection = createRelayConnection({
+    onChange: () => directPlane.handleConnectionChange(),
+    onPeerPush: (peerDeviceId, channel, payload) =>
+      directPlane.handlePeerPush(peerDeviceId, channel, payload),
+  });
 
   // Mirrors main/ipc/register.ts refreshRelayConnection: reconcile the
   // socket with the account state, resolving inside the serialized
@@ -314,11 +313,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   );
   registerContract(
     relayContract,
-    makeRelayHandlers({
-      status: relayStatusSnapshot,
-      connectPeer: (peerDeviceId, opts) =>
-        connection.connectPeer(peerDeviceId, opts),
-    }),
+    relayHandlers,
     clientWire.server,
     registrarOpts,
   );

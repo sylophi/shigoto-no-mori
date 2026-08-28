@@ -114,9 +114,15 @@ export type Supervisor = {
   stop(): void;
 };
 
-function backoffDelayMs(attempt: number): number {
-  const index = Math.min(attempt, BACKOFF_LADDER_MS.length - 1);
-  return BACKOFF_LADDER_MS[index];
+// The ladder lookup, clamped at both ends. Exported with the ladder as
+// a parameter so other supervised children (the cloudflared runner)
+// share the one rule instead of copying it.
+export function backoffDelayMs(
+  ladder: readonly number[],
+  attempt: number,
+): number {
+  const index = Math.min(Math.max(attempt, 0), ladder.length - 1);
+  return ladder[index];
 }
 
 export function createSupervisor(options: SupervisorOptions): Supervisor {
@@ -162,7 +168,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     // schedules would fan into parallel connect attempts (C3).
     clearRetry();
     if (resetLadder) attempt = 0;
-    const delayMs = backoffDelayMs(attempt);
+    const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, attempt);
     attempt += 1;
     setStatus({ phase: "backoff", attempt, delayMs });
     retryTimer = clock.setTimeout(() => {

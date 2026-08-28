@@ -15,7 +15,9 @@
 export type DirectPresenceDeps = {
   // Kill the host-side authed direct sockets whose peer deviceId is
   // not in the roster (the ticket-mode listener's targeted close).
-  closeHostPeersNotIn(online: readonly string[]): void;
+  // Optional because a platform with no direct listener (the web
+  // client) has no host half at all.
+  closeHostPeersNotIn?(online: readonly string[]): void;
   // Close and drop the cached outbound direct sessions for peers not
   // in the roster (the bridge's client half).
   dropClientPeersNotIn(online: readonly string[]): void;
@@ -33,6 +35,6 @@ export function applyDirectPresence(
   // direct session exactly when the relay cannot help.
   if (!relayConnected) return;
   deps.notePresence?.(online);
-  deps.closeHostPeersNotIn(online);
+  deps.closeHostPeersNotIn?.(online);
   deps.dropClientPeersNotIn(online);
 }

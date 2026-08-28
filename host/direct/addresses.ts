@@ -11,12 +11,13 @@
 // This file must stay Electron free (host:check). Node builtins are
 // fine here.
 import { networkInterfaces } from "node:os";
+import { MAX_DIRECT_CANDIDATES } from "@shared/ipc/modules/direct";
 
-// The dialer walks candidates sequentially on a fixed budget, so a
-// host with many virtual interfaces (Docker bridges, VPNs, VMs) must
-// not eat the whole budget on junk. Cap what we advertise, IPv4 first,
-// so a reachable LAN address is tried before the budget runs out.
-const MAX_CANDIDATES = 6;
+// The dialer races candidates on a fixed budget, so a host with many
+// virtual interfaces (Docker bridges, VPNs, VMs) must not fan out
+// junk. The advertised cap is the shared MAX_DIRECT_CANDIDATES (the
+// dialer bounds its race on the same constant), IPv4 first so a
+// reachable LAN address makes the cut.
 
 function isLinkLocal(address: string, family: string): boolean {
   if (family === "IPv4") return address.startsWith("169.254.");
@@ -36,5 +37,5 @@ export function candidateAddresses(): string[] {
       (entry.family === "IPv4" ? v4 : v6).push(entry.address);
     }
   }
-  return [...v4, ...v6].slice(0, MAX_CANDIDATES);
+  return [...v4, ...v6].slice(0, MAX_DIRECT_CANDIDATES);
 }

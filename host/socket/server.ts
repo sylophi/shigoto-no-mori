@@ -99,6 +99,11 @@ export type WsServerStartOpts = {
   // instead of leaving them live under the new one. The legacy LAN
   // listener has no account and leaves it unset.
   accountId?: string;
+  // Extra exact-match Origin the upgrade gate admits (v2 step 10,
+  // slice B): the configured web client's origin, so a browser dial
+  // arriving through the wss tunnel passes. Unset keeps the slice A
+  // behavior (origin-less and app-local origins only).
+  allowedOrigin?: string;
   // Test seam. Real callers take the 10s default.
   helloTimeoutMs?: number;
 };
@@ -148,10 +153,48 @@ const MAX_PREAUTH_CONNECTIONS = 16;
 // so the peer sees the code. The dead flag already blocks any frame
 // arriving in this gap, so correctness does not depend on the delay.
 const REJECT_TERMINATE_DELAY_MS = 50;
-// Wrong-token attempts from one IP before a lockout window starts, so a
-// wrong token is not a free infinite retry loop.
+// Wrong-token attempts from one client identity before a lockout
+// window starts, so a wrong token is not a free infinite retry loop.
 const AUTH_FAILURE_LIMIT = 5;
 const AUTH_LOCKOUT_MS = 30_000;
+
+// How often at most the ticket-mode listener logs a refused web
+// Origin. A half-configured deployment (the Worker has
+// ALLOWED_WEB_ORIGIN, the desktop lacks SM_ACCOUNT_WEB_ORIGIN) would
+// otherwise be a silent stream of bare upgrade refusals with no clue
+// on either side.
+const ORIGIN_REJECT_LOG_THROTTLE_MS = 60_000;
+
+function isLoopbackAddress(address: string): boolean {
+  return (
+    address.startsWith("127.") ||
+    address === "::1" ||
+    address.startsWith("::ffff:127.")
+  );
+}
+
+// The identity lockout, caps and log lines key on. The legacy LAN
+// listener keys on the socket's remoteAddress untouched. The
+// ticket-mode listener additionally serves connections arriving
+// through the local cloudflared connector, which ALL land on loopback:
+// keying those on remoteAddress would collapse every tunnel-borne
+// client into one 127.0.0.1 bucket, letting 5 bad tickets from
+// anywhere on the internet bench every tunnel dial for the lockout
+// window, forever renewable. cloudflared forwards the real client
+// address in CF-Connecting-IP, so a loopback connection in ticket mode
+// keys on that header instead when present. Only loopback connections
+// may delegate to the header: a LAN peer cannot spoof its way into
+// another bucket because its remoteAddress is not loopback.
+export function clientIdentityOf(
+  remoteAddress: string | undefined,
+  cfConnectingIp: string | undefined,
+  ticketMode: boolean,
+): string {
+  const address = remoteAddress ?? "unknown";
+  if (!ticketMode || !isLoopbackAddress(address)) return address;
+  const forwarded = cfConnectingIp?.trim() ?? "";
+  return forwarded === "" ? address : forwarded;
+}
 
 function digest(value: string): Buffer {
   return createHash("sha256").update(value, "utf8").digest();
@@ -173,10 +216,19 @@ function tokenMatches(given: string, expected: string): boolean {
 // browser-global WebSocket always sends one: "file://" from the
 // packaged app's loadFile page, a loopback http origin from the vite
 // dev server. Anything else is a drive-by browser page, refused before
-// it can even attempt a hello.
-export function isAllowedOrigin(origin: string | undefined): boolean {
+// it can even attempt a hello. The direct listener (v2 step 10, slice
+// B) may additionally admit ONE configured web-client origin, so the
+// web client can dial wss tunnel URLs: the exact-match `allowedOrigin`
+// arrives through start opts from the same SM_ACCOUNT_WEB_ORIGIN env
+// the app's account layer reads, never hardcoded. The legacy LAN
+// listener passes none and keeps its pinned behavior.
+export function isAllowedOrigin(
+  origin: string | undefined,
+  allowedOrigin?: string,
+): boolean {
   if (origin === undefined) return true;
   if (origin === "file://") return true;
+  if (allowedOrigin !== undefined && origin === allowedOrigin) return true;
   try {
     const url = new URL(origin);
     return (
@@ -237,7 +289,10 @@ export function createWsServerBinding(
   // Un-welcomed sockets currently held, for the pre-auth cap.
   let preAuthCount = 0;
   let droppedPushes = 0;
-  // Wrong-token attempts per remote IP, for lockout.
+  // Last time an Origin refusal was logged, for the throttle.
+  let originRejectLoggedAt = 0;
+  // Wrong-token attempts per client identity (clientIdentityOf), for
+  // lockout.
   const failedAuth = new Map<string, { count: number; until: number }>();
   let status: WsServerStatus = {
     listening: false,
@@ -392,7 +447,12 @@ export function createWsServerBinding(
   ): void {
     const helloTimeoutMs = opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
     wss.on("connection", (socket, req) => {
-      const ip = req.socket.remoteAddress ?? "unknown";
+      const forwardedFor = req.headers["cf-connecting-ip"];
+      const ip = clientIdentityOf(
+        req.socket.remoteAddress,
+        Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor,
+        auth !== undefined,
+      );
       // Caps are checked before any controller or timer is allocated.
       if (authed.size + preAuthCount >= MAX_CONNECTIONS) {
         closeThenTerminate(socket, CLOSE_OVER_CAPACITY, "over capacity");
@@ -617,12 +677,33 @@ export function createWsServerBinding(
         // tiny, so a small ceiling costs nothing and denies a hostile
         // peer a large buffer. Outbound frames are unaffected.
         maxPayload: MAX_INBOUND_FRAME_BYTES,
-        // Origin gate: no Origin (node and main-process clients) or
-        // one of the app's own renderer origins passes, anything else
-        // is refused. See isAllowedOrigin for why this is a coarse
-        // pre-filter and the hello token is the real auth.
-        verifyClient: (info: { req: IncomingMessage }) =>
-          isAllowedOrigin(info.req.headers.origin),
+        // Origin gate: no Origin (node and main-process clients), one
+        // of the app's own renderer origins, or the configured web
+        // origin passes, anything else is refused. See isAllowedOrigin
+        // for why this is a coarse pre-filter and the hello token is
+        // the real auth. A ticket-mode refusal logs (throttled) with
+        // the rejected origin, because the likeliest cause is a
+        // half-configured deployment: the Worker admits the web client
+        // (ALLOWED_WEB_ORIGIN) but this desktop never set the paired
+        // SM_ACCOUNT_WEB_ORIGIN, and without the log the web dial dies
+        // as a bare refusal with no clue on either side.
+        verifyClient: (info: { req: IncomingMessage }) => {
+          const origin = info.req.headers.origin;
+          const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
+          if (!allowed && auth !== undefined) {
+            const at = Date.now();
+            if (at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS) {
+              originRejectLoggedAt = at;
+              console.warn(
+                `[socket] refusing direct upgrade from origin ${origin}` +
+                  " (not an admitted origin; a web client needs" +
+                  " SM_ACCOUNT_WEB_ORIGIN set to its exact origin on this" +
+                  " device, paired with the Worker's ALLOWED_WEB_ORIGIN)",
+              );
+            }
+          }
+          return allowed;
+        },
       });
       attach(wss, opts, generation);
       const onBindError = (error: Error) => {
@@ -705,7 +786,10 @@ export function createWsServerBinding(
       current.port === opts.port &&
       current.token === opts.token &&
       current.bindAddress === opts.bindAddress &&
-      current.accountId === opts.accountId
+      current.accountId === opts.accountId &&
+      // Env-derived and process-constant in practice, compared anyway
+      // so a changed gate can never silently keep the old one.
+      current.allowedOrigin === opts.allowedOrigin
     );
   }
 
