@@ -38,27 +38,22 @@ const (
 	terrierSupportedMinor = 1
 )
 
-// One row of `terrier ls --json`. Slug (the GitHub owner/name) is
-// absent for non-GitHub repos; nothing here reads it yet, but decoding
-// it keeps the shape honest.
+// One row of `terrier ls --json`.
 type terrierListing struct {
 	Path string `json:"path"`
-	Slug string `json:"slug"`
 }
 
-var terrierInstalledOnce = sync.OnceValue(func() bool {
+var terrierInstalled = sync.OnceValue(func() bool {
 	_, err := exec.LookPath(terrierBinary)
 	return err == nil
 })
-
-func terrierInstalled() bool { return terrierInstalledOnce() }
 
 func terrierEnabled(global globalConfig) bool {
 	return global.Terrier != nil && *global.Terrier
 }
 
 // "" when the binary is missing or the spawn fails.
-var terrierVersionOnce = sync.OnceValue(func() string {
+var terrierVersion = sync.OnceValue(func() string {
 	stdout, err := exec.Command(terrierBinary, "version").Output()
 	if err != nil {
 		return ""
@@ -67,7 +62,7 @@ var terrierVersionOnce = sync.OnceValue(func() string {
 })
 
 func terrierCompatible() (ok bool, version string) {
-	version = terrierVersionOnce()
+	version = terrierVersion()
 	var major, minor int
 	if n, _ := fmt.Sscanf(version, "v%d.%d", &major, &minor); n < 2 {
 		return false, version
@@ -75,7 +70,7 @@ func terrierCompatible() (ok bool, version string) {
 	return major == terrierSupportedMajor && minor == terrierSupportedMinor, version
 }
 
-var terrierListOnce = sync.OnceValues(func() ([]terrierListing, error) {
+var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 	stdout, err := exec.Command(terrierBinary, "ls", "--json").Output()
 	if err != nil {
 		return nil, err
@@ -85,6 +80,14 @@ var terrierListOnce = sync.OnceValues(func() ([]terrierListing, error) {
 	}
 	if err := json.Unmarshal(stdout, &doc); err != nil {
 		return nil, err
+	}
+	// Normalized like every other path entering the project layer, so
+	// the registry dedupe and the id hash can't be defeated by a
+	// spelling difference. Mirrors the toAbsolute in main/lib/terrier.ts.
+	for i, t := range doc.Projects {
+		if t.Path != "" {
+			doc.Projects[i].Path = toAbsolute(t.Path)
+		}
 	}
 	return doc.Projects, nil
 })
@@ -100,27 +103,57 @@ func terrierProjectID(path string) string {
 	return h[0:8] + "-" + h[8:12] + "-" + h[12:16] + "-" + h[16:20] + "-" + h[20:32]
 }
 
-// Every activation gate in one place, like portPoolActiveFor: the
-// toggle, the binary, and the minor-version handshake.
-func terrierActive(global globalConfig) bool {
-	if !terrierEnabled(global) || !terrierInstalled() {
-		return false
+// Why the registry can't be read right now, or nil when it can. The
+// one walk of the installed -> compatible -> readable ladder, feeding
+// the merge's stderr warning and doctor's finding with the same words
+// so the two can never explain the same "off" state differently.
+// Assumes the caller already checked terrierEnabled: an off toggle is
+// the normal quiet state, not trouble. Runs the version handshake and
+// the listing read concurrently -- they are independent spawns and
+// every caller pays for both.
+type terrierTrouble struct {
+	summary, advice string
+}
+
+func terrierTroubleFor() *terrierTrouble {
+	if !terrierInstalled() {
+		return &terrierTrouble{
+			summary: "enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
+			advice:  "Install terrier, or turn the toggle off in the app's Settings.",
+		}
 	}
-	ok, _ := terrierCompatible()
-	return ok
+	listed := make(chan struct{})
+	go func() {
+		_, _ = terrierListings()
+		close(listed)
+	}()
+	ok, version := terrierCompatible()
+	<-listed
+	if !ok {
+		return &terrierTrouble{
+			summary: fmt.Sprintf("%s isn't a version this build understands (wants v%d.%d), so no terrier projects are listed",
+				describeTerrierVersion(version), terrierSupportedMajor, terrierSupportedMinor),
+			advice: "Update " + binaryName + " and terrier to versions that agree.",
+		}
+	}
+	if _, err := terrierListings(); err != nil {
+		return &terrierTrouble{
+			summary: "`terrier ls --json` failed: " + err.Error(),
+			advice:  "Run `terrier ls` by hand to see what it says.",
+		}
+	}
+	return nil
 }
 
 // Whether the active terrier registry lists path. False whenever the
 // integration is off or unreadable -- callers use this to decide id
-// continuity, and "don't know" must act like "no".
+// continuity, and "don't know" must act like "no". Mirror of
+// terrierHasPath in main/lib/terrier.ts.
 func terrierHasPath(path string) bool {
-	if !terrierActive(readGlobalConfigHints()) {
+	if !terrierEnabled(readGlobalConfigHints()) || terrierTroubleFor() != nil {
 		return false
 	}
-	listings, err := terrierListOnce()
-	if err != nil {
-		return false
-	}
+	listings, _ := terrierListings()
 	for _, t := range listings {
 		if t.Path == path {
 			return true
@@ -129,26 +162,27 @@ func terrierHasPath(path string) bool {
 	return false
 }
 
+// Whether proj would live on as a terrier-sourced project with the
+// same id after its registry entry is dropped -- the rule the remove
+// flow uses to decide that nothing is actually going away. Mirror of
+// terrierRetainsProject in main/lib/terrier.ts.
+func terrierRetains(proj project) bool {
+	return terrierHasPath(proj.Path) && proj.ID == terrierProjectID(proj.Path)
+}
+
 // The pre-dispatch merge (main.go): registry entries as-is, then a
 // read-only project per terrier repo the registry doesn't already
 // hold. Failures degrade to the registry alone with one stderr note --
 // a broken terrier must not take every command down with it.
 func mergeTerrierProjects(projects []project) []project {
-	global := readGlobalConfigHints()
-	if !terrierEnabled(global) || !terrierInstalled() {
+	if !terrierEnabled(readGlobalConfigHints()) {
 		return projects
 	}
-	if ok, version := terrierCompatible(); !ok {
-		noteTerrierTrouble(fmt.Sprintf(
-			"terrier %s isn't a version this build understands (wants v%d.%d), so terrier projects aren't listed.",
-			describeTerrierVersion(version), terrierSupportedMajor, terrierSupportedMinor))
+	if trouble := terrierTroubleFor(); trouble != nil {
+		note(yellowErr("warning:") + " " + trouble.summary + ".")
 		return projects
 	}
-	listings, err := terrierListOnce()
-	if err != nil {
-		noteTerrierTrouble("`terrier ls --json` failed (" + err.Error() + "), so terrier projects aren't listed.")
-		return projects
-	}
+	listings, _ := terrierListings()
 	return appendTerrierProjects(projects, listings)
 }
 
@@ -191,8 +225,4 @@ func describeTerrierVersion(version string) string {
 		return "(version unreadable)"
 	}
 	return version
-}
-
-func noteTerrierTrouble(msg string) {
-	note(yellowErr("warning:") + " " + msg)
 }

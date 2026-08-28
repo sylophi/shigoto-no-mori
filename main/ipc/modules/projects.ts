@@ -30,7 +30,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "../../lib/scripts";
-import { terrierListingsSnapshot, terrierProjectId } from "../../lib/terrier";
+import { terrierRetainsProject } from "../../lib/terrier";
 import { expandHome } from "../../lib/util/paths";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
@@ -65,10 +65,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // terrier id), nothing is actually going away — skip the script
     // reaping and the app-side cleanup, and let the CLI skip the state
     // dir for the same reason.
-    const persists =
-      terrierListingsSnapshot().some((t) => t.path === removed.path) &&
-      terrierProjectId(removed.path) === id;
-    if (persists) {
+    if (terrierRetainsProject(removed)) {
       await projectsRemoveViaCli(id);
       return;
     }

@@ -54,6 +54,10 @@ export function ttlMapCache<K, V>(
 
 export interface TtlValueCache<V> {
   get(): Promise<V>;
+  // The last stored value, even past its TTL — for sync readers that
+  // prefer stale over absent. null before the first load resolves and
+  // after invalidate(), which are the only times "absent" is true.
+  peek(): V | null;
   invalidate(): void;
 }
 
@@ -64,19 +68,41 @@ export function ttlValueCache<V>(
   let entry: Entry<V> | null = null;
   // Same in-flight-load-vs-invalidate guard as ttlMapCache above.
   let generation = 0;
+  // Concurrent misses join one load instead of each spawning their own
+  // (the loaders behind these caches shell out). invalidate() drops it
+  // so a post-write caller starts fresh rather than joining a load of
+  // the pre-write world.
+  let inflight: Promise<V> | null = null;
   return {
     async get() {
       const now = Date.now();
       if (entry && entry.expires > now) return entry.value;
+      if (inflight) return inflight;
       const startGeneration = generation;
-      const value = await load();
-      if (generation === startGeneration) {
-        entry = { value, expires: now + ttlMs };
-      }
-      return value;
+      // Declared before the IIFE runs: a loader that throws before its
+      // first await reaches the finally synchronously, while `loading`
+      // is still unassigned.
+      let loading: Promise<V> | undefined;
+      loading = (async () => {
+        try {
+          const value = await load();
+          if (generation === startGeneration) {
+            entry = { value, expires: Date.now() + ttlMs };
+          }
+          return value;
+        } finally {
+          if (inflight === loading) inflight = null;
+        }
+      })();
+      inflight = loading;
+      return loading;
+    },
+    peek() {
+      return entry ? entry.value : null;
     },
     invalidate() {
       entry = null;
+      inflight = null;
       generation += 1;
     },
   };

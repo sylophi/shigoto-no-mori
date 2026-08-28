@@ -574,34 +574,20 @@ func checkPortAllocations(report *doctorReport) {
 
 // The terrier registry belongs to terrier; sm only merges it into the
 // project list. So this check explains why merged projects might be
-// missing (binary gone, version handshake failed, unreadable registry)
-// and reports entries whose directory is gone -- never fixes anything,
-// since `terrier prune` owns that.
+// missing (the same terrierTroubleFor ladder the merge warns from) and
+// reports entries whose directory is gone -- never fixes anything,
+// since `terrier prune` owns that. This is also the only doctor
+// coverage terrier projects get: the per-project group iterates the
+// registry alone, so its repairs can't touch entries sm doesn't own.
 func checkTerrier(report *doctorReport) {
-	global := readGlobalConfigHints()
-	if !terrierEnabled(global) {
+	if !terrierEnabled(readGlobalConfigHints()) {
 		return
 	}
-	if !terrierInstalled() {
-		report.warn(groupState, "terrier", "terrier",
-			"enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
-			"Install terrier, or turn the toggle off in the app's Settings.")
+	if trouble := terrierTroubleFor(); trouble != nil {
+		report.warn(groupState, "terrier", "terrier", trouble.summary, trouble.advice)
 		return
 	}
-	if ok, version := terrierCompatible(); !ok {
-		report.warn(groupState, "terrier", "terrier",
-			fmt.Sprintf("%s isn't a version this build understands (wants v%d.%d), so no terrier projects are listed",
-				describeTerrierVersion(version), terrierSupportedMajor, terrierSupportedMinor),
-			"Update "+binaryName+" and terrier to versions that agree.")
-		return
-	}
-	listings, err := terrierListOnce()
-	if err != nil {
-		report.warn(groupState, "terrier", "terrier",
-			"`terrier ls --json` failed: "+err.Error(),
-			"Run `terrier ls` by hand to see what it says.")
-		return
-	}
+	listings, _ := terrierListings()
 	gone := 0
 	for _, t := range listings {
 		if _, err := os.Stat(t.Path); os.IsNotExist(err) {

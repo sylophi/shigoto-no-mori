@@ -191,10 +191,10 @@ app.on("ready", async () => {
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
   startOrphanScriptSweep();
-  // Warm the terrier snapshot so sync project resolution knows the
-  // merged list before the renderer's first id-scoped call. Fire and
-  // forget: the renderer takes far longer to boot than one `terrier ls`,
-  // and the projects:list handler refreshes again anyway.
+  // Warm the terrier listings for the sync loadProjects readers that
+  // run before the renderer's first projects:list refresh — the
+  // background-fetch sweep and the removed-worktree reap below. Fire
+  // and forget: they degrade to the registry-only list, not an error.
   void refreshTerrierListings();
   buildAppMenu();
   createWindow();

@@ -119,7 +119,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	// state dir keeps describing a project that still exists -- keep it.
 	// An older random id dies with the entry either way, so its state
 	// goes too, same as any remove.
-	persists := terrierHasPath(proj.Path) && proj.ID == terrierProjectID(proj.Path)
+	persists := terrierRetains(proj)
 
 	remains := "No files are deleted from disk."
 	if identities, idErr := listWorktreeIdentities(proj); idErr == nil {
@@ -187,17 +187,16 @@ func cmdProjectList(ctx cliContext) (int, error) {
 			break
 		}
 	}
-	rows := make([][]string, len(ctx.projects))
-	for i, p := range ctx.projects {
-		if hasSource {
-			rows[i] = []string{p.Name, p.Path, p.Source}
-		} else {
-			rows[i] = []string{p.Name, p.Path}
-		}
-	}
 	headers := []string{"NAME", "PATH"}
 	if hasSource {
 		headers = append(headers, "VIA")
+	}
+	rows := make([][]string, len(ctx.projects))
+	for i, p := range ctx.projects {
+		rows[i] = []string{p.Name, p.Path}
+		if hasSource {
+			rows[i] = append(rows[i], p.Source)
+		}
 	}
 	out(renderTable(headers, rows))
 	return 0, nil

@@ -18,7 +18,6 @@ import type {
   DetectedLauncher,
   GlobalConfig,
   LauncherCommand,
-  TerrierReadiness,
   Theme,
 } from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
@@ -102,9 +101,9 @@ export function SettingsForm({
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const { data: terrierReadiness } = useTerrierReadiness();
-  const terrierReady =
-    (terrierReadiness?.installed ?? true) &&
-    (terrierReadiness?.compatible ?? true);
+  const terrierInstalled = terrierReadiness?.installed ?? true;
+  const terrierCompatible = terrierReadiness?.compatible ?? true;
+  const terrierReady = terrierInstalled && terrierCompatible;
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -235,7 +234,11 @@ export function SettingsForm({
               }
               disabled={!terrierReady}
               label="Show terrier projects"
-              description={terrierDescription(terrierReadiness)}
+              description={terrierDescription(
+                terrierInstalled,
+                terrierCompatible,
+                terrierReadiness?.version,
+              )}
             />
           </section>
 
@@ -345,20 +348,22 @@ function ToolPill({ entry }: { entry: DetectedLauncher }) {
 }
 
 function terrierDescription(
-  readiness: TerrierReadiness | undefined,
+  installed: boolean,
+  compatible: boolean,
+  version: string | undefined,
 ): React.ReactNode {
-  if (readiness && !readiness.installed) {
+  if (!installed) {
     return (
       <>
         <TerrierLink>Install terrier</TerrierLink> to enable this integration.
       </>
     );
   }
-  if (readiness && !readiness.compatible) {
+  if (!compatible) {
     return (
       <>
-        {readiness.version ?? "The installed terrier"} isn't a version this
-        build understands. Update both and try again.{" "}
+        {version ?? "The installed terrier"} isn't a version this build
+        understands. Update both and try again.{" "}
         <TerrierLink>Learn more</TerrierLink>
       </>
     );
