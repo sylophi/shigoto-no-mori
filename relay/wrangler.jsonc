@@ -1,7 +1,7 @@
 // Cloudflare Worker config for the sm relay. Secrets never live here:
 // CLERK_SECRET_KEY is a wrangler secret (`wrangler secret put
-// CLERK_SECRET_KEY`), read by src/index.ts to verify Clerk session
-// tokens at enrollment.
+// CLERK_SECRET_KEY`), read by src/index.ts to verify Clerk OAuth
+// application access tokens at enrollment.
 //
 // Plain vars the owner may set (via `vars` here or the dashboard):
 // - ALLOWED_WEB_ORIGIN: exact origin of the future step-8 web client.

@@ -133,9 +133,10 @@ verifies tokens against. Register `http://127.0.0.1` as an allowed
 loopback redirect (RFC 8252 uses an ephemeral loopback port and a
 `/callback` path). The app runs the standard authorization-code-with-PKCE
 (S256) flow and forwards the resulting access token to the Worker as the
-enroll bearer, so the token type the provider issues must be one the
-Worker's `verifyToken` accepts (a Clerk session token for the default
-build). The Worker verifies it, the app never does.
+enroll bearer. The Worker accepts what a Clerk OAuth application
+issues: an OAuth access token, in either the opaque (`oat_...`) or the
+JWT (`at+jwt`) format - not a Clerk session token, M2M token or API
+key. The Worker verifies it, the app never does.
 
 For local development, the app also reads a gitignored `.env.account`
 file in the repo root if present (simple `KEY=value` lines). Real

@@ -4,13 +4,13 @@
 // the shared RELAY_ROUTES table, so the app-side client cannot drift
 // from what is served here.
 //
-// Auth is two-tier. POST /devices/enroll takes a Clerk session token
-// (verified through deps.verifyLogin). Everything else takes the
-// long-lived device credential, resolved by hashing it and looking up
-// the unique hash in D1. The credential only ever rides in the
-// Authorization header. The only secret allowed in a URL is the
-// single-use connection ticket on GET /connect, because websocket
-// clients cannot set headers.
+// Auth is two-tier. POST /devices/enroll takes the OAuth access token
+// the app's PKCE flow obtained, verified through deps.verifyLogin.
+// Everything else takes the long-lived device credential, resolved by
+// hashing it and looking up the unique hash in D1. The credential only
+// ever rides in the Authorization header. The only secret allowed in a
+// URL is the single-use connection ticket on GET /connect, because
+// websocket clients cannot set headers.
 import {
   CONNECT_TICKET_PARAM,
   type DeviceInfo,
@@ -52,9 +52,9 @@ import {
 } from "./relayObject.ts";
 
 export interface RelayDeps {
-  // Resolves a Clerk session token to the owning account, or null when
-  // the token does not verify. Injected so the test suite never talks
-  // to real Clerk.
+  // Resolves the enroll bearer (a Clerk OAuth application access
+  // token) to the owning account, or null when it does not verify.
+  // Injected so the test suite never talks to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
   // The fetch the Cloudflare tunnel API is called through (v2 step 10,
   // slice B). Injected like verifyLogin so the vitest suite stubs the
