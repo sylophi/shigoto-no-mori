@@ -7,10 +7,12 @@
 // the provider tree around the router.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ClerkProvider } from "@clerk/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Toaster } from "sonner";
+import { ClerkGate } from "@/components/account/ClerkGate";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -56,7 +58,11 @@ createRoot(rootElement).render(
         <DoubutsuProvider>
           <ErrorBoundary FallbackComponent={AppErrorFallback}>
             <TooltipProvider>
-              <RouterProvider router={webRouter} />
+              {/* The browser-flavor provider: plain @clerk/react, no
+                  Electron bridge. */}
+              <ClerkGate Provider={ClerkProvider}>
+                <RouterProvider router={webRouter} />
+              </ClerkGate>
               <DevThemeHotkeys />
             </TooltipProvider>
           </ErrorBoundary>

@@ -28,11 +28,11 @@ import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/relay/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
+import { enrollDevice, signOutDevice } from "@shared/account/enroll";
 import { createRelayConnection } from "../relay/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName } from "../account/deviceName";
-import { beginLogin, completeLogin, logout } from "../account/login";
 import { createWebAccountStore } from "../account/store";
 import {
   createWebAccessStore,
@@ -46,18 +46,11 @@ export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
   // client): the device id, the credential envelope and clientConfig.
   localStorage: KeyValueStorage;
-  // Tab-scoped storage carrying the PKCE verifier across the redirect.
-  sessionStorage: KeyValueStorage;
   // The env record the SM_ACCOUNT_* service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
   // navigator.userAgent, for the default device name.
   userAgent: string;
-  // window.location.origin, the base of the OAuth redirect URI.
-  origin: string;
-  // Full-page navigation for the sign-in redirect
-  // (window.location.assign in the real client).
-  navigate: (url: string) => void;
   // shell.openExternal's browser form (window.open with noopener).
   openExternal: (url: string) => void;
   isDev: boolean;
@@ -71,16 +64,13 @@ export type WebBridge = {
   api: {
     deviceId: string;
     appVersion: string;
+    clerkPublishableKey: string;
     isDev: boolean;
     isElectron: boolean;
   } & ReturnType<typeof buildApi>;
   // The deployment-level access state the shell surfaces when the
   // build is unconfigured or the relay refuses this origin.
   webAccess: WebAccessStore;
-  // Completes the OAuth redirect on the callback route, persists the
-  // credential, and fans out the account change. Takes the callback
-  // page's full URL (location.href).
-  completeLoginRedirect(rawRedirectUrl: string): Promise<AccountStatus>;
   // Account-level revoke of any enrolled device, the one mutation the
   // read-only web client is allowed (it mutates its own account, never
   // a peer's forest). Revoking this browser's own device also signs it
@@ -222,25 +212,59 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     void refreshRelay();
   }
 
+  // Re-entrancy guards mirroring the desktop handler's: a re-fired
+  // reconciler effect or a second tab must not race two enrolls (the
+  // relay rotates the credential per enroll, so racers can strand the
+  // stored one) or two revokes. Same-tab only: the storage key is
+  // still shared across tabs, but a cross-tab race is closed by the
+  // reconciler's re-read after the storage event.
+  let enrollInFlight: Promise<AccountStatus> | null = null;
+  let signOutInFlight: Promise<void> | null = null;
+
   const accountHandlers: Handlers<typeof accountContract> = {
     status: () => readStatus(),
 
-    // Starts the redirect flow. The page unloads mid-call on success,
-    // so the resolved status only ever reaches a caller whose redirect
-    // failed to start; an unconfigured build rejects before navigating.
-    signIn: async () => {
-      await beginLogin({
-        config,
-        sessionStorage: deps.sessionStorage,
-        origin: deps.origin,
-        navigate: deps.navigate,
-      });
-      return readStatus();
+    // Exchanges the Clerk session token ClerkAccountSync minted for the
+    // relay device credential, enrolling this browser under platform
+    // "web" (a legal opaque label beside the desktop's os.platform()
+    // values in EnrollRequestSchema's 1..64 bound).
+    enroll: async (token) => {
+      if (enrollInFlight) return enrollInFlight;
+      enrollInFlight = (async (): Promise<AccountStatus> => {
+        await enrollDevice(
+          {
+            config,
+            service,
+            store,
+            deviceId,
+            fallbackDeviceName: defaultDeviceName(),
+            platform: "web",
+          },
+          token,
+        );
+        accountChanged();
+        return readStatus();
+      })();
+      try {
+        return await enrollInFlight;
+      } finally {
+        enrollInFlight = null;
+      }
     },
 
+    // The shared best-effort revoke-then-clear (the desktop handler
+    // adds a warn-once and its grant clear on top of the same core).
     signOut: async () => {
-      await logout({ config, service, store, deviceId });
-      accountChanged();
+      if (signOutInFlight) return signOutInFlight;
+      signOutInFlight = (async (): Promise<void> => {
+        await signOutDevice({ config, service, store, deviceId });
+        accountChanged();
+      })();
+      try {
+        return await signOutInFlight;
+      } finally {
+        signOutInFlight = null;
+      }
     },
 
     listDevices: async () => {
@@ -331,6 +355,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const api = {
     deviceId,
     appVersion: deps.appVersion,
+    // The same mount decision the desktop preload delivers over argv:
+    // empty means no ClerkProvider (web/app/boot.tsx).
+    clerkPublishableKey: config.publishableKey,
     isDev: deps.isDev,
     // App-only UI (the port-forward controls) gates its mount on this:
     // a browser cannot bind a local TCP listener, and the loopback wire
@@ -344,23 +371,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     webAccess,
 
-    completeLoginRedirect: async (rawRedirectUrl) => {
-      await completeLogin(
-        {
-          config,
-          sessionStorage: deps.sessionStorage,
-          service,
-          store,
-          deviceId,
-          deviceName: store.read()?.deviceName ?? defaultDeviceName(),
-          fetchImpl: deps.fetchImpl,
-        },
-        rawRedirectUrl,
-      );
-      accountChanged();
-      return readStatus();
-    },
-
     revokeDevice: async (targetDeviceId) => {
       const record = store.read();
       if (record === null) {
@@ -369,7 +379,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       await service.revoke(record.credential, targetDeviceId);
       // Revoking THIS browser invalidates its own credential, so the
       // local sign-out follows immediately rather than waiting for the
-      // relay to refuse the next call.
+      // relay to refuse the next call. Callers revoking self MUST end
+      // the Clerk session first (DevicesPage's SelfRevokeButton does):
+      // with the session still live, ClerkAccountSync sees "signed in,
+      // not enrolled" and re-enrolls, silently undoing the revoke.
       if (targetDeviceId === deviceId) store.clear();
       accountChanged();
     },

@@ -14,6 +14,7 @@ import {
   UPDATE_FEED_REPO,
 } from "./shared/cliDist.mts";
 import { productName, version } from "./package.json";
+import { rendererSchemeName } from "./shared/rendererScheme.mts";
 import {
   DMG_APP_ICON,
   DMG_APPS_ICON,
@@ -63,6 +64,15 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: APP_BUNDLE_ID,
     appCopyright: "© 2026 sylophi",
+    // The renderer-origin scheme (main/electron/clerk.ts): packaged
+    // builds load the renderer from shigomori://app, and Clerk's OAuth
+    // redirects deep-link back to it. macOS routes the scheme to the
+    // app through this Info.plist entry (CFBundleURLTypes). Prod only:
+    // dev runs unbundled Electron.app, which LaunchServices will not
+    // route a scheme to, so social (browser-redirect) sign-in cannot
+    // complete in dev on macOS. Email-code sign-in is unaffected.
+    // Verify social providers in a packaged build.
+    protocols: [{ name: productName, schemes: [rendererSchemeName("prod")] }],
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
     // into the user's bin dir.

@@ -19,6 +19,7 @@ import {
   useAccountDevices,
   useAccountStatus,
 } from "@/hooks/account/useAccount";
+import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -132,16 +133,6 @@ function DeviceRow({
   // permanently disabled (nothing else on this page opens a session).
   const { reachable } = deviceStatusView(supervisorStatus);
 
-  // No onSuccess invalidation: the revoke ends with the bridge's
-  // account.changed broadcast, and useWatchAccountChanges (mounted in
-  // the shell) invalidates the whole account prefix off it, exactly as
-  // useAccount.ts documents for the desktop mutations.
-  const revoke = useMutation({
-    mutationFn: () => webBridge().revokeDevice(info.deviceId),
-    meta: { errorTitle: "Couldn't revoke the device" },
-  });
-  const confirm = useConfirmTwice();
-
   return (
     <div className="flex items-center gap-3 px-3 py-2.5">
       <MonitorSmartphone className="size-4 shrink-0 text-muted-foreground" />
@@ -175,14 +166,53 @@ function DeviceRow({
           View forest
         </Button>
       )}
-      <ConfirmDestructiveButton
-        armed={confirm.armed}
-        pending={revoke.isPending}
-        pendingLabel="Revoking…"
-        idleLabel={isSelf ? "Revoke and sign out" : "Revoke"}
-        onClick={() => confirm.trigger(() => revoke.mutate())}
-      />
+      {isSelf ? (
+        <SelfRevokeButton />
+      ) : (
+        <PeerRevokeButton deviceId={info.deviceId} />
+      )}
     </div>
+  );
+}
+
+// Revoking THIS browser must end the Clerk session first (with the
+// session alive, ClerkAccountSync would immediately re-enroll the
+// cleared credential), and the sign-out path (Clerk end, relay revoke,
+// local clear) is exactly the self-revoke semantics. Split from the
+// peer button so only the self row touches a Clerk hook (rows exist
+// only when enrolled, which implies a mounted provider).
+function SelfRevokeButton() {
+  const signOut = useClerkSignOut();
+  const confirm = useConfirmTwice();
+  return (
+    <ConfirmDestructiveButton
+      armed={confirm.armed}
+      pending={signOut.isPending}
+      pendingLabel="Revoking…"
+      idleLabel="Revoke and sign out"
+      onClick={() => confirm.trigger(() => signOut.mutate())}
+    />
+  );
+}
+
+// No onSuccess invalidation: the revoke ends with the bridge's
+// account.changed broadcast, and useWatchAccountChanges (mounted in
+// the shell) invalidates the whole account prefix off it, exactly as
+// useAccount.ts documents for the desktop mutations.
+function PeerRevokeButton({ deviceId }: { deviceId: string }) {
+  const revoke = useMutation({
+    mutationFn: () => webBridge().revokeDevice(deviceId),
+    meta: { errorTitle: "Couldn't revoke the device" },
+  });
+  const confirm = useConfirmTwice();
+  return (
+    <ConfirmDestructiveButton
+      armed={confirm.armed}
+      pending={revoke.isPending}
+      pendingLabel="Revoking…"
+      idleLabel="Revoke"
+      onClick={() => confirm.trigger(() => revoke.mutate())}
+    />
   );
 }
 

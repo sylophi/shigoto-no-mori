@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog } from "electron";
 import path from "node:path";
 import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
+import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
 import { cliRootDirName } from "@shared/cliDist.mts";
 import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
@@ -10,6 +11,11 @@ import { windowContract } from "@shared/ipc/modules/window";
 import { ensureShigomoriRoot } from "@host/lib/bootstrap";
 import { dropLegacyRemoteDevices } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
+import {
+  createDesktopClerkBridge,
+  rendererSchemeUrl,
+  serveRendererOverScheme,
+} from "./electron/clerk";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
 import {
@@ -22,6 +28,7 @@ import {
 } from "./electron/clientConfig";
 import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import { registerIpcHandlers } from "./ipc";
+import { clerkPublishableKey } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
@@ -83,6 +90,15 @@ if (!app.isPackaged) {
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 }
+
+// The Clerk main-process bridge: renderer-scheme privileges (pre-ready
+// requirement), token storage, and the OAuth deep-link transport. After
+// the lock above (the bridge's own lock management is disabled) and the
+// dev userData suffix (tokens live in userData). Its cleanup() is
+// deliberately not wired to a quit event: every quit path in this file
+// ends in app.exit(), which skips will-quit, and process teardown
+// reclaims the bridge's IPC handlers wholesale anyway.
+createDesktopClerkBridge();
 
 initShigomoriRoot(app.isPackaged);
 
@@ -148,6 +164,10 @@ const createWindow = () => {
         // and the dev flag: the renderer sends it in the socket hello
         // and compares it against a remote host's welcome for skew.
         `${APP_VERSION_FLAG}${app.getVersion()}`,
+        // The resolved Clerk publishable key (empty when the build is
+        // unconfigured), so the renderer can mount or skip the
+        // ClerkProvider synchronously at boot.
+        `${CLERK_PK_FLAG}${clerkPublishableKey()}`,
         ...(app.isPackaged ? [] : [DEV_BUILD_FLAG]),
       ],
     },
@@ -163,13 +183,11 @@ const createWindow = () => {
     if (url !== webContents.getURL()) event.preventDefault();
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    void mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    void mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    );
-  }
+  // Both modes load over the renderer scheme rather than file:// or the
+  // vite http origin. Clerk requires it (see main/electron/clerk.ts).
+  // The protocol handler is installed in the ready handler below,
+  // before the first createWindow.
+  void mainWindow.loadURL(rendererSchemeUrl());
 
   // Relay BrowserWindow focus/blur to the renderer. The web-level `focus`
   // and `visibilitychange` events don't fire on every Electron focus
@@ -267,6 +285,18 @@ app.on("second-instance", () => {
 });
 
 app.on("ready", async () => {
+  // The scheme the window loads from (see createWindow). protocol.handle
+  // only works post-ready, and it must precede the first loadURL.
+  serveRendererOverScheme(
+    MAIN_WINDOW_VITE_DEV_SERVER_URL
+      ? { devServerUrl: MAIN_WINDOW_VITE_DEV_SERVER_URL }
+      : {
+          rendererDir: path.join(
+            __dirname,
+            `../renderer/${MAIN_WINDOW_VITE_NAME}`,
+          ),
+        },
+  );
   // Packaged launches inherit launchd's stripped PATH; dev launches start
   // from the user's terminal and already have the right one.
   if (app.isPackaged) await applyUserShellPath();

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
+import { useAuth, useClerk } from "@clerk/react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, LogIn, LogOut } from "lucide-react";
+import { ArrowRight, LogIn } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
+import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -10,12 +12,11 @@ import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import {
   useAccountDevices,
   useAccountStatus,
+  useEnroll,
   useGrantCommands,
   useGrantedDevices,
   useRevokeCommands,
   useSetDeviceName,
-  useSignIn,
-  useSignOut,
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -31,8 +32,6 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 export function AccountSection() {
   useWatchGrantsChanges();
   const { data: status } = useAccountStatus();
-  const signIn = useSignIn();
-  const signOut = useSignOut();
 
   const signedIn = status?.signedIn === true;
   const devicesQuery = useAccountDevices(signedIn);
@@ -76,15 +75,7 @@ export function AccountSection() {
       {status === undefined ? (
         <p className="text-xs text-muted-foreground/70">Loading&hellip;</p>
       ) : !signedIn ? (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={signIn.isPending}
-          onClick={() => signIn.mutate()}
-        >
-          <LogIn />
-          {signIn.isPending ? "Signing in…" : "Sign in"}
-        </Button>
+        <ClerkSignInButton />
       ) : (
         <div className="space-y-3">
           <div className="flex flex-col gap-0.5">
@@ -135,18 +126,42 @@ export function AccountSection() {
             )}
           </div>
 
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={signOut.isPending}
-            onClick={() => signOut.mutate()}
-          >
-            <LogOut />
-            Sign out
-          </Button>
+          <ClerkSignOutButton />
         </div>
       )}
     </section>
+  );
+}
+
+// Split out so AccountSection itself never calls a Clerk hook: this
+// mounts only on the configured (and therefore provider-wrapped) path
+// above. Sign-in opens Clerk's embedded modal, and ClerkAccountSync
+// turns the resulting session into the enrollment. When Clerk is already
+// signed in but the device is not enrolled (the automatic attempt
+// failed: relay down, mint error), opening the modal again would do
+// nothing, so the button becomes the manual enrollment retry instead.
+function ClerkSignInButton() {
+  const clerk = useClerk();
+  const { isSignedIn, getToken } = useAuth();
+  const enroll = useEnroll();
+  if (isSignedIn) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={enroll.isPending}
+        onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
+      >
+        <LogIn />
+        {enroll.isPending ? "Enrolling…" : "Retry enrollment"}
+      </Button>
+    );
+  }
+  return (
+    <Button variant="outline" size="sm" onClick={() => clerk.openSignIn()}>
+      <LogIn />
+      Sign in
+    </Button>
   );
 }
 

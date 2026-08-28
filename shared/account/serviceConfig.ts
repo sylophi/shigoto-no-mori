@@ -1,25 +1,22 @@
 // Non-secret service configuration for the relay account layer, read
 // from the environment at launch. Everything here is a public endpoint
-// or a public OAuth client_id, never a secret, so it is safe to log and
-// safe to ship empty. Empty required fields mean "the owner has not
-// configured this build yet" and isConfigured returns false. This module
-// is pure (no electron, no node builtins) so the account check script
-// can drive it without a running app.
+// or a public Clerk publishable key, never a secret, so it is safe to
+// log and safe to ship empty. Empty required fields mean "the owner has
+// not configured this build yet" and isConfigured returns false. This
+// module is pure (no electron, no node builtins) so the account check
+// script can drive it without a running app.
 
 // The env vars an owner sets after deploying the relay Worker and
-// creating an OAuth application. All non-secret.
+// creating a Clerk application. All non-secret.
 export type AccountServiceConfig = {
   // Base URL of the relay Worker, e.g. https://relay.example.com. The
   // account service joins RELAY_ROUTES paths onto this.
   relayUrl: string;
-  // OAuth authorization endpoint (RFC 8252 native-app flow start).
-  authorizeUrl: string;
-  // OAuth token endpoint the authorization code is exchanged at.
-  tokenUrl: string;
-  // Public OAuth client_id for this native app.
-  clientId: string;
-  // Space-separated scopes requested at authorize time.
-  scopes: string;
+  // The Clerk publishable key (pk_test_... / pk_live_...) of the same
+  // Clerk application whose secret key the relay Worker verifies
+  // session tokens with. Publishable by definition: it only names the
+  // instance's Frontend API host.
+  publishableKey: string;
   // Exact origin of the deployed web client, the same value the
   // relay Worker's ALLOWED_WEB_ORIGIN carries (v2 step 10, slice B).
   // The direct listener's Origin gate admits browser dials from
@@ -30,38 +27,23 @@ export type AccountServiceConfig = {
   webOrigin: string;
 };
 
-// The default scope set for a plain OIDC login. Overridable via
-// SM_ACCOUNT_OAUTH_SCOPES for providers that want something narrower or
-// broader.
-const DEFAULT_SCOPES = "openid profile email";
-
 // Reads the config from a plain env-like record so tests can pass a
 // literal instead of mutating process.env. A missing var reads as the
 // empty string, which flows through to isConfigured as "not set".
 export function resolveServiceConfig(
   env: Record<string, string | undefined>,
 ): AccountServiceConfig {
-  const scopes = env.SM_ACCOUNT_OAUTH_SCOPES?.trim();
   return {
     relayUrl: (env.SM_ACCOUNT_RELAY_URL ?? "").trim(),
-    authorizeUrl: (env.SM_ACCOUNT_OAUTH_AUTHORIZE_URL ?? "").trim(),
-    tokenUrl: (env.SM_ACCOUNT_OAUTH_TOKEN_URL ?? "").trim(),
-    clientId: (env.SM_ACCOUNT_OAUTH_CLIENT_ID ?? "").trim(),
-    scopes: scopes ? scopes : DEFAULT_SCOPES,
+    publishableKey: (env.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY ?? "").trim(),
     webOrigin: (env.SM_ACCOUNT_WEB_ORIGIN ?? "").trim(),
   };
 }
 
-// True only when every field the login flow needs is present. Scopes are
-// excluded because they always have a default. The renderer disables
-// Sign in until this is true.
+// True only when every field the account layer needs is present. The
+// renderer disables Sign in until this is true.
 export function isConfigured(config: AccountServiceConfig): boolean {
-  return (
-    config.relayUrl.length > 0 &&
-    config.authorizeUrl.length > 0 &&
-    config.tokenUrl.length > 0 &&
-    config.clientId.length > 0
-  );
+  return config.relayUrl.length > 0 && config.publishableKey.length > 0;
 }
 
 // Minimal KEY=VALUE dotenv parser for the gitignored .env.account dev

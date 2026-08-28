@@ -170,3 +170,15 @@ export function report({ name, failures, hint }) {
   }
   console.log(`${name} OK`);
 }
+
+// A fake Clerk session JWT whose payload carries the given sub,
+// unsigned on purpose: deriveAccountId (shared/account/token.ts) never
+// verifies, it only reads the account id. The relay is the sole
+// verifier. Shared by the account and web-bridge checks so the one
+// stub token shape cannot drift between them.
+const jwtSegment = (obj) =>
+  Buffer.from(JSON.stringify(obj)).toString("base64url");
+
+export function fakeSessionJwt(sub) {
+  return `${jwtSegment({ alg: "none", typ: "JWT" })}.${jwtSegment({ sub })}.sig`;
+}

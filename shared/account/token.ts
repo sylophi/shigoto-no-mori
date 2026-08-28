@@ -1,13 +1,13 @@
-// Best-effort account identity from the OAuth token, shared by the
-// desktop login (main/account/login.ts) and the browser login
-// (web/account/login.ts). When the token is a JWT (three base64url
-// segments) its `sub` claim names the account, which makes a friendlier
-// signed-in display. Anything else, including an opaque non-JWT token,
-// yields "" and the UI falls back to the device list. The token is never
-// verified here, it is only read for display, and the relay is the sole
-// authority on identity. atob is a global in both node 22 and browsers
-// (the same portability argument pkce.ts makes for btoa), so no Buffer
-// is needed and the one implementation serves both runtimes.
+// Account identity from the Clerk session token both enroll handlers
+// present (main/ipc/modules/account.ts, web/bridge/createWebBridge.ts).
+// A session token is always a JWT whose `sub` claim is the Clerk user
+// id, the same value the relay's verifier keys D1 rows and Durable
+// Objects on. The token is never verified here, it is only read so the
+// stored credential record carries the account id. The relay is the
+// sole authority on identity (enroll fails there if the token is bad).
+// Anything malformed yields "". atob is a global in both node 22 and
+// browsers, so no Buffer is needed and the one implementation serves
+// both runtimes.
 export function deriveAccountId(token: string): string {
   const parts = token.split(".");
   if (parts.length !== 3) return "";

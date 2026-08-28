@@ -153,6 +153,55 @@ for (const { needle, what } of ART_RULES) {
   }
 }
 
+// 5. Clerk's prebuilt UI themes through renderer/lib/clerkAppearance.ts
+//    (its appearance API, not doubutsu.css selectors), binding Clerk
+//    variables to the app palette via CSS variables alone. Every BARE
+//    var it reads (the regex skips vars carrying an explicit fallback,
+//    which cannot silently break) must resolve in both systems: a v1
+//    theme token declared as a real runtime property in index.css, or a
+//    raw --color-* step that doubutsu.css remaps in BOTH its light and
+//    dark blocks. A renamed token would otherwise break the sign-in
+//    surfaces silently.
+const clerkSrc = readFileSync(
+  join(root, "renderer/lib/clerkAppearance.ts"),
+  "utf8",
+);
+// @theme inline never emits its declarations as runtime custom
+// properties (Tailwind inlines them into utilities), so strip those
+// blocks: a token that exists only there is NOT resolvable via var().
+const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8").replace(
+  /@theme[^{]*\{[^}]*\}/g,
+  "",
+);
+// The doubutsu light block (:root.doubutsu) and dark block
+// (:root.doubutsu.dark): a remap present in only one of them leaves
+// the other mode on the raw hue.
+const doubutsuDarkStart = css.indexOf(":root.doubutsu.dark");
+const doubutsuLight = css.slice(0, doubutsuDarkStart);
+const doubutsuDark = css.slice(doubutsuDarkStart);
+for (const [, name] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
+  if (name.startsWith("--color-")) {
+    for (const [block, label] of [
+      [doubutsuLight, "light"],
+      [doubutsuDark, "dark"],
+    ]) {
+      if (!block.includes(`${name}:`)) {
+        failures.push(
+          `clerkAppearance reads ${name} but doubutsu.css's ${label} block ` +
+            "does not remap that step, so Clerk's UI would keep the raw " +
+            "hue in that doubutsu mode",
+        );
+      }
+    }
+  } else if (!indexCss.includes(`${name}:`)) {
+    failures.push(
+      `clerkAppearance reads ${name} but renderer/index.css no longer ` +
+        "declares it as a runtime property (an @theme inline entry does " +
+        "not count: Tailwind never emits those as custom properties)",
+    );
+  }
+}
+
 report({
   name: "theme contract",
   failures,

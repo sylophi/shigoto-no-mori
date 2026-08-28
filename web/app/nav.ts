@@ -10,7 +10,6 @@
 export const webPaths = {
   index: "/",
   login: "/login",
-  authCallback: "/auth/callback",
   devices: "/devices",
   appearance: "/appearance",
   deviceForest: (deviceId: string) =>
@@ -33,8 +32,7 @@ export function navigateTo(path: string): void {
 }
 
 // Replace-style hop for redirects and flow completions, so the entry
-// being left (a dispatch-only route, or the OAuth callback URL still
-// carrying its spent code) does not stay reachable via Back.
+// being left (a dispatch-only route) does not stay reachable via Back.
 export function redirectTo(path: string): void {
   impl.replace(path);
 }

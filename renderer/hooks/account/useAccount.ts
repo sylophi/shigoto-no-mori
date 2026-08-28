@@ -53,24 +53,32 @@ export function useWatchAccountChanges(): void {
   );
 }
 
-// The mutations do not invalidate on success themselves. Every sign-in,
-// sign-out and rename ends with main emitting the account.changed
+// The mutations do not invalidate on success themselves. Every
+// enrollment, sign-out and rename ends with the account.changed
 // broadcast, and useWatchAccountChanges invalidates the whole "account"
 // prefix off that reliable local IPC, so a per-mutation invalidation
 // would only duplicate it.
-// silentError mirrors useGlobalConfig: a call site that renders its own
-// inline failure banner (the web login page) suppresses the global
-// toast so the error is signalled once, not twice.
-export function useSignIn({ silentError = false } = {}) {
-  return useMutation<AccountStatus, Error, void>({
-    mutationFn: () => window.api.account.signIn(),
-    meta: silentError
-      ? { silentError: true }
-      : { errorTitle: "Couldn't sign in" },
+// Exchanges a fresh Clerk session token for the relay device
+// credential. Driven by ClerkAccountSync after Clerk reports a
+// session. The Clerk sign-in UI itself never touches this layer.
+// Takes the token mint as a callback so a failed mint lands in the
+// same error path (and toast) as a failed enrollment.
+export function useEnroll() {
+  return useMutation<AccountStatus, Error, () => Promise<string | null>>({
+    mutationFn: async (mintToken) => {
+      const token = await mintToken();
+      if (!token) throw new Error("Clerk returned no session token");
+      return window.api.account.enroll(token);
+    },
+    meta: { errorTitle: "Couldn't enroll this device" },
   });
 }
 
-export function useSignOut() {
+// The account layer's half of sign-out (best-effort relay revoke plus
+// local credential clear). ClerkAccountSync drives it when the Clerk
+// session ends, while the UI buttons go through useClerkSignOut, which ends
+// the Clerk session first and then this same IPC call.
+export function useAccountSignOut() {
   return useMutation<void, Error, void>({
     mutationFn: () => window.api.account.signOut(),
     meta: { errorTitle: "Couldn't sign out" },

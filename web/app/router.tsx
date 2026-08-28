@@ -1,6 +1,6 @@
-// The web client's router: real browser history (deep links and the
-// OAuth callback path must survive a reload, which is also why the
-// deploy config rewrites every path to index.html). The desktop router
+// The web client's router: real browser history (deep links must
+// survive a reload, which is also why the deploy config rewrites every
+// path to index.html). The desktop router
 // owns the global tanstack Register (renderer/router.tsx), so this tree
 // deliberately does not register itself; navigation goes through
 // nav.ts's history-backed helper instead of the Register-typed hooks.
@@ -19,7 +19,6 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import { RemoteForest } from "@/components/remote/RemoteForest";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { AppearancePage } from "./AppearancePage";
-import { AuthCallbackPage } from "./AuthCallbackPage";
 import { DevicesPage } from "./DevicesPage";
 import { LoginPage } from "./LoginPage";
 import { NotFoundPage } from "./NotFoundPage";
@@ -56,12 +55,6 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-const authCallbackRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/auth/callback",
-  component: AuthCallbackPage,
-});
-
 const devicesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/devices",
@@ -87,7 +80,6 @@ const deviceForestRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
-  authCallbackRoute,
   devicesRoute,
   appearanceRoute,
   deviceForestRoute,

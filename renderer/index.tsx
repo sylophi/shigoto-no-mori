@@ -1,8 +1,10 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ClerkProvider } from "@clerk/electron/react";
 import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
+import { ClerkGate } from "./components/account/ClerkGate";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import {
@@ -111,7 +113,11 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      {/* The desktop-flavor provider: it rides the preload bridge for
+          token storage and the system-browser OAuth transport. */}
+      <ClerkGate Provider={ClerkProvider}>
+        <App />
+      </ClerkGate>
       <Toaster
         position="bottom-right"
         offset={{ bottom: 16, right: 16 }}

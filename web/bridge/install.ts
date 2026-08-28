@@ -20,11 +20,8 @@ export function installWebBridge(): WebBridge {
   if (installed !== null) return installed;
   const bridge = createWebBridge({
     localStorage: window.localStorage,
-    sessionStorage: window.sessionStorage,
     env: viteEnv(),
     userAgent: navigator.userAgent,
-    origin: window.location.origin,
-    navigate: (url) => window.location.assign(url),
     openExternal: (url) => {
       window.open(url, "_blank", "noopener,noreferrer");
     },
@@ -48,8 +45,8 @@ export function installWebBridge(): WebBridge {
   return bridge;
 }
 
-// The installed bridge for view code (the callback page, the devices
-// page's revoke). Throws rather than lazily installing so a missed
+// The installed bridge for view code (the devices page's revoke and
+// access state). Throws rather than lazily installing so a missed
 // install order (bridge after app modules) fails loudly at the first
 // use instead of silently double-building.
 export function webBridge(): WebBridge {

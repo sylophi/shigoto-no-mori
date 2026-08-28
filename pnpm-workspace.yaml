@@ -32,6 +32,13 @@ allowBuilds:
   # compiles them. Build tooling only: neither is bundled into the app.
   fs-xattr: true
   macos-alias: true
+  # Clerk transitives. The first two postinstalls only print promo and
+  # funding banners. bufferutil and utf-8-validate are optional native speedups
+  # for ws that fall back to pure JS when absent. None need to build.
+  browser-tabs-lock: false
+  bufferutil: false
+  core-js: false
+  utf-8-validate: false
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
@@ -44,3 +51,8 @@ allowBuilds:
 overrides:
   "tar@<7.5.10": "^7.5.10"
   "tmp@<0.2.7": "0.2.7"
+  # semver 5.x (via @electron-forge/cli -> username -> execa ->
+  # cross-spawn) has no provenance attestation while 7.x does, so any
+  # re-resolution of the lockfile trips trustPolicy: no-downgrade.
+  # Forcing 7.x keeps every consumer on the attested line.
+  "semver@<7.7.2": "^7.7.2"

@@ -1,19 +1,20 @@
-// Durable proof for the electron-free account layer (main/account/*).
-// Drives the pure modules end to end with stubs and asserts the security
-// and wire-shape invariants without electron, without a browser and
-// without the network: the PKCE math and authorize-URL params, the
-// redirect parse, the token exchange form fields and error path, the
-// relay client's route/method/auth-tier discipline against the shared
-// schemas, the credential store's encrypt and plaintext-fallback round
-// trips plus its corrupt/missing tolerance, the full loopback login flow
-// including the state-mismatch and timeout rejections, the loopback
-// server binding 127.0.0.1 only, deriveAccountId's tolerance of a
+// Durable proof for the electron-free account layer (main/account/*,
+// shared/account/*). Drives the pure modules end to end with stubs and
+// asserts the security and wire-shape invariants without electron,
+// without a browser and without the network: the relay client's
+// route/method/auth-tier discipline against the shared schemas, the
+// credential store's encrypt and plaintext-fallback round trips plus
+// its corrupt/missing tolerance, deriveAccountId's tolerance of a
 // malformed token, the .env.account parser and the three-layer
-// file/baked/process.env merge precedence, the setDeviceName bounds, and
-// the shape guarantee that the
-// device credential never appears in a renderer-visible object.
+// file/baked/process.env merge precedence, the setDeviceName and enroll
+// contract bounds, and the shape guarantee that the device credential
+// never appears in a renderer-visible object.
 //
-// The one thing it cannot cover is the safeStorage cipher round trip
+// Sign-in itself is Clerk's embedded UI plus the @clerk/electron
+// bridge. The pure seam this layer owns starts at the session token
+// the renderer hands account:enroll, whose orchestration
+// (shared/account/enroll.ts, driven by both shells) is proved here.
+// The other thing it cannot cover is the safeStorage cipher round trip
 // itself: that is an OS-keychain, electron-only seam, so the store here
 // runs against injected cipher stubs and the real encryption path is
 // exercised by hand.
@@ -21,8 +22,6 @@
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // and @shared imports resolve. See package.json "account:check".
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { get as httpGet } from "node:http";
 import {
   mkdtempSync,
   readFileSync,
@@ -30,54 +29,36 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { connect as netConnect } from "node:net";
-import { networkInterfaces, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  buildAuthorizeUrl,
-  generatePkcePair,
-  generateState,
-  parseRedirectQuery,
-} from "../shared/account/pkce.ts";
 import {
   isConfigured,
   mergeServiceEnv,
   parseDotenv,
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
-import { exchangeCodeForToken } from "../shared/account/tokenExchange.ts";
+import { enrollDevice, signOutDevice } from "../shared/account/enroll.ts";
 import { createAccountService } from "../shared/account/service.ts";
+import { deriveAccountId } from "../shared/account/token.ts";
 import { createAccountStore } from "../main/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
 import { createGrantStore } from "../main/account/grantStore.ts";
-import { deriveAccountId, runLoginFlow } from "../main/account/login.ts";
 import {
   AccountStatusSchema,
   accountContract,
 } from "@shared/ipc/modules/account";
 import { DeviceInfoSchema, RELAY_ROUTES } from "@shared/relay/protocol";
-import { makeProof } from "./lib/checkKit.mjs";
+import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
 
 // A resolved config that isConfigured accepts, for the flows that need
-// one. The URLs are never dialled: fetch is always stubbed.
+// one. The relay URL is never dialled: fetch is always stubbed.
 const CONFIG = resolveServiceConfig({
   SM_ACCOUNT_RELAY_URL: "https://relay.test",
-  SM_ACCOUNT_OAUTH_AUTHORIZE_URL: "https://auth.test/authorize",
-  SM_ACCOUNT_OAUTH_TOKEN_URL: "https://auth.test/token",
-  SM_ACCOUNT_OAUTH_CLIENT_ID: "client-abc",
-  SM_ACCOUNT_OAUTH_SCOPES: "openid profile",
+  SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
 });
 
-// base64url without padding, matching the encoding pkce.ts uses.
+// base64url without padding, for the malformed-token cases below.
 const b64url = (buf) => Buffer.from(buf).toString("base64url");
-
-// A JWT-shaped token whose payload carries the given sub, so the login
-// flow's best-effort accountId derivation has something to read.
-function jwtWithSub(sub) {
-  const header = b64url(JSON.stringify({ alg: "none", typ: "JWT" }));
-  const payload = b64url(JSON.stringify({ sub }));
-  return `${header}.${payload}.sig`;
-}
 
 // A fetch stub that records every call and answers via the responder.
 function recordingFetch(responder) {
@@ -96,22 +77,14 @@ const json = (body, status = 200) =>
   });
 
 // The plaintext cipher stub: a keychain-less machine's fallback, where
-// the store writes enc:false and the round trip is the identity. Hoisted
-// so every login and store assertion shares one copy.
+// the store writes enc:false and the round trip is the identity.
 const PLAINTEXT_CIPHER = {
   available: false,
   encrypt: (s) => s,
   decrypt: (p) => p,
 };
 
-// The sub the standard login fetch mints in its JWT, and the credential
-// its enroll returns, so the login assertions can name the expected
-// results as constants.
-const LOGIN_SUB = "user_abc123";
-const LOGIN_CREDENTIAL = "enrolled-credential";
-
-// The one device the relay stubs report. Declared here so both the
-// service and the login helpers can answer with it.
+// The one device the relay stubs report.
 const DEVICE = {
   deviceId: "device-uuid",
   name: "Test Mac",
@@ -121,197 +94,29 @@ const DEVICE = {
   online: true,
 };
 
-// A fetch that answers the token endpoint with a JWT carrying LOGIN_SUB
-// and the enroll route with LOGIN_CREDENTIAL. The flows that never reach
-// the exchange (state mismatch, timeout) never call it.
-function loginFetch() {
-  return recordingFetch((url) => {
-    if (url === CONFIG.tokenUrl) {
-      return json({ access_token: jwtWithSub(LOGIN_SUB) });
-    }
-    if (url.endsWith(RELAY_ROUTES.enroll.path)) {
-      return json({ credential: LOGIN_CREDENTIAL, device: DEVICE });
-    }
-    throw new Error(`unexpected fetch to ${url}`);
-  }).fetchImpl;
-}
-
-// Runs the loopback login flow with the constant config, device identity,
-// platform and login fetch, so each assertion states only the store it
-// writes to, how the browser behaves, and any timeout it varies.
-function runLogin({ store, openBrowser, timeoutMs }) {
-  return runLoginFlow({
-    config: CONFIG,
-    deviceId: "device-uuid",
-    deviceName: "My Mac",
-    platform: "darwin",
-    openBrowser,
-    service: createAccountService({
-      baseUrl: CONFIG.relayUrl,
-      fetchImpl: loginFetch(),
-    }),
-    store,
-    fetchImpl: loginFetch(),
-    timeoutMs,
-  });
-}
-
-// True when a TCP connection to host:port establishes within the timeout,
-// false when it is refused or times out. Proves the loopback server is
-// reachable on 127.0.0.1 while a routable address is not.
-function canConnect(host, port, timeoutMs = 400) {
-  return new Promise((resolve) => {
-    const socket = netConnect({ host, port });
-    let done = false;
-    const settle = (ok) => {
-      if (done) return;
-      done = true;
-      socket.destroy();
-      resolve(ok);
-    };
-    socket.setTimeout(timeoutMs);
-    socket.once("connect", () => settle(true));
-    socket.once("timeout", () => settle(false));
-    socket.once("error", () => settle(false));
-  });
-}
-
-// A non-internal IPv4 address of this machine, or null when it is
-// loopback-only (common in headless CI). The routable-bind probe is
-// skipped when null.
-function nonLoopbackIpv4() {
-  for (const addrs of Object.values(networkInterfaces())) {
-    for (const a of addrs ?? []) {
-      if (a.family === "IPv4" && !a.internal) return a.address;
-    }
-  }
-  return null;
-}
-
 const { check, done, fail } = makeProof("account layer proof");
 
 async function main() {
   console.log("account layer proof\n");
 
   await check(
-    "pkce: verifier is 43-128 base64url chars and challenge is S256(verifier)",
-    async () => {
-      for (let i = 0; i < 50; i += 1) {
-        // generatePkcePair is async now that the S256 challenge runs
-        // through the WebCrypto digest.
-        // oxlint-disable-next-line no-await-in-loop -- each pair is independent, the loop just samples
-        const { verifier, challenge } = await generatePkcePair();
-        assert.match(
-          verifier,
-          /^[A-Za-z0-9_-]{43,128}$/,
-          "verifier is not base64url in the RFC length range",
-        );
-        const expected = createHash("sha256")
-          .update(verifier)
-          .digest("base64url");
-        assert.equal(challenge, expected, "challenge is not base64url(sha256)");
-      }
-    },
-  );
-
-  await check(
-    "pkce: buildAuthorizeUrl carries the full RFC 8252 + 7636 param set",
-    () => {
-      const state = generateState();
-      const url = new URL(
-        buildAuthorizeUrl(CONFIG, {
-          redirectUri: "http://127.0.0.1:5555/callback",
-          challenge: "the-challenge",
-          state,
-        }),
-      );
-      const q = url.searchParams;
-      assert.equal(url.origin + url.pathname, "https://auth.test/authorize");
-      assert.equal(q.get("response_type"), "code");
-      assert.equal(q.get("client_id"), "client-abc");
-      assert.equal(q.get("redirect_uri"), "http://127.0.0.1:5555/callback");
-      assert.equal(q.get("scope"), "openid profile");
-      assert.equal(q.get("state"), state);
-      assert.equal(q.get("code_challenge"), "the-challenge");
-      assert.equal(q.get("code_challenge_method"), "S256");
-    },
-  );
-
-  await check(
     "config: isConfigured is false until every required field is set",
     () => {
       assert.equal(isConfigured(CONFIG), true);
-      const empty = resolveServiceConfig({});
-      assert.equal(isConfigured(empty), false);
-      assert.equal(empty.scopes, "openid profile email", "default scopes lost");
-      const missingClient = resolveServiceConfig({
+      assert.equal(isConfigured(resolveServiceConfig({})), false);
+      const missingKey = resolveServiceConfig({
         SM_ACCOUNT_RELAY_URL: "https://relay.test",
-        SM_ACCOUNT_OAUTH_AUTHORIZE_URL: "https://auth.test/authorize",
-        SM_ACCOUNT_OAUTH_TOKEN_URL: "https://auth.test/token",
       });
-      assert.equal(isConfigured(missingClient), false);
-    },
-  );
-
-  await check(
-    "pkce: parseRedirectQuery extracts code+state and surfaces an error param",
-    () => {
-      const ok = parseRedirectQuery("/callback?code=the-code&state=the-state");
-      assert.deepEqual(ok, { code: "the-code", state: "the-state" });
-      const denied = parseRedirectQuery("/callback?error=access_denied");
-      assert.deepEqual(denied, { error: "access_denied" });
-      const partial = parseRedirectQuery("/callback?code=only-code");
-      assert.ok("error" in partial, "a missing state should surface an error");
-    },
-  );
-
-  await check(
-    "tokenExchange: posts the PKCE grant form and returns the access_token",
-    async () => {
-      const { fetchImpl, calls } = recordingFetch(() =>
-        json({ access_token: "the-access-token", token_type: "Bearer" }),
-      );
-      const token = await exchangeCodeForToken(CONFIG, {
-        code: "auth-code",
-        verifier: "the-verifier",
-        redirectUri: "http://127.0.0.1:5555/callback",
-        fetchImpl,
+      assert.equal(isConfigured(missingKey), false);
+      const missingRelay = resolveServiceConfig({
+        SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
       });
-      assert.equal(token, "the-access-token");
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0].url, "https://auth.test/token");
-      assert.equal(calls[0].init.method, "POST");
-      assert.match(
-        calls[0].init.headers["content-type"],
-        /application\/x-www-form-urlencoded/,
-      );
-      const form = new URLSearchParams(calls[0].init.body);
-      assert.equal(form.get("grant_type"), "authorization_code");
-      assert.equal(form.get("code"), "auth-code");
-      assert.equal(form.get("code_verifier"), "the-verifier");
-      assert.equal(form.get("client_id"), "client-abc");
-      assert.equal(form.get("redirect_uri"), "http://127.0.0.1:5555/callback");
+      assert.equal(isConfigured(missingRelay), false);
     },
   );
 
-  await check("tokenExchange: throws on a non-2xx token response", async () => {
-    const { fetchImpl } = recordingFetch(
-      () => new Response("nope", { status: 400 }),
-    );
-    await assert.rejects(
-      () =>
-        exchangeCodeForToken(CONFIG, {
-          code: "c",
-          verifier: "v",
-          redirectUri: "http://127.0.0.1:1/callback",
-          fetchImpl,
-        }),
-      /token exchange failed with status 400/,
-    );
-  });
-
   await check(
-    "service: enroll hits the enroll route with the login-token bearer and an EnrollRequest body",
+    "service: enroll hits the enroll route with the session-token bearer and an EnrollRequest body",
     async () => {
       const { fetchImpl, calls } = recordingFetch(() =>
         json({ credential: "device-credential", device: DEVICE }),
@@ -320,7 +125,7 @@ async function main() {
         baseUrl: "https://relay.test",
         fetchImpl,
       });
-      const result = await service.enroll("login-token", {
+      const result = await service.enroll("session-token", {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
@@ -332,7 +137,7 @@ async function main() {
         "https://relay.test" + RELAY_ROUTES.enroll.path,
       );
       assert.equal(calls[0].init.method, "POST");
-      assert.equal(calls[0].init.headers.authorization, "Bearer login-token");
+      assert.equal(calls[0].init.headers.authorization, "Bearer session-token");
       const body = JSON.parse(calls[0].init.body);
       assert.deepEqual(body, {
         deviceId: "device-uuid",
@@ -420,7 +225,7 @@ async function main() {
   );
 
   await check(
-    "service: the auth tier differs, enroll under the login token and the rest under the credential",
+    "service: the auth tier differs, enroll under the session token and the rest under the credential",
     async () => {
       const responder = (url) => {
         if (url.endsWith(RELAY_ROUTES.enroll.path)) {
@@ -433,7 +238,7 @@ async function main() {
         baseUrl: "https://relay.test",
         fetchImpl,
       });
-      await service.enroll("login-token", {
+      await service.enroll("session-token", {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
@@ -441,7 +246,7 @@ async function main() {
       await service.listDevices("device-credential");
       const enrollAuth = calls[0].init.headers.authorization;
       const listAuth = calls[1].init.headers.authorization;
-      assert.equal(enrollAuth, "Bearer login-token");
+      assert.equal(enrollAuth, "Bearer session-token");
       assert.equal(listAuth, "Bearer device-credential");
       assert.notEqual(enrollAuth, listAuth, "enroll and list share a bearer");
     },
@@ -461,6 +266,131 @@ async function main() {
         () => service.listDevices("device-credential"),
         /device revoked/,
       );
+    },
+  );
+
+  // An in-memory store over the shared core, the seam both shells'
+  // enroll/sign-out orchestration is driven through.
+  const memoryStore = () => {
+    let stored = null;
+    return createCoreAccountStore({
+      storage: {
+        readRaw: () => stored,
+        writeRaw: (text) => {
+          stored = text;
+        },
+        removeRaw: () => {
+          stored = null;
+        },
+      },
+      cipher: PLAINTEXT_CIPHER,
+    });
+  };
+
+  await check(
+    "enroll flow: enrollDevice stores the credential with the derived accountId under the stored-or-fallback device name, and an unconfigured build rejects before any fetch",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(() =>
+        json({ credential: "cred-1", device: DEVICE }),
+      );
+      const service = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl,
+      });
+      const store = memoryStore();
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service,
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_abc"),
+      );
+      assert.deepEqual(store.read(), {
+        credential: "cred-1",
+        accountId: "user_abc",
+        deviceName: "Fallback Mac",
+      });
+      // A stored name survives re-enrollment. The fallback is only for
+      // a first sign-in.
+      store.write({ ...store.read(), deviceName: "Renamed" });
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service,
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_abc"),
+      );
+      assert.equal(store.read().deviceName, "Renamed");
+
+      const before = calls.length;
+      await assert.rejects(
+        () =>
+          enrollDevice(
+            {
+              config: resolveServiceConfig({}),
+              service,
+              store,
+              deviceId: "device-uuid",
+              fallbackDeviceName: "Fallback Mac",
+              platform: "darwin",
+            },
+            fakeSessionJwt("user_abc"),
+          ),
+        /not configured/,
+      );
+      assert.equal(calls.length, before, "an unconfigured enroll fetched");
+    },
+  );
+
+  await check(
+    "sign-out flow: signOutDevice revokes THIS device then clears, and still clears (reporting the failure) when the revoke fails",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      const service = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl,
+      });
+      const store = memoryStore();
+      store.write({ credential: "cred-1", accountId: "a", deviceName: "d" });
+      await signOutDevice({
+        config: CONFIG,
+        service,
+        store,
+        deviceId: "device-uuid",
+      });
+      assert.equal(store.read(), null);
+      assert.equal(calls[0].init.method, "DELETE");
+      assert.equal(calls[0].init.headers.authorization, "Bearer cred-1");
+
+      // The failure path: revoke rejects, the clear still lands and the
+      // failure reaches the caller's reporter instead of throwing.
+      const failing = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl: () => Promise.reject(new TypeError("offline")),
+      });
+      store.write({ credential: "cred-2", accountId: "a", deviceName: "d" });
+      let reported = null;
+      await signOutDevice({
+        config: CONFIG,
+        service: failing,
+        store,
+        deviceId: "device-uuid",
+        onRevokeFailure: (error) => {
+          reported = error;
+        },
+      });
+      assert.equal(store.read(), null, "a failed revoke blocked the clear");
+      assert.match(String(reported), /offline/);
     },
   );
 
@@ -592,186 +522,6 @@ async function main() {
     );
 
     await check(
-      "login: the full loopback flow stores the credential with the derived accountId and deviceName",
-      async () => {
-        const store = createAccountStore({
-          filePath: join(tmp, "login.json"),
-          cipher: PLAINTEXT_CIPHER,
-        });
-        const result = await runLogin({
-          store,
-          openBrowser: async (authorizeUrl) => {
-            const u = new URL(authorizeUrl);
-            const redirect = u.searchParams.get("redirect_uri");
-            const state = u.searchParams.get("state");
-            await httpGetDone(
-              `${redirect}?code=auth-code&state=${encodeURIComponent(state)}`,
-            );
-          },
-        });
-        assert.equal(result.accountId, LOGIN_SUB);
-        assert.equal(result.deviceName, "My Mac");
-        assert.equal(store.read().credential, LOGIN_CREDENTIAL);
-        assert.equal(store.read().accountId, LOGIN_SUB);
-      },
-    );
-
-    await check(
-      "login: a replayed /callback mid-exchange is answered 404 and the first sign-in still lands",
-      async () => {
-        const store = createAccountStore({
-          filePath: join(tmp, "login-replay.json"),
-          cipher: PLAINTEXT_CIPHER,
-        });
-        // The token exchange blocks on this gate until the replay has
-        // been answered, so the second /callback provably arrives while
-        // the first exchange is still in flight (the reload/prefetch
-        // window where a re-entered exchange would burn the code and
-        // drop the first flow's credential).
-        let releaseExchange;
-        const exchangeGate = new Promise((resolve) => {
-          releaseExchange = resolve;
-        });
-        const fetchImpl = async (url) => {
-          if (String(url) === CONFIG.tokenUrl) {
-            await exchangeGate;
-            return json({ access_token: jwtWithSub(LOGIN_SUB) });
-          }
-          if (String(url).endsWith(RELAY_ROUTES.enroll.path)) {
-            return json({ credential: LOGIN_CREDENTIAL, device: DEVICE });
-          }
-          throw new Error(`unexpected fetch to ${url}`);
-        };
-        let replayStatus = null;
-        const result = await runLoginFlow({
-          config: CONFIG,
-          deviceId: "device-uuid",
-          deviceName: "My Mac",
-          platform: "darwin",
-          openBrowser: async (authorizeUrl) => {
-            const u = new URL(authorizeUrl);
-            const redirect = u.searchParams.get("redirect_uri");
-            const state = u.searchParams.get("state");
-            const callback = `${redirect}?code=auth-code&state=${encodeURIComponent(state)}`;
-            await httpGetDone(callback);
-            // The replay: same state, already-redeemed code.
-            replayStatus = await httpGetStatus(callback);
-            releaseExchange();
-          },
-          service: createAccountService({
-            baseUrl: CONFIG.relayUrl,
-            fetchImpl,
-          }),
-          store,
-          fetchImpl,
-        });
-        assert.equal(
-          replayStatus,
-          404,
-          "the replayed callback was not refused with a 404",
-        );
-        assert.equal(result.accountId, LOGIN_SUB);
-        assert.equal(
-          store.read().credential,
-          LOGIN_CREDENTIAL,
-          "the replay disturbed the first sign-in's credential",
-        );
-      },
-    );
-
-    await check(
-      "login: the loopback server binds 127.0.0.1 only, reachable there but not on a routable address",
-      async () => {
-        const store = createAccountStore({
-          filePath: join(tmp, "login-bind.json"),
-          cipher: PLAINTEXT_CIPHER,
-        });
-        let loopbackReachable = false;
-        let routableReachable = null;
-        const result = await runLogin({
-          store,
-          openBrowser: async (authorizeUrl) => {
-            const u = new URL(authorizeUrl);
-            const redirect = new URL(u.searchParams.get("redirect_uri"));
-            const state = u.searchParams.get("state");
-            assert.equal(
-              redirect.hostname,
-              "127.0.0.1",
-              "the redirect URI is not loopback",
-            );
-            const port = Number(redirect.port);
-            loopbackReachable = await canConnect("127.0.0.1", port);
-            const routable = nonLoopbackIpv4();
-            if (routable) routableReachable = await canConnect(routable, port);
-            await httpGetDone(
-              `${redirect.origin}/callback?code=auth-code&state=${encodeURIComponent(state)}`,
-            );
-          },
-        });
-        assert.equal(result.accountId, LOGIN_SUB);
-        assert.ok(
-          loopbackReachable,
-          "the loopback server was not reachable on 127.0.0.1",
-        );
-        if (routableReachable !== null) {
-          assert.equal(
-            routableReachable,
-            false,
-            "the loopback server was reachable on a routable address",
-          );
-        }
-      },
-    );
-
-    await check(
-      "login: a state mismatch on the redirect is rejected and stores nothing",
-      async () => {
-        const store = createAccountStore({
-          filePath: join(tmp, "login-badstate.json"),
-          cipher: PLAINTEXT_CIPHER,
-        });
-        await assert.rejects(
-          () =>
-            runLogin({
-              store,
-              openBrowser: async (authorizeUrl) => {
-                const u = new URL(authorizeUrl);
-                const redirect = u.searchParams.get("redirect_uri");
-                await httpGetDone(`${redirect}?code=auth-code&state=WRONG`);
-              },
-            }),
-          /state mismatch/,
-        );
-        assert.equal(
-          store.read(),
-          null,
-          "a mismatched flow must store nothing",
-        );
-      },
-    );
-
-    await check(
-      "login: the redirect timeout rejects and closes the server",
-      async () => {
-        const store = createAccountStore({
-          filePath: join(tmp, "login-timeout.json"),
-          cipher: PLAINTEXT_CIPHER,
-        });
-        await assert.rejects(
-          () =>
-            runLogin({
-              store,
-              // Never redirects, so only the timeout can settle the flow.
-              openBrowser: () => {},
-              timeoutMs: 120,
-            }),
-          /timed out/,
-        );
-        assert.equal(store.read(), null, "a timed-out flow must store nothing");
-      },
-    );
-
-    await check(
       "grants: grant then list returns the peer, revoke removes it, and a mismatched account yields no grants",
       () => {
         const filePath = join(tmp, "grants.json");
@@ -887,10 +637,11 @@ async function main() {
   }
 
   await check(
-    'login: deriveAccountId reads a JWT sub and returns "" for anything malformed without throwing',
+    'token: deriveAccountId reads a JWT sub and returns "" for anything malformed without throwing',
     () => {
-      // The happy alg:none path still derives the sub.
-      assert.equal(deriveAccountId(jwtWithSub("user_x")), "user_x");
+      // The happy path derives the sub, the account id a Clerk session
+      // token carries.
+      assert.equal(deriveAccountId(fakeSessionJwt("user_x")), "user_x");
       // A three-segment token whose payload is not valid base64/JSON.
       assert.equal(deriveAccountId("aaa.!!!not base64 or json!!!.sig"), "");
       // Valid base64url that decodes to non-JSON bytes.
@@ -955,6 +706,16 @@ async function main() {
     },
   );
 
+  await check("contract: enroll rejects an empty session token", () => {
+    const input = accountContract.calls.enroll.input;
+    assert.equal(input.safeParse(fakeSessionJwt("user_x")).success, true);
+    assert.equal(
+      input.safeParse("").success,
+      false,
+      "an empty enroll token should be rejected",
+    );
+  });
+
   await check(
     "envFile: parseDotenv skips comments and blanks, strips quotes, ignores malformed lines, and drops __proto__",
     () => {
@@ -992,12 +753,12 @@ async function main() {
       const merged = mergeServiceEnv(
         {
           SM_ACCOUNT_RELAY_URL: "https://file.example",
-          SM_ACCOUNT_OAUTH_CLIENT_ID: "file-client",
+          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_file",
           ONLY_FILE: "f",
         },
         {
           SM_ACCOUNT_RELAY_URL: "https://baked.example",
-          SM_ACCOUNT_OAUTH_CLIENT_ID: "baked-client",
+          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_baked",
           ONLY_BAKED: "b",
         },
         { SM_ACCOUNT_RELAY_URL: "https://env.example", ONLY_ENV: "e" },
@@ -1008,8 +769,8 @@ async function main() {
         "process.env did not win over baked and file",
       );
       assert.equal(
-        merged.SM_ACCOUNT_OAUTH_CLIENT_ID,
-        "baked-client",
+        merged.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY,
+        "pk_baked",
         "a baked value did not win over the file",
       );
       // Each layer's uncontested keys all survive the merge.
@@ -1020,33 +781,6 @@ async function main() {
   );
 
   done();
-}
-
-// GET a URL and resolve once the response is fully drained, so the
-// loopback server has finished handling the redirect before the stub
-// browser returns.
-function httpGetDone(url) {
-  return new Promise((resolve, reject) => {
-    const req = httpGet(url, (res) => {
-      res.resume();
-      res.on("end", resolve);
-      res.on("error", reject);
-    });
-    req.on("error", reject);
-  });
-}
-
-// GET a URL and resolve with the response status once fully drained,
-// for the assertions that care how the loopback answered a replay.
-function httpGetStatus(url) {
-  return new Promise((resolve, reject) => {
-    const req = httpGet(url, (res) => {
-      res.resume();
-      res.on("end", () => resolve(res.statusCode));
-      res.on("error", reject);
-    });
-    req.on("error", reject);
-  });
 }
 
 main().catch(fail);

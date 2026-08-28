@@ -51,7 +51,11 @@
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
- *    aria-selected, sonner's [data-sonner-toast].
+ *    aria-selected, sonner's [data-sonner-toast]. Clerk's .cl-rootBox /
+ *    .cl-modalBackdrop (the ambient-strip carve-outs below) are part of
+ *    Clerk's documented appearance API but live in its runtime-loaded
+ *    UI bundle, so theme:check cannot grep them -- re-verify by eye
+ *    when the Clerk packages move.
  *
  * 5. One consumer outside renderer/: scripts/dmg-background.html, the
  *    dmg installer artwork, which links this file and renders against
@@ -261,13 +265,31 @@
    AC differentiates surfaces by stacked colored fills, not by hairlines,
    shadows, or rings. The :not(:focus-visible) carve-out preserves
    keyboard focus indication, which targets the focused element with
-   higher specificity via Tailwind's focus-visible:* utilities. */
-.doubutsu *,
-.doubutsu *::before,
-.doubutsu *::after {
+   higher specificity via Tailwind's focus-visible:* utilities. The
+   Clerk carve-out (.cl-rootBox embeds, .cl-modalBackdrop portals)
+   keeps these rules off Clerk's runtime-loaded UI, whose edges and
+   shadows come from clerkAppearance tokens instead of data-slot rules
+   -- stripped, its card and buttons lose every affordance. :where()
+   keeps the carve-out at zero specificity so both rules keep losing
+   to the data-slot rules exactly as before. */
+.doubutsu
+  *:not(
+    :where(.cl-rootBox, .cl-rootBox *, .cl-modalBackdrop, .cl-modalBackdrop *)
+  ),
+.doubutsu
+  *:not(
+    :where(.cl-rootBox, .cl-rootBox *, .cl-modalBackdrop, .cl-modalBackdrop *)
+  )::before,
+.doubutsu
+  *:not(
+    :where(.cl-rootBox, .cl-rootBox *, .cl-modalBackdrop, .cl-modalBackdrop *)
+  )::after {
   border-color: transparent;
 }
-.doubutsu *:not(:focus-visible) {
+.doubutsu
+  *:not(:focus-visible):not(
+    :where(.cl-rootBox, .cl-rootBox *, .cl-modalBackdrop, .cl-modalBackdrop *)
+  ) {
   box-shadow: none;
   outline: 0;
   --tw-ring-shadow: 0 0 transparent;

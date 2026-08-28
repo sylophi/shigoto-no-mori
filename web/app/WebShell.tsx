@@ -4,15 +4,15 @@
 // same overlay chrome they get inside the desktop's detail pane. Built
 // in v1 vocabulary (theme tokens only), per the theming contract.
 import { Outlet, useLocation } from "@tanstack/react-router";
-import { LogOut, MonitorSmartphone, Palette, TreePine } from "lucide-react";
+import { MonitorSmartphone, Palette, TreePine } from "lucide-react";
+import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import {
   useAccountStatus,
-  useSignOut,
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
-import { navigateTo, webPaths } from "./nav";
+import { navigateTo, redirectTo, webPaths } from "./nav";
 
 function NavButton({
   active,
@@ -41,12 +41,6 @@ export function WebShell() {
   const { pathname } = useLocation();
   const signedIn = status?.signedIn === true;
 
-  const signOut = useSignOut();
-  const onSignOut = () =>
-    signOut.mutate(undefined, {
-      onSuccess: () => navigateTo(webPaths.login),
-    });
-
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2">
@@ -74,17 +68,16 @@ export function WebShell() {
           </NavButton>
         </nav>
         <div className="ml-auto flex items-center gap-2">
+          {/* Enrolled implies configured, so the provider is mounted
+              and the Clerk hook inside the button is safe. */}
           {signedIn && (
-            <Button
-              variant="ghost"
-              size="sm"
+            <ClerkSignOutButton
               className="text-muted-foreground"
-              disabled={signOut.isPending}
-              onClick={onSignOut}
-            >
-              <LogOut />
-              Sign out
-            </Button>
+              // replace, not push: the status invalidation may already
+              // have bounced this page to /login, and a pushed second
+              // /login entry would trap the Back button.
+              onSignedOut={() => redirectTo(webPaths.login)}
+            />
           )}
         </div>
       </header>

@@ -42,6 +42,7 @@ import {
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
+import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";
@@ -387,9 +388,10 @@ async function main() {
     async () => {
       // Browser-global WebSocket clients (the web client's relay path,
       // and any future in-app consumer of this listener) ALWAYS send
-      // Origin: "file://" in the packaged app, the vite dev server's
-      // loopback origin in dev. Both must be able to authenticate, or
-      // an in-app client could never connect at all.
+      // an Origin: the renderer-scheme origin from the app's own
+      // window (both flavors), or a loopback http origin from a
+      // locally served web client. All must be able to authenticate,
+      // or an in-app client could never connect at all.
       const { binding, url } = await startBinding();
       const helloFrom = async (origin) => {
         const client = connect(url, { origin });
@@ -409,7 +411,10 @@ async function main() {
         client.close();
       };
       try {
-        await helloFrom("file://");
+        for (const origin of rendererSchemeOrigins()) {
+          // oxlint-disable-next-line no-await-in-loop -- one shared binding, sequential hellos
+          await helloFrom(origin);
+        }
         await helloFrom("http://localhost:5173");
       } finally {
         await binding.stop();
