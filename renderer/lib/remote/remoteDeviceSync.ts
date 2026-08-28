@@ -24,6 +24,10 @@ import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 import {
+  publishRelayStatus,
+  seedRelayStatus,
+} from "@/hooks/remote/useRelayStatus";
+import {
   rejectingClientTransport,
   type RemoteDevice,
   type RemoteDeviceApi,
@@ -65,6 +69,10 @@ function apiFor(deviceId: string): RemoteDeviceApi {
 
 async function reconcileNow(status?: RelayStatus): Promise<void> {
   const current = status ?? (await window.api.relay.status());
+  // A fetched snapshot seeds the shared store (a broadcast that raced
+  // it is newer and wins), so this module stays the store's single
+  // writer and the hooks never race a fetch of their own.
+  if (status === undefined) seedRelayStatus(current);
   const phase = current.socket.phase;
   const localDeviceId = window.api.deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -160,12 +168,18 @@ async function drainReconciles(): Promise<void> {
 
 // Boot wiring: reconcile once now, then follow account and relay
 // changes for the life of the window. Never unsubscribed on purpose,
-// exactly like the other boot-scope subscriptions in index.tsx.
+// exactly like the other boot-scope subscriptions in index.tsx. This
+// subscription is also the ONE writer of the useRelayStatus store:
+// every snapshot it sees is published there, so no hook needs a
+// subscription or an initial fetch of its own.
 export function startRemoteDeviceSync(): void {
   window.api.account.onChanged(() => {
     cachedList = null;
     reconcile();
   });
-  window.api.relay.onStatusChanged((status) => reconcile(status));
+  window.api.relay.onStatusChanged((status) => {
+    publishRelayStatus(status);
+    reconcile(status);
+  });
   reconcile();
 }

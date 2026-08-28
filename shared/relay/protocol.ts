@@ -132,6 +132,12 @@ export const RELAY_ROUTES = {
   },
   mintTicket: { method: "POST", path: "/tickets" },
   connect: { method: "GET", path: "/connect" },
+  // Tunnel provisioning (v2 step 10, slice B): the Worker creates or
+  // reuses this device's named Cloudflare tunnel, points its ingress
+  // at the given loopback port and answers with the public hostname
+  // plus the connector run token. Device-credential authed. Answers
+  // TUNNEL_UNCONFIGURED_STATUS when the Worker has no tunnel env.
+  provisionTunnel: { method: "POST", path: "/tunnel" },
 } as const;
 
 // The query parameter GET /connect reads the ticket from.
@@ -192,6 +198,34 @@ export const TicketResponseSchema = z.object({
   expiresInMs: z.number().int(),
 });
 export type TicketResponse = z.infer<typeof TicketResponseSchema>;
+
+// POST /tunnel request: the direct listener's currently bound loopback
+// port the tunnel ingress should front. Re-provisioning with a new
+// port only rewrites the ingress config.
+export const TunnelProvisionRequestSchema = z.object({
+  port: z.number().int().min(1).max(65535),
+});
+
+// POST /tunnel response. `hostname` is the public tunnel hostname
+// (`<name>.<TUNNEL_DOMAIN>`) peers derive the wss dial URL from.
+// `connectorToken` is the tunnel run token for cloudflared: a bearer
+// secret. The app keeps it in memory and passes it to the cloudflared
+// child via env, never argv, and it must never reach logs, status
+// objects or the renderer.
+export const TunnelProvisionResponseSchema = z.object({
+  hostname: z.string().min(1),
+  connectorToken: z.string().min(1),
+});
+export type TunnelProvisionResponse = z.infer<
+  typeof TunnelProvisionResponseSchema
+>;
+
+// The typed "not configured" answer for POST /tunnel: the Worker runs
+// without the Cloudflare tunnel env (see relay/src/tunnel.ts), so
+// tunnel provisioning is off while everything else works as before.
+// The status code is the type: the app's client maps it to a typed
+// error the tunnel runner treats as "unconfigured, do not retry".
+export const TUNNEL_UNCONFIGURED_STATUS = 501;
 
 // ---- Relay socket envelopes ----
 

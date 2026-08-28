@@ -6,11 +6,17 @@ import { promisify } from "node:util";
 
 const execFileP = promisify(execFile);
 
-export async function binaryOnPath(name: string): Promise<boolean> {
+// The resolved absolute path of a CLI on PATH, or null when absent.
+export async function resolveOnPath(name: string): Promise<string | null> {
   try {
-    await execFileP("which", [name]);
-    return true;
+    const { stdout } = await execFileP("which", [name]);
+    const found = stdout.trim();
+    return found === "" ? null : found;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export async function binaryOnPath(name: string): Promise<boolean> {
+  return (await resolveOnPath(name)) !== null;
 }

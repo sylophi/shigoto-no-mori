@@ -108,6 +108,38 @@ export function makeProof(name) {
   };
 }
 
+// A controllable SupervisorClock (shared/remote/supervisor.ts) for
+// checks that drive supervised runners headlessly: timers fire when
+// advance crosses them, and a settle tick lets promise chains complete
+// before assertions.
+export function fakeClock() {
+  let time = 0;
+  let nextTimerId = 1;
+  const timers = new Map();
+  return {
+    now: () => time,
+    setTimeout: (fn, ms) => {
+      const id = nextTimerId;
+      nextTimerId += 1;
+      timers.set(id, { fn, at: time + ms });
+      return id;
+    },
+    clearTimeout: (id) => timers.delete(id),
+    async advance(ms) {
+      time += ms;
+      // Deleting the visited entry is safe under Map iteration.
+      for (const [id, timer] of timers) {
+        if (timer.at <= time) {
+          timers.delete(id);
+          timer.fn();
+        }
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    },
+    settle: () => new Promise((resolve) => setImmediate(resolve)),
+  };
+}
+
 // `name` is the lowercase check phrase, like "host boundary". Failures
 // print a capitalized header, each failure line, and the hint, then set
 // a nonzero exit code. Setting exitCode instead of calling

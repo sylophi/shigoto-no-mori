@@ -14,8 +14,9 @@
 // tries the direct dial first and falls back to the relay on ANY
 // direct failure. Whichever succeeded is cached, and a close drops the
 // cache entry as before, so the next use redials and re-decides. The
-// web bridge injects nothing and keeps relay-only behavior (a browser
-// page cannot dial ws:// from https anyway).
+// web bridge injects the same dialer with a wss-only candidate filter
+// (v2 step 10, slice B): a browser page cannot dial ws:// from https
+// (mixed content), but wss tunnel URLs dial fine.
 import type { relayContract, RelayStatus } from "@shared/ipc/modules/relay";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";

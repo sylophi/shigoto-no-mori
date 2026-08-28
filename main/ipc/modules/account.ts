@@ -17,10 +17,14 @@ import {
   createAccountStore,
   type AccountStore,
   type StoreCipher,
+  type StoredAccount,
 } from "../../account/credentialStore";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
 import { runLoginFlow } from "../../account/login";
-import { createAccountService } from "@shared/account/service";
+import {
+  createAccountService,
+  type AccountService,
+} from "@shared/account/service";
 import {
   isConfigured,
   mergeServiceEnv,
@@ -188,6 +192,62 @@ function credentialConnectKey(credential: string): string {
   return `cred:${createHash("sha256").update(credential).digest("hex").slice(0, 16)}`;
 }
 
+// The signed-in preamble most account-backed calls share: the resolved
+// service against the configured relay plus the stored credential
+// record. Null when the build is unconfigured or no credential is
+// stored, which every caller reads as its own flavor of "nothing to
+// do". Kept module private so the store and config stay private too.
+function signedInService(): {
+  service: AccountService;
+  record: StoredAccount;
+} | null {
+  const config = serviceConfig();
+  if (!isConfigured(config)) return null;
+  const record = store().read();
+  if (record === null) return null;
+  return {
+    service: createAccountService({ baseUrl: config.relayUrl }),
+    record,
+  };
+}
+
+// The configured web client origin (SM_ACCOUNT_WEB_ORIGIN), for the
+// direct listener's Origin gate (v2 step 10, slice B): a browser dial
+// arriving over the wss tunnel carries the web client's Origin, and
+// this is the one extra origin the listener admits. Undefined means
+// none is configured.
+export function allowedWebOrigin(): string | undefined {
+  const origin = serviceConfig().webOrigin;
+  return origin === "" ? undefined : origin;
+}
+
+// The tunnel provision call for the cloudflared runner (v2 step 10,
+// slice B): asks the Worker to point this device's named tunnel at the
+// direct listener's current loopback port. Re-reads the stored
+// credential per call like mintTicket, so a rotated credential is
+// picked up without refresh plumbing. The returned connectorToken is a
+// bearer secret the caller must keep in memory only. Throws
+// TunnelUnconfiguredError (shared/account/service.ts) when the Worker
+// has no tunnel env, which the runner reads as a typed
+// "unconfigured", never a retry loop.
+export function provisionDeviceTunnel(
+  port: number,
+): Promise<{ hostname: string; connectorToken: string }> {
+  const signedIn = signedInService();
+  if (signedIn === null) {
+    return Promise.reject(
+      new Error("signed out or the account service is not configured"),
+    );
+  }
+  // Bounded so a black-holed route cannot wedge the runner's
+  // serialized lifecycle behind a fetch that never settles.
+  return signedIn.service.provisionTunnel(
+    signedIn.record.credential,
+    port,
+    AbortSignal.timeout(15_000),
+  );
+}
+
 // What the relay socket needs from the account layer, kept here so the
 // store and config stay module private. Null when unconfigured or
 // signed out, which the relay refresh reads as "stop". mintTicket is a
@@ -199,12 +259,11 @@ export function relayConnectInputs(): {
   accountId: string;
   mintTicket: (signal: AbortSignal) => Promise<string>;
 } | null {
-  const config = serviceConfig();
-  if (!isConfigured(config)) return null;
-  const record = store().read();
-  if (record === null) return null;
+  const signedIn = signedInService();
+  if (signedIn === null) return null;
+  const { service, record } = signedIn;
   return {
-    relayUrl: config.relayUrl,
+    relayUrl: serviceConfig().relayUrl,
     // Identifies the signed-in account so a re-enroll onto a different
     // account forces the relay socket to reconnect (C7). When the token
     // was opaque and derived no accountId, fall back to a key derived
@@ -218,7 +277,6 @@ export function relayConnectInputs(): {
       if (fresh === null) {
         throw new Error("signed out, no relay credential");
       }
-      const service = createAccountService({ baseUrl: config.relayUrl });
       // The signal aborts the mint on stop and on the dial's mint
       // timeout, so a black-holed route cannot strand the connect (C6).
       return (await service.mintTicket(fresh.credential, signal)).ticket;
@@ -278,17 +336,18 @@ export function makeAccountHandlers(
     },
 
     signOut: async () => {
-      const config = serviceConfig();
-      const record = store().read();
+      const signedIn = signedInService();
       // Best-effort server-side revoke of THIS device before clearing
       // locally, so a signed-out device's credential does not stay valid
       // on the relay. Any failure (offline, relay down, non-2xx) is
       // swallowed and logged at most once, because local sign-out MUST
       // always succeed regardless.
-      if (record && isConfigured(config)) {
+      if (signedIn !== null) {
         try {
-          const service = createAccountService({ baseUrl: config.relayUrl });
-          await service.revoke(record.credential, getDeviceId());
+          await signedIn.service.revoke(
+            signedIn.record.credential,
+            getDeviceId(),
+          );
         } catch (error) {
           if (!revokeWarned) {
             revokeWarned = true;
@@ -310,12 +369,10 @@ export function makeAccountHandlers(
     },
 
     listDevices: async () => {
-      const config = serviceConfig();
-      const record = store().read();
+      const signedIn = signedInService();
       // Signed out or unconfigured has no registry to show.
-      if (!record || !isConfigured(config)) return [];
-      const service = createAccountService({ baseUrl: config.relayUrl });
-      return service.listDevices(record.credential);
+      if (signedIn === null) return [];
+      return signedIn.service.listDevices(signedIn.record.credential);
     },
 
     setDeviceName: (name) => {

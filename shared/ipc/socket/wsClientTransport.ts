@@ -93,6 +93,34 @@ export type DeviceConnection = {
   remoteAppVersion: string;
 };
 
+// The two-phase handle the direct dialer's serialized-hello race needs
+// (v2 step 10, slice B): open the socket now, present the credential
+// later. A hello consumes a single-use connect ticket AND, on the
+// host, supersedes any previous authed socket from the same device, so
+// a race that hellos on every candidate at once would have the slower
+// candidate kill the winner's fresh session. Opening is free and
+// concurrent, and authenticate() is what spends the ticket.
+export type PendingDeviceConnection = {
+  // Resolves when the socket opens (the earliest a hello could be
+  // sent), rejects when it closes or errors before opening. Observing
+  // it is optional: an ignored rejection is absorbed internally.
+  whenOpen: Promise<void>;
+  // Sends the hello (immediately when the socket is open, on open
+  // otherwise) and settles with the established connection or the
+  // handshake failure. Idempotent: repeat calls return the same
+  // promise without a second hello.
+  authenticate(): Promise<DeviceConnection>;
+  // Whether the hello frame was actually handed to the socket. The
+  // dialer's blocked-verdict rule keys on this: only a hello that was
+  // sent can have consumed its ticket, so a connection-time rejection
+  // (a lockout, a dead route) must not read as a spent credential.
+  helloSent(): boolean;
+  // Close without authenticating. Harmless to the host: no hello was
+  // presented, so no ticket was spent and no session was superseded.
+  // After a successful authenticate, this is an owner close.
+  abandon(): void;
+};
+
 // The block-vs-retry verdict for a close code. Only a wrong token
 // blocks: the supervisor must not spin on it. Kept here beside the
 // connect logic so the one rule has a single owner.
@@ -100,274 +128,335 @@ function isBlockingCloseCode(code: number | null): boolean {
   return code === CLOSE_AUTH_FAILED;
 }
 
+// The single-phase connect every non-racing caller uses (the LAN
+// supervisor, the relay peer dial helpers): open and hello in one
+// motion, the behavior this function always had.
 export function connectDevice(
   options: ConnectDeviceOptions,
 ): Promise<DeviceConnection> {
+  return openDevice(options).authenticate();
+}
+
+export function openDevice(
+  options: ConnectDeviceOptions,
+): PendingDeviceConnection {
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
 
-  return new Promise<DeviceConnection>((resolve, reject) => {
-    const socket = new WebSocket(options.url);
+  let resolve!: (connection: DeviceConnection) => void;
+  let reject!: (error: unknown) => void;
+  const connectPromise = new Promise<DeviceConnection>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  // An abandoned handle may never call authenticate, so nobody would
+  // observe the rejection. The absorber keeps that from surfacing as
+  // an unhandled rejection. authenticate() still returns the original
+  // promise, whose rejection reaches its caller.
+  connectPromise.catch(() => {});
 
-    // Correlation state for invokes on this socket.
-    let nextId = 1;
-    const pending = new Map<
-      number,
-      { resolve: (value: unknown) => void; reject: (error: unknown) => void }
-    >();
-    // Push subscribers, purely local: fed by push frames, never touching
-    // the wire. The shared registry owns the add/remove/fan-out and
-    // isolates a throwing subscriber.
-    const subscribers = createSubscriberRegistry("socket");
+  let resolveOpen!: () => void;
+  let rejectOpen!: (error: unknown) => void;
+  const whenOpen = new Promise<void>((res, rej) => {
+    resolveOpen = res;
+    rejectOpen = rej;
+  });
+  whenOpen.catch(() => {});
 
-    // Flips true the instant this socket is unusable (closed or errored),
-    // so an invoke after close rejects immediately rather than hanging.
-    let closed = false;
-    // Throttle counter for the onAnyPush containment below, mirroring
-    // the subscriber registry's throttled warn: a throwing tap on a
-    // chatty push stream must not warn once per frame.
-    let anyPushThrew = 0;
-    // Set when the owner tears the connection down via close(), so the
-    // ensuing close event stays silent: onClose must fire only for a
-    // socket that dropped on its own, never for a deliberate teardown,
-    // or the supervisor would schedule a reconnect against its own stop.
-    let ownerClosed = false;
-    // Non-null once the welcome landed. Distinguishes a pre-welcome
-    // close (reject the connect promise) from a post-welcome close
-    // (invoke onClose, reject pending).
-    let welcome: { remoteDeviceId: string; remoteAppVersion: string } | null =
-      null;
+  const socket = new WebSocket(options.url);
 
-    const helloTimer = setTimeout(() => {
-      if (welcome !== null || closed) return;
-      // The welcome never arrived in time. A retryable failure: the host
-      // may just be slow or mid-restart.
-      closed = true;
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
-      reject(new RemoteConnectError("welcome timeout", null, false));
-    }, helloTimeoutMs);
+  // Correlation state for invokes on this socket.
+  let nextId = 1;
+  const pending = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: unknown) => void }
+  >();
+  // Push subscribers, purely local: fed by push frames, never touching
+  // the wire. The shared registry owns the add/remove/fan-out and
+  // isolates a throwing subscriber.
+  const subscribers = createSubscriberRegistry("socket");
 
-    // Reject every in-flight invoke with a disconnect error. Called once
-    // on a post-welcome close, so a caller awaiting a res is never left
-    // hanging.
-    const rejectAllPending = (code: number | null): void => {
-      const error = new RemoteDisconnectedError(code);
-      for (const entry of pending.values()) entry.reject(error);
-      pending.clear();
-    };
+  // Flips true the instant this socket is unusable (closed or errored),
+  // so an invoke after close rejects immediately rather than hanging.
+  let closed = false;
+  // Throttle counter for the onAnyPush containment below, mirroring
+  // the subscriber registry's throttled warn: a throwing tap on a
+  // chatty push stream must not warn once per frame.
+  let anyPushThrew = 0;
+  // Set when the owner tears the connection down via close(), so the
+  // ensuing close event stays silent: onClose must fire only for a
+  // socket that dropped on its own, never for a deliberate teardown,
+  // or the supervisor would schedule a reconnect against its own stop.
+  let ownerClosed = false;
+  // Non-null once the welcome landed. Distinguishes a pre-welcome
+  // close (reject the connect promise) from a post-welcome close
+  // (invoke onClose, reject pending).
+  let welcome: { remoteDeviceId: string; remoteAppVersion: string } | null =
+    null;
+  // The two-phase hello state: requested by authenticate(), sent once
+  // the socket is open too. connectDevice requests it up front, so the
+  // single-phase path hellos on open exactly as before.
+  let opened = false;
+  let helloRequested = false;
+  let helloWasSent = false;
 
-    socket.addEventListener("open", () => {
-      if (closed) return;
-      // Hello must be the first frame, within the host's hello timeout.
-      socket.send(
-        encodeFrame({
-          t: "hello",
-          token: options.token,
-          deviceId: options.localDeviceId,
-          appVersion: options.appVersion,
-        }),
-      );
-    });
+  const sendHello = (): void => {
+    if (helloWasSent || closed) return;
+    helloWasSent = true;
+    // Hello must be the first frame, within the host's hello timeout.
+    socket.send(
+      encodeFrame({
+        t: "hello",
+        token: options.token,
+        deviceId: options.localDeviceId,
+        appVersion: options.appVersion,
+      }),
+    );
+  };
 
-    socket.addEventListener("message", (event: MessageEvent) => {
-      if (closed) return;
-      // The host only ever sends text frames. A binary frame is not part
-      // of the contract, so drop it rather than treat it as fatal.
-      if (typeof event.data !== "string") {
-        console.warn("[socket] dropping non-text inbound frame");
+  // Armed at open time, not authenticate time, so the one timer bounds
+  // the whole attempt (TCP open included) exactly as it always did. A
+  // deferred authenticate (the dialer queueing behind another hello)
+  // spends its wait against the same budget, which is the deadline the
+  // dialer already passes in.
+  const helloTimer = setTimeout(() => {
+    if (welcome !== null || closed) return;
+    // The welcome never arrived in time. A retryable failure: the host
+    // may just be slow or mid-restart.
+    closed = true;
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+    const timeout = new RemoteConnectError("welcome timeout", null, false);
+    rejectOpen(timeout);
+    reject(timeout);
+  }, helloTimeoutMs);
+
+  // Reject every in-flight invoke with a disconnect error. Called once
+  // on a post-welcome close, so a caller awaiting a res is never left
+  // hanging.
+  const rejectAllPending = (code: number | null): void => {
+    const error = new RemoteDisconnectedError(code);
+    for (const entry of pending.values()) entry.reject(error);
+    pending.clear();
+  };
+
+  socket.addEventListener("open", () => {
+    if (closed) return;
+    opened = true;
+    resolveOpen();
+    if (helloRequested) sendHello();
+  });
+
+  socket.addEventListener("message", (event: MessageEvent) => {
+    if (closed) return;
+    // The host only ever sends text frames. A binary frame is not part
+    // of the contract, so drop it rather than treat it as fatal.
+    if (typeof event.data !== "string") {
+      console.warn("[socket] dropping non-text inbound frame");
+      return;
+    }
+    const frame = decodeFrame(event.data, ServerFrameSchema);
+    if (frame === null) {
+      // A malformed inbound frame is logged and dropped, never fatal:
+      // one bad message must not kill a socket carrying live invokes.
+      console.warn("[socket] dropping unparseable server frame");
+      return;
+    }
+
+    if (welcome === null) {
+      // Before the welcome, the only frame we act on is the welcome.
+      // Anything else pre-welcome is dropped: the host sends nothing
+      // else before it.
+      if (frame.t !== "welcome") {
+        console.warn("[socket] dropping pre-welcome frame");
         return;
       }
-      const frame = decodeFrame(event.data, ServerFrameSchema);
-      if (frame === null) {
-        // A malformed inbound frame is logged and dropped, never fatal:
-        // one bad message must not kill a socket carrying live invokes.
-        console.warn("[socket] dropping unparseable server frame");
-        return;
-      }
-
-      if (welcome === null) {
-        // Before the welcome, the only frame we act on is the welcome.
-        // Anything else pre-welcome is dropped: the host sends nothing
-        // else before it.
-        if (frame.t !== "welcome") {
-          console.warn("[socket] dropping pre-welcome frame");
-          return;
-        }
-        if (
-          options.expectedDeviceId !== undefined &&
-          frame.deviceId !== options.expectedDeviceId
-        ) {
-          // The wrong machine answered (a stale address, a NAT
-          // surprise). Blocked, not retryable: redialing the same
-          // address cannot change who lives there, and the caller
-          // falls back to the relay instead.
-          closed = true;
-          clearTimeout(helloTimer);
-          try {
-            socket.close();
-          } catch {
-            // Already closing.
-          }
-          reject(
-            new RemoteConnectError(
-              "welcome from an unexpected device",
-              null,
-              true,
-            ),
-          );
-          return;
-        }
+      if (
+        options.expectedDeviceId !== undefined &&
+        frame.deviceId !== options.expectedDeviceId
+      ) {
+        // The wrong machine answered (a stale address, a NAT
+        // surprise). Blocked, not retryable: redialing the same
+        // address cannot change who lives there, and the caller
+        // falls back to the relay instead.
+        closed = true;
         clearTimeout(helloTimer);
-        welcome = {
-          remoteDeviceId: frame.deviceId,
-          remoteAppVersion: frame.appVersion,
-        };
-        resolve({
-          transport,
-          close,
-          remoteDeviceId: welcome.remoteDeviceId,
-          remoteAppVersion: welcome.remoteAppVersion,
-        });
-        return;
-      }
-
-      if (frame.t === "res") {
-        const entry = pending.get(frame.id);
-        if (entry === undefined) {
-          // A res for an id we no longer track (already rejected on
-          // close, or a duplicate). Nothing to route it to.
-          return;
+        try {
+          socket.close();
+        } catch {
+          // Already closing.
         }
-        pending.delete(frame.id);
-        if (frame.ok) {
-          entry.resolve(frame.result);
-        } else if (frame.code === COMMAND_REFUSED_CODE) {
-          // The host's gate refused the command (the LAN wire is
-          // read-only). Typed, message preserved, so a caller can
-          // distinguish "that machine will not run commands from here"
-          // from a real handler failure. An old host sends no code and
-          // falls through to the plain Error below.
-          entry.reject(new CommandRefusedError(frame.message));
-        } else {
-          // A plain Error carrying the host's message text, so the
-          // shared/errors.ts matchers degrade a remote handler failure
-          // exactly as they do an Electron IPC one.
-          entry.reject(new Error(frame.message));
-        }
-        return;
-      }
-
-      if (frame.t === "push") {
-        if (options.onAnyPush !== undefined) {
-          // The wildcard tap sees every push before the per-channel
-          // fan-out. Contained so a throwing bridge callback cannot
-          // starve local subscribers, mirroring the relay link.
-          try {
-            options.onAnyPush(frame.channel, frame.payload);
-          } catch (error) {
-            anyPushThrew += 1;
-            if (anyPushThrew % 50 === 1) {
-              console.warn(
-                `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${anyPushThrew} so far)`,
-              );
-            }
-          }
-        }
-        subscribers.emit(frame.channel, frame.payload);
-        return;
-      }
-
-      // A second welcome, or any other frame after welcome, is not part
-      // of the contract. Drop it.
-      console.warn("[socket] dropping unexpected server frame");
-    });
-
-    socket.addEventListener("error", () => {
-      // The browser fires error with no useful detail, and always
-      // follows it with close. Let the close handler own the outcome so
-      // the reject reason carries the close code.
-    });
-
-    socket.addEventListener("close", (event: CloseEvent) => {
-      clearTimeout(helloTimer);
-      // The owner tore this connection down. close() already rejected any
-      // pending invokes, so stay silent: no onClose, and reject the
-      // connect promise only if it never resolved.
-      if (ownerClosed) {
-        if (welcome === null) {
-          reject(new RemoteConnectError("connection closed", null, false));
-        }
-        return;
-      }
-      // The welcome-timeout path already closed the socket and rejected.
-      if (closed && welcome === null) return;
-      const wasWelcomed = welcome !== null;
-      closed = true;
-      if (!wasWelcomed) {
-        // Closed before the handshake finished. The close code decides
-        // block vs retry; the supervisor reads it off the error.
-        const code = event.code;
         reject(
           new RemoteConnectError(
-            `connection closed before welcome (code ${code})`,
-            code,
-            isBlockingCloseCode(code),
+            "welcome from an unexpected device",
+            null,
+            true,
           ),
         );
         return;
       }
-      // An established connection dropped. Fail every pending invoke,
-      // then hand the close code to the owner so it can decide reconnect.
-      rejectAllPending(event.code);
-      options.onClose(event.code);
-    });
-
-    const transport: ClientTransport = {
-      invoke(channel: string, input: unknown): Promise<unknown> {
-        if (closed) {
-          // Invoke-after-close rejects immediately rather than queueing
-          // onto a dead socket.
-          return Promise.reject(new RemoteDisconnectedError(null));
-        }
-        const id = nextId++;
-        return new Promise<unknown>((res, rej) => {
-          pending.set(id, { resolve: res, reject: rej });
-          // Omit input when undefined so a void contract input rides as
-          // an absent field, matching the host's parse of the wire.
-          const frame =
-            input === undefined
-              ? ({ t: "req", id, channel } as const)
-              : ({ t: "req", id, channel, input } as const);
-          try {
-            socket.send(encodeFrame(frame));
-          } catch (error) {
-            pending.delete(id);
-            rej(error);
-          }
-        });
-      },
-      subscribe(
-        channel: string,
-        handler: (payload: unknown) => void,
-      ): () => void {
-        return subscribers.subscribe(channel, handler);
-      },
-    };
-
-    function close(): void {
-      if (closed) return;
-      closed = true;
-      ownerClosed = true;
       clearTimeout(helloTimer);
-      rejectAllPending(null);
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
+      welcome = {
+        remoteDeviceId: frame.deviceId,
+        remoteAppVersion: frame.appVersion,
+      };
+      resolve({
+        transport,
+        close,
+        remoteDeviceId: welcome.remoteDeviceId,
+        remoteAppVersion: welcome.remoteAppVersion,
+      });
+      return;
     }
+
+    if (frame.t === "res") {
+      const entry = pending.get(frame.id);
+      if (entry === undefined) {
+        // A res for an id we no longer track (already rejected on
+        // close, or a duplicate). Nothing to route it to.
+        return;
+      }
+      pending.delete(frame.id);
+      if (frame.ok) {
+        entry.resolve(frame.result);
+      } else if (frame.code === COMMAND_REFUSED_CODE) {
+        // The host's gate refused the command (the LAN wire is
+        // read-only). Typed, message preserved, so a caller can
+        // distinguish "that machine will not run commands from here"
+        // from a real handler failure. An old host sends no code and
+        // falls through to the plain Error below.
+        entry.reject(new CommandRefusedError(frame.message));
+      } else {
+        // A plain Error carrying the host's message text, so the
+        // shared/errors.ts matchers degrade a remote handler failure
+        // exactly as they do an Electron IPC one.
+        entry.reject(new Error(frame.message));
+      }
+      return;
+    }
+
+    if (frame.t === "push") {
+      if (options.onAnyPush !== undefined) {
+        // The wildcard tap sees every push before the per-channel
+        // fan-out. Contained so a throwing bridge callback cannot
+        // starve local subscribers, mirroring the relay link.
+        try {
+          options.onAnyPush(frame.channel, frame.payload);
+        } catch (error) {
+          anyPushThrew += 1;
+          if (anyPushThrew % 50 === 1) {
+            console.warn(
+              `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${anyPushThrew} so far)`,
+            );
+          }
+        }
+      }
+      subscribers.emit(frame.channel, frame.payload);
+      return;
+    }
+
+    // A second welcome, or any other frame after welcome, is not part
+    // of the contract. Drop it.
+    console.warn("[socket] dropping unexpected server frame");
   });
+
+  socket.addEventListener("error", () => {
+    // The browser fires error with no useful detail, and always
+    // follows it with close. Let the close handler own the outcome so
+    // the reject reason carries the close code.
+  });
+
+  socket.addEventListener("close", (event: CloseEvent) => {
+    clearTimeout(helloTimer);
+    // The owner tore this connection down. close() already rejected any
+    // pending invokes, so stay silent: no onClose, and reject the
+    // connect promise only if it never resolved.
+    if (ownerClosed) {
+      const error = new RemoteConnectError("connection closed", null, false);
+      if (!opened) rejectOpen(error);
+      if (welcome === null) reject(error);
+      return;
+    }
+    // The welcome-timeout path already closed the socket and rejected.
+    if (closed && welcome === null) return;
+    const wasWelcomed = welcome !== null;
+    closed = true;
+    if (!wasWelcomed) {
+      // Closed before the handshake finished. The close code decides
+      // block vs retry, and the supervisor reads it off the error.
+      const code = event.code;
+      const error = new RemoteConnectError(
+        `connection closed before welcome (code ${code})`,
+        code,
+        isBlockingCloseCode(code),
+      );
+      if (!opened) rejectOpen(error);
+      reject(error);
+      return;
+    }
+    // An established connection dropped. Fail every pending invoke,
+    // then hand the close code to the owner so it can decide reconnect.
+    rejectAllPending(event.code);
+    options.onClose(event.code);
+  });
+
+  const transport: ClientTransport = {
+    invoke(channel: string, input: unknown): Promise<unknown> {
+      if (closed) {
+        // Invoke-after-close rejects immediately rather than queueing
+        // onto a dead socket.
+        return Promise.reject(new RemoteDisconnectedError(null));
+      }
+      const id = nextId++;
+      return new Promise<unknown>((res, rej) => {
+        pending.set(id, { resolve: res, reject: rej });
+        // Omit input when undefined so a void contract input rides as
+        // an absent field, matching the host's parse of the wire.
+        const frame =
+          input === undefined
+            ? ({ t: "req", id, channel } as const)
+            : ({ t: "req", id, channel, input } as const);
+        try {
+          socket.send(encodeFrame(frame));
+        } catch (error) {
+          pending.delete(id);
+          rej(error);
+        }
+      });
+    },
+    subscribe(
+      channel: string,
+      handler: (payload: unknown) => void,
+    ): () => void {
+      return subscribers.subscribe(channel, handler);
+    },
+  };
+
+  function close(): void {
+    if (closed) return;
+    closed = true;
+    ownerClosed = true;
+    clearTimeout(helloTimer);
+    rejectAllPending(null);
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+  }
+
+  return {
+    whenOpen,
+    authenticate() {
+      if (!helloRequested) {
+        helloRequested = true;
+        if (opened && !closed) sendHello();
+      }
+      return connectPromise;
+    },
+    helloSent: () => helloWasSent,
+    abandon: close,
+  };
 }

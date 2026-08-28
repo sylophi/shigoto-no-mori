@@ -127,6 +127,28 @@ export async function signalTree(
   for (const d of descendants) safeKill(d, signal);
 }
 
+// SIGTERM one direct child, escalating to SIGKILL after graceMs unless
+// it exits first. For plain (non-detached) children whose whole work is
+// the one process (the cloudflared connector), where the process-group
+// walk above would be overkill. The grace timer is unref'd so a pending
+// escalation never holds the app open at quit.
+export function killWithGrace(child: ChildProcess, graceMs: number): void {
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // Already gone.
+  }
+  const killTimer = setTimeout(() => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      // Already gone.
+    }
+  }, graceMs);
+  killTimer.unref?.();
+  child.once("exit", () => clearTimeout(killTimer));
+}
+
 // Synchronous fire-and-forget variant for the update-install quit path,
 // where awaiting the kill chain would block the updater's handoff.
 // Descendants that escaped the group via setsid() get reparented to

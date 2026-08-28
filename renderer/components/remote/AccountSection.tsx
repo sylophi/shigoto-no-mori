@@ -19,6 +19,7 @@ import {
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 
@@ -48,6 +49,13 @@ export function AccountSection() {
   const relayById = new Map(
     useRemoteDevices().map((device) => [device.deviceId, device] as const),
   );
+  // THIS device's tunnel endpoint state (v2 step 10, slice B), as the
+  // derived primitive off the shared relay status store, for the muted
+  // marker on the this-device row: the section re-renders when the
+  // tunnel state flips, not on every roster transition. Shown only
+  // while up: the other states are diagnostics, not something the row
+  // should shout.
+  const tunnelUp = useTunnelUp();
 
   // Unreachable in practice: the sidebar's Devices button renders only
   // when the account service is configured, so an unconfigured build
@@ -102,23 +110,27 @@ export function AccountSection() {
               </p>
             ) : (
               <div className="space-y-2">
-                {(devicesQuery.data ?? []).map((device) => (
-                  <DeviceRow
-                    key={device.deviceId}
-                    device={device}
-                    isThisDevice={device.deviceId === window.api.deviceId}
-                    relayDevice={relayById.get(device.deviceId)}
-                    granted={grantedSet.has(device.deviceId)}
-                    grantPending={
-                      (grantCommands.isPending &&
-                        grantCommands.variables === device.deviceId) ||
-                      (revokeCommands.isPending &&
-                        revokeCommands.variables === device.deviceId)
-                    }
-                    onGrant={() => grantCommands.mutate(device.deviceId)}
-                    onRevoke={() => revokeCommands.mutate(device.deviceId)}
-                  />
-                ))}
+                {(devicesQuery.data ?? []).map((device) => {
+                  const isThisDevice = device.deviceId === window.api.deviceId;
+                  return (
+                    <DeviceRow
+                      key={device.deviceId}
+                      device={device}
+                      isThisDevice={isThisDevice}
+                      relayDevice={relayById.get(device.deviceId)}
+                      granted={grantedSet.has(device.deviceId)}
+                      grantPending={
+                        (grantCommands.isPending &&
+                          grantCommands.variables === device.deviceId) ||
+                        (revokeCommands.isPending &&
+                          revokeCommands.variables === device.deviceId)
+                      }
+                      onGrant={() => grantCommands.mutate(device.deviceId)}
+                      onRevoke={() => revokeCommands.mutate(device.deviceId)}
+                      tunnelUp={isThisDevice && tunnelUp}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -153,6 +165,7 @@ function DeviceRow({
   grantPending,
   onGrant,
   onRevoke,
+  tunnelUp,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
@@ -161,6 +174,10 @@ function DeviceRow({
   grantPending: boolean;
   onGrant: () => void;
   onRevoke: () => void;
+  // True when THIS device's tunnel endpoint is up (v2 step 10, slice
+  // B), rendered as a muted marker like the peer rows' "direct" one.
+  // Only ever true on the this-device row.
+  tunnelUp?: boolean;
 }) {
   const navigate = useNavigate();
   // A peer is reachable when its relay entry is in the connected phase
@@ -184,6 +201,9 @@ function DeviceRow({
             <span className="ml-2 text-xs text-muted-foreground">
               (this device)
             </span>
+          )}
+          {tunnelUp === true && (
+            <span className="ml-2 text-xs text-muted-foreground">tunnel</span>
           )}
           {relayDevice?.direct === true && (
             <span className="ml-2 text-xs text-muted-foreground">direct</span>

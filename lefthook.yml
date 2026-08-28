@@ -71,7 +71,7 @@ pre-commit:
     # peerPush path. Gated to the direct surface plus the socket and
     # relay layers it composes.
     direct-plane:
-      glob: "{host/direct/**,host/socket/**,host/ipc/modules/direct.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{host/direct/**,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,

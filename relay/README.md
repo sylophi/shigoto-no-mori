@@ -49,7 +49,46 @@ Prerequisites: a Cloudflare account, a Clerk application, and
 
 Optional var: set `ALLOWED_WEB_ORIGIN` to the exact origin of the
 future web client. Unset, only Origin-less clients (the desktop app)
-are accepted.
+are accepted. This var is PAIRED with the desktop app's
+`SM_ACCOUNT_WEB_ORIGIN` (below): the Worker admits the web client's
+relay traffic, and each desktop's direct listener separately admits
+its direct dials. Set one without the other and web access only
+half-works: with only `ALLOWED_WEB_ORIGIN`, web direct dials are
+refused at every desktop's Origin gate (each host logs the refusal).
+
+### Per-device tunnels (optional)
+
+With the tunnel env configured, `POST /tunnel` provisions one named
+Cloudflare Tunnel per device (v2 step 10, slice B): the Worker creates
+or reuses the tunnel, points its remotely managed ingress at the
+device's loopback direct listener, writes a proxied CNAME under
+`TUNNEL_DOMAIN`, and returns the connector run token the app hands to
+a local `cloudflared`. Tunnel data never touches the Worker. Unset,
+the tunnel route answers a typed "not configured" and devices simply
+skip tunnels.
+
+Prerequisites: a DNS zone on the same Cloudflare account (for the
+per-device CNAMEs), and an API token with Cloudflare Tunnel edit and
+DNS edit permissions scoped to that account and zone. Devices need
+`cloudflared` installed (`brew install cloudflared` on macOS, see
+Cloudflare's docs for other platforms); the app finds it on PATH or
+via the `cloudflaredPath` device config key.
+
+1. Set the API token as a secret:
+
+   ```sh
+   pnpm exec wrangler secret put CLOUDFLARE_API_TOKEN
+   ```
+
+2. Set the plain vars (in `wrangler.jsonc` `vars` or the dashboard),
+   placeholders shown, use your own values:
+
+   - `CF_ACCOUNT_ID` - the Cloudflare account id.
+   - `TUNNEL_ZONE_ID` - the DNS zone id for the CNAMEs.
+   - `TUNNEL_DOMAIN` - the tunnel parent domain inside that zone,
+     e.g. `sm.example.com`.
+
+Revoking a device best-effort deletes its tunnel and DNS record.
 
 ## App-side account configuration
 
@@ -69,6 +108,14 @@ bake into a build's launch environment. Never commit real values.
   OAuth application the owner creates.
 - `SM_ACCOUNT_OAUTH_SCOPES` - optional, space-separated. Defaults to
   `openid profile email`.
+- `SM_ACCOUNT_WEB_ORIGIN` - optional, the exact origin of the deployed
+  web client. MUST be set to the same value as the Worker's
+  `ALLOWED_WEB_ORIGIN` whenever that is set: the two are one feature
+  split across two processes. The desktop app's direct listener admits
+  browser dials from exactly this origin so the web client can dial
+  wss tunnel URLs; without it those dials die at the desktop's Origin
+  gate (the host logs the refused origin, throttled). Unset, only
+  Origin-less and app-local clients are admitted, as before.
 
 The owner must create an OAuth application (a native or public client,
 with PKCE and no client secret) at the same identity provider the Worker

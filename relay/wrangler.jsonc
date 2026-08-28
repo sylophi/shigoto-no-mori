@@ -9,6 +9,20 @@
 //   the API. See the origin gate in src/worker.ts.
 // - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
 //   test seam, production should leave it unset.
+//
+// Tunnel provisioning (v2 step 10, slice B), all optional: with any of
+// them unset, POST /tunnel answers the typed "not configured" and the
+// rest of the Worker works as before. Placeholders only, never real
+// values:
+// - CLOUDFLARE_API_TOKEN: a wrangler secret (`wrangler secret put
+//   CLOUDFLARE_API_TOKEN`), an API token with Cloudflare Tunnel edit
+//   and DNS edit permissions on the account and zone below.
+// - CF_ACCOUNT_ID: the Cloudflare account id tunnels are created
+//   under, e.g. "0000000000000000000000000000000c".
+// - TUNNEL_ZONE_ID: the DNS zone id the per-device CNAMEs are written
+//   into, e.g. "0000000000000000000000000000000z".
+// - TUNNEL_DOMAIN: the tunnel parent domain inside that zone, e.g.
+//   "sm.example.com". Each device gets `sm-<hash>.<TUNNEL_DOMAIN>`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sm-relay",

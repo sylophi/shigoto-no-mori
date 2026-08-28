@@ -46,6 +46,20 @@ type SocketStatusMatchesSupervisor =
       : never
     : never;
 
+// THIS device's tunnel endpoint state vocabulary (v2 step 10, slice
+// B). The wire schema is the single owner: the cloudflared runner
+// (host/direct/cloudflared.ts) types its state off this so the two
+// sides cannot drift.
+export const TunnelStateSchema = z.enum([
+  "off",
+  "no-binary",
+  "unconfigured",
+  "starting",
+  "up",
+  "error",
+]);
+export type TunnelState = z.infer<typeof TunnelStateSchema>;
+
 export const RelayStatusSchema = z.object({
   socket: RelaySocketStatusSchema,
   // The account's online deviceIds from the latest presence broadcast,
@@ -57,9 +71,13 @@ export const RelayStatusSchema = z.object({
   peerAppVersions: z.record(z.string(), z.string()),
   // The peers whose cached session rides a DIRECT socket rather than
   // the relay (v2 step 10, slice A). Optional per the version-skew
-  // policy: absent means the serving side predates the direct plane,
-  // and the web bridge never sets it.
+  // policy: absent means the serving side predates the direct plane.
   directDeviceIds: z.array(z.string()).optional(),
+  // The tunnel endpoint state, for the devices page. Additive-optional:
+  // absent means the serving side predates tunnels (the web bridge,
+  // which runs no cloudflared, never sets it). Never carries the
+  // hostname or any secret.
+  tunnel: TunnelStateSchema.optional(),
 });
 export type RelayStatus = z.infer<typeof RelayStatusSchema> &
   SocketStatusMatchesSupervisor;

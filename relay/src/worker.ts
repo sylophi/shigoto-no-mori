@@ -20,7 +20,11 @@ import {
   type ErrorBody,
   RELAY_ROUTES,
   type TicketResponse,
+  TUNNEL_UNCONFIGURED_STATUS,
+  type TunnelProvisionResponse,
+  TunnelProvisionRequestSchema,
 } from "../../shared/relay/protocol.ts";
+import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_TTL_MS,
@@ -52,6 +56,11 @@ export interface RelayDeps {
   // the token does not verify. Injected so the test suite never talks
   // to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
+  // The fetch the Cloudflare tunnel API is called through (v2 step 10,
+  // slice B). Injected like verifyLogin so the vitest suite stubs the
+  // CF API inside workerd with no network. Defaults to the global
+  // fetch in production (index.ts passes nothing).
+  cfFetch?: typeof fetch;
 }
 
 // Structurally compatible with ExportedHandler<Env>, with fetch and
@@ -181,8 +190,9 @@ function ticketTtlMs(env: Env): number {
 }
 
 export function createWorker(deps: RelayDeps): RelayWorker {
+  const cfFetch = deps.cfFetch ?? fetch;
   return {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
       try {
         const url = new URL(request.url);
 
@@ -207,7 +217,7 @@ export function createWorker(deps: RelayDeps): RelayWorker {
           return await connect(request, env, url);
         }
 
-        const response = await route(request, env, url);
+        const response = await route(request, env, url, ctx);
         // A non-null origin already passed the gate, so it is exactly
         // the configured web origin. Append CORS so the browser can
         // read the response.
@@ -237,6 +247,7 @@ export function createWorker(deps: RelayDeps): RelayWorker {
     request: Request,
     env: Env,
     url: URL,
+    ctx: ExecutionContext,
   ): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204 });
@@ -267,13 +278,19 @@ export function createWorker(deps: RelayDeps): RelayWorker {
         // { error } shape and a 400, never a 500.
         return jsonError(400, { error: "malformed device id" });
       }
-      return await revokeDevice(request, env, targetId);
+      return await revokeDevice(request, env, targetId, ctx);
     }
     if (
       request.method === RELAY_ROUTES.mintTicket.method &&
       url.pathname === RELAY_ROUTES.mintTicket.path
     ) {
       return await mintTicket(request, env);
+    }
+    if (
+      request.method === RELAY_ROUTES.provisionTunnel.method &&
+      url.pathname === RELAY_ROUTES.provisionTunnel.path
+    ) {
+      return await provisionDeviceTunnel(request, env);
     }
     return jsonError(404, { error: "not found" });
   }
@@ -368,7 +385,12 @@ export function createWorker(deps: RelayDeps): RelayWorker {
   // a nonexistent one, so the endpoint leaks nothing about foreign
   // deviceIds. The revocation itself (D1 row, live sockets, unconsumed
   // tickets) is one operation owned by the Durable Object.
-  async function revokeDevice(request: Request, env: Env, targetId: string) {
+  async function revokeDevice(
+    request: Request,
+    env: Env,
+    targetId: string,
+    ctx: ExecutionContext,
+  ) {
     // The caller auth and the target lookup are independent reads, so
     // they run together.
     const [device, target] = await Promise.all([
@@ -398,7 +420,54 @@ export function createWorker(deps: RelayDeps): RelayWorker {
     } catch {
       return jsonError(502, { error: "revocation failed" });
     }
+    // Best-effort tunnel teardown (v2 step 10, slice B): the revoked
+    // device's named tunnel and DNS record die with it when the tunnel
+    // env is configured. teardownTunnel swallows every CF failure
+    // itself, so it can never fail a revoke the DO already committed,
+    // and it rides waitUntil so the caller's 204 never waits on the CF
+    // API either.
+    const cf = tunnelEnvOf(env);
+    if (cf !== null) {
+      ctx.waitUntil(teardownTunnel(cf, cfFetch, device.account_id, targetId));
+    }
     return new Response(null, { status: 204 });
+  }
+
+  // Tunnel provisioning (v2 step 10, slice B): create-or-reuse this
+  // device's named tunnel, point its ingress at the presented loopback
+  // port, ensure the DNS CNAME and answer the hostname plus the
+  // connector run token. Device-credential authed like mintTicket.
+  // Unconfigured env answers the typed status so the app can gate
+  // tunnels off without treating it as a failure.
+  async function provisionDeviceTunnel(request: Request, env: Env) {
+    const device = await authDevice(request, env);
+    if (device === null)
+      return jsonError(401, { error: "invalid device credential" });
+    const cf = tunnelEnvOf(env);
+    if (cf === null) {
+      return jsonError(TUNNEL_UNCONFIGURED_STATUS, {
+        error: "tunnel provisioning is not configured",
+      });
+    }
+    const body = TunnelProvisionRequestSchema.safeParse(
+      await readJson(request),
+    );
+    if (!body.success)
+      return jsonError(400, { error: "invalid tunnel request" });
+    try {
+      const provisioned = await provisionTunnel(
+        cf,
+        cfFetch,
+        device.account_id,
+        device.device_id,
+        body.data.port,
+      );
+      return Response.json(provisioned satisfies TunnelProvisionResponse);
+    } catch {
+      // The CF API refused or misbehaved. A 502 keeps the { error }
+      // contract and the app's runner backs off and retries later.
+      return jsonError(502, { error: "tunnel provisioning failed" });
+    }
   }
 
   async function mintTicket(request: Request, env: Env) {
