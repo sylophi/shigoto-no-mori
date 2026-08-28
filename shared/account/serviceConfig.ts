@@ -93,12 +93,16 @@ export function parseDotenv(text: string): Record<string, string> {
   return out;
 }
 
-// Merges the optional dev .env.account values with the real process
-// environment. Real environment variables always win, so a shipped build
-// with real env vars never depends on the file.
+// Merges the three config layers, lowest to highest precedence: the
+// optional dev .env.account values, the values baked into the bundle at
+// build time, and the real process environment. Real environment
+// variables always win, so an owner can override even a baked build
+// from the environment, and a build with nothing baked in behaves
+// exactly as before.
 export function mergeServiceEnv(
   fileEnv: Record<string, string>,
+  bakedEnv: Record<string, string>,
   processEnv: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
-  return { ...fileEnv, ...processEnv };
+  return { ...fileEnv, ...bakedEnv, ...processEnv };
 }
