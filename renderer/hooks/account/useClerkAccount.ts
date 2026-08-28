@@ -13,7 +13,7 @@ import { useMutation } from "@tanstack/react-query";
 // passed as Clerk's sign-out callback: without one, clerk-js
 // window-navigates to its after-sign-out URL, reloading the renderer
 // mid-flight and racing the revoke. ClerkAccountSync fires the same
-// account:signOut off the session-ended transition; the handlers'
+// account:signOut off the session-ended transition, and the handlers'
 // in-flight guards collapse the two into one revoke.
 export function useClerkSignOut() {
   const clerk = useClerk();

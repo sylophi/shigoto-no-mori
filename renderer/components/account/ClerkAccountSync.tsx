@@ -1,12 +1,12 @@
 // Keeps the Clerk session and the relay device credential in step, on
 // both shells (mounted inside the ClerkProvider by ClerkGate). Clerk
-// owns "who is signed in"; the account layer owns "this device is
+// owns "who is signed in", the account layer owns "this device is
 // enrolled". The transitions this component drives:
 //
 // - Clerk signed in, no credential stored: mint a fresh session token
 //   (skipCache, so the relay never sees one mid-expiry) and exchange it
 //   for a device credential via account:enroll. One automatic attempt
-//   per Clerk user per session (armedFor), re-armed by a sign-out — a
+//   per Clerk user per session (armedFor), re-armed by a sign-out. A
 //   failure (relay down, mint failed) surfaces as the mutation's error
 //   toast, and the account UI offers a manual retry (the enroll-retry
 //   buttons in AccountSection / LoginPage). Main's in-flight guard is
@@ -15,7 +15,7 @@
 //   sign the account layer out first (the relay refuses a cross-account
 //   re-enroll of the same deviceId), then the effect re-runs into the
 //   enroll branch.
-// - Clerk session ended: sign the account layer out too — but only for
+// - Clerk session ended: sign the account layer out too, but only for
 //   a session this process actually observed (sawSession). "No session
 //   at boot" is NOT a sign-out: the stored credential is long-lived and
 //   independent of Clerk (a pre-Clerk upgrade, a cleared Clerk token

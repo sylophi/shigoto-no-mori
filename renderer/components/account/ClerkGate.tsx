@@ -1,6 +1,6 @@
 // The one Clerk mount decision, shared by both shells: mount the given
 // ClerkProvider (the @clerk/electron/react flavor on desktop, plain
-// @clerk/react on web — the only difference between the two boots) iff
+// @clerk/react on web, the only difference between the two boots) iff
 // the build carries a publishable key, and keep ClerkAccountSync inside
 // it so the session-to-credential reconciler can never be forgotten or
 // mounted outside the provider. Components under an absent provider

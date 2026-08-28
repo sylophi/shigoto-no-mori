@@ -32,8 +32,8 @@ allowBuilds:
   # compiles them. Build tooling only: neither is bundled into the app.
   fs-xattr: true
   macos-alias: true
-  # Clerk transitives. The first two postinstalls only print promo/funding
-  # banners; bufferutil and utf-8-validate are optional native speedups
+  # Clerk transitives. The first two postinstalls only print promo and
+  # funding banners. bufferutil and utf-8-validate are optional native speedups
   # for ws that fall back to pure JS when absent. None need to build.
   browser-tabs-lock: false
   bufferutil: false

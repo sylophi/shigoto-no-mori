@@ -4,7 +4,7 @@
 // builds the at-rest cipher, app names the userData store path, and
 // process.env supplies the service config. Sign-in itself lives in the
 // renderer (Clerk's embedded components over the @clerk/electron
-// bridge); this module only exchanges the resulting session token for
+// bridge). This module only exchanges the resulting session token for
 // the relay device credential. The handlers stay thin, delegating to
 // the pure orchestration.
 import { readFileSync } from "node:fs";
@@ -47,7 +47,7 @@ let cipherWarned = false;
 let revokeWarned = false;
 // Re-entrancy guards for account:enroll and account:signOut. A
 // concurrent enroll (a re-fired renderer effect, two windows) must not
-// enroll twice and rotate the credential mid-write; concurrent
+// enroll twice and rotate the credential mid-write, and concurrent
 // sign-outs (the UI button plus ClerkAccountSync reacting to the same
 // session end) must not race two revokes, where the second would 401
 // against the credential the first already deleted. The second caller

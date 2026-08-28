@@ -7,8 +7,8 @@
 // the system browser calls back is `<scheme>://<host>/...` (routed to
 // the app through the scheme registration the bridge performs), and
 // the SDK authenticates FAPI calls with an Authorization header, which
-// Clerk's API refuses to combine with a browser-set Origin header — a
-// custom-scheme page sends no Origin, an http one always does. Both
+// Clerk's API refuses to combine with a browser-set Origin header (a
+// custom-scheme page sends no Origin, an http one always does). Both
 // modes therefore load the renderer over the scheme: packaged serves
 // the built bundle from disk, dev proxies to the vite server (whose
 // HMR socket the client dials directly, see vite.renderer.config.ts).
@@ -37,7 +37,7 @@ export function rendererSchemeUrl(): string {
 // construction and then on each of clerk-js's periodic session
 // refreshes. Wrap it so construction moves off the boot path to the
 // first token access, and reads after the first are answered from
-// memory — main is the sole writer, so the cache can never be stale.
+// memory: main is the sole writer, so the cache can never be stale.
 function lazyMemoizedTokenStorage(): TokenStorage {
   let backing: TokenStorage | null = null;
   const cache = new Map<string, string | null>();
@@ -48,7 +48,7 @@ function lazyMemoizedTokenStorage(): TokenStorage {
       if (cached !== undefined) return cached;
       const value = await store().getItem(key);
       // A setItem that landed while the disk read was in flight is
-      // fresher than what was read — never let the read overwrite it.
+      // fresher than what was read, so never let the read overwrite it.
       const raced = cache.get(key);
       if (raced !== undefined) return raced;
       cache.set(key, value);
@@ -69,7 +69,7 @@ function lazyMemoizedTokenStorage(): TokenStorage {
 // scheme's privileges, which Electron only accepts pre-ready) and after
 // the dev userData suffix is applied (token storage lives in userData).
 // The app owns the single-instance lock (main/index.ts), so the
-// bridge's own lock management is disabled; its open-url and
+// bridge's own lock management is disabled, and its open-url and
 // second-instance listeners still receive the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
   return createClerkBridge({
@@ -125,7 +125,7 @@ function fileHandler(rendererDir: string): SchemeHandler {
       return new Response(null, { status: 404 });
     }
     try {
-      // net.fetch rejects on a missing file; that's a 404, not a
+      // net.fetch rejects on a missing file. That's a 404, not a
       // protocol-handler failure.
       return await net.fetch(pathToFileURL(file).toString());
     } catch {

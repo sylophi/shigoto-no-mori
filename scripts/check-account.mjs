@@ -11,7 +11,7 @@
 // never appears in a renderer-visible object.
 //
 // Sign-in itself is Clerk's embedded UI plus the @clerk/electron
-// bridge; the pure seam this layer owns starts at the session token
+// bridge. The pure seam this layer owns starts at the session token
 // the renderer hands account:enroll, whose orchestration
 // (shared/account/enroll.ts, driven by both shells) is proved here.
 // The other thing it cannot cover is the safeStorage cipher round trip
@@ -314,7 +314,7 @@ async function main() {
         accountId: "user_abc",
         deviceName: "Fallback Mac",
       });
-      // A stored name survives re-enrollment; the fallback is only for
+      // A stored name survives re-enrollment. The fallback is only for
       // a first sign-in.
       store.write({ ...store.read(), deviceName: "Renamed" });
       await enrollDevice(

@@ -215,7 +215,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // Re-entrancy guards mirroring the desktop handler's: a re-fired
   // reconciler effect or a second tab must not race two enrolls (the
   // relay rotates the credential per enroll, so racers can strand the
-  // stored one) or two revokes. Same-tab only — the storage key is
+  // stored one) or two revokes. Same-tab only: the storage key is
   // still shared across tabs, but a cross-tab race is closed by the
   // reconciler's re-read after the storage event.
   let enrollInFlight: Promise<AccountStatus> | null = null;

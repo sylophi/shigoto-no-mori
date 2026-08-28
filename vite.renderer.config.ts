@@ -48,11 +48,11 @@ export default defineConfig(({ mode }) => {
     // The Electron window loads over the shigomori-dev:// scheme with
     // main proxying http to this server (main/electron/clerk.ts), so
     // the HMR client cannot derive its websocket endpoint from the page
-    // location — pin it to the dev server directly. The pin is
+    // location, so pin it to the dev server directly. The pin is
     // unconditional: with PORT unset vite picks its own port and
     // injects the resolved one, and losing the pin with the port block
     // would leave a working page with silently dead HMR. `ws` is the
-    // current spelling; `hmr.{host,port,…}` is deprecated in vite 8.
+    // current spelling, `hmr.{host,port,…}` is deprecated in vite 8.
     server: {
       ...(port ? { port, strictPort: true } : {}),
       ws: { host: "localhost", protocol: "ws" },

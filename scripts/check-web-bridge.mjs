@@ -370,7 +370,7 @@ async function main() {
           });
         }
         if (url === `${RELAY_URL}/tickets`) {
-          // The post-enroll relay refresh mints here; failing it plainly
+          // The post-enroll relay refresh mints here, and failing it plainly
           // parks the supervisor in backoff until the tracked stop.
           return jsonResponse(500, { error: "no relay in this check" });
         }

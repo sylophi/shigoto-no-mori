@@ -184,7 +184,7 @@ const createWindow = () => {
   });
 
   // Both modes load over the renderer scheme rather than file:// or the
-  // vite http origin — Clerk requires it (see main/electron/clerk.ts).
+  // vite http origin. Clerk requires it (see main/electron/clerk.ts).
   // The protocol handler is installed in the ready handler below,
   // before the first createWindow.
   void mainWindow.loadURL(rendererSchemeUrl());

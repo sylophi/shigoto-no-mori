@@ -197,7 +197,7 @@ for (const [, name] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
     failures.push(
       `clerkAppearance reads ${name} but renderer/index.css no longer ` +
         "declares it as a runtime property (an @theme inline entry does " +
-        "not count — Tailwind never emits those as custom properties)",
+        "not count: Tailwind never emits those as custom properties)",
     );
   }
 }

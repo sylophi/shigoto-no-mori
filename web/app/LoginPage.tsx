@@ -1,7 +1,7 @@
 // The unauthenticated landing page: Clerk's embedded sign-in, or an
 // explanation that this build carries no account service configuration.
 // Signed-in (enrolled) visitors are bounced straight to the devices
-// page; ClerkAccountSync performs the enrollment the moment Clerk
+// page, and ClerkAccountSync performs the enrollment the moment Clerk
 // reports a session.
 import { useEffect } from "react";
 import { SignIn, useAuth } from "@clerk/react";
@@ -44,7 +44,7 @@ export function LoginPage() {
 // failed): rendering <SignIn/> to an already-signed-in visitor is a
 // dead end, so show the completing state with a manual retry instead.
 // The redirect props keep Clerk's post-sign-in navigation on this
-// route; the effect above forwards to /devices once enrolled.
+// route, and the effect above forwards to /devices once enrolled.
 function ConfiguredLogin() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const enroll = useEnroll();

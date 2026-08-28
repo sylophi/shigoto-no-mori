@@ -135,10 +135,10 @@ export function AccountSection() {
 
 // Split out so AccountSection itself never calls a Clerk hook: this
 // mounts only on the configured (and therefore provider-wrapped) path
-// above. Sign-in opens Clerk's embedded modal; ClerkAccountSync turns
-// the resulting session into the enrollment. When Clerk is already
+// above. Sign-in opens Clerk's embedded modal, and ClerkAccountSync
+// turns the resulting session into the enrollment. When Clerk is already
 // signed in but the device is not enrolled (the automatic attempt
-// failed — relay down, mint error), opening the modal again would do
+// failed: relay down, mint error), opening the modal again would do
 // nothing, so the button becomes the manual enrollment retry instead.
 function ClerkSignInButton() {
   const clerk = useClerk();

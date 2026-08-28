@@ -3,8 +3,8 @@
 // (main/ipc/modules/account.ts) and the web bridge
 // (web/bridge/createWebBridge.ts) differ only in their platform label,
 // device-name default and store backing. Pure like the rest of
-// shared/account/ — every dependency is an injected seam
-// (AccountService, AccountStore, AccountServiceConfig) — so the
+// shared/account/ (every dependency is an injected seam:
+// AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
 import type { AccountService } from "./service";
 import type { AccountStore } from "./credentialStore";

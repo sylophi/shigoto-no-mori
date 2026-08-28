@@ -11,7 +11,7 @@ export { AccountRelay } from "./relayObject.ts";
 // (renderer/components/account/ClerkAccountSync.tsx), so verifyToken's
 // default session-JWT verification applies, against the instance's
 // JWKS which the secret key fetches from Clerk's Backend API (one
-// outbound call per cold isolate, cached after) — so the first enroll
+// outbound call per cold isolate, cached after), so the first enroll
 // on a fresh isolate depends on api.clerk.com reachability. `sub` is
 // the Clerk user id, so D1 rows and DO names key on it as the account
 // id. Any verification failure (expired, foreign instance, malformed)

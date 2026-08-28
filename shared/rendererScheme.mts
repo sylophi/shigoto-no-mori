@@ -3,8 +3,8 @@
 // bridge (main/electron/clerk.ts), the packaged Info.plist registration
 // (forge.config.ts protocols), the socket host's Origin gate
 // (host/socket/server.ts, the renderer's WebSocket dials carry this
-// origin), and the Clerk instance's allowed_origins (relay/README.md)
-// — a divergence breaks packaged OAuth deep links or direct dials with
+// origin), and the Clerk instance's allowed_origins (relay/README.md).
+// A divergence breaks packaged OAuth deep links or direct dials with
 // no build error, so every consumer derives from here. Constant-only
 // module aside from the flavor switch: forge config, main, host and
 // check scripts all import it.

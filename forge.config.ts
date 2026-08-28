@@ -69,8 +69,8 @@ const config: ForgeConfig = {
     // redirects deep-link back to it. macOS routes the scheme to the
     // app through this Info.plist entry (CFBundleURLTypes). Prod only:
     // dev runs unbundled Electron.app, which LaunchServices will not
-    // route a scheme to — so social (browser-redirect) sign-in cannot
-    // complete in dev on macOS; email-code sign-in is unaffected.
+    // route a scheme to, so social (browser-redirect) sign-in cannot
+    // complete in dev on macOS. Email-code sign-in is unaffected.
     // Verify social providers in a packaged build.
     protocols: [{ name: productName, schemes: [rendererSchemeName("prod")] }],
     // The CLI binary is compiled by the prePackage hook below into

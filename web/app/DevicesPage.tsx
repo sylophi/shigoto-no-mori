@@ -175,9 +175,9 @@ function DeviceRow({
   );
 }
 
-// Revoking THIS browser must end the Clerk session first — with the
+// Revoking THIS browser must end the Clerk session first (with the
 // session alive, ClerkAccountSync would immediately re-enroll the
-// cleared credential — and the sign-out path (Clerk end, relay revoke,
+// cleared credential), and the sign-out path (Clerk end, relay revoke,
 // local clear) is exactly the self-revoke semantics. Split from the
 // peer button so only the self row touches a Clerk hook (rows exist
 // only when enrolled, which implies a mounted provider).

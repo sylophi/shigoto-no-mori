@@ -60,7 +60,7 @@ export function useWatchAccountChanges(): void {
 // would only duplicate it.
 // Exchanges a fresh Clerk session token for the relay device
 // credential. Driven by ClerkAccountSync after Clerk reports a
-// session; the Clerk sign-in UI itself never touches this layer.
+// session. The Clerk sign-in UI itself never touches this layer.
 // Takes the token mint as a callback so a failed mint lands in the
 // same error path (and toast) as a failed enrollment.
 export function useEnroll() {
@@ -76,7 +76,7 @@ export function useEnroll() {
 
 // The account layer's half of sign-out (best-effort relay revoke plus
 // local credential clear). ClerkAccountSync drives it when the Clerk
-// session ends; the UI buttons go through useClerkSignOut, which ends
+// session ends, while the UI buttons go through useClerkSignOut, which ends
 // the Clerk session first and then this same IPC call.
 export function useAccountSignOut() {
   return useMutation<void, Error, void>({
