@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { ChunkB64Schema, DeviceIdSchema } from "@shared/relay/protocol";
+import { ChunkB64Schema } from "@shared/ipc/socket/frames";
+import { DeviceIdSchema } from "@shared/relay/protocol";
 import {
   CommitHashSchema,
   GitRefNameSchema,
@@ -12,7 +13,7 @@ import {
 // between devices as chunked, grant-gated invoke responses over the
 // existing device connection. No new wire protocol, no sidecar port:
 // start registers a bundle on the host, chunk streams it out in
-// relay-sized pieces, abort cleans up a receiver that gave up. Every
+// WIRE_CHUNK_BYTES pieces, abort cleans up a receiver that gave up. Every
 // transfer verb (refTips through bundleAbort) is {remote:true,
 // mutating:true}, so that whole surface rides the per-peer command
 // grant -- and the LAN wire, read-only by policy, refuses it outright.
@@ -22,7 +23,7 @@ import {
 // cache ping (git:externalChange to every viewing peer). captureDirty
 // is the exception and KEEPS the ping -- it writes a capture ref, real
 // host state.
-// Responses to awaited invokes are reliable on the relay link (pushes
+// Responses to awaited invokes are reliable on the device wire (pushes
 // are droppable), which is why the transfer is invoke/response only.
 //
 // pullWorktree (slice C) is the odd one out: it is the LOCAL

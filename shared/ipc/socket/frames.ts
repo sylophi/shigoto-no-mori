@@ -9,15 +9,15 @@
 // the registrar's `def.input.parse(undefined)` behaves exactly as it
 // does on the Electron wire.
 //
-// Frame size: the relay imposes MAX_RELAY_MESSAGE_BYTES per message
-// (shared/relay/protocol.ts), so large res/push frames must chunk to
-// ride that wire.
-// The server caps INBOUND frames at 1 MiB (server.ts maxPayload). That
-// bound is about the hostile direction: client frames (hello, req) are
-// tiny, so a small ceiling denies a pre-auth peer a large buffering
-// budget. It does NOT limit outbound res/push frames (diffs, script
-// logs), which the server writes and ws never measures against
-// maxPayload.
+// Frame size: the server caps INBOUND frames at 1 MiB (server.ts
+// maxPayload, MAX_INBOUND_FRAME_BYTES below). That bound is about the
+// hostile direction: client frames (hello, req) are tiny, so a small
+// ceiling denies a pre-auth peer a large buffering budget. It does NOT
+// limit outbound res/push frames (diffs, script logs), which the
+// server writes and ws never measures against maxPayload. Bulk data
+// (sync bundles, port-forward streams) still crosses in bounded
+// chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
+// req carrying a chunk stays under the inbound cap.
 import { z } from "zod";
 
 // One well-known default keeps the app listener and a client's connect
@@ -26,9 +26,33 @@ import { z } from "zod";
 export const DEFAULT_SOCKET_PORT = 42017;
 
 // Largest inbound (client to server) frame the host will buffer, in
-// bytes. Client frames are tiny by construction, so 1 MiB is generous
-// and still denies a pre-auth peer an unbounded buffering budget.
+// bytes. Client frames are tiny by construction (the largest is a req
+// carrying one WIRE_CHUNK_B64_MAX chunk), so 1 MiB is generous and
+// still denies a pre-auth peer an unbounded buffering budget.
 export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
+
+// One raw chunk of bulk app data per frame, for callers that move byte
+// streams as base64 inside a JSON frame (the port-forward wire and the
+// sync bundle transfer). Chunking is what keeps an uplink req under
+// MAX_INBOUND_FRAME_BYTES and what gives both directions flow control
+// (each chunk is one awaited invoke round trip). The base64 form
+// (853_336 chars) leaves headroom under the 1 MiB inbound cap for the
+// frame fields around it. Raising the chunk size now that the relay's
+// envelope cap no longer applies is a deliberately deferred follow-up.
+export const WIRE_CHUNK_BYTES = 640_000;
+export const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
+
+// The base64 form of one raw chunk, bounded by the cap above and
+// pinned to the base64 charset so a non-base64 payload fails at the
+// schema instead of silently decoding to garbage bytes. The ONE schema
+// for every bulk-data field on both chunked wires (forward's send
+// payload and poll result, sync's bundleChunk result), so an uplink
+// write can never exceed what a downlink chunk may carry and vice
+// versa.
+export const ChunkB64Schema = z
+  .string()
+  .max(WIRE_CHUNK_B64_MAX)
+  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
 
 // Deadline for the first frame (a valid hello) after a socket opens.
 // A shared two-sided protocol fact: slice B's client must send within

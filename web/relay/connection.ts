@@ -3,20 +3,21 @@
 // (no node ws), so it runs in a plain browser and, under node 22 (which
 // ships a global WebSocket client), in the headless web:relay:check.
 //
-// A web client is a refuse-all host: it passes the core no handlers, no
-// read-only channels and no grant predicate, so the link's host role is
-// empty by construction and can never serve a command to a peer. It
-// only DIALS peers as a client, which is why this exposes just the
-// client surface (connectPeer) plus the lifecycle (refresh, stop,
-// status), not the ServerTransport half the node connection carries.
+// A web client is a refuse-all host: it supplies the broker CHANNEL
+// (the client role's req frames need it) but no handler, so the link's
+// host role is empty by construction and answers every req with the
+// no-handler shape. It only DIALS peers as a client (the direct
+// dialer's broker leg), which is why this exposes just the client
+// surface (connectBroker) plus the lifecycle (refresh, stop, status),
+// not the broker slot the node connection carries.
 //
 // This file must stay electron-free and node-builtin-free (host:check):
 // everything platform specific arrives through browser globals or the
 // injected RelayConnectOpts (deviceId, appVersion, accountId, the
-// credential-backed ticket mint).
+// credential-backed ticket mint) and options (the broker channel, so
+// no contract import lands here).
 import {
-  type ConnectPeerOpts,
-  type PeerConnection,
+  type RelayBrokerSession,
   RelayLinkDownError,
 } from "@shared/relay/link";
 import {
@@ -30,21 +31,20 @@ import type {
 
 export type { RelayConnectOpts, RelayConnectionStatus };
 
-export type RelayConnectionCallbacks = {
+export type RelayConnectionOpts = {
+  // The one channel the relay wire brokers, supplied by the
+  // composition (the web bridge derives it from the direct contract)
+  // so this binding stays contract-free like the node one.
+  brokerChannel: string;
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its views.
   onChange?: () => void;
-  // Every push frame received from any peer, see RelayLinkDeps.
-  onPeerPush?: (deviceId: string, channel: string, payload: unknown) => void;
 };
 
 export type RelayConnectionBinding = {
   // The CLIENT half. Rejects with RelayLinkDownError while the socket is
   // down.
-  connectPeer(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
+  connectBroker(deviceId: string): Promise<RelayBrokerSession>;
   // Reconciles the connection with the wanted state. The resolver runs
   // INSIDE the serialized lifecycle, and null means stop (signed out or
   // unconfigured).
@@ -78,7 +78,6 @@ function openBrowserSocket(url: string): RelaySocketAdapter {
         // Already closing.
       }
     },
-    bufferedAmount: () => socket.bufferedAmount,
     onMessage(handler) {
       socket.addEventListener("message", (event: MessageEvent) => {
         // The protocol is JSON text. A binary frame is not part of it,
@@ -96,18 +95,18 @@ function openBrowserSocket(url: string): RelaySocketAdapter {
 }
 
 export function createRelayConnection(
-  callbacks: RelayConnectionCallbacks = {},
+  opts: RelayConnectionOpts,
 ): RelayConnectionBinding {
-  // No host-role deps: a web client serves nobody, so the core keeps
-  // the host role empty by construction and only the client role
-  // (connectPeer) does any work.
+  // Channel only, no handler: a web client serves nobody, so the core
+  // keeps the host role empty by construction and only the client role
+  // (connectBroker) does any work.
   const core = createRelayConnectionCore({
     openSocket: openBrowserSocket,
-    onChange: callbacks.onChange,
-    onPeerPush: callbacks.onPeerPush,
+    onChange: opts.onChange,
+    broker: { channel: opts.brokerChannel },
   });
   return {
-    connectPeer: core.connectPeer,
+    connectBroker: core.connectBroker,
     refresh: core.refresh,
     stop: core.stop,
     status: core.status,

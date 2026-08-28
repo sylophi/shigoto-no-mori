@@ -91,12 +91,12 @@ function grantStore(): GrantStore {
 }
 
 // In-memory mirror of the granted peers for the CURRENT account, so the
-// relay link's synchronous dispatch predicate (isPeerCommandGranted)
+// direct listener's synchronous dispatch predicate (isPeerCommandGranted)
 // never hits the disk or the OS keychain on the hot path. Null means not
 // yet built (an empty set is a real built-empty answer, not "unbuilt").
 // Invalidated on every event that can change the answer: a grant or
 // revoke, and any account change (sign-in, sign-out, rename), so a grant
-// takes effect immediately without a relay reconnect.
+// takes effect immediately without a reconnect.
 let grantCache: ReadonlySet<string> | null = null;
 
 function invalidateGrantCache(): void {
@@ -117,7 +117,7 @@ function currentGrantedPeers(): ReadonlySet<string> {
   return peers;
 }
 
-// The predicate the relay link consults live at dispatch to decide
+// The predicate the direct listener consults live at dispatch to decide
 // whether a peer may run a mutating call on this host. Reads the cached
 // granted set, rebuilding it from disk on the first call after an
 // invalidation.

@@ -54,15 +54,42 @@ export function makeChecker() {
   return { check, failures };
 }
 
+// Teardown bookkeeping for fixture-heavy checks: register teardowns in
+// creation order, run them in reverse, and keep going past a failing
+// one so an assertion failure mid-scenario still releases every
+// listener and socket instead of hanging the process (a cleanup
+// failure never masks the test outcome). Used standalone by the checks
+// whose scenarios share long-lived fixtures, and by makeProof's
+// per-check cleanup below.
+export function makeTracker() {
+  const teardowns = [];
+  return {
+    track: (fn) => {
+      teardowns.push(fn);
+      return fn;
+    },
+    async teardown() {
+      for (const fn of teardowns.toReversed()) {
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- teardown is ordered
+          await fn();
+        } catch {
+          // One failing teardown must not strand the rest.
+        }
+      }
+    },
+  };
+}
+
 // The async sibling of makeChecker, for the e2e proof scripts: named
 // scenario groups that drive real transports sequentially, where the
 // first failure aborts the run. `name` is the proof phrase the summary
 // lines print, like "sync-transfer proof".
 //
 //   - check(label, fn) awaits fn(track) and prints the "  ok" line.
-//     track(cleanup) registers teardown that runs in reverse order even
-//     when the assertions throw, so a failed check cannot leak the
-//     event loop, and a cleanup failure never masks the test outcome.
+//     track(cleanup) registers teardown on a per-check makeTracker, so
+//     cleanups run in reverse order even when the assertions throw and
+//     a failed check cannot leak the event loop.
 //   - ok(label) records an assertion group the script ran inline, for
 //     proofs whose scenarios share long-lived fixtures instead of
 //     per-check setup.
@@ -76,22 +103,11 @@ export function makeProof(name) {
     console.log(`  ok  ${label}`);
   }
   async function check(label, fn) {
-    const cleanups = [];
-    const track = (cleanup) => {
-      cleanups.push(cleanup);
-      return cleanup;
-    };
+    const { track, teardown } = makeTracker();
     try {
       await fn(track);
     } finally {
-      for (const cleanup of cleanups.toReversed()) {
-        try {
-          // oxlint-disable-next-line no-await-in-loop -- cleanups run serially by design
-          await cleanup();
-        } catch {
-          // A cleanup failure must not mask the test outcome.
-        }
-      }
+      await teardown();
     }
     ok(label);
   }

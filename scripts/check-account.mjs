@@ -865,23 +865,20 @@ async function main() {
       () => {
         const filePath = join(tmp, "grants-cap.json");
         const grants = createGrantStore({ filePath });
-        // Fill exactly to the 1024 ceiling.
-        for (let i = 0; i < 1024; i += 1) grants.grant("acct-1", `peer-${i}`);
-        assert.equal(grants.list("acct-1").length, 1024);
+        // Fill exactly to the 256 ceiling (MAX_GRANTED_PEERS, a plain
+        // host-local bound on the persisted list).
+        for (let i = 0; i < 256; i += 1) grants.grant("acct-1", `peer-${i}`);
+        assert.equal(grants.list("acct-1").length, 256);
         // A NEW peer past the cap is refused rather than growing the file.
         assert.throws(
           () => grants.grant("acct-1", "peer-over"),
-          /cannot grant more than 1024/,
+          /cannot grant more than 256/,
         );
-        assert.equal(
-          grants.list("acct-1").length,
-          1024,
-          "the cap was exceeded",
-        );
+        assert.equal(grants.list("acct-1").length, 256, "the cap was exceeded");
         // Re-granting an already-trusted peer at the cap is still a no-op,
         // not a spurious over-cap throw.
         grants.grant("acct-1", "peer-0");
-        assert.equal(grants.list("acct-1").length, 1024);
+        assert.equal(grants.list("acct-1").length, 256);
       },
     );
   } finally {

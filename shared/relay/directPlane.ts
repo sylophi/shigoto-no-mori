@@ -1,9 +1,12 @@
 // The direct data plane's shared composition (v2 step 10): one relay
-// connection, the direct dialer tried before it, the renderer-facing
-// bridge handlers, the status snapshot that folds the direct-session
-// surface into the connection's own, and the presence reconcile that
-// scopes direct sessions to a live roster. Both owners (the Electron
-// main process in main/ipc/register.ts and the web bridge in
+// connection serving as the dialer's broker transport, the direct
+// dialer, the renderer-facing bridge handlers, the status snapshot
+// that folds the direct-session surface into the connection's own, and
+// the presence reconcile that scopes direct sessions to a live roster.
+// Data is direct or nothing (slice C): the relay connection is handed
+// to the DIALER only, never to the bridge, so no code path here can
+// open a relay peer session for contract traffic. Both owners (the
+// Electron main process in main/ipc/register.ts and the web bridge in
 // web/bridge/createWebBridge.ts) used to hand-assemble exactly this
 // and keep each other in step by comment. Now they differ only by the
 // deps here: identity facts, the fan-out sink, the dialable candidate
@@ -14,7 +17,7 @@
 // like the pieces it composes.
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { RelayPeerPush, RelayStatus } from "@shared/ipc/modules/relay";
-import type { ConnectPeerOpts, PeerConnection } from "@shared/relay/link";
+import type { RelayBrokerSession } from "@shared/relay/link";
 import type { RelayConnectionStatus } from "@shared/relay/connectionTypes";
 import {
   makeRelayHandlers,
@@ -28,13 +31,12 @@ import { applyDirectPresence } from "@shared/relay/directPresence";
 
 // The slice of a relay connection the plane composes over, common to
 // the node connection (host/relay/connection.ts) and the browser one
-// (web/relay/connection.ts).
+// (web/relay/connection.ts). connectBroker resolves the NARROWED
+// broker session (one typed invoke plus close) and is consumed by the
+// dialer's broker leg ONLY (see createDirectPlane below).
 export type DirectPlaneConnection = {
   status(): RelayConnectionStatus;
-  connectPeer(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
+  connectBroker(deviceId: string): Promise<RelayBrokerSession>;
 };
 
 export type DirectPlaneDeps = {
@@ -55,6 +57,10 @@ export type DirectPlaneDeps = {
   // web bridge declares ["tunnel"], the app takes the dialer's
   // race-everything default.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
+  // The dialer's overall attempt deadline. A check seam: the fixtures
+  // shrink it so failure scenarios settle fast, real owners omit it
+  // and take the dialer's HELLO_TIMEOUT_MS default.
+  deadlineMs?: number;
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.
@@ -69,9 +75,9 @@ export type DirectPlane = {
   // and the owner's teardown calls (closeDirectPeers on quit).
   handlers: RelayHandlers;
   // The status snapshot: the connection's own status plus the direct
-  // surface (directDeviceIds, merged peerAppVersions) plus the host
-  // half's tunnel state. The one shape the status handler and every
-  // statusChanged fan-out report.
+  // surface (peerAppVersions, whose keys are the live direct sessions)
+  // plus the host half's tunnel state. The one shape the status
+  // handler and every statusChanged fan-out report.
   status(): RelayStatus;
   // Fan a fresh snapshot out, for owner-side transitions outside the
   // connection (main's tunnel runner state changes).
@@ -80,8 +86,6 @@ export type DirectPlane = {
   // out AND reconciles direct-session presence, reading the
   // connection's status once for both.
   handleConnectionChange(): void;
-  // Wire this to the connection's onPeerPush.
-  handlePeerPush(deviceId: string, channel: string, payload: unknown): void;
 };
 
 export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
@@ -90,17 +94,23 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
   let dialer: DirectDialer | null = null;
   function getDialer(): DirectDialer {
     dialer ??= createDirectDialer({
-      connectRelayPeer: (deviceId) => deps.connection().connectPeer(deviceId),
+      // The ONLY consumer of the relay's client role: the broker leg
+      // that asks a peer for its connect info. The bridge below never
+      // sees connectBroker, and the session it resolves carries one
+      // typed invoke only, so contract traffic structurally cannot
+      // ride the relay.
+      connectBroker: (deviceId) => deps.connection().connectBroker(deviceId),
       localDeviceId: deps.localDeviceId(),
       localAppVersion: deps.localAppVersion(),
-      // Pushes received on a direct connection feed the SAME peerPush
-      // fan-out the relay feeds, tagged with the peer's deviceId, so
-      // the renderer's subscriber registry cannot tell the wires
-      // apart.
+      // Pushes received on a direct connection are the ONLY peer
+      // pushes there are (the relay carries none), tagged with the
+      // peer's deviceId and fanned through the owner's peerPush sink
+      // so the renderer's subscriber registry stays wire-agnostic.
       onAnyPush: (deviceId, channel, payload) => {
         deps.broadcastPeerPush({ deviceId, channel, payload });
       },
       dialableKinds: deps.dialableKinds,
+      deadlineMs: deps.deadlineMs,
     });
     return dialer;
   }
@@ -110,21 +120,19 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       socket: current.socket,
       onlineDeviceIds: current.onlineDeviceIds,
       // Folded into the snapshot so the renderer stops polling
-      // peerInfo per device on every reconcile (M3). The connection
-      // only knows its own client peers, so direct sessions merge
-      // their welcome-confirmed versions in here, or the skew check
-      // would silently never fire for exactly the peers on the best
-      // wire.
-      peerAppVersions: {
-        ...current.peerAppVersions,
-        ...handlers.directPeerVersions(),
-      },
-      directDeviceIds: handlers.directPeerIds(),
+      // peerInfo per device on every reconcile (M3). Every data
+      // session is direct now, so the direct sessions'
+      // welcome-confirmed versions are the whole surface, and
+      // membership here IS the direct-session set (the renderer
+      // derives connectedness from the keys).
+      peerAppVersions: handlers.directPeerVersions(),
     };
     // THIS device's tunnel endpoint state (v2 step 10, slice B). The
     // state only, never the hostname or token. Absent without a host
-    // half (the web bridge runs no cloudflared). Slice C revisits the
-    // status surface, so until then tunnel state rides RelayStatus.
+    // half (the web bridge runs no cloudflared). RelayStatus is the
+    // remote-plane snapshot (relay control plane plus the direct data
+    // plane it brokers), which is why the tunnel and direct surfaces
+    // ride it.
     if (deps.host !== undefined) snapshot.tunnel = deps.host.tunnelState();
     return snapshot;
   }
@@ -137,14 +145,12 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
     deps.broadcastStatus(status());
   }
 
-  // openPeer routes direct-first with relay fallback (v2 step 10,
-  // slice A), and a direct session opening or closing fires the same
-  // statusChanged fan-out a relay transition does so the snapshot
-  // stays live.
+  // openPeer is direct or nothing (v2 step 10, slice C): the bridge
+  // gets the dialer and nothing else, and a direct session opening or
+  // closing fires the same statusChanged fan-out a relay transition
+  // does so the snapshot stays live.
   const handlers = makeRelayHandlers({
     status,
-    connectPeer: (deviceId, opts) =>
-      deps.connection().connectPeer(deviceId, opts),
     connectDirect: (deviceId, opts) =>
       getDialer().connectDirect(deviceId, opts),
     onDirectChange: notifyStatusChanged,
@@ -181,9 +187,6 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
           notePresence: (online) => dialer?.notePresence(online),
         },
       );
-    },
-    handlePeerPush: (deviceId, channel, payload) => {
-      deps.broadcastPeerPush({ deviceId, channel, payload });
     },
   };
 }

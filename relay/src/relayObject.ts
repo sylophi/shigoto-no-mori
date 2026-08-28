@@ -226,6 +226,16 @@ export class AccountRelay implements DurableObject {
       // like an invalid ticket.
       const device = await getDeviceById(this.env.DB, record.deviceId);
       if (device === null) return this.rejectSocket();
+      // There is deliberately NO hard admission cap against
+      // MAX_ONLINE_DEVICES here: getWebSockets can still list sockets
+      // that just closed or are closing (see announcePresence), so a
+      // count-based refusal would burn a legitimate device's ticket
+      // for a slot that is actually free. At one-user scale the
+      // MAX_ONLINE_DEVICES bound stays real as the client's presence
+      // schema cap plus the arithmetic proof that a full roster
+      // envelope fits the message cap (relay/test/relay.spec.ts), and
+      // a correct stale-tolerant admission gate would cost more than
+      // that bound is worth.
       // A newer socket for the same deviceId supersedes the old one, so
       // a reconnecting device never fights its own half-dead socket.
       const superseded = this.ctx.getWebSockets(record.deviceId);
@@ -251,16 +261,21 @@ export class AccountRelay implements DurableObject {
     }
   }
 
-  // The chosen rejection behavior for unknown, expired and replayed
-  // tickets: complete the upgrade, then close immediately with
-  // CLOSE_TICKET_REJECTED. A websocket client sees a real close code
-  // this way, which an HTTP status before the upgrade would hide from
-  // the browser websocket API.
-  private rejectSocket(): Response {
+  // The chosen refusal behavior for every admission verdict: complete
+  // the upgrade, then close immediately with the typed code. A
+  // websocket client sees a real close code this way, which an HTTP
+  // status before the upgrade would hide from the browser websocket
+  // API.
+  private refuseSocket(code: number, reason: string): Response {
     const pair = new WebSocketPair();
     pair[1].accept();
-    pair[1].close(CLOSE_TICKET_REJECTED, "ticket rejected");
+    pair[1].close(code, reason);
     return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+
+  // Unknown, expired and replayed tickets all get the one ticket code.
+  private rejectSocket(): Response {
+    return this.refuseSocket(CLOSE_TICKET_REJECTED, "ticket rejected");
   }
 
   async webSocketMessage(

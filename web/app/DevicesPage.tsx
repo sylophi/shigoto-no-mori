@@ -126,7 +126,11 @@ function DeviceRow({
   const supervisorStatus = isSelf
     ? (relayStatus?.socket ?? { phase: "idle" as const })
     : (entry?.status ?? { phase: "stopped" as const });
-  const { connected } = deviceStatusView(supervisorStatus);
+  // The forest gate is REACHABLE (connected, or online in the roster),
+  // never `connected`: only entering the forest dials a direct
+  // session, so gating on an established one would leave the button
+  // permanently disabled (nothing else on this page opens a session).
+  const { reachable } = deviceStatusView(supervisorStatus);
 
   // No onSuccess invalidation: the revoke ends with the bridge's
   // account.changed broadcast, and useWatchAccountChanges (mounted in
@@ -161,8 +165,10 @@ function DeviceRow({
         <Button
           variant="outline"
           size="sm"
-          disabled={!connected}
-          title={connected ? undefined : "This device is offline on the relay"}
+          disabled={!reachable}
+          title={
+            reachable ? undefined : "This device isn't reachable right now"
+          }
           onClick={() => navigateTo(webPaths.deviceForest(info.deviceId))}
         >
           <TreePine />

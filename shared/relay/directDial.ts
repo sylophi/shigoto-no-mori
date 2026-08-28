@@ -4,7 +4,7 @@
 // over a short-lived relay peer session, then dials the returned
 // candidates, each a complete URL (ws:// interface candidates, the
 // wss:// tunnel endpoint, v2 step 10 slice B) with its own single-use
-// ticket. The result is the SAME DeviceConnection shape connectPeer
+// ticket. The result is the SAME DeviceConnection shape the LAN client
 // resolves, so everything downstream (the bridge cache, sync,
 // port-forward) stays transport agnostic.
 //
@@ -26,22 +26,24 @@
 // BLOCKED VERDICTS: a refused ticket or a wrong-identity welcome is
 // terminal for the whole attempt ONLY when that candidate's hello was
 // actually sent (the ticket provably presented): redialing cannot
-// change it, so the caller falls back to the relay at once. A
-// connection-TIME auth close whose hello never went out (the host's
-// per-identity lockout refusing the connection) proves nothing about
-// our tickets and just retires that one candidate, so a lockout on one
-// path cannot abort healthy candidates.
+// change it, so the caller learns at once instead of waiting out the
+// rest of the race. A connection-TIME auth close whose hello never
+// went out (the host's per-identity lockout refusing the connection)
+// proves nothing about our tickets and just retires that one
+// candidate, so a lockout on one path cannot abort healthy candidates.
 //
 // FAILURE MEMO: a failed dial is remembered per peer, and within the
-// window connectDirect throws immediately so the bridge falls back to
-// the relay without paying the dial cost again for a peer that is not
-// direct-reachable. The memo clears when that peer transitions
-// offline to online in the roster (notePresence, wired from the
-// owner's presence path), or after the ticket TTL, whichever first.
-// A STRUCTURAL verdict (NoDialableCandidateError: the peer advertised
-// candidates but none of a kind this platform can dial) has no TTL at
-// all: time cannot change what kinds a peer offers, so the memo holds
-// until the peer's next offline-to-online transition.
+// window connectDirect throws immediately so a tight retry loop fails
+// fast instead of paying the full dial cost on every use. Data is
+// direct or nothing (v2 step 10, slice C): there is no relay fallback
+// behind these failures, the typed rejection IS the outcome the caller
+// surfaces, so the memo is deliberately SHORT
+// (DIRECT_DIAL_FAILURE_TTL_MS) and uniform across failure kinds:
+// with nothing behind it, a long or unexpiring memo would brick a peer
+// whose listener merely blipped (or whose first connectInfo answered
+// nothing dialable while its tunnel was still starting). It clears
+// early when that peer transitions offline to online in the roster
+// (notePresence, wired from the owner's presence path).
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
@@ -49,7 +51,6 @@
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   candidateUrlMatchesKind,
-  DIRECT_TICKET_TTL_MS,
   MAX_DIRECT_CANDIDATES,
   type DirectCandidate,
   type DirectCandidateKind,
@@ -59,10 +60,23 @@ import {
 import {
   openDevice,
   RemoteConnectError,
+  type DeviceConnection,
   type PendingDeviceConnection,
 } from "@shared/ipc/socket/wsClientTransport";
 import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
-import type { ConnectPeerOpts, PeerConnection } from "./link";
+import type { RelayBrokerSession } from "./link";
+
+// The LAN DeviceConnection shape verbatim, so everything downstream of
+// a direct dial (the bridge cache, sync, port-forward) is transport
+// agnostic.
+export type PeerConnection = DeviceConnection;
+
+export type ConnectPeerOpts = {
+  // Called once when an ESTABLISHED direct connection dies on its own
+  // (socket teardown, roster drop). Never fires for an owner initiated
+  // close, and never for a failed connect.
+  onClose?: () => void;
+};
 
 // Candidates dialed at once: the shared advertising cap for interface
 // addresses plus the one tunnel candidate, enforced here too so a
@@ -70,14 +84,21 @@ import type { ConnectPeerOpts, PeerConnection } from "./link";
 // burst.
 const MAX_DIAL_CANDIDATES = MAX_DIRECT_CANDIDATES + 1;
 
+// How long a failed dial's memo denies retries. Short on purpose: with
+// no fallback behind a direct dial, the memo is the ONLY thing between
+// a momentary listener blip and a user stuck unable to retry, so it
+// just has to short-circuit tight loops while react-query retries and
+// manual navigation recover quickly. Deliberately not tied to the
+// ticket TTL: an unspent minted ticket costs nothing.
+export const DIRECT_DIAL_FAILURE_TTL_MS = 10_000;
+
 // Thrown when the peer advertises candidates but none of them is a
 // kind THIS platform can dial (an old host ignoring the caller's
 // declared dialableKinds and answering lan-only to a browser page).
 // Typed so a caller can tell "the peer is direct-capable but not from
-// here" apart from an ordinary dial failure, and structural for the
-// memo above. A kind-aware host filters to the caller's kinds itself
-// and answers available:false when nothing survives, so this arises
-// only across version skew.
+// here" apart from an ordinary dial failure. A kind-aware host filters
+// to the caller's kinds itself and answers available:false when
+// nothing survives, so this arises only across version skew.
 export class NoDialableCandidateError extends Error {
   constructor(deviceId: string) {
     super(`peer ${deviceId} offers no candidate this platform can dial`);
@@ -86,11 +107,14 @@ export class NoDialableCandidateError extends Error {
 }
 
 export type DirectDialerDeps = {
-  // Opens a relay peer session for the connectInfo exchange. The
+  // Opens the relay broker session for the connectInfo exchange. The
+  // NARROWED session type is the point (v2 step 10, slice C): it
+  // exposes one typed broker invoke plus close, so this dep cannot be
+  // used to move contract traffic over the relay even by accident. The
   // dialer runs only on a bridge cache miss, so no cached session for
   // this device exists to be superseded, and the temporary session is
   // closed before the dial result settles either way.
-  connectRelayPeer(deviceId: string): Promise<PeerConnection>;
+  connectBroker(deviceId: string): Promise<RelayBrokerSession>;
   // This device's identity, carried in the direct hello alongside the
   // ticket.
   localDeviceId: string;
@@ -125,11 +149,11 @@ export type DirectDialer = {
 };
 
 // A leg abandoned by the deadline may still resolve later. Its
-// connection must not linger half-owned, so close it on arrival.
-function closeWhenSettled(promise: Promise<PeerConnection>): void {
+// session must not linger half-owned, so close it on arrival.
+function closeWhenSettled(promise: Promise<{ close(): void }>): void {
   promise
-    .then((connection) => {
-      connection.close();
+    .then((session) => {
+      session.close();
     })
     .catch(() => {
       // Already failed on its own.
@@ -142,22 +166,17 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   // leg below (the relay hello, the connectInfo invoke, every
   // candidate handshake) individually stays under it.
   const deadlineMs = deps.deadlineMs ?? HELLO_TIMEOUT_MS;
-  const failureTtlMs = deps.failureTtlMs ?? DIRECT_TICKET_TTL_MS;
+  const failureTtlMs = deps.failureTtlMs ?? DIRECT_DIAL_FAILURE_TTL_MS;
   const now = deps.now ?? Date.now;
   const dialableKinds = new Set<DirectCandidateKind>(
     deps.dialableKinds ?? ALL_DIRECT_CANDIDATE_KINDS,
   );
 
-  // Peer deviceId to the timestamp its failure memo expires, pruned
+  // The ONE failure memo, uniform across failure kinds (see the file
+  // header): peer deviceId to the timestamp its memo expires, pruned
   // lazily on each dial so the map stays bounded by the peers dialed
   // within one window.
   const failedDials = new Map<string, number>();
-  // Peers whose last verdict was structural (nothing dialable from
-  // this platform). No expiry: cleared only by that peer's
-  // offline-to-online transition, so a browser does not pay two relay
-  // round trips per minute forever re-learning that a peer has no
-  // tunnel.
-  const structuralFailures = new Set<string>();
   // The roster seen by the last notePresence call, so the memo clears
   // exactly on an offline to online transition.
   let lastOnline = new Set<string>();
@@ -234,9 +253,10 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         ) {
           // The ticket was presented and refused, or the wrong machine
           // answered. Terminal for the whole attempt: redialing cannot
-          // change it, so the caller falls back to the relay at once.
-          // Pre-hello rejections never take this branch, so a lockout
-          // or stale route on one candidate cannot abort the rest.
+          // change it, so the caller learns at once instead of waiting
+          // out the deadline. Pre-hello rejections never take this
+          // branch, so a lockout or stale route on one candidate
+          // cannot abort the rest.
           done = true;
           settleAll();
           reject(error);
@@ -308,18 +328,20 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     deadline: Promise<never>,
     deadlineAt: number,
   ): Promise<PeerConnection> {
-    // Ask the peer how to dial it. The relay session is temporary and
-    // closed below (which also tells the host to drop its session, the
-    // bye frame): on success the direct socket replaces it, on failure
-    // the caller's relay fallback opens a fresh one with the right
-    // close wiring. When the deadline abandons a still-pending hello,
-    // the late session is closed on arrival instead of leaking.
-    const relayPeerPromise = deps.connectRelayPeer(deviceId);
-    let relayPeer: PeerConnection;
+    // Ask the peer how to dial it. The relay session is the BROKER
+    // SESSION only (one typed invoke, see RelayBrokerSession),
+    // temporary by design and closed below (which also tells the host
+    // to drop its session, the bye frame): on success the direct
+    // socket replaces it, on failure the whole attempt rejects and
+    // nothing keeps riding the relay. When the deadline abandons a
+    // still-pending hello, the late session is closed on arrival
+    // instead of leaking.
+    const brokerPromise = deps.connectBroker(deviceId);
+    let broker: RelayBrokerSession;
     try {
-      relayPeer = await Promise.race([relayPeerPromise, deadline]);
+      broker = await Promise.race([brokerPromise, deadline]);
     } catch (error) {
-      closeWhenSettled(relayPeerPromise);
+      closeWhenSettled(brokerPromise);
       throw error;
     }
     let info;
@@ -334,20 +356,17 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         dialableKinds: [...dialableKinds],
       };
       info = DirectConnectInfoSchema.parse(
-        await Promise.race([
-          relayPeer.transport.invoke("direct:connectInfo", input),
-          deadline,
-        ]),
+        await Promise.race([broker.brokerInvoke(input), deadline]),
       );
     } finally {
-      relayPeer.close();
+      broker.close();
     }
     const candidates = info.available ? (info.candidates ?? []) : [];
     if (candidates.length === 0) {
       // An old peer answers "No handler registered" (thrown above), a
       // new-but-not-listening peer answers available:false, and so
       // does a kind-aware peer with nothing THIS caller can dial.
-      // Either way the caller falls back to the relay.
+      // Either way the peer is unreachable for data right now.
       throw new Error(`peer ${deviceId} offers no direct listener`);
     }
     // Platform capability re-applied at candidate selection (the belt
@@ -364,9 +383,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       .slice(0, MAX_DIAL_CANDIDATES);
     if (dialable.length === 0) {
       // The peer is direct-capable, just not from THIS platform (an
-      // old host answering lan-only to a browser page). The typed,
-      // structural error keeps the outcome distinguishable while the
-      // caller falls back to the relay all the same.
+      // old host answering lan-only to a browser page). The typed
+      // error keeps the outcome distinguishable from an ordinary dial
+      // failure, though the memo treats both alike.
       throw new NoDialableCandidateError(deviceId);
     }
     return raceCandidates(
@@ -386,12 +405,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     for (const [id, expiresAt] of failedDials) {
       if (expiresAt <= at) failedDials.delete(id);
     }
-    if (structuralFailures.has(deviceId)) {
-      throw new NoDialableCandidateError(deviceId);
-    }
     if (failedDials.has(deviceId)) {
       throw new Error(
-        `direct dial to ${deviceId} failed recently, deferring to the relay`,
+        `direct dial to ${deviceId} failed recently, not retrying yet`,
       );
     }
     // One deadline over the ENTIRE attempt, so the bridge's cached
@@ -411,11 +427,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     try {
       return await runDial(deviceId, opts, deadline, at + deadlineMs);
     } catch (error) {
-      if (error instanceof NoDialableCandidateError) {
-        structuralFailures.add(deviceId);
-      } else {
-        failedDials.set(deviceId, now() + failureTtlMs);
-      }
+      failedDials.set(deviceId, now() + failureTtlMs);
       throw error;
     } finally {
       clearTimeout(deadlineTimer);
@@ -426,10 +438,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     connectDirect,
     notePresence(online) {
       for (const id of online) {
-        if (!lastOnline.has(id)) {
-          failedDials.delete(id);
-          structuralFailures.delete(id);
-        }
+        if (!lastOnline.has(id)) failedDials.delete(id);
       }
       lastOnline = new Set(online);
     },

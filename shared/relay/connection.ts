@@ -20,11 +20,10 @@ import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import type { HandlerContext } from "@shared/ipc/transport";
 import {
-  type ConnectPeerOpts,
   createRelayLink,
-  type PeerConnection,
+  type RelayBroker,
+  type RelayBrokerSession,
   type RelayLink,
   RelayLinkDownError,
 } from "@shared/relay/link";
@@ -67,8 +66,6 @@ export type RelaySocketAdapter = {
   // for orphan sockets and arms the post-close terminate grace only
   // when it exists. A browser socket has only close.
   terminate?(): void;
-  // The socket's queued-but-unsent byte count, for push backpressure.
-  bufferedAmount?(): number;
   // Delivers each inbound TEXT message. The adapter drops binary
   // frames: the protocol is JSON text, so they are not part of it.
   onMessage(handler: (text: string) => void): void;
@@ -83,30 +80,20 @@ export type RelayConnectionCoreDeps = {
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its views.
   onChange?: () => void;
-  // Every push frame received from any peer, see RelayLinkDeps.
-  onPeerPush?: (deviceId: string, channel: string, payload: unknown) => void;
-  // The HOST-role deps, shared by reference with the owner so handler
-  // registration at boot survives link recreation across reconnects. A
-  // client-only platform (the web) omits all three, leaving the host
-  // role empty by construction: no handlers, no read-only channels and
-  // no granted peer, so it can never serve a command.
-  handlers?: ReadonlyMap<
-    string,
-    (ctx: HandlerContext, raw: unknown) => Promise<unknown>
-  >;
-  readOnlyChannels?: ReadonlySet<string>;
-  isCommandGranted?: (peerDeviceId: string) => boolean;
+  // The channel-plus-handler pair the relay wire serves (see
+  // RelayBroker in link.ts), supplied by the composition so this core
+  // never imports a contract. The node binding passes a facade over
+  // its late-bound slot so registration at boot survives link
+  // recreation across reconnects. A client-only platform (the web)
+  // supplies the channel with no handler, leaving the host role empty
+  // by construction: the link then answers every req with the
+  // no-handler shape.
+  broker: RelayBroker;
 };
 
-// The lifecycle surface both platform bindings re-expose unchanged,
-// plus the host role's broadcast fan-out for the node binding's
-// ServerTransport half.
+// The lifecycle surface both platform bindings re-expose unchanged.
 export type RelayConnectionCore = {
-  connectPeer(
-    deviceId: string,
-    opts?: ConnectPeerOpts,
-  ): Promise<PeerConnection>;
-  broadcastAll(channel: string, payload: unknown): void;
+  connectBroker(deviceId: string): Promise<RelayBrokerSession>;
   refresh(resolve: () => Promise<RelayConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
   status(): RelayConnectionStatus;
@@ -149,12 +136,6 @@ function sameOpts(a: RelayConnectOpts, b: RelayConnectOpts): boolean {
   );
 }
 
-// A platform that grants no peer can never serve a mutating command, so
-// the default grant predicate refuses every peer unconditionally.
-function refuseAllCommands(): boolean {
-  return false;
-}
-
 // Prefer the adapter's hard terminate for a socket nothing should keep
 // draining (an aborted or timed-out dial), falling back to the advisory
 // close where the platform has nothing harder.
@@ -166,9 +147,6 @@ function killSocket(socket: RelaySocketAdapter): void {
 export function createRelayConnectionCore(
   deps: RelayConnectionCoreDeps,
 ): RelayConnectionCore {
-  const handlers = deps.handlers ?? new Map();
-  const readOnlyChannels = deps.readOnlyChannels ?? new Set<string>();
-  const isCommandGranted = deps.isCommandGranted ?? refuseAllCommands;
   let link: RelayLink | null = null;
   let current: { supervisor: Supervisor; opts: RelayConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
@@ -266,17 +244,11 @@ export function createRelayConnectionCore(
           localDeviceId: opts.deviceId,
           localAppVersion: opts.appVersion,
           send: (text) => socket.send(text),
-          bufferedAmount: socket.bufferedAmount,
-          // Shared by reference (populated at boot on the node binding,
-          // empty by construction on the web). The link serves a channel
-          // to an ungranted peer only when it is in this read-only set,
-          // so a mutating call from a peer this host has not granted is
-          // refused while reads pass through. isCommandGranted is read
-          // live at dispatch so a grant takes effect without a
-          // reconnect.
-          handlers,
-          readOnlyChannels,
-          isCommandGranted,
+          // The one broker slot (handler wired at boot on the node
+          // binding, absent on the web). The link pins dispatch to the
+          // injected channel itself, so what rides in here can never
+          // widen the wire.
+          broker: deps.broker,
           onPresence: () => {
             if (!settled) {
               settled = true;
@@ -287,13 +259,14 @@ export function createRelayConnectionCore(
               resolve({
                 transport: {
                   // The relay socket carries no direct sm transport
-                  // of its own. Peer traffic goes through connectPeer,
-                  // so this seam only satisfies the shared
-                  // DeviceConnection shape.
+                  // of its own. Peer brokering goes through
+                  // connectBroker, so this seam only satisfies the
+                  // shared DeviceConnection shape the supervisor
+                  // expects.
                   invoke: () =>
                     Promise.reject(
                       new Error(
-                        "the relay socket has no direct transport, use connectPeer",
+                        "the relay socket has no direct transport, use connectBroker",
                       ),
                     ),
                   subscribe: () => () => {},
@@ -321,7 +294,6 @@ export function createRelayConnectionCore(
             }
             notifyChange();
           },
-          onPeerPush: deps.onPeerPush,
         });
 
         socket.onMessage((text) => {
@@ -407,16 +379,11 @@ export function createRelayConnectionCore(
   }
 
   return {
-    connectPeer(deviceId, opts) {
+    connectBroker(deviceId) {
       if (link === null) {
         return Promise.reject(new RelayLinkDownError());
       }
-      return link.connectPeer(deviceId, opts);
-    },
-
-    broadcastAll(channel, payload) {
-      // No socket or no helloed peers means nobody to tell, silently.
-      link?.broadcastAll(channel, payload);
+      return link.connectBroker(deviceId);
     },
 
     refresh: (resolve) =>
@@ -447,17 +414,16 @@ export function createRelayConnectionCore(
 
     status: () => {
       const localDeviceId = current?.opts.deviceId;
-      // The link owns the authoritative roster and per-peer versions, so
-      // this reads them rather than keeping a second copy that a stale
-      // generation's close could wipe (C4). Presence includes the
-      // receiver per protocol.ts, so the local device is filtered out.
+      // The link owns the authoritative roster, so this reads it rather
+      // than keeping a second copy that a stale generation's close
+      // could wipe (C4). Presence includes the receiver per
+      // protocol.ts, so the local device is filtered out.
       const online = (link?.onlineDeviceIds() ?? []).filter(
         (id) => id !== localDeviceId,
       );
       return {
         socket: socketStatus,
         onlineDeviceIds: online,
-        peerAppVersions: link?.peerAppVersions() ?? {},
       };
     },
   };

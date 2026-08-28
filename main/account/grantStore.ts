@@ -14,11 +14,14 @@
 import { readFileSync, unlinkSync } from "node:fs";
 import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 
-// A ceiling on the stored grant list so a runaway local write cannot grow
-// grants.json without bound. It matches the presence-roster cap
-// (MAX_ONLINE_DEVICES) because a host granting more than this many of its
-// OWN devices is not a real scenario, so refusing past it is safe.
-const MAX_GRANTED_PEERS = 1024;
+// A ceiling on the stored grant list so a runaway local write cannot
+// grow grants.json without bound. A plain host-local constant,
+// deliberately NOT tied to the relay's roster cap: grants persist for
+// offline devices (an enrolled machine keeps its grant while off), so
+// this bounds a persisted registry, not concurrent presence. A host
+// granting more than this many of its OWN devices is not a real
+// scenario, so refusing past it is safe.
+const MAX_GRANTED_PEERS = 256;
 
 // What the caller reads back: the account these grants belong to and the
 // peer deviceIds granted command access under it. accountId matches the

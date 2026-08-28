@@ -47,6 +47,16 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    pnpm run deploy
    ```
 
+Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
+`MAX_RELAY_MESSAGE_BYTES` change): update all devices BEFORE
+redeploying the Worker. The devices' inbound socket bound stays
+tolerant at the old cap for exactly this window, so a
+not-yet-redeployed Worker forwarding an old peer's oversize frame does
+not kill a new client's control-plane socket. The reverse skew (an old
+app talking through a new Worker) degrades softly instead: its
+oversize sends get nacked and the calls time out, which is acceptable
+during the owner's own rollout.
+
 Optional var: set `ALLOWED_WEB_ORIGIN` to the exact origin of the
 future web client. Unset, only Origin-less clients (the desktop app)
 are accepted. This var is PAIRED with the desktop app's

@@ -1,17 +1,21 @@
-// Durable proof for the port-forward wire (v2 step 8, slice A): TCP
-// bytes as chunked, grant-gated invoke responses over the REAL relay
-// transport. Nothing here is a double on the forward path itself: the
-// stub relay (scripts/lib/relayStub.mjs) carries two real relay
-// connections, device A registers the REAL forward contract and
-// handlers, and the handlers dial REAL loopback TCP fixture servers.
-// Asserts:
+// Durable proof for the port-forward wire (v2 step 8, slice A;
+// direct-only since step 10 slice C): TCP bytes as chunked,
+// grant-gated invoke responses over a REAL DIRECT websocket between
+// the two fixtures, brokered by the stub relay exactly as production
+// does (scripts/lib/directBoot.mjs). Nothing here is a double on the
+// forward path itself: device A registers the REAL forward contract
+// and handlers on a real ticket-mode listener, B drives them through
+// the real dialer and bridge cache, and the handlers dial REAL
+// loopback TCP fixture servers. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) before
 //     the handler runs, so the fixture server sees no connection.
 //   - a granted echo round trip (open, send, poll, close).
 //   - server-initiated bytes arrive through poll without an uplink
 //     write first (the long-poll downlink).
 //   - a ~1.5 MB transfer crosses chunked, byte-identical, in multiple
-//     send AND poll req frames each under the relay cap.
+//     send AND poll round trips, while the stub relay's forwardedCount
+//     stays FLAT (nothing but the one-time broker frames ever rides
+//     the relay).
 //   - a server-side close drains buffered bytes before eof, refuses a
 //     send with the coded "conn-closed", and a drained conn is gone
 //     ("unknown-conn").
@@ -39,25 +43,27 @@
 //     with no wire traffic spent on the doomed dial.
 //
 // Both "devices" share one node process. What separates them is the
-// relay wire between their connections, which is exactly the surface
-// this slice adds. Runs under scripts/lib/register-ts-alias.mjs. See
+// direct wire between them, which is exactly the surface this proof
+// pins. Runs under scripts/lib/register-ts-alias.mjs. See
 // package.json "forward:check".
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { connect, createServer } from "node:net";
-import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import {
+  CommandRefusedError,
+  WIRE_CHUNK_BYTES,
+} from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { registerContract } from "@shared/ipc/registerContract";
-import { RELAY_CHUNK_BYTES } from "@shared/relay/protocol";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
 } from "../main/portForward/engine.ts";
-import { makeProof } from "./lib/checkKit.mjs";
-import { bootDevice, delay, waitFor } from "./lib/relayBoot.mjs";
-import { startStubRelay } from "./lib/relayStub.mjs";
+import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import { bootDirectWire } from "./lib/directBoot.mjs";
+import { delay, waitFor } from "./lib/relayBoot.mjs";
 
 // once() with waitFor's deadline treatment: an event that never fires
 // fails loudly with a descriptive message instead of hanging the check.
@@ -107,17 +113,6 @@ function startFixtureServer(onConnection) {
       });
     });
   });
-}
-
-// Count the req frames for one forward channel that crossed the stub
-// after `since`, the wire-level proof a transfer was chunked.
-function reqFramesSince(stub, since, channel) {
-  return stub.received
-    .slice(since)
-    .filter(
-      (entry) =>
-        entry.frame?.sm?.t === "req" && entry.frame.sm.channel === channel,
-    ).length;
 }
 
 // Drives poll until `total` raw bytes arrived, then returns them. An
@@ -188,24 +183,40 @@ async function main() {
 
   const echo = await startFixtureServer((socket) => socket.pipe(socket));
 
-  const stub = await startStubRelay();
-  let granted = false;
-  const { connection: a } = await bootDevice(stub, "A", {
-    isCommandGranted: () => granted,
+  // The direct wire: A hosts the forward surface on a real ticket-mode
+  // listener, B drives it through the real dialer and bridge cache,
+  // and the stub relay carries only the broker exchange
+  // (bootDirectWire, the shared fixture).
+  const { track, teardown } = makeTracker();
+  track(() => echo.close());
+  // The registered send handler is wrapped with a counter, so the
+  // chunking assertion in the transfer scenario counts PRODUCTION
+  // dispatches on the serving side (frames that provably crossed the
+  // wire), not the check's own loop iterations.
+  let serverSends = 0;
+  const countedForwardHandlers = {
+    ...forwardHandlers,
+    send: (input, ctx) => {
+      serverSends += 1;
+      return forwardHandlers.send(input, ctx);
+    },
+  };
+  const { stub, listener, peerA } = await bootDirectWire(track, {
+    registerHandlers: (binding) => {
+      registerContract(forwardContract, countedForwardHandlers, binding, {
+        validateOutputs: true,
+      });
+    },
   });
-  registerContract(forwardContract, forwardHandlers, a.server, {
-    validateOutputs: true,
-  });
-  const { connection: b } = await bootDevice(stub, "B");
   // Torn down in the finally so an assertion failure mid-scenario does
   // not leave listeners and parked polls holding the process open.
   let engine = null;
   try {
-    const peer = await b.connectPeer("A");
-    const forward = buildClient(forwardContract, peer.transport);
+    const forward = buildClient(forwardContract, peerA.transport);
 
-    // (1) Ungranted: refused typed at the relay link's dispatch, before
-    // the handler runs. The echo server never sees a dial.
+    // (1) Ungranted: refused typed at the direct listener's dispatch
+    // (the grant gate lives on the direct wire now), before the
+    // handler runs. The echo server never sees a dial.
     await assert.rejects(
       () => forward.open({ port: echo.port }),
       (error) =>
@@ -221,7 +232,7 @@ async function main() {
       "ungranted peer: forward:open is refused with the typed CommandRefusedError and no conn is dialed",
     );
 
-    granted = true;
+    listener.granted.add("B");
 
     // (2) The basic round trip: open, send, poll the echo, close.
     const { connId } = await forward.open({ port: echo.port });
@@ -249,18 +260,24 @@ async function main() {
     ok("server-initiated bytes arrive through poll without an uplink write");
 
     // (4) A ~1.5 MB transfer, chunked both ways: sent in
-    // RELAY_CHUNK_BYTES slices, echoed back, polled until complete.
-    // The stub's frame log proves the chunking crossed the wire as
-    // multiple send AND poll reqs, each inside the relay cap.
+    // WIRE_CHUNK_BYTES slices, echoed back, polled until complete. The
+    // transfer rides the direct socket, so the stub relay must stay
+    // COMPLETELY flat (it only ever saw the one-time broker exchange).
+    // Chunking is proven on both halves: the send half counts the
+    // registered handler's dispatches SERVER-SIDE (production frames
+    // that crossed the wire, not this loop's own iterations), and the
+    // poll half counts client round trips through the peer transport.
     const big = randomBytes(1_500_000);
-    const framesBefore = stub.received.length;
+    const relayBaseline = stub.forwardedCount();
+    const sendsBefore = serverSends;
+    const pollsBefore = peerA.invokeCount("forward:poll");
     const bulk = await forward.open({ port: echo.port });
-    for (let offset = 0; offset < big.length; offset += RELAY_CHUNK_BYTES) {
+    for (let offset = 0; offset < big.length; offset += WIRE_CHUNK_BYTES) {
       // oxlint-disable-next-line no-await-in-loop -- sequential by design
       await forward.send({
         connId: bulk.connId,
         dataB64: big
-          .subarray(offset, offset + RELAY_CHUNK_BYTES)
+          .subarray(offset, offset + WIRE_CHUNK_BYTES)
           .toString("base64"),
       });
     }
@@ -269,13 +286,18 @@ async function main() {
       Buffer.compare(big, returned) === 0,
       "echoed bytes differ byte-for-byte",
     );
-    const sendReqs = reqFramesSince(stub, framesBefore, "forward:send");
-    const pollReqs = reqFramesSince(stub, framesBefore, "forward:poll");
+    const sendReqs = serverSends - sendsBefore;
+    const pollReqs = peerA.invokeCount("forward:poll") - pollsBefore;
     assert.ok(sendReqs >= 3, `expected >= 3 send frames, saw ${sendReqs}`);
     assert.ok(pollReqs >= 3, `expected >= 3 poll frames, saw ${pollReqs}`);
+    assert.equal(
+      stub.forwardedCount(),
+      relayBaseline,
+      "the port-forward stream rode the relay instead of the direct socket",
+    );
     await forward.close({ connId: bulk.connId });
     ok(
-      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll frames, byte-identical",
+      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the relay flat, byte-identical",
     );
 
     // (5) The server closes: buffered bytes drain first (eof only once
@@ -492,26 +514,26 @@ async function main() {
     // constant: the first local socket OVER the cap is destroyed
     // immediately while the capped set stands. Mirrors the host's
     // MAX_CONNS without spending a relay round trip on the doomed dial.
-    const capFramesBefore = stub.received.length;
+    const capOpensBefore = peerA.invokeCount("forward:open");
     const capSockets = [];
     for (let i = 0; i < MAX_CONNS_PER_DEVICE; i += 1) {
       const socket = connect({ host: "127.0.0.1", port: fresh.localPort });
       socket.on("error", () => {});
       capSockets.push(socket);
     }
-    // Also wait out the capped set's open frames so the over-cap
-    // socket's zero-frame assertion below cannot miscount a straggler
-    // from these dials.
+    // Also wait out the capped set's open round trips so the over-cap
+    // socket's zero-traffic assertion below cannot miscount a
+    // straggler from these dials.
     await waitFor(
       () =>
         engine.listForwards().find((f) => f.forwardId === fresh.forwardId)
           ?.connCount === MAX_CONNS_PER_DEVICE &&
-        reqFramesSince(stub, capFramesBefore, "forward:open") ===
+        peerA.invokeCount("forward:open") - capOpensBefore ===
           MAX_CONNS_PER_DEVICE,
-      "the capped conns and their open frames to register",
+      "the capped conns and their open round trips to register",
       10_000,
     );
-    const overCapFramesBefore = stub.received.length;
+    const overCapOpensBefore = peerA.invokeCount("forward:open");
     const overCap = connect({ host: "127.0.0.1", port: fresh.localPort });
     overCap.on("error", () => {});
     await onceWithin(
@@ -522,7 +544,7 @@ async function main() {
     // Destroyed at accept means no wire traffic: the doomed dial spent
     // no forward:open round trip.
     assert.equal(
-      reqFramesSince(stub, overCapFramesBefore, "forward:open"),
+      peerA.invokeCount("forward:open") - overCapOpensBefore,
       0,
       "the capped over-cap socket still spent a forward:open round trip",
     );
@@ -540,10 +562,10 @@ async function main() {
     );
   } finally {
     engine?.stopAll();
-    await b.stop();
-    await a.stop();
-    await stub.close();
-    await echo.close();
+    // Reverse creation order via the shared tracker: the direct
+    // sessions and listener first, then the relay connections, then
+    // the stub and the fixture server.
+    await teardown();
   }
 
   done();

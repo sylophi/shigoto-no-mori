@@ -1,11 +1,11 @@
 // The pull orchestration's reach into a peer device's sync surface,
-// injected at boot following the setCliRunnerImpl precedent: the relay
-// plumbing lives in main/, so this seam owns the api shape and the
-// sync handlers stay free of Electron imports. The injected factory
-// must route through the relay bridge's SHARED peer-session cache
-// (makeRelayHandlers), never a fresh connectPeer: the link keeps
-// exactly one client peer per deviceId, and a second dial silently
-// destroys the session every remote-forest query is riding on.
+// injected at boot following the setCliRunnerImpl precedent: the
+// remote plumbing lives in main/, so this seam owns the api shape and
+// the sync handlers stay free of Electron imports. The injected
+// factory must route through the bridge's SHARED direct-session cache
+// (makeRelayHandlers), never a fresh dial: the host keeps exactly one
+// authed socket per deviceId, and a second dial silently supersedes
+// the session every remote-forest query is riding on.
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";

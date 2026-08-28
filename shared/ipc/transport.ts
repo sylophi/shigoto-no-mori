@@ -34,18 +34,19 @@ export type HandlerContext = {
   // handler can answer the preflight "am I granted?" read per caller
   // without ever seeing the grant list. The Electron binding says yes
   // (a local window commands its own machine), the LAN socket says no
-  // (that wire is read-only by policy), and the relay reads the host's
-  // live per-peer grant for the calling deviceId. Optional and
-  // FAIL-CLOSED: a transport that supplies no verdict reads as not
-  // granted.
+  // (that wire is read-only by policy), and the direct data-plane
+  // listener reads the host's live per-peer grant for the calling
+  // deviceId. Optional and FAIL-CLOSED: a transport that supplies no
+  // verdict reads as not granted.
   isCallerCommandGranted?: () => boolean;
-  // The AUTHENTICATED deviceId of the calling peer, supplied only by
-  // wires that verified one: the relay link (the DO authenticated the
-  // account and stamps `from`) and the direct data-plane listener (the
+  // The AUTHENTICATED deviceId of the calling peer, supplied only by a
+  // wire that verified one: the direct data-plane listener (the
   // connect ticket bound the hello to a deviceId). The Electron wire,
   // the legacy LAN socket and in-page loopbacks leave it undefined, so
   // a handler that needs a peer identity (direct:connectInfo minting a
-  // ticket for its caller) fails closed on absence.
+  // ticket for its caller) fails closed on absence. The relay's broker
+  // slot carries its own minimal context (shared/relay/link.ts) and
+  // never mints a HandlerContext at all.
   callerDeviceId?: string;
 };
 
@@ -64,11 +65,11 @@ export type HandlerContext = {
 //
 // `opts.mutating` is the command-vs-read axis: the registrar passes each
 // call's `def.mutating` here so a remote binding can gate commands. The
-// relay binding gates them on a per-peer command grant. The LAN binding
-// has no grant model, so it serves ONLY channels explicitly registered
-// mutating:false and refuses everything else (fail-closed read-only).
-// The Electron binding ignores it: a local window commands its own
-// machine.
+// direct data-plane listener gates them on a per-peer command grant.
+// The LAN binding has no grant model, so it serves ONLY channels
+// explicitly registered mutating:false and refuses everything else
+// (fail-closed read-only). The Electron binding ignores it: a local
+// window commands its own machine.
 export type TransportCallOpts = { remote?: boolean; mutating?: boolean };
 
 export type ServerTransport = {

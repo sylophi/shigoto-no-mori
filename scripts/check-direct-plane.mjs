@@ -1,14 +1,17 @@
-// Durable proof for the direct data plane (v2 step 10, slice A): the
-// relay becomes control plane and data flows over DIRECT websockets
-// between devices, brokered by short-lived single-use connect tickets.
+// Durable proof for the direct data plane (v2 step 10 slice A, made
+// the ONLY data plane by slice C): the relay is orchestration and data
+// flows over DIRECT websockets between devices, brokered by
+// short-lived single-use connect tickets, with no relay fallback
+// behind a failed dial.
 //
 // Boots the stub Durable Object (scripts/lib/relayStub.mjs) with two
 // REAL relay connections (A the dialing client, B the host) plus a
 // REAL ticket-mode ws listener instance (host/socket/server.ts with a
 // WsServerTicketAuth) on an ephemeral loopback port, and drives the
-// real broker (direct:connectInfo through the shared registrar), the
-// real dialer (shared/relay/directDial.ts) and the real bridge routing
-// (shared/relay/bridgeHandlers.ts). Asserts:
+// real broker (direct:connectInfo wired into the binding's one slot)
+// and the REAL shared composition (shared/relay/directPlane.ts: the
+// dialer over the broker leg, the bridge cache over the dialer),
+// through the shared fixtures in scripts/lib/directBoot.mjs. Asserts:
 //
 //   - connectInfo over the relay answers available:true with fully
 //     dialable candidates (kind, complete URL, one smpt_ ticket EACH)
@@ -30,18 +33,24 @@
 //   - the dialer opens candidates concurrently under ONE overall
 //     deadline (hellos serialized, see slice B below): a junk
 //     candidate cannot defeat a reachable one, a wedged connectInfo
-//     cannot hang the bridge cache, and a blocked verdict whose hello
-//     was sent is terminal for the whole attempt.
-//   - a client peer's close sends bye, so the host stops fanning
-//     broadcasts at the departed peer through the relay.
+//     cannot hang the bridge cache (the attempt rejects typed and the
+//     failure memo short-circuits the next one), and a blocked verdict
+//     whose hello was sent is terminal for the whole attempt.
+//   - a winning dial closes its throwaway broker session with bye, so
+//     the host's relay-side session dies at once instead of lingering
+//     until presence notices.
 //   - presence scopes the data plane: a peer leaving a LIVE roster
 //     loses its direct sessions host-side and client-side, while our
 //     own relay link going down leaves them alone.
-//   - openPeer routes direct-first with relay fallback, reports direct
-//     sessions via directPeerIds, drops the cache when the direct
-//     socket closes, and re-establishes on the next invoke.
+//   - openPeer is direct or nothing (slice C): a working listener
+//     yields a direct session reported via directPeerVersions, a dead
+//     socket drops the cache, and a FAILED dial rejects with the typed
+//     unreachable outcome with no relay session created for data.
+//     (The relay wire refusing every non-broker channel is pinned in
+//     check-relay-link.mjs. Here there is nothing left to register on
+//     the wire, so no second proof exists to write.)
 //   - pushes from the host reach a direct-connected client through the
-//     same peerPush path the relay feeds.
+//     shared peerPush path while the relay stub forwards nothing.
 //
 // SLICE B (tunnel endpoints) adds:
 //
@@ -64,10 +73,17 @@
 //     unspent.
 //   - the web path's dialableKinds reaches the HOST, which mints only
 //     dialable kinds. A peer with nothing for this platform answers
-//     available:false and the bridge falls back to the relay, and an
+//     available:false and the attempt rejects as unreachable, and an
 //     OLD host's undialable answer yields the typed
-//     NoDialableCandidateError, memoized structurally (no TTL) until
-//     the peer's next offline-to-online transition.
+//     NoDialableCandidateError, memoized under the ONE short-TTL
+//     failure memo and cleared early by the peer's offline-to-online
+//     transition.
+//   - the roster sweeps cover mid-dial entries (a session completing
+//     after its peer left the roster is closed and never reported,
+//     quit closes an in-flight dial's socket), a dropped direct socket
+//     recovers on the next dial-on-subscribe ensure, and the
+//     remoteAccess:commandAccess preflight flips live with the grant
+//     on one direct session.
 //   - the cloudflared deciders (argv/env secret discipline, the
 //     capped ladder through the supervisor's shared lookup) and the
 //     runner's lifecycle (no-binary, unconfigured cached for the
@@ -96,19 +112,17 @@ import {
   connectDevice,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
+import { DirectCandidateSchema } from "@shared/ipc/modules/direct";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { registerContract } from "@shared/ipc/registerContract";
-import {
-  DirectCandidateSchema,
-  directContract,
-} from "@shared/ipc/modules/direct";
+import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import {
   createDirectDialer,
   NoDialableCandidateError,
 } from "@shared/relay/directDial";
 import { applyDirectPresence } from "@shared/relay/directPresence";
-import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
+import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { backoffDelayMs } from "@shared/remote/supervisor";
-import { createWsServerBinding } from "@host/socket/server";
 import {
   cloudflaredArgs,
   cloudflaredEnv,
@@ -128,6 +142,11 @@ import {
   TunnelUnconfiguredError,
 } from "@shared/account/service";
 import { fakeClock, makeProof } from "./lib/checkKit.mjs";
+import {
+  bootBrokeredPair as bootPair,
+  makeDirectBridge,
+  startDirectListener as startListenerFixture,
+} from "./lib/directBoot.mjs";
 import { bootDevice, delay, waitFor } from "./lib/relayBoot.mjs";
 import { startStubRelay } from "./lib/relayStub.mjs";
 
@@ -135,94 +154,33 @@ import { startStubRelay } from "./lib/relayStub.mjs";
 // hangs or dies on its own, never reaching any listener.
 const BLACKHOLE = "203.0.113.1";
 
-// A REAL ticket-mode listener for device "B" on an ephemeral loopback
-// port, with its ticket store, a toggleable grant set, and data-plane
-// test handlers. Handler counters prove refusals never ran a body.
+// The shared listener fixture (scripts/lib/directBoot.mjs) with this
+// check's data-plane test handlers mounted. Handler counters prove
+// refusals never ran a body.
 async function startDirectListener(track, opts = {}) {
-  const tickets = createConnectTicketStore(opts.ticketOpts);
-  const granted = new Set();
   let mutateRuns = 0;
-  const binding = createWsServerBinding({
-    verifyTicket: (ticket, deviceId) => tickets.consume(ticket, deviceId),
-    isCommandGranted: (peerDeviceId) => granted.has(peerDeviceId),
-  });
-  binding.handle("test:echo", async (_ctx, raw) => raw, { mutating: false });
-  binding.handle("test:whoami", async (ctx) => ctx.callerDeviceId ?? "none", {
-    mutating: false,
-  });
-  binding.handle(
-    "test:mutate",
-    async () => {
-      mutateRuns += 1;
-      return "mutated";
+  const listener = await startListenerFixture(track, {
+    ...opts,
+    registerHandlers: (binding) => {
+      binding.handle("test:echo", async (_ctx, raw) => raw, {
+        mutating: false,
+      });
+      binding.handle(
+        "test:whoami",
+        async (ctx) => ctx.callerDeviceId ?? "none",
+        { mutating: false },
+      );
+      binding.handle(
+        "test:mutate",
+        async () => {
+          mutateRuns += 1;
+          return "mutated";
+        },
+        { mutating: true },
+      );
     },
-    { mutating: true },
-  );
-  const port = await binding.start({
-    port: 0,
-    bindAddress: "127.0.0.1",
-    // Ticket mode has no static token, the injected verifier is the
-    // auth.
-    token: "",
-    deviceId: opts.deviceId ?? "B",
-    appVersion: "2.0.0",
-    helloTimeoutMs: 1000,
   });
-  track(() => binding.stop());
-  return {
-    binding,
-    tickets,
-    granted,
-    port,
-    mutateRuns: () => mutateRuns,
-    listenerPort: () => {
-      const status = binding.status();
-      return status.listening ? status.port : null;
-    },
-  };
-}
-
-// Boots the relay pair: B registers the REAL direct broker through the
-// shared registrar (plus a relay-side echo for the fallback path), A
-// is the dialing client.
-async function bootPair(stub, track, listener, opts = {}) {
-  const host = await bootDevice(
-    stub,
-    "B",
-    {
-      registerHandlers: (server) => {
-        registerContract(
-          directContract,
-          makeDirectHandlers({
-            listenerPort: listener.listenerPort,
-            mintTickets: (peerDeviceId, count) => {
-              const tickets = listener.tickets.mint(peerDeviceId, count);
-              // Observation seam for the slice B alignment checks: the
-              // minted set in broker order (tunnel ticket last).
-              if (tickets !== null) opts.onMinted?.(tickets);
-              return tickets;
-            },
-            isPeerOnline: opts.isPeerOnline ?? (() => true),
-            // Deterministic candidates: the listener binds loopback,
-            // so real interface enumeration would offer unreachable
-            // LAN addresses.
-            candidateAddresses:
-              opts.candidateAddresses ?? (() => ["127.0.0.1"]),
-            // The tunnel candidate (slice B), absent by default.
-            tunnelUrl: opts.tunnelUrl,
-          }),
-          server,
-          { validateOutputs: true },
-        );
-        server.handle("test:echo", async (_ctx, raw) => raw, {
-          mutating: false,
-        });
-      },
-    },
-    track,
-  );
-  const client = await bootDevice(stub, "A", opts.clientOpts ?? {}, track);
-  return { host, client };
+  return { ...listener, mutateRuns: () => mutateRuns };
 }
 
 // One direct dial against the listener under test. The defaults are
@@ -241,17 +199,6 @@ function dialWith(port, ticket, overrides = {}) {
   });
 }
 
-function dialerFor(client, opts = {}) {
-  return createDirectDialer({
-    connectRelayPeer: (deviceId) => client.connection.connectPeer(deviceId),
-    localDeviceId: "A",
-    localAppVersion: "1.0.0",
-    onAnyPush: opts.onAnyPush,
-    dialableKinds: opts.dialableKinds,
-    deadlineMs: opts.deadlineMs ?? 3000,
-  }).connectDirect;
-}
-
 // A dialer over a FAKE broker answering a fixed candidate list, for
 // scenarios that need per-candidate URLs (different ports, stubs) the
 // real broker's one-listener-port shape cannot express, or a stand-in
@@ -260,14 +207,14 @@ function dialerFor(client, opts = {}) {
 function fakeBrokerDialer(answer, opts = {}) {
   let brokerCalls = 0;
   const dialer = createDirectDialer({
-    connectRelayPeer: async () => {
+    connectBroker: async () => {
       brokerCalls += 1;
       return {
-        transport: {
-          invoke: async () =>
-            typeof answer === "function" ? answer() : answer,
-        },
+        brokerInvoke: async () =>
+          typeof answer === "function" ? answer() : answer,
         close() {},
+        remoteDeviceId: "B",
+        remoteAppVersion: "9",
       };
     },
     localDeviceId: "A",
@@ -345,6 +292,47 @@ function rawHeaderDial(port, ticket, cfConnectingIp) {
   });
 }
 
+// The bridge cache (shared/relay/bridgeHandlers.ts) driven directly
+// with a controllable dialer whose one dial resolves only on release,
+// so the mid-dial sweep scenarios can provably land a sweep between
+// dial start and completion.
+function heldDial() {
+  let release;
+  let closed = 0;
+  let changes = 0;
+  const handlers = makeRelayHandlers({
+    status: () => ({
+      socket: { phase: "connected" },
+      onlineDeviceIds: [],
+      peerAppVersions: {},
+    }),
+    connectDirect: () =>
+      new Promise((resolve) => {
+        release = () =>
+          resolve({
+            transport: {
+              invoke: async () => null,
+              subscribe: () => () => {},
+            },
+            close: () => {
+              closed += 1;
+            },
+            remoteDeviceId: "B",
+            remoteAppVersion: "9",
+          });
+      }),
+    onDirectChange: () => {
+      changes += 1;
+    },
+  });
+  return {
+    handlers,
+    release: () => release(),
+    closed: () => closed,
+    changes: () => changes,
+  };
+}
+
 const { check, done, fail } = makeProof("direct-plane proof");
 
 async function main() {
@@ -359,8 +347,8 @@ async function main() {
       const { client } = await bootPair(stub, track, listener, {
         candidateAddresses: () => ["127.0.0.1", "192.0.2.9"],
       });
-      const peer = await client.connection.connectPeer("B");
-      const info = await peer.transport.invoke("direct:connectInfo", undefined);
+      const peer = await client.connection.connectBroker("B");
+      const info = await peer.brokerInvoke(undefined);
       assert.equal(info.available, true);
       // The host builds the complete dial URLs, so the two sides can
       // never disagree on how URL and ticket line up.
@@ -382,7 +370,7 @@ async function main() {
       // Listener down: the broker answers unavailable, never a stale
       // candidate.
       await listener.binding.stop();
-      const down = await peer.transport.invoke("direct:connectInfo", undefined);
+      const down = await peer.brokerInvoke(undefined);
       assert.deepEqual(down, { available: false });
     },
   );
@@ -403,11 +391,8 @@ async function main() {
       });
       // The context a non-peer wire supplies: no callerDeviceId (the
       // Electron wire, the legacy LAN socket and loopbacks never set
-      // one).
-      const anonymous = {
-        signal: new AbortController().signal,
-        notifier: () => () => {},
-      };
+      // one). connectInfo reads nothing else off its context.
+      const anonymous = {};
       assert.deepEqual(handlers.connectInfo(undefined, anonymous), {
         available: false,
       });
@@ -432,21 +417,30 @@ async function main() {
       track(() => stub.close());
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
-      const dial = dialerFor(client);
-      const connection = await dial("B");
-      track(() => connection.close());
-      assert.equal(connection.remoteDeviceId, "B");
-      assert.equal(connection.remoteAppVersion, "2.0.0");
+      const { bridge } = makeDirectBridge(client);
+      track(() => bridge.closeDirectPeers());
+      await bridge.ensurePeer({ deviceId: "B" });
+      // The welcome pinned the dialed identity and confirmed the
+      // host's version, surfaced through the one per-peer data fact.
+      assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
       // The direct wire carries the authed caller identity to
       // handlers.
       assert.equal(
-        await connection.transport.invoke("test:whoami", undefined),
+        await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:whoami",
+          input: undefined,
+        }),
         "A",
       );
       const baseline = stub.forwardedCount();
       for (let i = 0; i < 5; i += 1) {
         // oxlint-disable-next-line no-await-in-loop -- sequential invokes measure the relay stays flat
-        const result = await connection.transport.invoke("test:echo", { i });
+        const result = await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:echo",
+          input: { i },
+        });
         assert.deepEqual(result, { i });
       }
       assert.equal(
@@ -470,17 +464,21 @@ async function main() {
       const { client } = await bootPair(stub, track, listener, {
         candidateAddresses: () => [BLACKHOLE, "127.0.0.1"],
       });
-      const dial = dialerFor(client, { deadlineMs: 4000 });
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 4000 });
+      track(() => bridge.closeDirectPeers());
       const startedAt = Date.now();
-      const connection = await dial("B");
-      track(() => connection.close());
+      await bridge.ensurePeer({ deviceId: "B" });
       const elapsed = Date.now() - startedAt;
       assert.ok(
         elapsed < 2000,
         `the reachable candidate waited on the junk one (${elapsed}ms)`,
       );
       assert.equal(
-        await connection.transport.invoke("test:echo", "raced"),
+        await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:echo",
+          input: "raced",
+        }),
         "raced",
       );
     },
@@ -505,10 +503,10 @@ async function main() {
       const { client } = await bootPair(stub, track, brokerListener, {
         candidateAddresses: () => ["127.0.0.1", BLACKHOLE],
       });
-      const dial = dialerFor(client, { deadlineMs: 5000 });
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 5000 });
       const startedAt = Date.now();
       await assert.rejects(
-        () => dial("B"),
+        () => bridge.ensurePeer({ deviceId: "B" }),
         (error) =>
           error instanceof RemoteConnectError &&
           error.blocked &&
@@ -735,58 +733,55 @@ async function main() {
   );
 
   await check(
-    "deadline: a wedged connectInfo cannot hang the bridge cache, which settles, falls back to the relay and still serves the invoke",
+    "deadline: a wedged connectInfo cannot hang the bridge cache, whose attempt rejects typed within the budget and whose failure memo short-circuits the next one",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
-      // B serves a connectInfo that NEVER answers (a wedged peer), and
-      // the relay-side echo the fallback lands on.
+      // B serves a connectInfo that NEVER answers (a wedged peer),
+      // wired raw into its one broker slot.
       const host = await bootDevice(
         stub,
         "B",
-        {
-          registerHandlers: (server) => {
-            server.handle("direct:connectInfo", () => new Promise(() => {}), {
-              mutating: false,
-            });
-            server.handle("test:echo", async (_ctx, raw) => raw, {
-              mutating: false,
-            });
-          },
-        },
+        { brokerHandler: () => new Promise(() => {}) },
         track,
       );
       const client = await bootDevice(stub, "A", {}, track);
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client, { deadlineMs: 400 }),
-      });
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 400 });
       const startedAt = Date.now();
-      assert.deepEqual(
-        await bridge.invokePeer({
-          deviceId: "B",
-          channel: "test:echo",
-          input: "hung broker",
-        }),
-        "hung broker",
+      // Direct or nothing: the wedged broker means the peer is
+      // unreachable for data, so the invoke rejects with the deadline
+      // error instead of hanging every consumer of this peer.
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:echo",
+            input: "hung broker",
+          }),
+        /exceeded its 400ms deadline/,
       );
       const elapsed = Date.now() - startedAt;
       assert.ok(
         elapsed < 3000,
         `the wedged connectInfo was not bounded by the deadline (${elapsed}ms)`,
       );
-      assert.deepEqual(bridge.directPeerIds(), []);
-      // The cached promise settled on the relay session: the next
-      // invoke reuses it without a new dial.
-      assert.deepEqual(
-        await bridge.invokePeer({
-          deviceId: "B",
-          channel: "test:echo",
-          input: "cached",
-        }),
-        "cached",
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      // The failed dial dropped its cache entry (no poisoning) and the
+      // dialer's failure memo answers the retry at once, without a
+      // second broker round trip.
+      const retryStartedAt = Date.now();
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:echo",
+            input: "retry",
+          }),
+        /failed recently/,
+      );
+      assert.ok(
+        Date.now() - retryStartedAt < 200,
+        "the failure memo did not short-circuit the retry",
       );
       void host;
     },
@@ -978,44 +973,43 @@ async function main() {
   );
 
   await check(
-    "bye: a closed client peer's host session dies at once, so host broadcasts stop riding the relay to the departed peer",
+    "bye: a winning dial closes its throwaway broker session with a bye the host acts on, so the relay-side session dies at once and no broker garbage lingers",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
-      const host = await bootDevice(
-        stub,
-        "B",
-        {
-          registerHandlers: (server) => {
-            server.handle("test:echo", async (_ctx, raw) => raw, {
-              mutating: false,
-            });
-          },
-        },
-        track,
+      const listener = await startDirectListener(track);
+      const { client } = await bootPair(stub, track, listener);
+      const { bridge } = makeDirectBridge(client);
+      track(() => bridge.closeDirectPeers());
+      await bridge.ensurePeer({ deviceId: "B" });
+      // The broker leg closed its relay session before the dial
+      // resolved, and the close carried a bye so B's relay-side host
+      // session died at once instead of waiting on presence.
+      const bye = stub.received.find(
+        (entry) =>
+          entry.from === "A" &&
+          entry.to === "B" &&
+          entry.frame?.sm?.t === "bye",
       );
-      const client = await bootDevice(stub, "A", {}, track);
-      const peer = await client.connection.connectPeer("B");
-      // Control: with the session live, a host broadcast is forwarded
-      // to A through the stub relay.
-      const before = stub.forwardedCount();
-      host.connection.server.broadcastAll("test:ping", { n: 1 });
-      await waitFor(
-        () => stub.forwardedCount() > before,
-        "the pre-close broadcast to ride the relay",
-      );
-      // Close the client peer: the bye tears the host session down, so
-      // later broadcasts have nobody to ride to.
-      peer.close();
-      await delay(150);
+      assert.ok(bye, "the broker session close never sent a bye");
+      // The relay stays quiet from here: data flows on the direct
+      // socket only, so nothing else rides the stub. (The wire itself
+      // refusing non-broker channels is pinned in check-relay-link.mjs,
+      // and there is no registration surface left here to prove twice.)
       const baseline = stub.forwardedCount();
-      host.connection.server.broadcastAll("test:ping", { n: 2 });
-      host.connection.server.broadcastAll("test:ping", { n: 3 });
+      assert.equal(
+        await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:echo",
+          input: "after bye",
+        }),
+        "after bye",
+      );
       await delay(150);
       assert.equal(
         stub.forwardedCount(),
         baseline,
-        "the host kept fanning broadcasts at a closed client peer",
+        "post-dial traffic still rode the relay",
       );
     },
   );
@@ -1027,16 +1021,14 @@ async function main() {
       track(() => stub.close());
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client),
-      });
+      const { bridge } = makeDirectBridge(client);
+      track(() => bridge.closeDirectPeers());
+      const notePresenceCalls = [];
       const presenceDeps = {
         closeHostPeersNotIn: (online) =>
           listener.binding.closePeersNotIn(online),
         dropClientPeersNotIn: (online) => bridge.dropDirectPeersNotIn(online),
+        notePresence: (online) => notePresenceCalls.push([...online]),
       };
       assert.deepEqual(
         await bridge.invokePeer({
@@ -1046,11 +1038,19 @@ async function main() {
         }),
         "up",
       );
-      assert.deepEqual(bridge.directPeerIds(), ["B"]);
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       // Our own relay link down (no live roster): the working direct
-      // session must survive an account-relay outage.
+      // session must survive an account-relay outage, but the dialer's
+      // roster bookkeeping resets (an empty notePresence) so the
+      // post-reconnect roster counts as fresh offline-to-online
+      // transitions and clears stale failure memos.
       applyDirectPresence(false, [], presenceDeps);
-      assert.deepEqual(bridge.directPeerIds(), ["B"]);
+      assert.deepEqual(
+        notePresenceCalls.at(-1),
+        [],
+        "a relay-down reconcile did not reset the dialer's roster",
+      );
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       assert.deepEqual(
         await bridge.invokePeer({
           deviceId: "B",
@@ -1061,11 +1061,11 @@ async function main() {
       );
       // A live roster still naming the peer: nothing closes.
       applyDirectPresence(true, ["A", "B"], presenceDeps);
-      assert.deepEqual(bridge.directPeerIds(), ["B"]);
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       // The peer leaves the live roster: the cached client session
       // drops at once.
       applyDirectPresence(true, ["A"], presenceDeps);
-      assert.deepEqual(bridge.directPeerIds(), []);
+      assert.deepEqual(bridge.directPeerVersions(), {});
       // Host side: an inbound authed direct socket dies when ITS
       // deviceId leaves the roster, and survives while present.
       let hostSideClosed = false;
@@ -1088,22 +1088,144 @@ async function main() {
   );
 
   await check(
-    "routing: openPeer is direct-first with relay fallback, directPeerIds and directPeerVersions report the direct session, and a closed direct socket drops the cache and re-establishes",
+    "mid-dial sweeps: a peer leaving the roster while its dial is in flight has the completed session closed on arrival and never reported, and the quit sweep closes an in-flight dial's socket too",
+    async () => {
+      // Roster sweep: the peer leaves (revocation included) while its
+      // dial is still in flight. The completing session must not be
+      // installed for a device the control plane stopped vouching for.
+      const sweep = heldDial();
+      const ensure = sweep.handlers.ensurePeer({ deviceId: "B" });
+      sweep.handlers.dropDirectPeersNotIn([]);
+      sweep.release();
+      await ensure;
+      assert.equal(
+        sweep.closed(),
+        1,
+        "the session completing after the roster sweep was not closed",
+      );
+      assert.deepEqual(sweep.handlers.directPeerVersions(), {});
+      assert.equal(
+        sweep.changes(),
+        0,
+        "an orphan session fired onDirectChange",
+      );
+      // Quit sweep: closeDirectPeers with a dial still in flight must
+      // close the resulting socket instead of leaking it past quit.
+      const quit = heldDial();
+      const quitEnsure = quit.handlers.ensurePeer({ deviceId: "B" });
+      quit.handlers.closeDirectPeers();
+      quit.release();
+      await quitEnsure;
+      assert.equal(
+        quit.closed(),
+        1,
+        "the quit sweep left the in-flight dial's socket open",
+      );
+      assert.deepEqual(quit.handlers.directPeerVersions(), {});
+    },
+  );
+
+  await check(
+    "drop then recover: a dead direct socket drops the cache and the next dial-on-subscribe ensure re-establishes the session (no memo blocks a drop that was not a dial failure)",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
+      const { bridge } = makeDirectBridge(client);
+      track(() => bridge.closeDirectPeers());
+      await bridge.ensurePeer({ deviceId: "B" });
+      assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
+      // The established direct socket dies out from under the client
+      // (the host closes it), and the cache drops the session.
+      listener.binding.closePeersNotIn([]);
+      await waitFor(
+        () => Object.keys(bridge.directPeerVersions()).length === 0,
+        "the dropped session to leave the cache",
+      );
+      // The re-ensure the renderer transport fires off the drop's own
+      // status snapshot (an online subscribed peer with no established
+      // session) redials at once: the drop itself was never a dial
+      // failure, so no failure memo stands in the way.
+      await bridge.ensurePeer({ deviceId: "B" });
+      assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
+      assert.deepEqual(
+        await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:echo",
+          input: "recovered",
+        }),
+        "recovered",
+      );
+    },
+  );
+
+  await check(
+    "grant preflight on the direct wire: remoteAccess:commandAccess answers false pre-grant and true post-grant over the SAME direct session, no reconnect",
+    async (track) => {
+      const listener = await startListenerFixture(track, {
+        registerHandlers: (binding) => {
+          registerContract(
+            remoteAccessContract,
+            remoteAccessHandlers,
+            binding,
+            {
+              validateOutputs: true,
+            },
+          );
+        },
+      });
+      const connection = await dialWith(
+        listener.port,
+        listener.tickets.mint("A", 1)[0],
+      );
+      track(() => connection.close());
+      // The preflight is a read, served ungated, and fail-closed about
+      // the CALLER: no grant means granted:false, never an error.
+      assert.deepEqual(
+        await connection.transport.invoke(
+          "remoteAccess:commandAccess",
+          undefined,
+        ),
+        { granted: false },
+      );
+      listener.granted.add("A");
+      assert.deepEqual(
+        await connection.transport.invoke(
+          "remoteAccess:commandAccess",
+          undefined,
+        ),
+        { granted: true },
+      );
+      // And a revoke flips the verdict live on the same socket.
+      listener.granted.delete("A");
+      assert.deepEqual(
+        await connection.transport.invoke(
+          "remoteAccess:commandAccess",
+          undefined,
+        ),
+        { granted: false },
+      );
+    },
+  );
+
+  await check(
+    "routing: openPeer is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache and rejects typed on the next use",
+    async (track) => {
+      const stub = await startStubRelay();
+      track(() => stub.close());
+      const listener = await startDirectListener(track);
+      const { client } = await bootPair(stub, track, listener);
+      // The plane fans a status snapshot out on every direct open and
+      // close (the same statusChanged fan-out a relay transition
+      // fires), so the counter reads that seam.
       let directChanges = 0;
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client),
-        onDirectChange: () => {
+      const { bridge } = makeDirectBridge(client, {
+        onStatusChange: () => {
           directChanges += 1;
         },
       });
+      track(() => bridge.closeDirectPeers());
       // Direct available: the cached session is direct and invokes
       // leave the relay flat once established.
       assert.deepEqual(
@@ -1114,7 +1236,7 @@ async function main() {
         }),
         { n: 1 },
       );
-      assert.deepEqual(bridge.directPeerIds(), ["B"]);
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       // The welcome-confirmed version surfaces for the direct session,
       // so the owner's status snapshot can feed the skew check.
       assert.deepEqual(bridge.directPeerVersions(), { B: "2.0.0" });
@@ -1141,7 +1263,7 @@ async function main() {
       // and the direct marker.
       await listener.binding.stop();
       await waitFor(
-        () => bridge.directPeerIds().length === 0,
+        () => Object.keys(bridge.directPeerVersions()).length === 0,
         "the direct session to drop from the cache",
       );
       assert.equal(
@@ -1149,53 +1271,66 @@ async function main() {
         2,
         "closing the direct session never fired onDirectChange",
       );
-      // The next invoke re-decides: the broker answers unavailable
-      // now, so it falls back to the relay and still succeeds.
-      assert.deepEqual(
-        await bridge.invokePeer({
-          deviceId: "B",
-          channel: "test:echo",
-          input: { n: 3 },
-        }),
-        { n: 3 },
+      // The next invoke re-decides: the broker answers unavailable now
+      // and there is nothing to fall back to, so the attempt rejects
+      // with the typed unreachable outcome and the cache stays empty.
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:echo",
+            input: { n: 3 },
+          }),
+        /offers no direct listener/,
       );
-      assert.deepEqual(bridge.directPeerIds(), []);
       assert.deepEqual(bridge.directPeerVersions(), {});
-      assert.ok(
-        stub.forwardedCount() > baseline,
-        "the fallback invoke never rode the relay",
-      );
     },
   );
 
   await check(
-    "routing fallback on a dead dial: an unreachable direct port falls back to the relay and the invoke still succeeds",
+    "unreachable is typed: a failed direct dial rejects the invoke with the dial error and creates no relay data session",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
       const listener = await startDirectListener(track);
       // Free the port, then keep ADVERTISING it: the broker hands out
-      // tickets and a port nobody listens on, so the dial itself must
-      // fail and the bridge must fall back.
+      // tickets and a port nobody listens on, so the dial itself fails
+      // and the failure is the outcome (direct or nothing).
       const deadPort = listener.port;
       await listener.binding.stop();
       listener.listenerPort = () => deadPort;
       const { client } = await bootPair(stub, track, listener);
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client),
-      });
-      assert.deepEqual(
-        await bridge.invokePeer({
-          deviceId: "B",
-          channel: "test:echo",
-          input: "fallback",
-        }),
-        "fallback",
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:echo",
+            input: "unreachable",
+          }),
+        // Typed pin: a dead advertised port fails the candidate's
+        // socket, so the dial error is the connect error itself, not
+        // some incidental throw.
+        (error) => error instanceof RemoteConnectError,
       );
-      assert.deepEqual(bridge.directPeerIds(), []);
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      // No relay session was created for the data: the throwaway
+      // broker session closed with a bye, and after it nothing from A
+      // rides the relay at B anymore.
+      const bye = stub.received.find(
+        (entry) =>
+          entry.from === "A" &&
+          entry.to === "B" &&
+          entry.frame?.sm?.t === "bye",
+      );
+      assert.ok(bye, "the failed dial left its broker session open");
+      const baseline = stub.receivedCount();
+      await delay(200);
+      assert.equal(
+        stub.receivedCount(),
+        baseline,
+        "something kept riding the relay after the failed dial",
+      );
     },
   );
 
@@ -1207,19 +1342,14 @@ async function main() {
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       const pushes = [];
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client, {
-          onAnyPush: (deviceId, channel, payload) =>
-            pushes.push({ deviceId, channel, payload }),
-        }),
+      const { bridge } = makeDirectBridge(client, {
+        onPeerPush: (push) => pushes.push(push),
       });
+      track(() => bridge.closeDirectPeers());
       // Dial-on-subscribe: the session comes up with no invoke, then
       // the host's fan-out reaches it over the direct socket.
       await bridge.ensurePeer({ deviceId: "B" });
-      assert.deepEqual(bridge.directPeerIds(), ["B"]);
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       const baseline = stub.forwardedCount();
       listener.binding.broadcastAll("test:ping", { n: 7 });
       await waitFor(() => pushes.length > 0, "the direct push");
@@ -1285,9 +1415,9 @@ async function main() {
         minted[1],
         "the candidate tickets drifted from the minted set",
       );
-      // A tunnel with NO interface addresses still advertises: slice C
-      // removes the relay fallback, so a host reachable only through
-      // its tunnel must stay dialable.
+      // A tunnel with NO interface addresses still advertises: data
+      // is direct or nothing, so a host reachable only through its
+      // tunnel must stay dialable.
       const only = makeDirectHandlers({
         listenerPort: () => 42017,
         mintTickets: (_peer, count) =>
@@ -1335,7 +1465,7 @@ async function main() {
   );
 
   await check(
-    "dialableKinds (the web path): the declared capability reaches the host over the wire, which mints only the tunnel ticket, and a tunnel-less peer is a plain relay fallback",
+    "dialableKinds (the web path): the declared capability reaches the host over the wire, which mints only the tunnel ticket, and a tunnel-less peer is the plain unreachable outcome",
     async (track) => {
       const stub = await startStubRelay();
       track(() => stub.close());
@@ -1343,8 +1473,9 @@ async function main() {
       // A well-formed but unroutable tunnel hostname: a check cannot
       // stand up a real wss endpoint (the no-port invariant pins the
       // tunnel to 443), so this scenario pins the BROKER half (what
-      // was minted) and the fallback, while the race mechanics are
-      // pinned by the lan scenarios above through the same code path.
+      // was minted) and the failure outcome, while the race mechanics
+      // are pinned by the lan scenarios above through the same code
+      // path.
       const minted = [];
       const { client } = await bootPair(stub, track, listener, {
         // A REACHABLE lan candidate the host must NOT mint for a
@@ -1355,26 +1486,23 @@ async function main() {
           minted.push(tickets);
         },
       });
-      const bridge = makeRelayHandlers({
-        status: () => client.connection.status(),
-        connectPeer: (deviceId, opts) =>
-          client.connection.connectPeer(deviceId, opts),
-        connectDirect: dialerFor(client, {
-          dialableKinds: ["tunnel"],
-          deadlineMs: 2500,
-        }),
+      const { bridge } = makeDirectBridge(client, {
+        dialableKinds: ["tunnel"],
+        deadlineMs: 2500,
       });
-      // The dial cannot succeed (unroutable hostname), so the bridge
-      // falls back to the relay and the invoke still serves.
-      assert.deepEqual(
-        await bridge.invokePeer({
-          deviceId: "B",
-          channel: "test:echo",
-          input: "fallback",
-        }),
-        "fallback",
+      // The dial cannot succeed (unroutable hostname), so the invoke
+      // rejects as unreachable: direct or nothing. Typed pin: the
+      // failed candidate socket surfaces as the connect error.
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:echo",
+            input: "unroutable",
+          }),
+        (error) => error instanceof RemoteConnectError,
       );
-      assert.deepEqual(bridge.directPeerIds(), []);
+      assert.deepEqual(bridge.directPeerVersions(), {});
       // The host saw the caller's capability and minted ONE ticket
       // (the tunnel's), never a lan ticket to burn and abandon.
       assert.equal(minted.length, 1, "expected exactly one broker mint");
@@ -1384,8 +1512,8 @@ async function main() {
         "the host minted lan tickets for a tunnel-only caller",
       );
       // A tunnel-less host answers a tunnel-only caller
-      // available:false and mints nothing: the fallback stays a plain
-      // dial failure.
+      // available:false and mints nothing: the plain unreachable
+      // outcome, distinguishable from the structural skew error below.
       const bare = await startDirectListener(track);
       const bareMinted = [];
       const stub2 = await startStubRelay();
@@ -1396,12 +1524,12 @@ async function main() {
           bareMinted.push(tickets);
         },
       });
+      const bareBridge = makeDirectBridge(pair2.client, {
+        dialableKinds: ["tunnel"],
+        deadlineMs: 2000,
+      }).bridge;
       await assert.rejects(
-        () =>
-          dialerFor(pair2.client, {
-            dialableKinds: ["tunnel"],
-            deadlineMs: 2000,
-          })("B"),
+        () => bareBridge.ensurePeer({ deviceId: "B" }),
         /offers no direct listener/,
         "a kind-filtered empty answer was not the plain unavailable outcome",
       );
@@ -1410,7 +1538,7 @@ async function main() {
   );
 
   await check(
-    "old-host skew: an answer ignoring dialableKinds yields the typed NoDialableCandidateError, memoized structurally (no TTL) until the peer's offline-to-online transition",
+    "old-host skew and the ONE failure memo: an answer ignoring dialableKinds yields the typed NoDialableCandidateError, memoized under the same short TTL as any failure and cleared early by the peer's offline-to-online transition",
     async () => {
       // The fake broker stands in for an OLD host: it ignores the
       // input and answers lan candidates to a tunnel-only caller.
@@ -1421,7 +1549,7 @@ async function main() {
             { kind: "lan", url: "ws://127.0.0.1:9", ticket: "smpt_x" },
           ],
         },
-        { dialableKinds: ["tunnel"], failureTtlMs: 40, deadlineMs: 1000 },
+        { dialableKinds: ["tunnel"], failureTtlMs: 300, deadlineMs: 1000 },
       );
       await assert.rejects(
         () => dialer.connectDirect("B"),
@@ -1429,24 +1557,30 @@ async function main() {
         "an undialable candidate set did not reject with the typed error",
       );
       assert.equal(brokerCalls(), 1);
-      // Past the transient TTL the structural memo still short-circuits:
-      // no broker round trip, same typed error.
-      await delay(80);
+      // Within the TTL the memo short-circuits: no broker round trip.
+      // ONE memo for every failure kind (there is no fallback behind a
+      // dial, so an unexpiring structural memo would brick a peer whose
+      // tunnel was merely still starting).
+      await assert.rejects(() => dialer.connectDirect("B"), /failed recently/);
+      assert.equal(brokerCalls(), 1, "the memo did not short-circuit");
+      // The peer going offline and coming back clears the memo EARLY,
+      // before the TTL: its offer may genuinely have changed (a tunnel
+      // came up).
+      dialer.notePresence([]);
+      dialer.notePresence(["B"]);
       await assert.rejects(
         () => dialer.connectDirect("B"),
         (error) => error instanceof NoDialableCandidateError,
       );
-      assert.equal(
-        brokerCalls(),
-        1,
-        "a structural verdict was re-brokered on the transient TTL",
-      );
-      // The peer going offline and coming back clears it: its offer
-      // may genuinely have changed (a tunnel came up).
-      dialer.notePresence([]);
-      dialer.notePresence(["B"]);
-      await assert.rejects(() => dialer.connectDirect("B"));
       assert.equal(brokerCalls(), 2, "the presence transition did not clear");
+      // And the TTL alone recovers too: past expiry the next dial pays
+      // a real broker round trip instead of the memo answer.
+      await delay(350);
+      await assert.rejects(
+        () => dialer.connectDirect("B"),
+        (error) => error instanceof NoDialableCandidateError,
+      );
+      assert.equal(brokerCalls(), 3, "the expired memo still short-circuited");
     },
   );
 

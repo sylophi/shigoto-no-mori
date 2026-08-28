@@ -20,8 +20,8 @@ import {
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
-import type { RemoteDevice } from "@/lib/remote/devices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import type { RemoteDevice } from "@/lib/remote/devices";
 
 // "Account": sign in to the relay so this device can reach the account's
 // other devices (v2 step 4, slice B). Two states: signed out (a Sign in
@@ -180,11 +180,15 @@ function DeviceRow({
   tunnelUp?: boolean;
 }) {
   const navigate = useNavigate();
-  // A peer is reachable when its relay entry is in the connected phase
-  // (socket up and the peer in the presence roster), which is also when
-  // its api is serving, so the forest lookup will find it.
+  // The forest is worth offering while the device is reachable
+  // (connected, or online in the roster): a direct session may not
+  // exist yet, but viewing the forest is exactly what dials one, so
+  // gating on an established session here would make an undialed peer
+  // permanently unreachable. The dot beside the row stays honest
+  // ("Online" until a session is up, "Connected" only on a live
+  // direct wire).
   const reachable =
-    relayDevice !== undefined && deviceStatusView(relayDevice.status).connected;
+    relayDevice !== undefined && deviceStatusView(relayDevice.status).reachable;
   return (
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-3 py-2">
       {isThisDevice ? (
@@ -204,9 +208,6 @@ function DeviceRow({
           )}
           {tunnelUp === true && (
             <span className="ml-2 text-xs text-muted-foreground">tunnel</span>
-          )}
-          {relayDevice?.direct === true && (
-            <span className="ml-2 text-xs text-muted-foreground">direct</span>
           )}
         </span>
         <span className="truncate font-mono text-[10px] text-muted-foreground">

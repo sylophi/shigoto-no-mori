@@ -68,9 +68,10 @@ import {
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
-// cached peer session) the renderer's remote-device api uses. Dialing
-// relayConnectPeer directly would silently replace that session
-// mid-view since the link keeps one client peer per deviceId.
+// cached direct peer session) the renderer's remote-device api uses.
+// Opening a second session directly would supersede-kill the one every
+// remote-forest query is riding, since the host keeps one authed
+// socket per device.
 const peerTransportFor = (deviceId: string) => ({
   invoke: (channel: string, input: unknown) =>
     Promise.resolve(
@@ -115,7 +116,8 @@ export function registerIpcHandlers(): void {
   // Client-scoped bridge onto the main-process relay socket: status,
   // lazy peer invokes, and the peerPush/statusChanged fan-outs. The
   // handlers themselves are constructed in register.ts, which owns
-  // every dep and reads directPeerIds back into the status snapshot.
+  // every dep and folds directPeerVersions back into the status
+  // snapshot.
   registerContract(relayContract, relayHandlers);
   // The direct data plane's brokering surface: host-scoped and
   // remote:true, so a peer asks over the relay (or an existing direct
@@ -135,10 +137,10 @@ export function registerIpcHandlers(): void {
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
-  // a direct relayConnectPeer would silently replace the session the
-  // renderer's remote-forest queries ride. The engine itself is
-  // electron-free (main/portForward/engine.ts), and this is its only
-  // binding to the relay and to the renderer's changed signal.
+  // a second session would supersede the one the renderer's
+  // remote-forest queries ride. The engine itself is electron-free
+  // (main/portForward/engine.ts), and this is its only binding to the
+  // peer sessions and to the renderer's changed signal.
   setPortForwardEngine(
     createPortForwardEngine({
       forwardApiFor: (deviceId) =>

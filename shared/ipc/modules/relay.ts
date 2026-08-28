@@ -60,23 +60,29 @@ export const TunnelStateSchema = z.enum([
 ]);
 export type TunnelState = z.infer<typeof TunnelStateSchema>;
 
+// Despite the module's historical name, RelayStatus is the
+// REMOTE-PLANE snapshot: the relay control plane's socket and roster
+// plus the direct data plane it brokers (sessions, versions, the
+// tunnel endpoint). The relay itself carries orchestration only (v2
+// step 10, slice C), so every per-peer data fact below is about
+// direct sessions.
 export const RelayStatusSchema = z.object({
   socket: RelaySocketStatusSchema,
   // The account's online deviceIds from the latest presence broadcast,
-  // empty whenever the socket is down.
+  // empty whenever the socket is down. A roster fact only: online
+  // means enrolled and connected to the relay, not data-reachable.
   onlineDeviceIds: z.array(z.string()),
-  // The appVersion each currently connected client peer confirmed in its
-  // welcome, keyed by deviceId. Empty for a peer with no open session,
-  // so the renderer reads it here instead of polling peerInfo per device.
+  // The appVersion each ESTABLISHED direct session's welcome
+  // confirmed, keyed by deviceId. Absent key means no direct session,
+  // so membership here is the whole "direct-connected" surface (the
+  // only kind of data session there is, v2 step 10 slice C) and the
+  // renderer reads it instead of polling peerInfo per device.
   peerAppVersions: z.record(z.string(), z.string()),
-  // The peers whose cached session rides a DIRECT socket rather than
-  // the relay (v2 step 10, slice A). Optional per the version-skew
-  // policy: absent means the serving side predates the direct plane.
-  directDeviceIds: z.array(z.string()).optional(),
-  // The tunnel endpoint state, for the devices page. Additive-optional:
-  // absent means the serving side predates tunnels (the web bridge,
-  // which runs no cloudflared, never sets it). Never carries the
-  // hostname or any secret.
+  // The tunnel endpoint state, for the devices page. Optional because
+  // only a serving side with a host half sets it (the web bridge runs
+  // no cloudflared). Not a skew concern: relay:status is
+  // client-scoped, main answering its own renderer, so both ends are
+  // always the same build. Never carries the hostname or any secret.
   tunnel: TunnelStateSchema.optional(),
 });
 export type RelayStatus = z.infer<typeof RelayStatusSchema> &
@@ -96,10 +102,11 @@ export const relayContract = defineContract("client", {
   // The current socket phase plus the online set. Cheap: main reads
   // its in-memory snapshot, nothing touches the network.
   status: invoke("relay:status", z.void(), RelayStatusSchema),
-  // Forward one sm invoke to a peer device over the relay. Main opens
-  // the peer session lazily on first use and caches it. Offline,
-  // oversize and disconnected surface as thrown errors whose messages
-  // ride Electron's error serialization.
+  // Forward one sm invoke to a peer device over its DIRECT session.
+  // Main opens the session lazily on first use (dialing through the
+  // relay-brokered connect info) and caches it. An unreachable peer,
+  // a failed dial and a disconnect surface as thrown errors whose
+  // messages ride Electron's error serialization.
   invokePeer: invoke(
     "relay:invokePeer",
     z.object({
