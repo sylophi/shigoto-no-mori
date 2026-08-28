@@ -32,6 +32,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
+import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -214,21 +215,23 @@ function tokenMatches(given: string, expected: string): boolean {
 // hello token is what actually authenticates a peer (a bad token
 // terminates the socket). Legitimate clients are node and main-process
 // sockets, which send no Origin, plus the app's own renderer, whose
-// browser-global WebSocket always sends one: "file://" from the
-// packaged app's loadFile page, a loopback http origin from the vite
-// dev server. Anything else is a drive-by browser page, refused before
-// it can even attempt a hello. The direct listener (v2 step 10, slice
-// B) may additionally admit ONE configured web-client origin, so the
-// web client can dial wss tunnel URLs: the exact-match `allowedOrigin`
-// arrives through start opts from the same SM_ACCOUNT_WEB_ORIGIN env
-// the app's account layer reads, never hardcoded. The legacy LAN
-// listener passes none and keeps its pinned behavior.
+// browser-global WebSocket always sends one: the renderer-scheme
+// origin (shigomori://app or shigomori-dev://app, both builds load
+// over it, see main/electron/clerk.ts), or a loopback http origin from
+// a locally served web client. Anything else is a drive-by browser
+// page, refused before it can even attempt a hello. The direct
+// listener (v2 step 10, slice B) may additionally admit ONE configured
+// web-client origin, so the web client can dial wss tunnel URLs: the
+// exact-match `allowedOrigin` arrives through start opts from the same
+// SM_ACCOUNT_WEB_ORIGIN env the app's account layer reads, never
+// hardcoded. The legacy LAN listener passes none and keeps its pinned
+// behavior.
 export function isAllowedOrigin(
   origin: string | undefined,
   allowedOrigin?: string,
 ): boolean {
   if (origin === undefined) return true;
-  if (origin === "file://") return true;
+  if (rendererSchemeOrigins().includes(origin)) return true;
   if (allowedOrigin !== undefined && origin === allowedOrigin) return true;
   try {
     const url = new URL(origin);

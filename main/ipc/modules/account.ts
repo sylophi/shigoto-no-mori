@@ -22,7 +22,7 @@ import {
   type StoredAccount,
 } from "../../account/credentialStore";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
-import { deriveAccountId } from "@shared/account/token";
+import { enrollDevice, signOutDevice } from "@shared/account/enroll";
 import {
   createAccountService,
   type AccountService,
@@ -307,32 +307,30 @@ export function makeAccountHandlers(
 
     enroll: async (token) => {
       // A second concurrent caller rides the first enrollment instead
-      // of racing it and rotating the credential twice.
+      // of racing it and rotating the credential twice. This is the
+      // authoritative dedupe for the whole app: renderer effects may
+      // re-fire, but the credential is a one-per-machine fact.
       if (enrollInFlight) return enrollInFlight;
       enrollInFlight = (async (): Promise<AccountStatus> => {
         const config = serviceConfig();
-        if (!isConfigured(config)) {
-          throw new Error(
-            "the relay account service is not configured on this build",
-          );
-        }
-        const service = createAccountService({ baseUrl: config.relayUrl });
-        const deviceName = store().read()?.deviceName ?? defaultDeviceName();
-        const enrollment = await service.enroll(token, {
-          // The relay device identity is tied to registry.json: getDeviceId
-          // mints and persists this root's UUID there, so a registry reset
-          // re-enrolls this app as a brand new relay device.
-          deviceId: getDeviceId(),
-          name: deviceName,
-          // os.platform() is the same value as process.platform, which the
-          // linter restricts here. The relay stores it as an opaque label.
-          platform: platform(),
-        });
-        store().write({
-          credential: enrollment.credential,
-          accountId: deriveAccountId(token),
-          deviceName,
-        });
+        await enrollDevice(
+          {
+            config,
+            service: createAccountService({ baseUrl: config.relayUrl }),
+            store: store(),
+            // The relay device identity is tied to registry.json:
+            // getDeviceId mints and persists this root's UUID there, so
+            // a registry reset re-enrolls this app as a brand new relay
+            // device.
+            deviceId: getDeviceId(),
+            fallbackDeviceName: defaultDeviceName(),
+            // os.platform() is the same value as process.platform,
+            // which the linter restricts here. The relay stores it as
+            // an opaque label.
+            platform: platform(),
+          },
+          token,
+        );
         accountChanged();
         return readStatus();
       })();
@@ -344,30 +342,24 @@ export function makeAccountHandlers(
     },
 
     signOut: async () => {
-      const signedIn = signedInService();
-      // Best-effort server-side revoke of THIS device before clearing
-      // locally, so a signed-out device's credential does not stay valid
-      // on the relay. Any failure (offline, relay down, non-2xx) is
-      // swallowed and logged at most once, because local sign-out MUST
-      // always succeed regardless.
-      if (signedIn !== null) {
-        try {
-          await signedIn.service.revoke(
-            signedIn.record.credential,
-            getDeviceId(),
+      const config = serviceConfig();
+      await signOutDevice({
+        config,
+        service: createAccountService({ baseUrl: config.relayUrl }),
+        store: store(),
+        deviceId: getDeviceId(),
+        // The failure is swallowed (local sign-out must always land)
+        // and logged at most once per session.
+        onRevokeFailure: (error) => {
+          if (revokeWarned) return;
+          revokeWarned = true;
+          console.warn(
+            "[account] best-effort device revoke on sign-out failed, " +
+              "clearing the local credential anyway.",
+            error,
           );
-        } catch (error) {
-          if (!revokeWarned) {
-            revokeWarned = true;
-            console.warn(
-              "[account] best-effort device revoke on sign-out failed, " +
-                "clearing the local credential anyway.",
-              error,
-            );
-          }
-        }
-      }
-      store().clear();
+        },
+      });
       // Drop this host's command grants too, so re-signing into the SAME
       // account does not resurrect the prior grants from a lingering
       // grants.json. accountChanged() below also invalidates the grant

@@ -4,10 +4,11 @@ import { DeviceIdSchema, DeviceInfoSchema } from "@shared/relay/protocol";
 
 // The relay account layer as the renderer sees it. Client-scoped on
 // purpose: enrollment writes an OS-keychain credential on the machine
-// showing the window, so it must never be served to a remote peer. Being client-scoped also keeps every call
-// structurally off the websocket wire (main/ipc/register.ts registers
-// client channels only on the Electron binding), which is why these
-// invokes carry no `remote` tag and the socket check exempts them.
+// showing the window, so it must never be served to a remote peer.
+// Being client-scoped also keeps every call structurally off the
+// websocket wire (main/ipc/register.ts registers client channels only
+// on the Electron binding), which is why these invokes carry no
+// `remote` tag and the socket check exempts them.
 
 // The renderer's whole view of account state in one object. accountId is
 // empty when signed out. This device's id is not carried here since the

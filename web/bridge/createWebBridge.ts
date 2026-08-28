@@ -28,7 +28,7 @@ import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/relay/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
-import { deriveAccountId } from "@shared/account/token";
+import { enrollDevice, signOutDevice } from "@shared/account/enroll";
 import { createRelayConnection } from "../relay/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
@@ -220,40 +220,25 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // "web" (a legal opaque label beside the desktop's os.platform()
     // values in EnrollRequestSchema's 1..64 bound).
     enroll: async (token) => {
-      if (!isConfigured(config)) {
-        throw new Error(
-          "the relay account service is not configured on this build",
-        );
-      }
-      const deviceName = store.read()?.deviceName ?? defaultDeviceName();
-      const enrollment = await service.enroll(token, {
-        deviceId,
-        name: deviceName,
-        platform: "web",
-      });
-      store.write({
-        credential: enrollment.credential,
-        accountId: deriveAccountId(token),
-        deviceName,
-      });
+      await enrollDevice(
+        {
+          config,
+          service,
+          store,
+          deviceId,
+          fallbackDeviceName: defaultDeviceName(),
+          platform: "web",
+        },
+        token,
+      );
       accountChanged();
       return readStatus();
     },
 
-    // Mirrors the desktop's sign-out semantics: best-effort revoke of
-    // THIS device on the relay first, then clear the stored credential.
-    // The revoke failure is swallowed because local sign-out must
-    // always succeed, even offline.
+    // The shared best-effort revoke-then-clear (the desktop handler
+    // adds a warn-once and its grant clear on top of the same core).
     signOut: async () => {
-      const record = store.read();
-      if (record !== null && isConfigured(config)) {
-        try {
-          await service.revoke(record.credential, deviceId);
-        } catch {
-          // Clearing locally regardless is the whole point.
-        }
-      }
-      store.clear();
+      await signOutDevice({ config, service, store, deviceId });
       accountChanged();
     },
 

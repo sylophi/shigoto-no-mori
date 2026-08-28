@@ -61,10 +61,27 @@ export function useWatchAccountChanges(): void {
 // Exchanges a fresh Clerk session token for the relay device
 // credential. Driven by ClerkAccountSync after Clerk reports a
 // session; the Clerk sign-in UI itself never touches this layer.
+// Takes the token mint as a callback so a failed mint lands in the
+// same error path (and toast) as a failed enrollment.
 export function useEnroll() {
-  return useMutation<AccountStatus, Error, string>({
-    mutationFn: (token) => window.api.account.enroll(token),
+  return useMutation<AccountStatus, Error, () => Promise<string | null>>({
+    mutationFn: async (mintToken) => {
+      const token = await mintToken();
+      if (!token) throw new Error("Clerk returned no session token");
+      return window.api.account.enroll(token);
+    },
     meta: { errorTitle: "Couldn't enroll this device" },
+  });
+}
+
+// The account layer's half of sign-out (best-effort relay revoke plus
+// local credential clear). ClerkAccountSync drives it when the Clerk
+// session ends; the UI buttons go through useClerkSignOut, which ends
+// the Clerk session first and then this same IPC call.
+export function useAccountSignOut() {
+  return useMutation<void, Error, void>({
+    mutationFn: () => window.api.account.signOut(),
+    meta: { errorTitle: "Couldn't sign out" },
   });
 }
 

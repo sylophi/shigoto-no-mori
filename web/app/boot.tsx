@@ -5,16 +5,15 @@
 // facts). Keeps only the boot concerns that exist on the web: the query
 // client with the shared error-toast wiring, the relay device sync, and
 // the provider tree around the router.
-import { StrictMode, type ReactNode } from "react";
+import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ClerkProvider } from "@clerk/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { Toaster } from "sonner";
-import { ClerkAccountSync } from "@/components/account/ClerkAccountSync";
+import { ClerkGate } from "@/components/account/ClerkGate";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
-import { clerkAppearance } from "@/lib/clerkAppearance";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
@@ -32,23 +31,6 @@ const queryClient = createAppQueryClient();
 // The registry's relay half: enrolled devices plus live presence, from
 // the bridge's account and relay modules, exactly as on desktop.
 startRemoteDeviceSync(queryClient);
-
-// Clerk mounts only on a configured build (the key is baked into the
-// bundle, see webServiceConfig). The browser flavor of the provider:
-// plain @clerk/react, no Electron bridge. ClerkAccountSync exchanges
-// the Clerk session for the relay device credential; components under
-// an absent provider must not call Clerk hooks, which the
-// status.configured gates in the account UI guarantee.
-function WithClerk({ children }: { children: ReactNode }) {
-  const publishableKey = window.api.clerkPublishableKey;
-  if (!publishableKey) return children;
-  return (
-    <ClerkProvider publishableKey={publishableKey} appearance={clerkAppearance}>
-      <ClerkAccountSync />
-      {children}
-    </ClerkProvider>
-  );
-}
 
 function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));
@@ -76,9 +58,11 @@ createRoot(rootElement).render(
         <DoubutsuProvider>
           <ErrorBoundary FallbackComponent={AppErrorFallback}>
             <TooltipProvider>
-              <WithClerk>
+              {/* The browser-flavor provider: plain @clerk/react, no
+                  Electron bridge. */}
+              <ClerkGate Provider={ClerkProvider}>
                 <RouterProvider router={webRouter} />
-              </WithClerk>
+              </ClerkGate>
               <DevThemeHotkeys />
             </TooltipProvider>
           </ErrorBoundary>

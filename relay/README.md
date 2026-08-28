@@ -158,6 +158,12 @@ first (the web client is unaffected: a browser origin authenticates
 the browser way). For macOS passkey support later, the dashboard's
 Native applications page must also have the Native API enabled.
 
+The web deploy's CSP (vercel.json) allowlists Clerk's script host as
+`https://*.clerk.accounts.dev`, which covers development instances. A
+production (`pk_live`) instance serves Clerk's UI from your own
+`clerk.<domain>` Frontend API host instead — add that origin to
+`script-src` when going live.
+
 For local development, the app also reads a gitignored `.env.account`
 file in the repo root if present (simple `KEY=value` lines). Baked and
 real environment variables override it, and packaged builds never read

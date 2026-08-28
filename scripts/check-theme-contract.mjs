@@ -153,6 +153,32 @@ for (const { needle, what } of ART_RULES) {
   }
 }
 
+// 5. Clerk's prebuilt UI themes through renderer/lib/clerkAppearance.ts
+//    (its appearance API, not doubutsu.css selectors), binding Clerk
+//    variables to the app palette via CSS variables alone. Every var it
+//    reads must resolve in both systems: a v1 theme token declared in
+//    index.css, or a raw --color-* step that doubutsu.css remaps. A
+//    renamed token would otherwise break the sign-in surfaces silently.
+const clerkSrc = readFileSync(
+  join(root, "renderer/lib/clerkAppearance.ts"),
+  "utf8",
+);
+const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8");
+for (const [, name] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
+  if (name.startsWith("--color-")) {
+    if (!css.includes(`${name}:`)) {
+      failures.push(
+        `clerkAppearance reads ${name} but doubutsu.css does not remap ` +
+          "that step, so Clerk's UI would keep the raw hue in doubutsu mode",
+      );
+    }
+  } else if (!indexCss.includes(`${name}:`)) {
+    failures.push(
+      `clerkAppearance reads ${name} but renderer/index.css no longer declares it`,
+    );
+  }
+}
+
 report({
   name: "theme contract",
   failures,

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useClerk } from "@clerk/react";
 import { useNavigate } from "@tanstack/react-router";
-import { ArrowRight, LogIn, LogOut } from "lucide-react";
+import { ArrowRight, LogIn } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
+import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -17,7 +18,6 @@ import {
   useSetDeviceName,
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
-import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -132,31 +132,16 @@ export function AccountSection() {
   );
 }
 
-// The Clerk-driven halves, split out so AccountSection itself never
-// calls a Clerk hook: these mount only on the configured (and therefore
-// provider-wrapped) paths above. Sign-in opens Clerk's embedded modal;
-// ClerkAccountSync turns the resulting session into the enrollment.
+// Split out so AccountSection itself never calls a Clerk hook: this
+// mounts only on the configured (and therefore provider-wrapped) path
+// above. Sign-in opens Clerk's embedded modal; ClerkAccountSync turns
+// the resulting session into the enrollment.
 function ClerkSignInButton() {
   const clerk = useClerk();
   return (
     <Button variant="outline" size="sm" onClick={() => clerk.openSignIn()}>
       <LogIn />
       Sign in
-    </Button>
-  );
-}
-
-function ClerkSignOutButton() {
-  const signOut = useClerkSignOut();
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      disabled={signOut.isPending}
-      onClick={() => signOut.mutate()}
-    >
-      <LogOut />
-      Sign out
     </Button>
   );
 }

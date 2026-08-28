@@ -8,8 +8,8 @@
 // localStorage-backed clientConfig store round-trips and heals corrupt
 // JSON, the per-browser deviceId is stable and matches DeviceIdSchema,
 // enroll exchanges the Clerk session token for a credential with
-// platform "web" and persists the enc:false envelope, sign-out revokes
-// this device then clears the envelope, explicitly read-classified OS-bound
+// platform "web" and persists the enc:false envelope, sign-out
+// revokes this device then clears the envelope, read-classified OS-bound
 // channels answer structural stub defaults while every mutation-shaped
 // or unclassified channel REJECTS (fail-closed, including enum/union
 // outputs the walker refuses to fabricate), the step-6 remote flips
@@ -31,7 +31,7 @@ import {
   NO_STRUCTURAL_STUB,
   stubValueFor,
 } from "../web/bridge/stubDefaults.ts";
-import { makeProof } from "./lib/checkKit.mjs";
+import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -90,17 +90,6 @@ function jsonResponse(status, body) {
     status,
     headers: { "content-type": "application/json" },
   });
-}
-
-// A fake session JWT whose payload carries the sub claim, unsigned on
-// purpose: deriveAccountId never verifies, it only reads the account
-// id; the relay is the sole verifier.
-function jwtSegment(obj) {
-  return Buffer.from(JSON.stringify(obj)).toString("base64url");
-}
-
-function fakeJwt(sub) {
-  return `${jwtSegment({ alg: "none" })}.${jwtSegment({ sub })}.sig`;
 }
 
 const STORED_ENVELOPE = JSON.stringify({
@@ -366,7 +355,7 @@ async function main() {
           // derived or stored value.
           assert.equal(
             init.headers.authorization,
-            `Bearer ${fakeJwt("acct_1")}`,
+            `Bearer ${fakeSessionJwt("acct_1")}`,
           );
           return jsonResponse(200, {
             credential: "cred-1",
@@ -391,7 +380,7 @@ async function main() {
       track(() => bridge.stop());
       const deviceId = bridge.api.deviceId;
 
-      const status = await bridge.api.account.enroll(fakeJwt("acct_1"));
+      const status = await bridge.api.account.enroll(fakeSessionJwt("acct_1"));
       assert.equal(status.signedIn, true);
       assert.equal(status.accountId, "acct_1");
 
@@ -462,7 +451,7 @@ async function main() {
       assert.equal(status.configured, false);
       assert.equal(bridge.api.clerkPublishableKey, "");
       await assert.rejects(
-        bridge.api.account.enroll(fakeJwt("acct_1")),
+        bridge.api.account.enroll(fakeSessionJwt("acct_1")),
         /not configured/,
       );
       await bridge.refreshRelay();

@@ -11,8 +11,9 @@
 // never appears in a renderer-visible object.
 //
 // Sign-in itself is Clerk's embedded UI plus the @clerk/electron
-// bridge, so it has no pure core to prove here; the seam this layer
-// owns starts at the session token the renderer hands account:enroll.
+// bridge; the pure seam this layer owns starts at the session token
+// the renderer hands account:enroll, whose orchestration
+// (shared/account/enroll.ts, driven by both shells) is proved here.
 // The other thing it cannot cover is the safeStorage cipher round trip
 // itself: that is an OS-keychain, electron-only seam, so the store here
 // runs against injected cipher stubs and the real encryption path is
@@ -36,6 +37,7 @@ import {
   parseDotenv,
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
+import { enrollDevice, signOutDevice } from "../shared/account/enroll.ts";
 import { createAccountService } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
 import { createAccountStore } from "../main/account/credentialStore.ts";
@@ -46,7 +48,7 @@ import {
   accountContract,
 } from "@shared/ipc/modules/account";
 import { DeviceInfoSchema, RELAY_ROUTES } from "@shared/relay/protocol";
-import { makeProof } from "./lib/checkKit.mjs";
+import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
 
 // A resolved config that isConfigured accepts, for the flows that need
 // one. The relay URL is never dialled: fetch is always stubbed.
@@ -55,16 +57,8 @@ const CONFIG = resolveServiceConfig({
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
 });
 
-// base64url without padding, for the JWT-shaped stub tokens.
+// base64url without padding, for the malformed-token cases below.
 const b64url = (buf) => Buffer.from(buf).toString("base64url");
-
-// A JWT-shaped token whose payload carries the given sub, the shape a
-// Clerk session token has, so deriveAccountId has something to read.
-function jwtWithSub(sub) {
-  const header = b64url(JSON.stringify({ alg: "none", typ: "JWT" }));
-  const payload = b64url(JSON.stringify({ sub }));
-  return `${header}.${payload}.sig`;
-}
 
 // A fetch stub that records every call and answers via the responder.
 function recordingFetch(responder) {
@@ -272,6 +266,131 @@ async function main() {
         () => service.listDevices("device-credential"),
         /device revoked/,
       );
+    },
+  );
+
+  // An in-memory store over the shared core, the seam both shells'
+  // enroll/sign-out orchestration is driven through.
+  const memoryStore = () => {
+    let stored = null;
+    return createCoreAccountStore({
+      storage: {
+        readRaw: () => stored,
+        writeRaw: (text) => {
+          stored = text;
+        },
+        removeRaw: () => {
+          stored = null;
+        },
+      },
+      cipher: PLAINTEXT_CIPHER,
+    });
+  };
+
+  await check(
+    "enroll flow: enrollDevice stores the credential with the derived accountId under the stored-or-fallback device name, and an unconfigured build rejects before any fetch",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(() =>
+        json({ credential: "cred-1", device: DEVICE }),
+      );
+      const service = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl,
+      });
+      const store = memoryStore();
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service,
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_abc"),
+      );
+      assert.deepEqual(store.read(), {
+        credential: "cred-1",
+        accountId: "user_abc",
+        deviceName: "Fallback Mac",
+      });
+      // A stored name survives re-enrollment; the fallback is only for
+      // a first sign-in.
+      store.write({ ...store.read(), deviceName: "Renamed" });
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service,
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_abc"),
+      );
+      assert.equal(store.read().deviceName, "Renamed");
+
+      const before = calls.length;
+      await assert.rejects(
+        () =>
+          enrollDevice(
+            {
+              config: resolveServiceConfig({}),
+              service,
+              store,
+              deviceId: "device-uuid",
+              fallbackDeviceName: "Fallback Mac",
+              platform: "darwin",
+            },
+            fakeSessionJwt("user_abc"),
+          ),
+        /not configured/,
+      );
+      assert.equal(calls.length, before, "an unconfigured enroll fetched");
+    },
+  );
+
+  await check(
+    "sign-out flow: signOutDevice revokes THIS device then clears, and still clears (reporting the failure) when the revoke fails",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      const service = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl,
+      });
+      const store = memoryStore();
+      store.write({ credential: "cred-1", accountId: "a", deviceName: "d" });
+      await signOutDevice({
+        config: CONFIG,
+        service,
+        store,
+        deviceId: "device-uuid",
+      });
+      assert.equal(store.read(), null);
+      assert.equal(calls[0].init.method, "DELETE");
+      assert.equal(calls[0].init.headers.authorization, "Bearer cred-1");
+
+      // The failure path: revoke rejects, the clear still lands and the
+      // failure reaches the caller's reporter instead of throwing.
+      const failing = createAccountService({
+        baseUrl: CONFIG.relayUrl,
+        fetchImpl: () => Promise.reject(new TypeError("offline")),
+      });
+      store.write({ credential: "cred-2", accountId: "a", deviceName: "d" });
+      let reported = null;
+      await signOutDevice({
+        config: CONFIG,
+        service: failing,
+        store,
+        deviceId: "device-uuid",
+        onRevokeFailure: (error) => {
+          reported = error;
+        },
+      });
+      assert.equal(store.read(), null, "a failed revoke blocked the clear");
+      assert.match(String(reported), /offline/);
     },
   );
 
@@ -522,7 +641,7 @@ async function main() {
     () => {
       // The happy path derives the sub, the account id a Clerk session
       // token carries.
-      assert.equal(deriveAccountId(jwtWithSub("user_x")), "user_x");
+      assert.equal(deriveAccountId(fakeSessionJwt("user_x")), "user_x");
       // A three-segment token whose payload is not valid base64/JSON.
       assert.equal(deriveAccountId("aaa.!!!not base64 or json!!!.sig"), "");
       // Valid base64url that decodes to non-JSON bytes.
@@ -589,7 +708,7 @@ async function main() {
 
   await check("contract: enroll rejects an empty session token", () => {
     const input = accountContract.calls.enroll.input;
-    assert.equal(input.safeParse(jwtWithSub("user_x")).success, true);
+    assert.equal(input.safeParse(fakeSessionJwt("user_x")).success, true);
     assert.equal(
       input.safeParse("").success,
       false,

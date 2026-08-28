@@ -2,9 +2,10 @@
 // forking their structure: every value is a CSS variable reference, so
 // light/dark and the doubutsu overlay (which remaps the same tokens)
 // propagate into Clerk's portaled surfaces with no remount. Clerk's UI
-// is deliberately outside doubutsu.css and theme:check — this appearance
-// object is its entire theming surface, so keep it to theme tokens
-// (never literals) and eyeball all four modes when touching it.
+// is outside doubutsu.css's selector contract — this appearance object
+// is its entire theming surface, so keep it to theme tokens (never
+// literals; theme:check verifies every var here still resolves in both
+// systems) and eyeball all four modes when touching it.
 import type { ClerkProviderProps } from "@clerk/react";
 
 export const clerkAppearance: ClerkProviderProps["appearance"] = {
@@ -22,8 +23,9 @@ export const clerkAppearance: ClerkProviderProps["appearance"] = {
     colorRing: "var(--ring)",
     colorDanger: "var(--destructive)",
     // The two status hues from the app's sanctioned raw families
-    // (emerald = success, amber = warning), which doubutsu remaps.
-    colorSuccess: "var(--color-emerald-600)",
+    // (emerald = success, amber = warning), on the exact steps
+    // doubutsu.css remaps.
+    colorSuccess: "var(--color-emerald-500)",
     colorWarning: "var(--color-amber-600)",
     borderRadius: "var(--radius)",
     fontFamily: "var(--font-sans)",

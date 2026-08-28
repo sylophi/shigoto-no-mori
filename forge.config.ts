@@ -14,6 +14,7 @@ import {
   UPDATE_FEED_REPO,
 } from "./shared/cliDist.mts";
 import { productName, version } from "./package.json";
+import { rendererSchemeName } from "./shared/rendererScheme.mts";
 import {
   DMG_APP_ICON,
   DMG_APPS_ICON,
@@ -66,8 +67,10 @@ const config: ForgeConfig = {
     // The renderer-origin scheme (main/electron/clerk.ts): packaged
     // builds load the renderer from shigomori://app, and Clerk's OAuth
     // redirects deep-link back to it. macOS routes the scheme to the
-    // app through this Info.plist entry (CFBundleURLTypes).
-    protocols: [{ name: productName, schemes: ["shigomori"] }],
+    // app through this Info.plist entry (CFBundleURLTypes). Prod only:
+    // dev runs unbundled, where an Info.plist registration cannot
+    // apply.
+    protocols: [{ name: productName, schemes: [rendererSchemeName("prod")] }],
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
     // into the user's bin dir.

@@ -4,13 +4,13 @@
 // same overlay chrome they get inside the desktop's detail pane. Built
 // in v1 vocabulary (theme tokens only), per the theming contract.
 import { Outlet, useLocation } from "@tanstack/react-router";
-import { LogOut, MonitorSmartphone, Palette, TreePine } from "lucide-react";
+import { MonitorSmartphone, Palette, TreePine } from "lucide-react";
+import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import {
   useAccountStatus,
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
-import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { cn } from "@/lib/utils";
 import { navigateTo, webPaths } from "./nav";
 
@@ -68,7 +68,14 @@ export function WebShell() {
           </NavButton>
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {signedIn && <SignOutButton />}
+          {/* Enrolled implies configured, so the provider is mounted
+              and the Clerk hook inside the button is safe. */}
+          {signedIn && (
+            <ClerkSignOutButton
+              className="text-muted-foreground"
+              onSignedOut={() => navigateTo(webPaths.login)}
+            />
+          )}
         </div>
       </header>
       <main
@@ -78,27 +85,5 @@ export function WebShell() {
         <Outlet />
       </main>
     </div>
-  );
-}
-
-// Split out so WebShell never calls a Clerk hook: this mounts only when
-// enrolled, which implies configured and therefore a mounted provider.
-function SignOutButton() {
-  const signOut = useClerkSignOut();
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="text-muted-foreground"
-      disabled={signOut.isPending}
-      onClick={() =>
-        signOut.mutate(undefined, {
-          onSuccess: () => navigateTo(webPaths.login),
-        })
-      }
-    >
-      <LogOut />
-      Sign out
-    </Button>
   );
 }

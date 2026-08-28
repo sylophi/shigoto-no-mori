@@ -1,7 +1,8 @@
-// Account hooks that require a mounted ClerkProvider. Kept out of
-// useAccount.ts so that module stays safe to import in unconfigured
-// builds (no provider mounted): call these only from components the
-// status.configured gates keep off the tree when Clerk is absent.
+// Account hooks that require a mounted ClerkProvider (calling useClerk
+// outside one throws at runtime). Kept apart from useAccount.ts so the
+// provider requirement is visible at the import site: call these only
+// from components the status.configured gates keep off the tree when
+// Clerk is absent (see ClerkGate).
 import { useClerk } from "@clerk/react";
 import { useMutation } from "@tanstack/react-query";
 

@@ -113,11 +113,11 @@ pre-commit:
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),
     # the localStorage-backed clientConfig and credential stores, the
-    # stable per-browser deviceId, the redirect login flow's PKCE and
-    # state discipline plus the enroll fields (platform "web"), the
-    # sign-out revoke, the schema-derived stubs for OS-bound channels,
-    # and the typed unconfigured/origin-blocked access states that keep
-    # a misconfigured deployment from looping the relay supervisor.
+    # stable per-browser deviceId, the Clerk session-token enroll
+    # (platform "web") and the sign-out revoke, the schema-derived
+    # stubs for OS-bound channels, and the typed
+    # unconfigured/origin-blocked access states that keep a
+    # misconfigured deployment from looping the relay supervisor.
     web-bridge:
       glob: "{web/**,shared/account/**,shared/ipc/**,shared/relay/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:bridge:check

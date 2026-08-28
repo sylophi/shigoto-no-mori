@@ -19,9 +19,14 @@ export function LoginPage() {
 
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
-      {isPending ? (
+      {status?.configured === true ? (
+        // Rendering the Clerk component is gated on configured, which
+        // implies the ClerkProvider is mounted (ClerkGate): a pending
+        // or errored status must not fall through to a bare <SignIn />.
+        <SignIn />
+      ) : isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
-      ) : status?.configured === false ? (
+      ) : (
         <div className="flex w-full max-w-sm items-start gap-2 rounded-lg border border-dashed border-border bg-card px-3 py-3 text-sm text-muted-foreground shadow-sm">
           <CloudOff className="mt-0.5 size-4 shrink-0" />
           <span>
@@ -29,10 +34,6 @@ export function LoginPage() {
             missing its account service settings, so sign-in is unavailable.
           </span>
         </div>
-      ) : (
-        // Rendering the Clerk component is gated on configured, which
-        // implies the ClerkProvider is mounted (web/app/boot.tsx).
-        <SignIn />
       )}
     </div>
   );

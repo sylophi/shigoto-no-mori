@@ -17,19 +17,48 @@ import { pathToFileURL } from "node:url";
 import { app, net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import { storage } from "@clerk/electron/storage";
+import type { TokenStorage } from "@clerk/electron";
+import {
+  RENDERER_SCHEME_HOST,
+  rendererSchemeName,
+  rendererSchemeOrigin,
+} from "@shared/rendererScheme.mts";
 
-export const RENDERER_SCHEME_HOST = "app";
-
-// Separate dev and prod schemes, mirroring the dev userData split in
-// main/index.ts: both builds register their scheme with the OS, and a
-// shared spelling would let an installed copy swallow a dev build's
-// OAuth callbacks (or vice versa).
-export function rendererScheme(): string {
-  return app.isPackaged ? "shigomori" : "shigomori-dev";
+function rendererScheme(): string {
+  return rendererSchemeName(app.isPackaged ? "prod" : "dev");
 }
 
 export function rendererSchemeUrl(): string {
-  return `${rendererScheme()}://${RENDERER_SCHEME_HOST}/`;
+  return `${rendererSchemeOrigin(app.isPackaged ? "prod" : "dev")}/`;
+}
+
+// The SDK's electron-store adapter reads and decrypts the token file on
+// EVERY getItem: a synchronous file read plus an OS keychain call, at
+// construction and then on each of clerk-js's periodic session
+// refreshes. Wrap it so construction moves off the boot path to the
+// first token access, and reads after the first are answered from
+// memory — main is the sole writer, so the cache can never be stale.
+function lazyMemoizedTokenStorage(): TokenStorage {
+  let backing: TokenStorage | null = null;
+  const cache = new Map<string, string | null>();
+  const store = () => (backing ??= storage());
+  return {
+    getItem: async (key) => {
+      const cached = cache.get(key);
+      if (cached !== undefined) return cached;
+      const value = await store().getItem(key);
+      cache.set(key, value);
+      return value;
+    },
+    setItem: async (key, value) => {
+      await store().setItem(key, value);
+      cache.set(key, value);
+    },
+    removeItem: async (key) => {
+      await store().removeItem(key);
+      cache.set(key, null);
+    },
+  };
 }
 
 // Must be called before app "ready" (createClerkBridge registers the
@@ -40,47 +69,61 @@ export function rendererSchemeUrl(): string {
 // second-instance listeners still receive the OAuth deep links.
 export function createDesktopClerkBridge(): { cleanup: () => void } {
   return createClerkBridge({
-    storage: storage(),
+    storage: lazyMemoizedTokenStorage(),
     renderer: { scheme: rendererScheme(), host: RENDERER_SCHEME_HOST },
     manageSingleInstanceLock: false,
   });
 }
 
-// Serves the renderer over the scheme origin: the packaged bundle from
-// disk, or a proxy onto the vite dev server. Must run after "ready"
-// (protocol.handle) and before the window's loadURL.
-export function serveRendererOverScheme(
-  target: { rendererDir: string } | { devServerUrl: string },
-): void {
-  protocol.handle(rendererScheme(), (request) => {
+type SchemeHandler = (request: Request) => Response | Promise<Response>;
+
+// Guards the host before delegating, so both handlers below serve only
+// the renderer origin.
+function forRendererHost(serve: (url: URL) => Response | Promise<Response>) {
+  return (request: Request) => {
     const url = new URL(request.url);
     if (url.host !== RENDERER_SCHEME_HOST) {
       return new Response(null, { status: 404 });
     }
-    if ("devServerUrl" in target) {
-      const proxied = new URL(url.pathname + url.search, target.devServerUrl);
-      const headers = new Headers(request.headers);
-      // The dev server sees a plain same-origin-looking request; a
-      // scheme Origin or Host would only trip vite's host checks.
-      for (const name of ["host", "origin", "referer"]) headers.delete(name);
-      return net.fetch(proxied.toString(), {
-        method: request.method,
-        headers,
-        ...(request.body === null
-          ? {}
-          : { body: request.body, duplex: "half" as const }),
-      });
-    }
+    return serve(url);
+  };
+}
+
+function proxyHandler(devServerUrl: string): SchemeHandler {
+  return forRendererHost((url) => {
+    const target = new URL(url.pathname + url.search, devServerUrl);
+    return net.fetch(target.toString());
+  });
+}
+
+function fileHandler(rendererDir: string): SchemeHandler {
+  const rootWithSep = path.resolve(rendererDir) + path.sep;
+  return forRendererHost((url) => {
     const pathname = decodeURIComponent(url.pathname);
-    const file = path.join(
-      target.rendererDir,
-      pathname === "/" ? "index.html" : pathname.slice(1),
+    const file = path.resolve(
+      rootWithSep,
+      pathname === "/" ? "index.html" : `.${pathname}`,
     );
     // Containment: a crafted ../ path must not escape the bundle dir.
-    const relative = path.relative(target.rendererDir, file);
-    if (relative.startsWith("..") || path.isAbsolute(relative)) {
+    if (!file.startsWith(rootWithSep)) {
       return new Response(null, { status: 404 });
     }
     return net.fetch(pathToFileURL(file).toString());
   });
+}
+
+// Serves the renderer over the scheme origin: the packaged bundle from
+// disk, or a proxy onto the vite dev server. Must run after "ready"
+// (protocol.handle) and before the window's loadURL. The mode is fixed
+// for the process lifetime, so the branch resolves here, not per
+// request.
+export function serveRendererOverScheme(
+  target: { rendererDir: string } | { devServerUrl: string },
+): void {
+  protocol.handle(
+    rendererScheme(),
+    "devServerUrl" in target
+      ? proxyHandler(target.devServerUrl)
+      : fileHandler(target.rendererDir),
+  );
 }
