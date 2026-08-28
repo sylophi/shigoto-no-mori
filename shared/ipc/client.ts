@@ -17,6 +17,7 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
+import { terrierContract } from "@shared/ipc/modules/terrier";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { windowContract } from "@shared/ipc/modules/window";
@@ -51,6 +52,7 @@ const runtimeClient = buildClient(runtimeContract);
 const scriptsClient = buildClient(scriptsContract);
 const cliClient = buildClient(cliContract);
 const shellClient = buildClient(shellContract);
+const terrierClient = buildClient(terrierContract);
 const shigomoriClient = buildClient(shigomoriContract);
 const updaterClient = buildClient(updaterContract);
 const windowClient = buildClient(windowContract);
@@ -205,6 +207,10 @@ export const cli = {
 export const shell = {
   openExternal: (url: string) => shellClient.openExternal({ url }),
   showItemInFolder: (path: string) => shellClient.showItemInFolder({ path }),
+} as const;
+
+export const terrier = {
+  readiness: terrierClient.readiness,
 } as const;
 
 export const shigomori = {

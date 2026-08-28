@@ -24,6 +24,10 @@ export function useGlobalConfigWrite() {
       // and the project PR list -- refetch immediately rather than wait
       // for the next focus/mount.
       queryClient.invalidateQueries({ queryKey: queryKeys.githubCliAll() });
+      // Toggling the terrier integration changes which projects the
+      // list handler merges in -- same immediate refetch.
+      queryClient.invalidateQueries({ queryKey: queryKeys.terrierAll() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
     },
     meta: { errorTitle: "Couldn't save settings" },
   });

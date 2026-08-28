@@ -53,6 +53,10 @@ export const queryKeys = {
     ["packageScriptSort", projectId] as const,
 
   portPoolInstalled: () => ["portPoolInstalled"] as const,
+  // "terrier" prefix so toggling the integration can invalidate the
+  // whole domain in one call, like githubCliAll below.
+  terrierAll: () => ["terrier"] as const,
+  terrierReadiness: () => ["terrier", "readiness"] as const,
   cli: () => ["cli"] as const,
   cliShell: () => ["cliShell"] as const,
   portPoolActive: (projectId: string, worktreeId: string) =>

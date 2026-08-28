@@ -30,6 +30,7 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "../../lib/scripts";
+import { terrierListingsSnapshot, terrierProjectId } from "../../lib/terrier";
 import { expandHome } from "../../lib/util/paths";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
@@ -51,6 +52,26 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   remove: async ({ id }) => {
     const removed = loadProjects().find((p) => p.id === id);
     if (!removed) return;
+    if (removed.source === "terrier") {
+      // The UI disables removal for terrier-sourced projects; this
+      // backstops a stale renderer list.
+      throw new Error(
+        `${removed.name} is registered via terrier — unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`,
+      );
+    }
+    // A path terrier also registers doesn't leave the sidebar: dropping
+    // the registry entry just demotes it to a terrier-sourced project.
+    // When the id carries over (registration minted the deterministic
+    // terrier id), nothing is actually going away — skip the script
+    // reaping and the app-side cleanup, and let the CLI skip the state
+    // dir for the same reason.
+    const persists =
+      terrierListingsSnapshot().some((t) => t.path === removed.path) &&
+      terrierProjectId(removed.path) === id;
+    if (persists) {
+      await projectsRemoveViaCli(id);
+      return;
+    }
     // Reap scripts running in this project's worktrees before dropping
     // the registry entry: once the id is gone the renderer has no UI
     // left to stop them, and the per-worktree delete path (which would

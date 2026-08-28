@@ -269,6 +269,7 @@ func checkStateRoot(report *doctorReport, projects []project) {
 	checkStagingLock(report)
 	checkShelvedEntries(report, projects)
 	checkPortAllocations(report)
+	checkTerrier(report)
 }
 
 // access(2)'s W_OK. Go's syscall package doesn't name the mode bits,
@@ -569,6 +570,53 @@ func checkPortAllocations(report *doctorReport) {
 		fmt.Sprintf("%d of %d allocations point at directories that are gone, so those ports stay reserved",
 			orphans, total),
 		"Run `port-pool prune` (it owns that state, so "+binaryName+" won't touch it).")
+}
+
+// The terrier registry belongs to terrier; sm only merges it into the
+// project list. So this check explains why merged projects might be
+// missing (binary gone, version handshake failed, unreadable registry)
+// and reports entries whose directory is gone -- never fixes anything,
+// since `terrier prune` owns that.
+func checkTerrier(report *doctorReport) {
+	global := readGlobalConfigHints()
+	if !terrierEnabled(global) {
+		return
+	}
+	if !terrierInstalled() {
+		report.warn(groupState, "terrier", "terrier",
+			"enabled in config.json but `terrier` isn't on PATH, so no terrier projects are listed",
+			"Install terrier, or turn the toggle off in the app's Settings.")
+		return
+	}
+	if ok, version := terrierCompatible(); !ok {
+		report.warn(groupState, "terrier", "terrier",
+			fmt.Sprintf("%s isn't a version this build understands (wants v%d.%d), so no terrier projects are listed",
+				describeTerrierVersion(version), terrierSupportedMajor, terrierSupportedMinor),
+			"Update "+binaryName+" and terrier to versions that agree.")
+		return
+	}
+	listings, err := terrierListOnce()
+	if err != nil {
+		report.warn(groupState, "terrier", "terrier",
+			"`terrier ls --json` failed: "+err.Error(),
+			"Run `terrier ls` by hand to see what it says.")
+		return
+	}
+	gone := 0
+	for _, t := range listings {
+		if _, err := os.Stat(t.Path); os.IsNotExist(err) {
+			gone++
+		}
+	}
+	if gone > 0 {
+		report.warn(groupState, "terrier", "terrier",
+			fmt.Sprintf("%d of %d registered repos point at directories that are gone",
+				gone, len(listings)),
+			"Run `terrier prune` (it owns that registry, so "+binaryName+" won't touch it).")
+		return
+	}
+	report.ok(groupState, "terrier", "terrier",
+		fmt.Sprintf("%d registered repo%s merged into the project list", len(listings), plural(len(listings))))
 }
 
 // `port-pool list` prints "  <port> -> <dir> (<date>)" per allocation.

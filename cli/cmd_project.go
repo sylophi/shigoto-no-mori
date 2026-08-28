@@ -107,6 +107,19 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
+	if proj.Source == "terrier" {
+		return 1, errf(
+			"%s is registered via terrier, not %s. Unregister it with `terrier rm %s`, or turn the terrier integration off.",
+			proj.Name, binaryName, proj.Name)
+	}
+	// A path terrier also registers doesn't leave the sidebar: dropping
+	// the registry entry just demotes it to a terrier-sourced project.
+	// When the id carries over (it was registered while terrier listed
+	// it, so registerProject minted the deterministic id), the project's
+	// state dir keeps describing a project that still exists -- keep it.
+	// An older random id dies with the entry either way, so its state
+	// goes too, same as any remove.
+	persists := terrierHasPath(proj.Path) && proj.ID == terrierProjectID(proj.Path)
 
 	remains := "No files are deleted from disk."
 	if identities, idErr := listWorktreeIdentities(proj); idErr == nil {
@@ -119,6 +132,9 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		if n > 0 {
 			remains = fmt.Sprintf("Its %d worktrees stay on disk.", n)
 		}
+	}
+	if persists {
+		remains += " It stays listed via terrier."
 	}
 	if !parsed.bools["yes"] {
 		if !interactiveStdio() {
@@ -135,8 +151,11 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	}
 	// Best-effort, like the app's icon-cache cleanup: the entry is
 	// already gone, so failing here would report a half-removal the
-	// user can do nothing about.
-	_ = removeProjectState(proj.ID)
+	// user can do nothing about. Skipped when the same id lives on as a
+	// terrier-sourced project (see `persists` above).
+	if !persists {
+		_ = removeProjectState(proj.ID)
+	}
 
 	if jsonMode {
 		emit(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path})
@@ -159,11 +178,28 @@ func cmdProjectList(ctx cliContext) (int, error) {
 		note("No projects registered.")
 		return 0, nil
 	}
+	// The VIA column only appears once there is something to put in it,
+	// so the table stays two columns for anyone not using terrier.
+	hasSource := false
+	for _, p := range ctx.projects {
+		if p.Source != "" {
+			hasSource = true
+			break
+		}
+	}
 	rows := make([][]string, len(ctx.projects))
 	for i, p := range ctx.projects {
-		rows[i] = []string{p.Name, p.Path}
+		if hasSource {
+			rows[i] = []string{p.Name, p.Path, p.Source}
+		} else {
+			rows[i] = []string{p.Name, p.Path}
+		}
 	}
-	out(renderTable([]string{"NAME", "PATH"}, rows))
+	headers := []string{"NAME", "PATH"}
+	if hasSource {
+		headers = append(headers, "VIA")
+	}
+	out(renderTable(headers, rows))
 	return 0, nil
 }
 
@@ -219,6 +255,13 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 // directory can't both land.
 func registerProject(path string) (project, error) {
 	proj := project{ID: newProjectID(), Name: filepath.Base(path), Path: path}
+	// A repo terrier already lists keeps the deterministic id it has
+	// been living under, so promoting it to a registry entry (and later
+	// demoting it back by removing that entry) never orphans its
+	// per-project state or the renderer's id-keyed caches.
+	if terrierHasPath(path) {
+		proj.ID = terrierProjectID(path)
+	}
 	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
 		if err := decodeKey(registryPath(), projectsKey, raw, &projects); err != nil {

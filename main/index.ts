@@ -23,6 +23,7 @@ import {
   signalAllScriptsBestEffort,
 } from "./lib/scripts";
 import { startOrphanScriptSweep } from "./lib/scripts/persistence";
+import { refreshTerrierListings } from "./lib/terrier";
 import { reapScriptsForRemovedWorktrees } from "./lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "./lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -190,6 +191,11 @@ app.on("ready", async () => {
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
   startOrphanScriptSweep();
+  // Warm the terrier snapshot so sync project resolution knows the
+  // merged list before the renderer's first id-scoped call. Fire and
+  // forget: the renderer takes far longer to boot than one `terrier ls`,
+  // and the projects:list handler refreshes again anyway.
+  void refreshTerrierListings();
   buildAppMenu();
   createWindow();
   startBackgroundFetch();

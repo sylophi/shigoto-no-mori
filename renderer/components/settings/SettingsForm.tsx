@@ -12,11 +12,13 @@ import { useGlobalConfigWrite } from "@/hooks/config/useGlobalConfig";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
+import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { useTheme } from "@/hooks/ui/useTheme";
 import type {
   DetectedLauncher,
   GlobalConfig,
   LauncherCommand,
+  TerrierReadiness,
   Theme,
 } from "@shared/schemas";
 import { AppearanceSection } from "./AppearanceSection";
@@ -25,6 +27,7 @@ import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
+import { TerrierLink } from "./TerrierLink";
 import { CliSection } from "./CliSection";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
@@ -38,6 +41,7 @@ interface FormState {
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
+  terrier: boolean;
   githubCli: boolean;
 }
 
@@ -55,6 +59,7 @@ function fromConfig(config: GlobalConfig): FormState {
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
+    terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
   };
 }
@@ -83,6 +88,7 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
     portPool: state.portPool ? true : undefined,
+    terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
     githubCli: state.githubCli ? undefined : false,
   };
@@ -95,6 +101,10 @@ export function SettingsForm({
 }) {
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
+  const { data: terrierReadiness } = useTerrierReadiness();
+  const terrierReady =
+    (terrierReadiness?.installed ?? true) &&
+    (terrierReadiness?.compatible ?? true);
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -218,6 +228,15 @@ export function SettingsForm({
                 </>
               }
             />
+            <ToggleRow
+              checked={form.terrier && terrierReady}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, terrier: v }))
+              }
+              disabled={!terrierReady}
+              label="Show terrier projects"
+              description={terrierDescription(terrierReadiness)}
+            />
           </section>
 
           <section className="space-y-3">
@@ -322,6 +341,35 @@ function ToolPill({ entry }: { entry: DetectedLauncher }) {
       <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
       {entry.label}
     </span>
+  );
+}
+
+function terrierDescription(
+  readiness: TerrierReadiness | undefined,
+): React.ReactNode {
+  if (readiness && !readiness.installed) {
+    return (
+      <>
+        <TerrierLink>Install terrier</TerrierLink> to enable this integration.
+      </>
+    );
+  }
+  if (readiness && !readiness.compatible) {
+    return (
+      <>
+        {readiness.version ?? "The installed terrier"} isn't a version this
+        build understands. Update both and try again.{" "}
+        <TerrierLink>Learn more</TerrierLink>
+      </>
+    );
+  }
+  return (
+    <>
+      Lists every repo registered in terrier as a project, alongside the ones
+      added here. Terrier projects can't be removed from the sidebar —{" "}
+      <span className="font-mono">terrier rm</span> is what unregisters them.{" "}
+      <TerrierLink>Learn more</TerrierLink>
+    </>
   );
 }
 
