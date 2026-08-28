@@ -45,7 +45,17 @@ export default defineConfig(({ mode }) => {
         "@shared": resolve(__dirname, "shared"),
       },
     },
-    server: port ? { port, strictPort: true } : undefined,
+    // The Electron window loads over the shigomori-dev:// scheme with
+    // main proxying http to this server (main/electron/clerk.ts), so
+    // the HMR client cannot derive its websocket endpoint from the page
+    // location — pin it to the dev server directly.
+    server: port
+      ? {
+          port,
+          strictPort: true,
+          hmr: { host: "localhost", protocol: "ws", port },
+        }
+      : undefined,
     // Scope the dep scanner to the real entry; its default **/*.html
     // glob picks up LICENSES.chromium.html inside out/ packaged builds
     // and fails the scan with noisy (harmless) errors at dev boot.

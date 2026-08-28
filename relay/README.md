@@ -117,12 +117,10 @@ commit real values.
 - `SM_ACCOUNT_RELAY_URL` - the deployed Worker's base URL, e.g.
   `https://sm-relay.<account>.workers.dev`. The app joins the device and
   ticket routes onto this.
-- `SM_ACCOUNT_OAUTH_AUTHORIZE_URL` - the OAuth authorization endpoint.
-- `SM_ACCOUNT_OAUTH_TOKEN_URL` - the OAuth token endpoint.
-- `SM_ACCOUNT_OAUTH_CLIENT_ID` - the public client id of the native-app
-  OAuth application the owner creates.
-- `SM_ACCOUNT_OAUTH_SCOPES` - optional, space-separated. Defaults to
-  `openid profile email`.
+- `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` - the publishable key
+  (`pk_test_...` / `pk_live_...`) of the same Clerk application whose
+  secret key the Worker holds. The clients mount Clerk's embedded
+  sign-in with it.
 - `SM_ACCOUNT_WEB_ORIGIN` - optional, the exact origin of the deployed
   web client. MUST be set to the same value as the Worker's
   `ALLOWED_WEB_ORIGIN` whenever that is set: the two are one feature
@@ -132,16 +130,33 @@ commit real values.
   gate (the host logs the refused origin, throttled). Unset, only
   Origin-less and app-local clients are admitted, as before.
 
-The owner must create an OAuth application (a native or public client,
-with PKCE and no client secret) at the same identity provider the Worker
-verifies tokens against. Register `http://127.0.0.1` as an allowed
-loopback redirect (RFC 8252 uses an ephemeral loopback port and a
-`/callback` path). The app runs the standard authorization-code-with-PKCE
-(S256) flow and forwards the resulting access token to the Worker as the
-enroll bearer. The Worker accepts what a Clerk OAuth application
-issues: an OAuth access token, in either the opaque (`oat_...`) or the
-JWT (`at+jwt`) format - not a Clerk session token, M2M token or API
-key. The Worker verifies it, the app never does.
+Sign-in itself is Clerk's embedded components: both clients mount
+`ClerkProvider` with the publishable key (the desktop over
+`@clerk/electron`'s main-process bridge, the web client with plain
+`@clerk/react`), and after Clerk reports a session the client mints a
+fresh session token and forwards it to the Worker as the enroll
+bearer. The Worker verifies it as a Clerk session JWT
+(`verifyToken` with the secret key) and keys the device registry on
+its `sub`. The Worker verifies, the app never does.
+
+One REQUIRED piece of Clerk instance configuration: the desktop
+renderer lives on a custom-scheme origin and authenticates Clerk's
+Frontend API with an `Authorization` header, which Clerk rejects from
+an origin it does not know (`origin_authorization_headers_conflict`,
+the same rule browser extensions hit). Add both renderer origins to
+the instance's `allowed_origins` once per instance:
+
+```sh
+curl -X PATCH https://api.clerk.com/v1/instance \
+  -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
+  -H "Content-type: application/json" \
+  -d '{"allowed_origins": ["shigomori://app", "shigomori-dev://app"]}'
+```
+
+Without it, desktop sign-in fails on every Frontend API call after the
+first (the web client is unaffected: a browser origin authenticates
+the browser way). For macOS passkey support later, the dashboard's
+Native applications page must also have the Native API enabled.
 
 For local development, the app also reads a gitignored `.env.account`
 file in the repo root if present (simple `KEY=value` lines). Baked and

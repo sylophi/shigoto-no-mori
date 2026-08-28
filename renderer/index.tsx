@@ -1,8 +1,11 @@
-import { StrictMode } from "react";
+import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { ClerkProvider } from "@clerk/electron/react";
 import { focusManager, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import { App } from "./App";
+import { ClerkAccountSync } from "./components/account/ClerkAccountSync";
+import { clerkAppearance } from "./lib/clerkAppearance";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import {
@@ -108,10 +111,30 @@ if (!rootElement) {
   throw new Error("#root element missing from index.html");
 }
 
+// Clerk mounts only on a configured build (the key rides the window's
+// argv, see main/preload.ts). The provider is the desktop flavor: it
+// rides the preload bridge for token storage and the system-browser
+// OAuth transport. ClerkAccountSync exchanges the Clerk session for
+// the relay device credential; components under an absent provider
+// must not call Clerk hooks, which the status.configured gates in the
+// account UI guarantee.
+function WithClerk({ children }: { children: ReactNode }) {
+  const publishableKey = window.api.clerkPublishableKey;
+  if (!publishableKey) return children;
+  return (
+    <ClerkProvider publishableKey={publishableKey} appearance={clerkAppearance}>
+      <ClerkAccountSync />
+      {children}
+    </ClerkProvider>
+  );
+}
+
 createRoot(rootElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <WithClerk>
+        <App />
+      </WithClerk>
       <Toaster
         position="bottom-right"
         offset={{ bottom: 16, right: 16 }}

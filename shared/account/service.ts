@@ -5,10 +5,11 @@
 // can drive every method with a recording fetch stub.
 //
 // Auth-tier discipline lives here. enroll is the only call that carries
-// the OAuth login token. listDevices, revoke and mintTicket carry the
-// long-lived device credential the enroll response returned. Mixing the
-// two would either leak the login token past its one use or try to enroll
-// under a credential the endpoint does not accept.
+// the short-lived Clerk session token proving the sign-in. listDevices,
+// revoke and mintTicket carry the long-lived device credential the
+// enroll response returned. Mixing the two would either leak the login
+// token past its one use or try to enroll under a credential the
+// endpoint does not accept.
 import {
   DeviceListResponseSchema,
   EnrollRequestSchema,
@@ -77,7 +78,7 @@ export type EnrollFields = {
 };
 
 export type AccountService = {
-  enroll(loginToken: string, fields: EnrollFields): Promise<EnrollResponse>;
+  enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
   listDevices(credential: string): Promise<DeviceInfo[]>;
   revoke(credential: string, deviceId: string): Promise<void>;
   // signal aborts the mint fetch on stop or on the caller's mint
@@ -124,8 +125,8 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   };
 
   // The one bearer-header/ok-check/parse dance every route shares:
-  // fetch under the given bearer (the login token for enroll, the
-  // device credential for everything else), throw the typed failure on
+  // fetch under the given bearer (the Clerk session token for enroll,
+  // the device credential for everything else), throw the typed failure on
   // non-2xx, and hand back the parsed JSON body (undefined for the
   // 204s, which have no body to parse).
   const credentialed = async (
@@ -150,7 +151,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   };
 
   return {
-    async enroll(loginToken, fields) {
+    async enroll(sessionToken, fields) {
       // Validate the body before sending so a bad deviceId/name/platform
       // fails here with a clear zod error, not as a relay 400.
       const body = EnrollRequestSchema.parse(fields);
@@ -158,7 +159,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         await credentialed(
           RELAY_ROUTES.enroll,
           RELAY_ROUTES.enroll.path,
-          loginToken,
+          sessionToken,
           { body },
         ),
       );

@@ -3,9 +3,8 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema, DeviceInfoSchema } from "@shared/relay/protocol";
 
 // The relay account layer as the renderer sees it. Client-scoped on
-// purpose: sign-in drives an OS browser and writes an OS-keychain
-// credential on the machine showing the window, so it must never be
-// served to a remote peer. Being client-scoped also keeps every call
+// purpose: enrollment writes an OS-keychain credential on the machine
+// showing the window, so it must never be served to a remote peer. Being client-scoped also keeps every call
 // structurally off the websocket wire (main/ipc/register.ts registers
 // client channels only on the Electron binding), which is why these
 // invokes carry no `remote` tag and the socket check exempts them.
@@ -31,10 +30,11 @@ export const accountContract = defineContract("client", {
   // poll. The device list is a separate call so a status read never
   // hits the relay.
   status: invoke("account:status", z.void(), AccountStatusSchema),
-  // Runs the full OAuth + enroll flow. Opens the user's browser, awaits
-  // the loopback redirect, exchanges the code, enrolls this device and
-  // stores the credential. Resolves to the post-sign-in status.
-  signIn: invoke("account:signIn", z.void(), AccountStatusSchema),
+  // Enrolls this device on the relay under a fresh Clerk session token
+  // (the renderer owns the Clerk sign-in UI and mints the token) and
+  // stores the returned device credential. Resolves to the
+  // post-enrollment status.
+  enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
   // Best-effort revokes THIS device on the relay, then clears the stored
   // credential locally. The revoke is best-effort so local sign-out
   // always succeeds even offline. Removing OTHER devices from the list is

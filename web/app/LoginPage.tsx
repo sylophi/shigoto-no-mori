@@ -1,12 +1,13 @@
-// The unauthenticated landing page: starts the OAuth redirect, or
-// explains that this build carries no account service configuration.
-// Signed-in visitors are bounced straight to the devices page.
+// The unauthenticated landing page: Clerk's embedded sign-in, or an
+// explanation that this build carries no account service configuration.
+// Signed-in (enrolled) visitors are bounced straight to the devices
+// page; ClerkAccountSync performs the enrollment the moment Clerk
+// reports a session, so completing the form below lands on /devices
+// without a callback route.
 import { useEffect } from "react";
-import { CloudOff, LogIn } from "lucide-react";
-import { errorMessageOf } from "@shared/errors";
-import { Button } from "@/components/ui/button";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { useAccountStatus, useSignIn } from "@/hooks/account/useAccount";
+import { SignIn } from "@clerk/react";
+import { CloudOff } from "lucide-react";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { redirectTo, webPaths } from "./nav";
 
 export function LoginPage() {
@@ -16,49 +17,23 @@ export function LoginPage() {
     if (status?.signedIn === true) redirectTo(webPaths.devices);
   }, [status?.signedIn]);
 
-  // The bridge's signIn navigates the whole page away on success, so
-  // this mutation only ever settles when the redirect could not start.
-  // silentError keeps the failure in the inline banner below.
-  const signIn = useSignIn({ silentError: true });
-
   return (
-    <div className="flex h-full items-center justify-center p-6">
-      <div className="flex w-full max-w-sm flex-col gap-4 rounded-lg border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-lg font-medium tracking-tight">Sign in</h1>
-          <p className="text-sm text-muted-foreground">
-            Browse your devices&apos; forests from this browser. Read-only:
-            nothing here can change a machine.
-          </p>
+    <div className="flex h-full items-center justify-center overflow-y-auto p-6">
+      {isPending ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : status?.configured === false ? (
+        <div className="flex w-full max-w-sm items-start gap-2 rounded-lg border border-dashed border-border bg-card px-3 py-3 text-sm text-muted-foreground shadow-sm">
+          <CloudOff className="mt-0.5 size-4 shrink-0" />
+          <span>
+            This deployment is not configured for web access. The build is
+            missing its account service settings, so sign-in is unavailable.
+          </span>
         </div>
-
-        {isPending ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
-        ) : status?.configured === false ? (
-          <div className="flex items-start gap-2 rounded-md border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">
-            <CloudOff className="mt-0.5 size-4 shrink-0" />
-            <span>
-              This deployment is not configured for web access. The build is
-              missing its account service settings, so sign-in is unavailable.
-            </span>
-          </div>
-        ) : (
-          <Button
-            variant="secondary"
-            disabled={signIn.isPending}
-            onClick={() => signIn.mutate()}
-          >
-            <LogIn />
-            {signIn.isPending ? "Redirecting…" : "Sign in with your account"}
-          </Button>
-        )}
-
-        {signIn.isError && (
-          <ErrorBanner>
-            Couldn&apos;t start sign-in: {errorMessageOf(signIn.error)}
-          </ErrorBanner>
-        )}
-      </div>
+      ) : (
+        // Rendering the Clerk component is gated on configured, which
+        // implies the ClerkProvider is mounted (web/app/boot.tsx).
+        <SignIn />
+      )}
     </div>
   );
 }

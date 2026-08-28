@@ -53,27 +53,18 @@ export function useWatchAccountChanges(): void {
   );
 }
 
-// The mutations do not invalidate on success themselves. Every sign-in,
-// sign-out and rename ends with main emitting the account.changed
+// The mutations do not invalidate on success themselves. Every
+// enrollment, sign-out and rename ends with the account.changed
 // broadcast, and useWatchAccountChanges invalidates the whole "account"
 // prefix off that reliable local IPC, so a per-mutation invalidation
 // would only duplicate it.
-// silentError mirrors useGlobalConfig: a call site that renders its own
-// inline failure banner (the web login page) suppresses the global
-// toast so the error is signalled once, not twice.
-export function useSignIn({ silentError = false } = {}) {
-  return useMutation<AccountStatus, Error, void>({
-    mutationFn: () => window.api.account.signIn(),
-    meta: silentError
-      ? { silentError: true }
-      : { errorTitle: "Couldn't sign in" },
-  });
-}
-
-export function useSignOut() {
-  return useMutation<void, Error, void>({
-    mutationFn: () => window.api.account.signOut(),
-    meta: { errorTitle: "Couldn't sign out" },
+// Exchanges a fresh Clerk session token for the relay device
+// credential. Driven by ClerkAccountSync after Clerk reports a
+// session; the Clerk sign-in UI itself never touches this layer.
+export function useEnroll() {
+  return useMutation<AccountStatus, Error, string>({
+    mutationFn: (token) => window.api.account.enroll(token),
+    meta: { errorTitle: "Couldn't enroll this device" },
   });
 }
 

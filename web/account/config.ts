@@ -3,7 +3,7 @@
 // static web build has no process, so the same variables are baked in
 // at build time through Vite's import.meta.env (vite.web.config.ts adds
 // "SM_ACCOUNT_" to envPrefix). Everything here is a public endpoint or
-// a public OAuth client_id, never a secret (see serviceConfig.ts), so
+// a public Clerk publishable key, never a secret (serviceConfig.ts), so
 // inlining the values into the shipped bundle is safe by design.
 import {
   isConfigured,

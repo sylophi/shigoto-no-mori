@@ -5,6 +5,14 @@
 // so fail loudly rather than run with keys scoped to nothing or an
 // empty version on the wire. `flag` is the constant with its trailing
 // "=", `name` is the human-facing flag name for the error.
+// Reads an optional value flag off process.argv in the preload. Main
+// always appends the flag; an empty value is a legal "not configured"
+// answer rather than a wiring error, so no throw.
+export function optionalArgFlag(flag: string): string {
+  const arg = process.argv.find((entry) => entry.startsWith(flag));
+  return arg?.slice(flag.length) ?? "";
+}
+
 export function requireArgFlag(flag: string, name: string): string {
   const arg = process.argv.find((entry) => entry.startsWith(flag));
   const value = arg?.slice(flag.length) ?? "";

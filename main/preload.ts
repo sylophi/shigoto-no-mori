@@ -2,12 +2,18 @@
 // Exposes a typed `window.api` to the renderer.
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
+import { exposeClerkBridge } from "@clerk/electron/preload";
 import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { buildApi } from "@shared/ipc/client";
+import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
 import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
-import { requireArgFlag } from "./argFlags";
+import { optionalArgFlag, requireArgFlag } from "./argFlags";
 import { electronClientTransport } from "./preloadTransport";
+
+// The narrow bridge @clerk/electron/react rides for token storage and
+// the system-browser OAuth transport, published beside window.api.
+exposeClerkBridge();
 
 // The device id arrives on argv (main passes --sm-device-id=<uuid> via
 // webPreferences.additionalArguments, which reaches sandboxed preloads)
@@ -24,6 +30,10 @@ const appVersion = requireArgFlag(APP_VERSION_FLAG, "--sm-app-version");
 const api = {
   deviceId,
   appVersion,
+  // The Clerk publishable key main resolved from the account config
+  // (baked, .env.account or process env). Empty on an unconfigured
+  // build, which the renderer reads as "mount no ClerkProvider".
+  clerkPublishableKey: optionalArgFlag(CLERK_PK_FLAG),
   // Client fact delivered the same way as the device id: dev-only
   // affordances key off the build showing the window, never the host
   // (a packaged client on a dev host must not grow dev hotkeys).

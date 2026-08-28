@@ -63,6 +63,11 @@ const config: ForgeConfig = {
     icon: "assets/icon",
     appBundleId: APP_BUNDLE_ID,
     appCopyright: "© 2026 sylophi",
+    // The renderer-origin scheme (main/electron/clerk.ts): packaged
+    // builds load the renderer from shigomori://app, and Clerk's OAuth
+    // redirects deep-link back to it. macOS routes the scheme to the
+    // app through this Info.plist entry (CFBundleURLTypes).
+    protocols: [{ name: productName, schemes: ["shigomori"] }],
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
     // into the user's bin dir.

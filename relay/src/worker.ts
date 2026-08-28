@@ -4,8 +4,8 @@
 // the shared RELAY_ROUTES table, so the app-side client cannot drift
 // from what is served here.
 //
-// Auth is two-tier. POST /devices/enroll takes the OAuth access token
-// the app's PKCE flow obtained, verified through deps.verifyLogin.
+// Auth is two-tier. POST /devices/enroll takes the Clerk session token
+// the app's embedded sign-in minted, verified through deps.verifyLogin.
 // Everything else takes the long-lived device credential, resolved by
 // hashing it and looking up the unique hash in D1. The credential only
 // ever rides in the Authorization header. The only secret allowed in a
@@ -52,9 +52,9 @@ import {
 } from "./relayObject.ts";
 
 export interface RelayDeps {
-  // Resolves the enroll bearer (a Clerk OAuth application access
-  // token) to the owning account, or null when it does not verify.
-  // Injected so the test suite never talks to real Clerk.
+  // Resolves the enroll bearer (a Clerk session token) to the owning
+  // account, or null when it does not verify. Injected so the test
+  // suite never talks to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
   // The fetch the Cloudflare tunnel API is called through (v2 step 10,
   // slice B). Injected like verifyLogin so the vitest suite stubs the

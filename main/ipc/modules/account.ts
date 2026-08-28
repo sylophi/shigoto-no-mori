@@ -1,14 +1,16 @@
 // The one electron-facing file of the relay account layer. Everything
 // under main/account/ is pure and electron-free so the account check
 // script can drive it. This module is where electron enters: safeStorage
-// builds the at-rest cipher, shell opens the OAuth browser, app names the
-// userData store path, and process.env supplies the service config. The
-// handlers themselves stay thin, delegating to the pure orchestration.
-import { createHash } from "node:crypto";
+// builds the at-rest cipher, app names the userData store path, and
+// process.env supplies the service config. Sign-in itself lives in the
+// renderer (Clerk's embedded components over the @clerk/electron
+// bridge); this module only exchanges the resulting session token for
+// the relay device credential. The handlers stay thin, delegating to
+// the pure orchestration.
 import { readFileSync } from "node:fs";
 import { hostname, platform } from "node:os";
 import { join } from "node:path";
-import { app, safeStorage, shell } from "electron";
+import { app, safeStorage } from "electron";
 import { accountContract } from "@shared/ipc/modules/account";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { Handlers } from "@shared/ipc/types";
@@ -20,7 +22,7 @@ import {
   type StoredAccount,
 } from "../../account/credentialStore";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
-import { runLoginFlow } from "../../account/login";
+import { deriveAccountId } from "@shared/account/token";
 import {
   createAccountService,
   type AccountService,
@@ -43,10 +45,11 @@ let cachedGrantStore: GrantStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
-// Re-entrancy guard for account:signIn. A concurrent invocation (two
-// windows, a rapid re-invoke) must not start two loopback servers or two
-// browser tabs, so the second caller rides this in-flight promise.
-let signInInFlight: Promise<AccountStatus> | null = null;
+// Re-entrancy guard for account:enroll. A concurrent invocation (a
+// re-fired renderer effect, two windows) must not enroll twice and
+// rotate the credential mid-write, so the second caller rides this
+// in-flight promise.
+let enrollInFlight: Promise<AccountStatus> | null = null;
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
@@ -137,7 +140,7 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 //
 // The file read is gated behind !app.isPackaged for security: in a
 // packaged build an attacker-planted .env.account in the launch directory
-// could both enable sign-in and point the OAuth/relay URLs at hostile
+// could both enable sign-in and point the Clerk key/relay URL at hostile
 // infrastructure, so a shipped build sources config ONLY from the values
 // baked in at build time and real environment variables, neither of
 // which a file can plant. The dev-convenience file stays in dev.
@@ -177,6 +180,13 @@ export function accountServiceConfigured(): boolean {
   return isConfigured(serviceConfig());
 }
 
+// The renderer's half of the Clerk mount decision: the resolved
+// publishable key rides the window's argv (main/index.ts) so the
+// provider can mount synchronously at boot. Empty when unconfigured.
+export function clerkPublishableKey(): string {
+  return serviceConfig().publishableKey;
+}
+
 // Assembles the current status from the stored credential metadata and
 // the resolved config. accountId and the stored deviceName come from the
 // record when signed in, else empty and the hostname default.
@@ -189,18 +199,6 @@ function readStatus(): AccountStatus {
     accountId: record?.accountId ?? "",
     deviceName: record?.deviceName ?? defaultDeviceName(),
   };
-}
-
-// The reconnect key for a credential that derived no accountId. An
-// opaque (non-JWT) access token leaves record.accountId empty, and the
-// relay connection's sameOpts compares accountId to decide whether an
-// account change forces a reconnect, so a constant "" would leave the
-// live socket on the OLD account's DO after a re-sign-in until restart.
-// The credential rotates on every enroll, so a credential-derived key
-// changes on any re-sign-in and forces the reconnect. Hashed and
-// truncated so the bearer secret itself never rides in connect opts.
-function credentialConnectKey(credential: string): string {
-  return `cred:${createHash("sha256").update(credential).digest("hex").slice(0, 16)}`;
 }
 
 // The signed-in preamble most account-backed calls share: the resolved
@@ -276,13 +274,10 @@ export function relayConnectInputs(): {
   return {
     relayUrl: serviceConfig().relayUrl,
     // Identifies the signed-in account so a re-enroll onto a different
-    // account forces the relay socket to reconnect (C7). When the token
-    // was opaque and derived no accountId, fall back to a key derived
-    // from the rotating credential so the reconnect still fires.
-    accountId:
-      record.accountId !== ""
-        ? record.accountId
-        : credentialConnectKey(record.credential),
+    // account forces the relay socket to reconnect (C7). A Clerk
+    // session token is always a JWT with a sub, so the stored record
+    // always carries a real account id.
+    accountId: record.accountId,
     mintTicket: async (signal) => {
       const fresh = store().read();
       if (fresh === null) {
@@ -310,11 +305,11 @@ export function makeAccountHandlers(
   return {
     status: () => readStatus(),
 
-    signIn: async () => {
-      // A second concurrent caller rides the first flow instead of
-      // opening its own loopback server and browser tab.
-      if (signInInFlight) return signInInFlight;
-      signInInFlight = (async (): Promise<AccountStatus> => {
+    enroll: async (token) => {
+      // A second concurrent caller rides the first enrollment instead
+      // of racing it and rotating the credential twice.
+      if (enrollInFlight) return enrollInFlight;
+      enrollInFlight = (async (): Promise<AccountStatus> => {
         const config = serviceConfig();
         if (!isConfigured(config)) {
           throw new Error(
@@ -322,27 +317,29 @@ export function makeAccountHandlers(
           );
         }
         const service = createAccountService({ baseUrl: config.relayUrl });
-        await runLoginFlow({
-          config,
+        const deviceName = store().read()?.deviceName ?? defaultDeviceName();
+        const enrollment = await service.enroll(token, {
           // The relay device identity is tied to registry.json: getDeviceId
           // mints and persists this root's UUID there, so a registry reset
           // re-enrolls this app as a brand new relay device.
           deviceId: getDeviceId(),
-          deviceName: store().read()?.deviceName ?? defaultDeviceName(),
+          name: deviceName,
           // os.platform() is the same value as process.platform, which the
           // linter restricts here. The relay stores it as an opaque label.
           platform: platform(),
-          openBrowser: (url) => shell.openExternal(url),
-          service,
-          store: store(),
+        });
+        store().write({
+          credential: enrollment.credential,
+          accountId: deriveAccountId(token),
+          deviceName,
         });
         accountChanged();
         return readStatus();
       })();
       try {
-        return await signInInFlight;
+        return await enrollInFlight;
       } finally {
-        signInInFlight = null;
+        enrollInFlight = null;
       }
     },
 

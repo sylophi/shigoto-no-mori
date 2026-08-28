@@ -8,9 +8,9 @@ import { LogOut, MonitorSmartphone, Palette, TreePine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   useAccountStatus,
-  useSignOut,
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
+import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { cn } from "@/lib/utils";
 import { navigateTo, webPaths } from "./nav";
 
@@ -41,12 +41,6 @@ export function WebShell() {
   const { pathname } = useLocation();
   const signedIn = status?.signedIn === true;
 
-  const signOut = useSignOut();
-  const onSignOut = () =>
-    signOut.mutate(undefined, {
-      onSuccess: () => navigateTo(webPaths.login),
-    });
-
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
       <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2">
@@ -74,18 +68,7 @@ export function WebShell() {
           </NavButton>
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {signedIn && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              disabled={signOut.isPending}
-              onClick={onSignOut}
-            >
-              <LogOut />
-              Sign out
-            </Button>
-          )}
+          {signedIn && <SignOutButton />}
         </div>
       </header>
       <main
@@ -95,5 +78,27 @@ export function WebShell() {
         <Outlet />
       </main>
     </div>
+  );
+}
+
+// Split out so WebShell never calls a Clerk hook: this mounts only when
+// enrolled, which implies configured and therefore a mounted provider.
+function SignOutButton() {
+  const signOut = useClerkSignOut();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="text-muted-foreground"
+      disabled={signOut.isPending}
+      onClick={() =>
+        signOut.mutate(undefined, {
+          onSuccess: () => navigateTo(webPaths.login),
+        })
+      }
+    >
+      <LogOut />
+      Sign out
+    </Button>
   );
 }

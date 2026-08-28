@@ -126,7 +126,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   return {
     account: {
       status: accountClient.status,
-      signIn: accountClient.signIn,
+      enroll: accountClient.enroll,
       signOut: accountClient.signOut,
       listDevices: accountClient.listDevices,
       setDeviceName: accountClient.setDeviceName,

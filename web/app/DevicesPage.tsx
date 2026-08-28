@@ -19,6 +19,7 @@ import {
   useAccountDevices,
   useAccountStatus,
 } from "@/hooks/account/useAccount";
+import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
@@ -135,11 +136,17 @@ function DeviceRow({
   // No onSuccess invalidation: the revoke ends with the bridge's
   // account.changed broadcast, and useWatchAccountChanges (mounted in
   // the shell) invalidates the whole account prefix off it, exactly as
-  // useAccount.ts documents for the desktop mutations.
+  // useAccount.ts documents for the desktop mutations. Revoking THIS
+  // browser must end the Clerk session first — with the session alive,
+  // ClerkAccountSync would immediately re-enroll the cleared credential
+  // — and the sign-out path (Clerk end, relay revoke, local clear) is
+  // exactly the self-revoke semantics.
+  const clerkSignOut = useClerkSignOut();
   const revoke = useMutation({
     mutationFn: () => webBridge().revokeDevice(info.deviceId),
     meta: { errorTitle: "Couldn't revoke the device" },
   });
+  const pending = revoke.isPending || clerkSignOut.isPending;
   const confirm = useConfirmTwice();
 
   return (
@@ -177,10 +184,14 @@ function DeviceRow({
       )}
       <ConfirmDestructiveButton
         armed={confirm.armed}
-        pending={revoke.isPending}
+        pending={pending}
         pendingLabel="Revoking…"
         idleLabel={isSelf ? "Revoke and sign out" : "Revoke"}
-        onClick={() => confirm.trigger(() => revoke.mutate())}
+        onClick={() =>
+          confirm.trigger(() =>
+            isSelf ? clerkSignOut.mutate() : revoke.mutate(),
+          )
+        }
       />
     </div>
   );

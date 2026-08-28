@@ -128,15 +128,16 @@ pre-commit:
     liveness:
       glob: "{main/liveness/**,scripts/check-liveness.mjs}"
       run: pnpm run liveness:check
-    # Drives the electron-free account layer (main/account/*) end to end
-    # with stubs: the PKCE math and authorize-URL params, the redirect
-    # parse, the token-exchange form and error path, the relay client's
-    # route/method/auth-tier discipline against the shared schemas, the
-    # credential store's encrypt and plaintext-fallback round trips, and
-    # the full loopback login flow plus its state-mismatch and timeout
-    # rejections. Gated to the account surface so it stays off unrelated
-    # commits. Proves sign-in, enrollment and storage cannot drift from
-    # shared/relay/protocol.ts without electron or a browser.
+    # Drives the electron-free account layer (main/account/*,
+    # shared/account/*) end to end with stubs: the relay client's
+    # route/method/auth-tier discipline against the shared schemas
+    # (Clerk session token at enroll, device credential everywhere
+    # else), the credential store's encrypt and plaintext-fallback
+    # round trips, the grant store, and the config/env-file layering.
+    # Sign-in itself is Clerk's embedded UI, so it has no pure core to
+    # prove here. Gated to the account surface so it stays off
+    # unrelated commits. Proves enrollment and storage cannot drift
+    # from shared/relay/protocol.ts without electron or a browser.
     account:
       glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/relay/protocol.ts,scripts/check-account.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run account:check
