@@ -4,6 +4,7 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
+import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -55,6 +56,7 @@ export const allContractModules: readonly ContractModule[] = [
   branchesContract,
   clientConfigContract,
   dialogContract,
+  directContract,
   forwardContract,
   fsContract,
   gitContract,
@@ -162,6 +164,13 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       pickFolder: (options?: PickFolderPayload) =>
         dialogClient.pickFolder(options),
     },
+
+    // The direct contract (v2 step 10, slice A) is deliberately absent
+    // here: its one read is the peer-to-peer brokering call the direct
+    // dialer invokes over the raw peer transport, and no renderer or
+    // local caller has a use for it (locally it answers
+    // available:false). It stays in allContractModules above so the
+    // wire inventory still carries it.
 
     forward: {
       open: forwardClient.open,

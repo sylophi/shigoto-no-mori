@@ -2,6 +2,7 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
+import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -53,18 +54,32 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "./modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { makeRelayHandlers } from "@shared/relay/bridgeHandlers";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "../portForward/engine";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
+  directHandlers,
   refreshRelayConnection,
   registerContract,
-  relayConnectPeer,
-  relayStatus,
+  relayHandlers,
 } from "./register";
+
+// The pull/transplant orchestrations' and the port-forward engine's
+// peer reach, routed through the SAME invokePeer path (and so the same
+// cached peer session) the renderer's remote-device api uses. Dialing
+// relayConnectPeer directly would silently replace that session
+// mid-view since the link keeps one client peer per deviceId.
+const peerTransportFor = (deviceId: string) => ({
+  invoke: (channel: string, input: unknown) =>
+    Promise.resolve(
+      relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
+    ),
+  subscribe: (): (() => void) => {
+    throw new Error("the peer api is invoke-only");
+  },
+});
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
@@ -85,6 +100,8 @@ export function registerIpcHandlers(): void {
         // renderer display fresh, since `changed` invalidates the
         // ["account"] prefix but not ["accountGrants"].
         broadcastAll(accountContract, "grantsChanged", undefined);
+        // Also reconciles the direct listener from its tail, which
+        // follows the same enrollment condition.
         void refreshRelayConnection();
       },
       // A grant or revoke fans out on its own channel so a toggle does
@@ -96,27 +113,20 @@ export function registerIpcHandlers(): void {
     ),
   );
   // Client-scoped bridge onto the main-process relay socket: status,
-  // lazy peer invokes, and the peerPush/statusChanged fan-outs wired in
-  // register.ts.
-  const relayHandlers = makeRelayHandlers({
-    status: relayStatus,
-    connectPeer: relayConnectPeer,
-  });
+  // lazy peer invokes, and the peerPush/statusChanged fan-outs. The
+  // handlers themselves are constructed in register.ts, which owns
+  // every dep and reads directPeerIds back into the status snapshot.
   registerContract(relayContract, relayHandlers);
-  // The pull/transplant orchestrations' peer reach (host/ipc/peerSync.ts),
-  // routed through the SAME invokePeer path (and so the same cached peer
-  // session) the renderer's remote-device api uses. Dialing
-  // relayConnectPeer directly here would silently replace that session
-  // mid-view -- the link keeps one client peer per deviceId.
-  const peerTransportFor = (deviceId: string) => ({
-    invoke: (channel: string, input: unknown) =>
-      Promise.resolve(
-        relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
-      ),
-    subscribe: (): (() => void) => {
-      throw new Error("the peer api is invoke-only");
-    },
-  });
+  // The direct data plane's brokering surface: host-scoped and
+  // remote:true, so a peer asks over the relay (or an existing direct
+  // session) how to dial this host directly. The handlers are
+  // constructed in register.ts, which owns every dep (the listener,
+  // the ticket store, the relay roster). The handler fails closed
+  // without an authenticated callerDeviceId, so the Electron wire
+  // always reads available:false.
+  registerContract(directContract, directHandlers);
+  // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
+  // peerTransportFor above.
   setPeerSyncApiImpl({
     syncApiFor: (deviceId) =>
       buildClient(syncContract, peerTransportFor(deviceId)),

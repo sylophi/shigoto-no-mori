@@ -30,6 +30,7 @@ import {
   broadcastAll,
   refreshRelayConnection,
   refreshSocketHost,
+  stopDirectHost,
   stopRelayConnection,
 } from "./ipc/register";
 import {
@@ -326,7 +327,9 @@ app.on("ready", async () => {
   // The relay socket (v2 step 4, slice C): connect to the account's
   // Durable Object when a credential is stored. The same reconcile
   // reruns after every account change (the emitChanged path in
-  // main/ipc/index.ts), making this the boot-time pass only.
+  // main/ipc/index.ts), making this the boot-time pass only. The
+  // direct data-plane listener (v2 step 10, slice A) follows the same
+  // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshRelayConnection();
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
@@ -392,8 +395,11 @@ app.on("before-quit", (event) => {
     // socket to ride out on.
     stopAllPortForwards();
     // Fire and forget: the relay close frame either flushes in the
-    // handoff window or the DO notices the dead socket on its own.
+    // handoff window or the DO notices the dead socket on its own. The
+    // direct listener goes down the same way so connected peers see a
+    // clean going-away.
     void stopRelayConnection();
+    void stopDirectHost();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
     return;
@@ -420,8 +426,10 @@ app.on("before-quit", (event) => {
   // its close frames ride the relay socket while it is still up.
   stopAllPortForwards();
   // Close the relay socket alongside the script reaping so the DO sees
-  // a clean departure. Fire and forget for the same reason as above.
+  // a clean departure, and the direct listener with it so peers see a
+  // clean going-away. Fire and forget for the same reason as above.
   void stopRelayConnection();
+  void stopDirectHost();
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);

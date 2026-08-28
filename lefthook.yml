@@ -59,6 +59,20 @@ pre-commit:
     relaylink:
       glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run relaylink:check
+    # Durable proof for the direct data plane (v2 step 10, slice A):
+    # boots the stub Durable Object plus a REAL ticket-mode listener on
+    # an ephemeral loopback port, brokers connect tickets over the relay
+    # via direct:connectInfo, and asserts the whole plane: fail-closed
+    # brokering without a caller identity, ticket single-use, expiry and
+    # wrong-peer binding, the live grant gate on the direct wire, the
+    # direct-first openPeer routing with relay fallback and cache drop
+    # on close, invokes flowing with the relay's forwardedCount flat,
+    # and pushes reaching a direct-connected client through the shared
+    # peerPush path. Gated to the direct surface plus the socket and
+    # relay layers it composes.
+    direct-plane:
+      glob: "{host/direct/**,host/socket/**,host/ipc/modules/direct.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
     # and moves a >1.5 MB git bundle between two REAL relay connections

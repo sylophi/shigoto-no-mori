@@ -11,6 +11,7 @@
 // frames fanned out to local subscribers. It owns exactly one socket.
 // Reconnect and backoff live one layer up in the supervisor, which is
 // the single owner of retry.
+import { errorMessageOf } from "@shared/errors";
 import {
   CLOSE_AUTH_FAILED,
   COMMAND_REFUSED_CODE,
@@ -68,6 +69,19 @@ export type ConnectDeviceOptions = {
   // A pre-welcome close rejects the connect promise instead, so this
   // fires at most once and never for a failed attempt.
   onClose: (code: number | null) => void;
+  // Identity pin for the direct data plane (v2 step 10, slice A): when
+  // set and the welcome's self-asserted deviceId differs, the
+  // handshake fails and the socket closes, so a dial that landed on
+  // the wrong machine can never be cached under the intended peer.
+  // Absent for the legacy LAN dial, whose caller keys on whatever the
+  // welcome says.
+  expectedDeviceId?: string;
+  // Wildcard push tap, fired for EVERY push frame before the
+  // per-channel subscribers, so a bridge can forward this connection's
+  // pushes wholesale (the relay peerPush path) without enumerating
+  // channels. A throw here is contained, mirroring the relay link's
+  // onPeerPush.
+  onAnyPush?: (channel: string, payload: unknown) => void;
   // Test seam. Real callers take the frames.ts default.
   helloTimeoutMs?: number;
 };
@@ -108,6 +122,10 @@ export function connectDevice(
     // Flips true the instant this socket is unusable (closed or errored),
     // so an invoke after close rejects immediately rather than hanging.
     let closed = false;
+    // Throttle counter for the onAnyPush containment below, mirroring
+    // the subscriber registry's throttled warn: a throwing tap on a
+    // chatty push stream must not warn once per frame.
+    let anyPushThrew = 0;
     // Set when the owner tears the connection down via close(), so the
     // ensuing close event stays silent: onClose must fire only for a
     // socket that dropped on its own, never for a deliberate teardown,
@@ -178,6 +196,30 @@ export function connectDevice(
           console.warn("[socket] dropping pre-welcome frame");
           return;
         }
+        if (
+          options.expectedDeviceId !== undefined &&
+          frame.deviceId !== options.expectedDeviceId
+        ) {
+          // The wrong machine answered (a stale address, a NAT
+          // surprise). Blocked, not retryable: redialing the same
+          // address cannot change who lives there, and the caller
+          // falls back to the relay instead.
+          closed = true;
+          clearTimeout(helloTimer);
+          try {
+            socket.close();
+          } catch {
+            // Already closing.
+          }
+          reject(
+            new RemoteConnectError(
+              "welcome from an unexpected device",
+              null,
+              true,
+            ),
+          );
+          return;
+        }
         clearTimeout(helloTimer);
         welcome = {
           remoteDeviceId: frame.deviceId,
@@ -219,6 +261,21 @@ export function connectDevice(
       }
 
       if (frame.t === "push") {
+        if (options.onAnyPush !== undefined) {
+          // The wildcard tap sees every push before the per-channel
+          // fan-out. Contained so a throwing bridge callback cannot
+          // starve local subscribers, mirroring the relay link.
+          try {
+            options.onAnyPush(frame.channel, frame.payload);
+          } catch (error) {
+            anyPushThrew += 1;
+            if (anyPushThrew % 50 === 1) {
+              console.warn(
+                `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${anyPushThrew} so far)`,
+              );
+            }
+          }
+        }
         subscribers.emit(frame.channel, frame.payload);
         return;
       }

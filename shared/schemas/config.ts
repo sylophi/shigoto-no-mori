@@ -155,6 +155,14 @@ export const GlobalConfigSchema = z.object({
   // over a read (the read contract redacts it, see RedactedSocketHost
   // below). Step 4 replaces this shared-token auth wholesale with
   // pairing, so nothing else should grow to depend on the token's shape.
+  // Direct data plane (v2 step 10, slice A): when false, this device
+  // neither runs the direct listener nor is advertised to peers, so
+  // all its remote traffic stays on the relay. ON by default (absent =
+  // enrolled, explicit `false` is the opt-out), matching the feature
+  // being an internal transport optimization rather than a capability.
+  // Config-only for now (no Settings UI, like socketHost below):
+  // toggle by editing config.json or `sm config edit`.
+  directConnections: z.boolean().optional(),
   socketHost: z
     .object({
       enabled: z.boolean().optional(),

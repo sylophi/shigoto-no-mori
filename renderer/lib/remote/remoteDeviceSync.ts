@@ -128,6 +128,9 @@ function buildEntry(
     label: info.name,
     status,
     appVersion,
+    // Optional on the wire (an older host sends none), so absence
+    // simply reads as not-direct.
+    direct: current.directDeviceIds?.includes(info.deviceId) === true,
     api,
   };
 }

@@ -185,6 +185,9 @@ function DeviceRow({
               (this device)
             </span>
           )}
+          {relayDevice?.direct === true && (
+            <span className="ml-2 text-xs text-muted-foreground">direct</span>
+          )}
         </span>
         <span className="truncate font-mono text-[10px] text-muted-foreground">
           {device.platform} &middot; {device.deviceId}
