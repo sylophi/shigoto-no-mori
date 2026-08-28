@@ -158,6 +158,13 @@ first (the web client is unaffected: a browser origin authenticates
 the browser way). For macOS passkey support later, the dashboard's
 Native applications page must also have the Native API enabled.
 
+One dev-only caveat: social (browser-redirect) sign-in cannot complete
+in `pnpm start` on macOS — the redirect deep-links to
+`shigomori-dev://app`, and LaunchServices won't route a scheme to the
+unbundled dev Electron.app (only the packaged build registers its
+scheme via Info.plist). Use email-code sign-in in dev; verify social
+providers against a packaged build.
+
 The web deploy's CSP (vercel.json) allowlists Clerk's script host as
 `https://*.clerk.accounts.dev`, which covers development instances. A
 production (`pk_live`) instance serves Clerk's UI from your own

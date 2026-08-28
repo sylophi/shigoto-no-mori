@@ -45,11 +45,15 @@ let cachedGrantStore: GrantStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
-// Re-entrancy guard for account:enroll. A concurrent invocation (a
-// re-fired renderer effect, two windows) must not enroll twice and
-// rotate the credential mid-write, so the second caller rides this
-// in-flight promise.
+// Re-entrancy guards for account:enroll and account:signOut. A
+// concurrent enroll (a re-fired renderer effect, two windows) must not
+// enroll twice and rotate the credential mid-write; concurrent
+// sign-outs (the UI button plus ClerkAccountSync reacting to the same
+// session end) must not race two revokes, where the second would 401
+// against the credential the first already deleted. The second caller
+// rides the in-flight promise.
 let enrollInFlight: Promise<AccountStatus> | null = null;
+let signOutInFlight: Promise<void> | null = null;
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
@@ -342,30 +346,39 @@ export function makeAccountHandlers(
     },
 
     signOut: async () => {
-      const config = serviceConfig();
-      await signOutDevice({
-        config,
-        service: createAccountService({ baseUrl: config.relayUrl }),
-        store: store(),
-        deviceId: getDeviceId(),
-        // The failure is swallowed (local sign-out must always land)
-        // and logged at most once per session.
-        onRevokeFailure: (error) => {
-          if (revokeWarned) return;
-          revokeWarned = true;
-          console.warn(
-            "[account] best-effort device revoke on sign-out failed, " +
-              "clearing the local credential anyway.",
-            error,
-          );
-        },
-      });
-      // Drop this host's command grants too, so re-signing into the SAME
-      // account does not resurrect the prior grants from a lingering
-      // grants.json. accountChanged() below also invalidates the grant
-      // cache, so the in-memory mirror is dropped in the same breath.
-      grantStore().clear();
-      accountChanged();
+      if (signOutInFlight) return signOutInFlight;
+      signOutInFlight = (async (): Promise<void> => {
+        const config = serviceConfig();
+        await signOutDevice({
+          config,
+          service: createAccountService({ baseUrl: config.relayUrl }),
+          store: store(),
+          deviceId: getDeviceId(),
+          // The failure is swallowed (local sign-out must always land)
+          // and logged at most once per session.
+          onRevokeFailure: (error) => {
+            if (revokeWarned) return;
+            revokeWarned = true;
+            console.warn(
+              "[account] best-effort device revoke on sign-out failed, " +
+                "clearing the local credential anyway.",
+              error,
+            );
+          },
+        });
+        // Drop this host's command grants too, so re-signing into the
+        // SAME account does not resurrect the prior grants from a
+        // lingering grants.json. accountChanged() below also
+        // invalidates the grant cache, so the in-memory mirror is
+        // dropped in the same breath.
+        grantStore().clear();
+        accountChanged();
+      })();
+      try {
+        return await signOutInFlight;
+      } finally {
+        signOutInFlight = null;
+      }
     },
 
     listDevices: async () => {

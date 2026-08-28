@@ -12,7 +12,7 @@ import {
   useWatchAccountChanges,
 } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
-import { navigateTo, webPaths } from "./nav";
+import { navigateTo, redirectTo, webPaths } from "./nav";
 
 function NavButton({
   active,
@@ -73,7 +73,10 @@ export function WebShell() {
           {signedIn && (
             <ClerkSignOutButton
               className="text-muted-foreground"
-              onSignedOut={() => navigateTo(webPaths.login)}
+              // replace, not push: the status invalidation may already
+              // have bounced this page to /login, and a pushed second
+              // /login entry would trap the Back button.
+              onSignedOut={() => redirectTo(webPaths.login)}
             />
           )}
         </div>

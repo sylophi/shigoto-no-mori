@@ -3,9 +3,9 @@
 // light/dark and the doubutsu overlay (which remaps the same tokens)
 // propagate into Clerk's portaled surfaces with no remount. Clerk's UI
 // is outside doubutsu.css's selector contract — this appearance object
-// is its entire theming surface, so keep it to theme tokens (never
-// literals; theme:check verifies every var here still resolves in both
-// systems) and eyeball all four modes when touching it.
+// is its entire theming surface, so keep it to theme tokens (theme:check
+// verifies every bare var here still resolves in both systems) and
+// eyeball all four modes when touching it.
 import type { ClerkProviderProps } from "@clerk/react";
 
 export const clerkAppearance: ClerkProviderProps["appearance"] = {
@@ -19,15 +19,29 @@ export const clerkAppearance: ClerkProviderProps["appearance"] = {
     colorMutedForeground: "var(--muted-foreground)",
     colorInput: "var(--secondary)",
     colorInputForeground: "var(--secondary-foreground)",
-    colorBorder: "var(--border)",
+    // --input, not --border: doubutsu deliberately sets --border to
+    // transparent (its surfaces separate by fill, with edges re-added
+    // through data-slot rules Clerk's DOM can't carry), while the input
+    // token stays a visible tone in all four modes.
+    colorBorder: "var(--input)",
     colorRing: "var(--ring)",
     colorDanger: "var(--destructive)",
     // The two status hues from the app's sanctioned raw families
     // (emerald = success, amber = warning), on the exact steps
-    // doubutsu.css remaps.
+    // doubutsu.css remaps in BOTH its light and dark blocks.
     colorSuccess: "var(--color-emerald-500)",
-    colorWarning: "var(--color-amber-600)",
+    colorWarning: "var(--color-amber-500)",
+    // Clerk's default backdrop is colorNeutral at 73% — a near-white
+    // scrim in dark modes. A dark scrim is the app's own overlay
+    // convention (ui/sheet.tsx's bg-black/10), mode-independent, so a
+    // literal is right here.
+    colorModalBackdrop: "rgb(0 0 0 / 0.4)",
     borderRadius: "var(--radius)",
-    fontFamily: "var(--font-sans)",
+    // Tailwind's @theme inline never emits --font-sans as a runtime
+    // custom property in v1 (it inlines the stack into utilities), so
+    // the v1 stack rides the var() fallback; doubutsu declares the
+    // variable and overrides it with Zen Maru.
+    fontFamily:
+      'var(--font-sans, "Geist Variable", ui-sans-serif, system-ui, sans-serif)',
   },
 };

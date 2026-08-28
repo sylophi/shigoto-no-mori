@@ -71,10 +71,10 @@ importers:
         specifier: ^5.36.1
         version: 5.36.1
       react:
-        specifier: ^19.2.7
+        specifier: ~19.2.7
         version: 19.2.7
       react-dom:
-        specifier: ^19.2.7
+        specifier: ~19.2.7
         version: 19.2.7(react@19.2.7)
       react-error-boundary:
         specifier: ^6.1.2

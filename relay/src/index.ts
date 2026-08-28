@@ -9,10 +9,12 @@ export { AccountRelay } from "./relayObject.ts";
 // The enroll bearer is a Clerk session token: both clients render
 // Clerk's embedded sign-in and mint the token off the live session
 // (renderer/components/account/ClerkAccountSync.tsx), so verifyToken's
-// default session-JWT verification applies — networkless, against the
-// instance's JWKS fetched via the secret key. `sub` is the Clerk user
-// id, so D1 rows and DO names key on it as the account id. Any
-// verification failure (expired, foreign instance, malformed)
+// default session-JWT verification applies, against the instance's
+// JWKS which the secret key fetches from Clerk's Backend API (one
+// outbound call per cold isolate, cached after) — so the first enroll
+// on a fresh isolate depends on api.clerk.com reachability. `sub` is
+// the Clerk user id, so D1 rows and DO names key on it as the account
+// id. Any verification failure (expired, foreign instance, malformed)
 // collapses to null, which the worker turns into a 401.
 async function verifyLogin(
   token: string,

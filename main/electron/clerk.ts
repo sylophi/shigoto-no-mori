@@ -47,6 +47,10 @@ function lazyMemoizedTokenStorage(): TokenStorage {
       const cached = cache.get(key);
       if (cached !== undefined) return cached;
       const value = await store().getItem(key);
+      // A setItem that landed while the disk read was in flight is
+      // fresher than what was read — never let the read overwrite it.
+      const raced = cache.get(key);
+      if (raced !== undefined) return raced;
       cache.set(key, value);
       return value;
     },
@@ -91,15 +95,27 @@ function forRendererHost(serve: (url: URL) => Response | Promise<Response>) {
 
 function proxyHandler(devServerUrl: string): SchemeHandler {
   return forRendererHost((url) => {
-    const target = new URL(url.pathname + url.search, devServerUrl);
+    // Assign path and query onto a URL built from the dev server, never
+    // resolve the request path AGAINST it: a protocol-relative pathname
+    // ("//evil.example/x") would re-target the whole fetch, and the
+    // response would land on the renderer's privileged origin.
+    const target = new URL(devServerUrl);
+    target.pathname = url.pathname;
+    target.search = url.search;
     return net.fetch(target.toString());
   });
 }
 
 function fileHandler(rendererDir: string): SchemeHandler {
   const rootWithSep = path.resolve(rendererDir) + path.sep;
-  return forRendererHost((url) => {
-    const pathname = decodeURIComponent(url.pathname);
+  return forRendererHost(async (url) => {
+    let pathname: string;
+    try {
+      pathname = decodeURIComponent(url.pathname);
+    } catch {
+      // A malformed percent-escape is a bad request, not a crash.
+      return new Response(null, { status: 404 });
+    }
     const file = path.resolve(
       rootWithSep,
       pathname === "/" ? "index.html" : `.${pathname}`,
@@ -108,7 +124,13 @@ function fileHandler(rendererDir: string): SchemeHandler {
     if (!file.startsWith(rootWithSep)) {
       return new Response(null, { status: 404 });
     }
-    return net.fetch(pathToFileURL(file).toString());
+    try {
+      // net.fetch rejects on a missing file; that's a 404, not a
+      // protocol-handler failure.
+      return await net.fetch(pathToFileURL(file).toString());
+    } catch {
+      return new Response(null, { status: 404 });
+    }
   });
 }
 

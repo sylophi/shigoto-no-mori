@@ -2,12 +2,12 @@
 // explanation that this build carries no account service configuration.
 // Signed-in (enrolled) visitors are bounced straight to the devices
 // page; ClerkAccountSync performs the enrollment the moment Clerk
-// reports a session, so completing the form below lands on /devices
-// without a callback route.
+// reports a session.
 import { useEffect } from "react";
-import { SignIn } from "@clerk/react";
-import { CloudOff } from "lucide-react";
-import { useAccountStatus } from "@/hooks/account/useAccount";
+import { SignIn, useAuth } from "@clerk/react";
+import { CloudOff, RotateCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
 import { redirectTo, webPaths } from "./nav";
 
 export function LoginPage() {
@@ -20,10 +20,10 @@ export function LoginPage() {
   return (
     <div className="flex h-full items-center justify-center overflow-y-auto p-6">
       {status?.configured === true ? (
-        // Rendering the Clerk component is gated on configured, which
-        // implies the ClerkProvider is mounted (ClerkGate): a pending
-        // or errored status must not fall through to a bare <SignIn />.
-        <SignIn />
+        // The Clerk half is gated on configured, which implies the
+        // ClerkProvider is mounted (ClerkGate): a pending or errored
+        // status must not fall through to a bare Clerk hook.
+        <ConfiguredLogin />
       ) : isPending ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
@@ -36,5 +36,44 @@ export function LoginPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// With a live Clerk session this page means "enrollment has not landed
+// yet" (ClerkAccountSync's automatic attempt is in flight, or it
+// failed): rendering <SignIn/> to an already-signed-in visitor is a
+// dead end, so show the completing state with a manual retry instead.
+// The redirect props keep Clerk's post-sign-in navigation on this
+// route; the effect above forwards to /devices once enrolled.
+function ConfiguredLogin() {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const enroll = useEnroll();
+
+  if (!isLoaded) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+  if (isSignedIn) {
+    return (
+      <div className="flex w-full max-w-sm flex-col items-start gap-3 rounded-lg border border-border bg-card px-4 py-4 shadow-sm">
+        <p className="text-sm text-muted-foreground">
+          Signed in. Enrolling this browser with the relay&hellip;
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={enroll.isPending}
+          onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
+        >
+          <RotateCw />
+          {enroll.isPending ? "Enrolling…" : "Retry enrollment"}
+        </Button>
+      </div>
+    );
+  }
+  return (
+    <SignIn
+      forceRedirectUrl={webPaths.login}
+      signUpForceRedirectUrl={webPaths.login}
+    />
   );
 }

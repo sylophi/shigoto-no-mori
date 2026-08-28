@@ -212,6 +212,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     void refreshRelay();
   }
 
+  // Re-entrancy guards mirroring the desktop handler's: a re-fired
+  // reconciler effect or a second tab must not race two enrolls (the
+  // relay rotates the credential per enroll, so racers can strand the
+  // stored one) or two revokes. Same-tab only — the storage key is
+  // still shared across tabs, but a cross-tab race is closed by the
+  // reconciler's re-read after the storage event.
+  let enrollInFlight: Promise<AccountStatus> | null = null;
+  let signOutInFlight: Promise<void> | null = null;
+
   const accountHandlers: Handlers<typeof accountContract> = {
     status: () => readStatus(),
 
@@ -220,26 +229,42 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // "web" (a legal opaque label beside the desktop's os.platform()
     // values in EnrollRequestSchema's 1..64 bound).
     enroll: async (token) => {
-      await enrollDevice(
-        {
-          config,
-          service,
-          store,
-          deviceId,
-          fallbackDeviceName: defaultDeviceName(),
-          platform: "web",
-        },
-        token,
-      );
-      accountChanged();
-      return readStatus();
+      if (enrollInFlight) return enrollInFlight;
+      enrollInFlight = (async (): Promise<AccountStatus> => {
+        await enrollDevice(
+          {
+            config,
+            service,
+            store,
+            deviceId,
+            fallbackDeviceName: defaultDeviceName(),
+            platform: "web",
+          },
+          token,
+        );
+        accountChanged();
+        return readStatus();
+      })();
+      try {
+        return await enrollInFlight;
+      } finally {
+        enrollInFlight = null;
+      }
     },
 
     // The shared best-effort revoke-then-clear (the desktop handler
     // adds a warn-once and its grant clear on top of the same core).
     signOut: async () => {
-      await signOutDevice({ config, service, store, deviceId });
-      accountChanged();
+      if (signOutInFlight) return signOutInFlight;
+      signOutInFlight = (async (): Promise<void> => {
+        await signOutDevice({ config, service, store, deviceId });
+        accountChanged();
+      })();
+      try {
+        return await signOutInFlight;
+      } finally {
+        signOutInFlight = null;
+      }
     },
 
     listDevices: async () => {
@@ -354,7 +379,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       await service.revoke(record.credential, targetDeviceId);
       // Revoking THIS browser invalidates its own credential, so the
       // local sign-out follows immediately rather than waiting for the
-      // relay to refuse the next call.
+      // relay to refuse the next call. Callers revoking self MUST end
+      // the Clerk session first (DevicesPage's SelfRevokeButton does):
+      // with the session still live, ClerkAccountSync sees "signed in,
+      // not enrolled" and re-enrolls, silently undoing the revoke.
       if (targetDeviceId === deviceId) store.clear();
       accountChanged();
     },

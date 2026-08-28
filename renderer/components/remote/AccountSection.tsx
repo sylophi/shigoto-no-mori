@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useClerk } from "@clerk/react";
+import { useAuth, useClerk } from "@clerk/react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, LogIn } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
@@ -12,6 +12,7 @@ import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import {
   useAccountDevices,
   useAccountStatus,
+  useEnroll,
   useGrantCommands,
   useGrantedDevices,
   useRevokeCommands,
@@ -135,9 +136,27 @@ export function AccountSection() {
 // Split out so AccountSection itself never calls a Clerk hook: this
 // mounts only on the configured (and therefore provider-wrapped) path
 // above. Sign-in opens Clerk's embedded modal; ClerkAccountSync turns
-// the resulting session into the enrollment.
+// the resulting session into the enrollment. When Clerk is already
+// signed in but the device is not enrolled (the automatic attempt
+// failed — relay down, mint error), opening the modal again would do
+// nothing, so the button becomes the manual enrollment retry instead.
 function ClerkSignInButton() {
   const clerk = useClerk();
+  const { isSignedIn, getToken } = useAuth();
+  const enroll = useEnroll();
+  if (isSignedIn) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={enroll.isPending}
+        onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
+      >
+        <LogIn />
+        {enroll.isPending ? "Enrolling…" : "Retry enrollment"}
+      </Button>
+    );
+  }
   return (
     <Button variant="outline" size="sm" onClick={() => clerk.openSignIn()}>
       <LogIn />

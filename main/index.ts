@@ -94,9 +94,11 @@ if (!app.requestSingleInstanceLock()) {
 // The Clerk main-process bridge: renderer-scheme privileges (pre-ready
 // requirement), token storage, and the OAuth deep-link transport. After
 // the lock above (the bridge's own lock management is disabled) and the
-// dev userData suffix (tokens live in userData).
-const clerkBridge = createDesktopClerkBridge();
-app.on("will-quit", () => clerkBridge.cleanup());
+// dev userData suffix (tokens live in userData). Its cleanup() is
+// deliberately not wired to a quit event: every quit path in this file
+// ends in app.exit(), which skips will-quit, and process teardown
+// reclaims the bridge's IPC handlers wholesale anyway.
+createDesktopClerkBridge();
 
 initShigomoriRoot(app.isPackaged);
 
