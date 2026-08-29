@@ -85,6 +85,20 @@ export function useAccountSignOut() {
   });
 }
 
+// Removes another device from the account on the relay. Like the
+// grant mutations it does not invalidate itself: main broadcasts
+// account:changed (and grantsChanged) after the revoke, and the
+// watchers above turn those into the invalidations. Self-revoke is not
+// offered by the devices page -- this device signs out instead, so the
+// Clerk session ends first and ClerkAccountSync cannot re-enroll it
+// back onto the account.
+export function useRevokeDevice() {
+  return useMutation<void, Error, string>({
+    mutationFn: (deviceId) => window.api.account.revokeDevice(deviceId),
+    meta: { errorTitle: "Couldn't revoke this device" },
+  });
+}
+
 export function useSetDeviceName() {
   return useMutation<AccountStatus, Error, string>({
     mutationFn: (name) => window.api.account.setDeviceName(name),

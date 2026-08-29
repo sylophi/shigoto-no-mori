@@ -221,6 +221,25 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   let enrollInFlight: Promise<AccountStatus> | null = null;
   let signOutInFlight: Promise<void> | null = null;
 
+  // Removing a device from the account, shared by the account:revokeDevice
+  // client handler (what the devices page calls) and the bridge method
+  // below, so the two callers cannot drift on the self-revoke rule.
+  async function revokeDeviceOnAccount(targetDeviceId: string): Promise<void> {
+    const record = store.read();
+    if (record === null) {
+      throw new Error("cannot revoke a device while signed out");
+    }
+    await service.revoke(record.credential, targetDeviceId);
+    // Revoking THIS browser invalidates its own credential, so the
+    // local sign-out follows immediately rather than waiting for the
+    // relay to refuse the next call. Callers revoking self MUST end
+    // the Clerk session first (DevicesPage's SelfRevokeButton does):
+    // with the session still live, ClerkAccountSync sees "signed in,
+    // not enrolled" and re-enrolls, silently undoing the revoke.
+    if (targetDeviceId === deviceId) store.clear();
+    accountChanged();
+  }
+
   const accountHandlers: Handlers<typeof accountContract> = {
     status: () => readStatus(),
 
@@ -266,6 +285,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         signOutInFlight = null;
       }
     },
+
+    revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
 
     listDevices: async () => {
       const record = store.read();
@@ -371,21 +392,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     webAccess,
 
-    revokeDevice: async (targetDeviceId) => {
-      const record = store.read();
-      if (record === null) {
-        throw new Error("cannot revoke a device while signed out");
-      }
-      await service.revoke(record.credential, targetDeviceId);
-      // Revoking THIS browser invalidates its own credential, so the
-      // local sign-out follows immediately rather than waiting for the
-      // relay to refuse the next call. Callers revoking self MUST end
-      // the Clerk session first (DevicesPage's SelfRevokeButton does):
-      // with the session still live, ClerkAccountSync sees "signed in,
-      // not enrolled" and re-enrolls, silently undoing the revoke.
-      if (targetDeviceId === deviceId) store.clear();
-      accountChanged();
-    },
+    revokeDevice: revokeDeviceOnAccount,
 
     notifyAccountChanged: accountChanged,
 

@@ -131,6 +131,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       status: accountClient.status,
       enroll: accountClient.enroll,
       signOut: accountClient.signOut,
+      revokeDevice: accountClient.revokeDevice,
       listDevices: accountClient.listDevices,
       setDeviceName: accountClient.setDeviceName,
       grantCommands: accountClient.grantCommands,
