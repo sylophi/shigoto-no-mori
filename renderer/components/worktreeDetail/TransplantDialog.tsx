@@ -227,7 +227,12 @@ function DoneBody({
           {result.captured && !result.dirtyApplied
             ? `The uncommitted changes could not be applied here — they are still safe on ${sourceDeviceLabel}.`
             : result.sourceRemoved
-              ? `Uncommitted changes came along, and the copy on ${sourceDeviceLabel} was torn down.`
+              ? // `captured` is only true when the source actually had
+                // uncommitted changes; a clean tree must not claim any
+                // travelled.
+                result.captured
+                ? `Uncommitted changes came along, and the copy on ${sourceDeviceLabel} was torn down.`
+                : `The copy on ${sourceDeviceLabel} was torn down.`
               : `The copy on ${sourceDeviceLabel} stayed: ${
                   keptSourceReason(result.sourceError) ??
                   "its teardown was refused."

@@ -289,6 +289,9 @@ index 4f2c9d1..a91f3c7 100644
 // ---- lab-mutable account/presence state ----
 
 const granted = new Set(grantedDeviceIds);
+// Devices revoked in this lab session: the fixture registry is static,
+// so the revoke handler records the id here and the list filters it.
+const revoked = new Set<string>();
 let deviceName = "Studio Mac";
 
 // The web-shell pose (lab/web-main.tsx): this page is an enrolled
@@ -369,7 +372,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   );
 
   const registryDevices = () =>
-    WEB_SHELL
+    (WEB_SHELL
       ? [
           ...accountDevices,
           {
@@ -381,7 +384,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
             online: true,
           },
         ]
-      : accountDevices;
+      : accountDevices
+    ).filter((device) => !revoked.has(device.deviceId));
 
   const accountStatus = () => ({
     configured: true,
@@ -401,6 +405,13 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "account:revokeCommands": (deviceId: string) => {
       granted.delete(deviceId);
       client.emit("account:grantsChanged", undefined);
+    },
+    "account:revokeDevice": (deviceId: string) => {
+      // Mirrors the real handler's registry effect: the device leaves
+      // the account list and account:changed fans out the refetch.
+      // Fixture presence is untouched, matching the relay's lag.
+      revoked.add(deviceId);
+      client.emit("account:changed", undefined);
     },
     "account:setDeviceName": (name: string) => {
       deviceName = name;

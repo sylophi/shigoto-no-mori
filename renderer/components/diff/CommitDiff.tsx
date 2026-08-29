@@ -1,18 +1,14 @@
-import { useParams } from "@tanstack/react-router";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import {
+  useScopedWorktreeParams,
+  useWorktreeNav,
+} from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
 
 export function CommitDiff() {
-  // Non-strict: this page serves both the local route and the
-  // /devices/$deviceId twin (see renderer/router.tsx).
-  const { projectId, worktreeId, hash } = useParams({ strict: false }) as {
-    projectId: string;
-    worktreeId: string;
-    hash: string;
-  };
+  const { projectId, worktreeId, hash } = useScopedWorktreeParams();
   const nav = useWorktreeNav();
   const {
     data: worktrees = [],

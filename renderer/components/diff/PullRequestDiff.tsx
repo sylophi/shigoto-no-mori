@@ -1,7 +1,9 @@
-import { useParams } from "@tanstack/react-router";
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import {
+  useScopedWorktreeParams,
+  useWorktreeNav,
+} from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
@@ -9,12 +11,7 @@ import { WorktreeMissing } from "./WorktreeMissing";
 import { DiffStats } from "@/components/ui/diff-stats";
 
 export function PullRequestDiff() {
-  // Non-strict: this page serves both the local route and the
-  // /devices/$deviceId twin (see renderer/router.tsx).
-  const { projectId, worktreeId } = useParams({ strict: false }) as {
-    projectId: string;
-    worktreeId: string;
-  };
+  const { projectId, worktreeId } = useScopedWorktreeParams();
   const nav = useWorktreeNav();
   const {
     data: worktrees = [],

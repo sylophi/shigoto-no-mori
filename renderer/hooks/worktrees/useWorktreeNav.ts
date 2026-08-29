@@ -5,15 +5,26 @@
 // picks the twin and splices the device param; the paths themselves
 // come from lib/routePaths so the route trees and these links cannot
 // drift apart.
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+
+// The worktree pages' params, read non-strictly because each page
+// serves both its local route and the /devices/$deviceId twin (the
+// router can only type params against ONE route). `hash` exists only
+// under the commit pair; keeping the one unavoidable cast here gives
+// the twin pattern a single seam instead of a copy per page.
+export function useScopedWorktreeParams() {
+  return useParams({ strict: false }) as {
+    projectId: string;
+    worktreeId: string;
+    hash: string;
+  };
+}
 
 export function useWorktreeNav() {
   const navigate = useNavigate();
-  const { deviceId } = useHostScope();
-  const remote = deviceId !== localDeviceId;
+  const { deviceId, remote } = useHostScope();
 
   // The local path and the remote twin differ only by the
   // /devices/$deviceId prefix and the param that fills it, so the two

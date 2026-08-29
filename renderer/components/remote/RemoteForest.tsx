@@ -23,6 +23,7 @@ import { EmptyPanel } from "./EmptyPanel";
 import { PortForwardSection } from "./PortForwardSection";
 import { RemoteDeviceSettings } from "./RemoteDeviceSettings";
 import { useBringWorktreeHere } from "@/hooks/remote/useBringWorktreeHere";
+import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
@@ -177,7 +178,7 @@ function ConnectedForest({
           )}
           {/* App-only (the engine binds real local listeners, which the
               web shell cannot), so the web build never mounts it. */}
-          {connected && api !== undefined && window.api.isElectron && (
+          {connected && api !== undefined && canForwardPorts && (
             <PortForwardSection />
           )}
         </>

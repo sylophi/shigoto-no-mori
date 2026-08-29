@@ -11,14 +11,16 @@ import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { usePortForwards } from "@/hooks/remote/usePortForwards";
+import {
+  canForwardPorts,
+  usePortForwards,
+} from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 
 export function PortsSection({ worktree }: { worktree: Worktree }) {
   const { deviceId, remote } = useHostScope();
   if (worktree.port === undefined) return null;
-  // Forwarding binds a real local listener; only the app can.
-  if (remote && !window.api.isElectron) return null;
+  if (remote && !canForwardPorts) return null;
   return (
     <section className="space-y-3">
       <SectionHeading>Ports</SectionHeading>

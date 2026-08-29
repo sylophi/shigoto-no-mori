@@ -1,4 +1,4 @@
-import { useParams } from "@tanstack/react-router";
+import { useScopedWorktreeParams } from "@/hooks/worktrees/useWorktreeNav";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -9,12 +9,7 @@ import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
 export function WorktreeDetail() {
-  // Non-strict: this page serves both the local route and the
-  // /devices/$deviceId twin (see renderer/router.tsx).
-  const { projectId, worktreeId } = useParams({ strict: false }) as {
-    projectId: string;
-    worktreeId: string;
-  };
+  const { projectId, worktreeId } = useScopedWorktreeParams();
   const { remote } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {

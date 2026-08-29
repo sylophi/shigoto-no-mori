@@ -13,6 +13,11 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 
+// Forwarding binds a real local TCP listener, which only the app can do
+// -- the capability gate for every surface that offers a forward, kept
+// here so the mechanism and its precondition travel together.
+export const canForwardPorts = window.api.isElectron;
+
 export function usePortForwards() {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();

@@ -14,7 +14,7 @@ import { AlertTriangle, ArrowRight, Trash2 } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
-import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import { StatusDot, TONE_PILL } from "@/components/ui/status-dot";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -25,19 +25,6 @@ import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import type { HostChip } from "./deviceHostChips";
 import type { DeviceRowStatus } from "./deviceRegistryStatus";
-
-// The status pill is tinted by its own tone, so a row's state reads
-// from across the page instead of from a 6px dot. Same closed set the
-// StatusDot primitive draws, and the same four raw families the
-// doubutsu overlay remaps -- slate alone falls back to the muted token,
-// since "off" has no color to carry.
-const TONE_PILL: Record<StatusTone, string> = {
-  emerald: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  rose: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  sky: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  slate: "bg-muted text-muted-foreground",
-};
 
 export function DeviceRegistryRow({
   device,
