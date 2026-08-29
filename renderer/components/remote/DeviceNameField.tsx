@@ -15,32 +15,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSetDeviceName } from "@/hooks/account/useAccount";
 
+// The trigger is a separate export because its two call sites put it in
+// different places: the web page inline after the name, the registry row
+// with the row's other actions on the right. The editor itself always
+// opens where the NAME is, so the open/closed flag is the caller's to
+// hold rather than something the field can own for both layouts.
+export function DeviceRenameButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      variant="ghost"
+      size="xs"
+      className="text-muted-foreground"
+      aria-label={`Rename ${label.toLowerCase()}`}
+      onClick={onClick}
+    >
+      <Pencil />
+      Rename
+    </Button>
+  );
+}
+
 export function DeviceNameField({
   deviceName,
   label,
-  editing: controlledEditing,
+  editing,
   onEditingChange,
 }: {
   deviceName: string;
   // "This device" / "This browser". The control's accessible name
   // derives from it, so the two can't drift apart.
   label: string;
-  // Controlled mode. The registry row keeps its Rename trigger with
-  // the row's other actions on the right, where every row's actions
-  // live, while the editor itself has to open where the NAME is. Pass
-  // both to take the state over; pass neither and the field carries
-  // its own trigger inline (the web devices page does).
-  editing?: boolean;
-  onEditingChange?: (next: boolean) => void;
+  // Open/closed, held by the caller alongside its DeviceRenameButton.
+  editing: boolean;
+  onEditingChange: (next: boolean) => void;
 }) {
   const setDeviceName = useSetDeviceName();
-  const [ownEditing, setOwnEditing] = useState(false);
-  const controlled = controlledEditing !== undefined;
-  const editing = controlled ? controlledEditing : ownEditing;
-  const setEditing = (next: boolean): void => {
-    if (!controlled) setOwnEditing(next);
-    onEditingChange?.(next);
-  };
   const [draft, setDraft] = useState(deviceName);
 
   // Keep the draft in step when the stored name changes underneath us (a
@@ -56,7 +71,7 @@ export function DeviceNameField({
   // editor opens.
   function cancel(): void {
     setDraft(deviceName);
-    setEditing(false);
+    onEditingChange(false);
   }
 
   // Enter on an unchanged (or blank) draft is a no-op save, which reads
@@ -66,27 +81,11 @@ export function DeviceNameField({
       cancel();
       return;
     }
-    setDeviceName.mutate(trimmed, { onSuccess: () => setEditing(false) });
+    setDeviceName.mutate(trimmed, { onSuccess: () => onEditingChange(false) });
   }
 
   if (!editing) {
-    return (
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="truncate text-sm font-medium">{deviceName}</span>
-        {!controlled && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="text-muted-foreground"
-            aria-label={`Rename ${label.toLowerCase()}`}
-            onClick={() => setEditing(true)}
-          >
-            <Pencil />
-            Rename
-          </Button>
-        )}
-      </span>
-    );
+    return <span className="truncate text-sm font-medium">{deviceName}</span>;
   }
 
   return (

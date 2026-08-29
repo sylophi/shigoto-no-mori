@@ -10,14 +10,18 @@
 // re-name the machine it applies to.
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Trash2 } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import { StatusDot, type StatusTone } from "@/components/ui/status-dot";
+import {
+  CONFIRM_DESTRUCTIVE_MS,
+  useConfirmTwice,
+} from "@/hooks/ui/useConfirmTwice";
 import { cn } from "@/lib/utils";
 import { DeviceHosts } from "./DeviceHosts";
-import { DeviceNameField } from "./DeviceNameField";
+import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import type { HostChip } from "./deviceHostChips";
 import type { DeviceRowStatus } from "./deviceRegistryStatus";
@@ -79,8 +83,13 @@ export function DeviceRegistryRow({
   const navigate = useNavigate();
   // Armed inline instead of in a modal: the sentence names the machine
   // and the row is right there to check it against, which a dialog
-  // covering the list cannot offer.
-  const [confirming, setConfirming] = useState(false);
+  // covering the list cannot offer. The shared two-step confirm carries
+  // the armed flag, so an untouched banner disarms itself.
+  const revoke = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
+  // The banner outlives the arming while the revoke is in flight, so
+  // the row shows "Revoking…" where the confirm button was instead of
+  // snapping back to its actions.
+  const confirming = revoke.armed || revokePending;
   // Held here rather than inside the name field so the Rename trigger
   // can sit with the row's other actions while the editor opens on the
   // name itself.
@@ -145,16 +154,10 @@ export function DeviceRegistryRow({
             {isThisDevice ? (
               <>
                 {!renaming && (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    className="text-muted-foreground"
-                    aria-label="Rename this device"
+                  <DeviceRenameButton
+                    label="This device"
                     onClick={() => setRenaming(true)}
-                  >
-                    <Pencil />
-                    Rename
-                  </Button>
+                  />
                 )}
                 {/* Self-revoke is not offered: it would invalidate this
                     app's own credential, and with the Clerk session
@@ -200,7 +203,7 @@ export function DeviceRegistryRow({
                 <Button
                   variant="ghost-destructive"
                   size="xs"
-                  onClick={() => setConfirming(true)}
+                  onClick={() => revoke.trigger(onRevokeDevice)}
                 >
                   <Trash2 />
                   Revoke device
@@ -227,7 +230,7 @@ export function DeviceRegistryRow({
               variant="ghost"
               size="xs"
               disabled={revokePending}
-              onClick={() => setConfirming(false)}
+              onClick={revoke.reset}
             >
               Cancel
             </Button>
@@ -235,7 +238,7 @@ export function DeviceRegistryRow({
               variant="destructive"
               size="xs"
               disabled={revokePending}
-              onClick={onRevokeDevice}
+              onClick={() => revoke.trigger(onRevokeDevice)}
             >
               {revokePending ? "Revoking…" : "Revoke device"}
             </Button>

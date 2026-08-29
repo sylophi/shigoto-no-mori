@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -11,16 +12,14 @@ import { ScriptRow } from "./ScriptRow";
 
 interface ScriptsSectionProps {
   worktree: Worktree;
-  // Set under a remote scope while remote runs are not streamable yet:
-  // rows render, run affordances disable with this exact reason.
-  runsDisabledReason?: string;
 }
 
-export function ScriptsSection({
-  worktree,
-  runsDisabledReason,
-}: ScriptsSectionProps) {
+export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   const navigate = useNavigate();
+  // Rows still render remotely (their run affordances disable
+  // themselves, see useScriptRunner); only the local-page CTA below
+  // gates on the scope.
+  const { remote } = useHostScope();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(
     worktree.projectId,
   );
@@ -85,13 +84,7 @@ export function ScriptsSection({
 
   return (
     <div className="space-y-4">
-      {pkg && pkgHasScripts && (
-        <PackageScripts
-          worktree={worktree}
-          pkg={pkg}
-          runsDisabledReason={runsDisabledReason}
-        />
-      )}
+      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
 
       {lifecycleRows.length > 0 && (
         <div className="space-y-2">
@@ -106,7 +99,6 @@ export function ScriptsSection({
                 slot={row.slot}
                 label={row.label}
                 command={row.command}
-                runsDisabledReason={runsDisabledReason}
               />
             ))}
           </ScriptList>
@@ -114,7 +106,7 @@ export function ScriptsSection({
       )}
 
       {!hasLifecycle &&
-        runsDisabledReason === undefined && (
+        !remote && (
           // Configure is a local page, so the CTA only exists locally.
           <button
             type="button"

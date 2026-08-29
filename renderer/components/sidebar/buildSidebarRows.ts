@@ -229,6 +229,7 @@ function pushRemoteWorktreeRows(
       deviceId: item.deviceId,
       deviceLabel: item.deviceLabel,
       reachable: item.reachable,
+      tone: item.tone,
       groupId,
     });
   }
@@ -245,6 +246,7 @@ function deviceBadgesOf(
       badges.set(item.deviceId, {
         deviceId: item.deviceId,
         label: item.deviceLabel,
+        tone: item.tone,
         reachable: item.reachable,
       });
     }

@@ -3,6 +3,7 @@
 // registry read it at module scope), so the app boots via dynamic
 // import.
 import { installLabBridge } from "./bridge";
+import { applyPose } from "./pose";
 
 // Diagnostics for driving the lab headlessly: every console.error/warn,
 // page error and unhandled rejection lands in window.smLabLog.
@@ -31,25 +32,10 @@ window.addEventListener("unhandledrejection", (event) =>
   record("rejection", [event.reason]),
 );
 
-// URL posing for one-shot headless screenshots:
-//   ?theme=light|dark        (default light)
-//   ?doubutsu=0|1            (default 1, matching the product default)
-//   ?peers=tp:connected,mini:offline,pc:offline
-//   ?to=/devices             (memory-router route after mount)
-// Theme must be seeded BEFORE index.css/providers evaluate, mirroring
-// what boot-theme.js does for the persisted keys.
-const pose = new URLSearchParams(location.search);
-const theme = pose.get("theme") === "dark" ? "dark" : "light";
-const doubutsu = pose.get("doubutsu") !== "0";
-localStorage.setItem("shigomori.theme", theme);
-localStorage.setItem("shigomori.doubutsu", String(doubutsu));
-localStorage.setItem(
-  "sm.lab.clientConfig",
-  JSON.stringify({ theme, doubutsu }),
-);
-document.documentElement.classList.toggle("dark", theme === "dark");
-document.documentElement.style.colorScheme = theme;
-document.documentElement.classList.toggle("doubutsu", doubutsu);
+// The shared theme pose (lab/pose.ts). This entry also answers
+// ?peers (lab/bridge.ts) and ?to=/devices, the memory-router route
+// applied after mount.
+applyPose();
 
 installLabBridge();
 

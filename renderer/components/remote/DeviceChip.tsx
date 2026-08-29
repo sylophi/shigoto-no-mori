@@ -4,16 +4,13 @@
 // not a state worth announcing.
 import { StatusDot } from "@/components/ui/status-dot";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { localDeviceId } from "@/lib/queryKeys";
 
 export function DeviceChip() {
-  const { deviceId } = useHostScope();
-  const device = useRemoteDevices().find(
-    (entry) => entry.deviceId === deviceId,
-  );
-  if (deviceId === localDeviceId || device === undefined) return null;
+  const { deviceId, remote } = useHostScope();
+  const device = useRemoteDevice(deviceId);
+  if (!remote || device === undefined) return null;
   const { tone, label } = deviceStatusView(device.status);
   return (
     <span

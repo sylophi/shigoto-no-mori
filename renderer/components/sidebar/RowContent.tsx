@@ -47,6 +47,7 @@ export function RowContent({
           deviceId={row.deviceId}
           deviceLabel={row.deviceLabel}
           reachable={row.reachable}
+          tone={row.tone}
         />
       );
     case "remote-project":

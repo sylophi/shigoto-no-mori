@@ -6,8 +6,8 @@ import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import {
   scriptKey,
@@ -65,8 +65,9 @@ export function WorktreeDetailInner({
   // already rides the host scope; `remote` only gates the affordances
   // that are local by nature (launching, configure links) and adds the
   // cross-device ones (bring here, transplant, the device chip).
-  const nav = useWorktreeNav();
-  const remote = nav.remote;
+  const { remote } = useHostScope();
+  // Always true locally (the local device is granted by contract), so
+  // this alone carries the read-only mirror.
   const { granted } = useCommandAccess();
   const { data: runtime } = useRuntimeInfo();
   const {
@@ -248,17 +249,10 @@ export function WorktreeDetailInner({
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
-            <ScriptsSection
-              worktree={worktree}
-              runsDisabledReason={
-                remote
-                  ? "Remote script runs stream back in a later update"
-                  : undefined
-              }
-            />
+            <ScriptsSection worktree={worktree} />
           </section>
 
-          <NotesSection worktree={worktree} readOnly={remote && !granted} />
+          <NotesSection worktree={worktree} />
         </div>
       </div>
 
@@ -266,7 +260,7 @@ export function WorktreeDetailInner({
         worktree={worktree}
         state={footerState}
         actions={footerActions}
-        canMutate={!remote || granted}
+        canMutate={granted}
         leading={
           remote ? (
             <RemoteWorktreeActions worktree={worktree} project={project} />

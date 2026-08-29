@@ -4,8 +4,9 @@
 // invented per-phase progress. Review says exactly what travels and
 // what happens; done reports where the worktree landed and whether the
 // source was torn down (a kept source is a partial success with its
-// reason, never an error).
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+// reason, never an error). The move itself is the shared bring-here
+// mutation, quieted: the steps below are the report.
+import { useState } from "react";
 import { ArrowRight, Check, Loader2, Shovel } from "lucide-react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { SyncTransplantWorktreeResult } from "@shared/ipc/modules/sync";
@@ -13,10 +14,12 @@ import type { Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { StatusDot } from "@/components/ui/status-dot";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import {
+  keptSourceReason,
+  useBringWorktreeHere,
+} from "@/hooks/remote/useBringWorktreeHere";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { errorMessageOf } from "@shared/errors";
-import { queryKeys } from "@/lib/queryKeys";
 
 export function TransplantDialog({
   worktree,
@@ -33,34 +36,34 @@ export function TransplantDialog({
   localProjectId: string;
   onClose: () => void;
 }) {
-  const { deviceId } = useHostScope();
-  const queryClient = useQueryClient();
   const nav = useWorktreeNav();
-
-  const transplant = useMutation({
-    mutationFn: (): Promise<SyncTransplantWorktreeResult> =>
-      window.api.sync.transplantWorktree({
-        sourceDeviceId: deviceId,
-        sourceProjectId,
-        sourceWorktreeId: worktree.id,
-        sourceIdentity,
-        branch: worktree.branch,
-      }),
-    onSuccess: () => {
-      // The new worktree and branch are LOCAL (module-level keys); the
-      // source side refreshes off the host's own mutation ping.
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(localProjectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(localProjectId),
-      });
-    },
-    meta: { silentError: true },
+  // The shared bring-here mutation, quiet: this dialog's done state is
+  // the report, so the hook's toasts would say it twice.
+  const transplant = useBringWorktreeHere({
+    worktree,
+    sourceProjectId,
+    sourceIdentity,
+    localProjectId,
+    transplant: true,
+    quiet: true,
   });
+  // The hook's result is the pull/transplant union; `transplant: true`
+  // only ever resolves the transplant arm, and narrowing it once here
+  // keeps the done body typed.
+  const [result, setResult] = useState<SyncTransplantWorktreeResult>();
+
+  const start = () => {
+    void transplant
+      .mutateAsync()
+      .then((landed) => {
+        if ("sourceRemoved" in landed) setResult(landed);
+      })
+      .catch(() => {
+        // Surfaces in the error line below (refusals toast centrally).
+      });
+  };
 
   const pending = transplant.isPending;
-  const result = transplant.data;
 
   return (
     <ModalShell onClose={onClose} closeOnEscape={!pending}>
@@ -166,11 +169,7 @@ export function TransplantDialog({
               >
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                disabled={pending}
-                onClick={() => transplant.mutate()}
-              >
+              <Button size="sm" disabled={pending} onClick={start}>
                 {pending ? (
                   <>
                     <Loader2 className="animate-spin" />
@@ -230,9 +229,8 @@ function DoneBody({
             : result.sourceRemoved
               ? `Uncommitted changes came along, and the copy on ${sourceDeviceLabel} was torn down.`
               : `The copy on ${sourceDeviceLabel} stayed: ${
-                  result.sourceError?.includes("scripts-running")
-                    ? "scripts are still running there."
-                    : (result.sourceError ?? "its teardown was refused.")
+                  keptSourceReason(result.sourceError) ??
+                  "its teardown was refused."
                 }`}
         </p>
       </div>

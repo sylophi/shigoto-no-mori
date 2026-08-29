@@ -1,4 +1,5 @@
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type { StatusTone } from "@/components/ui/status-dot";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 
 // The two shelves the inbox view folds shut by default. The third box --
@@ -45,6 +46,8 @@ export type SidebarRow =
       // False renders the row faded: the device is off and this is its
       // last known state.
       reachable: boolean;
+      // The device's connection tone, for its badge on the row.
+      tone: StatusTone;
       groupId: string;
     }
   // Header for remote worktrees whose project has no local counterpart.

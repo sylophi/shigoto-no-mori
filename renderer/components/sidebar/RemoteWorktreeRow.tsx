@@ -7,6 +7,7 @@
 // device's rows fade back: last known state, not an error.
 import { useNavigate } from "@tanstack/react-router";
 import type { Worktree } from "@shared/schemas";
+import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { DeviceBadge } from "./DeviceBadge";
@@ -18,6 +19,7 @@ interface RemoteWorktreeRowProps {
   deviceId: string;
   deviceLabel: string;
   reachable: boolean;
+  tone: StatusTone;
 }
 
 export function RemoteWorktreeRow({
@@ -25,6 +27,7 @@ export function RemoteWorktreeRow({
   deviceId,
   deviceLabel,
   reachable,
+  tone,
 }: RemoteWorktreeRowProps) {
   const navigate = useNavigate();
   return (
@@ -47,7 +50,7 @@ export function RemoteWorktreeRow({
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
       {/* Rightmost, where the local row keeps its own trailing cluster:
           the owning device, name in the tooltip. */}
-      <DeviceBadge badge={{ deviceId, label: deviceLabel, reachable }} />
+      <DeviceBadge badge={{ deviceId, label: deviceLabel, tone, reachable }} />
     </button>
   );
 }

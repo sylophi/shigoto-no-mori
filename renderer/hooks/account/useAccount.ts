@@ -26,15 +26,14 @@ export function useAccountStatus() {
   });
 }
 
-// The account's device registry from the relay. Enabled only when signed
-// in so a signed-out or unconfigured app never hits the network. The
-// handler already returns [] in those states, and gating here keeps the
-// query from firing at all.
-export function useAccountDevices(enabled: boolean) {
+// The account's device registry from the relay. Both call sites render
+// only under a signed-in guard, so a signed-out or unconfigured app
+// never mounts this and never hits the network (and the handler returns
+// [] in those states anyway).
+export function useAccountDevices() {
   return useQuery<DeviceInfo[]>({
     queryKey: queryKeys.accountDevices(),
     queryFn: () => window.api.account.listDevices(),
-    enabled,
     meta: { errorTitle: "Couldn't load account devices" },
   });
 }
@@ -107,14 +106,13 @@ export function useSetDeviceName() {
 }
 
 // The peer deviceIds this host grants command access, for the current
-// account. Enabled only when signed in, mirroring useAccountDevices: the
-// handler returns [] signed out, and gating keeps the query idle. Kept
-// off the "account" prefix so a grant toggle invalidates only this.
-export function useGrantedDevices(enabled: boolean) {
+// account. Mounted only under the same signed-in guard as
+// useAccountDevices, and the handler returns [] signed out. Kept off the
+// "account" prefix so a grant toggle invalidates only this.
+export function useGrantedDevices() {
   return useQuery<string[]>({
     queryKey: queryKeys.accountGrantedDevices(),
     queryFn: () => window.api.account.listGrantedDevices(),
-    enabled,
     meta: { errorTitle: "Couldn't load command grants" },
   });
 }

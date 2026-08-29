@@ -7,7 +7,6 @@
 // the LIVE relay store rather than the account:listDevices HTTP
 // snapshot (which only invalidates on account:changed), so a device
 // coming online or going away updates without a refetch.
-import type { DeviceInfo } from "@shared/relay/protocol";
 import {
   useAccountDevices,
   useGrantCommands,
@@ -18,6 +17,7 @@ import {
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
+import { localDeviceId } from "@/lib/queryKeys";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "./deviceRegistryStatus";
@@ -29,13 +29,12 @@ export function DeviceRegistry({
   localDeviceName: string;
 }) {
   useWatchGrantsChanges();
-  const localDeviceId = window.api.deviceId;
-  const devicesQuery = useAccountDevices(true);
+  const devicesQuery = useAccountDevices();
   // The peers this host grants command access. Host-local, so it is
   // independent of whether the peer is online -- and so the toggle
   // keeps working on an offline row, which is the point: you decide
   // what a machine may do here before it next knocks.
-  const grantedSet = new Set(useGrantedDevices(true).data ?? []);
+  const grantedSet = new Set(useGrantedDevices().data ?? []);
   const grantCommands = useGrantCommands();
   const revokeCommands = useRevokeCommands();
   const revokeDevice = useRevokeDevice();
@@ -49,25 +48,25 @@ export function DeviceRegistry({
   const hosts = useHostChipIndex(localDeviceId);
 
   // This device first, everything else in the order the relay listed
-  // it. Array sort is stable, so the peers keep their registry order.
-  const rows = (devicesQuery.data ?? [])
-    .toSorted(
-      (left, right) => rank(left, localDeviceId) - rank(right, localDeviceId),
-    )
-    .map((device) => {
-      const isThisDevice = device.deviceId === localDeviceId;
-      const relayDevice = relayById.get(device.deviceId);
-      return {
-        device,
-        isThisDevice,
-        status: deviceRowStatus(device, isThisDevice, relayDevice),
-        // This machine knows its own version synchronously; a peer
-        // confirms one only once its direct session's welcome lands.
-        appVersion: isThisDevice
-          ? window.api.appVersion
-          : (relayDevice?.appVersion ?? ""),
-      };
-    });
+  // it, so the peers keep their registry order.
+  const devices = devicesQuery.data ?? [];
+  const rows = [
+    ...devices.filter((device) => device.deviceId === localDeviceId),
+    ...devices.filter((device) => device.deviceId !== localDeviceId),
+  ].map((device) => {
+    const isThisDevice = device.deviceId === localDeviceId;
+    const relayDevice = relayById.get(device.deviceId);
+    return {
+      device,
+      isThisDevice,
+      status: deviceRowStatus(device, isThisDevice, relayDevice),
+      // This machine knows its own version synchronously; a peer
+      // confirms one only once its direct session's welcome lands.
+      appVersion: isThisDevice
+        ? window.api.appVersion
+        : (relayDevice?.appVersion ?? ""),
+    };
+  });
   const online = rows.filter((row) => row.status.reachable).length;
 
   if (devicesQuery.isLoading) {
@@ -122,9 +121,4 @@ export function DeviceRegistry({
       ))}
     </section>
   );
-}
-
-// Sort key: this device is 0, every peer is 1.
-function rank(device: DeviceInfo, localDeviceId: string): number {
-  return device.deviceId === localDeviceId ? 0 : 1;
 }

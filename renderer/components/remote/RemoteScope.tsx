@@ -10,15 +10,14 @@ import type { ComponentType, ReactElement } from "react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { useWatchRemoteHost } from "@/hooks/remote/useWatchRemoteHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
 function RemoteScopeGate({ Page }: { Page: ComponentType }) {
   const { deviceId } = useParams({ strict: false }) as { deviceId: string };
-  const devices = useRemoteDevices();
-  const device = devices.find((entry) => entry.deviceId === deviceId);
+  const device = useRemoteDevice(deviceId);
 
   if (device === undefined || device.api === undefined) {
     return <UnreachableDevice device={device} />;

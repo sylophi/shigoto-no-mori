@@ -111,25 +111,6 @@ export function NewWorktree() {
       target.deviceId === pickedDeviceId && target.block === undefined,
   );
   const target = picked ?? targets[0];
-  const remote =
-    target && !target.isThisDevice && target.api && target.project
-      ? { deviceId: target.deviceId, api: target.api, project: target.project }
-      : undefined;
-
-  const form = (
-    // Remounted per device: the seeded fields (picked name, default
-    // branch) and the mode come from the target's own answers, so
-    // carrying the previous machine's state across would show one
-    // device's branch under another's path.
-    <NewWorktreeForm
-      key={remote?.deviceId ?? localDeviceId}
-      projectId={remote?.project.id ?? projectId}
-      project={remote?.project ?? project}
-      // Undefined with no device section: the form keeps the copy it has
-      // always had rather than naming a machine nobody chose.
-      deviceLabel={target?.label}
-    />
-  );
 
   return (
     <div className="flex h-full flex-col">
@@ -144,7 +125,7 @@ export function NewWorktree() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-xl flex-col gap-7">
-          {targets.length > 0 && target && (
+          {target && (
             <DevicePicker
               targets={targets}
               selectedId={target.deviceId}
@@ -152,13 +133,27 @@ export function NewWorktree() {
               home={runtime?.homedir ?? null}
             />
           )}
-          {remote ? (
-            <HostScopeProvider deviceId={remote.deviceId} api={remote.api}>
-              {form}
-            </HostScopeProvider>
-          ) : (
-            form
-          )}
+          {/* Unconditional: the provider resolves to exactly the
+              default scope when the target is this device (local id,
+              window.api), so the form needs no local special case. */}
+          <HostScopeProvider
+            deviceId={target?.deviceId ?? localDeviceId}
+            api={target?.api ?? window.api}
+          >
+            {/* Remounted per device: the seeded fields (picked name,
+                default branch) and the mode come from the target's own
+                answers, so carrying the previous machine's state across
+                would show one device's branch under another's path. */}
+            <NewWorktreeForm
+              key={target?.deviceId ?? localDeviceId}
+              projectId={target?.project?.id ?? projectId}
+              project={target?.project ?? project}
+              // Undefined with no device section: the form keeps the copy
+              // it has always had rather than naming a machine nobody
+              // chose.
+              deviceLabel={target?.label}
+            />
+          </HostScopeProvider>
         </div>
       </div>
     </div>

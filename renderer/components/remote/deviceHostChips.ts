@@ -13,6 +13,17 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 
+// A chip count is decorative, so the local sweep rides whatever the
+// sidebar's always-mounted listings already hold rather than re-running
+// worktrees.list (~4 git subprocesses per worktree, for every project)
+// on each visit to the page and every window focus. Same calm shape
+// useRemoteForests gives the peers' half.
+const CALM_REFETCH = {
+  staleTime: 30_000,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
+};
+
 export type HostChip = {
   projectId: string;
   name: string;
@@ -37,7 +48,11 @@ export function useHostChipIndex(localDeviceId: string): HostChipIndex {
   const localProjects: Project[] = projectsQuery.data ?? [];
   // Positionally aligned with localProjects, which is the contract
   // useAllProjectWorktrees documents.
-  const localWorktrees = useAllProjectWorktrees(localProjects);
+  const localWorktrees = useAllProjectWorktrees(
+    localProjects,
+    true,
+    CALM_REFETCH,
+  );
   const forests = useRemoteForests();
 
   const byDevice = new Map<string, HostChip[]>();

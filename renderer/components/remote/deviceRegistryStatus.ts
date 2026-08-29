@@ -31,7 +31,6 @@ export function deviceRowStatus(
   device: DeviceInfo,
   isThisDevice: boolean,
   relayDevice: RemoteDevice | undefined,
-  now: number = Date.now(),
 ): DeviceRowStatus {
   // This machine is not a remote device to itself: it is running the
   // app the row is rendered by, so it is online by construction and
@@ -50,7 +49,7 @@ export function deviceRowStatus(
       label:
         device.lastSeenAt === null
           ? "Offline"
-          : `Offline · last seen ${formatRelativeTime(device.lastSeenAt, now)}`,
+          : `Offline · last seen ${formatRelativeTime(device.lastSeenAt)}`,
       reachable: false,
     };
   }

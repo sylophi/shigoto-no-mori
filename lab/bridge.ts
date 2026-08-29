@@ -8,11 +8,12 @@
 //
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
-import { allContractModules, buildApi } from "@shared/ipc/client";
-import type { ContractScope, InvokeDef } from "@shared/ipc/contract";
+import { buildApi } from "@shared/ipc/client";
+import type { ContractScope } from "@shared/ipc/contract";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import { invokeIndexFor } from "../web/bridge/loopback";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/bridge/stubDefaults";
 import {
   accountDevices,
@@ -30,17 +31,6 @@ import {
 
 type FixtureHandler = (input: any) => unknown;
 type FixtureHandlers = Record<string, FixtureHandler>;
-
-function invokeIndexFor(scope: ContractScope): Map<string, InvokeDef> {
-  const index = new Map<string, InvokeDef>();
-  for (const module of allContractModules) {
-    if (module.scope !== scope) continue;
-    for (const def of Object.values(module.calls)) {
-      if (def.kind === "invoke") index.set(def.channel, def);
-    }
-  }
-  return index;
-}
 
 type FixtureWire = {
   transport: ClientTransport;

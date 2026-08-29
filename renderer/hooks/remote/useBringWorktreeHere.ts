@@ -5,8 +5,9 @@
 // streams to the local worktree's own detail page, not the calling
 // surface. The handler re-verifies the identity match; the gate at the
 // call sites is UX, not the wall. Refusals surface centrally,
-// everything else toasts here. The result lands on another page (the
-// local forest), so the toast is the only visible conclusion.
+// everything else toasts here: the result lands on another page (the
+// local forest), so the toast is usually the only visible conclusion --
+// a caller that shows the outcome itself passes `quiet`.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type {
@@ -18,18 +19,36 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError, toast } from "@/lib/toast";
 
+// The handler reports a kept source with its raw reason. scripts-running
+// is the one code worth spelling out, and every surface that reports a
+// kept source says it from here. Phrased for mid-sentence use, which is
+// where both callers put it.
+export function keptSourceReason(
+  sourceError: string | undefined,
+): string | undefined {
+  return sourceError !== undefined && sourceError.includes("scripts-running")
+    ? "scripts are still running there."
+    : sourceError;
+}
+
 export function useBringWorktreeHere({
   worktree,
   sourceProjectId,
   sourceIdentity,
   localProjectId,
   transplant,
+  quiet = false,
 }: {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
   localProjectId: string;
   transplant: boolean;
+  // Suppresses the toasts for a caller that reports the outcome itself
+  // (the transplant dialog's done state), so the conclusion is told
+  // once. The invalidations still run: they are about the cache, not
+  // about who speaks.
+  quiet?: boolean;
 }) {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
@@ -62,6 +81,7 @@ export function useBringWorktreeHere({
       void queryClient.invalidateQueries({
         queryKey: queryKeys.branches(localProjectId),
       });
+      if (quiet) return;
       if ("sourceRemoved" in result) {
         // Transplant: a refused or failed teardown (including a dirty
         // state that did not land here) is a partial success the
@@ -72,10 +92,7 @@ export function useBringWorktreeHere({
         } else {
           notifyError(
             `Brought ${worktree.branch} here, but the source worktree stayed`,
-            result.sourceError !== undefined &&
-              result.sourceError.includes("scripts-running")
-              ? "Scripts are still running there."
-              : result.sourceError,
+            keptSourceReason(result.sourceError),
           );
         }
         return;
@@ -92,7 +109,7 @@ export function useBringWorktreeHere({
       }
     },
     onError: (err) => {
-      if (!isCommandRefusedError(err)) {
+      if (!quiet && !isCommandRefusedError(err)) {
         notifyError(
           transplant
             ? "Couldn't transplant worktree"

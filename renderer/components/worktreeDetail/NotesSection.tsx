@@ -1,67 +1,44 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useWorktreeData,
   useWorktreeDataWrite,
 } from "@/hooks/worktrees/useWorktreeData";
 import type { Worktree } from "@shared/schemas";
 
-export function NotesSection({
-  worktree,
-  readOnly = false,
-}: {
-  worktree: Worktree;
-  // True on a remote device that has not granted command access: the
-  // write would only be refused at the wire, so the editor says so up
-  // front instead of offering a save that cannot land.
-  readOnly?: boolean;
-}) {
+export function NotesSection({ worktree }: { worktree: Worktree }) {
   // The primary checkout (the main repo root) lives at the project path,
   // which never sits under a managed prefix, so it's flagged external --
   // but it's ours to annotate, so notes stay available for it. Only
   // genuinely external worktrees (manual checkouts elsewhere) are skipped.
   if (worktree.isExternal && !worktree.isPrimary) return null;
-  return (
-    <NotesSectionLoader
-      key={worktree.id}
-      worktree={worktree}
-      readOnly={readOnly}
-    />
-  );
+  return <NotesSectionLoader key={worktree.id} worktree={worktree} />;
 }
 
-function NotesSectionLoader({
-  worktree,
-  readOnly,
-}: {
-  worktree: Worktree;
-  readOnly: boolean;
-}) {
+function NotesSectionLoader({ worktree }: { worktree: Worktree }) {
   const { data, isPending } = useWorktreeData(worktree.projectId, worktree.id);
   // Wait for the persisted value before mounting the editor. The inner
   // seeds its draft from `saved` via useState, which only reads the
   // initial value -- mounting while the read is still in flight would
   // seed an empty draft that never picks up the notes once they arrive.
   if (isPending) return null;
-  return (
-    <NotesSectionInner
-      worktree={worktree}
-      saved={data?.notes ?? ""}
-      readOnly={readOnly}
-    />
-  );
+  return <NotesSectionInner worktree={worktree} saved={data?.notes ?? ""} />;
 }
 
 function NotesSectionInner({
   worktree,
   saved,
-  readOnly,
 }: {
   worktree: Worktree;
   saved: string;
-  readOnly: boolean;
 }) {
+  // Without command access (a remote host that hasn't granted it) the
+  // write would only be refused at the wire, so the editor says so up
+  // front instead of offering a save that cannot land. The local device
+  // is granted by contract, so this is never read-only locally.
+  const { granted } = useCommandAccess();
   const write = useWorktreeDataWrite();
 
   const [draft, setDraft] = useState(saved);
@@ -97,9 +74,9 @@ function NotesSectionInner({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        readOnly={readOnly}
+        readOnly={!granted}
         title={
-          readOnly
+          !granted
             ? "Read-only — command access is granted from that device"
             : undefined
         }

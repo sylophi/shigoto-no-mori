@@ -2,14 +2,13 @@
 // config's resolver for imports coming from web/ modules: the web app
 // boots on the fixture window.api instead of the real relay-backed
 // bridge, and the singleton the web pages reach for answers with
-// harmless lab shims (access ok, revoke a no-op).
+// harmless lab shims (access ok, refresh a no-op).
 import { createWebAccessStore } from "../web/account/webAccess";
 import { installLabBridge } from "./bridge";
 
 type LabWebBridge = {
   api: unknown;
   webAccess: ReturnType<typeof createWebAccessStore>;
-  revokeDevice(deviceId: string): Promise<void>;
   notifyAccountChanged(): void;
   refreshRelay(): Promise<void>;
   stop(): Promise<void>;
@@ -23,7 +22,6 @@ export function installWebBridge(): LabWebBridge {
   installed = {
     api: (window as { api?: unknown }).api,
     webAccess: createWebAccessStore(),
-    revokeDevice: async () => {},
     notifyAccountChanged: () => {},
     refreshRelay: async () => {},
     stop: async () => {},

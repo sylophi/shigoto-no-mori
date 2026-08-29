@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
@@ -15,7 +15,7 @@ export function WorktreeDetail() {
     projectId: string;
     worktreeId: string;
   };
-  const { remote } = useWorktreeNav();
+  const { remote } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {
     data: worktrees = [],

@@ -51,7 +51,10 @@ export function useDeviceTargets(
   worktreeCount: number,
 ): DeviceTarget[] {
   const devices = useRemoteDevices();
-  const forests = useRemoteForests();
+  // Only an identity match per device is read out of this, and the
+  // sidebar's always-mounted fan-out keeps it current, so opening the
+  // page must not kick a fresh re-listing of every peer's forest.
+  const forests = useRemoteForests({ refetchOnMount: false });
   const access = usePeerCommandAccess(devices);
   const { data: account } = useAccountStatus();
 

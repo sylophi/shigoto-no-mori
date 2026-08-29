@@ -1,5 +1,4 @@
 import { getRouteApi } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDownToLine,
   FolderGit2,
@@ -27,7 +26,7 @@ import { useBringWorktreeHere } from "@/hooks/remote/useBringWorktreeHere";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { projectsQueryOptions } from "@/hooks/projects/useProjects";
+import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import {
   useCreateWorktree,
   useDeleteWorktree,
@@ -40,10 +39,10 @@ import {
   useAllRemoteWorktrees,
   useRemoteProjects,
 } from "@/hooks/remote/useRemoteForest";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { useWatchRemoteHost } from "@/hooks/remote/useWatchRemoteHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { deviceVersionMismatch } from "@/lib/remote/devices";
+import { deviceVersionMismatch, type RemoteDevice } from "@/lib/remote/devices";
 import { notifyError } from "@/lib/toast";
 
 const route = getRouteApi("/devices/$deviceId");
@@ -61,8 +60,7 @@ const route = getRouteApi("/devices/$deviceId");
 // exist for a remote device or in the web shell.
 export function RemoteForest() {
   const { deviceId } = route.useParams();
-  const devices = useRemoteDevices();
-  const device = devices.find((d) => d.deviceId === deviceId);
+  const device = useRemoteDevice(deviceId);
 
   if (device === undefined) {
     return (
@@ -82,7 +80,7 @@ function ConnectedForest({
   device,
   deviceId,
 }: {
-  device: ReturnType<typeof useRemoteDevices>[number];
+  device: RemoteDevice;
   deviceId: string;
 }) {
   const api = device.api;
@@ -237,12 +235,6 @@ function ForestBody({
   worktreesByProject: Map<string, Worktree[]>;
 }) {
   const { granted, isLoading } = useCommandAccess();
-  // The LOCAL device's projects (explicitly scope-less despite the
-  // surrounding provider), for the pull-here gate: a remote worktree is
-  // pullable only into a local project sharing the repo's identity. On
-  // the web the local list stubs to [], so the control structurally
-  // never renders there.
-  const { data: localProjects = [] } = useQuery(projectsQueryOptions({}));
   return (
     <div className="flex flex-col gap-4">
       {!granted && !isLoading && (
@@ -257,15 +249,6 @@ function ForestBody({
           project={project}
           worktrees={worktreesByProject.get(project.id) ?? []}
           granted={granted}
-          localProject={
-            project.identity != null
-              ? localProjects.find(
-                  (local) =>
-                    local.identity != null &&
-                    local.identity === project.identity,
-                )
-              : undefined
-          }
         />
       ))}
     </div>
@@ -276,14 +259,14 @@ function RemoteProjectGroup({
   project,
   worktrees,
   granted,
-  localProject,
 }: {
   project: Project;
   worktrees: Worktree[];
   granted: boolean;
-  // The first local project with the same repo identity, if any.
-  localProject: Project | undefined;
 }) {
+  // The pull-here gate: a remote worktree is pullable only into a local
+  // project that is the same repo.
+  const localProject = useLocalProjectForIdentity(project.identity);
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

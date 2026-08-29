@@ -6,15 +6,14 @@
 // shares the repo identity (the same gate the forest rows apply; the
 // handler re-verifies it).
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowDownToLine, Loader2, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
-import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { useBringWorktreeHere } from "@/hooks/remote/useBringWorktreeHere";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { TransplantDialog } from "./TransplantDialog";
 
 export function RemoteWorktreeActions({
@@ -25,17 +24,7 @@ export function RemoteWorktreeActions({
   project: Project;
 }) {
   const { granted } = useCommandAccess();
-  // The LOCAL device's projects (explicitly scope-less despite the
-  // surrounding remote provider): a worktree can only land in a local
-  // project sharing the repo's identity.
-  const { data: localProjects = [] } = useQuery(projectsQueryOptions({}));
-  const localProject =
-    project.identity != null
-      ? localProjects.find(
-          (local) =>
-            local.identity != null && local.identity === project.identity,
-        )
-      : undefined;
+  const localProject = useLocalProjectForIdentity(project.identity);
 
   if (
     !granted ||
@@ -81,9 +70,7 @@ function TransplantButton({
 }) {
   const [open, setOpen] = useState(false);
   const { deviceId } = useHostScope();
-  const deviceLabel =
-    useRemoteDevices().find((entry) => entry.deviceId === deviceId)?.label ??
-    "the device";
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   return (
     <>
       <Button

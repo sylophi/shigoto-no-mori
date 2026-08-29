@@ -25,6 +25,7 @@ import { RemoteForest } from "@/components/remote/RemoteForest";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { useAccountStatus } from "@/hooks/account/useAccount";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { DevicesPage } from "./DevicesPage";
 import { LoginPage } from "./LoginPage";
 import { NotFoundPage } from "./NotFoundPage";
@@ -91,26 +92,26 @@ const deviceForestRoute = createRoute({
 // (port forwarding) already gate on window.api.isElectron.
 const remoteWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
+  path: WORKTREE_ROUTE_PATHS.detail.remote,
   component: withRemoteScope(WorktreeDetail),
   remountDeps: ({ params }) => params,
 });
 
 const remoteWorktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/diff",
+  path: WORKTREE_ROUTE_PATHS.diff.remote,
   component: withRemoteScope(WorktreeDiff),
 });
 
 const remotePullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  path: WORKTREE_ROUTE_PATHS.prDiff.remote,
   component: withRemoteScope(PullRequestDiff),
 });
 
 const remoteCommitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  path: WORKTREE_ROUTE_PATHS.commit.remote,
   component: withRemoteScope(CommitDiff),
 });
 

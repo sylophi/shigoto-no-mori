@@ -62,6 +62,11 @@ export type HostApi = Pick<
 export interface HostScope {
   // The device whose data the subtree reads and mutates.
   deviceId: string;
+  // True when that device is another machine. Computed once here so the
+  // affordances that are local by nature (launching, configure links,
+  // script runs) gate on the scope instead of each re-deriving the
+  // comparison against localDeviceId.
+  remote: boolean;
   // The api those calls go through: window.api locally, a connected
   // remote device's socket- or relay-backed api under a provider.
   api: HostApi;
@@ -75,6 +80,7 @@ export interface HostScope {
 // bridge, so every hook works unchanged with no provider mounted.
 const localHostScope: HostScope = {
   deviceId: localDeviceId,
+  remote: false,
   api: window.api,
   keys: queryKeys,
 };
@@ -85,9 +91,16 @@ export function HostScopeProvider({
   deviceId,
   api,
   children,
-}: Omit<HostScope, "keys"> & { children: ReactNode }) {
+}: Omit<HostScope, "keys" | "remote"> & { children: ReactNode }) {
   return (
-    <HostScopeContext value={{ deviceId, api, keys: queryKeysFor(deviceId) }}>
+    <HostScopeContext
+      value={{
+        deviceId,
+        remote: deviceId !== localDeviceId,
+        api,
+        keys: queryKeysFor(deviceId),
+      }}
+    >
       {children}
     </HostScopeContext>
   );

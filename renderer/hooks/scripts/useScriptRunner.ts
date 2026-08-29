@@ -1,3 +1,4 @@
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   scriptKey,
   scriptRuns,
@@ -25,9 +26,16 @@ export interface ScriptRunner {
   key: ScriptKey;
   state: ScriptRunState;
   busy: boolean;
+  // False under a remote scope: the run IPC and the output stream are
+  // this machine's, so a run there cannot be dispatched or watched yet.
+  // `disabledReason` is the title the UI shows on the dead affordance.
+  canRun: boolean;
+  disabledReason: string | undefined;
   start: () => void;
   stop: () => void;
 }
+
+const REMOTE_RUNS_REASON = "Remote script runs stream back in a later update";
 
 // Bundles the per-script run state with the start/stop dispatch tied
 // to the correct IPC (lifecycle vs package). Lets row/console UIs
@@ -36,11 +44,15 @@ export function useScriptRunner(
   worktree: Worktree,
   slot: ScriptSlot,
 ): ScriptRunner {
+  // The scope defaults to the local device with no provider mounted, so
+  // every local caller keeps running exactly as before.
+  const { remote } = useHostScope();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const state = useScriptRunState(key);
   const busy = state.status === "starting" || state.status === "running";
 
   const start = () => {
+    if (remote) return;
     void scriptRuns
       .run({
         key,
@@ -70,5 +82,13 @@ export function useScriptRunner(
     void scriptRuns.cancel(key);
   };
 
-  return { key, state, busy, start, stop };
+  return {
+    key,
+    state,
+    busy,
+    canRun: !remote,
+    disabledReason: remote ? REMOTE_RUNS_REASON : undefined,
+    start,
+    stop,
+  };
 }

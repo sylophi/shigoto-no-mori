@@ -4,73 +4,21 @@
 // host) and app-only (the parent gates the mount on
 // window.api.isElectron: the engine binds a real TCP listener in the
 // desktop's main process, and the web loopback rejects the portForward
-// channels). Everything here is CLIENT-scoped and calls window.api
-// directly, never the surrounding host scope: the listener belongs to
-// this machine, only its target is the scoped device. The list caches
-// under one client key for all devices, and this section filters to
-// its own.
-import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// channels). The list, its broadcast and the start/stop pair live in
+// usePortForwards, shared with the worktree detail's port row.
+import { useState } from "react";
 import { Cable, ExternalLink, Loader2, X } from "lucide-react";
 import { PortSchema } from "@shared/ipc/modules/portForward";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { queryKeys } from "@/lib/queryKeys";
-import { notifyError } from "@/lib/toast";
+import { usePortForwards } from "@/hooks/remote/usePortForwards";
 
 export function PortForwardSection() {
-  const { deviceId } = useHostScope();
   const { granted } = useCommandAccess();
-  const queryClient = useQueryClient();
   const [port, setPort] = useState("");
-  const { data } = useQuery({
-    queryKey: queryKeys.portForwards(),
-    queryFn: () => window.api.portForward.list(),
-    meta: { silentError: true },
-  });
-  // The engine broadcasts on every forward/conn change, so conn counts
-  // and engine-side teardowns (peer offline) render live. It also fires
-  // for this section's own mutations, so they never invalidate the list
-  // themselves (the broadcast-owns-invalidation rule, see
-  // renderer/hooks/account/useAccount.ts).
-  useEffect(
-    () =>
-      window.api.portForward.onChanged(() => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.portForwards(),
-        });
-      }),
-    [queryClient],
-  );
-  const start = useMutation({
-    mutationFn: (remotePort: number) =>
-      window.api.portForward.start({ deviceId, remotePort }),
-    onSuccess: () => setPort(""),
-    // The engine's start probe surfaces the coded errors here
-    // (connect-failed, too-many-conns). Refusals surface centrally.
-    onError: (err) => {
-      if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't forward the port", err);
-      }
-    },
-    meta: { silentError: true },
-  });
-  const stop = useMutation({
-    mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
-    onError: (err) => {
-      if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't stop forwarding", err);
-      }
-    },
-    meta: { silentError: true },
-  });
+  const { forwards, start, stop } = usePortForwards();
   if (!granted) return null;
-  const forwards = (data?.forwards ?? []).filter(
-    (forward) => forward.deviceId === deviceId,
-  );
   const parsedPort = parsePort(port);
   return (
     <div className="flex flex-col gap-2">
@@ -124,7 +72,11 @@ export function PortForwardSection() {
         className="flex items-center gap-1"
         onSubmit={(event) => {
           event.preventDefault();
-          if (parsedPort !== undefined) start.mutate(parsedPort);
+          if (parsedPort !== undefined) {
+            // Clearing the field is this form's business, not the
+            // shared mutation's.
+            start.mutate(parsedPort, { onSuccess: () => setPort("") });
+          }
         }}
       >
         <Input

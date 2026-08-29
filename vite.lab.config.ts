@@ -5,35 +5,9 @@
 // Clerk. Mirrors vite.web.config.ts (same plugins, same aliases) with
 // three differences: the lab root, a distinct port, and the @clerk/*
 // aliases onto the lab's in-memory stub so account UI renders signed-in
-// without a network.
-import { resolve } from "node:path";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import babel from "@rolldown/plugin-babel";
-import tailwindcss from "@tailwindcss/vite";
+// without a network. Those shared pieces live in vite.lab.base.ts,
+// which the web-shell flavor builds on too.
 import { defineConfig } from "vite";
+import { labBaseConfig } from "./vite.lab.base";
 
-export default defineConfig({
-  root: resolve(__dirname, "lab"),
-  // Reuse the web client's public dir for the CSP-safe theme boot
-  // script the HTML shell references.
-  publicDir: resolve(__dirname, "web/public"),
-  resolve: {
-    alias: {
-      "@clerk/electron/react": resolve(__dirname, "lab/clerkStub.tsx"),
-      "@clerk/react": resolve(__dirname, "lab/clerkStub.tsx"),
-      "@": resolve(__dirname, "renderer"),
-      "@shared": resolve(__dirname, "shared"),
-    },
-  },
-  server: { port: 5191, strictPort: true },
-  optimizeDeps: { entries: ["index.html"] },
-  define: {
-    __APP_VERSION__: JSON.stringify("2.0.3"),
-    __APP_COMMIT__: JSON.stringify("lab"),
-  },
-  plugins: [
-    tailwindcss(),
-    react(),
-    babel({ presets: [reactCompilerPreset()] }),
-  ],
-});
+export default defineConfig(labBaseConfig({ port: 5191, entry: "index.html" }));

@@ -71,11 +71,6 @@ export type WebBridge = {
   // The deployment-level access state the shell surfaces when the
   // build is unconfigured or the relay refuses this origin.
   webAccess: WebAccessStore;
-  // Account-level revoke of any enrolled device, the one mutation the
-  // read-only web client is allowed (it mutates its own account, never
-  // a peer's forest). Revoking this browser's own device also signs it
-  // out locally.
-  revokeDevice(deviceId: string): Promise<void>;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
@@ -221,9 +216,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   let enrollInFlight: Promise<AccountStatus> | null = null;
   let signOutInFlight: Promise<void> | null = null;
 
-  // Removing a device from the account, shared by the account:revokeDevice
-  // client handler (what the devices page calls) and the bridge method
-  // below, so the two callers cannot drift on the self-revoke rule.
+  // Removing a device from the account, served over the
+  // account:revokeDevice client channel (what the devices page calls).
   async function revokeDeviceOnAccount(targetDeviceId: string): Promise<void> {
     const record = store.read();
     if (record === null) {
@@ -391,8 +385,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     api,
 
     webAccess,
-
-    revokeDevice: revokeDeviceOnAccount,
 
     notifyAccountChanged: accountChanged,
 

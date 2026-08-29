@@ -27,6 +27,7 @@ import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { dragRegion } from "@/lib/utils";
 import { readStored, writeStored } from "@/lib/localStorage";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -146,26 +147,26 @@ const devicesRoute = createRoute({
 // inside them gate on useWorktreeNav().remote.
 const remoteWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
+  path: WORKTREE_ROUTE_PATHS.detail.remote,
   component: withRemoteScope(WorktreeDetail),
   remountDeps: ({ params }) => params,
 });
 
 const remoteWorktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/diff",
+  path: WORKTREE_ROUTE_PATHS.diff.remote,
   component: withRemoteScope(WorktreeDiff),
 });
 
 const remotePullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  path: WORKTREE_ROUTE_PATHS.prDiff.remote,
   component: withRemoteScope(PullRequestDiff),
 });
 
 const remoteCommitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  path: WORKTREE_ROUTE_PATHS.commit.remote,
   component: withRemoteScope(CommitDiff),
 });
 
@@ -212,7 +213,7 @@ const worktreeLocationRoute = createRoute({
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId",
+  path: WORKTREE_ROUTE_PATHS.detail.local,
   component: WorktreeDetail,
   remountDeps: ({ params }) => params,
 });
@@ -225,19 +226,19 @@ const scriptConsoleRoute = createRoute({
 
 const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/diff",
+  path: WORKTREE_ROUTE_PATHS.diff.local,
   component: WorktreeDiff,
 });
 
 const pullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  path: WORKTREE_ROUTE_PATHS.prDiff.local,
   component: PullRequestDiff,
 });
 
 const commitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  path: WORKTREE_ROUTE_PATHS.commit.local,
   component: CommitDiff,
 });
 

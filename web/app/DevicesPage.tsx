@@ -6,8 +6,7 @@
 // clients. Web-specific substance: the deployment access banner, the
 // honest relay reachability messages, and per-device account-level
 // revoke (a browser cannot grant command access, so no grant toggles).
-import { useEffect, useSyncExternalStore } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { MonitorSmartphone, TreePine } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
 import type { AccountStatus } from "@shared/ipc/modules/account";
@@ -17,12 +16,16 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { DeviceNameField } from "@/components/remote/DeviceNameField";
+import {
+  DeviceNameField,
+  DeviceRenameButton,
+} from "@/components/remote/DeviceNameField";
 import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import { PageShell } from "@/components/shared/PageShell";
 import {
   useAccountDevices,
   useAccountStatus,
+  useRevokeDevice,
 } from "@/hooks/account/useAccount";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
@@ -69,7 +72,7 @@ export function DevicesPage() {
 // status guard above has passed and the page shell stays a flat
 // two-branch render.
 function DevicesBody({ status }: { status: AccountStatus }) {
-  const devices = useAccountDevices(true);
+  const devices = useAccountDevices();
   const webAccess = useWebAccess();
   const relayStatus = useRelayStatus();
 
@@ -87,7 +90,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
             signs it out.
           </p>
         </div>
-        <DeviceNameField deviceName={status.deviceName} label="This browser" />
+        <BrowserNameField deviceName={status.deviceName} />
       </section>
 
       <section className="space-y-3">
@@ -126,6 +129,29 @@ function DevicesBody({ status }: { status: AccountStatus }) {
         )}
       </section>
     </>
+  );
+}
+
+// This browser's name with its Rename trigger inline beside it (the
+// desktop registry puts the same trigger with the row's actions
+// instead), so the flag the two share lives here.
+function BrowserNameField({ deviceName }: { deviceName: string }) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <DeviceNameField
+        deviceName={deviceName}
+        label="This browser"
+        editing={editing}
+        onEditingChange={setEditing}
+      />
+      {!editing && (
+        <DeviceRenameButton
+          label="This browser"
+          onClick={() => setEditing(true)}
+        />
+      )}
+    </span>
   );
 }
 
@@ -232,15 +258,14 @@ function SelfRevokeButton() {
   );
 }
 
-// No onSuccess invalidation: the revoke ends with the bridge's
-// account.changed broadcast, and useWatchAccountChanges (mounted in
-// the shell) invalidates the whole account prefix off it, exactly as
-// useAccount.ts documents for the desktop mutations.
+// The same hook the desktop registry revokes through: the bridge serves
+// account:revokeDevice from the very function its own revokeDevice
+// method calls, so the two clients cannot drift. No onSuccess
+// invalidation there either -- the revoke ends with the bridge's
+// account.changed broadcast, and useWatchAccountChanges (mounted in the
+// shell) invalidates the whole account prefix off it.
 function PeerRevokeButton({ deviceId }: { deviceId: string }) {
-  const revoke = useMutation({
-    mutationFn: () => webBridge().revokeDevice(deviceId),
-    meta: { errorTitle: "Couldn't revoke the device" },
-  });
+  const revoke = useRevokeDevice();
   const confirm = useConfirmTwice();
   return (
     <ConfirmDestructiveButton
@@ -248,7 +273,7 @@ function PeerRevokeButton({ deviceId }: { deviceId: string }) {
       pending={revoke.isPending}
       pendingLabel="Revoking…"
       idleLabel="Revoke"
-      onClick={() => confirm.trigger(() => revoke.mutate())}
+      onClick={() => confirm.trigger(() => revoke.mutate(deviceId))}
     />
   );
 }
