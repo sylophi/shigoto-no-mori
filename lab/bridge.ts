@@ -145,8 +145,8 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
     "githubCli:readiness": () => ({ installed: true, authed: true }),
     "githubCli:projectPullRequests": ({ projectId }) =>
       projectId === "p_sm" ? { "v2-exp/remote-ui-flows": LAB_PR_SLIM } : {},
-    "githubCli:worktreePullRequest": ({ worktreeId }) =>
-      worktreeId === "wt_sm_hum" ? LAB_PR_DETAIL : null,
+    "githubCli:worktreePullRequest": ({ branch }) =>
+      branch === "v2-exp/remote-ui-flows" ? LAB_PR_DETAIL : null,
     "githubCli:repoMergeConfig": () => ({
       merge: false,
       squash: true,
@@ -276,20 +276,32 @@ index 4f2c9d1..a91f3c7 100644
 const granted = new Set(grantedDeviceIds);
 let deviceName = "Studio Mac";
 
+// The web-shell pose (lab/web-main.tsx): this page is an enrolled
+// BROWSER device, every machine forest (Studio Mac included) is a
+// peer, and nothing is local. Passed into installLabBridge rather than
+// read from a global, since import hoisting evaluates this module
+// before any entry-file code runs.
+let WEB_SHELL = false;
+const WEB_DEVICE_ID = "dev_beefcafe01";
+
 // Presence the lab can pose: which peers are in the roster, and which
 // of those have an established direct session. ?peers=tp:connected,
 // mini:online,pc:offline overrides the default (Thinkpad connected,
-// the rest offline).
+// the rest offline; the web shell also defaults Studio Mac connected).
 const PEER_KEYS: Record<string, string> = {
+  sm: LOCAL_DEVICE_ID,
   tp: THINKPAD_ID,
   mini: MINI_ID,
   pc: WORKPC_ID,
 };
 const roster = new Set<string>();
 const directSessions = new Set<string>();
-{
+
+function initPresence(): void {
   const posed = new URLSearchParams(location.search).get("peers");
-  const entries = (posed ?? "tp:connected").split(",");
+  const entries = (
+    posed ?? (WEB_SHELL ? "sm:connected,tp:connected" : "tp:connected")
+  ).split(",");
   for (const entry of entries) {
     const [key, state] = entry.split(":");
     const id = PEER_KEYS[key?.trim() ?? ""];
@@ -315,34 +327,57 @@ function relaySnapshot(): RelayStatus {
   };
 }
 
-export function installLabBridge() {
+export function installLabBridge(opts: { webShell?: boolean } = {}) {
+  WEB_SHELL = opts.webShell === true;
+  initPresence();
   // Remote hosts: one fixture wire per device, reached only through
-  // relay:invokePeer exactly like the real relay bridge.
+  // relay:invokePeer exactly like the real relay bridge. Under the web
+  // shell every machine forest (Studio Mac included) is a peer of the
+  // browser device; on desktop Studio Mac is the local host.
+  const selfDeviceId = WEB_SHELL ? WEB_DEVICE_ID : LOCAL_DEVICE_ID;
   const peerWires = new Map<string, FixtureWire>();
   for (const forest of Object.values(forests)) {
-    if (forest.deviceId === LOCAL_DEVICE_ID) continue;
+    if (forest.deviceId === selfDeviceId) continue;
     peerWires.set(
       forest.deviceId,
       createFixtureWire("host", hostHandlersFor(forest), forest.deviceId),
     );
   }
 
+  // The web shell has no local forest: its host wire serves nothing, so
+  // every host read falls back to the schema stubs (empty lists),
+  // matching the real browser bridge's shape.
   const localHost = createFixtureWire(
     "host",
-    hostHandlersFor(forests[LOCAL_DEVICE_ID]),
+    WEB_SHELL ? {} : hostHandlersFor(forests[LOCAL_DEVICE_ID]),
     "local",
   );
+
+  const registryDevices = () =>
+    WEB_SHELL
+      ? [
+          ...accountDevices,
+          {
+            deviceId: WEB_DEVICE_ID,
+            name: "Chrome on MacBook",
+            platform: "web",
+            createdAt: Date.now() - 2 * 24 * 3_600_000,
+            lastSeenAt: Date.now(),
+            online: true,
+          },
+        ]
+      : accountDevices;
 
   const accountStatus = () => ({
     configured: true,
     signedIn: true,
     accountId: LAB_ACCOUNT_ID,
-    deviceName,
+    deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
   });
 
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,
-    "account:listDevices": () => accountDevices,
+    "account:listDevices": () => registryDevices(),
     "account:listGrantedDevices": () => [...granted],
     "account:grantCommands": (deviceId: string) => {
       granted.add(deviceId);
@@ -402,11 +437,11 @@ export function installLabBridge() {
   const client = createFixtureWire("client", clientHandlers, "client");
 
   const api = {
-    deviceId: LOCAL_DEVICE_ID,
+    deviceId: selfDeviceId,
     appVersion: LAB_APP_VERSION,
     clerkPublishableKey: "pk_test_lab",
     isDev: true,
-    isElectron: true,
+    isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
   // The renderer's window.d.ts types window.api off the preload; the
