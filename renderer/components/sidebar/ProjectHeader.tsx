@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, PawPrint } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import {
@@ -34,6 +34,20 @@ export function ProjectHeader({
   arrangeMode,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
+  // A terrier-sourced project is otherwise indistinguishable from a
+  // registered one, and the difference shows up in what you can do to
+  // it (no remove, no reordering). Shaped like WorktreeKindIcon, the
+  // row's other passive marker, but a hair lighter still: it annotates
+  // the name rather than reporting on the worktree.
+  const terrierMark = project.source === "terrier" && (
+    <span title="Registered via terrier" className="inline-flex shrink-0">
+      <PawPrint
+        aria-label="Registered via terrier"
+        strokeWidth={1.5}
+        className="size-3 text-muted-foreground/70"
+      />
+    </span>
+  );
   const baseClass =
     "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
   const trigger = arrangeMode ? (
@@ -60,6 +74,7 @@ export function ProjectHeader({
       >
         {project.name}
       </span>
+      {terrierMark}
     </div>
   ) : missing ? (
     <div
@@ -76,6 +91,7 @@ export function ProjectHeader({
       <span className="shrink-0 text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
         missing
       </span>
+      {terrierMark}
     </div>
   ) : (
     <button
@@ -97,6 +113,7 @@ export function ProjectHeader({
       <span ref={nameRef} className="min-w-0 truncate">
         {project.name}
       </span>
+      {terrierMark}
     </button>
   );
 
