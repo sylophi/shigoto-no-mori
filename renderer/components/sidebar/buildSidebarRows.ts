@@ -59,7 +59,7 @@ export function buildSidebarRows({
   // project can only group with itself). The local pass claims groups
   // by `get` + `delete`, so whatever remains IS the leftover set -- one
   // structure, no consumed-tracking, and a group can never be claimed
-  // twice. Shelving is a local noise-control preference; a peer's
+  // twice. Shelving is a local noise-control preference, so a peer's
   // shelved worktrees stay in its own sidebar, not this one's.
   const remoteByIdentity = new Map<string, RemoteForestItem[]>();
   for (const raw of remote) {

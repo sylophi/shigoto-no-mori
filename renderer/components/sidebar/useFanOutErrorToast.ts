@@ -1,5 +1,5 @@
 // The per-project listing queries are silent so the fan-out doesn't
-// spam toasts; both shells coalesce the same observations into this one
+// spam toasts. Both shells coalesce the same observations into this one
 // toast (and dismiss it when the failures clear), so a remote listing
 // error can never vanish from the web tree without a trace.
 import { useEffect } from "react";

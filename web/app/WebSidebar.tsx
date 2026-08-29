@@ -53,7 +53,7 @@ export function WebSidebar() {
 }
 
 // The tree has no local half here, so none of the local-row handlers
-// can ever be called; stable no-ops keep SidebarList's props inert.
+// can ever be called, and stable no-ops keep SidebarList's props inert.
 const NO_LOCAL_HANDLERS: RowHandlers = {
   onToggle: () => {},
   onToggleShelved: () => {},

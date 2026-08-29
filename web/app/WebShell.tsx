@@ -42,7 +42,7 @@ export function WebShell() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const { pathname } = useLocation();
 
-  // Navigating from a sheet row lands on the new page; the sheet's job
+  // Navigating from a sheet row lands on the new page. The sheet's job
   // is done, so it follows the navigation closed.
   useEffect(() => setSheetOpen(false), [pathname]);
 

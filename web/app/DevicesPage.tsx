@@ -83,7 +83,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
             <span className="font-mono text-foreground">
               {abbreviateId(status.accountId)}
             </span>
-            . This browser is enrolled as a device of its own; revoking it below
+            . This browser is enrolled as a device of its own. Revoking it below
             signs it out.
           </p>
         </div>
@@ -171,7 +171,7 @@ function DeviceRow({
   return (
     <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
       <MonitorSmartphone className="size-4 shrink-0 text-muted-foreground" />
-      {/* Grows but never shrinks below a readable name; on a narrow
+      {/* Grows but never shrinks below a readable name. On a narrow
           screen the controls wrap under it instead of crushing it. */}
       <div className="flex min-w-0 flex-[1_1_10rem] flex-col">
         <span className="flex items-center gap-2 text-sm">

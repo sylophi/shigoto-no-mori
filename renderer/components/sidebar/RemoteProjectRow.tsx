@@ -2,7 +2,7 @@
 // checkout: ProjectRow's typography without its affordances (no
 // collapse -- nothing persists it for a foreign project -- and no local
 // actions). The group may span several devices sharing one repo
-// identity; the per-row device markers below it tell those apart.
+// identity, and the per-row device markers below it tell those apart.
 //
 // The icon is the repo's own, fetched from the first member device with
 // a live api (projects:icon sits on the ungated read surface, so a

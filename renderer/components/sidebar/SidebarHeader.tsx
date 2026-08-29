@@ -14,7 +14,7 @@ interface SidebarHeaderProps {
   // and no traffic lights to clear.
   windowChrome?: boolean;
   // A static build marker ("web") in the corner slot the dev sticker
-  // otherwise uses; providing it replaces the dev affordance.
+  // otherwise uses. Providing it replaces the dev affordance.
   badge?: string;
 }
 
@@ -130,8 +130,9 @@ function DefaultSidebarHeader({
 }: ThemeHeaderProps) {
   return (
     <div
-      // Title-bar drag region on the desktop; the left inset clears the
-      // traffic lights. The web bar keeps the height, drops both.
+      // Title-bar drag region on the desktop, with the left inset
+      // clearing the traffic lights. The web bar keeps the height,
+      // drops both.
       className={cn(
         "v1-only flex h-[52px] items-center gap-2",
         windowChrome ? "px-3 pl-[92px]" : "px-4",
