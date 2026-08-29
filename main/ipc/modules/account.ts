@@ -133,7 +133,7 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 }
 
 // The resolved service config, resolved once and cached. Three layers,
-// lowest to highest precedence: the optional .env.account file (dev
+// lowest to highest precedence: the optional .env.local file (dev
 // convenience), the SM_ACCOUNT_* values baked into the bundle when it
 // was built, then real environment variables. The baked layer is what
 // configures a shipped build: a packaged .app launched from Finder or
@@ -142,8 +142,11 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 // lets an owner override a baked build. Caching keeps account:status
 // cheap since it runs on every poll.
 //
+// The web shell reads the same .env.local through Vite, so the filename
+// is shared: changing it here strands vite.web.config.ts.
+//
 // The file read is gated behind !app.isPackaged for security: in a
-// packaged build an attacker-planted .env.account in the launch directory
+// packaged build an attacker-planted .env.local in the launch directory
 // could both enable sign-in and point the Clerk key/relay URL at hostile
 // infrastructure, so a shipped build sources config ONLY from the values
 // baked in at build time and real environment variables, neither of
@@ -154,7 +157,7 @@ function serviceConfig(): AccountServiceConfig {
   if (!app.isPackaged) {
     try {
       fileEnv = parseDotenv(
-        readFileSync(join(process.cwd(), ".env.account"), "utf8"),
+        readFileSync(join(process.cwd(), ".env.local"), "utf8"),
       );
     } catch {
       // No dev file. Baked and environment values are the only sources.
@@ -179,7 +182,7 @@ function defaultDeviceName(): string {
 // the account module (liveness gates keepReachable on it: with no
 // account to stay available to, the toggle is unreachable in the UI and
 // must be inert in the engine). Uses the same resolver as account:status
-// so dev's .env.account file counts.
+// so dev's .env.local file counts.
 export function accountServiceConfigured(): boolean {
   return isConfigured(serviceConfig());
 }

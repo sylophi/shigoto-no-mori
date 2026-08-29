@@ -31,7 +31,7 @@ const api = {
   deviceId,
   appVersion,
   // The Clerk publishable key main resolved from the account config
-  // (baked, .env.account or process env). Empty on an unconfigured
+  // (baked, .env.local or process env). Empty on an unconfigured
   // build, which the renderer reads as "mount no ClerkProvider".
   clerkPublishableKey: optionalArgFlag(CLERK_PK_FLAG),
   // Client fact delivered the same way as the device id: dev-only

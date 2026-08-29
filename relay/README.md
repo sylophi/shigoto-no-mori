@@ -177,10 +177,10 @@ production (`pk_live`) instance serves Clerk's UI from your own
 `clerk.<domain>` Frontend API host instead, so add that origin to
 `script-src` when going live.
 
-For local development, the app also reads a gitignored `.env.account`
-file in the repo root if present (simple `KEY=value` lines). Baked and
-real environment variables override it, and packaged builds never read
-it.
+For local development, put the `SM_ACCOUNT_*` values in a gitignored
+`.env.local` in the repo root (simple `KEY=value` lines). Both the
+desktop and the web build read it. Baked and real environment variables
+override it, and packaged builds never read it.
 
 ## Develop and test
 

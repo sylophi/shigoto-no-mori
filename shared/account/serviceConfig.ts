@@ -46,7 +46,7 @@ export function isConfigured(config: AccountServiceConfig): boolean {
   return config.relayUrl.length > 0 && config.publishableKey.length > 0;
 }
 
-// Minimal KEY=VALUE dotenv parser for the gitignored .env.account dev
+// Minimal KEY=VALUE dotenv parser for the gitignored .env.local dev
 // convenience file. Pure string work so it lives here rather than in the
 // electron glue and the account check can drive it. Not a full dotenv
 // implementation: it skips blanks and comments, strips one layer of
@@ -76,7 +76,7 @@ export function parseDotenv(text: string): Record<string, string> {
 }
 
 // Merges the three config layers, lowest to highest precedence: the
-// optional dev .env.account values, the values baked into the bundle at
+// optional dev .env.local values, the values baked into the bundle at
 // build time, and the real process environment. Real environment
 // variables always win, so an owner can override even a baked build
 // from the environment, and a build with nothing baked in behaves
