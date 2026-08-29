@@ -8,6 +8,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { MonitorSmartphone } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
 import { BranchLabel } from "@/components/ui/branch-label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { StatusIndicator } from "./StatusIndicator";
 
@@ -29,7 +34,6 @@ export function RemoteWorktreeRow({
       onClick={() =>
         void navigate({ to: "/devices/$deviceId", params: { deviceId } })
       }
-      title={`On ${deviceLabel}`}
       className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60"
     >
       <div className="flex min-w-0 flex-1 flex-col">
@@ -44,13 +48,21 @@ export function RemoteWorktreeRow({
         </span>
       </div>
       <StatusIndicator worktree={worktree} />
-      <span
-        aria-label={`On ${deviceLabel}`}
-        className="inline-flex max-w-24 shrink-0 items-center gap-0.5 text-[10px] text-sky-500"
-      >
-        <MonitorSmartphone aria-hidden className="size-3 shrink-0" />
-        <span className="truncate">{deviceLabel}</span>
-      </span>
+      {/* Same shape as WorktreeKindIcon: a neutral marker whose device
+          name lives in the tooltip, not the row. */}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="inline-flex shrink-0">
+              <MonitorSmartphone
+                aria-label={`On ${deviceLabel}`}
+                className="size-3 text-muted-foreground/70"
+              />
+            </span>
+          }
+        />
+        <TooltipContent>On {deviceLabel}</TooltipContent>
+      </Tooltip>
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </button>
   );
