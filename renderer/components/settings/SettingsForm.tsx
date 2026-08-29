@@ -238,7 +238,7 @@ export function SettingsForm({
                 setForm((prev) => ({ ...prev, terrier: v }))
               }
               disabled={!terrierReady && !form.terrier}
-              label="Show terrier projects"
+              label="Automatically use terrier"
               description={terrierDescription(
                 terrierInstalled,
                 terrierCompatible,
@@ -375,10 +375,10 @@ function terrierDescription(
   }
   return (
     <>
-      Lists every repo registered in terrier as a project, alongside the ones
-      added here. Terrier projects can't be removed from the sidebar, since{" "}
-      <span className="font-mono">terrier rm</span> is what unregisters them.{" "}
-      <TerrierLink>Learn more</TerrierLink>
+      Makes every repo in your terrier registry a project here automatically, so
+      registering a repo once is enough for both tools. Terrier decides their
+      presence: <span className="font-mono">terrier rm</span> removes them, not
+      the sidebar. <TerrierLink>Learn more</TerrierLink>
     </>
   );
 }
