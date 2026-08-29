@@ -50,10 +50,10 @@
     {
       "binding": "DB",
       "database_name": "sm-relay",
-      // PLACEHOLDER: replace with the id printed by
-      // `wrangler d1 create sm-relay` before deploying. Local dev and
-      // the vitest suite ignore it.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // The deployed sm-relay database's id (printed by `wrangler d1
+      // create sm-relay`; not a secret). Local dev and the vitest
+      // suite ignore it.
+      "database_id": "087dc705-d0d6-409c-adcc-9561079eb838",
       "migrations_dir": "migrations",
     },
   ],
