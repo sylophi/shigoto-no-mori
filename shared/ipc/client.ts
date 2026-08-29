@@ -25,6 +25,7 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
+import { terrierContract } from "@shared/ipc/modules/terrier";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -77,6 +78,7 @@ export const allContractModules: readonly ContractModule[] = [
   scriptsContract,
   cliContract,
   shellContract,
+  terrierContract,
   shigomoriContract,
   syncContract,
   updaterContract,
@@ -117,6 +119,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const scriptsClient = c(scriptsContract);
   const cliClient = c(cliContract);
   const shellClient = c(shellContract);
+  const terrierClient = c(terrierContract);
   const shigomoriClient = c(shigomoriContract);
   const syncClient = c(syncContract);
   const updaterClient = c(updaterContract);
@@ -356,6 +359,10 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       bundleAbort: syncClient.bundleAbort,
       pullWorktree: syncClient.pullWorktree,
       transplantWorktree: syncClient.transplantWorktree,
+    },
+
+    terrier: {
+      readiness: terrierClient.readiness,
     },
 
     updater: {

@@ -27,6 +27,7 @@ export interface SettingsFormState {
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
+  terrier: boolean;
   githubCli: boolean;
 }
 
@@ -50,6 +51,7 @@ export function fromConfig(
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
+    terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
   };
 }
@@ -76,6 +78,7 @@ function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
     portPool: state.portPool ? true : undefined,
+    terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
     githubCli: state.githubCli ? undefined : false,
   };
@@ -90,7 +93,7 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
   );
 }
 
-// The remote encoding of the same seven managed keys (v2 step 6): the
+// The remote encoding of the same managed keys (v2 step 6): the
 // globalConfig.writeDeviceSettings patch. EXPLICIT values throughout,
 // where managedDeviceConfig omits a key at its default: the host
 // applies the patch as absent-means-keep (an undefined key cannot
@@ -108,6 +111,7 @@ export function toDeviceSettingsPatch(
     deleteBranchOnRemove: state.deleteBranchOnRemove,
     autoPopulateInstall: state.autoPopulateInstall,
     portPool: state.portPool,
+    terrier: state.terrier,
     githubCli: state.githubCli,
   };
 }
@@ -183,6 +187,11 @@ function invalidateDeviceQueries(queryClient: QueryClient): void {
   // and the project PR list -- refetch immediately rather than wait
   // for the next focus/mount.
   void queryClient.invalidateQueries({ queryKey: queryKeys.githubCliAll() });
+  // Toggling the terrier integration changes which projects the
+  // list handler merges in -- same immediate refetch. (Terrier
+  // readiness depends only on the binary, not the toggle, so it
+  // has nothing to invalidate here.)
+  void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
 }
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and

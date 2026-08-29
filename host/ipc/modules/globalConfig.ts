@@ -8,6 +8,7 @@ import {
   redactGlobalConfigForRead,
   withGlobalConfigWriteLock,
 } from "@host/lib/config/global";
+import { invalidateTerrierCaches } from "@host/lib/terrier";
 import { globalConfigWriteViaCli } from "../cliDelegate";
 
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
@@ -36,6 +37,9 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // refresh hook is needed: every config-change path reconciles
       // through invalidateGlobalConfigCache now.
       invalidateGlobalConfigCache();
+      // The terrier merge gates on the toggle just written. Without this
+      // the sidebar would keep the pre-save project list for a TTL.
+      invalidateTerrierCaches();
     }),
   // The remote-writable device-settings subset. The zod boundary already
   // rejected any key outside the managed set (the patch schema is
@@ -63,5 +67,8 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       ) as DeviceSettingsPatch;
       await globalConfigWriteViaCli({ ...base, ...provided });
       invalidateGlobalConfigCache();
+      // Device-settings patches can carry the terrier toggle too, so the
+      // merged project list must not serve a pre-save TTL entry either.
+      invalidateTerrierCaches();
     }),
 };

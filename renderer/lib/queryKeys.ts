@@ -107,6 +107,7 @@ function buildQueryKeys(deviceId: string) {
       host("packageScriptSort", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
+    terrierReadiness: () => host("terrierReadiness"),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),
     portPoolActive: (projectId: string, worktreeId: string) =>

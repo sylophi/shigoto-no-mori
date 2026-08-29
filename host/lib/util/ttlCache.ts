@@ -77,7 +77,18 @@ export function ttlMapCache<K, V>(
 
 export interface TtlValueCache<V> {
   get(): Promise<V>;
+  // The last stored value, even past its TTL, for sync readers that
+  // prefer stale over absent. null before the first load resolves and
+  // after invalidate(), while expire() keeps it.
+  peek(): V | null;
+  // Erase everything: the next get() reloads and peek() answers null
+  // until it lands. For writers whose change makes the old value wrong
+  // to show at all (nuke wiping the config).
   invalidate(): void;
+  // Mark stale without forgetting: the next get() reloads, but peek()
+  // keeps serving the last value meanwhile. For writers whose change
+  // merely outdates the value, where sync readers must not see a gap.
+  expire(): void;
 }
 
 export function ttlValueCache<V>(
@@ -87,19 +98,49 @@ export function ttlValueCache<V>(
   let entry: Entry<V> | null = null;
   // Same in-flight-load-vs-invalidate guard as ttlMapCache above.
   let generation = 0;
+  // Concurrent misses join one load instead of each spawning their own
+  // (the loaders behind these caches shell out). invalidate()/expire()
+  // drop it so a post-write caller starts fresh rather than joining a
+  // load of the pre-write world.
+  let inflight: Promise<V> | null = null;
   return {
     async get() {
       const now = Date.now();
       if (entry && entry.expires > now) return entry.value;
+      if (inflight) return inflight;
       const startGeneration = generation;
-      const value = await load();
-      if (generation === startGeneration) {
-        entry = { value, expires: now + ttlMs };
-      }
-      return value;
+      const loading = (async () => {
+        const value = await load();
+        if (generation === startGeneration) {
+          entry = { value, expires: now + ttlMs };
+        }
+        return value;
+      })();
+      inflight = loading;
+      // Cleanup rides a side chain attached after the assignment, so a
+      // loader that throws before its first await (the async wrapper
+      // turns that into a rejection) still gets cleared: a rejected
+      // promise left in `inflight` would be re-served forever. The
+      // catch keeps the side chain from surfacing as an unhandled
+      // rejection, and callers get the rejection from `loading` itself.
+      void loading
+        .catch(() => {})
+        .then(() => {
+          if (inflight === loading) inflight = null;
+        });
+      return loading;
+    },
+    peek() {
+      return entry ? entry.value : null;
     },
     invalidate() {
       entry = null;
+      inflight = null;
+      generation += 1;
+    },
+    expire() {
+      if (entry) entry.expires = 0;
+      inflight = null;
       generation += 1;
     },
   };

@@ -141,6 +141,14 @@ export const GlobalConfigSchema = z.object({
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
   portPool: z.boolean().optional(),
+  // When true, repos registered in terrier (github.com/sylophi/terrier)
+  // are listed as projects alongside the registry's own. Terrier-sourced
+  // projects can't be removed here, only `terrier rm` unregisters them. A
+  // path registered in both is an ordinary removable project, and
+  // removing its registry entry demotes it back to terrier-sourced. Off by
+  // default, and only active while `terrier` is on PATH at a version
+  // this build understands (host/lib/terrier.ts, cli/terrier.go).
+  terrier: z.boolean().optional(),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
@@ -239,6 +247,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPopulateInstall: true,
     portPool: true,
     githubCli: true,
+    terrier: true,
   }).shape,
 );
 export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatchSchema>;

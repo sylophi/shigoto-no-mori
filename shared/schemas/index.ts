@@ -15,6 +15,7 @@ export * from "./pullRequest";
 export * from "./config";
 export * from "./launchers";
 export * from "./scripts";
+export * from "./terrier";
 export * from "./fs";
 export * from "./shell";
 export * from "./runtime";

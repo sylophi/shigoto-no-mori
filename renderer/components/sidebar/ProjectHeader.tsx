@@ -18,6 +18,9 @@ interface ProjectHeaderProps {
   listeners?: DraggableSyntheticListeners;
   onContextMenu?: (event: React.MouseEvent) => void;
   arrangeMode?: boolean;
+  // False for a row arrange mode renders but won't let you drag (a
+  // terrier project, whose order isn't ours to store).
+  reorderable?: boolean;
 }
 
 // Header row shared by the healthy and missing-project branches. The
@@ -32,6 +35,7 @@ export function ProjectHeader({
   listeners,
   onContextMenu,
   arrangeMode,
+  reorderable = true,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
   const baseClass =
@@ -42,7 +46,10 @@ export function ProjectHeader({
       onContextMenu={onContextMenu}
       className={cn(
         baseClass,
-        "cursor-grab text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing",
+        "text-muted-foreground transition-colors",
+        reorderable
+          ? "cursor-grab hover:bg-accent hover:text-foreground active:cursor-grabbing"
+          : "cursor-not-allowed opacity-50",
         missing && "text-muted-foreground/60 hover:text-muted-foreground",
       )}
     >
