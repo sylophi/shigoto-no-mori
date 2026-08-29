@@ -4,7 +4,7 @@ import { z } from "zod";
 // and its version inside the minor-version handshake this build
 // understands (see main/lib/terrier.ts). `version` is whatever
 // `terrier version` printed, for the Settings row to name when the
-// handshake fails; absent when the binary is missing.
+// handshake fails. Absent when the binary is missing.
 export const TerrierReadinessSchema = z.object({
   installed: z.boolean(),
   compatible: z.boolean(),

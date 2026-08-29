@@ -376,7 +376,7 @@ function terrierDescription(
   return (
     <>
       Lists every repo registered in terrier as a project, alongside the ones
-      added here. Terrier projects can't be removed from the sidebar —{" "}
+      added here. Terrier projects can't be removed from the sidebar, since{" "}
       <span className="font-mono">terrier rm</span> is what unregisters them.{" "}
       <TerrierLink>Learn more</TerrierLink>
     </>

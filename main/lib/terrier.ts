@@ -3,11 +3,11 @@
 // `terrier` toggle is on. Terrier's stable surface is `terrier ls
 // --json` plus the rule that a minor version bump is the compatibility
 // signal, so that is all this file consumes. Ported alongside
-// cli/terrier.go — the two engines must produce the same merged list
+// cli/terrier.go: the two engines must produce the same merged list
 // or the app and the CLI would disagree about which projects exist.
 //
 // The registry read is a subprocess, but project resolution
-// (findProjectOrThrow) is sync and hot — so sync callers read the
+// (findProjectOrThrow) is sync and hot, so sync callers read the
 // cache's last-known value via peek() while async ones await a
 // refresh. The projects:list handler always refreshes first, and the
 // renderer only ever learns a terrier project's id from that list, so
@@ -25,7 +25,7 @@ import { ttlValueCache } from "./util/ttlCache";
 const execFileP = promisify(execFile);
 
 const TERRIER_BINARY = "terrier";
-// A wedged terrier must not hang the callers gated on these spawns —
+// A wedged terrier must not hang the callers gated on these spawns:
 // projects:list awaits the listing refresh, so an unbounded wait here
 // is a sidebar that never loads. Mirror of terrierSpawnTimeout in
 // cli/terrier.go.
@@ -37,8 +37,8 @@ function execTerrier(args: string[]): Promise<{ stdout: string }> {
   });
 }
 
-// The registry-read contract this build understands. Terrier's README:
-// "a tool checks the minor version and nothing else" — a minor bump
+// The registry-read contract this build understands. Terrier's README
+// says a tool checks the minor version and nothing else: a minor bump
 // means something a tool could be relying on has changed, so an
 // unknown minor deactivates the merge rather than guessing. Mirror of
 // terrierSupported* in cli/terrier.go.
@@ -49,8 +49,8 @@ const TERRIER_SUPPORTED_MINOR = 1;
 // describes another tool's output, not this app's IPC contract, so it
 // doesn't belong in the shared barrel (same as GhPrListItemSchema in
 // githubCli/pullRequests.ts). The path is allowed to be empty here and
-// filtered below, so one blank row costs that row — not the whole
-// document — matching how the Go engine reads the same output.
+// filtered below, so one blank row costs that row rather than the
+// whole document, matching how the Go engine reads the same output.
 const TerrierListingSchema = z.object({ path: z.string() });
 const TerrierLsSchema = z.object({
   projects: z.array(TerrierListingSchema),
@@ -95,7 +95,7 @@ export function terrierReadiness(): Promise<TerrierReadiness> {
 }
 
 // Empty whenever any gate is closed (toggle off, binary missing,
-// version handshake failed) or the read fails — a broken terrier must
+// version handshake failed) or the read fails: a broken terrier must
 // degrade to "no terrier projects", never break project loading.
 async function fetchListings(): Promise<TerrierListing[]> {
   const global = await readGlobalConfig();
@@ -109,8 +109,8 @@ async function fetchListings(): Promise<TerrierListing[]> {
       console.warn("[terrier] unrecognized ls --json shape:", parsed.error);
       return [];
     }
-    // Home-expanded and required to be absolute — never resolved
-    // against cwd, which differs between the app and a shell, so the
+    // Home-expanded and required to be absolute, never resolved
+    // against cwd: that differs between the app and a shell, so the
     // two engines could mint different ids for the same relative row.
     // Mirrors the filter in cli/terrier.go's listing read.
     const listings: TerrierListing[] = [];
@@ -135,7 +135,7 @@ export async function refreshTerrierListings(): Promise<void> {
 
 // For the sync callers (loadProjects and everything on top of it):
 // the last-known listings, possibly stale until an async caller
-// refreshes — better than absent, which would make every terrier
+// refreshes. Better than absent, which would make every terrier
 // project id transiently unresolvable (invalidateTerrierCaches uses
 // expire() for exactly this reason).
 export function terrierListingsSnapshot(): TerrierListing[] {
@@ -143,7 +143,7 @@ export function terrierListingsSnapshot(): TerrierListing[] {
 }
 
 // Whether the last-known terrier listings hold path. False whenever
-// the integration is off or unrefreshed — callers use this to decide
+// the integration is off or unrefreshed: callers use this to decide
 // id continuity, and "don't know" must act like "no". Mirror of
 // terrierHasPath in cli/terrier.go.
 export function terrierHasPath(path: string): boolean {
@@ -151,7 +151,7 @@ export function terrierHasPath(path: string): boolean {
 }
 
 // Whether the project would live on as a terrier-sourced project with
-// the same id after its registry entry is dropped — the remove
+// the same id after its registry entry is dropped: the remove
 // handler's cue that nothing is actually going away, so scripts and
 // app-side state must be left alone. Mirrors the id-continuity branch
 // in cmdProjectRemove (cli/cmd_project.go), where the CLI keeps or
@@ -180,7 +180,7 @@ export function invalidateTerrierCaches(): void {
 // Deterministic id for a terrier-sourced project: UUID-shaped from
 // sha256(path) so the Go engine and this one mint the same id for the
 // same path without ever writing it down. Uppercase like CLI-minted
-// ids. Mirror of terrierProjectID in cli/terrier.go — keep the two
+// ids. Mirror of terrierProjectID in cli/terrier.go. Keep the two
 // byte-for-byte in sync (cli/terrier_test.go pins a vector).
 export function terrierProjectId(path: string): string {
   const hex = createHash("sha256")

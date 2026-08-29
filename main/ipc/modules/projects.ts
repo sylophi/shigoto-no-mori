@@ -57,16 +57,16 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const removed = loadProjects().find((p) => p.id === id);
     if (!removed) return;
     if (removed.source === "terrier") {
-      // The UI disables removal for terrier-sourced projects; this
-      // backstops a stale renderer list.
+      // The UI disables removal for terrier-sourced projects, so this
+      // only backstops a stale renderer list.
       throw new Error(
-        `${removed.name} is registered via terrier — unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`,
+        `${removed.name} is registered via terrier. Unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`,
       );
     }
     // A path terrier also registers doesn't leave the sidebar: dropping
     // the registry entry just demotes it to a terrier-sourced project.
     // When the id carries over (registration minted the deterministic
-    // terrier id), nothing is actually going away — skip the script
+    // terrier id), nothing is actually going away: skip the script
     // reaping and the app-side cleanup, and let the CLI skip the state
     // dir for the same reason. Decided from a just-expired, freshly
     // refetched listing rather than the snapshot: the CLI re-derives

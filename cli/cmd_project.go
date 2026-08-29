@@ -158,7 +158,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	if stillListed {
 		if newID := terrierProjectID(proj.Path); newID != proj.ID {
 			// A leftover state dir from an earlier terrier era blocks the
-			// rename; the config that was live until this removal wins.
+			// rename, and the config that was live until this removal wins.
 			// (newID can't be a live project here: the merge only surfaces
 			// it once this registry entry is gone.) If the rename still
 			// fails, drop the old dir rather than leave it orphaned under

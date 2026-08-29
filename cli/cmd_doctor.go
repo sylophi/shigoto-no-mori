@@ -134,7 +134,7 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	// because checkRegistryFile reports the parse failure itself.
 	// Terrier projects join silently (checkTerrier reports any trouble
 	// as a finding) so state checks like the shelved-marks scan see the
-	// same world the commands do; the per-project group filters them
+	// same world the commands do. The per-project group filters them
 	// back out (checkProjects).
 	projects, _ := loadProjects()
 	terrierListed, _ := activeTerrierListings()

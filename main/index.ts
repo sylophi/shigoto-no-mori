@@ -194,9 +194,9 @@ app.on("ready", async () => {
   buildAppMenu();
   createWindow();
   // The sweeps below read the merged project list synchronously, so
-  // wait for the terrier listings (bounded by the spawn timeout) —
-  // otherwise the first fetch pass and the state watcher's reaper run
-  // against a registry-only list. The window is already up; this
+  // wait for the terrier listings (bounded by the spawn timeout).
+  // Otherwise the first fetch pass and the state watcher's reaper run
+  // against a registry-only list. The window is already up, so this
   // delays only the background machinery.
   await refreshTerrierListings();
   startBackgroundFetch();

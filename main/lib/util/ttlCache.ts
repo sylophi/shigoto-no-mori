@@ -54,9 +54,9 @@ export function ttlMapCache<K, V>(
 
 export interface TtlValueCache<V> {
   get(): Promise<V>;
-  // The last stored value, even past its TTL — for sync readers that
+  // The last stored value, even past its TTL, for sync readers that
   // prefer stale over absent. null before the first load resolves and
-  // after invalidate(); expire() keeps it.
+  // after invalidate(), while expire() keeps it.
   peek(): V | null;
   // Erase everything: the next get() reloads and peek() answers null
   // until it lands. For writers whose change makes the old value wrong
@@ -64,7 +64,7 @@ export interface TtlValueCache<V> {
   invalidate(): void;
   // Mark stale without forgetting: the next get() reloads, but peek()
   // keeps serving the last value meanwhile. For writers whose change
-  // merely outdates the value — sync readers must not see a gap.
+  // merely outdates the value, where sync readers must not see a gap.
   expire(): void;
 }
 
@@ -96,10 +96,10 @@ export function ttlValueCache<V>(
       inflight = loading;
       // Cleanup rides a side chain attached after the assignment, so a
       // loader that throws before its first await (the async wrapper
-      // turns that into a rejection) still gets cleared — a rejected
+      // turns that into a rejection) still gets cleared: a rejected
       // promise left in `inflight` would be re-served forever. The
       // catch keeps the side chain from surfacing as an unhandled
-      // rejection; callers get the rejection from `loading` itself.
+      // rejection, and callers get the rejection from `loading` itself.
       void loading
         .catch(() => {})
         .then(() => {

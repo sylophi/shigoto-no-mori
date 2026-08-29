@@ -10,9 +10,10 @@ package main
 // exist.
 //
 // Merge semantics: registry.json wins by path. A repo registered in
-// both is an ordinary project (removable); one only terrier knows
-// becomes a read-only entry with Source "terrier" and a deterministic
-// id, so nothing has to be persisted for the two engines to agree.
+// both is an ordinary project (removable), while one only terrier
+// knows becomes a read-only entry with Source "terrier" and a
+// deterministic id, so nothing has to be persisted for the two
+// engines to agree.
 
 import (
 	"context"
@@ -30,8 +31,8 @@ import (
 
 const terrierBinary = "terrier"
 
-// A wedged terrier must not hang every CLI invocation — the merge runs
-// pre-dispatch. Mirror of TERRIER_SPAWN_TIMEOUT_MS in
+// A wedged terrier must not hang every CLI invocation, since the merge
+// runs pre-dispatch. Mirror of TERRIER_SPAWN_TIMEOUT_MS in
 // main/lib/terrier.ts.
 const terrierSpawnTimeout = 10 * time.Second
 
@@ -94,8 +95,8 @@ var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 	if err := json.Unmarshal(stdout, &doc); err != nil {
 		return nil, err
 	}
-	// Home-expanded and required to be absolute — never resolved
-	// against cwd, which differs between the app and a shell, so the
+	// Home-expanded and required to be absolute, never resolved
+	// against cwd: that differs between the app and a shell, so the
 	// two engines could mint different ids for the same relative row.
 	// Mirrors the filter in main/lib/terrier.ts's listing read.
 	var listings []terrierListing
@@ -155,8 +156,8 @@ var terrierTroubleFor = sync.OnceValue(func() *terrierTrouble {
 })
 
 // The whole gate in one call: nil listings whenever the toggle is off
-// or the registry is unreadable (trouble says which; nil trouble with
-// nil listings means simply disabled). Every consumer of the terrier
+// or the registry is unreadable (trouble says which, and nil trouble
+// with nil listings means simply disabled). Every consumer of the terrier
 // registry goes through here so no call site can walk the ladder
 // differently.
 func activeTerrierListings() ([]terrierListing, *terrierTrouble) {

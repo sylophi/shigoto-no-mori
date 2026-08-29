@@ -36,7 +36,7 @@ export function ProjectRow({
   isHovered,
 }: ProjectRowProps) {
   // Terrier-sourced projects have no registry entry, so there is no
-  // stored order to drag them within — they always trail the list.
+  // stored order to drag them within: they always trail the list.
   const fromTerrier = project.source === "terrier";
   const {
     attributes,

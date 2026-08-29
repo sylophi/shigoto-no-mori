@@ -142,9 +142,9 @@ export const GlobalConfigSchema = z.object({
   portPool: z.boolean().optional(),
   // When true, repos registered in terrier (github.com/sylophi/terrier)
   // are listed as projects alongside the registry's own. Terrier-sourced
-  // projects can't be removed here — `terrier rm` unregisters them. A
-  // path registered in both is an ordinary removable project; removing
-  // its registry entry demotes it back to terrier-sourced. Off by
+  // projects can't be removed here, only `terrier rm` unregisters them. A
+  // path registered in both is an ordinary removable project, and
+  // removing its registry entry demotes it back to terrier-sourced. Off by
   // default, and only active while `terrier` is on PATH at a version
   // this build understands (main/lib/terrier.ts, cli/terrier.go).
   terrier: z.boolean().optional(),

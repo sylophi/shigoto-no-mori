@@ -572,8 +572,8 @@ func checkPortAllocations(report *doctorReport) {
 		"Run `port-pool prune` (it owns that state, so "+binaryName+" won't touch it).")
 }
 
-// The terrier registry belongs to terrier; sm only merges it into the
-// project list. So this check explains why merged projects might be
+// The terrier registry belongs to terrier, and sm only merges it into
+// the project list. So this check explains why merged projects might be
 // missing (the same terrierTroubleFor ladder the merge warns from) and
 // reports entries whose directory is gone -- never fixes anything,
 // since `terrier prune` owns that. This is also the only doctor
