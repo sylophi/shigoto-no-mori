@@ -375,10 +375,9 @@ function terrierDescription(
   }
   return (
     <>
-      Makes every repo in your terrier registry a project here automatically, so
-      registering a repo once is enough for both tools. Terrier decides their
-      presence: <span className="font-mono">terrier rm</span> removes them, not
-      the sidebar. <TerrierLink>Learn more</TerrierLink>
+      Shows every repo registered in terrier as a project. Removing one requires{" "}
+      <span className="font-mono">terrier rm</span>.{" "}
+      <TerrierLink>Learn more</TerrierLink>
     </>
   );
 }
