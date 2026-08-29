@@ -38,6 +38,9 @@ export function ProjectRow({
   // Terrier-sourced projects have no registry entry, so there is no
   // stored order to drag them within: they always trail the list.
   const fromTerrier = project.source === "terrier";
+  // One flag behind both the drag and the affordance, so a row can't
+  // advertise a grab it will refuse.
+  const reorderable = arrangeMode && !fromTerrier;
   const {
     attributes,
     listeners,
@@ -45,7 +48,7 @@ export function ProjectRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: project.id, disabled: !arrangeMode || fromTerrier });
+  } = useSortable({ id: project.id, disabled: !reorderable });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -133,6 +136,7 @@ export function ProjectRow({
           listeners={listeners}
           onContextMenu={onHeaderContextMenu}
           arrangeMode={arrangeMode}
+          reorderable={reorderable}
         />
         {!arrangeMode && (
           <>
