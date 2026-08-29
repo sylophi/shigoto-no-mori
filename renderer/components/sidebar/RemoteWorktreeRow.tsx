@@ -48,8 +48,9 @@ export function RemoteWorktreeRow({
         </span>
       </div>
       <StatusIndicator worktree={worktree} />
-      {/* Same shape as WorktreeKindIcon: a neutral marker whose device
-          name lives in the tooltip, not the row. */}
+      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+      {/* Rightmost, same shape as WorktreeKindIcon: a neutral marker
+          whose device name lives in the tooltip, not the row. */}
       <Tooltip>
         <TooltipTrigger
           render={
@@ -63,7 +64,6 @@ export function RemoteWorktreeRow({
         />
         <TooltipContent>On {deviceLabel}</TooltipContent>
       </Tooltip>
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </button>
   );
 }
