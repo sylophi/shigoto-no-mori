@@ -12,6 +12,7 @@ import { useGlobalConfigWrite } from "@/hooks/config/useGlobalConfig";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
+import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { useTheme } from "@/hooks/ui/useTheme";
 import type {
   DetectedLauncher,
@@ -25,6 +26,7 @@ import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
+import { TerrierLink } from "./TerrierLink";
 import { CliSection } from "./CliSection";
 import { ToggleRow } from "./ToggleRow";
 import { VersionSection } from "./VersionSection";
@@ -38,6 +40,7 @@ interface FormState {
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
   portPool: boolean;
+  terrier: boolean;
   githubCli: boolean;
 }
 
@@ -55,6 +58,7 @@ function fromConfig(config: GlobalConfig): FormState {
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     portPool: config.portPool ?? false,
+    terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
   };
 }
@@ -83,6 +87,7 @@ function toConfig(original: GlobalConfig, state: FormState): GlobalConfig {
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
     portPool: state.portPool ? true : undefined,
+    terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
     githubCli: state.githubCli ? undefined : false,
   };
@@ -95,6 +100,10 @@ export function SettingsForm({
 }) {
   const { data: detected = [] } = useDetectedLaunchers();
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
+  const { data: terrierReadiness } = useTerrierReadiness();
+  const terrierInstalled = terrierReadiness?.installed ?? true;
+  const terrierCompatible = terrierReadiness?.compatible ?? true;
+  const terrierReady = terrierInstalled && terrierCompatible;
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -218,6 +227,24 @@ export function SettingsForm({
                 </>
               }
             />
+            <ToggleRow
+              // Shows the persisted truth and stays operable while on:
+              // when terrier vanishes or drifts out of the version
+              // handshake, the CLI warns "turn the toggle off in the
+              // app's Settings", so the off switch must keep working.
+              // Only turning it ON requires a ready binary.
+              checked={form.terrier}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, terrier: v }))
+              }
+              disabled={!terrierReady && !form.terrier}
+              label="Automatically use terrier"
+              description={terrierDescription(
+                terrierInstalled,
+                terrierCompatible,
+                terrierReadiness?.version,
+              )}
+            />
           </section>
 
           <section className="space-y-3">
@@ -322,6 +349,36 @@ function ToolPill({ entry }: { entry: DetectedLauncher }) {
       <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
       {entry.label}
     </span>
+  );
+}
+
+function terrierDescription(
+  installed: boolean,
+  compatible: boolean,
+  version: string | undefined,
+): React.ReactNode {
+  if (!installed) {
+    return (
+      <>
+        <TerrierLink>Install terrier</TerrierLink> to enable this integration.
+      </>
+    );
+  }
+  if (!compatible) {
+    return (
+      <>
+        {version ?? "The installed terrier"} isn't a version this build
+        understands. Update both and try again.{" "}
+        <TerrierLink>Learn more</TerrierLink>
+      </>
+    );
+  }
+  return (
+    <>
+      Shows every repo registered in terrier as a project. Removing one requires{" "}
+      <span className="font-mono">terrier rm</span>.{" "}
+      <TerrierLink>Learn more</TerrierLink>
+    </>
   );
 }
 

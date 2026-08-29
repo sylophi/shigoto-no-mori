@@ -33,6 +33,12 @@ export const ProjectSchema = z.object({
   // action count. Other handlers don't set them.
   lastUsed: z.number().int().nonnegative().optional(),
   recentCount: z.number().int().nonnegative().optional(),
+  // "terrier" marks a project merged from the terrier registry rather
+  // than registry.json. Never persisted: the merge layer decorates it
+  // at read time (main/lib/projects, cli/terrier.go), and the id is
+  // minted deterministically from the path so both engines agree
+  // without coordination. Terrier-sourced projects can't be removed.
+  source: z.literal("terrier").optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 

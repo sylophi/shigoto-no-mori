@@ -53,6 +53,7 @@ export const queryKeys = {
     ["packageScriptSort", projectId] as const,
 
   portPoolInstalled: () => ["portPoolInstalled"] as const,
+  terrierReadiness: () => ["terrierReadiness"] as const,
   cli: () => ["cli"] as const,
   cliShell: () => ["cliShell"] as const,
   portPoolActive: (projectId: string, worktreeId: string) =>

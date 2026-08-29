@@ -35,6 +35,9 @@ export function ProjectRow({
   arrangeMode,
   isHovered,
 }: ProjectRowProps) {
+  // Terrier-sourced projects have no registry entry, so there is no
+  // stored order to drag them within: they always trail the list.
+  const fromTerrier = project.source === "terrier";
   const {
     attributes,
     listeners,
@@ -42,7 +45,7 @@ export function ProjectRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: project.id, disabled: !arrangeMode });
+  } = useSortable({ id: project.id, disabled: !arrangeMode || fromTerrier });
   const sortableStyle = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -96,7 +99,12 @@ export function ProjectRow({
     />
   );
 
-  const removeItem = (
+  // A terrier-sourced project has nothing here to remove: its presence
+  // is terrier's call (`terrier rm`), so say that instead of offering a
+  // remove that the main process would refuse anyway.
+  const removeItem = fromTerrier ? (
+    <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
+  ) : (
     <DropdownMenuItem
       variant="destructive"
       closeOnClick={removeArmed}
