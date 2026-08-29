@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shared/schemas";
 
 interface DeleteOpts {
@@ -14,7 +14,7 @@ interface DeleteOpts {
 // affordances hang off of, since both the detail footer and the closed-PR
 // box drive the same deletion.
 export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
-  const navigate = useNavigate();
+  const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
   const [needsForce, setNeedsForce] = useState(false);
   const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
@@ -26,18 +26,17 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
 
   const navigateToSibling = () => {
-    // Prefer the sibling above so the user's eye stays in place.
+    // Prefer the sibling above so the user's eye stays in place. The
+    // nav helper keeps this on whichever device tree the page lives in
+    // (a remote delete lands on the remote sibling, or the device's
+    // forest page when it was the last one).
     const index = siblings.findIndex((w) => w.id === worktree.id);
     const next =
       index >= 0 ? (siblings[index - 1] ?? siblings[index + 1]) : undefined;
     if (next) {
-      void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId",
-        params: { projectId: worktree.projectId, worktreeId: next.id },
-        replace: true,
-      });
+      nav.toWorktree(worktree.projectId, next.id, true);
     } else {
-      void navigate({ to: "/", replace: true });
+      nav.toFallback(true);
     }
   };
 

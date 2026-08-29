@@ -1,6 +1,6 @@
 import { ChevronRight } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { DiffStats } from "@/components/ui/diff-stats";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 
@@ -11,17 +11,10 @@ interface CommitRowProps {
 }
 
 export function CommitRow({ worktree, commit, onNavigate }: CommitRowProps) {
-  const navigate = useNavigate();
+  const nav = useWorktreeNav();
   const onClick = () => {
     onNavigate?.();
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
-      params: {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        hash: commit.hash,
-      },
-    });
+    nav.toCommit(worktree.projectId, worktree.id, commit.hash);
   };
   return (
     <button

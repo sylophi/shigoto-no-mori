@@ -1,18 +1,16 @@
 // A peer device's worktree in the sidebar tree: the local WorktreeRow's
 // layout (branch over name, trailing status cluster) with the local-only
 // concerns dropped -- no script activity, deletion state or PR pill,
-// which all read this machine's stores -- and a device marker in their
-// place. Opens the device's forest page, the one surface a remote
-// worktree has.
+// which all read this machine's stores -- and a device badge in their
+// place. Opens the worktree's own detail page under the device-scoped
+// twin route, exactly like clicking a local row. An unreachable
+// device's rows fade back: last known state, not an error.
 import { useNavigate } from "@tanstack/react-router";
-import { MonitorSmartphone } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import type { StatusTone } from "@/components/ui/status-dot";
+import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { DeviceBadge } from "./DeviceBadge";
 import { StatusIndicator } from "./StatusIndicator";
 import { WORKTREE_ROW_BUTTON, WorktreeRowLabel } from "./WorktreeRow";
 
@@ -20,40 +18,39 @@ interface RemoteWorktreeRowProps {
   worktree: Worktree;
   deviceId: string;
   deviceLabel: string;
+  reachable: boolean;
+  tone: StatusTone;
 }
 
 export function RemoteWorktreeRow({
   worktree,
   deviceId,
   deviceLabel,
+  reachable,
+  tone,
 }: RemoteWorktreeRowProps) {
   const navigate = useNavigate();
   return (
     <button
       type="button"
       onClick={() =>
-        void navigate({ to: "/devices/$deviceId", params: { deviceId } })
+        void navigate({
+          to: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
+          params: {
+            deviceId,
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+          },
+        })
       }
-      className={WORKTREE_ROW_BUTTON}
+      className={cn(WORKTREE_ROW_BUTTON, !reachable && "opacity-60")}
     >
       <WorktreeRowLabel worktree={worktree} />
       <StatusIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
-      {/* Rightmost, same shape as WorktreeKindIcon: a neutral marker
-          whose device name lives in the tooltip, not the row. */}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <span className="inline-flex shrink-0">
-              <MonitorSmartphone
-                aria-label={`On ${deviceLabel}`}
-                className="size-3 text-muted-foreground/70"
-              />
-            </span>
-          }
-        />
-        <TooltipContent>On {deviceLabel}</TooltipContent>
-      </Tooltip>
+      {/* Rightmost, where the local row keeps its own trailing cluster:
+          the owning device, name in the tooltip. */}
+      <DeviceBadge badge={{ deviceId, label: deviceLabel, tone, reachable }} />
     </button>
   );
 }

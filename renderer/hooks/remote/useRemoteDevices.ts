@@ -18,3 +18,17 @@ export function useRemoteDevices(): readonly RemoteDevice[] {
     remoteDeviceStore.getSnapshot,
   );
 }
+
+// One registered device by id, live like the list. Undefined for the
+// local device and for any id the registry doesn't know (a revoked peer,
+// or a stale link into a device that left the account).
+export function useRemoteDevice(deviceId: string): RemoteDevice | undefined {
+  return useRemoteDevices().find((entry) => entry.deviceId === deviceId);
+}
+
+// The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls
+// back to a neutral phrase rather than the raw id, which means nothing
+// to the reader.
+export function useRemoteDeviceLabel(deviceId: string): string {
+  return useRemoteDevice(deviceId)?.label ?? "the device";
+}

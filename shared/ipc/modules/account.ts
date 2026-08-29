@@ -38,9 +38,22 @@ export const accountContract = defineContract("client", {
   enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
   // Best-effort revokes THIS device on the relay, then clears the stored
   // credential locally. The revoke is best-effort so local sign-out
-  // always succeeds even offline. Removing OTHER devices from the list is
-  // a later slice.
+  // always succeeds even offline.
   signOut: invoke("account:signOut", z.void(), z.void()),
+  // Removes a device from the ACCOUNT on the relay, under this device's
+  // credential: the target's credential stops working the moment it next
+  // calls, and it disappears from every other device's registry. Unlike
+  // signOut this is not best-effort -- a failed relay call must surface,
+  // because nothing local stands in for "the device is still enrolled".
+  // Bounded by DeviceIdSchema so a listed peer's id always parses. The
+  // handler mirrors web/bridge/createWebBridge.ts's revokeDevice,
+  // including the self-revoke caveat: revoking THIS device invalidates
+  // our own credential, so the local one is cleared in the same breath
+  // (the desktop UI offers Sign out for this device instead, which ends
+  // the Clerk session first -- with the session still live
+  // ClerkAccountSync would see "signed in, not enrolled" and silently
+  // re-enroll, undoing the revoke).
+  revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
   // The account's device registry from the relay, under the stored
   // credential. Element shape is the shared relay DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.

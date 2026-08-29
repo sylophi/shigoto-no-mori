@@ -1,15 +1,15 @@
 import { useState } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Worktree } from "@shared/schemas";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
 
 export function CommitsSection({ worktree }: { worktree: Worktree }) {
-  const navigate = useNavigate();
+  const nav = useWorktreeNav();
   // The backend hands back up to 4 rows: 3 for the teaser plus 1 extra
   // we use as the "more available" probe. Slicing here keeps the
   // teaser's visible shape decoupled from that probe.
@@ -31,15 +31,7 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
         {worktree.changedCount > 0 ? (
           <button
             type="button"
-            onClick={() =>
-              void navigate({
-                to: "/projects/$projectId/worktrees/$worktreeId/diff",
-                params: {
-                  projectId: worktree.projectId,
-                  worktreeId: worktree.id,
-                },
-              })
-            }
+            onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
             title="View uncommitted changes"
             className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
           >

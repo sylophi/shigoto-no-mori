@@ -1,5 +1,5 @@
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { PullRequestDetail, Worktree } from "@shared/schemas";
 import { DiffButton } from "../DiffButton";
@@ -19,7 +19,7 @@ export function PullRequestIdentity({
   worktree: Worktree;
   pr: PullRequestDetail;
 }) {
-  const navigate = useNavigate();
+  const nav = useWorktreeNav();
   const containerRef = useRef<HTMLDivElement>(null);
   const measurerRef = useRef<HTMLDivElement>(null);
   const [showUpdated, setShowUpdated] = useState(true);
@@ -44,10 +44,7 @@ export function PullRequestIdentity({
   const updatedLabel = `, last updated ${formatRelativeTime(updatedDate.getTime())}`;
 
   const openDiff = () => {
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
-      params: { projectId: worktree.projectId, worktreeId: worktree.id },
-    });
+    nav.toPrDiff(worktree.projectId, worktree.id);
   };
 
   return (

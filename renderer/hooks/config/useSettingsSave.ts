@@ -12,7 +12,7 @@ import type {
 } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { updateLocalGlobalConfig } from "@/lib/config/localGlobalConfig";
-import { queryKeys } from "@/lib/queryKeys";
+import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
@@ -174,24 +174,29 @@ interface SettingsSaveResult {
   clientConfig: ClientConfig;
 }
 
-// LOCAL keys on purpose, paired with the write path: the save below
-// goes through updateLocalGlobalConfig, whose readLocal/write are
-// local-only by design, so the caches it staled are exactly the local
-// device's. Must not move to a useHostScope registry while the write
-// stays local (see the exception list in hooks/remote/useHostScope).
-function invalidateDeviceQueries(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.globalConfig() });
+// What a device-settings write stales, for whichever device's registry
+// it is handed: the local save below passes the LOCAL keys (paired with
+// its write path -- updateLocalGlobalConfig's readLocal/write are
+// local-only by design, so the caches it staled are exactly this
+// machine's, see the exception list in hooks/remote/useHostScope), and
+// useDeviceSettingsSave passes the scoped registry of the peer it
+// patched.
+export function invalidateDeviceSettingsQueries(
+  queryClient: QueryClient,
+  keys: QueryKeyRegistry,
+): void {
+  void queryClient.invalidateQueries({ queryKey: keys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.
-  void queryClient.invalidateQueries({ queryKey: queryKeys.launchersAll() });
+  void queryClient.invalidateQueries({ queryKey: keys.launchersAll() });
   // Toggling the GitHub CLI integration flips both readiness gating
   // and the project PR list -- refetch immediately rather than wait
   // for the next focus/mount.
-  void queryClient.invalidateQueries({ queryKey: queryKeys.githubCliAll() });
+  void queryClient.invalidateQueries({ queryKey: keys.githubCliAll() });
   // Toggling the terrier integration changes which projects the
   // list handler merges in -- same immediate refetch. (Terrier
   // readiness depends only on the binary, not the toggle, so it
   // has nothing to invalidate here.)
-  void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+  void queryClient.invalidateQueries({ queryKey: keys.projects() });
 }
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
@@ -271,7 +276,7 @@ export function useSettingsSave({
         queryClient.setQueryData(queryKeys.clientConfig(), clientConfig);
       }
       if (devicePersisted) {
-        invalidateDeviceQueries(queryClient);
+        invalidateDeviceSettingsQueries(queryClient, queryKeys);
       }
     },
     onError: (error) => {
@@ -279,7 +284,7 @@ export function useSettingsSave({
       // landed before the appearance write failed, so its caches are
       // stale exactly as on success.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        invalidateDeviceQueries(queryClient);
+        invalidateDeviceSettingsQueries(queryClient, queryKeys);
       }
     },
     meta: { errorTitle: "Couldn't save settings" },

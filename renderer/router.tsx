@@ -19,6 +19,7 @@ import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { RemoteForest } from "@/components/remote/RemoteForest";
+import { withRemoteScope } from "@/components/remote/RemoteScope";
 import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
@@ -26,6 +27,7 @@ import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { dragRegion } from "@/lib/utils";
 import { readStored, writeStored } from "@/lib/localStorage";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
@@ -138,6 +140,36 @@ const devicesRoute = createRoute({
   remountDeps: ({ params }) => params,
 });
 
+// Device-scoped twins of the worktree pages (v2: remote feels local).
+// The SAME components serve both trees: withRemoteScope resolves the
+// device, mounts HostScopeProvider and the push-refresh watcher, and
+// the pages read their params non-strictly. Local-only affordances
+// inside them gate on useWorktreeNav().remote.
+const remoteWorktreeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.detail.remote,
+  component: withRemoteScope(WorktreeDetail),
+  remountDeps: ({ params }) => params,
+});
+
+const remoteWorktreeDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.diff.remote,
+  component: withRemoteScope(WorktreeDiff),
+});
+
+const remotePullRequestDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.prDiff.remote,
+  component: withRemoteScope(PullRequestDiff),
+});
+
+const remoteCommitDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.commit.remote,
+  component: withRemoteScope(CommitDiff),
+});
+
 // remountDeps on the project- and worktree-scoped routes: the router
 // keeps one component instance across a params change and just
 // re-renders it, so without this a route would keep showing the
@@ -181,7 +213,7 @@ const worktreeLocationRoute = createRoute({
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId",
+  path: WORKTREE_ROUTE_PATHS.detail.local,
   component: WorktreeDetail,
   remountDeps: ({ params }) => params,
 });
@@ -194,19 +226,19 @@ const scriptConsoleRoute = createRoute({
 
 const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/diff",
+  path: WORKTREE_ROUTE_PATHS.diff.local,
   component: WorktreeDiff,
 });
 
 const pullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  path: WORKTREE_ROUTE_PATHS.prDiff.local,
   component: PullRequestDiff,
 });
 
 const commitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  path: WORKTREE_ROUTE_PATHS.commit.local,
   component: CommitDiff,
 });
 
@@ -216,6 +248,10 @@ const routeTree = rootRoute.addChildren([
   tidyRoute,
   devicesIndexRoute,
   devicesRoute,
+  remoteWorktreeRoute,
+  remoteWorktreeDiffRoute,
+  remotePullRequestDiffRoute,
+  remoteCommitDiffRoute,
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,

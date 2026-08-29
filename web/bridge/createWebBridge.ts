@@ -71,11 +71,6 @@ export type WebBridge = {
   // The deployment-level access state the shell surfaces when the
   // build is unconfigured or the relay refuses this origin.
   webAccess: WebAccessStore;
-  // Account-level revoke of any enrolled device, the one mutation the
-  // read-only web client is allowed (it mutates its own account, never
-  // a peer's forest). Revoking this browser's own device also signs it
-  // out locally.
-  revokeDevice(deviceId: string): Promise<void>;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
@@ -221,6 +216,24 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   let enrollInFlight: Promise<AccountStatus> | null = null;
   let signOutInFlight: Promise<void> | null = null;
 
+  // Removing a device from the account, served over the
+  // account:revokeDevice client channel (what the devices page calls).
+  async function revokeDeviceOnAccount(targetDeviceId: string): Promise<void> {
+    const record = store.read();
+    if (record === null) {
+      throw new Error("cannot revoke a device while signed out");
+    }
+    await service.revoke(record.credential, targetDeviceId);
+    // Revoking THIS browser invalidates its own credential, so the
+    // local sign-out follows immediately rather than waiting for the
+    // relay to refuse the next call. Callers revoking self MUST end
+    // the Clerk session first (DevicesPage's SelfRevokeButton does):
+    // with the session still live, ClerkAccountSync sees "signed in,
+    // not enrolled" and re-enrolls, silently undoing the revoke.
+    if (targetDeviceId === deviceId) store.clear();
+    accountChanged();
+  }
+
   const accountHandlers: Handlers<typeof accountContract> = {
     status: () => readStatus(),
 
@@ -266,6 +279,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         signOutInFlight = null;
       }
     },
+
+    revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
 
     listDevices: async () => {
       const record = store.read();
@@ -370,22 +385,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     api,
 
     webAccess,
-
-    revokeDevice: async (targetDeviceId) => {
-      const record = store.read();
-      if (record === null) {
-        throw new Error("cannot revoke a device while signed out");
-      }
-      await service.revoke(record.credential, targetDeviceId);
-      // Revoking THIS browser invalidates its own credential, so the
-      // local sign-out follows immediately rather than waiting for the
-      // relay to refuse the next call. Callers revoking self MUST end
-      // the Clerk session first (DevicesPage's SelfRevokeButton does):
-      // with the session still live, ClerkAccountSync sees "signed in,
-      // not enrolled" and re-enrolls, silently undoing the revoke.
-      if (targetDeviceId === deviceId) store.clear();
-      accountChanged();
-    },
 
     notifyAccountChanged: accountChanged,
 

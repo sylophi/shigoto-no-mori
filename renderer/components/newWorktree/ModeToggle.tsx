@@ -1,4 +1,7 @@
-import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
 
 export type Mode = "branch-from" | "checkout" | "pull-request";
 
@@ -10,12 +13,27 @@ export function ModeToggle({
   // remote). Greys that option out and doubles as its tooltip. The form
   // prints the same line under the control.
   pullRequestUnavailable,
+  // Drops the pull request option entirely, for a form pointed at
+  // another machine: `gh` runs here, so that source only ever produces a
+  // local checkout. Greying it out would suggest it might come back.
+  hidePullRequest,
 }: {
   mode: Mode;
   onChange: (m: Mode) => void;
   disabled?: boolean;
   pullRequestUnavailable?: string;
+  hidePullRequest?: boolean;
 }) {
+  const pullRequest: SegmentedOption<Mode>[] = hidePullRequest
+    ? []
+    : [
+        {
+          value: "pull-request",
+          label: "From pull request",
+          disabled: pullRequestUnavailable !== undefined,
+          title: pullRequestUnavailable,
+        },
+      ];
   return (
     <SegmentedControl
       aria-label="Worktree source mode"
@@ -27,12 +45,7 @@ export function ModeToggle({
       // segments that reshuffle once the availability check lands would
       // move out from under the cursor.
       options={[
-        {
-          value: "pull-request",
-          label: "From pull request",
-          disabled: pullRequestUnavailable !== undefined,
-          title: pullRequestUnavailable,
-        },
+        ...pullRequest,
         { value: "branch-from", label: "Branch from source" },
         { value: "checkout", label: "Check out source" },
       ]}

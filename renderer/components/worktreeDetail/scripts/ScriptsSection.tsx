@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -15,6 +16,10 @@ interface ScriptsSectionProps {
 
 export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   const navigate = useNavigate();
+  // Rows still render remotely (their run affordances disable
+  // themselves, see useScriptRunner). Only the local-page CTA below
+  // gates on the scope.
+  const { remote } = useHostScope();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(
     worktree.projectId,
   );
@@ -100,15 +105,17 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
         </div>
       )}
 
-      {!hasLifecycle && (
-        <button
-          type="button"
-          onClick={goConfigure}
-          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          Configure setup or teardown scripts →
-        </button>
-      )}
+      {!hasLifecycle &&
+        !remote && (
+          // Configure is a local page, so the CTA only exists locally.
+          <button
+            type="button"
+            onClick={goConfigure}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Configure setup or teardown scripts →
+          </button>
+        )}
     </div>
   );
 }

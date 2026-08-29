@@ -384,6 +384,40 @@ export function makeAccountHandlers(
       }
     },
 
+    revokeDevice: async (deviceId) => {
+      const signedIn = signedInService();
+      // Nothing to revoke against: no credential means no registry.
+      // Loud, not silent -- the caller asked to remove a device.
+      if (signedIn === null) {
+        throw new Error("cannot revoke a device while signed out");
+      }
+      const { service, record } = signedIn;
+      // Not swallowed the way sign-out's best-effort revoke is: a failed
+      // call here leaves the device enrolled, and no local state stands
+      // in for that, so the renderer must be able to say so.
+      await service.revoke(record.credential, deviceId);
+      if (deviceId === getDeviceId()) {
+        // Self-revoke invalidated our own credential, so drop it now
+        // rather than waiting for the relay to refuse the next call.
+        // The desktop UI routes this device through Sign out instead
+        // (which ends the Clerk session first). This arm exists so the
+        // handler is still correct for any other caller.
+        store().clear();
+        grantStore().clear();
+      } else {
+        // A device that is no longer on the account cannot be a
+        // meaningful grant target, and leaving the entry would silently
+        // re-trust the id if it ever re-enrolled under the same uuid.
+        grantStore().revoke(record.accountId, deviceId);
+      }
+      // Both fan-outs: the registry list and this host's granted set
+      // each just changed. accountChanged also drops the grant cache,
+      // so the direct listener's dispatch predicate sees the removal
+      // without a reconnect.
+      accountChanged();
+      emitGrantsChanged();
+    },
+
     listDevices: async () => {
       const signedIn = signedInService();
       // Signed out or unconfigured has no registry to show.

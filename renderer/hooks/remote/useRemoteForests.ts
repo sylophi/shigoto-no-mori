@@ -13,6 +13,8 @@
 // wanting a refetch refreshes this one's rows for free.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
+import type { StatusTone } from "@/components/ui/status-dot";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
 import {
   remoteProjectsQueryOptions,
@@ -25,6 +27,13 @@ import { useRemoteDevices } from "./useRemoteDevices";
 export interface RemoteForestItem {
   deviceId: string;
   deviceLabel: string;
+  // False when the device is not currently reachable: its rows are the
+  // cache's last known state, and the tree fades them rather than
+  // hiding work that still exists on that machine.
+  reachable: boolean;
+  // The device's connection tone, so a badge for it reads the same as
+  // its dot on the devices rail and its chip on the devices page.
+  tone: StatusTone;
   project: Project;
   worktrees: Worktree[];
   // A failed worktree listing, folded into the sidebar's coalesced
@@ -43,12 +52,23 @@ export interface RemoteForests {
 
 const CALM_REFETCH = { staleTime: 30_000, refetchOnWindowFocus: false };
 
-export function useRemoteForests(): RemoteForests {
+export interface RemoteForestsOptions {
+  // False for a consumer whose copy is decorative (the new-worktree
+  // device picker): mounting a fresh observer on a stale key would
+  // otherwise kick a full re-listing of every peer's forest on page
+  // open, for data the always-mounted sidebar keeps fresh anyway.
+  refetchOnMount?: boolean;
+}
+
+export function useRemoteForests(
+  options: RemoteForestsOptions = {},
+): RemoteForests {
+  const refetch = { ...CALM_REFETCH, ...options };
   const devices = useRemoteDevices();
   const projectQueries = useQueries({
     queries: devices.map((device) => ({
       ...remoteProjectsQueryOptions(device.deviceId, device.api),
-      ...CALM_REFETCH,
+      ...refetch,
     })),
     combine: combineFanOut,
   });
@@ -63,18 +83,23 @@ export function useRemoteForests(): RemoteForests {
   const worktreeQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
       ...remoteWorktreesQueryOptions(device.deviceId, device.api, project.id),
-      ...CALM_REFETCH,
+      ...refetch,
     })),
     combine: combineFanOut,
   });
   return {
-    items: pairs.map(({ device, project }, index) => ({
-      deviceId: device.deviceId,
-      deviceLabel: device.label,
-      project,
-      worktrees: worktreeQueries[index]?.data ?? [],
-      worktreesError: worktreeQueries[index]?.error != null,
-    })),
+    items: pairs.map(({ device, project }, index) => {
+      const status = deviceStatusView(device.status);
+      return {
+        deviceId: device.deviceId,
+        deviceLabel: device.label,
+        reachable: status.reachable,
+        tone: status.tone,
+        project,
+        worktrees: worktreeQueries[index]?.data ?? [],
+        worktreesError: worktreeQueries[index]?.error != null,
+      };
+    }),
     loading:
       projectQueries.some((query) => query.isLoading) ||
       worktreeQueries.some((query) => query.isLoading),

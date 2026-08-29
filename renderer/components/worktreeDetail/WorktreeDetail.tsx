@@ -1,16 +1,16 @@
-import { getRouteApi } from "@tanstack/react-router";
+import { useScopedWorktreeParams } from "@/hooks/worktrees/useWorktreeNav";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
-const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId");
-
 export function WorktreeDetail() {
-  const { projectId, worktreeId } = route.useParams();
+  const { projectId, worktreeId } = useScopedWorktreeParams();
+  const { remote } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {
     data: worktrees = [],
@@ -22,9 +22,14 @@ export function WorktreeDetail() {
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   useEffect(() => {
+    // Local-only page-open work: refreshProject is a mutating invoke
+    // (an ungranted peer would refuse it, and auto-fetching on a peer
+    // is chatty when push invalidation already keeps it fresh), and
+    // the recent-worktrees list is this window's own quick-switcher.
+    if (remote) return;
     void window.api.git.refreshProject(projectId);
     recordRecentWorktree(projectId, worktreeId);
-  }, [projectId, worktreeId]);
+  }, [projectId, worktreeId, remote]);
 
   if (!worktree || !project) {
     // Cold cache (e.g. a reload landing directly on this route): the

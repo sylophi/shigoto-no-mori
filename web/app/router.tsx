@@ -18,8 +18,14 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { ErrorFallback } from "@/components/ErrorFallback";
+import { CommitDiff } from "@/components/diff/CommitDiff";
+import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
+import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { RemoteForest } from "@/components/remote/RemoteForest";
+import { withRemoteScope } from "@/components/remote/RemoteScope";
+import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { useAccountStatus } from "@/hooks/account/useAccount";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { DevicesPage } from "./DevicesPage";
 import { LoginPage } from "./LoginPage";
 import { NotFoundPage } from "./NotFoundPage";
@@ -79,12 +85,46 @@ const deviceForestRoute = createRoute({
   remountDeps: ({ params }) => params,
 });
 
+// The device-scoped worktree pages, same ids and components as the
+// desktop's twin routes (renderer/router.tsx): a remote worktree row in
+// the shared sidebar navigates here, and the pages read their params
+// non-strictly, so they mount unmodified. App-only affordances inside
+// (port forwarding) already gate on window.api.isElectron.
+const remoteWorktreeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.detail.remote,
+  component: withRemoteScope(WorktreeDetail),
+  remountDeps: ({ params }) => params,
+});
+
+const remoteWorktreeDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.diff.remote,
+  component: withRemoteScope(WorktreeDiff),
+});
+
+const remotePullRequestDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.prDiff.remote,
+  component: withRemoteScope(PullRequestDiff),
+});
+
+const remoteCommitDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.commit.remote,
+  component: withRemoteScope(CommitDiff),
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   devicesRoute,
   settingsRoute,
   deviceForestRoute,
+  remoteWorktreeRoute,
+  remoteWorktreeDiffRoute,
+  remotePullRequestDiffRoute,
+  remoteCommitDiffRoute,
 ]);
 
 function RouteErrorFallback({

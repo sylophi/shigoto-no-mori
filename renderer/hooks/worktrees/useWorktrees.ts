@@ -16,8 +16,14 @@ export type HostForestScope = Partial<HostScope>;
 // different devices.
 export function worktreesQueryOptions(
   projectId: string | null,
-  { deviceId = localDeviceId, api = window.api }: HostForestScope = {},
+  scope: HostForestScope = {},
 ) {
+  const deviceId = scope.deviceId ?? localDeviceId;
+  // Key-presence check, not a default parameter: `api: undefined` from
+  // a disconnected device must stay undefined (disabled query), not
+  // fall back to the local api and cache this machine's worktrees
+  // under the peer's device key. See projectsQueryOptions.
+  const api = "api" in scope ? scope.api : window.api;
   return queryOptions<Worktree[]>({
     queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {
@@ -68,11 +74,25 @@ export function useWorktrees(projectId: string | null) {
 // objects every render, so nothing downstream can stay memoized.
 // Projecting to the fields consumers read routes it through
 // replaceEqualDeep, which keeps identity when nothing changed.
-export function useAllProjectWorktrees(projects: Project[], enabled = true) {
+// Freshness overrides for a consumer that tolerates stale counts (the
+// devices page's chips) and must not re-list every project on mount or
+// focus. Empty for everyone else, who keep the query's own defaults.
+export type WorktreeFanOutRefetch = {
+  staleTime?: number;
+  refetchOnMount?: boolean;
+  refetchOnWindowFocus?: boolean;
+};
+
+export function useAllProjectWorktrees(
+  projects: Project[],
+  enabled = true,
+  refetch: WorktreeFanOutRefetch = {},
+) {
   const scope = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({
       ...worktreesQueryOptions(project.id, scope),
+      ...refetch,
       enabled: enabled && project.pathExists !== false,
     })),
     combine: combineFanOut,

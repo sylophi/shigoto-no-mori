@@ -240,6 +240,9 @@ export const queryKeys = queryKeysFor(localDeviceId);
 const externalChangeExempt = new Set([
   "account",
   "clientConfig",
+  // A permission verdict, not state: it moves only on a grant or
+  // revoke on the host, never because that host's git state did.
+  "commandAccess",
   "fs",
   "githubCli",
   "portForwards",

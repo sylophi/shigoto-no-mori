@@ -1,11 +1,22 @@
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
+import type { StatusTone } from "@/components/ui/status-dot";
+import type { SidebarDeviceBadge } from "./DeviceBadge";
 
 // The two shelves the inbox view folds shut by default. The third box --
 // the live one -- has no header and no toggle, so it isn't in this union.
 export type InboxShelf = "shelved" | "merged";
 
 export type SidebarRow =
-  | { kind: "project"; key: string; project: Project; expanded: boolean }
+  // `devices` lists the peer devices whose worktrees merged into this
+  // project's group (empty for a purely local project), for the
+  // header's badge cluster.
+  | {
+      kind: "project";
+      key: string;
+      project: Project;
+      expanded: boolean;
+      devices: readonly SidebarDeviceBadge[];
+    }
   | { kind: "worktree"; key: string; worktree: Worktree }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The PR rides
@@ -32,6 +43,11 @@ export type SidebarRow =
       worktree: Worktree;
       deviceId: string;
       deviceLabel: string;
+      // False renders the row faded: the device is off and this is its
+      // last known state.
+      reachable: boolean;
+      // The device's connection tone, for its badge on the row.
+      tone: StatusTone;
       groupId: string;
     }
   // Header for remote worktrees whose project has no local counterpart.
@@ -45,6 +61,7 @@ export type SidebarRow =
       key: string;
       name: string;
       count: number;
+      devices: readonly SidebarDeviceBadge[];
       iconSources: readonly { deviceId: string; projectId: string }[];
     }
   | {

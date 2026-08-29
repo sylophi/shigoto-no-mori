@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Textarea } from "@/components/ui/textarea";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useWorktreeData,
   useWorktreeDataWrite,
@@ -33,6 +34,11 @@ function NotesSectionInner({
   worktree: Worktree;
   saved: string;
 }) {
+  // Without command access (a remote host that hasn't granted it) the
+  // write would only be refused at the wire, so the editor says so up
+  // front instead of offering a save that cannot land. The local device
+  // is granted by contract, so this is never read-only locally.
+  const { granted } = useCommandAccess();
   const write = useWorktreeDataWrite();
 
   const [draft, setDraft] = useState(saved);
@@ -68,7 +74,13 @@ function NotesSectionInner({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        className="w-full resize-y px-3 py-2 text-sm"
+        readOnly={!granted}
+        title={
+          !granted
+            ? "Read-only. Command access is granted from that device."
+            : undefined
+        }
+        className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
       />
     </section>
   );

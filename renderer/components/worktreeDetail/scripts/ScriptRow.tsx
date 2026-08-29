@@ -15,7 +15,12 @@ interface ScriptRowProps {
 
 export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
   const navigate = useNavigate();
-  const { state, busy, start, stop } = useScriptRunner(worktree, slot);
+  // The runner also says whether a run can happen at all here (it
+  // can't under a remote scope) and why.
+  const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
+    worktree,
+    slot,
+  );
   // No history means there's nothing for the console to show, so the
   // right-side "view output" affordance only appears once a run lands.
   const hasHistory = state.status !== "idle";
@@ -37,9 +42,12 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
       <button
         type="button"
         onClick={busy ? stop : start}
-        disabled={state.cancelling}
+        disabled={state.cancelling || !canRun}
         aria-label={actionLabel}
-        title={command ? `${actionLabel}\n${command}` : actionLabel}
+        title={
+          disabledReason ??
+          (command ? `${actionLabel}\n${command}` : actionLabel)
+        }
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           busy ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent",
