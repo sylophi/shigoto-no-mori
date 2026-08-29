@@ -158,12 +158,18 @@ first (the web client is unaffected: a browser origin authenticates
 the browser way). For macOS passkey support later, the dashboard's
 Native applications page must also have the Native API enabled.
 
-One dev-only caveat: social (browser-redirect) sign-in cannot complete
-in `pnpm start` on macOS. The redirect deep-links to
-`shigomori-dev://app`, and LaunchServices won't route a scheme to the
-unbundled dev Electron.app (only the packaged build registers its
-scheme via Info.plist). Use email-code sign-in in dev, and verify
-social providers against a packaged build.
+Social (browser-redirect) sign-in works in `pnpm start` on macOS: the
+dev launcher (scripts/dev-electron.mts) clones Electron.app into a
+gitignored per-worktree bundle that claims `shigomori-dev://` with
+LaunchServices, and runs the dev app from it, so the redirect
+deep-links back to the running dev process. With several dev worktrees
+the most recently launched one owns the scheme. On Linux and Windows
+dev stays unbundled and social sign-in still needs a packaged build
+(email-code sign-in works everywhere). The dev bundle registers its
+own plist, so the packaged app's `shigomori://` registration
+(forge.config.ts protocols) is not exercised by dev sign-in: verify
+social providers against a packaged build before a release that
+touches it.
 
 The web deploy's CSP (vercel.json) allowlists Clerk's script host as
 `https://*.clerk.accounts.dev`, which covers development instances. A
