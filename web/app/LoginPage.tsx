@@ -1,8 +1,9 @@
-// The unauthenticated landing page: Clerk's embedded sign-in, or an
-// explanation that this build carries no account service configuration.
-// Signed-in (enrolled) visitors are bounced straight to the devices
-// page, and ClerkAccountSync performs the enrollment the moment Clerk
-// reports a session.
+// The unauthenticated landing page: Clerk's embedded sign-in under a
+// short app-voiced introduction, or an explanation that this build
+// carries no account service configuration. Signed-in (enrolled)
+// visitors are bounced straight to the devices page, and
+// ClerkAccountSync performs the enrollment the moment Clerk reports a
+// session.
 import { useEffect } from "react";
 import { SignIn, useAuth } from "@clerk/react";
 import { CloudOff, RotateCw } from "lucide-react";
@@ -18,14 +19,24 @@ export function LoginPage() {
   }, [status?.signedIn]);
 
   return (
-    <div className="flex h-full items-center justify-center overflow-y-auto p-6">
+    <div className="flex h-full flex-col items-center justify-center gap-6 overflow-y-auto p-6">
+      <div className="flex max-w-sm flex-col items-center gap-1 text-center">
+        <span className="text-xs text-muted-foreground">Shigoto no Mori</span>
+        <h1 className="text-lg font-medium tracking-tight">
+          Your forests, from anywhere
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Sign in to reach this account&apos;s devices through the relay. This
+          browser enrolls as a device of its own.
+        </p>
+      </div>
       {status?.configured === true ? (
         // The Clerk half is gated on configured, which implies the
         // ClerkProvider is mounted (ClerkGate): a pending or errored
         // status must not fall through to a bare Clerk hook.
         <ConfiguredLogin />
       ) : isPending ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading&hellip;</p>
       ) : (
         <div className="flex w-full max-w-sm items-start gap-2 rounded-lg border border-dashed border-border bg-card px-3 py-3 text-sm text-muted-foreground shadow-sm">
           <CloudOff className="mt-0.5 size-4 shrink-0" />
@@ -50,7 +61,7 @@ function ConfiguredLogin() {
   const enroll = useEnroll();
 
   if (!isLoaded) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <p className="text-sm text-muted-foreground">Loading&hellip;</p>;
   }
   if (isSignedIn) {
     return (

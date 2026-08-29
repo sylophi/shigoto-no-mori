@@ -7,11 +7,15 @@
 // the history impl, which also keeps pages free of an import cycle
 // with the route tree.
 
+// Settings deliberately shares the desktop's "/settings" path (not a
+// web-only name): every web path being a subset of the desktop tree is
+// what lets reused desktop components (NavIconButton, AccountSection's
+// forest links) pass the Register-typed navigate checks unmodified.
 export const webPaths = {
   index: "/",
   login: "/login",
   devices: "/devices",
-  appearance: "/appearance",
+  settings: "/settings",
   deviceForest: (deviceId: string) =>
     `/devices/${encodeURIComponent(deviceId)}`,
 } as const;

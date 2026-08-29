@@ -1,3 +1,4 @@
+import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
 import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
@@ -9,6 +10,11 @@ interface BuildSidebarRowsArgs {
   collapsed: Set<string>;
   shelvedExpanded: Set<string>;
   arrangeMode: boolean;
+  // Peer devices' forests, merged into the tree: a remote project
+  // sharing a local project's repo identity contributes its worktrees
+  // to that group (marked per row), the rest gather under
+  // remote-project headers after the local projects.
+  remote: RemoteForestItem[];
 }
 
 // Flattens `projects` plus their per-project worktree queries into the
@@ -26,8 +32,13 @@ export function buildSidebarRows({
   collapsed,
   shelvedExpanded,
   arrangeMode,
+  remote,
 }: BuildSidebarRowsArgs): SidebarViewModel {
-  const failedCount = worktreeQueries.filter((q) => q.error).length;
+  // Remote listing failures count beside the local ones, so the shell's
+  // coalesced fan-out toast covers the whole tree.
+  const failedCount =
+    worktreeQueries.filter((q) => q.error).length +
+    remote.filter((item) => item.worktreesError).length;
 
   if (arrangeMode) {
     const rows: SidebarRow[] = projects.map((project) => ({
@@ -44,6 +55,24 @@ export function buildSidebarRows({
     };
   }
 
+  // Remote items grouped up front by repo identity (an identity-less
+  // project can only group with itself). The local pass claims groups
+  // by `get` + `delete`, so whatever remains IS the leftover set -- one
+  // structure, no consumed-tracking, and a group can never be claimed
+  // twice. Shelving is a local noise-control preference, so a peer's
+  // shelved worktrees stay in its own sidebar, not this one's.
+  const remoteByIdentity = new Map<string, RemoteForestItem[]>();
+  for (const raw of remote) {
+    const worktrees = raw.worktrees.filter((worktree) => !worktree.shelved);
+    if (worktrees.length === 0) continue;
+    const item = { ...raw, worktrees };
+    const groupKey =
+      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
+    const group = remoteByIdentity.get(groupKey);
+    if (group) group.push(item);
+    else remoteByIdentity.set(groupKey, [item]);
+  }
+
   const rows: SidebarRow[] = [];
   projects.forEach((project, i) => {
     const expanded = !collapsed.has(project.id);
@@ -53,15 +82,40 @@ export function buildSidebarRows({
       project,
       expanded,
     });
+    // Claimed by identity even while collapsed or still loading, so a
+    // folded project's remote worktrees fold with it instead of
+    // reappearing below as a duplicate remote-project group. A missing
+    // local project claims nothing: its remote counterpart is alive and
+    // belongs under its own header.
+    let remoteHere: RemoteForestItem[] = [];
+    if (project.pathExists !== false && project.identity != null) {
+      remoteHere = remoteByIdentity.get(project.identity) ?? [];
+      if (remoteHere.length > 0) remoteByIdentity.delete(project.identity);
+    }
     if (!expanded || project.pathExists === false) return;
+    // Peers' worktrees of this same repo render after the local rows so
+    // the local work stays where the eye expects it -- and on EVERY
+    // path below: a claimed group that then skipped rendering (local
+    // listing still loading, or errored) would vanish from the tree
+    // entirely, hiding the peer's perfectly healthy worktrees behind a
+    // local-only failure.
+    const pushRemoteHere = () => {
+      for (const item of remoteHere) {
+        pushRemoteWorktreeRows(rows, item, project.id);
+      }
+    };
     const query = worktreeQueries[i];
-    if (!query) return;
+    if (!query) {
+      pushRemoteHere();
+      return;
+    }
     if (query.isLoading) {
       rows.push({
         kind: "worktree-skeleton",
         key: `sk:${project.id}`,
         projectId: project.id,
       });
+      pushRemoteHere();
       return;
     }
     if (query.error) {
@@ -70,6 +124,7 @@ export function buildSidebarRows({
         key: `err:${project.id}`,
         projectId: project.id,
       });
+      pushRemoteHere();
       return;
     }
     const trees = (query.data ?? []) as Worktree[];
@@ -82,6 +137,7 @@ export function buildSidebarRows({
         worktree,
       });
     }
+    pushRemoteHere();
     if (shelved.length > 0) {
       const shelfOpen = shelvedExpanded.has(project.id);
       if (shelfOpen) {
@@ -104,6 +160,30 @@ export function buildSidebarRows({
       });
     }
   });
+
+  // Whatever the local pass left unclaimed: remote projects with no
+  // local counterpart, after the local tree. The same repo on several
+  // devices reads as one project (the per-row device marker tells them
+  // apart), and any live member serves the icon fetch -- same repo.
+  for (const [groupKey, items] of remoteByIdentity) {
+    const [first] = items;
+    if (!first) continue;
+    const groupId = `rp:${groupKey}`;
+    rows.push({
+      kind: "remote-project",
+      key: groupId,
+      name: first.project.name,
+      count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
+      iconSources: items.map((item) => ({
+        deviceId: item.deviceId,
+        projectId: item.project.id,
+      })),
+    });
+    for (const item of items) {
+      pushRemoteWorktreeRows(rows, item, groupId);
+    }
+  }
+
   return {
     rows,
     failedCount,
@@ -128,4 +208,23 @@ export function buildSidebarRows({
 function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
   const key = `p:${projectId}`;
   return rows.some((r) => r.key === key) ? key : null;
+}
+
+function pushRemoteWorktreeRows(
+  rows: SidebarRow[],
+  item: RemoteForestItem,
+  groupId: string,
+): void {
+  for (const worktree of item.worktrees) {
+    rows.push({
+      kind: "remote-worktree",
+      // Device-qualified: the same repo pulled to two machines can
+      // carry the same worktree id on both.
+      key: `rw:${item.deviceId}:${worktree.id}`,
+      worktree,
+      deviceId: item.deviceId,
+      deviceLabel: item.deviceLabel,
+      groupId,
+    });
+  }
 }

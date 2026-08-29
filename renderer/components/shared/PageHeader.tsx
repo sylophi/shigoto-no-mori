@@ -5,17 +5,12 @@
 // header chrome live in exactly one place.
 import type React from "react";
 
-// Two complete class strings rather than an interpolated padding slot:
-// Tailwind's scanner only sees full utility tokens, so the variant
-// classes must appear verbatim. Desktop pages sit under the window
-// chrome and breathe with pt-7, the web pages render below the web
-// shell's own top bar and use pt-5.
-const HEADER_CLASS = {
-  "pt-7":
-    "relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4",
-  "pt-5":
-    "relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-5 pb-4",
-} as const;
+// One padding for both shells: the desktop pages sit under the window
+// chrome, and since the web shell became a sidebar layout its pages
+// have the same open canvas above them (the former slim-top-bar shell
+// carried a pt-5 variant that no longer has a caller).
+const HEADER_CLASS =
+  "relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4";
 
 export function PageHeader({
   eyebrow,
@@ -23,7 +18,6 @@ export function PageHeader({
   watermark,
   status,
   actions,
-  topPadding = "pt-7",
 }: {
   eyebrow: React.ReactNode;
   title: React.ReactNode;
@@ -33,10 +27,9 @@ export function PageHeader({
   status?: React.ReactNode;
   // Pinned to the right edge (a settings toggle).
   actions?: React.ReactNode;
-  topPadding?: keyof typeof HEADER_CLASS;
 }) {
   return (
-    <header className={HEADER_CLASS[topPadding]}>
+    <header className={HEADER_CLASS}>
       <div className="relative z-[1] flex min-w-0 flex-col">
         <span className="truncate text-xs text-muted-foreground">
           {eyebrow}

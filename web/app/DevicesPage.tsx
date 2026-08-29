@@ -1,20 +1,25 @@
-// The devices-first home: the account's enrolled devices with live
-// relay presence, a per-device account-level revoke, and the door into
-// each online device's read-only forest. Data comes through the same
-// hooks the desktop settings use (useAccount) plus the remote device
-// registry the relay sync maintains, so status semantics cannot drift
-// between the two clients.
+// "/devices" on the web: the account's machines, wearing the desktop
+// Devices page's chrome (PageShell, the "devices" wallpaper zone,
+// Account over Devices sections). Data comes through the same hooks the
+// desktop uses (useAccount) plus the remote device registry the relay
+// sync maintains, so status semantics cannot drift between the two
+// clients. Web-specific substance: the deployment access banner, the
+// honest relay reachability messages, and per-device account-level
+// revoke (a browser cannot grant command access, so no grant toggles).
 import { useEffect, useSyncExternalStore } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { MonitorSmartphone, TreePine } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
+import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { SectionHeading } from "@/components/ui/section-heading";
+import { DeviceNameField } from "@/components/remote/DeviceNameField";
 import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
-import { PageHeader } from "@/components/shared/PageHeader";
+import { PageShell } from "@/components/shared/PageShell";
 import {
   useAccountDevices,
   useAccountStatus,
@@ -23,6 +28,7 @@ import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { abbreviateId } from "@/lib/abbreviateId";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
@@ -42,50 +48,84 @@ export function DevicesPage() {
     if (!statusPending && !signedIn) redirectTo(webPaths.login);
   }, [statusPending, signedIn]);
 
-  const devices = useAccountDevices(signedIn);
+  return (
+    <PageShell
+      page="devices"
+      eyebrow="Shigoto no Mori"
+      title="Devices"
+      watermark="機器"
+      gap="gap-10"
+    >
+      {statusPending || !signedIn ? (
+        <p className="text-sm text-muted-foreground">Loading&hellip;</p>
+      ) : (
+        <DevicesBody status={status} />
+      )}
+    </PageShell>
+  );
+}
+
+// The signed-in page body, split out so its hooks only run once the
+// status guard above has passed and the page shell stays a flat
+// two-branch render.
+function DevicesBody({ status }: { status: AccountStatus }) {
+  const devices = useAccountDevices(true);
   const webAccess = useWebAccess();
   const relayStatus = useRelayStatus();
 
-  if (statusPending || !signedIn) {
-    return (
-      <PageShell>
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </PageShell>
-    );
-  }
-
   return (
-    <PageShell accountId={status?.accountId}>
-      {webAccess.kind === "blocked" && (
-        <ErrorBanner>
-          The relay refused this request ({webAccess.message}). This deployment
-          cannot serve the device list until the relay accepts it.
-        </ErrorBanner>
-      )}
-
-      {devices.isError && (
-        <ErrorBanner>{reachabilityMessage(devices.error)}</ErrorBanner>
-      )}
-
-      {devices.isPending ? (
-        <p className="text-sm text-muted-foreground">Loading devices…</p>
-      ) : devices.data !== undefined && devices.data.length > 0 ? (
-        <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-          {devices.data.map((info) => (
-            <DeviceRow
-              key={info.deviceId}
-              info={info}
-              relayStatus={relayStatus}
-            />
-          ))}
+    <>
+      <section className="space-y-3">
+        <div>
+          <SectionHeading className="mb-1">Account</SectionHeading>
+          <p className="text-xs text-muted-foreground">
+            Signed in as{" "}
+            <span className="font-mono text-foreground">
+              {abbreviateId(status.accountId)}
+            </span>
+            . This browser is enrolled as a device of its own. Revoking it below
+            signs it out.
+          </p>
         </div>
-      ) : devices.isError ? null : (
-        <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-          No devices enrolled on this account yet. Sign in from the desktop app
-          to enroll a machine.
-        </div>
-      )}
-    </PageShell>
+        <DeviceNameField deviceName={status.deviceName} label="This browser" />
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeading>Devices</SectionHeading>
+
+        {webAccess.kind === "blocked" && (
+          <ErrorBanner>
+            The relay refused this request ({webAccess.message}). This
+            deployment cannot serve the device list until the relay accepts it.
+          </ErrorBanner>
+        )}
+
+        {devices.isError && (
+          <ErrorBanner>{reachabilityMessage(devices.error)}</ErrorBanner>
+        )}
+
+        {devices.isPending ? (
+          <p className="text-sm text-muted-foreground">
+            Loading devices&hellip;
+          </p>
+        ) : devices.data !== undefined && devices.data.length > 0 ? (
+          <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+            {devices.data.map((info) => (
+              <DeviceRow
+                key={info.deviceId}
+                info={info}
+                relayStatus={relayStatus}
+              />
+            ))}
+          </div>
+        ) : devices.isError ? null : (
+          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            No devices enrolled on this account yet. Sign in from the desktop
+            app to enroll a machine.
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -129,9 +169,11 @@ function DeviceRow({
   const { reachable } = deviceStatusView(supervisorStatus);
 
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5">
+    <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
       <MonitorSmartphone className="size-4 shrink-0 text-muted-foreground" />
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* Grows but never shrinks below a readable name. On a narrow
+          screen the controls wrap under it instead of crushing it. */}
+      <div className="flex min-w-0 flex-[1_1_10rem] flex-col">
         <span className="flex items-center gap-2 text-sm">
           <span className="truncate font-medium">{info.name}</span>
           {isSelf && (
@@ -208,27 +250,5 @@ function PeerRevokeButton({ deviceId }: { deviceId: string }) {
       idleLabel="Revoke"
       onClick={() => confirm.trigger(() => revoke.mutate())}
     />
-  );
-}
-
-function PageShell({
-  accountId,
-  children,
-}: {
-  accountId?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex h-full flex-col">
-      <PageHeader
-        eyebrow={accountId ? `Signed in as ${accountId}` : "Account"}
-        title="Devices"
-        watermark="端末"
-        topPadding="pt-5"
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="flex max-w-3xl flex-col gap-4">{children}</div>
-      </div>
-    </div>
   );
 }

@@ -3,6 +3,8 @@ import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
 import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { ProjectRow } from "./ProjectRow";
+import { RemoteProjectRow } from "./RemoteProjectRow";
+import { RemoteWorktreeRow } from "./RemoteWorktreeRow";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
 import type { InboxShelf, SidebarRow } from "./sidebarRow";
@@ -37,6 +39,22 @@ export function RowContent({
       );
     case "worktree":
       return <WorktreeRow worktree={row.worktree} />;
+    case "remote-worktree":
+      return (
+        <RemoteWorktreeRow
+          worktree={row.worktree}
+          deviceId={row.deviceId}
+          deviceLabel={row.deviceLabel}
+        />
+      );
+    case "remote-project":
+      return (
+        <RemoteProjectRow
+          name={row.name}
+          count={row.count}
+          iconSources={row.iconSources}
+        />
+      );
     case "inbox-worktree":
       return (
         <InboxRow

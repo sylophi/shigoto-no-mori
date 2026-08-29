@@ -21,6 +21,32 @@ export type SidebarRow =
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }
+  // A peer device's worktree, merged into the tree beside the local
+  // rows: under the local project sharing its repo identity when one
+  // exists, else under a remote-project header. groupId names the group
+  // it renders in (the local project's id, or the remote group key) so
+  // hover attribution works without re-deriving the merge.
+  | {
+      kind: "remote-worktree";
+      key: string;
+      worktree: Worktree;
+      deviceId: string;
+      deviceLabel: string;
+      groupId: string;
+    }
+  // Header for remote worktrees whose project has no local counterpart.
+  // Not a Project row: it carries no local actions, no collapse state,
+  // and may span several devices sharing one repo identity. Its key
+  // doubles as the group id its worktree rows carry. iconSources names
+  // every member (device, project) pair -- same repo, so any member
+  // with a live connection serves the icon fetch.
+  | {
+      kind: "remote-project";
+      key: string;
+      name: string;
+      count: number;
+      iconSources: readonly { deviceId: string; projectId: string }[];
+    }
   | {
       kind: "shelved-toggle";
       key: string;
@@ -63,6 +89,8 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "shelved-toggle": 24,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
+  "remote-worktree": 40,
+  "remote-project": 28,
 };
 
 // Where the row sits in the scroller, read off the kind rather than
@@ -86,4 +114,6 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "shelved-toggle": "px-2 pl-5",
   "inbox-worktree": "px-2 pb-1",
   "inbox-shelf": "px-2 pb-1",
+  "remote-worktree": "px-2 pl-5",
+  "remote-project": "px-2",
 };

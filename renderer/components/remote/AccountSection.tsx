@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
 import { useAuth, useClerk } from "@clerk/react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, LogIn } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
+import { DeviceNameField } from "@/components/remote/DeviceNameField";
 import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import {
   useAccountDevices,
@@ -16,11 +15,11 @@ import {
   useGrantCommands,
   useGrantedDevices,
   useRevokeCommands,
-  useSetDeviceName,
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
+import { abbreviateId } from "@/lib/abbreviateId";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
@@ -87,7 +86,7 @@ export function AccountSection() {
             </span>
           </div>
 
-          <DeviceNameField deviceName={status.deviceName} />
+          <DeviceNameField deviceName={status.deviceName} label="This device" />
 
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Devices</p>
@@ -261,53 +260,4 @@ function DeviceRow({
       )}
     </div>
   );
-}
-
-// This device's name, editable inline. The saved name is the metadata the
-// credential store keeps, so a rename survives a relaunch even before a
-// future slice pushes it to the relay.
-function DeviceNameField({ deviceName }: { deviceName: string }) {
-  const setDeviceName = useSetDeviceName();
-  const [draft, setDraft] = useState(deviceName);
-
-  // Keep the draft in step when the stored name changes underneath us (a
-  // broadcast from another window, or the mutation settling).
-  useEffect(() => setDraft(deviceName), [deviceName]);
-
-  const trimmed = draft.trim();
-  const canSave =
-    trimmed.length > 0 && trimmed !== deviceName && !setDeviceName.isPending;
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="text-xs text-muted-foreground" htmlFor="device-name">
-        This device
-      </label>
-      <Input
-        id="device-name"
-        type="text"
-        value={draft}
-        disabled={setDeviceName.isPending}
-        onChange={(e) => setDraft(e.target.value)}
-        aria-label="This device name"
-        className="min-w-0 flex-1 px-2.5 py-1.5 text-sm"
-      />
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!canSave}
-        onClick={() => setDeviceName.mutate(trimmed)}
-      >
-        Rename
-      </Button>
-    </div>
-  );
-}
-
-// Shorten a long account id for display while keeping enough on each end
-// to recognise it. Short ids and the empty signed-out case pass through.
-function abbreviateId(id: string): string {
-  if (id === "") return "(no id)";
-  if (id.length <= 16) return id;
-  return `${id.slice(0, 10)}…${id.slice(-4)}`;
 }

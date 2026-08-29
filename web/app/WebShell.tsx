@@ -1,92 +1,111 @@
-// The web client's root layout: a slim top bar with the app identity,
-// the signed-in navigation, and the routed page in a doubutsu "main"
-// zone so the reused renderer pages (RemoteForest and friends) get the
-// same overlay chrome they get inside the desktop's detail pane. Built
-// in v1 vocabulary (theme tokens only), per the theming contract.
+// The web client's root layout: the browser twin of the desktop's
+// RootLayout (renderer/router.tsx) -- a sidebar beside the routed page
+// in a doubutsu "main" zone, so the whole client wears the app's chrome
+// rather than a website's. The browser tailoring is exactly the layout
+// response: on narrow viewports the sidebar folds into a slide-over
+// sheet behind a slim top bar, and there is no window-chrome drag
+// region or resize handle. Built in v1 vocabulary (theme tokens only),
+// per the theming contract.
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Outlet, useLocation } from "@tanstack/react-router";
-import { MonitorSmartphone, Palette, TreePine } from "lucide-react";
-import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
-import { Button } from "@/components/ui/button";
-import {
-  useAccountStatus,
-  useWatchAccountChanges,
-} from "@/hooks/account/useAccount";
-import { cn } from "@/lib/utils";
-import { navigateTo, redirectTo, webPaths } from "./nav";
+import { PanelLeft } from "lucide-react";
+import { SIDEBAR_ICON_BUTTON } from "@/components/sidebar/sidebarChrome";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import { WebSidebar } from "./WebSidebar";
 
-function NavButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Button
-      variant={active ? "secondary" : "ghost"}
-      size="sm"
-      onClick={onClick}
-      className={cn(!active && "text-muted-foreground")}
-    >
-      {children}
-    </Button>
+// Tailwind's md breakpoint, as a real render gate rather than a CSS
+// `hidden`: the static sidebar runs the full remote-forest query
+// fan-out, and a phone-width session must not pay for a permanently
+// invisible copy of it (nor run two copies while the sheet is open).
+const WIDE_QUERY = "(min-width: 48rem)";
+
+function subscribeToWide(onChange: () => void): () => void {
+  const media = window.matchMedia(WIDE_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function useIsWideViewport(): boolean {
+  return useSyncExternalStore(
+    subscribeToWide,
+    () => window.matchMedia(WIDE_QUERY).matches,
   );
 }
 
 export function WebShell() {
+  // The always-mounted account watch (the web counterpart of the
+  // desktop's SidebarFooter mount), keeping every staleTime-Infinity
+  // account read fresh across sign-in, sign-out and renames.
   useWatchAccountChanges();
-  const { data: status } = useAccountStatus();
+  const wide = useIsWideViewport();
+  const [sheetOpen, setSheetOpen] = useState(false);
   const { pathname } = useLocation();
-  const signedIn = status?.signedIn === true;
+
+  // Navigating from a sheet row lands on the new page. The sheet's job
+  // is done, so it follows the navigation closed.
+  useEffect(() => setSheetOpen(false), [pathname]);
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-4 py-2">
-        <TreePine className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-sm font-medium tracking-tight">
-          Shigoto no Mori
-        </span>
-        <span className="text-xs text-muted-foreground">web</span>
-        <nav className="ml-4 flex items-center gap-1">
-          {signedIn && (
-            <NavButton
-              active={pathname === webPaths.devices}
-              onClick={() => navigateTo(webPaths.devices)}
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+      {wide ? (
+        <>
+          {/* Wide viewports: the desktop's static sidebar + hairline
+              separator. The separator keeps the desktop's role so the
+              doubutsu overlay styles it as the sidebar's mint edge. */}
+          <div className="w-60 shrink-0">
+            <WebSidebar />
+          </div>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Sidebar edge"
+            className="w-px shrink-0 bg-border"
+          />
+        </>
+      ) : null}
+
+      <div className="flex h-full min-w-0 flex-1 flex-col">
+        {!wide && (
+          /* Narrow viewports: a slim bar carrying the brand and the
+             sidebar toggle. */
+          <header className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+            <button
+              type="button"
+              aria-label="Open sidebar"
+              aria-expanded={sheetOpen}
+              onClick={() => setSheetOpen(true)}
+              className={SIDEBAR_ICON_BUTTON}
             >
-              <MonitorSmartphone />
-              Devices
-            </NavButton>
-          )}
-          <NavButton
-            active={pathname === webPaths.appearance}
-            onClick={() => navigateTo(webPaths.appearance)}
+              <PanelLeft className="size-4" />
+            </button>
+            <span className="truncate text-[13px] font-semibold tracking-tight">
+              Shigoto no Mori
+            </span>
+          </header>
+        )}
+        <main
+          data-doubutsu-zone="main"
+          className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
+        >
+          <Outlet />
+        </main>
+      </div>
+
+      {!wide && (
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+          {/* No close X: it would float over the brand header, and the
+              backdrop tap, Esc, and any navigation already close it. */}
+          <SheetContent
+            side="left"
+            showCloseButton={false}
+            className="w-72 gap-0 p-0"
           >
-            <Palette />
-            Appearance
-          </NavButton>
-        </nav>
-        <div className="ml-auto flex items-center gap-2">
-          {/* Enrolled implies configured, so the provider is mounted
-              and the Clerk hook inside the button is safe. */}
-          {signedIn && (
-            <ClerkSignOutButton
-              className="text-muted-foreground"
-              // replace, not push: the status invalidation may already
-              // have bounced this page to /login, and a pushed second
-              // /login entry would trap the Back button.
-              onSignedOut={() => redirectTo(webPaths.login)}
-            />
-          )}
-        </div>
-      </header>
-      <main
-        data-doubutsu-zone="main"
-        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
-      >
-        <Outlet />
-      </main>
+            <SheetTitle className="sr-only">Sidebar</SheetTitle>
+            <WebSidebar />
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

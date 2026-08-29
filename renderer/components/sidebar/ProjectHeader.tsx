@@ -23,6 +23,11 @@ interface ProjectHeaderProps {
   reorderable?: boolean;
 }
 
+// The header row's shared shell, also worn by RemoteProjectRow so a
+// remote-only project's header keeps this typography through restyles.
+export const PROJECT_HEADER_BASE =
+  "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
+
 // Header row shared by the healthy and missing-project branches. The
 // project name is `truncate`d, with a Tooltip that only opens when the
 // text actually overflows -- uses `useIsTruncated` to suppress redundant
@@ -38,8 +43,7 @@ export function ProjectHeader({
   reorderable = true,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
-  const baseClass =
-    "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
+  const baseClass = PROJECT_HEADER_BASE;
   const trigger = arrangeMode ? (
     <div
       {...listeners}
