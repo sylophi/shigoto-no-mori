@@ -6,27 +6,51 @@
 // direct session is up: the options gate fetching on the api being
 // present, and a disconnected device serves whatever its last session
 // cached -- the same staleness contract every query in the app has.
+//
+// This fan-out is always mounted, so it refetches calmly: the forest
+// page keeps its own fresher observers on the same keys (plus the
+// useWatchRemoteHost push channel while it is open), and any observer
+// wanting a refetch refreshes this one's rows for free.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
+import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
 import {
   remoteProjectsQueryOptions,
   remoteWorktreesQueryOptions,
 } from "./useRemoteForest";
 import { useRemoteDevices } from "./useRemoteDevices";
 
-export interface RemoteForestEntry {
+// One remote project's slice, flat because that is exactly the unit
+// the row builder merges by repo identity.
+export interface RemoteForestItem {
   deviceId: string;
   deviceLabel: string;
-  projects: Project[];
-  worktreesByProject: Map<string, Worktree[]>;
+  project: Project;
+  worktrees: Worktree[];
+  // A failed worktree listing, folded into the sidebar's coalesced
+  // fan-out toast beside the local failures.
+  worktreesError: boolean;
 }
 
-export function useRemoteForests(): RemoteForestEntry[] {
+export interface RemoteForests {
+  items: RemoteForestItem[];
+  // True while any remote listing is actually fetching (isLoading, not
+  // isPending: a disconnected device's disabled queries stay pending
+  // forever). The web sidebar's empty state hangs on this so a slow
+  // relay reads as loading, not as "no projects".
+  loading: boolean;
+}
+
+const CALM_REFETCH = { staleTime: 30_000, refetchOnWindowFocus: false };
+
+export function useRemoteForests(): RemoteForests {
   const devices = useRemoteDevices();
   const projectQueries = useQueries({
-    queries: devices.map((device) =>
-      remoteProjectsQueryOptions(device.deviceId, device.api),
-    ),
+    queries: devices.map((device) => ({
+      ...remoteProjectsQueryOptions(device.deviceId, device.api),
+      ...CALM_REFETCH,
+    })),
+    combine: combineFanOut,
   });
   // Flattened (device, project) pairs, so the worktree fan-out is one
   // flat useQueries whatever shape the forests have.
@@ -37,24 +61,22 @@ export function useRemoteForests(): RemoteForestEntry[] {
     })),
   );
   const worktreeQueries = useQueries({
-    queries: pairs.map(({ device, project }) =>
-      remoteWorktreesQueryOptions(device.deviceId, device.api, project.id),
-    ),
+    queries: pairs.map(({ device, project }) => ({
+      ...remoteWorktreesQueryOptions(device.deviceId, device.api, project.id),
+      ...CALM_REFETCH,
+    })),
+    combine: combineFanOut,
   });
-  return devices.map((device, index) => {
-    const worktreesByProject = new Map<string, Worktree[]>();
-    pairs.forEach((pair, pairIndex) => {
-      if (pair.device.deviceId !== device.deviceId) return;
-      worktreesByProject.set(
-        pair.project.id,
-        worktreeQueries[pairIndex]?.data ?? [],
-      );
-    });
-    return {
+  return {
+    items: pairs.map(({ device, project }, index) => ({
       deviceId: device.deviceId,
       deviceLabel: device.label,
-      projects: projectQueries[index]?.data ?? [],
-      worktreesByProject,
-    };
-  });
+      project,
+      worktrees: worktreeQueries[index]?.data ?? [],
+      worktreesError: worktreeQueries[index]?.error != null,
+    })),
+    loading:
+      projectQueries.some((query) => query.isLoading) ||
+      worktreeQueries.some((query) => query.isLoading),
+  };
 }

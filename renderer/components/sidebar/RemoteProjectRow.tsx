@@ -11,6 +11,8 @@
 import { FolderGit2 } from "lucide-react";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { cn } from "@/lib/utils";
+import { PROJECT_HEADER_BASE } from "./ProjectHeader";
 import { ProjectIcon } from "./ProjectIcon";
 
 interface RemoteProjectRowProps {
@@ -30,7 +32,7 @@ export function RemoteProjectRow({
     (device) => device.deviceId === iconDeviceId,
   )?.api;
   return (
-    <div className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-muted-foreground">
+    <div className={cn(PROJECT_HEADER_BASE, "text-muted-foreground")}>
       {api === undefined ? (
         <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground/50" />
       ) : (

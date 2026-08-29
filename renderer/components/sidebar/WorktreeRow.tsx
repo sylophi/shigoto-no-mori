@@ -13,6 +13,37 @@ interface WorktreeRowProps {
   worktree: Worktree;
 }
 
+// The row button's shared shell, also worn by RemoteWorktreeRow so a
+// peer's worktree reads as a sibling of a local one -- and stays one
+// through the next restyle.
+export const WORKTREE_ROW_BUTTON =
+  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
+
+// The two-line branch-over-name block both row flavors lead with.
+export function WorktreeRowLabel({
+  worktree,
+  className,
+  emphasized = false,
+}: {
+  worktree: Worktree;
+  className?: string;
+  emphasized?: boolean;
+}) {
+  return (
+    <div className={cn("flex min-w-0 flex-1 flex-col", className)}>
+      <span
+        className={cn("truncate font-mono", emphasized && "font-medium")}
+        title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
+      >
+        <BranchLabel branch={worktree.branch} detached={worktree.detached} />
+      </span>
+      <span className="truncate text-[10px] text-muted-foreground">
+        {worktree.name}
+      </span>
+    </div>
+  );
+}
+
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
@@ -23,28 +54,16 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
       onClick={open}
       title={title}
       className={cn(
-        "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors",
-        "hover:bg-accent/60",
+        WORKTREE_ROW_BUTTON,
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
       )}
     >
-      <div
-        className={cn(
-          "flex min-w-0 flex-1 flex-col",
-          worktree.shelved && "opacity-60",
-        )}
-      >
-        <span
-          className={cn("truncate font-mono", isSelected && "font-medium")}
-          title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
-        >
-          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-        </span>
-        <span className="truncate text-[10px] text-muted-foreground">
-          {worktree.name}
-        </span>
-      </div>
+      <WorktreeRowLabel
+        worktree={worktree}
+        className={worktree.shelved ? "opacity-60" : undefined}
+        emphasized={isSelected}
+      />
       <RowTrailing
         worktree={worktree}
         activity={activity}

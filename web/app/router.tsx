@@ -47,25 +47,25 @@ const rootRoute = createRootRoute({
 
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/",
+  path: webPaths.index,
   component: IndexRedirect,
 });
 
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/login",
+  path: webPaths.login,
   component: LoginPage,
 });
 
 const devicesRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/devices",
+  path: webPaths.devices,
   component: DevicesPage,
 });
 
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/settings",
+  path: webPaths.settings,
   component: SettingsPage,
 });
 

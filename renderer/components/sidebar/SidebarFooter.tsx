@@ -1,10 +1,4 @@
-import {
-  FolderPlus,
-  Inbox,
-  ListTree,
-  MonitorSmartphone,
-  Settings as SettingsIcon,
-} from "lucide-react";
+import { FolderPlus, Inbox, ListTree } from "lucide-react";
 import type { SidebarView } from "@shared/schemas";
 import {
   SegmentedControl,
@@ -21,8 +15,9 @@ import {
   useSidebarView,
 } from "@/hooks/projects/useSidebarView";
 import { useUpdater } from "@/hooks/system/useUpdater";
-import { NavIconButton } from "./NavIconButton";
-import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
+import { SidebarNavActions } from "./SidebarNavActions";
+import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
+import { cn } from "@/lib/utils";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;
@@ -71,7 +66,7 @@ export function SidebarFooter({
 
   if (arrangeMode) {
     return (
-      <div className="flex items-center justify-end border-t border-border px-2 py-1.5">
+      <div className={cn(SIDEBAR_FOOTER_BAR, "justify-end")}>
         <button
           type="button"
           onClick={onToggleArrange}
@@ -83,7 +78,7 @@ export function SidebarFooter({
     );
   }
   return (
-    <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
+    <div className={SIDEBAR_FOOTER_BAR}>
       <SegmentedControl<SidebarView>
         value={view}
         onChange={setView}
@@ -104,31 +99,10 @@ export function SidebarFooter({
           <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
-      {devicesEnabled && (
-        // Prefix match: a device's forest belongs to the same "your
-        // machines" surface this button opens.
-        <NavIconButton
-          to="/devices"
-          tip="Devices"
-          label="Devices"
-          exact={false}
-        >
-          <MonitorSmartphone className="size-3.5" />
-        </NavIconButton>
-      )}
-      <NavIconButton
-        to="/settings"
-        tip={updateReady ? "Settings — update available" : "Settings"}
-        label={updateReady ? "Settings (update available)" : "Settings"}
-      >
-        <SettingsIcon className="size-3.5" />
-        {updateReady && (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-sky-500 ring-2 ring-card"
-          />
-        )}
-      </NavIconButton>
+      <SidebarNavActions
+        devicesEnabled={devicesEnabled}
+        updateReady={updateReady}
+      />
     </div>
   );
 }

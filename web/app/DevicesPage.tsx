@@ -6,28 +6,29 @@
 // clients. Web-specific substance: the deployment access banner, the
 // honest relay reachability messages, and per-device account-level
 // revoke (a browser cannot grant command access, so no grant toggles).
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { MonitorSmartphone, TreePine } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
+import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { Input } from "@/components/ui/input";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { DeviceNameField } from "@/components/remote/DeviceNameField";
 import { DeviceStatusDot } from "@/components/remote/DeviceStatusDot";
 import { PageShell } from "@/components/shared/PageShell";
 import {
   useAccountDevices,
   useAccountStatus,
-  useSetDeviceName,
 } from "@/hooks/account/useAccount";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { abbreviateId } from "@/lib/abbreviateId";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
@@ -47,10 +48,6 @@ export function DevicesPage() {
     if (!statusPending && !signedIn) redirectTo(webPaths.login);
   }, [statusPending, signedIn]);
 
-  const devices = useAccountDevices(signedIn);
-  const webAccess = useWebAccess();
-  const relayStatus = useRelayStatus();
-
   return (
     <PageShell
       page="devices"
@@ -62,102 +59,77 @@ export function DevicesPage() {
       {statusPending || !signedIn ? (
         <p className="text-sm text-muted-foreground">Loading&hellip;</p>
       ) : (
-        <>
-          <section className="space-y-3">
-            <div>
-              <SectionHeading className="mb-1">Account</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Signed in as{" "}
-                <span className="font-mono text-foreground">
-                  {abbreviateId(status.accountId)}
-                </span>
-                . This browser is enrolled as a device of its own; revoking it
-                below signs it out.
-              </p>
-            </div>
-            <BrowserNameField deviceName={status.deviceName} />
-          </section>
-
-          <section className="space-y-3">
-            <SectionHeading>Devices</SectionHeading>
-
-            {webAccess.kind === "blocked" && (
-              <ErrorBanner>
-                The relay refused this request ({webAccess.message}). This
-                deployment cannot serve the device list until the relay accepts
-                it.
-              </ErrorBanner>
-            )}
-
-            {devices.isError && (
-              <ErrorBanner>{reachabilityMessage(devices.error)}</ErrorBanner>
-            )}
-
-            {devices.isPending ? (
-              <p className="text-sm text-muted-foreground">
-                Loading devices&hellip;
-              </p>
-            ) : devices.data !== undefined && devices.data.length > 0 ? (
-              <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-                {devices.data.map((info) => (
-                  <DeviceRow
-                    key={info.deviceId}
-                    info={info}
-                    relayStatus={relayStatus}
-                  />
-                ))}
-              </div>
-            ) : devices.isError ? null : (
-              <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                No devices enrolled on this account yet. Sign in from the
-                desktop app to enroll a machine.
-              </div>
-            )}
-          </section>
-        </>
+        <DevicesBody status={status} />
       )}
     </PageShell>
   );
 }
 
-// This browser's device name, editable inline -- the same affordance
-// the desktop's account section offers for its machine, backed by the
-// same setDeviceName call over the web bridge.
-function BrowserNameField({ deviceName }: { deviceName: string }) {
-  const setDeviceName = useSetDeviceName();
-  const [draft, setDraft] = useState(deviceName);
-
-  // Keep the draft in step when the stored name changes underneath us
-  // (another tab, or the mutation settling).
-  useEffect(() => setDraft(deviceName), [deviceName]);
-
-  const trimmed = draft.trim();
-  const canSave =
-    trimmed.length > 0 && trimmed !== deviceName && !setDeviceName.isPending;
+// The signed-in page body, split out so its hooks only run once the
+// status guard above has passed and the page shell stays a flat
+// two-branch render.
+function DevicesBody({ status }: { status: AccountStatus }) {
+  const devices = useAccountDevices(true);
+  const webAccess = useWebAccess();
+  const relayStatus = useRelayStatus();
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <label className="text-xs text-muted-foreground" htmlFor="device-name">
-        This browser
-      </label>
-      <Input
-        id="device-name"
-        type="text"
-        value={draft}
-        disabled={setDeviceName.isPending}
-        onChange={(e) => setDraft(e.target.value)}
-        aria-label="This browser's device name"
-        className="min-w-0 flex-1 px-2.5 py-1.5 text-sm"
-      />
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!canSave}
-        onClick={() => setDeviceName.mutate(trimmed)}
-      >
-        Rename
-      </Button>
-    </div>
+    <>
+      <section className="space-y-3">
+        <div>
+          <SectionHeading className="mb-1">Account</SectionHeading>
+          <p className="text-xs text-muted-foreground">
+            Signed in as{" "}
+            <span className="font-mono text-foreground">
+              {abbreviateId(status.accountId)}
+            </span>
+            . This browser is enrolled as a device of its own; revoking it below
+            signs it out.
+          </p>
+        </div>
+        <DeviceNameField
+          deviceName={status.deviceName}
+          label="This browser"
+          inputAriaLabel="This browser's device name"
+        />
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeading>Devices</SectionHeading>
+
+        {webAccess.kind === "blocked" && (
+          <ErrorBanner>
+            The relay refused this request ({webAccess.message}). This
+            deployment cannot serve the device list until the relay accepts it.
+          </ErrorBanner>
+        )}
+
+        {devices.isError && (
+          <ErrorBanner>{reachabilityMessage(devices.error)}</ErrorBanner>
+        )}
+
+        {devices.isPending ? (
+          <p className="text-sm text-muted-foreground">
+            Loading devices&hellip;
+          </p>
+        ) : devices.data !== undefined && devices.data.length > 0 ? (
+          <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
+            {devices.data.map((info) => (
+              <DeviceRow
+                key={info.deviceId}
+                info={info}
+                relayStatus={relayStatus}
+              />
+            ))}
+          </div>
+        ) : devices.isError ? null : (
+          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+            No devices enrolled on this account yet. Sign in from the desktop
+            app to enroll a machine.
+          </div>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -283,12 +255,4 @@ function PeerRevokeButton({ deviceId }: { deviceId: string }) {
       onClick={() => confirm.trigger(() => revoke.mutate())}
     />
   );
-}
-
-// Shorten a long account id for display while keeping enough on each
-// end to recognise it (the desktop account section's rule).
-function abbreviateId(id: string): string {
-  if (id === "") return "(no id)";
-  if (id.length <= 16) return id;
-  return `${id.slice(0, 10)}…${id.slice(-4)}`;
 }

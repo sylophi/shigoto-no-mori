@@ -91,7 +91,7 @@ export function Sidebar() {
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged into the tree beside the local rows. The
   // inbox stays local: it triages this machine's work.
-  const remoteForests = useRemoteForests();
+  const { items: remoteItems } = useRemoteForests();
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
@@ -105,7 +105,7 @@ export function Sidebar() {
         collapsed,
         shelvedExpanded,
         arrangeMode,
-        remote: remoteForests,
+        remote: remoteItems,
       });
   const { rows, failedCount } = view;
 
@@ -250,7 +250,9 @@ export function Sidebar() {
   );
 }
 
-function SidebarEmptyState({ message }: { message: string | null }) {
+// Exported for the web sidebar, which renders the same message style
+// for its own signed-out and empty-forest states.
+export function SidebarEmptyState({ message }: { message: string | null }) {
   if (!message) return null;
   return (
     <div className="px-3 py-6 text-center text-xs text-muted-foreground">

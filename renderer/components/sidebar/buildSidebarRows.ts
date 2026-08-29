@@ -1,4 +1,4 @@
-import type { RemoteForestEntry } from "@/hooks/remote/useRemoteForests";
+import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
 import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
@@ -14,15 +14,7 @@ interface BuildSidebarRowsArgs {
   // sharing a local project's repo identity contributes its worktrees
   // to that group (marked per row), the rest gather under
   // remote-project headers after the local projects.
-  remote: RemoteForestEntry[];
-}
-
-// One remote project's flattened slice, the unit the merge consumes.
-interface RemoteItem {
-  deviceId: string;
-  deviceLabel: string;
-  project: Project;
-  worktrees: Worktree[];
+  remote: RemoteForestItem[];
 }
 
 // Flattens `projects` plus their per-project worktree queries into the
@@ -42,7 +34,11 @@ export function buildSidebarRows({
   arrangeMode,
   remote,
 }: BuildSidebarRowsArgs): SidebarViewModel {
-  const failedCount = worktreeQueries.filter((q) => q.error).length;
+  // Remote listing failures count beside the local ones, so the shell's
+  // coalesced fan-out toast covers the whole tree.
+  const failedCount =
+    worktreeQueries.filter((q) => q.error).length +
+    remote.filter((item) => item.worktreesError).length;
 
   if (arrangeMode) {
     const rows: SidebarRow[] = projects.map((project) => ({
@@ -59,21 +55,23 @@ export function buildSidebarRows({
     };
   }
 
-  // Shelving is a local noise-control preference; a peer's shelved
-  // worktrees stay in its own sidebar, not this one's.
-  const remoteItems: RemoteItem[] = remote
-    .flatMap((entry) =>
-      entry.projects.map((project) => ({
-        deviceId: entry.deviceId,
-        deviceLabel: entry.deviceLabel,
-        project,
-        worktrees: (entry.worktreesByProject.get(project.id) ?? []).filter(
-          (worktree) => !worktree.shelved,
-        ),
-      })),
-    )
-    .filter((item) => item.worktrees.length > 0);
-  const consumed = new Set<RemoteItem>();
+  // Remote items grouped up front by repo identity (an identity-less
+  // project can only group with itself). The local pass claims groups
+  // by `get` + `delete`, so whatever remains IS the leftover set -- one
+  // structure, no consumed-tracking, and a group can never be claimed
+  // twice. Shelving is a local noise-control preference; a peer's
+  // shelved worktrees stay in its own sidebar, not this one's.
+  const remoteByIdentity = new Map<string, RemoteForestItem[]>();
+  for (const raw of remote) {
+    const worktrees = raw.worktrees.filter((worktree) => !worktree.shelved);
+    if (worktrees.length === 0) continue;
+    const item = { ...raw, worktrees };
+    const groupKey =
+      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
+    const group = remoteByIdentity.get(groupKey);
+    if (group) group.push(item);
+    else remoteByIdentity.set(groupKey, [item]);
+  }
 
   const rows: SidebarRow[] = [];
   projects.forEach((project, i) => {
@@ -92,10 +90,10 @@ export function buildSidebarRows({
     const remoteHere =
       project.pathExists === false || project.identity == null
         ? []
-        : remoteItems.filter(
-            (item) => item.project.identity === project.identity,
-          );
-    for (const item of remoteHere) consumed.add(item);
+        : (remoteByIdentity.get(project.identity) ?? []);
+    if (project.identity != null && remoteHere.length > 0) {
+      remoteByIdentity.delete(project.identity);
+    }
     if (!expanded || project.pathExists === false) return;
     const query = worktreeQueries[i];
     if (!query) return;
@@ -154,29 +152,21 @@ export function buildSidebarRows({
     }
   });
 
-  // Remote projects with no local counterpart, after the local tree.
-  // Grouped by repo identity so the same repo on several devices reads
-  // as one project (the per-row device marker tells them apart); an
-  // identity-less project can only group with itself.
-  const leftoverGroups = new Map<string, RemoteItem[]>();
-  for (const item of remoteItems) {
-    if (consumed.has(item)) continue;
-    const groupKey =
-      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
-    const group = leftoverGroups.get(groupKey);
-    if (group) group.push(item);
-    else leftoverGroups.set(groupKey, [item]);
-  }
-  for (const [groupKey, items] of leftoverGroups) {
+  // Whatever the local pass left unclaimed: remote projects with no
+  // local counterpart, after the local tree. The same repo on several
+  // devices reads as one project (the per-row device marker tells them
+  // apart), and any member serves the icon fetch -- same repo.
+  for (const [groupKey, items] of remoteByIdentity) {
+    const [first] = items;
+    if (!first) continue;
     const groupId = `rp:${groupKey}`;
     rows.push({
       kind: "remote-project",
       key: groupId,
-      name: items[0]?.project.name ?? "",
+      name: first.project.name,
       count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
-      groupId,
-      iconDeviceId: items[0]?.deviceId ?? "",
-      iconProjectId: items[0]?.project.id ?? "",
+      iconDeviceId: first.deviceId,
+      iconProjectId: first.project.id,
     });
     for (const item of items) {
       pushRemoteWorktreeRows(rows, item, groupId);
@@ -211,7 +201,7 @@ function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
 
 function pushRemoteWorktreeRows(
   rows: SidebarRow[],
-  item: RemoteItem,
+  item: RemoteForestItem,
   groupId: string,
 ): void {
   for (const worktree of item.worktrees) {

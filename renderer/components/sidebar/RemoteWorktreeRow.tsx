@@ -7,7 +7,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { MonitorSmartphone } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
-import { BranchLabel } from "@/components/ui/branch-label";
 import {
   Tooltip,
   TooltipContent,
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui/tooltip";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { StatusIndicator } from "./StatusIndicator";
+import { WORKTREE_ROW_BUTTON, WorktreeRowLabel } from "./WorktreeRow";
 
 interface RemoteWorktreeRowProps {
   worktree: Worktree;
@@ -34,19 +34,9 @@ export function RemoteWorktreeRow({
       onClick={() =>
         void navigate({ to: "/devices/$deviceId", params: { deviceId } })
       }
-      className="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60"
+      className={WORKTREE_ROW_BUTTON}
     >
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span
-          className="truncate font-mono"
-          title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
-        >
-          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-        </span>
-        <span className="truncate text-[10px] text-muted-foreground">
-          {worktree.name}
-        </span>
-      </div>
+      <WorktreeRowLabel worktree={worktree} />
       <StatusIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
       {/* Rightmost, same shape as WorktreeKindIcon: a neutral marker

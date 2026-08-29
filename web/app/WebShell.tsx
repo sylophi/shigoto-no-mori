@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "@tanstack/react-router";
 import { PanelLeft } from "lucide-react";
+import { SIDEBAR_ICON_BUTTON } from "@/components/sidebar/sidebarChrome";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { WebSidebar } from "./WebSidebar";
@@ -49,7 +50,7 @@ export function WebShell() {
             aria-label="Open sidebar"
             aria-expanded={sheetOpen}
             onClick={() => setSheetOpen(true)}
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className={SIDEBAR_ICON_BUTTON}
           >
             <PanelLeft className="size-4" />
           </button>
