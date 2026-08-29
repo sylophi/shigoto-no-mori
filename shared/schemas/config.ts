@@ -246,8 +246,8 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     deleteBranchOnRemove: true,
     autoPopulateInstall: true,
     portPool: true,
-    githubCli: true,
     terrier: true,
+    githubCli: true,
   }).shape,
 );
 export type DeviceSettingsPatch = z.infer<typeof DeviceSettingsPatchSchema>;
