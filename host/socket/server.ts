@@ -161,10 +161,9 @@ const AUTH_FAILURE_LIMIT = 5;
 const AUTH_LOCKOUT_MS = 30_000;
 
 // How often at most the ticket-mode listener logs a refused web
-// Origin. A half-configured deployment (the Worker has
-// ALLOWED_WEB_ORIGIN, the desktop lacks SM_ACCOUNT_WEB_ORIGIN) would
-// otherwise be a silent stream of bare upgrade refusals with no clue
-// on either side.
+// Origin. A deployment whose desktop never set SM_ACCOUNT_WEB_ORIGIN
+// would otherwise be a silent stream of bare upgrade refusals with no
+// clue on either side.
 const ORIGIN_REJECT_LOG_THROTTLE_MS = 60_000;
 
 function isLoopbackAddress(address: string): boolean {
@@ -699,9 +698,8 @@ export function createWsServerBinding(
         // origin passes, anything else is refused. See isAllowedOrigin
         // for why this is a coarse pre-filter and the hello token is
         // the real auth. A ticket-mode refusal logs (throttled) with
-        // the rejected origin, because the likeliest cause is a
-        // half-configured deployment: the Worker admits the web client
-        // (ALLOWED_WEB_ORIGIN) but this desktop never set the paired
+        // the rejected origin, because the likeliest cause is a web
+        // client reaching a desktop that never set
         // SM_ACCOUNT_WEB_ORIGIN, and without the log the web dial dies
         // as a bare refusal with no clue on either side.
         verifyClient: (info: { req: IncomingMessage }) => {
@@ -715,7 +713,7 @@ export function createWsServerBinding(
                 `[socket] refusing direct upgrade from origin ${origin}` +
                   " (not an admitted origin; a web client needs" +
                   " SM_ACCOUNT_WEB_ORIGIN set to its exact origin on this" +
-                  " device, paired with the Worker's ALLOWED_WEB_ORIGIN)",
+                  " device)",
               );
             }
           }

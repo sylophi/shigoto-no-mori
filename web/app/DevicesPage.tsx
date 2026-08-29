@@ -25,7 +25,7 @@ import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { isFetchFailure, isOriginBlockedError } from "../account/webAccess";
+import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
 import { navigateTo, redirectTo, webPaths } from "./nav";
 
@@ -58,9 +58,8 @@ export function DevicesPage() {
     <PageShell accountId={status?.accountId}>
       {webAccess.kind === "blocked" && (
         <ErrorBanner>
-          This deployment is not configured for web access: the relay refused
-          this browser&apos;s origin ({webAccess.message}). Set
-          ALLOWED_WEB_ORIGIN on the relay Worker to this site&apos;s origin.
+          The relay refused this request ({webAccess.message}). This deployment
+          cannot serve the device list until the relay accepts it.
         </ErrorBanner>
       )}
 
@@ -90,22 +89,18 @@ export function DevicesPage() {
   );
 }
 
-// One honest sentence per failure shape. A browser cannot tell an
-// origin-blocked relay from an unreachable one (the worker's 403
-// carries no CORS headers), so the fetch-failure branch names both
-// possibilities instead of guessing.
+// One honest sentence per failure shape. A browser cannot tell a
+// refusing relay from an unreachable one when the response carries no
+// CORS headers, so the fetch-failure branch names both possibilities
+// instead of guessing.
 function reachabilityMessage(error: unknown): string {
-  if (isOriginBlockedError(error)) {
-    return (
-      "This deployment is not configured for web access: the relay " +
-      "refused this origin. Set ALLOWED_WEB_ORIGIN on the relay Worker."
-    );
+  if (isRelayRefusedError(error)) {
+    return "The relay refused this request, so the device list is unavailable.";
   }
   if (isFetchFailure(error)) {
     return (
       "Couldn't reach the relay. Either you are offline, or this " +
-      "deployment is not configured for web access (the relay Worker's " +
-      "ALLOWED_WEB_ORIGIN must be set to this site's origin)."
+      "deployment's relay URL does not point at a reachable Worker."
     );
   }
   return `Couldn't load the device list: ${errorMessageOf(error)}`;

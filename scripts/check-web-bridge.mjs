@@ -464,7 +464,7 @@ async function main() {
   );
 
   await check(
-    "origin blocked: a relay 403 on the ticket mint yields the typed blocked state and stops the supervisor after one mint, no retry loop",
+    "refused: a relay 403 on the ticket mint yields the typed blocked state and stops the supervisor after one mint, no retry loop",
     async (track) => {
       const localStorage = memoryStorage();
       localStorage.setItem("sm.web.account", STORED_ENVELOPE);
@@ -473,7 +473,7 @@ async function main() {
         const url = String(input);
         if (url === `${RELAY_URL}/tickets`) {
           mints += 1;
-          return jsonResponse(403, { error: "origin not allowed" });
+          return jsonResponse(403, { error: "malformed ticket" });
         }
         throw new Error(`unexpected fetch in blocked check: ${url}`);
       };
@@ -484,7 +484,7 @@ async function main() {
         () => bridge.webAccess.get().kind === "blocked",
         "the blocked access state",
       );
-      assert.match(bridge.webAccess.get().message, /origin not allowed/);
+      assert.match(bridge.webAccess.get().message, /malformed ticket/);
       // Longer than the supervisor's first backoff rung: a retry loop
       // would have minted again by now.
       await delay(1_300);

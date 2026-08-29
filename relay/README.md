@@ -57,14 +57,14 @@ app talking through a new Worker) degrades softly instead: its
 oversize sends get nacked and the calls time out, which is acceptable
 during the owner's own rollout.
 
-Optional var: set `ALLOWED_WEB_ORIGIN` to the exact origin of the
-future web client. Unset, only Origin-less clients (the desktop app)
-are accepted. This var is PAIRED with the desktop app's
-`SM_ACCOUNT_WEB_ORIGIN` (below): the Worker admits the web client's
-relay traffic, and each desktop's direct listener separately admits
-its direct dials. Set one without the other and web access only
-half-works: with only `ALLOWED_WEB_ORIGIN`, web direct dials are
-refused at every desktop's Origin gate (each host logs the refusal).
+The Worker serves any browser origin (`Access-Control-Allow-Origin:
+*`) and needs no origin config. Every route authenticates from an
+explicit `Authorization` bearer, never from a cookie or any other
+ambient credential, so a cross-origin page can obtain nothing a plain
+unauthenticated request could not: it cannot read another origin's
+localStorage to forge the header. The desktop's `SM_ACCOUNT_WEB_ORIGIN`
+(below) is a separate gate on a separate process and is NOT paired with
+anything here.
 
 ### Per-device tunnels (optional)
 
@@ -122,13 +122,13 @@ commit real values.
   secret key the Worker holds. The clients mount Clerk's embedded
   sign-in with it.
 - `SM_ACCOUNT_WEB_ORIGIN` - optional, the exact origin of the deployed
-  web client. MUST be set to the same value as the Worker's
-  `ALLOWED_WEB_ORIGIN` whenever that is set: the two are one feature
-  split across two processes. The desktop app's direct listener admits
-  browser dials from exactly this origin so the web client can dial
-  wss tunnel URLs; without it those dials die at the desktop's Origin
-  gate (the host logs the refused origin, throttled). Unset, only
-  Origin-less and app-local clients are admitted, as before.
+  web client. The desktop app's direct listener admits browser dials
+  from exactly this origin so the web client can dial wss tunnel URLs;
+  without it those dials die at the desktop's Origin gate (the host
+  logs the refused origin, throttled). Unset, only Origin-less and
+  app-local clients are admitted, as before. Unlike the relay, this
+  gate stays strict on purpose: it guards a loopback listener on the
+  user's own machine, which any page they visit can reach.
 
 Sign-in itself is Clerk's embedded components: both clients mount
 `ClerkProvider` with the publishable key (the desktop over

@@ -5,14 +5,18 @@
 //
 //   - "unconfigured": the SM_ACCOUNT_* variables were not baked into
 //     this build, so there is no relay to talk to.
-//   - "blocked": the relay refused this browser's Origin ("origin not
-//     allowed", the ALLOWED_WEB_ORIGIN misconfiguration). The refusal
-//     is deterministic for the deployment, so retrying the supervisor
-//     forever would loop without ever succeeding.
+//   - "blocked": the relay answered the ticket mint with a 403. The
+//     refusal is deterministic for the deployment, so retrying the
+//     supervisor forever would loop without ever succeeding. The relay
+//     no longer refuses browser origins (its CORS is open, since every
+//     route authenticates from the bearer alone), so this is now the
+//     backstop for any other 403 rather than a config mistake.
 //
 // The store is a tiny external-store (subscribe + snapshot) so React
 // reads it through useSyncExternalStore, and the bridge factory owns
 // one instance per bridge so the headless check drives it in isolation.
+
+import { RelayRequestError } from "@shared/account/service";
 
 export type WebAccessState =
   | { kind: "ok" }
@@ -44,28 +48,19 @@ export function createWebAccessStore(): WebAccessStore {
   };
 }
 
-// The exact error body relay/src/worker.ts returns from its Origin
-// gate. Matching on it is the same message-text contract the app uses
-// for entity-gone errors (shared/errors.ts): the worker cannot reword
-// it without this matcher following along.
-const ORIGIN_BLOCKED_MESSAGE = "origin not allowed";
-
-// True when a relay call failed because this origin is not allowed.
-// Under node (the checks) and via any same-origin proxy the 403 body is
-// readable and the message is exact. In a real browser the worker's 403
-// carries no CORS headers, so the failure surfaces as an opaque fetch
-// TypeError instead and is NOT classified here: that path keeps the
-// supervisor's honest backoff (it is indistinguishable from being
-// offline) and the devices page surfaces the possible misconfiguration
-// through its own reachability probe.
-export function isOriginBlockedError(error: unknown): boolean {
-  return error instanceof Error && error.message === ORIGIN_BLOCKED_MESSAGE;
+// True when the relay refused the call outright with a 403. Keyed on
+// the status rather than the message text: the refusal is terminal for
+// this deployment whatever the worker's wording, and retrying cannot
+// turn it into a success. A response the browser cannot read at all
+// surfaces as an opaque fetch TypeError instead and is NOT classified
+// here, so that path keeps the supervisor's honest backoff.
+export function isRelayRefusedError(error: unknown): boolean {
+  return error instanceof RelayRequestError && error.status === 403;
 }
 
 // True for the browser's opaque network failure shape (a fetch
-// TypeError). Used by the UI's reachability probe to explain that an
-// unreachable relay may mean an ALLOWED_WEB_ORIGIN misconfiguration,
-// without treating it as terminal the way an exact origin refusal is.
+// TypeError). Used by the UI's reachability probe to explain an
+// unreachable relay without treating it as terminal the way a 403 is.
 export function isFetchFailure(error: unknown): boolean {
   return error instanceof TypeError;
 }

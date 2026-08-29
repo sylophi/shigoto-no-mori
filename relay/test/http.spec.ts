@@ -1,7 +1,6 @@
 // The HTTP surface: enrollment, device listing, revocation, tickets
-// and the origin gate. Runs inside workerd against real D1 and DO
-// bindings, with the stub Clerk verifier from helpers.ts.
-import { env } from "cloudflare:test";
+// and CORS. Runs inside workerd against real D1 and DO bindings, with
+// the stub Clerk verifier from helpers.ts.
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DeviceListResponseSchema,
@@ -235,35 +234,45 @@ describe("POST /tickets", () => {
   });
 });
 
-describe("origin gate", () => {
-  it("rejects any browser origin by default", async () => {
+describe("cors", () => {
+  it("serves any browser origin, authenticating from the bearer alone", async () => {
+    const response = await call(
+      new Request(`${BASE}${RELAY_ROUTES.listDevices.path}`, {
+        headers: { Origin: "https://app.example" },
+      }),
+    );
+    // 401 (no credential), never 403: the origin is not what decides.
+    expect(response.status).toBe(401);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+  });
+
+  it("answers the preflight a bearer request triggers", async () => {
+    const preflight = await call(
+      new Request(`${BASE}${RELAY_ROUTES.enroll.path}`, {
+        method: "OPTIONS",
+        headers: {
+          Origin: "http://localhost:5190",
+          "Access-Control-Request-Method": "POST",
+          "Access-Control-Request-Headers": "authorization,content-type",
+        },
+      }),
+    );
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(preflight.headers.get("Access-Control-Allow-Headers")).toContain(
+      "Authorization",
+    );
+    expect(preflight.headers.get("Access-Control-Allow-Methods")).toContain(
+      "POST",
+    );
+  });
+
+  it("never allows credentials, so no cookie rides a cross-origin call", async () => {
     const response = await call(
       new Request(`${BASE}${RELAY_ROUTES.listDevices.path}`, {
         headers: { Origin: "https://evil.example" },
       }),
     );
-    expect(response.status).toBe(403);
-  });
-
-  it("allows exactly the configured web origin, with CORS headers", async () => {
-    const webEnv = { ...env, ALLOWED_WEB_ORIGIN: "https://app.example" };
-    const allowed = await call(
-      new Request(`${BASE}${RELAY_ROUTES.listDevices.path}`, {
-        headers: { Origin: "https://app.example" },
-      }),
-      webEnv,
-    );
-    // 401 (no credential), not 403: the origin gate let it through.
-    expect(allowed.status).toBe(401);
-    expect(allowed.headers.get("Access-Control-Allow-Origin")).toBe(
-      "https://app.example",
-    );
-    const denied = await call(
-      new Request(`${BASE}${RELAY_ROUTES.listDevices.path}`, {
-        headers: { Origin: "https://other.example" },
-      }),
-      webEnv,
-    );
-    expect(denied.status).toBe(403);
+    expect(response.headers.get("Access-Control-Allow-Credentials")).toBe(null);
   });
 });

@@ -196,17 +196,6 @@ export function createWorker(deps: RelayDeps): RelayWorker {
       try {
         const url = new URL(request.url);
 
-        // Origin gate. No Origin header means a non-browser client (the
-        // desktop app), always allowed. A browser is only allowed when
-        // its exact origin is configured as ALLOWED_WEB_ORIGIN, which
-        // pre-wires the step-8 web client without loosening the
-        // default. An unset ALLOWED_WEB_ORIGIN is undefined, so a
-        // browser origin never equals it and is rejected.
-        const origin = request.headers.get("Origin");
-        if (origin !== null && origin !== env.ALLOWED_WEB_ORIGIN) {
-          return jsonError(403, { error: "origin not allowed" });
-        }
-
         // GET /connect is routed before the CORS append: a successful
         // upgrade is a 101 with immutable headers, and websocket
         // clients ignore CORS anyway.
@@ -218,20 +207,27 @@ export function createWorker(deps: RelayDeps): RelayWorker {
         }
 
         const response = await route(request, env, url, ctx);
-        // A non-null origin already passed the gate, so it is exactly
-        // the configured web origin. Append CORS so the browser can
-        // read the response.
-        if (origin !== null) {
-          response.headers.set("Access-Control-Allow-Origin", origin);
-          response.headers.set(
-            "Access-Control-Allow-Methods",
-            "GET,POST,DELETE,OPTIONS",
-          );
-          response.headers.set(
-            "Access-Control-Allow-Headers",
-            "Authorization,Content-Type",
-          );
-        }
+        // Open CORS, the standard shape for a bearer-token API. Every
+        // route authenticates from an explicit Authorization header, so
+        // no ambient credential exists for a hostile page to ride: it
+        // cannot read the token out of another origin's localStorage,
+        // and cookies are never sent (no Allow-Credentials, which "*"
+        // forbids anyway). A cross-origin caller therefore gets exactly
+        // what curl already gets unauthenticated -- a 401 -- so an
+        // origin allowlist here bought no security while breaking every
+        // client not served from one hardcoded origin.
+        response.headers.set("Access-Control-Allow-Origin", "*");
+        response.headers.set(
+          "Access-Control-Allow-Methods",
+          "GET,POST,DELETE,OPTIONS",
+        );
+        response.headers.set(
+          "Access-Control-Allow-Headers",
+          "Authorization,Content-Type",
+        );
+        // Cache the preflight for a day so the extra round trip is not
+        // paid per request.
+        response.headers.set("Access-Control-Max-Age", "86400");
         return response;
       } catch {
         // Backstop for any unexpected throw. protocol.ts promises every

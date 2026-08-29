@@ -17,8 +17,8 @@ export type AccountServiceConfig = {
   // session tokens with. Publishable by definition: it only names the
   // instance's Frontend API host.
   publishableKey: string;
-  // Exact origin of the deployed web client, the same value the
-  // relay Worker's ALLOWED_WEB_ORIGIN carries (v2 step 10, slice B).
+  // Exact origin of the deployed web client (v2 step 10, slice B).
+  // Desktop-only: the relay serves any origin, this gate does not.
   // The direct listener's Origin gate admits browser dials from
   // exactly this origin, so a web client can dial wss tunnel URLs.
   // Empty means no web origin is admitted, which was the only prior

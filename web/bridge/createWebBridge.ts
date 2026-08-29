@@ -36,7 +36,7 @@ import { defaultWebDeviceName } from "../account/deviceName";
 import { createWebAccountStore } from "../account/store";
 import {
   createWebAccessStore,
-  isOriginBlockedError,
+  isRelayRefusedError,
   type WebAccessStore,
 } from "../account/webAccess";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
@@ -166,7 +166,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
               return (await service.mintTicket(fresh.credential, signal))
                 .ticket;
             } catch (error) {
-              if (isOriginBlockedError(error)) {
+              if (isRelayRefusedError(error)) {
                 webAccess.set({
                   kind: "blocked",
                   message: errorMessageOf(error),

@@ -4,9 +4,6 @@
 // tokens at enrollment.
 //
 // Plain vars the owner may set (via `vars` here or the dashboard):
-// - ALLOWED_WEB_ORIGIN: exact origin of the future step-8 web client.
-//   Unset means only Origin-less clients (the desktop app) may call
-//   the API. See the origin gate in src/worker.ts.
 // - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
 //   test seam, production should leave it unset.
 //
