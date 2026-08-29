@@ -48,7 +48,14 @@ export function RowContent({
         />
       );
     case "remote-project":
-      return <RemoteProjectRow name={row.name} count={row.count} />;
+      return (
+        <RemoteProjectRow
+          name={row.name}
+          count={row.count}
+          iconDeviceId={row.iconDeviceId}
+          iconProjectId={row.iconProjectId}
+        />
+      );
     case "inbox-worktree":
       return (
         <InboxRow

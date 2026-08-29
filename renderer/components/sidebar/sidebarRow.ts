@@ -36,13 +36,17 @@ export type SidebarRow =
     }
   // Header for remote worktrees whose project has no local counterpart.
   // Not a Project row: it carries no local actions, no collapse state,
-  // and may span several devices sharing one repo identity.
+  // and may span several devices sharing one repo identity. The icon
+  // fields name one (device, project) to fetch the repo's icon from --
+  // any member serves, it is the same repo.
   | {
       kind: "remote-project";
       key: string;
       name: string;
       count: number;
       groupId: string;
+      iconDeviceId: string;
+      iconProjectId: string;
     }
   | {
       kind: "shelved-toggle";

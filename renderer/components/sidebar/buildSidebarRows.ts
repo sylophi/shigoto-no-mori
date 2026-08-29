@@ -175,6 +175,8 @@ export function buildSidebarRows({
       name: items[0]?.project.name ?? "",
       count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
       groupId,
+      iconDeviceId: items[0]?.deviceId ?? "",
+      iconProjectId: items[0]?.project.id ?? "",
     });
     for (const item of items) {
       pushRemoteWorktreeRows(rows, item, groupId);
