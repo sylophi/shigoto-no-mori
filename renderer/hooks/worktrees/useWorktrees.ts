@@ -16,8 +16,14 @@ export type HostForestScope = Partial<HostScope>;
 // different devices.
 export function worktreesQueryOptions(
   projectId: string | null,
-  { deviceId = localDeviceId, api = window.api }: HostForestScope = {},
+  scope: HostForestScope = {},
 ) {
+  const deviceId = scope.deviceId ?? localDeviceId;
+  // Key-presence check, not a default parameter: `api: undefined` from
+  // a disconnected device must stay undefined (disabled query), not
+  // fall back to the local api and cache this machine's worktrees
+  // under the peer's device key. See projectsQueryOptions.
+  const api = "api" in scope ? scope.api : window.api;
   return queryOptions<Worktree[]>({
     queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {
