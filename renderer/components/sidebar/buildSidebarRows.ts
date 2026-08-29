@@ -87,22 +87,35 @@ export function buildSidebarRows({
     // reappearing below as a duplicate remote-project group. A missing
     // local project claims nothing: its remote counterpart is alive and
     // belongs under its own header.
-    const remoteHere =
-      project.pathExists === false || project.identity == null
-        ? []
-        : (remoteByIdentity.get(project.identity) ?? []);
-    if (project.identity != null && remoteHere.length > 0) {
-      remoteByIdentity.delete(project.identity);
+    let remoteHere: RemoteForestItem[] = [];
+    if (project.pathExists !== false && project.identity != null) {
+      remoteHere = remoteByIdentity.get(project.identity) ?? [];
+      if (remoteHere.length > 0) remoteByIdentity.delete(project.identity);
     }
     if (!expanded || project.pathExists === false) return;
+    // Peers' worktrees of this same repo render after the local rows so
+    // the local work stays where the eye expects it -- and on EVERY
+    // path below: a claimed group that then skipped rendering (local
+    // listing still loading, or errored) would vanish from the tree
+    // entirely, hiding the peer's perfectly healthy worktrees behind a
+    // local-only failure.
+    const pushRemoteHere = () => {
+      for (const item of remoteHere) {
+        pushRemoteWorktreeRows(rows, item, project.id);
+      }
+    };
     const query = worktreeQueries[i];
-    if (!query) return;
+    if (!query) {
+      pushRemoteHere();
+      return;
+    }
     if (query.isLoading) {
       rows.push({
         kind: "worktree-skeleton",
         key: `sk:${project.id}`,
         projectId: project.id,
       });
+      pushRemoteHere();
       return;
     }
     if (query.error) {
@@ -111,6 +124,7 @@ export function buildSidebarRows({
         key: `err:${project.id}`,
         projectId: project.id,
       });
+      pushRemoteHere();
       return;
     }
     const trees = (query.data ?? []) as Worktree[];
@@ -123,12 +137,7 @@ export function buildSidebarRows({
         worktree,
       });
     }
-    // Peers' worktrees of this same repo, after the local rows so the
-    // local work stays where the eye expects it. The shelved section
-    // keeps its anchor at the very bottom of the group.
-    for (const item of remoteHere) {
-      pushRemoteWorktreeRows(rows, item, project.id);
-    }
+    pushRemoteHere();
     if (shelved.length > 0) {
       const shelfOpen = shelvedExpanded.has(project.id);
       if (shelfOpen) {
@@ -155,7 +164,7 @@ export function buildSidebarRows({
   // Whatever the local pass left unclaimed: remote projects with no
   // local counterpart, after the local tree. The same repo on several
   // devices reads as one project (the per-row device marker tells them
-  // apart), and any member serves the icon fetch -- same repo.
+  // apart), and any live member serves the icon fetch -- same repo.
   for (const [groupKey, items] of remoteByIdentity) {
     const [first] = items;
     if (!first) continue;
@@ -165,8 +174,10 @@ export function buildSidebarRows({
       key: groupId,
       name: first.project.name,
       count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
-      iconDeviceId: first.deviceId,
-      iconProjectId: first.project.id,
+      iconSources: items.map((item) => ({
+        deviceId: item.deviceId,
+        projectId: item.project.id,
+      })),
     });
     for (const item of items) {
       pushRemoteWorktreeRows(rows, item, groupId);

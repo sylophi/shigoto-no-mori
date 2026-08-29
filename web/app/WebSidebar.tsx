@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
+import { useFanOutErrorToast } from "@/components/sidebar/useFanOutErrorToast";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { cn } from "@/lib/utils";
 import { redirectTo, webPaths } from "./nav";
@@ -75,6 +76,9 @@ function WebForest({
     arrangeMode: false,
     remote: items,
   });
+  // Failed remote listings surface here exactly as on the desktop --
+  // without it a peer's project would silently vanish from the tree.
+  useFanOutErrorToast(view.failedCount);
   if (view.rows.length === 0) {
     // Loading and empty are different answers: a slow relay must not
     // read as "no projects".

@@ -86,11 +86,7 @@ export function AccountSection() {
             </span>
           </div>
 
-          <DeviceNameField
-            deviceName={status.deviceName}
-            label="This device"
-            inputAriaLabel="This device name"
-          />
+          <DeviceNameField deviceName={status.deviceName} label="This device" />
 
           <div className="space-y-2">
             <p className="text-xs text-muted-foreground">Devices</p>

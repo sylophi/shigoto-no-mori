@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -26,7 +26,7 @@ import {
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "@/lib/toast";
+import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import { buildSidebarRows } from "./buildSidebarRows";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
@@ -91,7 +91,7 @@ export function Sidebar() {
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged into the tree beside the local rows. The
   // inbox stays local: it triages this machine's work.
-  const { items: remoteItems } = useRemoteForests();
+  const { items: remoteItems, loading: remoteLoading } = useRemoteForests();
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
@@ -108,20 +108,7 @@ export function Sidebar() {
         remote: remoteItems,
       });
   const { rows, failedCount } = view;
-
-  // The per-project query is silent so the all-projects launcher fan-out
-  // doesn't spam toasts; here we coalesce the same observations into one.
-  useEffect(() => {
-    const id = "worktrees-fanout-error";
-    if (failedCount === 0) {
-      toast.dismiss(id);
-      return;
-    }
-    toast.error(
-      `Couldn't load worktrees for ${failedCount} ${failedCount === 1 ? "project" : "projects"}`,
-      { id },
-    );
-  }, [failedCount]);
+  useFanOutErrorToast(failedCount);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -160,11 +147,15 @@ export function Sidebar() {
   // "Nothing configured" and "configured but nothing to show" are
   // different answers, and neither should flash while its list is still
   // resolving.
-  const emptyMessage = isLoading
-    ? null
-    : projects.length === 0 && rows.length === 0
-      ? "No projects yet."
-      : view.emptyMessage;
+  // remoteLoading joins the local gate: with zero local projects the
+  // rows can still be about to arrive from a peer, and "No projects
+  // yet." must not flash while that fetch is in flight.
+  const emptyMessage =
+    isLoading || remoteLoading
+      ? null
+      : projects.length === 0 && rows.length === 0
+        ? "No projects yet."
+        : view.emptyMessage;
 
   const list = (
     <SidebarList

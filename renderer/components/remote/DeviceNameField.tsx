@@ -11,11 +11,11 @@ import { useSetDeviceName } from "@/hooks/account/useAccount";
 export function DeviceNameField({
   deviceName,
   label,
-  inputAriaLabel,
 }: {
   deviceName: string;
+  // "This device" / "This browser". The input's accessible name derives
+  // from it, so the two can't drift apart.
   label: string;
-  inputAriaLabel: string;
 }) {
   const setDeviceName = useSetDeviceName();
   const [draft, setDraft] = useState(deviceName);
@@ -39,7 +39,7 @@ export function DeviceNameField({
         value={draft}
         disabled={setDeviceName.isPending}
         onChange={(e) => setDraft(e.target.value)}
-        aria-label={inputAriaLabel}
+        aria-label={`${label} name`}
         className="min-w-0 flex-1 px-2.5 py-1.5 text-sm"
       />
       <Button

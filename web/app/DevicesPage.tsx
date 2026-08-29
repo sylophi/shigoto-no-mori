@@ -87,11 +87,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
             signs it out.
           </p>
         </div>
-        <DeviceNameField
-          deviceName={status.deviceName}
-          label="This browser"
-          inputAriaLabel="This browser's device name"
-        />
+        <DeviceNameField deviceName={status.deviceName} label="This browser" />
       </section>
 
       <section className="space-y-3">

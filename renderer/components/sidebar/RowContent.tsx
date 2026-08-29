@@ -52,8 +52,7 @@ export function RowContent({
         <RemoteProjectRow
           name={row.name}
           count={row.count}
-          iconDeviceId={row.iconDeviceId}
-          iconProjectId={row.iconProjectId}
+          iconSources={row.iconSources}
         />
       );
     case "inbox-worktree":
