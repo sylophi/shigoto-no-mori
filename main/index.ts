@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog } from "electron";
+import { platform } from "node:os";
 import path from "node:path";
+import { DEV_NAME_SUFFIX } from "@shared/appName.mts";
 import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
 import { cliRootDirName } from "@shared/cliDist.mts";
@@ -78,7 +80,32 @@ enableDevCdpPort();
 // its own userData or an installed copy would lock it out.
 if (!app.isPackaged) {
   app.setPath("userData", `${app.getPath("userData")} (dev)`);
+  // One dev-identity policy, two halves. The rename gives dev its own
+  // menu bar label and, on Linux and Windows where safeStorage really
+  // talks to libsecret/DPAPI, its own "<name> Safe Storage" item so
+  // dev tokens never share prod's encryption key. On macOS the dev
+  // app runs from an ad-hoc-signed per-worktree bundle
+  // (scripts/dev-electron.mts) that the keychain treats as a new app
+  // per worktree and per rebuild - every launch would prompt for the
+  // login-keychain password, several dialogs at once, and "Always
+  // Allow" cannot stick - so macOS dev skips the keychain via
+  // Chromium's own test-automation switch instead. safeStorage still
+  // reports encryption available under the mock constant key, so dev
+  // tokens there are obfuscated, not protected: the accepted trade
+  // for dev-instance tokens on the owner's machine. Packaged builds
+  // keep the real keychain. After the userData suffix above, so the
+  // dev data path stays derived from the shared productName.
+  app.setName(`${app.name}${DEV_NAME_SUFFIX}`);
+  if (platform() === "darwin") {
+    app.commandLine.appendSwitch("use-mock-keychain");
+  }
 }
+
+// The dev launcher's Electron-resolution override must never leak into
+// processes the host spawns (launchers, script runs, the CLI): any
+// other Electron project started from here would silently boot our
+// binary instead of its own.
+delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 
 // One live instance per data root. A second copy (typically a fresh
 // download in ~/Downloads beside the installed app) would run its own

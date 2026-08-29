@@ -93,6 +93,9 @@ typings/
 .vite/
 dist/
 
+# Per-worktree dev app bundle (scripts/dev-electron.mts)
+.electron-dev/
+
 # Web client build output (vite.web.config.ts)
 dist-web/
 

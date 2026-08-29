@@ -68,10 +68,10 @@ const config: ForgeConfig = {
     // builds load the renderer from shigomori://app, and Clerk's OAuth
     // redirects deep-link back to it. macOS routes the scheme to the
     // app through this Info.plist entry (CFBundleURLTypes). Prod only:
-    // dev runs unbundled Electron.app, which LaunchServices will not
-    // route a scheme to, so social (browser-redirect) sign-in cannot
-    // complete in dev on macOS. Email-code sign-in is unaffected.
-    // Verify social providers in a packaged build.
+    // the dev scheme is claimed by the per-worktree bundle
+    // scripts/dev-electron.mts registers, so this prod entry is NOT
+    // exercised by dev sign-in. Verify changes to it against a
+    // packaged build.
     protocols: [{ name: productName, schemes: [rendererSchemeName("prod")] }],
     // The CLI binary is compiled by the prePackage hook below into
     // dist-cli/ and shipped in Resources; Settings offers to link it
