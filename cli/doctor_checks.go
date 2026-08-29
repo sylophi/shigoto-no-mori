@@ -269,6 +269,7 @@ func checkStateRoot(report *doctorReport, projects []project) {
 	checkStagingLock(report)
 	checkShelvedEntries(report, projects)
 	checkPortAllocations(report)
+	checkTerrier(report)
 }
 
 // access(2)'s W_OK. Go's syscall package doesn't name the mode bits,
@@ -571,6 +572,39 @@ func checkPortAllocations(report *doctorReport) {
 		"Run `port-pool prune` (it owns that state, so "+binaryName+" won't touch it).")
 }
 
+// The terrier registry belongs to terrier, and sm only merges it into
+// the project list. So this check explains why merged projects might be
+// missing (the same terrierTroubleFor ladder the merge warns from) and
+// reports entries whose directory is gone -- never fixes anything,
+// since `terrier prune` owns that. This is also the only doctor
+// coverage terrier projects get: checkProjects filters them out so its
+// repairs can't touch entries sm doesn't own.
+func checkTerrier(report *doctorReport) {
+	if !terrierEnabled(readGlobalConfigHints()) {
+		return
+	}
+	listings, trouble := activeTerrierListings()
+	if trouble != nil {
+		report.warn(groupState, "terrier", "terrier", trouble.summary, trouble.advice)
+		return
+	}
+	gone := 0
+	for _, t := range listings {
+		if _, err := os.Stat(t.Path); os.IsNotExist(err) {
+			gone++
+		}
+	}
+	if gone > 0 {
+		report.warn(groupState, "terrier", "terrier",
+			fmt.Sprintf("%d of %d registered repos point at directories that are gone",
+				gone, len(listings)),
+			"Run `terrier prune` (it owns that registry, so "+binaryName+" won't touch it).")
+		return
+	}
+	report.ok(groupState, "terrier", "terrier",
+		fmt.Sprintf("%d registered repo%s merged into the project list", len(listings), plural(len(listings))))
+}
+
 // `port-pool list` prints "  <port> -> <dir> (<date>)" per allocation.
 // Tolerant on purpose: an unrecognized line is skipped, so a change in
 // its output degrades to "no allocations found" instead of a wrong
@@ -599,6 +633,17 @@ func parsePortPoolDirs(stdout string) []string {
 // a dozen registered projects would otherwise bury the findings that
 // matter under a hundred green ticks.
 func checkProjects(report *doctorReport, projects []project) {
+	// Registry entries only: the terrier-sourced merges get their
+	// aggregate coverage in checkTerrier, and the repairs here
+	// (unregister + state-dir delete) must never act on an entry sm
+	// doesn't own.
+	owned := make([]project, 0, len(projects))
+	for _, p := range projects {
+		if p.Source == "" {
+			owned = append(owned, p)
+		}
+	}
+	projects = owned
 	if len(projects) == 0 {
 		return
 	}

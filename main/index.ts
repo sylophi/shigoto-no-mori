@@ -48,6 +48,7 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
+import { refreshTerrierListings } from "@host/lib/terrier";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -346,6 +347,12 @@ app.on("ready", async () => {
   installFatalRecovery({ isShuttingDown });
   createWindow();
   reconcileLaunchAtLogin();
+  // The sweeps below read the merged project list synchronously, so
+  // wait for the terrier listings (bounded by the spawn timeout).
+  // Otherwise the first fetch pass and the state watcher's reaper run
+  // against a registry-only list. The window is already up, so this
+  // delays only the background machinery.
+  await refreshTerrierListings();
   startBackgroundFetch();
   startUpdater();
   // Remote hosting (v2 step 3, slice A): serve host-scoped calls over

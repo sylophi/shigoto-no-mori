@@ -107,6 +107,11 @@ type project struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Path string `json:"path"`
+	// "terrier" on entries merged from the terrier registry
+	// (terrier.go). Never persisted: registry.json rows always leave it
+	// empty, and the merge layer decorates at read time -- mirroring
+	// ProjectSchema's source field (shared/schemas/project.ts).
+	Source string `json:"source,omitempty"`
 }
 
 // Per-project config (ShigomoriConfigSchema). Mirrors the zod schema's
@@ -135,6 +140,7 @@ type carryOverEntry struct {
 type globalConfig struct {
 	DeleteBranchOnRemove *bool             `json:"deleteBranchOnRemove"`
 	PortPool             *bool             `json:"portPool"`
+	Terrier              *bool             `json:"terrier"`
 	AutoPopulateInstall  *bool             `json:"autoPopulateInstall"`
 	Launchers            []launcherCommand `json:"launchers"`
 	HiddenLaunchers      []string          `json:"hiddenLaunchers"`

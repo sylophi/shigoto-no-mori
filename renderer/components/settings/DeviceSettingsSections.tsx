@@ -10,13 +10,15 @@ import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
+import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
+import { TerrierLink } from "./TerrierLink";
 import { ToggleRow } from "./ToggleRow";
 
 // The device-managed settings sections, shared verbatim between the
 // local Settings form and the remote device settings body (v2 step 6).
-// Everything here reads and writes only the seven device-managed keys
+// Everything here reads and writes only the device-managed keys
 // on SettingsFormState, and every query it runs (tool detection,
 // port-pool install check, gh readiness) goes through host-scoped
 // hooks, so the same JSX answers for whichever device the surrounding
@@ -31,6 +33,10 @@ interface DeviceSectionProps {
 // The Worktrees / Integrations / Launch toggle sections.
 export function DeviceToggleSections({ form, setForm }: DeviceSectionProps) {
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
+  const { data: terrierReadiness } = useTerrierReadiness();
+  const terrierInstalled = terrierReadiness?.installed ?? true;
+  const terrierCompatible = terrierReadiness?.compatible ?? true;
+  const terrierReady = terrierInstalled && terrierCompatible;
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -86,6 +92,22 @@ export function DeviceToggleSections({ form, setForm }: DeviceSectionProps) {
               </PortPoolLink>
             </>
           }
+        />
+        <ToggleRow
+          // Shows the persisted truth and stays operable while on:
+          // when terrier vanishes or drifts out of the version
+          // handshake, the CLI warns "turn the toggle off in the
+          // app's Settings", so the off switch must keep working.
+          // Only turning it ON requires a ready binary.
+          checked={form.terrier}
+          onCheckedChange={(v) => setForm((prev) => ({ ...prev, terrier: v }))}
+          disabled={!terrierReady && !form.terrier}
+          label="Automatically use terrier"
+          description={terrierDescription(
+            terrierInstalled,
+            terrierCompatible,
+            terrierReadiness?.version,
+          )}
         />
       </section>
 
@@ -196,6 +218,36 @@ function ToolPill({ entry }: { entry: DetectedLauncher }) {
       <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
       {entry.label}
     </span>
+  );
+}
+
+function terrierDescription(
+  installed: boolean,
+  compatible: boolean,
+  version: string | undefined,
+): React.ReactNode {
+  if (!installed) {
+    return (
+      <>
+        <TerrierLink>Install terrier</TerrierLink> to enable this integration.
+      </>
+    );
+  }
+  if (!compatible) {
+    return (
+      <>
+        {version ?? "The installed terrier"} isn't a version this build
+        understands. Update both and try again.{" "}
+        <TerrierLink>Learn more</TerrierLink>
+      </>
+    );
+  }
+  return (
+    <>
+      Shows every repo registered in terrier as a project. Removing one requires{" "}
+      <span className="font-mono">terrier rm</span>.{" "}
+      <TerrierLink>Learn more</TerrierLink>
+    </>
   );
 }
 

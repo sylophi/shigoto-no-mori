@@ -54,6 +54,7 @@ export type HostApi = Pick<
   | "scripts"
   | "shigomori"
   | "sync"
+  | "terrier"
   | "worktreeData"
   | "worktrees"
 >;

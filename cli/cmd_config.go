@@ -85,6 +85,8 @@ var globalConfigKeys = []configKey{
 		desc: "Seed new projects' setup script with `<pm> install`"},
 	{name: "portPool", kind: boolKind, def: false,
 		desc: "Provision/release port-pool ports with worktrees"},
+	{name: "terrier", kind: boolKind, def: false,
+		desc: "List terrier-registered repos as projects"},
 	{name: "githubCli", kind: boolKind, def: true,
 		desc: "GitHub CLI integration"},
 	// Remote hosting (socketHost). Registered as flat leaf keys so the

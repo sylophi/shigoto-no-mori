@@ -28,6 +28,7 @@
   "remoteAccess:commandAccess",
   "scripts:orphanReport",
   "shigomori:read",
+  "terrier:readiness",
   "worktreeData:read",
   "worktrees:commitDiff",
   "worktrees:diff",

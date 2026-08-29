@@ -132,7 +132,13 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	// command exists to diagnose must not fail the load before the
 	// checks get to describe it. Read it here and degrade to none,
 	// because checkRegistryFile reports the parse failure itself.
+	// Terrier projects join silently (checkTerrier reports any trouble
+	// as a finding) so state checks like the shelved-marks scan see the
+	// same world the commands do. The per-project group filters them
+	// back out (checkProjects).
 	projects, _ := loadProjects()
+	terrierListed, _ := activeTerrierListings()
+	projects = appendTerrierProjects(projects, terrierListed)
 
 	report := runDoctorChecks(projects)
 	var repaired []string
@@ -147,6 +153,7 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 			// is broken, and checkRegistryFile already says so; carry on
 			// with none rather than refusing to report.
 			projects, _ := loadProjects()
+			projects = appendTerrierProjects(projects, terrierListed)
 			report = runDoctorChecks(projects)
 		}
 	}
