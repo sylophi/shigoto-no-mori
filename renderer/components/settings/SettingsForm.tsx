@@ -228,11 +228,16 @@ export function SettingsForm({
               }
             />
             <ToggleRow
-              checked={form.terrier && terrierReady}
+              // Shows the persisted truth and stays operable while on:
+              // when terrier vanishes or drifts out of the version
+              // handshake, the CLI warns "turn the toggle off in the
+              // app's Settings", so the off switch must keep working.
+              // Only turning it ON requires a ready binary.
+              checked={form.terrier}
               onCheckedChange={(v) =>
                 setForm((prev) => ({ ...prev, terrier: v }))
               }
-              disabled={!terrierReady}
+              disabled={!terrierReady && !form.terrier}
               label="Show terrier projects"
               description={terrierDescription(
                 terrierInstalled,

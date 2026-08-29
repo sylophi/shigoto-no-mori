@@ -191,13 +191,14 @@ app.on("ready", async () => {
   // record file synchronously (before any script can spawn) and does
   // the killing in the background.
   startOrphanScriptSweep();
-  // Warm the terrier listings for the sync loadProjects readers that
-  // run before the renderer's first projects:list refresh — the
-  // background-fetch sweep and the removed-worktree reap below. Fire
-  // and forget: they degrade to the registry-only list, not an error.
-  void refreshTerrierListings();
   buildAppMenu();
   createWindow();
+  // The sweeps below read the merged project list synchronously, so
+  // wait for the terrier listings (bounded by the spawn timeout) —
+  // otherwise the first fetch pass and the state watcher's reaper run
+  // against a registry-only list. The window is already up; this
+  // delays only the background machinery.
+  await refreshTerrierListings();
   startBackgroundFetch();
   startUpdater();
   // External CLI writes surface in the UI via an explicit invalidation

@@ -577,17 +577,17 @@ func checkPortAllocations(report *doctorReport) {
 // missing (the same terrierTroubleFor ladder the merge warns from) and
 // reports entries whose directory is gone -- never fixes anything,
 // since `terrier prune` owns that. This is also the only doctor
-// coverage terrier projects get: the per-project group iterates the
-// registry alone, so its repairs can't touch entries sm doesn't own.
+// coverage terrier projects get: checkProjects filters them out so its
+// repairs can't touch entries sm doesn't own.
 func checkTerrier(report *doctorReport) {
 	if !terrierEnabled(readGlobalConfigHints()) {
 		return
 	}
-	if trouble := terrierTroubleFor(); trouble != nil {
+	listings, trouble := activeTerrierListings()
+	if trouble != nil {
 		report.warn(groupState, "terrier", "terrier", trouble.summary, trouble.advice)
 		return
 	}
-	listings, _ := terrierListings()
 	gone := 0
 	for _, t := range listings {
 		if _, err := os.Stat(t.Path); os.IsNotExist(err) {
@@ -633,6 +633,17 @@ func parsePortPoolDirs(stdout string) []string {
 // a dozen registered projects would otherwise bury the findings that
 // matter under a hundred green ticks.
 func checkProjects(report *doctorReport, projects []project) {
+	// Registry entries only: the terrier-sourced merges get their
+	// aggregate coverage in checkTerrier, and the repairs here
+	// (unregister + state-dir delete) must never act on an entry sm
+	// doesn't own.
+	owned := make([]project, 0, len(projects))
+	for _, p := range projects {
+		if p.Source == "" {
+			owned = append(owned, p)
+		}
+	}
+	projects = owned
 	if len(projects) == 0 {
 		return
 	}

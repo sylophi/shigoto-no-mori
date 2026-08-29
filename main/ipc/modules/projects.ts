@@ -30,7 +30,11 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "../../lib/scripts";
-import { terrierRetainsProject } from "../../lib/terrier";
+import {
+  invalidateTerrierCaches,
+  refreshTerrierListings,
+  terrierRetainsProject,
+} from "../../lib/terrier";
 import { expandHome } from "../../lib/util/paths";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
 
@@ -64,7 +68,13 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // When the id carries over (registration minted the deterministic
     // terrier id), nothing is actually going away — skip the script
     // reaping and the app-side cleanup, and let the CLI skip the state
-    // dir for the same reason.
+    // dir for the same reason. Decided from a just-expired, freshly
+    // refetched listing rather than the snapshot: the CLI re-derives
+    // the same rule from a live read, and a stale answer here would
+    // half-apply the removal (scripts killed for a project that stays,
+    // or cleanup skipped for one that goes).
+    invalidateTerrierCaches();
+    await refreshTerrierListings();
     if (terrierRetainsProject(removed)) {
       await projectsRemoveViaCli(id);
       return;
