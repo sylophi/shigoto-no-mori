@@ -113,6 +113,31 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
     "projects:icon": () => null,
     "projects:listIgnoredPaths": () => [".env.local", "node_modules"],
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
+    "worktrees:create": ({ projectId, worktreeName, branchName }) => {
+      const name = worktreeName ?? "tender-tanuki";
+      const created = {
+        id: `c0ffee${String(Date.now()).slice(-6)}`,
+        projectId,
+        name,
+        branch: branchName ?? name,
+        path: `${forest.projects.find((p) => p.id === projectId)?.path ?? "/tmp"}/../worktrees/${name}`,
+        ahead: 0,
+        behind: 0,
+        hasUpstream: false,
+        hasRemote: true,
+        divergedClean: false,
+        behindPrimary: 0,
+        mergedIntoPrimary: false,
+        changedCount: 0,
+        recentCommits: [],
+        isPrimary: false,
+        isExternal: false,
+        detached: false,
+        shelved: false,
+      };
+      (forest.worktrees[projectId] ??= []).push(created);
+      return { worktree: created };
+    },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:diff": () => LAB_DIFF,

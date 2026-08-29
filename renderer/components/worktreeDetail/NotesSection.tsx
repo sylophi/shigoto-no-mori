@@ -7,31 +7,60 @@ import {
 } from "@/hooks/worktrees/useWorktreeData";
 import type { Worktree } from "@shared/schemas";
 
-export function NotesSection({ worktree }: { worktree: Worktree }) {
+export function NotesSection({
+  worktree,
+  readOnly = false,
+}: {
+  worktree: Worktree;
+  // True on a remote device that has not granted command access: the
+  // write would only be refused at the wire, so the editor says so up
+  // front instead of offering a save that cannot land.
+  readOnly?: boolean;
+}) {
   // The primary checkout (the main repo root) lives at the project path,
   // which never sits under a managed prefix, so it's flagged external --
   // but it's ours to annotate, so notes stay available for it. Only
   // genuinely external worktrees (manual checkouts elsewhere) are skipped.
   if (worktree.isExternal && !worktree.isPrimary) return null;
-  return <NotesSectionLoader key={worktree.id} worktree={worktree} />;
+  return (
+    <NotesSectionLoader
+      key={worktree.id}
+      worktree={worktree}
+      readOnly={readOnly}
+    />
+  );
 }
 
-function NotesSectionLoader({ worktree }: { worktree: Worktree }) {
+function NotesSectionLoader({
+  worktree,
+  readOnly,
+}: {
+  worktree: Worktree;
+  readOnly: boolean;
+}) {
   const { data, isPending } = useWorktreeData(worktree.projectId, worktree.id);
   // Wait for the persisted value before mounting the editor. The inner
   // seeds its draft from `saved` via useState, which only reads the
   // initial value -- mounting while the read is still in flight would
   // seed an empty draft that never picks up the notes once they arrive.
   if (isPending) return null;
-  return <NotesSectionInner worktree={worktree} saved={data?.notes ?? ""} />;
+  return (
+    <NotesSectionInner
+      worktree={worktree}
+      saved={data?.notes ?? ""}
+      readOnly={readOnly}
+    />
+  );
 }
 
 function NotesSectionInner({
   worktree,
   saved,
+  readOnly,
 }: {
   worktree: Worktree;
   saved: string;
+  readOnly: boolean;
 }) {
   const write = useWorktreeDataWrite();
 
@@ -68,7 +97,13 @@ function NotesSectionInner({
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
         rows={3}
-        className="w-full resize-y px-3 py-2 text-sm"
+        readOnly={readOnly}
+        title={
+          readOnly
+            ? "Read-only — command access is granted from that device"
+            : undefined
+        }
+        className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
       />
     </section>
   );

@@ -258,7 +258,7 @@ export function WorktreeDetailInner({
             />
           </section>
 
-          <NotesSection worktree={worktree} />
+          <NotesSection worktree={worktree} readOnly={remote && !granted} />
         </div>
       </div>
 
