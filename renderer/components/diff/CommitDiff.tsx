@@ -1,16 +1,19 @@
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
 
-const route = getRouteApi(
-  "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
-);
-
 export function CommitDiff() {
-  const { projectId, worktreeId, hash } = route.useParams();
-  const navigate = useNavigate();
+  // Non-strict: this page serves both the local route and the
+  // /devices/$deviceId twin (see renderer/router.tsx).
+  const { projectId, worktreeId, hash } = useParams({ strict: false }) as {
+    projectId: string;
+    worktreeId: string;
+    hash: string;
+  };
+  const nav = useWorktreeNav();
   const {
     data: worktrees = [],
     isPending,
@@ -19,11 +22,7 @@ export function CommitDiff() {
   } = useWorktrees(projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
-  const goBack = () =>
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId",
-      params: { projectId, worktreeId },
-    });
+  const goBack = () => nav.toWorktree(projectId, worktreeId);
 
   // Resolve commit metadata from the worktree's recentCommits cache so the
   // header shows author/subject without an extra IPC round-trip. If it's

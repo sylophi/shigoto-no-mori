@@ -12,6 +12,9 @@ import { ProjectIcon } from "./ProjectIcon";
 
 interface ProjectHeaderProps {
   project: Project;
+  // The merged tree's device badge cluster, rendered after the name on
+  // the healthy branch only (arrange and missing rows stay quiet).
+  badges?: React.ReactNode;
   expanded?: boolean;
   onToggle?: () => void;
   missing?: boolean;
@@ -34,6 +37,7 @@ export const PROJECT_HEADER_BASE =
 // tooltips on names that already fit.
 export function ProjectHeader({
   project,
+  badges,
   expanded,
   onToggle,
   missing,
@@ -108,6 +112,7 @@ export function ProjectHeader({
       <span ref={nameRef} className="min-w-0 truncate">
         {project.name}
       </span>
+      {badges}
     </button>
   );
 

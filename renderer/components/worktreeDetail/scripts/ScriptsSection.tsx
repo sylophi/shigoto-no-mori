@@ -11,9 +11,15 @@ import { ScriptRow } from "./ScriptRow";
 
 interface ScriptsSectionProps {
   worktree: Worktree;
+  // Set under a remote scope while remote runs are not streamable yet:
+  // rows render, run affordances disable with this exact reason.
+  runsDisabledReason?: string;
 }
 
-export function ScriptsSection({ worktree }: ScriptsSectionProps) {
+export function ScriptsSection({
+  worktree,
+  runsDisabledReason,
+}: ScriptsSectionProps) {
   const navigate = useNavigate();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(
     worktree.projectId,
@@ -79,7 +85,13 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
 
   return (
     <div className="space-y-4">
-      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
+      {pkg && pkgHasScripts && (
+        <PackageScripts
+          worktree={worktree}
+          pkg={pkg}
+          runsDisabledReason={runsDisabledReason}
+        />
+      )}
 
       {lifecycleRows.length > 0 && (
         <div className="space-y-2">
@@ -94,21 +106,24 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
                 slot={row.slot}
                 label={row.label}
                 command={row.command}
+                runsDisabledReason={runsDisabledReason}
               />
             ))}
           </ScriptList>
         </div>
       )}
 
-      {!hasLifecycle && (
-        <button
-          type="button"
-          onClick={goConfigure}
-          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          Configure setup or teardown scripts →
-        </button>
-      )}
+      {!hasLifecycle &&
+        runsDisabledReason === undefined && (
+          // Configure is a local page, so the CTA only exists locally.
+          <button
+            type="button"
+            onClick={goConfigure}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Configure setup or teardown scripts →
+          </button>
+        )}
     </div>
   );
 }

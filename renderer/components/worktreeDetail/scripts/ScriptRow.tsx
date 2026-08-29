@@ -11,9 +11,18 @@ interface ScriptRowProps {
   slot: ScriptSlot;
   label: string;
   command: string;
+  // Disables the run affordance with this reason as the title (the
+  // remote detail sets it while remote runs are not streamable yet).
+  runsDisabledReason?: string;
 }
 
-export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
+export function ScriptRow({
+  worktree,
+  slot,
+  label,
+  command,
+  runsDisabledReason,
+}: ScriptRowProps) {
   const navigate = useNavigate();
   const { state, busy, start, stop } = useScriptRunner(worktree, slot);
   // No history means there's nothing for the console to show, so the
@@ -37,9 +46,12 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
       <button
         type="button"
         onClick={busy ? stop : start}
-        disabled={state.cancelling}
+        disabled={state.cancelling || runsDisabledReason !== undefined}
         aria-label={actionLabel}
-        title={command ? `${actionLabel}\n${command}` : actionLabel}
+        title={
+          runsDisabledReason ??
+          (command ? `${actionLabel}\n${command}` : actionLabel)
+        }
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
           busy ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent",

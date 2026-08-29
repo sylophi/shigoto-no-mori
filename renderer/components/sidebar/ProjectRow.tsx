@@ -15,11 +15,14 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
 import type { Project } from "@shared/schemas";
+import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
 import { ProjectHeader } from "./ProjectHeader";
 
 interface ProjectRowProps {
   project: Project;
   expanded: boolean;
+  // Peer devices whose worktrees merged into this project's group.
+  devices: readonly SidebarDeviceBadge[];
   onToggle: () => void;
   arrangeMode: boolean;
   // True while the cursor is anywhere in this project's region in the
@@ -31,6 +34,7 @@ interface ProjectRowProps {
 export function ProjectRow({
   project,
   expanded,
+  devices,
   onToggle,
   arrangeMode,
   isHovered,
@@ -130,6 +134,7 @@ export function ProjectRow({
       <div className="flex items-center gap-0.5 py-0.5">
         <ProjectHeader
           project={project}
+          badges={<DeviceBadgeCluster devices={devices} />}
           missing={missing}
           expanded={expanded}
           onToggle={onToggle}

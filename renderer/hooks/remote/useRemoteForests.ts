@@ -13,6 +13,7 @@
 // wanting a refetch refreshes this one's rows for free.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
 import {
   remoteProjectsQueryOptions,
@@ -25,6 +26,10 @@ import { useRemoteDevices } from "./useRemoteDevices";
 export interface RemoteForestItem {
   deviceId: string;
   deviceLabel: string;
+  // False when the device is not currently reachable: its rows are the
+  // cache's last known state, and the tree fades them rather than
+  // hiding work that still exists on that machine.
+  reachable: boolean;
   project: Project;
   worktrees: Worktree[];
   // A failed worktree listing, folded into the sidebar's coalesced
@@ -71,6 +76,7 @@ export function useRemoteForests(): RemoteForests {
     items: pairs.map(({ device, project }, index) => ({
       deviceId: device.deviceId,
       deviceLabel: device.label,
+      reachable: deviceStatusView(device.status).reachable,
       project,
       worktrees: worktreeQueries[index]?.data ?? [],
       worktreesError: worktreeQueries[index]?.error != null,

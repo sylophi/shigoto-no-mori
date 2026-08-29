@@ -19,6 +19,7 @@ import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { RemoteForest } from "@/components/remote/RemoteForest";
+import { withRemoteScope } from "@/components/remote/RemoteScope";
 import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
@@ -138,6 +139,36 @@ const devicesRoute = createRoute({
   remountDeps: ({ params }) => params,
 });
 
+// Device-scoped twins of the worktree pages (v2: remote feels local).
+// The SAME components serve both trees — withRemoteScope resolves the
+// device, mounts HostScopeProvider and the push-refresh watcher, and
+// the pages read their params non-strictly. Local-only affordances
+// inside them gate on useWorktreeNav().remote.
+const remoteWorktreeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
+  component: withRemoteScope(WorktreeDetail),
+  remountDeps: ({ params }) => params,
+});
+
+const remoteWorktreeDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/diff",
+  component: withRemoteScope(WorktreeDiff),
+});
+
+const remotePullRequestDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
+  component: withRemoteScope(PullRequestDiff),
+});
+
+const remoteCommitDiffRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  component: withRemoteScope(CommitDiff),
+});
+
 // remountDeps on the project- and worktree-scoped routes: the router
 // keeps one component instance across a params change and just
 // re-renders it, so without this a route would keep showing the
@@ -216,6 +247,10 @@ const routeTree = rootRoute.addChildren([
   tidyRoute,
   devicesIndexRoute,
   devicesRoute,
+  remoteWorktreeRoute,
+  remoteWorktreeDiffRoute,
+  remotePullRequestDiffRoute,
+  remoteCommitDiffRoute,
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,

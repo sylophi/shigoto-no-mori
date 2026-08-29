@@ -296,7 +296,7 @@ const thinkpadProjects: Project[] = [
 const thinkpadWorktrees: Record<string, Worktree[]> = {
   tp_sm: [
     worktree({
-      id: "tp_sm_main",
+      id: "aa11bb22cc33",
       projectId: "tp_sm",
       name: "shigoto-no-mori",
       branch: "main",
@@ -313,13 +313,14 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "tp_sm_gecko",
+      id: "a1b2c3d4e5f6",
       projectId: "tp_sm",
       name: "gentle-gecko",
       branch: "exp/terrier-sync",
       path: "/home/rin/shigomori/worktrees/shigoto-no-mori/gentle-gecko",
       ahead: 1,
       changedCount: 7,
+      port: 5173,
       lastChangeAt: now - 40 * 60_000,
       recentCommits: [
         commit(
@@ -334,7 +335,7 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
   ],
   tp_df: [
     worktree({
-      id: "tp_df_main",
+      id: "dd44ee55ff66",
       projectId: "tp_df",
       name: "dotfiles",
       branch: "main",
@@ -366,7 +367,7 @@ const miniProjects: Project[] = [
 const miniWorktrees: Record<string, Worktree[]> = {
   mini_sm: [
     worktree({
-      id: "mini_sm_main",
+      id: "0123456789ab",
       projectId: "mini_sm",
       name: "shigoto-no-mori",
       branch: "main",
@@ -375,7 +376,7 @@ const miniWorktrees: Record<string, Worktree[]> = {
       recentCommits: [],
     }),
     worktree({
-      id: "mini_sm_newt",
+      id: "ba9876543210",
       projectId: "mini_sm",
       name: "nimble-newt",
       branch: "quiet-quail/notes",

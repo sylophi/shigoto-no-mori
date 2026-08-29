@@ -16,9 +16,14 @@ import { sortEntries } from "./sortPackageScripts";
 interface PackageScriptsProps {
   worktree: Worktree;
   pkg: PackageScriptsResult;
+  runsDisabledReason?: string;
 }
 
-export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
+export function PackageScripts({
+  worktree,
+  pkg,
+  runsDisabledReason,
+}: PackageScriptsProps) {
   const [expanded, setExpanded] = useState(true);
   const [query, setQuery] = useState("");
   const { data: sortMode = "frequent" } = usePackageScriptSort(
@@ -85,6 +90,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
                   slot={{ kind: "package", name: entry.name }}
                   label={entry.name}
                   command={entry.command}
+                  runsDisabledReason={runsDisabledReason}
                 />
               ))}
             </ScriptList>

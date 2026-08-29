@@ -152,6 +152,75 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
       squash: true,
       rebase: false,
     }),
+    // Local-orchestrator sync verbs, mutating the fixture world so the
+    // outcome is visible: the worktree lands in the identity-matched
+    // local project, and a transplant removes the source row.
+    ...(forest.deviceId === LOCAL_DEVICE_ID
+      ? {
+          "sync:pullWorktree": (input: any) =>
+            labSyncPull(forest, input, false),
+          "sync:transplantWorktree": (input: any) =>
+            labSyncPull(forest, input, true),
+        }
+      : {}),
+  };
+}
+
+async function labSyncPull(
+  local: DeviceForest,
+  input: {
+    sourceDeviceId: string;
+    sourceProjectId: string;
+    sourceWorktreeId: string;
+    sourceIdentity: string;
+    branch: string;
+  },
+  transplant: boolean,
+) {
+  await new Promise((resolve) => setTimeout(resolve, 1600));
+  const project = local.projects.find(
+    (entry) => entry.identity === input.sourceIdentity,
+  );
+  if (project === undefined) throw new Error("[lab] no identity match");
+  const source = forests[input.sourceDeviceId];
+  const sourceList = source?.worktrees[input.sourceProjectId] ?? [];
+  const sourceWorktree = sourceList.find(
+    (entry) => entry.id === input.sourceWorktreeId,
+  );
+  const name = sourceWorktree?.name ?? "tender-tanuki";
+  const landed = {
+    ...sourceWorktree,
+    id: "fedcba987654",
+    projectId: project.id,
+    name,
+    branch: input.branch,
+    path: `/Users/rin/shigomori/worktrees/${project.name}/${name}`,
+    ahead: sourceWorktree?.ahead ?? 0,
+    behind: 0,
+    hasUpstream: sourceWorktree?.hasUpstream ?? true,
+    hasRemote: true,
+    divergedClean: false,
+    behindPrimary: 0,
+    mergedIntoPrimary: false,
+    changedCount: sourceWorktree?.changedCount ?? 0,
+    recentCommits: sourceWorktree?.recentCommits ?? [],
+    isPrimary: false,
+    isExternal: false,
+    detached: false,
+    shelved: false,
+    port: undefined,
+  };
+  (local.worktrees[project.id] ??= []).push(landed as any);
+  if (transplant && source !== undefined) {
+    source.worktrees[input.sourceProjectId] = sourceList.filter(
+      (entry) => entry.id !== input.sourceWorktreeId,
+    );
+  }
+  return {
+    worktree: landed,
+    captured: (sourceWorktree?.changedCount ?? 0) > 0,
+    dirtyApplied: (sourceWorktree?.changedCount ?? 0) > 0,
+    ...(transplant ? { sourceRemoved: true } : {}),
   };
 }
 

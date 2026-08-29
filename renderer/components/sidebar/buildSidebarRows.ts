@@ -1,6 +1,7 @@
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
+import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
 
 interface BuildSidebarRowsArgs {
@@ -46,6 +47,7 @@ export function buildSidebarRows({
       key: `p:${project.id}`,
       project,
       expanded: false,
+      devices: [],
     }));
     return {
       rows,
@@ -76,12 +78,6 @@ export function buildSidebarRows({
   const rows: SidebarRow[] = [];
   projects.forEach((project, i) => {
     const expanded = !collapsed.has(project.id);
-    rows.push({
-      kind: "project",
-      key: `p:${project.id}`,
-      project,
-      expanded,
-    });
     // Claimed by identity even while collapsed or still loading, so a
     // folded project's remote worktrees fold with it instead of
     // reappearing below as a duplicate remote-project group. A missing
@@ -92,6 +88,13 @@ export function buildSidebarRows({
       remoteHere = remoteByIdentity.get(project.identity) ?? [];
       if (remoteHere.length > 0) remoteByIdentity.delete(project.identity);
     }
+    rows.push({
+      kind: "project",
+      key: `p:${project.id}`,
+      project,
+      expanded,
+      devices: deviceBadgesOf(remoteHere),
+    });
     if (!expanded || project.pathExists === false) return;
     // Peers' worktrees of this same repo render after the local rows so
     // the local work stays where the eye expects it -- and on EVERY
@@ -174,6 +177,7 @@ export function buildSidebarRows({
       key: groupId,
       name: first.project.name,
       count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
+      devices: deviceBadgesOf(items),
       iconSources: items.map((item) => ({
         deviceId: item.deviceId,
         projectId: item.project.id,
@@ -224,7 +228,26 @@ function pushRemoteWorktreeRows(
       worktree,
       deviceId: item.deviceId,
       deviceLabel: item.deviceLabel,
+      reachable: item.reachable,
       groupId,
     });
   }
+}
+
+// One badge per contributing device, first sighting wins the order (a
+// device usually contributes one project slice here anyway).
+function deviceBadgesOf(
+  items: readonly RemoteForestItem[],
+): SidebarDeviceBadge[] {
+  const badges = new Map<string, SidebarDeviceBadge>();
+  for (const item of items) {
+    if (!badges.has(item.deviceId)) {
+      badges.set(item.deviceId, {
+        deviceId: item.deviceId,
+        label: item.deviceLabel,
+        reachable: item.reachable,
+      });
+    }
+  }
+  return [...badges.values()];
 }

@@ -32,6 +32,7 @@ export function RowContent({
         <ProjectRow
           project={row.project}
           expanded={row.expanded}
+          devices={row.devices}
           onToggle={() => onToggle(row.project.id)}
           arrangeMode={arrangeMode}
           isHovered={isHovered}
@@ -45,6 +46,7 @@ export function RowContent({
           worktree={row.worktree}
           deviceId={row.deviceId}
           deviceLabel={row.deviceLabel}
+          reachable={row.reachable}
         />
       );
     case "remote-project":
@@ -52,6 +54,7 @@ export function RowContent({
         <RemoteProjectRow
           name={row.name}
           count={row.count}
+          devices={row.devices}
           iconSources={row.iconSources}
         />
       );

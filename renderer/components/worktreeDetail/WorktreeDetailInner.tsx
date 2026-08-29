@@ -1,10 +1,13 @@
 import { useNavigate } from "@tanstack/react-router";
+import { DeviceChip } from "@/components/remote/DeviceChip";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
 import {
   scriptKey,
@@ -23,6 +26,8 @@ import type {
 } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
+import { PortsSection } from "./PortsSection";
+import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptLaunchRow } from "./ScriptLaunchRow";
 import { ScriptsSection } from "./scripts/ScriptsSection";
@@ -56,6 +61,13 @@ export function WorktreeDetailInner({
   siblings,
 }: InnerProps) {
   const navigate = useNavigate();
+  // Which device this page is scoped to. Everything data-shaped below
+  // already rides the host scope; `remote` only gates the affordances
+  // that are local by nature (launching, configure links) and adds the
+  // cross-device ones (bring here, transplant, the device chip).
+  const nav = useWorktreeNav();
+  const remote = nav.remote;
+  const { granted } = useCommandAccess();
   const { data: runtime } = useRuntimeInfo();
   const {
     deleteMutation,
@@ -165,19 +177,25 @@ export function WorktreeDetailInner({
     <div className="flex h-full flex-col">
       <header className="flex flex-col gap-2 border-b border-border px-6 pt-7 pb-5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() =>
-              void navigate({
-                to: "/projects/$projectId/configure",
-                params: { projectId: worktree.projectId },
-              })
-            }
-            className="shrink-0 rounded transition-colors hover:text-foreground"
-            title={`Configure ${project.name}`}
-          >
-            {project.name}
-          </button>
+          {remote ? (
+            // Configure is a local page; remotely the name is just the
+            // breadcrumb.
+            <span className="shrink-0">{project.name}</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                void navigate({
+                  to: "/projects/$projectId/configure",
+                  params: { projectId: worktree.projectId },
+                })
+              }
+              className="shrink-0 rounded transition-colors hover:text-foreground"
+              title={`Configure ${project.name}`}
+            >
+              {project.name}
+            </button>
+          )}
           <span aria-hidden className="text-muted-foreground/40">
             /
           </span>
@@ -188,6 +206,7 @@ export function WorktreeDetailInner({
             copyable
           />
           <WorktreeKindIcon worktree={worktree} />
+          <DeviceChip />
         </div>
         <BranchHeaderRow worktree={worktree} />
       </header>
@@ -206,15 +225,22 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex max-w-4xl flex-col gap-10">
-          <section className="space-y-3">
-            <SectionHeading>Launch</SectionHeading>
-            {/* The two rows are one wrapping group of pills, so they sit a
-                pill-gap apart -- not the section's heading-to-content gap. */}
-            <div className="space-y-2">
-              <LauncherRow worktree={worktree} />
-              <ScriptLaunchRow worktree={worktree} />
-            </div>
-          </section>
+          {!remote && (
+            // Launching opens editors and shells on the machine showing
+            // this window; on another device's worktree there is nothing
+            // honest to launch, so the section only exists locally.
+            <section className="space-y-3">
+              <SectionHeading>Launch</SectionHeading>
+              {/* The two rows are one wrapping group of pills, so they sit a
+                  pill-gap apart -- not the section's heading-to-content gap. */}
+              <div className="space-y-2">
+                <LauncherRow worktree={worktree} />
+                <ScriptLaunchRow worktree={worktree} />
+              </div>
+            </section>
+          )}
+
+          <PortsSection worktree={worktree} />
 
           <PullRequestSection worktree={worktree} />
 
@@ -222,7 +248,14 @@ export function WorktreeDetailInner({
 
           <section className="space-y-3">
             <SectionHeading>Scripts</SectionHeading>
-            <ScriptsSection worktree={worktree} />
+            <ScriptsSection
+              worktree={worktree}
+              runsDisabledReason={
+                remote
+                  ? "Remote script runs stream back in a later update"
+                  : undefined
+              }
+            />
           </section>
 
           <NotesSection worktree={worktree} />
@@ -233,6 +266,12 @@ export function WorktreeDetailInner({
         worktree={worktree}
         state={footerState}
         actions={footerActions}
+        canMutate={!remote || granted}
+        leading={
+          remote ? (
+            <RemoteWorktreeActions worktree={worktree} project={project} />
+          ) : undefined
+        }
       />
     </div>
   );

@@ -1,17 +1,21 @@
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
 import { DiffStats } from "@/components/ui/diff-stats";
 
-const route = getRouteApi("/projects/$projectId/worktrees/$worktreeId/pr-diff");
-
 export function PullRequestDiff() {
-  const { projectId, worktreeId } = route.useParams();
-  const navigate = useNavigate();
+  // Non-strict: this page serves both the local route and the
+  // /devices/$deviceId twin (see renderer/router.tsx).
+  const { projectId, worktreeId } = useParams({ strict: false }) as {
+    projectId: string;
+    worktreeId: string;
+  };
+  const nav = useWorktreeNav();
   const {
     data: worktrees = [],
     isPending: worktreesPending,
@@ -26,11 +30,7 @@ export function PullRequestDiff() {
     refetch: refetchPullRequest,
   } = useWorktreePullRequest(projectId, worktree?.branch ?? "");
 
-  const goBack = () =>
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId",
-      params: { projectId, worktreeId },
-    });
+  const goBack = () => nav.toWorktree(projectId, worktreeId);
 
   const {
     data: patch,

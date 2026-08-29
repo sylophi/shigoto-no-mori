@@ -19,25 +19,28 @@ import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import { cn } from "@/lib/utils";
+import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
 import { PROJECT_HEADER_BASE } from "./ProjectHeader";
 import { ProjectIcon } from "./ProjectIcon";
 
 interface RemoteProjectRowProps {
   name: string;
   count: number;
+  devices: readonly SidebarDeviceBadge[];
   iconSources: readonly { deviceId: string; projectId: string }[];
 }
 
 export function RemoteProjectRow({
   name,
   count,
+  devices,
   iconSources,
 }: RemoteProjectRowProps) {
-  const devices = useRemoteDevices();
+  const registry = useRemoteDevices();
   const live = iconSources
     .map((source) => ({
       ...source,
-      api: devices.find((device) => device.deviceId === source.deviceId)?.api,
+      api: registry.find((device) => device.deviceId === source.deviceId)?.api,
     }))
     .find((source) => source.api !== undefined);
   // Same truncation-aware tooltip as ProjectHeader, so a long remote
@@ -59,6 +62,7 @@ export function RemoteProjectRow({
             <span ref={nameRef} className="min-w-0 truncate">
               {name}
             </span>
+            <DeviceBadgeCluster devices={devices} />
             <span className="shrink-0 text-[10px] text-muted-foreground/70">
               {count}
             </span>
