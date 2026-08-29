@@ -2,42 +2,33 @@
 // sidebar/Sidebar.tsx, carrying the same chrome contract (data-sidebar
 // token overrides, the doubutsu "sidebar" zone, the brand header with
 // both themes' markup side by side, a scrollable list over a footer of
-// nav icon buttons). Where the desktop lists projects and worktrees,
-// the web lists the account's other devices -- the forests this client
-// can actually reach -- each row opening that device's forest page.
-import { useLocation } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+// nav icon buttons). The list IS the desktop's: buildSidebarRows +
+// SidebarList with no local projects, so the merged tree renders
+// exactly as it does in the app -- here every worktree is remote, so
+// every row carries its device marker.
+import { useRef, type RefObject } from "react";
 import {
-  FolderGit2,
   LogOut,
   MonitorSmartphone,
   Settings as SettingsIcon,
 } from "lucide-react";
-import type { DeviceInfo } from "@shared/relay/protocol";
-import type { Project, Worktree } from "@shared/schemas";
+import { buildSidebarRows } from "@/components/sidebar/buildSidebarRows";
 import { NavIconButton } from "@/components/sidebar/NavIconButton";
+import { SidebarList } from "@/components/sidebar/SidebarList";
 import { SIDEBAR_ICON_BUTTON } from "@/components/sidebar/sidebarChrome";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { StatusDot } from "@/components/ui/status-dot";
+import type { RowHandlers } from "@/components/sidebar/VirtualRow";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  useAccountDevices,
-  useAccountStatus,
-} from "@/hooks/account/useAccount";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import {
-  remoteProjectsQueryOptions,
-  useAllRemoteWorktrees,
-} from "@/hooks/remote/useRemoteForest";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { cn } from "@/lib/utils";
-import { navigateTo, redirectTo, webPaths } from "./nav";
+import { redirectTo, webPaths } from "./nav";
 
 export function WebSidebar() {
   const { data: status } = useAccountStatus();
   const signedIn = status?.signedIn === true;
+  const viewportRef = useRef<HTMLDivElement | null>(null);
 
   return (
     <aside
@@ -47,9 +38,9 @@ export function WebSidebar() {
     >
       <WebSidebarHeader />
       <div className="min-h-0 flex-1">
-        <ScrollArea className="size-full">
+        <ScrollArea className="size-full" viewportRef={viewportRef}>
           {signedIn ? (
-            <DeviceList />
+            <WebForest viewportRef={viewportRef} />
           ) : (
             <p className="px-3 py-6 text-center text-xs text-muted-foreground">
               Sign in to reach this account&apos;s devices.
@@ -59,6 +50,48 @@ export function WebSidebar() {
       </div>
       <WebSidebarFooter signedIn={signedIn} />
     </aside>
+  );
+}
+
+// The tree has no local half here, so none of the local-row handlers
+// can ever be called; stable no-ops keep SidebarList's props inert.
+const NO_LOCAL_HANDLERS: RowHandlers = {
+  onToggle: () => {},
+  onToggleShelved: () => {},
+  onToggleShelf: () => {},
+  arrangeMode: false,
+};
+const NO_COLLAPSED = new Set<string>();
+
+function WebForest({
+  viewportRef,
+}: {
+  viewportRef: RefObject<HTMLDivElement | null>;
+}) {
+  const remote = useRemoteForests();
+  const view = buildSidebarRows({
+    projects: [],
+    worktreeQueries: [],
+    collapsed: NO_COLLAPSED,
+    shelvedExpanded: NO_COLLAPSED,
+    arrangeMode: false,
+    remote,
+  });
+  if (view.rows.length === 0) {
+    return (
+      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+        No reachable devices with projects yet. Open the Devices page to see
+        this account&apos;s machines.
+      </p>
+    );
+  }
+  return (
+    <SidebarList
+      rows={view.rows}
+      revealKey={view.revealKey}
+      viewportRef={viewportRef}
+      handlers={NO_LOCAL_HANDLERS}
+    />
   );
 }
 
@@ -97,175 +130,6 @@ function WebSidebarHeader() {
         </span>
       </div>
     </>
-  );
-}
-
-// The account's other devices, merged with the live relay roster for
-// the status dot -- same derivation as the devices page, so the two
-// surfaces can never disagree about a device's state. Each device row
-// heads its remote forest: projects with their worktrees nested under
-// it, the web twin of the desktop sidebar's project tree (which lists
-// the LOCAL forest -- content a browser doesn't have). Rows always
-// navigate to the device's forest page: it renders the honest status
-// panel for an unreachable device, which beats a dead row.
-function DeviceList() {
-  const devices = useAccountDevices(true);
-  const peers = (devices.data ?? []).filter(
-    (device) => device.deviceId !== window.api.deviceId,
-  );
-
-  return (
-    <nav aria-label="Devices" className="flex flex-col gap-1 px-2 py-1">
-      <h2 className="px-1 pt-1 pb-0.5 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-        Devices
-      </h2>
-      {devices.isPending ? (
-        <p className="px-1 py-2 text-xs text-muted-foreground">
-          Loading devices&hellip;
-        </p>
-      ) : devices.isError ? (
-        <p className="px-1 py-2 text-xs text-muted-foreground">
-          Couldn&apos;t load this account&apos;s devices.
-        </p>
-      ) : peers.length === 0 ? (
-        <p className="px-1 py-2 text-xs text-muted-foreground">
-          No other devices yet. Sign in from the desktop app to enroll a
-          machine.
-        </p>
-      ) : (
-        peers.map((device) => (
-          <DeviceGroup key={device.deviceId} info={device} />
-        ))
-      )}
-    </nav>
-  );
-}
-
-function DeviceGroup({ info }: { info: DeviceInfo }) {
-  const { pathname } = useLocation();
-  const path = webPaths.deviceForest(info.deviceId);
-  const active = pathname === path;
-  const entry = useRemoteDevices().find(
-    (device) => device.deviceId === info.deviceId,
-  );
-  const { tone, label } = deviceStatusView(
-    entry?.status ?? { phase: "stopped" },
-  );
-
-  return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={() => navigateTo(path)}
-        aria-current={active ? "page" : undefined}
-        title={label}
-        className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent",
-          active ? "bg-accent text-foreground" : "text-muted-foreground",
-        )}
-      >
-        <StatusDot tone={tone} />
-        <span className="truncate text-[13px] font-medium text-foreground">
-          {info.name}
-        </span>
-        <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">
-          {info.platform}
-        </span>
-      </button>
-      <DeviceForest deviceId={info.deviceId} onOpen={() => navigateTo(path)} />
-    </div>
-  );
-}
-
-// One device's projects and worktrees, nested under its row. The
-// queries are the same device-scoped builders the forest page uses
-// (shared cache keys, silent errors), gated inside the options on the
-// api being present -- an offline device fetches nothing and this
-// renders whatever its last session cached, or nothing at all. Every
-// row opens the device's forest page, where the real controls live.
-function DeviceForest({
-  deviceId,
-  onOpen,
-}: {
-  deviceId: string;
-  onOpen: () => void;
-}) {
-  const api = useRemoteDevices().find(
-    (device) => device.deviceId === deviceId,
-  )?.api;
-  const { data: projects = [] } = useQuery(
-    remoteProjectsQueryOptions(deviceId, api),
-  );
-  const worktreeQueries = useAllRemoteWorktrees(deviceId, api, projects);
-
-  if (projects.length === 0) return null;
-  return (
-    <div className="flex flex-col pb-1">
-      {projects.map((project, index) => (
-        <ProjectGroup
-          key={project.id}
-          project={project}
-          worktrees={worktreeQueries[index]?.data ?? []}
-          onOpen={onOpen}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ProjectGroup({
-  project,
-  worktrees,
-  onOpen,
-}: {
-  project: Project;
-  worktrees: Worktree[];
-  onOpen: () => void;
-}) {
-  return (
-    <div className="flex flex-col">
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 pl-4 text-left text-[11px] font-medium text-muted-foreground transition-colors hover:bg-accent"
-      >
-        <FolderGit2 className="size-3 shrink-0" />
-        <span className="min-w-0 truncate">{project.name}</span>
-        <span className="shrink-0 text-[10px] text-muted-foreground/70">
-          {worktrees.length}
-        </span>
-      </button>
-      {worktrees.map((worktree) => (
-        <WorktreeRow key={worktree.id} worktree={worktree} onOpen={onOpen} />
-      ))}
-    </div>
-  );
-}
-
-function WorktreeRow({
-  worktree,
-  onOpen,
-}: {
-  worktree: Worktree;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 pl-8 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-    >
-      <span className="min-w-0 truncate">
-        <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-      </span>
-      {(worktree.ahead > 0 || worktree.behind > 0) && (
-        <span className="tabular ml-auto shrink-0 text-[10px] text-muted-foreground/70">
-          {worktree.ahead > 0 && `↑${worktree.ahead}`}
-          {worktree.ahead > 0 && worktree.behind > 0 && " "}
-          {worktree.behind > 0 && `↓${worktree.behind}`}
-        </span>
-      )}
-    </button>
   );
 }
 

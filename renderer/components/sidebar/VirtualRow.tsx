@@ -61,5 +61,10 @@ function projectIdForRow(row: SidebarRow): string | null {
   if (row.kind === "project") return row.project.id;
   if (row.kind === "worktree") return row.worktree.projectId;
   if (row.kind === "inbox-worktree" || row.kind === "inbox-shelf") return null;
+  // Remote rows report the group they were merged into, so hovering a
+  // peer's worktree keeps its local project header's actions alive.
+  if (row.kind === "remote-worktree" || row.kind === "remote-project") {
+    return row.groupId;
+  }
   return row.projectId;
 }

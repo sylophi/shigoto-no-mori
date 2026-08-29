@@ -23,6 +23,7 @@ import {
   useSidebarView,
   useSidebarViewHotkey,
 } from "@/hooks/projects/useSidebarView";
+import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/lib/toast";
@@ -88,6 +89,9 @@ export function Sidebar() {
   // which re-probe git for every project on mount -- never unmount.
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
+  // Peers' forests, merged into the tree beside the local rows. The
+  // inbox stays local: it triages this machine's work.
+  const remoteForests = useRemoteForests();
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
@@ -101,6 +105,7 @@ export function Sidebar() {
         collapsed,
         shelvedExpanded,
         arrangeMode,
+        remote: remoteForests,
       });
   const { rows, failedCount } = view;
 
@@ -157,7 +162,7 @@ export function Sidebar() {
   // resolving.
   const emptyMessage = isLoading
     ? null
-    : projects.length === 0
+    : projects.length === 0 && rows.length === 0
       ? "No projects yet."
       : view.emptyMessage;
 
