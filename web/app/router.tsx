@@ -1,9 +1,11 @@
 // The web client's router: real browser history (deep links must
 // survive a reload, which is also why the deploy config rewrites every
-// path to index.html). The desktop router
-// owns the global tanstack Register (renderer/router.tsx), so this tree
-// deliberately does not register itself; navigation goes through
-// nav.ts's history-backed helper instead of the Register-typed hooks.
+// path to index.html). The desktop router owns the global tanstack
+// Register (renderer/router.tsx), so this tree deliberately does not
+// register itself; navigation goes through nav.ts's history-backed
+// helper instead of the Register-typed hooks. Every path here is a
+// subset of the desktop tree, so reused desktop components whose typed
+// navigate calls name these paths mount unmodified.
 //
 // The device forest route reuses the desktop's RemoteForest under the
 // SAME route id ("/devices/$deviceId"): its getRouteApi lookup is keyed
@@ -18,10 +20,10 @@ import {
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { RemoteForest } from "@/components/remote/RemoteForest";
 import { useAccountStatus } from "@/hooks/account/useAccount";
-import { AppearancePage } from "./AppearancePage";
 import { DevicesPage } from "./DevicesPage";
 import { LoginPage } from "./LoginPage";
 import { NotFoundPage } from "./NotFoundPage";
+import { SettingsPage } from "./SettingsPage";
 import { WebShell } from "./WebShell";
 import { installNavigate, redirectTo, webPaths } from "./nav";
 
@@ -61,10 +63,10 @@ const devicesRoute = createRoute({
   component: DevicesPage,
 });
 
-const appearanceRoute = createRoute({
+const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/appearance",
-  component: AppearancePage,
+  path: "/settings",
+  component: SettingsPage,
 });
 
 // Same id and remount behavior as the desktop's device route, so
@@ -81,7 +83,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   devicesRoute,
-  appearanceRoute,
+  settingsRoute,
   deviceForestRoute,
 ]);
 

@@ -5,6 +5,14 @@
 @import "@fontsource/zen-maru-gothic/900.css";
 @import "tailwindcss";
 @import "tw-animate-css";
+/* Explicit content roots, relative to this file. Auto-detection scans
+   under the Vite root only, and the web build's root is web/ -- without
+   naming renderer/ here, every utility that appears only in renderer
+   components silently drops out of the web bundle (unstyled reused
+   pages). The desktop build (repo root) is unaffected but keeps the
+   same explicit inventory. */
+@source "./";
+@source "../web";
 /* Default-on Animal Crossing overlay (opt-out in Settings). Self-
    contained; see the CONTRACT
    header in the file for the hooks it depends on (token blocks in it
