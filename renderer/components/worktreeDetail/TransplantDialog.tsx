@@ -1,8 +1,8 @@
 // The transplant confirmation, shaped after the owner's flow mockups
 // but honest to the backend: sync:transplantWorktree is one invoke, so
-// the dialog has a review step, a pending step, and a done step — no
-// invented per-phase progress. Review says exactly what travels and
-// what happens; done reports where the worktree landed and whether the
+// the dialog has a review step, a pending step, and a done step, with
+// no invented per-phase progress. Review says exactly what travels and
+// what happens. Done reports where the worktree landed and whether the
 // source was torn down (a kept source is a partial success with its
 // reason, never an error). The move itself is the shared bring-here
 // mutation, quieted: the steps below are the report.
@@ -47,7 +47,7 @@ export function TransplantDialog({
     transplant: true,
     quiet: true,
   });
-  // The hook's result is the pull/transplant union; `transplant: true`
+  // The hook's result is the pull/transplant union, but `transplant: true`
   // only ever resolves the transplant arm, and narrowing it once here
   // keeps the done body typed.
   const [result, setResult] = useState<SyncTransplantWorktreeResult>();
@@ -128,7 +128,7 @@ export function TransplantDialog({
                   ? `${worktree.changedCount} uncommitted ${
                       worktree.changedCount === 1 ? "file" : "files"
                     } travel with the branch.`
-                  : "The tree is clean — only the branch and its history travel."}
+                  : "The tree is clean, so only the branch and its history travel."}
                 {worktree.ahead > 0 &&
                   ` ${worktree.ahead} unpushed ${
                     worktree.ahead === 1 ? "commit comes" : "commits come"
@@ -148,8 +148,8 @@ export function TransplantDialog({
                 Create the worktree on this machine, carry-over applied.
               </Step>
               <Step n={4}>
-                Tear the source down — only once everything landed. If anything
-                can&apos;t land, the copy on {sourceDeviceLabel} stays
+                Tear the source down, but only once everything landed. If
+                anything can&apos;t land, the copy on {sourceDeviceLabel} stays
                 untouched.
               </Step>
             </ol>
@@ -225,10 +225,10 @@ function DoneBody({
         </div>
         <p className="text-muted-foreground">
           {result.captured && !result.dirtyApplied
-            ? `The uncommitted changes could not be applied here — they are still safe on ${sourceDeviceLabel}.`
+            ? `The uncommitted changes could not be applied here. They are still safe on ${sourceDeviceLabel}.`
             : result.sourceRemoved
               ? // `captured` is only true when the source actually had
-                // uncommitted changes; a clean tree must not claim any
+                // uncommitted changes, so a clean tree must not claim any
                 // travelled.
                 result.captured
                 ? `Uncommitted changes came along, and the copy on ${sourceDeviceLabel} was torn down.`

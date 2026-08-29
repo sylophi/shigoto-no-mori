@@ -77,7 +77,7 @@ function NotesSectionInner({
         readOnly={!granted}
         title={
           !granted
-            ? "Read-only — command access is granted from that device"
+            ? "Read-only. Command access is granted from that device."
             : undefined
         }
         className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"

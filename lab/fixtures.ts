@@ -1,7 +1,7 @@
 // The lab's fixture world: one account, four devices, forests shaped
-// after the owner's v2 flow mockups (Studio Mac local; Thinkpad online
-// with a direct session; Mini and Work PC offline). Pure data — the
-// bridge (lab/bridge.ts) serves it over fixture transports.
+// after the owner's v2 flow mockups: Studio Mac local, Thinkpad online
+// with a direct session, Mini and Work PC offline. Pure data, served
+// over fixture transports by the bridge (lab/bridge.ts).
 import type { DeviceInfo } from "@shared/relay/protocol";
 import type { Project, Worktree, CommitSummary } from "@shared/schemas";
 
@@ -71,7 +71,7 @@ function commit(
   };
 }
 
-// Every field WorktreeSchema requires, with quiet defaults; overrides
+// Every field WorktreeSchema requires, with quiet defaults. Overrides
 // pose the interesting states.
 function worktree(
   base: Pick<Worktree, "id" | "projectId" | "name" | "branch" | "path"> &
@@ -349,7 +349,7 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
   ],
 };
 
-// ---- Mini (offline; the forest exists so the lab can pose "cached
+// ---- Mini (offline, but the forest exists so the lab can pose "cached
 // snapshot" and reconnect states by flipping it online) ----
 
 const miniProjects: Project[] = [

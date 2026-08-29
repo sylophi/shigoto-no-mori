@@ -363,7 +363,7 @@ function NewWorktreeForm({
   const root = runtime?.shigomoriRoot
     ? tildify(runtime.shigomoriRoot, home)
     : "~/shigomori";
-  // Locally the runtime's own root; on a peer, where its existing
+  // Locally the runtime's own root. On a peer, where its existing
   // worktrees live, since runtime is local-only.
   const destRoot = remote
     ? siblingWorktreeRoot(worktrees)
@@ -489,7 +489,7 @@ function NewWorktreeForm({
               options={PR_FOLDER_OPTIONS}
               disabled={busy}
               // The row is baseline-aligned for the label and the old
-              // checkbox; a bordered track wants its own centering.
+              // checkbox, but a bordered track wants its own centering.
               className="self-center"
               optionClassName="px-2 py-0.5 text-[11px]"
             />

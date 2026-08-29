@@ -1,8 +1,8 @@
 // The worktree's port, where it actually is. Locally that is one quiet
 // row: the port-pool port and an open-in-browser affordance. Under a
 // remote scope the row becomes the forward control: forward the port to
-// this machine's localhost over the device connection (app-only — a
-// browser cannot bind a listener) and open the LOCAL end. Renders
+// this machine's localhost over the device connection (app-only, since
+// a browser cannot bind a listener) and open the LOCAL end. Renders
 // nothing when the worktree has no known port, so the section costs
 // nothing on repos without port-pool.
 import { Cable, ExternalLink, Loader2, X } from "lucide-react";

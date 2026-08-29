@@ -3,7 +3,7 @@
 // queries live over its api (HostScopeProvider + push refresh), and
 // render honest connection states instead of the page when the device
 // is not reachable. The wrapped page component is the SAME one the
-// local route mounts — remoteness stays in the scope, never in the
+// local route mounts: remoteness stays in the scope, never in the
 // page (v2's core bet).
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";

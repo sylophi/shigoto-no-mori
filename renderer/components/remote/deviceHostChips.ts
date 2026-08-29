@@ -62,7 +62,7 @@ export function useHostChipIndex(localDeviceId: string): HostChipIndex {
       projectId: project.id,
       name: project.name,
       // A project whose worktree listing has not landed (or failed)
-      // still deserves its chip; the count reads 0 until it does.
+      // still deserves its chip. The count reads 0 until it does.
       worktrees: localWorktrees[index]?.data?.length ?? 0,
     })),
   );

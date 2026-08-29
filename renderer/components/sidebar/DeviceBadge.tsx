@@ -18,7 +18,7 @@ export interface SidebarDeviceBadge {
 }
 
 // "Studio Mac" -> SM, "Thinkpad" -> TH, "Work PC" -> WP. Word initials
-// when there are two words, else the first two letters — enough to tell
+// when there are two words, else the first two letters. Enough to tell
 // an account's handful of machines apart, with the full name on hover.
 export function deviceAbbrev(label: string): string {
   const words = label.trim().split(/\s+/);
@@ -34,7 +34,7 @@ export function deviceAbbrev(label: string): string {
 export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
   return (
     <SimpleTooltip
-      tip={`${badge.label}${badge.reachable ? "" : " — offline, last known state"}`}
+      tip={`${badge.label}${badge.reachable ? "" : " (offline, last known state)"}`}
     >
       <span
         className={cn(

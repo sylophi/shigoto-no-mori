@@ -3,7 +3,7 @@
 // and the remote worktree detail's footer: capture, transfer, create,
 // and dirty apply ride a single pending state -- create-phase progress
 // streams to the local worktree's own detail page, not the calling
-// surface. The handler re-verifies the identity match; the gate at the
+// surface. The handler re-verifies the identity match, so the gate at the
 // call sites is UX, not the wall. Refusals surface centrally,
 // everything else toasts here: the result lands on another page (the
 // local forest), so the toast is usually the only visible conclusion --

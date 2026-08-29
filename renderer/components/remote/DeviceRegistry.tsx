@@ -60,7 +60,7 @@ export function DeviceRegistry({
       device,
       isThisDevice,
       status: deviceRowStatus(device, isThisDevice, relayDevice),
-      // This machine knows its own version synchronously; a peer
+      // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice
         ? window.api.appVersion

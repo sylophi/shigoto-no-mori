@@ -1,7 +1,7 @@
 // The sidebar's quiet devices rail: one dot per machine on the account
 // (this one included) and a "3 devices · 1 offline" line, sitting just
-// above the footer. It is the tree's one connection summary — presence
-// changes show here without a single row shouting — and clicking it
+// above the footer. It is the tree's one connection summary (presence
+// changes show here without a single row shouting), and clicking it
 // opens the Devices page.
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";

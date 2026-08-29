@@ -48,9 +48,9 @@ interface PeerProps {
 
 // Another device's settings, edited in place on /settings (the switcher
 // picks which). Everything below the header routes through the
-// HostScope this mounts — the scoped config read, the host-scoped
+// HostScope this mounts (the scoped config read, the host-scoped
 // queries inside the shared section components, and the
-// writeDeviceSettings patch save — so no client-scoped call reaches for
+// writeDeviceSettings patch save), so no client-scoped call reaches for
 // a peer, and the web shell renders it unchanged. Client-scoped and
 // host-secret sections (CLI, data location, danger zone) are absent by
 // construction: SettingsForm renders those only for this device.
@@ -66,7 +66,7 @@ export function PeerDeviceSettings({ device, header, client }: PeerProps) {
     return (
       <PeerShell header={header} footer={<ClientFooter client={client} />}>
         <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-          {device.label} is offline — its settings live on that device and load
+          {device.label} is offline. Its settings live on that device and load
           when it reconnects.
         </p>
       </PeerShell>
@@ -152,8 +152,8 @@ function PeerSettingsForm({
       await save.mutateAsync(form);
       setSavedSnapshot(form);
     } catch {
-      // Surfaced by the mutation cache toast and the banner below; the
-      // form stays dirty so the user can retry or discard.
+      // Surfaced by the mutation cache toast and the banner below.
+      // The form stays dirty so the user can retry or discard.
     }
   };
 

@@ -17,7 +17,7 @@ interface ScriptsSectionProps {
 export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   const navigate = useNavigate();
   // Rows still render remotely (their run affordances disable
-  // themselves, see useScriptRunner); only the local-page CTA below
+  // themselves, see useScriptRunner). Only the local-page CTA below
   // gates on the scope.
   const { remote } = useHostScope();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(

@@ -400,7 +400,7 @@ export function makeAccountHandlers(
         // Self-revoke invalidated our own credential, so drop it now
         // rather than waiting for the relay to refuse the next call.
         // The desktop UI routes this device through Sign out instead
-        // (which ends the Clerk session first); this arm exists so the
+        // (which ends the Clerk session first). This arm exists so the
         // handler is still correct for any other caller.
         store().clear();
         grantStore().clear();

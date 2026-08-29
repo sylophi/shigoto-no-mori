@@ -13,7 +13,7 @@ import {
 // No per-key diff and no second store: the patch write is cheap enough
 // that an unchanged key riding along costs nothing. A refused save (the
 // host revoked command access mid-edit) surfaces through the central
-// CommandRefusedError toast; isPending resets either way, so Save
+// CommandRefusedError toast. isPending resets either way, so Save
 // re-enables for a retry.
 //
 // The local device's save does NOT come through here -- it writes two

@@ -1,6 +1,6 @@
 // Screenshot harness for the UI lab. Usage:
 //   node lab/shoot.mjs <shots.json> [outDir]
-// Needs `playwright-core` resolvable (it is not a repo dependency —
+// Needs `playwright-core` resolvable (it is not a repo dependency, so
 // run from a scratch dir that has it installed, or point NODE_PATH at
 // one) and system Chrome. LAB_ORIGIN overrides the default desktop
 // lab origin (set it to the web flavor's port for web-shell shots).

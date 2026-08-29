@@ -29,7 +29,7 @@ export type ProjectsScope = Partial<HostScope>;
 // The api falls back to window.api only when the KEY is absent (a
 // scope-less local call). A caller passing `api: undefined` means "this
 // device has no connection", and a default parameter would silently
-// swap the local api in — every offline device would then fetch and
+// swap the local api in, and every offline device would then fetch and
 // cache the LOCAL forest under its own device key, mirroring this
 // machine's projects into the merged sidebar once per offline peer.
 export function projectsQueryOptions(scope: ProjectsScope = {}) {

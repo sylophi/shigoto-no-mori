@@ -21,7 +21,7 @@ import type { DeviceBlock, DeviceTarget } from "./deviceTargets";
 const BLOCK_REASON: Record<DeviceBlock, string> = {
   offline: "Creating needs a live connection.",
   "no-project":
-    "Doesn't have this repo registered — matching by git remote found no checkout there.",
+    "Doesn't have this repo registered. Matching by git remote found no checkout there.",
   "no-grant": "Read-only until it grants command access from its Devices page.",
 };
 

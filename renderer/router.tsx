@@ -141,7 +141,7 @@ const devicesRoute = createRoute({
 });
 
 // Device-scoped twins of the worktree pages (v2: remote feels local).
-// The SAME components serve both trees — withRemoteScope resolves the
+// The SAME components serve both trees: withRemoteScope resolves the
 // device, mounts HostScopeProvider and the push-refresh watcher, and
 // the pages read their params non-strictly. Local-only affordances
 // inside them gate on useWorktreeNav().remote.

@@ -1,6 +1,6 @@
 // The lab's window.api: the same surface the preload exposes, served
 // entirely from lab/fixtures.ts. The real renderer boots on top of it
-// unmodified — startRemoteDeviceSync, HostScope, the sidebar tree and
+// unmodified: startRemoteDeviceSync, HostScope, the sidebar tree and
 // every remote view all derive from these answers exactly as they
 // would from a live relay. Channels no fixture handler covers fall
 // back to schema-derived stubs (fabricated arms allowed: this is a
@@ -305,7 +305,8 @@ const WEB_DEVICE_ID = "dev_beefcafe01";
 // Presence the lab can pose: which peers are in the roster, and which
 // of those have an established direct session. ?peers=tp:connected,
 // mini:online,pc:offline overrides the default (Thinkpad connected,
-// the rest offline; the web shell also defaults Studio Mac connected).
+// the rest offline, and the web shell also defaults Studio Mac
+// connected).
 const PEER_KEYS: Record<string, string> = {
   sm: LOCAL_DEVICE_ID,
   tp: THINKPAD_ID,
@@ -351,7 +352,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   // Remote hosts: one fixture wire per device, reached only through
   // relay:invokePeer exactly like the real relay bridge. Under the web
   // shell every machine forest (Studio Mac included) is a peer of the
-  // browser device; on desktop Studio Mac is the local host.
+  // browser device, while on desktop Studio Mac is the local host.
   const selfDeviceId = WEB_SHELL ? WEB_DEVICE_ID : LOCAL_DEVICE_ID;
   const peerWires = new Map<string, FixtureWire>();
   for (const forest of Object.values(forests)) {
@@ -470,8 +471,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
-  // The renderer's window.d.ts types window.api off the preload; the
-  // lab bridge satisfies the same runtime surface.
+  // The renderer's window.d.ts types window.api off the preload, and
+  // the lab bridge satisfies the same runtime surface.
   (window as any).api = api;
 
   const pushRelay = () => client.emit("relay:statusChanged", relaySnapshot());

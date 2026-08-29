@@ -34,7 +34,7 @@ interface WorktreeDetailFooterProps {
   state: WorktreeFooterState;
   actions: WorktreeFooterActions;
   // Extra scope-specific actions (the remote detail's bring-here /
-  // transplant pair), rendered leading in the quiet state only — the
+  // transplant pair), rendered leading in the quiet state only: the
   // deletion state machine keeps the whole row once it engages.
   leading?: ReactNode;
   // False when a remote host has not granted this client command
@@ -57,7 +57,7 @@ export function WorktreeDetailFooter({
         renderFooterContent(worktree, state, actions)
       ) : (
         <span className="ml-auto text-xs text-muted-foreground">
-          Read-only — command access is granted from that device
+          Read-only. Command access is granted from that device.
         </span>
       )}
     </footer>

@@ -2,7 +2,7 @@
 // components serve the local /projects/... routes and the
 // /devices/$deviceId/projects/... twins, so their internal links must
 // target whichever tree the current host scope lives in. One `go`
-// picks the twin and splices the device param; the paths themselves
+// picks the twin and splices the device param. The paths themselves
 // come from lib/routePaths so the route trees and these links cannot
 // drift apart.
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -12,7 +12,7 @@ import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 // The worktree pages' params, read non-strictly because each page
 // serves both its local route and the /devices/$deviceId twin (the
 // router can only type params against ONE route). `hash` exists only
-// under the commit pair; keeping the one unavoidable cast here gives
+// under the commit pair. Keeping the one unavoidable cast here gives
 // the twin pattern a single seam instead of a copy per page.
 export function useScopedWorktreeParams() {
   return useParams({ strict: false }) as {

@@ -62,7 +62,7 @@ export function WorktreeDetailInner({
 }: InnerProps) {
   const navigate = useNavigate();
   // Which device this page is scoped to. Everything data-shaped below
-  // already rides the host scope; `remote` only gates the affordances
+  // already rides the host scope. `remote` only gates the affordances
   // that are local by nature (launching, configure links) and adds the
   // cross-device ones (bring here, transplant, the device chip).
   const { remote } = useHostScope();
@@ -179,7 +179,7 @@ export function WorktreeDetailInner({
       <header className="flex flex-col gap-2 border-b border-border px-6 pt-7 pb-5">
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {remote ? (
-            // Configure is a local page; remotely the name is just the
+            // Configure is a local page, so remotely the name is just the
             // breadcrumb.
             <span className="shrink-0">{project.name}</span>
           ) : (
@@ -228,7 +228,7 @@ export function WorktreeDetailInner({
         <div className="flex max-w-4xl flex-col gap-10">
           {!remote && (
             // Launching opens editors and shells on the machine showing
-            // this window; on another device's worktree there is nothing
+            // this window. On another device's worktree there is nothing
             // honest to launch, so the section only exists locally.
             <section className="space-y-3">
               <SectionHeading>Launch</SectionHeading>

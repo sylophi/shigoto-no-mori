@@ -1,6 +1,6 @@
 // The quiet "which machine is this" marker for device-scoped pages: a
 // status dot and the device's name, rendered only under a remote host
-// scope. The local pages stay chipless — this machine is the default,
+// scope. The local pages stay chipless, since this machine is the default,
 // not a state worth announcing.
 import { StatusDot } from "@/components/ui/status-dot";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -15,7 +15,7 @@ export function DeviceChip() {
   return (
     <span
       data-slot="device-chip"
-      // The name is the chip; the connection state stays on the dot's
+      // The name is the chip. The connection state stays on the dot's
       // tone and the tooltip, so the header reads "on Thinkpad", not a
       // status report.
       title={`${device.label} · ${label}`}
