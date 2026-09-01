@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AlertTriangle, ArrowRight, Trash2 } from "lucide-react";
+import type { TunnelState } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import { DeviceHosts } from "./DeviceHosts";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import type { HostChip } from "./deviceHostChips";
-import type { DeviceRowStatus } from "./deviceRegistryStatus";
+import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
 
 export function DeviceRegistryRow({
   device,
@@ -40,7 +41,7 @@ export function DeviceRegistryRow({
   onRevokeCommands,
   onRevokeDevice,
   revokePending,
-  tunnelUp,
+  tunnel,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
@@ -62,10 +63,12 @@ export function DeviceRegistryRow({
   onRevokeCommands: () => void;
   onRevokeDevice: () => void;
   revokePending: boolean;
-  // True when THIS device's tunnel endpoint is up (v2 step 10, slice
-  // B), a muted marker rather than a state: the other tunnel phases are
-  // diagnostics, not something the row should shout.
-  tunnelUp: boolean;
+  // THIS device's tunnel endpoint state (v2 step 10, slice B), set on
+  // the this-device row only. "up" is a muted marker beside the name;
+  // the phases that mean "peers off this network cannot reach me" get
+  // one quiet line under the id (tunnelNote), because that fact is
+  // what decides whether the other machine's forest view can load.
+  tunnel: TunnelState | undefined;
 }) {
   const navigate = useNavigate();
   // Armed inline instead of in a modal: the sentence names the machine
@@ -81,6 +84,7 @@ export function DeviceRegistryRow({
   // can sit with the row's other actions while the editor opens on the
   // name itself.
   const [renaming, setRenaming] = useState(false);
+  const note = tunnelNote(tunnel);
 
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2.5">
@@ -104,7 +108,7 @@ export function DeviceRegistryRow({
                 (this device)
               </span>
             )}
-            {tunnelUp && (
+            {tunnel === "up" && (
               <span className="text-xs text-muted-foreground">tunnel</span>
             )}
             <span
@@ -124,6 +128,10 @@ export function DeviceRegistryRow({
             {device.platform} &middot; {device.deviceId}
             {appVersion !== "" && <> &middot; v{appVersion}</>}
           </span>
+
+          {note !== null && (
+            <span className="text-[11px] text-muted-foreground">{note}</span>
+          )}
 
           <DeviceHosts
             chips={chips}

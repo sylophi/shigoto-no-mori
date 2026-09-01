@@ -16,7 +16,7 @@ import {
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
+import { useTunnelState } from "@/hooks/remote/useRelayStatus";
 import { localDeviceId } from "@/lib/queryKeys";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import { useHostChipIndex } from "./deviceHostChips";
@@ -44,7 +44,7 @@ export function DeviceRegistry({
   // THIS device's tunnel endpoint state (v2 step 10, slice B), as the
   // derived primitive off the shared relay status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
-  const tunnelUp = useTunnelUp();
+  const tunnel = useTunnelState();
   const hosts = useHostChipIndex(localDeviceId);
 
   // This device first, everything else in the order the relay listed
@@ -116,7 +116,7 @@ export function DeviceRegistry({
           revokePending={
             revokeDevice.isPending && revokeDevice.variables === device.deviceId
           }
-          tunnelUp={isThisDevice && tunnelUp}
+          tunnel={isThisDevice ? tunnel : undefined}
         />
       ))}
     </section>

@@ -12,6 +12,7 @@
 // is not running the app is the NORMAL state of a laptop in a bag, so
 // it gets amber (calm, "not right now") plus the last-seen time, never
 // the rose an error would earn.
+import type { TunnelState } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -26,6 +27,32 @@ export type DeviceRowStatus = {
   // Always true for this device, which needs no relay to be reached.
   reachable: boolean;
 };
+
+// What THIS device's row says about its tunnel endpoint, or null when
+// there is nothing worth saying: "up" earns the muted marker beside
+// the name, and "off" means the listener itself is down (signed out,
+// or direct connections switched off), so a tunnel is not the missing
+// piece. The copy states the CONSEQUENCE, not the state: data is
+// direct or nothing, so without a tunnel a peer on another network
+// cannot reach this machine at all, which is the single most common
+// reason its forest never loads over there.
+const LOCAL_ONLY =
+  "other devices can only reach this machine over the local network.";
+
+export function tunnelNote(state: TunnelState | undefined): string | null {
+  switch (state) {
+    case "no-binary":
+      return `No tunnel: no usable cloudflared (see the log), so ${LOCAL_ONLY}`;
+    case "unconfigured":
+      return `No tunnel: the relay isn't set up for tunnels, so ${LOCAL_ONLY}`;
+    case "error":
+      return `Tunnel is down (retrying). Until it's back, ${LOCAL_ONLY}`;
+    case "starting":
+      return "Tunnel starting…";
+    default:
+      return null;
+  }
+}
 
 export function deviceRowStatus(
   device: DeviceInfo,

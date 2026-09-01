@@ -7,6 +7,7 @@
 // through the contract's payload schema before it crosses the bridge.
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
+import { WebSocket as WsWebSocket } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -23,6 +24,10 @@ import type {
   BroadcastProducerPayload,
   Handlers,
 } from "@shared/ipc/types";
+import {
+  CLOUDFLARED_BINARY_NAME,
+  CLOUDFLARED_DIST_DIR,
+} from "@shared/cloudflaredDist.mts";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   ensureSocketHostToken,
@@ -153,7 +158,14 @@ const tunnelRunner = createCloudflaredRunner({
   // dead for the PATH case.
   resolveBinary: async () => {
     const config = await readGlobalConfig();
-    return resolveCloudflaredBinary(config.cloudflaredPath);
+    // The connector the app ships (shared/cloudflaredDist.mts):
+    // Resources/ when packaged, dist-cloudflared/ in dev (fetched by
+    // `pnpm start`), the same two homes the sm CLI has
+    // (main/electron/cliRunner.ts).
+    const bundled = app.isPackaged
+      ? join(process.resourcesPath, CLOUDFLARED_BINARY_NAME)
+      : join(app.getAppPath(), CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME);
+    return resolveCloudflaredBinary(config.cloudflaredPath, bundled);
   },
   provision: (port) => provisionDeviceTunnel(port),
   // Orphan-reap bookkeeping: the live child's pid, recorded so a
@@ -177,6 +189,11 @@ const directPlane = createDirectPlane({
   broadcastStatus: (status) =>
     broadcastAll(relayContract, "statusChanged", status),
   broadcastPeerPush: (push) => broadcastAll(relayContract, "peerPush", push),
+  // The candidate sockets ride the `ws` package so a failed dial names
+  // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
+  // nor Node's global sends an Origin header, so the peer's upgrade
+  // gate reads the two identically.
+  openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
   host: {
     closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
     tunnelState: () => tunnelRunner.status().state,

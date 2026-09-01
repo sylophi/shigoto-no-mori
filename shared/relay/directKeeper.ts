@@ -134,6 +134,9 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
       () => {
         if (!isCurrent(deviceId, state)) return;
         state.connectedAt = clock.now();
+        if (state.lastFailure !== null) {
+          console.info(`[direct] session to ${deviceId} established`);
+        }
         state.lastFailure = null;
         // attempt is NOT reset here: only a drop after a STABLE run
         // resets the ladder (peerDropped), so a connect-then-die
@@ -142,7 +145,17 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
       },
       (error: unknown) => {
         if (!isCurrent(deviceId, state)) return;
-        state.lastFailure = errorMessageOf(error);
+        const message = errorMessageOf(error);
+        // One line per DISTINCT reason, not per rung: the ladder
+        // redials forever, and a reason unchanged since the last
+        // attempt says nothing new. This is the only place a failed
+        // dial is logged at all (the renderer learns of it only when
+        // it asks, through the no-session rejection), so without it a
+        // peer that never connects leaves no trace in the log.
+        if (message !== state.lastFailure) {
+          console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
+        }
+        state.lastFailure = message;
         if (isTerminalDialError(error)) {
           // Redialing cannot change it and WOULD feed the host's
           // failed-auth lockout, so schedule nothing: this peer's next

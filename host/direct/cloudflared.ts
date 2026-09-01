@@ -85,7 +85,11 @@ const PROBE_ATTEMPT_TIMEOUT_MS = 5_000;
 // (cloudflared reads it there), never argv, so `ps` output and spawn
 // logging can never leak it.
 export function cloudflaredArgs(): string[] {
-  return ["tunnel", "run"];
+  // --no-autoupdate: cloudflared otherwise checks for a newer release
+  // and replaces its own binary, which would break the signature of
+  // the copy the app ships. The version is pinned in
+  // shared/cloudflaredDist.mts and bumped with the app.
+  return ["tunnel", "--no-autoupdate", "run"];
 }
 
 export function cloudflaredEnv(
@@ -97,27 +101,51 @@ export function cloudflaredEnv(
 
 // ---- binary discovery ----
 
-// The configured override wins when set (a device-scoped config key,
-// see cloudflaredPath in shared/schemas/config.ts), else PATH. Null
-// means tunnels are off: the caller logs ONE clear line and reports
-// the typed status, never an error loop.
+// Resolution order: the configured override (a device-scoped config
+// key, see cloudflaredPath in shared/schemas/config.ts), then the copy
+// the app ships (the zero-install path, and the one a packaged build
+// normally takes), then PATH for a build that carries none. Null means
+// tunnels are off: the caller logs ONE clear line and reports the
+// typed status, never an error loop.
 export async function resolveCloudflaredBinary(
   configuredPath: string | undefined,
+  bundledPath: string | null,
 ): Promise<string | null> {
   const configured = configuredPath?.trim() ?? "";
   if (configured !== "") {
-    try {
-      // `-x` semantics via the binary itself: asking cloudflared for
-      // its version proves the path exists AND is executable in one
-      // probe, where a bare stat would pass a stray non-executable.
-      await execFileP(configured, ["--version"]);
-      return configured;
-    } catch {
-      return null;
-    }
+    return (await runsAsCloudflared(configured)) ? configured : null;
+  }
+  if (bundledPath !== null && (await runsAsCloudflared(bundledPath))) {
+    return bundledPath;
   }
   return resolveOnPath("cloudflared");
 }
+
+// `-x` semantics via the binary itself: asking cloudflared for its
+// version proves the path exists AND is executable in one probe, where
+// a bare stat would pass a stray non-executable. A path that exists
+// but will not run (a lost executable bit, Gatekeeper refusing an
+// unsigned copy, the wrong architecture) is the one case the user can
+// act on and cannot otherwise see, so it is logged. A missing file is
+// not: that is the ordinary "ships none" answer. The probe is bounded
+// so a wedged binary cannot stall the runner's serialized lifecycle.
+async function runsAsCloudflared(path: string): Promise<boolean> {
+  try {
+    await execFileP(path, ["--version"], { timeout: PROBE_TIMEOUT_MS });
+    return true;
+  } catch (error) {
+    if (
+      !(error instanceof Error && "code" in error && error.code === "ENOENT")
+    ) {
+      console.warn(
+        `[tunnel] cloudflared at ${path} did not run: ${errorMessageOf(error)}`,
+      );
+    }
+    return false;
+  }
+}
+
+const PROBE_TIMEOUT_MS = 10_000;
 
 // ---- the supervised runner ----
 
@@ -471,8 +499,8 @@ export function createCloudflaredRunner(
       // reconcile.
       if (status.state !== "no-binary") {
         console.info(
-          "[tunnel] cloudflared not found (PATH or the cloudflaredPath " +
-            "config key), tunnel endpoints are off",
+          "[tunnel] no usable cloudflared (the cloudflaredPath config " +
+            "key, the bundled copy, PATH), tunnel endpoints are off",
         );
       }
       setStatus({ state: "no-binary", hostname: null });
