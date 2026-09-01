@@ -21,9 +21,10 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 export type DeviceRowStatus = {
   tone: StatusTone;
   label: string;
-  // True when the device's api can be used right now, so the row can
-  // gate "View forest" and mark its host chips as a cached snapshot.
-  // Always true for this device, which needs no relay to be reached.
+  // True when the device's api can be used right now, so the registry
+  // can count it as online and the row can mark its host chips as a
+  // cached snapshot. Always true for this device, which needs no relay
+  // to be reached.
   reachable: boolean;
 };
 

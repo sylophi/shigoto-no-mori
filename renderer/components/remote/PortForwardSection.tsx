@@ -1,11 +1,14 @@
-// Forward a port from the remote device to this machine (v2 step 8,
-// slice B): a slim section under the forest's project groups.
+// Forward any port from a peer to this machine (v2 step 8, slice B):
+// a slim block indented under that machine's registry row, the way the
+// keep-reachable toggle sits under this device's -- a property of the
+// machine named right above it. The worktree detail's port row covers
+// the port a worktree already has; this is the arbitrary-port arm.
 // Granted-only (the engine drives grant-gated forward verbs on the
-// host) and app-only (the parent gates the mount on
-// window.api.isElectron: the engine binds a real TCP listener in the
-// desktop's main process, and the web loopback rejects the portForward
-// channels). The list, its broadcast and the start/stop pair live in
-// usePortForwards, shared with the worktree detail's port row.
+// host) and app-only (the parent gates the mount on canForwardPorts:
+// the engine binds a real TCP listener in the desktop's main process,
+// and the web loopback rejects the portForward channels). The list,
+// its broadcast and the start/stop pair live in usePortForwards,
+// shared with that worktree port row.
 import { useState } from "react";
 import { Cable, ExternalLink, Loader2, X } from "lucide-react";
 import { PortSchema } from "@shared/ipc/modules/portForward";
@@ -21,7 +24,7 @@ export function PortForwardSection() {
   if (!granted) return null;
   const parsedPort = parsePort(port);
   return (
-    <div className="flex flex-col gap-2">
+    <div className="mt-2.5 flex flex-col gap-2 border-t border-border pt-2.5">
       <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Cable className="size-3.5 shrink-0" />
         <span>Port forwarding</span>

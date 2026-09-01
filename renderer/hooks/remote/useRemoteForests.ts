@@ -1,16 +1,19 @@
 // Every registered remote device's forest at once, for the sidebar's
-// merged tree. One projects query per device and one worktrees query
-// per (device, project), through the same device-scoped builders the
-// forest page uses, so the cache is shared and the sidebar can never
-// disagree with the page. Devices stay in the list whether or not a
+// merged tree -- the only place a peer's forest is read, since remote
+// work is meant to look local rather than live on a page of its own.
+// One projects query per device and one worktrees query per (device,
+// project), through the device-scoped builders in useRemoteForest, so
+// a peer's rows share the cache with the device-scoped worktree pages
+// and the two can never disagree. Devices stay in the list whether or not a
 // direct session is up: the options gate fetching on the api being
 // present, and a disconnected device serves whatever its last session
 // cached -- the same staleness contract every query in the app has.
 //
-// This fan-out is always mounted, so it refetches calmly: the forest
-// page keeps its own fresher observers on the same keys (plus the
-// useWatchRemoteHost push channel while it is open), and any observer
-// wanting a refetch refreshes this one's rows for free.
+// This fan-out is always mounted, so it refetches calmly: an open
+// remote worktree page keeps its own fresher observers on the same
+// keys (plus the useWatchRemoteHost push channel while it is open),
+// and any observer wanting a refetch refreshes this one's rows for
+// free.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";

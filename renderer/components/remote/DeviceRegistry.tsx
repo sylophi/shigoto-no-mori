@@ -3,10 +3,10 @@
 // read, so a row is a pure function of what it is handed and the page
 // makes one fan-out instead of one per row.
 //
-// The dot, the summary count and the "View forest" gate all derive from
-// the LIVE relay store rather than the account:listDevices HTTP
-// snapshot (which only invalidates on account:changed), so a device
-// coming online or going away updates without a refetch.
+// The dot, the summary count and the host chips' cached marker all
+// derive from the LIVE relay store rather than the account:listDevices
+// HTTP snapshot (which only invalidates on account:changed), so a
+// device coming online or going away updates without a refetch.
 import {
   useAccountDevices,
   useGrantCommands,
@@ -60,6 +60,9 @@ export function DeviceRegistry({
       device,
       isThisDevice,
       status: deviceRowStatus(device, isThisDevice, relayDevice),
+      // Only the row's port-forward block reads this; it is undefined
+      // for this device and for a peer that is not in the roster.
+      api: relayDevice?.api,
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice
@@ -86,7 +89,7 @@ export function DeviceRegistry({
         {rows.length} {rows.length === 1 ? "device" : "devices"} &middot;{" "}
         {online} online
       </p>
-      {rows.map(({ device, isThisDevice, status, appVersion }) => (
+      {rows.map(({ device, isThisDevice, status, appVersion, api }) => (
         <DeviceRegistryRow
           key={device.deviceId}
           device={device}
@@ -117,6 +120,7 @@ export function DeviceRegistry({
             revokeDevice.isPending && revokeDevice.variables === device.deviceId
           }
           tunnelUp={isThisDevice && tunnelUp}
+          api={api}
         />
       ))}
     </section>

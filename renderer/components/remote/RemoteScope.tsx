@@ -43,9 +43,9 @@ function ScopedPage({
   api: NonNullable<RemoteDevice["api"]>;
   Page: ComponentType;
 }) {
-  // Push-driven refresh while this device's pages are open, exactly
-  // like the forest page: the host pings after mutating invokes and the
-  // device-scoped cache invalidates in place.
+  // Push-driven refresh while this device's pages are open: the host
+  // pings after mutating invokes and the device-scoped cache
+  // invalidates in place.
   useWatchRemoteHost(device);
   return (
     <HostScopeProvider deviceId={deviceId} api={api}>

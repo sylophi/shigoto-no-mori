@@ -4,8 +4,9 @@
 // never the surrounding host scope: the listener belongs to this
 // machine, only its target is the scoped device. The list caches under
 // one client key for all devices, and this hook filters to the scope's
-// own so both the forest section and the worktree detail's port row
-// render off the same query and the same error wording.
+// own so both the devices page's per-peer section and the worktree
+// detail's port row render off the same query and the same error
+// wording.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";

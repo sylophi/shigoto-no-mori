@@ -1,28 +1,31 @@
 // One machine on the account, as a card: what it is, what state it is
-// in, what it hosts, and the two things this host decides about it
-// (whether it may run commands here, and whether it stays on the
-// account at all).
+// in, what it hosts, and what this host decides about it (whether it
+// may run commands here, which of its ports reach this machine, and
+// whether it stays on the account at all).
 //
 // The row is the unit of the page. Everything about a device is inside
-// its own card -- the rename for this device, the keep-reachable toggle
-// for this device, the destructive confirm for a peer -- so nothing
-// about a machine ever floats in a section of its own where it has to
-// re-name the machine it applies to.
+// its own card -- the rename and keep-reachable toggle for this device,
+// the port forwards and the destructive confirm for a peer -- so
+// nothing about a machine ever floats in a section of its own where it
+// has to re-name the machine it applies to.
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, ArrowRight, Trash2 } from "lucide-react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import { StatusDot, TONE_PILL } from "@/components/ui/status-dot";
+import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
+import type { RemoteDeviceApi } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
+import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
 import type { DeviceRowStatus } from "./deviceRegistryStatus";
 
@@ -41,6 +44,7 @@ export function DeviceRegistryRow({
   onRevokeDevice,
   revokePending,
   tunnelUp,
+  api,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
@@ -66,8 +70,10 @@ export function DeviceRegistryRow({
   // B), a muted marker rather than a state: the other tunnel phases are
   // diagnostics, not something the row should shout.
   tunnelUp: boolean;
+  // A peer's device api, present once it is in the roster. Only the
+  // port-forward block needs it, to scope its calls to this machine.
+  api: RemoteDeviceApi | undefined;
 }) {
-  const navigate = useNavigate();
   // Armed inline instead of in a modal: the sentence names the machine
   // and the row is right there to check it against, which a dialog
   // covering the list cannot offer. The shared two-step confirm carries
@@ -177,21 +183,6 @@ export function DeviceRegistryRow({
                 >
                   {granted ? "Revoke commands" : "Allow commands"}
                 </Button>
-                {status.reachable && (
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() =>
-                      void navigate({
-                        to: "/devices/$deviceId",
-                        params: { deviceId: device.deviceId },
-                      })
-                    }
-                  >
-                    View forest
-                    <ArrowRight />
-                  </Button>
-                )}
                 <Button
                   // "Remove from account", not "Revoke device": the
                   // relay call underneath is a credential revoke, but
@@ -213,6 +204,18 @@ export function DeviceRegistryRow({
       </div>
 
       {isThisDevice && <KeepReachableToggle />}
+
+      {/* Forwarding a peer's port binds a real listener on THIS
+          machine, so it is app-only, and it needs command access on
+          the peer -- which the section itself checks under the scope
+          mounted here. Absent for an unreachable peer, which has no
+          api to forward through, and while the revoke is armed, so the
+          card asks one question at a time. */}
+      {!isThisDevice && !confirming && canForwardPorts && api !== undefined && (
+        <HostScopeProvider deviceId={device.deviceId} api={api}>
+          <PortForwardSection />
+        </HostScopeProvider>
+      )}
 
       {confirming && (
         <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">

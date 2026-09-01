@@ -9,15 +9,14 @@
 
 // Settings deliberately shares the desktop's "/settings" path (not a
 // web-only name): every web path being a subset of the desktop tree is
-// what lets reused desktop components (NavIconButton, AccountSection's
-// forest links) pass the Register-typed navigate checks unmodified.
+// what lets reused desktop components (NavIconButton, the sidebar's
+// remote worktree rows) pass the Register-typed navigate checks
+// unmodified.
 export const webPaths = {
   index: "/",
   login: "/login",
   devices: "/devices",
   settings: "/settings",
-  deviceForest: (deviceId: string) =>
-    `/devices/${encodeURIComponent(deviceId)}`,
 } as const;
 
 type NavigateImpl = {

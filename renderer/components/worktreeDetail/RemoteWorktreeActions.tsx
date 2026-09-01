@@ -1,10 +1,9 @@
 // The remote worktree detail's cross-device actions: pull a copy here
 // ("Bring here") or move it here and tear down the source
-// ("Transplant"). Text buttons rather than the forest's icon pair,
-// since the footer has room to say what they do. Renders nothing unless the
-// caller holds command access, the branch is real, and a local project
-// shares the repo identity (the same gate the forest rows apply, and
-// the handler re-verifies it).
+// ("Transplant"). Text buttons, since the footer has room to say what
+// they do. Renders nothing unless the caller holds command access, the
+// branch is real, and a local project shares the repo identity (the
+// handler re-verifies that last one).
 import { useState } from "react";
 import { ArrowDownToLine, Loader2, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
