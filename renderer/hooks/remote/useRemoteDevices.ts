@@ -5,7 +5,11 @@
 // settings UI and no scoped data live here, just the live snapshot the
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
-import { type RemoteDevice, remoteDeviceStore } from "@/lib/remote/devices";
+import {
+  type RemoteDevice,
+  type RemoteDeviceApi,
+  remoteDeviceStore,
+} from "@/lib/remote/devices";
 
 // Live list of every registered remote device. Re-renders on any status
 // or connection change. The snapshot reference is stable between changes
@@ -24,6 +28,26 @@ export function useRemoteDevices(): readonly RemoteDevice[] {
 // or a stale link into a device that left the account).
 export function useRemoteDevice(deviceId: string): RemoteDevice | undefined {
   return useRemoteDevices().find((entry) => entry.deviceId === deviceId);
+}
+
+// One device's api, or undefined when it has no session (or the id
+// names the local device, a revoked peer, or nothing at all). A
+// selector, not a filter over useRemoteDevices: the api reference is
+// stable per device (the store compares it by identity), so a status
+// transition on any peer leaves this value unchanged and React skips
+// the render. Shared leaf hooks that draw at list scale (a project icon
+// per row) read through this rather than subscribing to the whole
+// roster. Pass undefined to subscribe to a constant.
+export function useRemoteDeviceApi(
+  deviceId: string | undefined,
+): RemoteDeviceApi | undefined {
+  const select = () =>
+    deviceId === undefined
+      ? undefined
+      : remoteDeviceStore
+          .getSnapshot()
+          .find((entry) => entry.deviceId === deviceId)?.api;
+  return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
 }
 
 // The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls

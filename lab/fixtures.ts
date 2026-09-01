@@ -3,7 +3,12 @@
 // with a direct session, Mini and Work PC offline. Pure data, served
 // over fixture transports by the bridge (lab/bridge.ts).
 import type { DeviceInfo } from "@shared/relay/protocol";
-import type { Project, Worktree, CommitSummary } from "@shared/schemas";
+import type {
+  Project,
+  ProjectIcon,
+  Worktree,
+  CommitSummary,
+} from "@shared/schemas";
 
 export const LAB_ACCOUNT_ID = "user_2rin8xk3";
 export const LAB_APP_VERSION = "2.0.3";
@@ -16,6 +21,24 @@ export const WORKPC_ID = "dev_a02f61c3";
 const now = Date.now();
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+
+// Lab-only project icons: a rounded tile with the repo's initial, so
+// the surfaces that draw project icons (sidebar headers, the device
+// chips on /devices) show one without a real repo behind them. Keyed by
+// name, so the same repo wears the same icon on every device. t3code is
+// left out on purpose to pose the icon-less case beside the others.
+const ICON_HUE: Record<string, number> = {
+  "shigoto-no-mori": 155,
+  "port-pool": 235,
+  dotfiles: 30,
+};
+
+export function projectIconFor(name: string): ProjectIcon | null {
+  const hue = ICON_HUE[name];
+  if (hue === undefined) return null;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="oklch(0.68 0.14 ${hue})"/><text x="16" y="22" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="18" font-weight="700" fill="#fff">${name[0]?.toUpperCase() ?? ""}</text></svg>`;
+  return { mime: "image/svg+xml", base64: btoa(svg) };
+}
 
 export const accountDevices: DeviceInfo[] = [
   {

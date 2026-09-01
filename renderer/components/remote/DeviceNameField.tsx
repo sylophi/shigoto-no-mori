@@ -14,6 +14,7 @@ import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSetDeviceName } from "@/hooks/account/useAccount";
+import { cn } from "@/lib/utils";
 
 // The trigger is a separate export because its two call sites put it in
 // different places: the web page inline after the name, the registry row
@@ -46,6 +47,7 @@ export function DeviceNameField({
   label,
   editing,
   onEditingChange,
+  className,
 }: {
   deviceName: string;
   // "This device" / "This browser". The control's accessible name
@@ -54,6 +56,9 @@ export function DeviceNameField({
   // Open/closed, held by the caller alongside its DeviceRenameButton.
   editing: boolean;
   onEditingChange: (next: boolean) => void;
+  // Type size, honored by the text and by the editor that replaces it,
+  // so opening Rename does not make the name jump.
+  className?: string;
 }) {
   const setDeviceName = useSetDeviceName();
   const [draft, setDraft] = useState(deviceName);
@@ -85,7 +90,11 @@ export function DeviceNameField({
   }
 
   if (!editing) {
-    return <span className="truncate text-sm font-medium">{deviceName}</span>;
+    return (
+      <span className={cn("truncate text-sm font-medium", className)}>
+        {deviceName}
+      </span>
+    );
   }
 
   return (
@@ -109,7 +118,7 @@ export function DeviceNameField({
           }
         }}
         aria-label={`${label} name`}
-        className="h-7 w-48 min-w-0 px-2 py-1 text-sm"
+        className={cn("h-7 w-48 min-w-0 px-2 py-1 text-sm", className)}
       />
       <Button variant="outline" size="xs" disabled={!canSave} onClick={save}>
         {setDeviceName.isPending ? "Saving…" : "Save"}

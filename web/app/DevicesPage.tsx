@@ -14,6 +14,7 @@ import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
   DeviceNameField,
@@ -31,6 +32,7 @@ import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { abbreviateId } from "@/lib/abbreviateId";
+import { platformLabel } from "@/lib/platformLabel";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
@@ -195,14 +197,10 @@ function DeviceRow({
       <div className="flex min-w-0 flex-[1_1_10rem] flex-col">
         <span className="flex items-center gap-2 text-sm">
           <span className="truncate font-medium">{info.name}</span>
-          {isSelf && (
-            <span className="shrink-0 rounded-sm bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
-              This browser
-            </span>
-          )}
+          {isSelf && <RowTag>This browser</RowTag>}
         </span>
         <span className="truncate text-xs text-muted-foreground">
-          {info.platform}
+          {platformLabel(info.platform)}
           {info.lastSeenAt !== null &&
             ` · last seen ${formatRelativeTime(info.lastSeenAt)}`}
         </span>
