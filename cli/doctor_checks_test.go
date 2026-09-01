@@ -37,15 +37,17 @@ func seedRepo(t *testing.T, parent, name string) string {
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	run := func(args ...string) {
-		t.Helper()
-		if _, err := runGit(path, args...); err != nil {
-			t.Fatalf("git %s: %v", strings.Join(args, " "), err)
-		}
-	}
-	run("init", "-q", "-b", "main")
-	run("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init")
+	mustGit(t, path, "init", "-q", "-b", "main")
+	mustGit(t, path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init")
 	return path
+}
+
+// Runs git in dir, failing the test with the command that broke.
+func mustGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := runGit(dir, args...); err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
 }
 
 // The findings for one check id, in record order.
