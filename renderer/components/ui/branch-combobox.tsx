@@ -86,7 +86,9 @@ export function BranchCombobox({
 
   return (
     <Combobox.Root
-      value={value}
+      // Base UI shows the placeholder for null only. An empty string
+      // (the new-worktree form's blank checkout seed) renders as nothing.
+      value={value || null}
       onValueChange={(v) => onChange((v as string) ?? "")}
       inputValue={query}
       onInputValueChange={setQuery}

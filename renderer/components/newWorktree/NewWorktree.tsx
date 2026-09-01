@@ -34,6 +34,7 @@ import {
   sanitizeBranchForPath,
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
+  localBranchOf,
 } from "@shared/branches";
 import {
   isRealBranch,
@@ -204,7 +205,23 @@ function NewWorktreeForm({
   const worktreeByBranch = new Map<string, Worktree>(
     worktrees.filter((w) => isRealBranch(w.branch)).map((w) => [w.branch, w]),
   );
-  const occupiedBranches = [...worktreeByBranch.keys()];
+  // The worktree holding the branch a checkout of `ref` would land on,
+  // so `origin/main` is just as blocked as `main` while the primary
+  // holds it. Mirrors pullRequestBlockedBy so the warning can name the
+  // holder.
+  const localRefs = new Set(branches?.local ?? []);
+  const remoteRefs = new Set(branches?.remote ?? []);
+  const worktreeHolding = (ref: string): Worktree | undefined =>
+    worktreeByBranch.get(localBranchOf(ref, remoteRefs));
+  // What checkout mode leaves out of the picker: refs held by a
+  // worktree, and remote refs shadowed by a local branch (picking
+  // `origin/feat` would land on local `feat` anyway -- same rule as the
+  // branch switcher).
+  const hiddenInCheckout = [...localRefs, ...remoteRefs].filter(
+    (ref) =>
+      worktreeHolding(ref) !== undefined ||
+      (remoteRefs.has(ref) && localRefs.has(localBranchOf(ref, remoteRefs))),
+  );
   // null until the user picks a source, same as the seeded fields below.
   const [modeInput, setModeInput] = useState<Mode | null>(null);
   // Which source to open on, latched from the first availability verdict
@@ -229,7 +246,18 @@ function NewWorktreeForm({
   const [branchNameInput, setBranchNameInput] = useState<string | null>(null);
   const [baseInput, setBaseInput] = useState<string | null>(null);
   const branchName = branchNameInput ?? pickedName ?? "";
-  const base = baseInput ?? defaultBranch ?? "";
+  // Checkout mode can't open on the default branch while a worktree
+  // holds it (the usual layout: primary on main), so the source starts
+  // empty there rather than on an error the user didn't cause.
+  const baseSeed =
+    mode === "checkout" && defaultBranch && worktreeHolding(defaultBranch)
+      ? ""
+      : (defaultBranch ?? "");
+  const base = baseInput ?? baseSeed;
+  // The branch the worktree actually lands on: checkout mode resolves a
+  // remote ref to its local branch, which is what the read-only branch
+  // field and the folder name should show.
+  const checkoutBranch = localBranchOf(base, remoteRefs);
   const [worktreeName, setWorktreeName] = useState("");
   const [useBranchAsFolder, setUseBranchAsFolder] = useState(true);
   const [selectedPr, setSelectedPr] = useState<PullRequestCandidate | null>(
@@ -258,7 +286,7 @@ function NewWorktreeForm({
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in — block submit and surface why.
-  const baseOccupied = mode === "checkout" && occupiedBranches.includes(base);
+  const baseHolder = mode === "checkout" ? worktreeHolding(base) : undefined;
 
   // `git worktree add -b` refuses an existing branch name. Catch it
   // up-front so the form mirrors the source/folder collision warnings.
@@ -279,7 +307,7 @@ function NewWorktreeForm({
   // be unreachable — the trailing `-` would be trimmed before the `2`).
   const folderSource = {
     "branch-from": branchName,
-    checkout: base,
+    checkout: checkoutBranch,
     "pull-request": !selectedPr
       ? ""
       : prFolderFrom === "branch"
@@ -302,12 +330,15 @@ function NewWorktreeForm({
   const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
   const folderUnusable = folderSourceRaw.length > 0 && folderName.length === 0;
 
+  // Checkout mode waits for the branch list: the occupancy gate reads
+  // it, and submitting before it lands would let the CLI find the
+  // collision instead.
   const sourceReady = prMode
     ? selectedPr !== null && !prHeadOccupied
     : base.length > 0 &&
-      (mode === "checkout" || branchName.length > 0) &&
+      (mode === "checkout" ? branches !== undefined : branchName.length > 0) &&
       !branchTaken &&
-      !baseOccupied;
+      baseHolder === undefined;
 
   const canSubmit = sourceReady && folderName.length > 0 && !folderTaken;
 
@@ -409,9 +440,11 @@ function NewWorktreeForm({
             projectId={projectId}
             value={base}
             onChange={setBaseInput}
-            placeholder={defaultBranch ?? "main"}
+            placeholder={
+              mode === "checkout" ? "Pick a branch" : (defaultBranch ?? "main")
+            }
             disabled={busy || !defaultBranch}
-            excludeBranches={mode === "checkout" ? occupiedBranches : undefined}
+            excludeBranches={mode === "checkout" ? hiddenInCheckout : undefined}
             pinnedBranch={defaultBranch}
           />
           {deviceLabel && (
@@ -419,10 +452,17 @@ function NewWorktreeForm({
               Branches are read from {deviceLabel}&apos;s checkout.
             </p>
           )}
-          {baseOccupied && (
+          {baseHolder && (
             <p className="text-xs text-destructive">
-              <span className="font-mono">{base}</span> is already checked out
-              in another worktree.
+              <span className="font-mono">{base}</span>
+              {checkoutBranch !== base && (
+                <>
+                  {" "}
+                  lands on <span className="font-mono">{checkoutBranch}</span>,
+                  which
+                </>
+              )}{" "}
+              is already checked out in {baseHolder.name}.
             </p>
           )}
         </div>
@@ -446,7 +486,7 @@ function NewWorktreeForm({
             <Input
               id="branch-name"
               type="text"
-              value={mode === "checkout" ? base : branchName}
+              value={mode === "checkout" ? checkoutBranch : branchName}
               onChange={(e) =>
                 setBranchNameInput(sanitizeBranchName(e.target.value))
               }

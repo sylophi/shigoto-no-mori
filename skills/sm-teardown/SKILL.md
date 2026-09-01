@@ -1,6 +1,6 @@
 ---
 name: sm-teardown
-description: Tear down a Shigoto no Mori worktree without merging it. Use to discard or abandon a worktree.
+description: Tear down a Shigoto no Mori worktree. Use when the user asks to discard or abandon a worktree.
 ---
 
 One command does the whole teardown:

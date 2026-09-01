@@ -43,6 +43,14 @@ func seedRepo(t *testing.T, parent, name string) string {
 	return path
 }
 
+// Runs git in dir, failing the test with the command that broke.
+func mustGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if _, err := runGit(dir, args...); err != nil {
+		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
+	}
+}
+
 // The findings for one check id, in record order.
 func findingsFor(report *doctorReport, id string) []finding {
 	var matched []finding

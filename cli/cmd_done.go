@@ -205,23 +205,14 @@ func ffPullPrimary(worktreePath, primaryRef string, remotes []string) (bool, err
 	return err == nil, err
 }
 
-// checkoutBranch ports branches.ts: an exact local branch wins; a
-// qualified remote ref whose local branch doesn't exist yet gets a
-// tracking branch from the explicit ref (so a name shared across
-// remotes stays unambiguous); otherwise checkout the stripped name.
+// Switches the worktree to a branch, creating a tracking branch when
+// the ref resolves to a remote-only one (resolveCheckoutRef).
 func checkoutBranch(worktreePath, branch string, remotes []string) error {
-	if localBranchExists(worktreePath, branch) {
-		_, err := runGit(worktreePath, "checkout", branch)
-		return err
+	target, track := resolveCheckoutRef(worktreePath, branch, remotes)
+	args := []string{"checkout"}
+	if track != "" {
+		args = append(args, "--track")
 	}
-	remote, stripped := splitRemoteRef(branch, remotes)
-	if remote != "" && !localBranchExists(worktreePath, stripped) {
-		_, err := runGit(worktreePath, "checkout", "--track", branch)
-		return err
-	}
-	if remote != "" {
-		branch = stripped
-	}
-	_, err := runGit(worktreePath, "checkout", branch)
+	_, err := runGit(worktreePath, append(args, target)...)
 	return err
 }
