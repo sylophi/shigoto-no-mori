@@ -31,10 +31,10 @@ import { useRemoteDevices } from "./useRemoteDevices";
 
 // A peer's projects, scoped off the shared local builder. The base meta
 // is overridden to stay silent because a peer that is merely asleep
-// would otherwise toast on every disabled-to-enabled transition; the
+// would otherwise toast on every disabled-to-enabled transition. The
 // sidebar shows a device's rows as stale instead. Note this swallows a
-// genuine listing failure too -- such a device contributes zero items
-// and simply reads as empty.
+// genuine listing failure too: such a device contributes zero items and
+// simply reads as empty.
 function remoteProjectsQueryOptions(
   deviceId: string,
   api: RemoteDeviceApi | undefined,

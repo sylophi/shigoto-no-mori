@@ -1,7 +1,7 @@
 // Forward any port from a peer to this machine (v2 step 8, slice B).
-// The worktree detail's port row covers the port a worktree already has;
-// this is the arbitrary-port arm, and the two share the list and the
-// start/stop pair in usePortForwards.
+// The worktree detail's port row covers the port a worktree already
+// has. This is the arbitrary-port arm, and the two share the list and
+// the start/stop pair in usePortForwards.
 //
 // The two halves have DIFFERENT preconditions, which is why the block
 // renders on either one alone:
@@ -13,9 +13,9 @@
 //     list stays, with its Stop, even once `canStart` is false. Dropping
 //     it there would strand the local port bound until the app quit,
 //     with nothing left in the UI to release it.
-// Both halves are app-only (the engine binds a real TCP listener in the
-// desktop main process, and the web loopback rejects the portForward
-// channels); the caller gates that.
+// Both halves are app-only, since the engine binds a real TCP listener
+// in the desktop main process and the web loopback rejects the
+// portForward channels. The caller gates that.
 import { useState } from "react";
 import { Cable, ExternalLink, Loader2, X } from "lucide-react";
 import { PortSchema } from "@shared/ipc/modules/portForward";

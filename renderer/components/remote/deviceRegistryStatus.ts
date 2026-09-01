@@ -20,8 +20,8 @@ import {
 } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
-// The same triple every other device surface renders (tone, label,
-// reachable); a registry row only differs in how it ANSWERS it, not in
+// The same triple every other device surface renders: tone, label,
+// reachable. A registry row differs only in how it ANSWERS that, not in
 // what it answers.
 export type DeviceRowStatus = DeviceStatusView;
 

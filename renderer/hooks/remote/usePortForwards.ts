@@ -30,11 +30,11 @@ export const canForwardPorts = window.api.isElectron;
 //
 // Mounted ONCE from App.tsx, not per consumer: the devices page mounts a
 // forward surface per peer, and a subscription each would turn one
-// engine signal into N invalidations of the same key -- which do not
+// engine signal into N invalidations of the same key. Those do not
 // collapse, since invalidateQueries cancels and restarts an in-flight
 // refetch by default. The engine already coalesces conn bursts to one
-// signal per 150ms; a per-consumer listener would multiply that straight
-// back up.
+// signal per 150ms, which a per-consumer listener would multiply
+// straight back up.
 export function useWatchPortForwards(): void {
   const queryClient = useQueryClient();
   useEffect(
