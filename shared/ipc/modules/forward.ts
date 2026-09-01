@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
+import { PortNumberSchema } from "@shared/schemas";
 
 // Port-forward wire protocol (v2 step 8, slice A): TCP bytes move
 // between devices as chunked, grant-gated invoke/response calls over
@@ -41,8 +42,20 @@ import { ChunkB64Schema } from "@shared/ipc/socket/frames";
 // never exceed what a downlink chunk may carry and vice versa.
 const ConnIdSchema = HexId32Schema;
 
+// The host's coded refusals, as the exact message texts the client
+// side matches on (the engine's re-dial-vs-fail decision, the UI's
+// inline wording). Electron IPC and the device wires preserve only the
+// message string, so the marker IS the message: mint and match through
+// these, never a literal. connect-failed is a prefix, the rest are the
+// whole message.
+export const FORWARD_CONNECT_FAILED = "connect-failed";
+export const FORWARD_TOO_MANY_CONNS = "too-many-conns";
+export const FORWARD_UNKNOWN_CONN = "unknown-conn";
+export const FORWARD_CONN_CLOSED = "conn-closed";
+export const FORWARD_POLL_IN_FLIGHT = "poll-in-flight";
+
 export const ForwardOpenPayloadSchema = z.strictObject({
-  port: z.number().int().min(1).max(65535),
+  port: PortNumberSchema,
 });
 
 export const ForwardOpenResultSchema = z.strictObject({

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { isSafeRelPath } from "../gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
+import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
 
 export const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -96,6 +97,10 @@ export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 // external worktrees deliberately have no on-disk state.
 export const ShigomoriWorktreeDataSchema = z.object({
   notes: z.string().optional(),
+  // Ports the user added beside port-pool's (see shared/schemas/ports.ts).
+  // The write is a full replace, so every renderer writer goes through
+  // useWorktreeDataWrite, which merges a patch over the stored document.
+  ports: z.array(CustomPortSchema).max(MAX_CUSTOM_PORTS).optional(),
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 
@@ -279,6 +284,15 @@ export const ClientConfigSchema = z.object({
   // the CLI never reads it and it does not ride any sync path. Default is
   // off (absent = off), explicit `true` is the opt-in.
   keepReachable: z.boolean().optional(),
+  // Where a peer's port lands on this machine when forwarded: local port
+  // by `${deviceId}:${remotePort}` (renderer/hooks/config/
+  // useForwardLocalPort.ts is the only reader and writer). Keyed by
+  // device and remote port rather than by worktree because that is the
+  // engine's own identity for a forward (main/portForward/engine.ts
+  // dedupes on the same pair). Only preferences that differ from the
+  // default (the remote port itself) are stored, so the map stays as
+  // small as the user's overrides.
+  forwardLocalPorts: z.record(z.string(), PortNumberSchema).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 

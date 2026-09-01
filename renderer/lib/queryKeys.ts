@@ -107,6 +107,11 @@ function buildQueryKeys(deviceId: string) {
       host("packageScriptSort", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
+    // The merged pool + custom port list with its liveness probe. Polled
+    // while a detail page shows it, so a dev server starting or
+    // stopping on the host shows up without a refetch trigger.
+    worktreePorts: (projectId: string, worktreeId: string) =>
+      host("worktreePorts", projectId, worktreeId),
     terrierReadiness: () => host("terrierReadiness"),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),

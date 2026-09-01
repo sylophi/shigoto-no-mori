@@ -33,6 +33,7 @@
     "direct:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-direct-plane.mjs",
     "sync:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-sync-transfer.mjs",
     "forward:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-port-forward.mjs",
+    "ports:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-worktree-ports.mjs",
     "web:relay:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-web-relay.mjs",
     "web:bridge:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-web-bridge.mjs",
     "web:dev": "vite --config vite.web.config.ts",

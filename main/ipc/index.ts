@@ -14,6 +14,7 @@ import { menuContract } from "@shared/ipc/modules/menu";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
+import { portsContract } from "@shared/ipc/modules/ports";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { relayContract } from "@shared/ipc/modules/relay";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
@@ -44,6 +45,7 @@ import {
   setPortForwardEngine,
 } from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
+import { portsHandlers } from "@host/ipc/modules/ports";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
@@ -168,6 +170,7 @@ export function registerIpcHandlers(): void {
   registerContract(branchesContract, branchesHandlers);
   registerContract(globalConfigContract, globalConfigHandlers);
   registerContract(portPoolContract, portPoolHandlers);
+  registerContract(portsContract, portsHandlers);
   registerContract(terrierContract, terrierHandlers);
   registerContract(menuContract, menuHandlers);
   registerContract(launchersContract, launchersHandlers);
