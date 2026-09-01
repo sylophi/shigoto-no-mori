@@ -600,6 +600,44 @@ func gitWorktreeAdd(projectPath, worktreePath, branch, base string) error {
 	return err
 }
 
+// resolveCheckoutRef ports branches.ts: what to hand git so a checkout
+// of `ref` lands on a branch rather than a detached HEAD. An exact local
+// branch wins. A qualified remote ref whose local branch already exists
+// resolves to that branch, and one whose local branch doesn't exist yet
+// keeps the explicit remote ref (unambiguous when several remotes share
+// the name) and names the tracking branch to create from it. Anything
+// else goes to git as-is -- a bare name found in exactly one remote
+// DWIMs into a tracking branch. Callers that already hold the remote
+// list pass it to skip a `git remote`.
+func resolveCheckoutRef(repoPath, ref string, remotes []string) (target, track string) {
+	if localBranchExists(repoPath, ref) {
+		return ref, ""
+	}
+	if remotes == nil {
+		remotes = listRemotes(repoPath)
+	}
+	remote, stripped := splitRemoteRef(ref, remotes)
+	if remote == "" {
+		return ref, ""
+	}
+	if localBranchExists(repoPath, stripped) {
+		return stripped, ""
+	}
+	return ref, stripped
+}
+
+// Adds a worktree on an existing branch. `--` keeps the ref from being
+// parsed as flags.
+func gitWorktreeCheckout(projectPath, worktreePath, ref string, remotes []string) error {
+	target, track := resolveCheckoutRef(projectPath, ref, remotes)
+	args := []string{"worktree", "add"}
+	if track != "" {
+		args = append(args, "--track", "-b", track)
+	}
+	_, err := runGit(projectPath, append(args, "--", worktreePath, target)...)
+	return err
+}
+
 func gitWorktreeRemove(projectPath, worktreePath string, force bool) error {
 	args := []string{"worktree", "remove", worktreePath}
 	if force {

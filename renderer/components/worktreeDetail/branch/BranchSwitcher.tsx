@@ -8,6 +8,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/ui/branch-combobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
+import { localBranchOf } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 import { ErrorBanner } from "@/components/ui/error-banner";
 
@@ -34,14 +35,16 @@ export function BranchSwitcher({
   }
   // Local branches always shown; remotes only when no matching local
   // exists. Picking a remote orphan creates a local tracking branch
-  // (handled in onValueChange below).
+  // (main's checkoutBranch resolves the qualified ref, so which remote
+  // was picked survives when several carry the same name).
   const localSet = new Set(branches?.local ?? []);
+  const remoteSet = new Set(branches?.remote ?? []);
   const all: BranchEntry[] = [];
   for (const name of branches?.local ?? []) {
     if (!occupied.has(name)) all.push({ name, kind: "local" });
   }
   for (const name of branches?.remote ?? []) {
-    if (!localSet.has(name.replace(/^[^/]+\//, ""))) {
+    if (!localSet.has(localBranchOf(name, remoteSet))) {
       all.push({ name, kind: "remote" });
     }
   }
@@ -53,18 +56,10 @@ export function BranchSwitcher({
       onValueChange={(v) => {
         const next = v as string | null;
         if (!next || next === worktree.branch) return;
-        // Remote orphans: strip the remote prefix so `git checkout` DWIMs
-        // into a freshly-created local tracking branch instead of
-        // detached HEAD on the remote ref.
-        const remoteSet = new Set(branches?.remote ?? []);
-        const target = remoteSet.has(next)
-          ? next.replace(/^[^/]+\//, "")
-          : next;
-        if (target === worktree.branch) return;
         checkout.mutate({
           projectId: worktree.projectId,
           worktreeId: worktree.id,
-          branch: target,
+          branch: next,
         });
       }}
       inputValue={query}

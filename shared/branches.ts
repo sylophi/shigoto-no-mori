@@ -57,6 +57,19 @@ export function isValidWorktreeDirName(name: string): boolean {
   return name.length > 0 && sanitizeBranchForPath(name) === name;
 }
 
+// The local branch a checkout of `ref` lands on: a remote-tracking ref
+// ("origin/main") resolves to its local branch ("main", created as a
+// tracking branch if missing), anything else is already local. The
+// renderer can't see the remote list, so this approximates main's
+// longest-configured-remote split by dropping the first path segment
+// of refs that appear in the project's remote-ref list.
+export function localBranchOf(
+  ref: string,
+  remoteRefs: ReadonlySet<string>,
+): string {
+  return remoteRefs.has(ref) ? ref.replace(/^[^/]+\//, "") : ref;
+}
+
 // Local branch names a fork PR head can land on, in the order the
 // resolver tries them (pickForkBranchName in
 // main/lib/githubCli/pullRequestCheckout.ts). A fork head is named by

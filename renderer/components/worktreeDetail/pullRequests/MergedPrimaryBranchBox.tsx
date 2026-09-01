@@ -2,6 +2,7 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useSwitchToPrimaryAndDeleteBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
+import { localBranchOf } from "@shared/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 
@@ -29,10 +30,7 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   // show in the label and compare against. The actual switch (land on the
   // local tracking branch + fast-forward onto the remote tip) and the delete
   // of the merged branch are done server-side in one atomic operation.
-  const remoteSet = new Set(branches?.remote ?? []);
-  const target = remoteSet.has(defaultBranch)
-    ? defaultBranch.replace(/^[^/]+\//, "")
-    : defaultBranch;
+  const target = localBranchOf(defaultBranch, new Set(branches?.remote ?? []));
   // Already on the primary branch — nothing to switch to or delete.
   if (target === worktree.branch) return null;
 
