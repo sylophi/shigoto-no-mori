@@ -24,6 +24,7 @@ import {
   LAB_APP_VERSION,
   LOCAL_DEVICE_ID,
   MINI_ID,
+  projectIconFor,
   THINKPAD_ID,
   WORKPC_ID,
   type DeviceForest,
@@ -100,7 +101,10 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
       remote: ["origin/main"],
     }),
     "projects:pickWorktreeName": () => "tender-tanuki",
-    "projects:icon": () => null,
+    "projects:icon": ({ projectId }) =>
+      projectIconFor(
+        forest.projects.find((project) => project.id === projectId)?.name ?? "",
+      ),
     "projects:listIgnoredPaths": () => [".env.local", "node_modules"],
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {

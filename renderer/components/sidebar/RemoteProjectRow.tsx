@@ -4,18 +4,19 @@
 // actions). The group may span several devices sharing one repo
 // identity, and the per-row device markers below it tell those apart.
 //
-// The icon is the repo's own, fetched from the first member device with
-// a live api (projects:icon sits on the ungated read surface, so a
-// read-only peer serves it). With no member connected the header falls
-// back to the generic glyph rather than mounting a scope that cannot
-// fetch.
+// The icon is the repo's own, read from the first member device with a
+// live api (projects:icon sits on the ungated read surface, so a
+// read-only peer serves it). When every member is asleep the row keeps
+// reading the member that last served it, because that is the key the
+// cached icon lives under. A group that never had a live member reads
+// its first, and with nothing cached falls back to the generic glyph.
+import { useRef } from "react";
 import { FolderGit2 } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import { cn } from "@/lib/utils";
@@ -37,12 +38,14 @@ export function RemoteProjectRow({
   iconSources,
 }: RemoteProjectRowProps) {
   const registry = useRemoteDevices();
-  const live = iconSources
-    .map((source) => ({
-      ...source,
-      api: registry.find((device) => device.deviceId === source.deviceId)?.api,
-    }))
-    .find((source) => source.api !== undefined);
+  const live = iconSources.find(
+    (source) =>
+      registry.find((device) => device.deviceId === source.deviceId)?.api !==
+      undefined,
+  );
+  const lastLive = useRef(live);
+  if (live !== undefined) lastLive.current = live;
+  const iconSource = live ?? lastLive.current ?? iconSources[0];
   // Same truncation-aware tooltip as ProjectHeader, so a long remote
   // name is recoverable on hover exactly like a local one.
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
@@ -52,12 +55,14 @@ export function RemoteProjectRow({
       <TooltipTrigger
         render={
           <div className={cn(PROJECT_HEADER_BASE, "text-muted-foreground")}>
-            {live?.api === undefined ? (
+            {iconSource === undefined ? (
               <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground/50" />
             ) : (
-              <HostScopeProvider deviceId={live.deviceId} api={live.api}>
-                <ProjectIcon projectId={live.projectId} fallback={FolderGit2} />
-              </HostScopeProvider>
+              <ProjectIcon
+                projectId={iconSource.projectId}
+                deviceId={iconSource.deviceId}
+                fallback={FolderGit2}
+              />
             )}
             <span ref={nameRef} className="min-w-0 truncate">
               {name}
