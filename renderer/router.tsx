@@ -18,7 +18,6 @@ import { NewWorktree } from "@/components/newWorktree/NewWorktree";
 import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
-import { RemoteForest } from "@/components/remote/RemoteForest";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
 import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
@@ -129,17 +128,6 @@ const devicesIndexRoute = createRoute({
   component: DevicesPage,
 });
 
-// App-wide like /tidy, but device-scoped: a read-only view of another
-// machine's forest. Carries a param, so it takes remountDeps like the
-// project routes so switching devices swaps the data rather than showing
-// the previous device's forest until its queries refetch.
-const devicesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId",
-  component: RemoteForest,
-  remountDeps: ({ params }) => params,
-});
-
 // Device-scoped twins of the worktree pages (v2: remote feels local).
 // The SAME components serve both trees: withRemoteScope resolves the
 // device, mounts HostScopeProvider and the push-refresh watcher, and
@@ -247,7 +235,6 @@ const routeTree = rootRoute.addChildren([
   settingsRoute,
   tidyRoute,
   devicesIndexRoute,
-  devicesRoute,
   remoteWorktreeRoute,
   remoteWorktreeDiffRoute,
   remotePullRequestDiffRoute,

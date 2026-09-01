@@ -52,15 +52,6 @@ export type RemoteDevice = {
   api?: RemoteDeviceApi;
 };
 
-// True when a connected remote host's version differs from this client's.
-// A nudge flag only: contracts are additive, so a skew never blocks the
-// connection. Derived at read time rather than stored so it can never
-// drift from device.appVersion: "" (not yet connected) is never a
-// mismatch, since the version is unknown until the peer session confirms.
-export function deviceVersionMismatch(device: RemoteDevice): boolean {
-  return device.appVersion !== "" && device.appVersion !== localAppVersion;
-}
-
 // Client-scoped calls only make sense for the local machine, so a remote
 // device's client transport rejects them outright rather than sending
 // them over a wire that has no client scope.
@@ -82,11 +73,6 @@ export const rejectingClientTransport: ClientTransport = {
     return () => {};
   },
 };
-
-// A local fact, read synchronously off the preload bridge exactly like
-// the query-key device id, so deviceVersionMismatch can compare without
-// threading it through.
-const localAppVersion = window.api.appVersion;
 
 const listeners = new Set<() => void>();
 // Cached immutable snapshot for useSyncExternalStore: it must return a

@@ -6,10 +6,6 @@
 // helper instead of the Register-typed hooks. Every path here is a
 // subset of the desktop tree, so reused desktop components whose typed
 // navigate calls name these paths mount unmodified.
-//
-// The device forest route reuses the desktop's RemoteForest under the
-// SAME route id ("/devices/$deviceId"): its getRouteApi lookup is keyed
-// by that id at runtime, so the component mounts here unmodified.
 import { useEffect } from "react";
 import {
   createBrowserHistory,
@@ -21,7 +17,6 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
-import { RemoteForest } from "@/components/remote/RemoteForest";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { useAccountStatus } from "@/hooks/account/useAccount";
@@ -75,16 +70,6 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 });
 
-// Same id and remount behavior as the desktop's device route, so
-// RemoteForest's route api resolves and switching devices swaps the
-// data instead of showing the previous device's forest.
-const deviceForestRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/devices/$deviceId",
-  component: RemoteForest,
-  remountDeps: ({ params }) => params,
-});
-
 // The device-scoped worktree pages, same ids and components as the
 // desktop's twin routes (renderer/router.tsx): a remote worktree row in
 // the shared sidebar navigates here, and the pages read their params
@@ -120,7 +105,6 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   devicesRoute,
   settingsRoute,
-  deviceForestRoute,
   remoteWorktreeRoute,
   remoteWorktreeDiffRoute,
   remotePullRequestDiffRoute,

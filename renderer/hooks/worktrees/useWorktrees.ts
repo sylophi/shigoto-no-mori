@@ -5,8 +5,9 @@ import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 
 // Which device's forest to read, and over which api. Both default to
 // the local machine, so a scope-less call reads this machine's forest;
-// a scoped caller (a useHostScope consumer, the remote forest) passes a
-// peer's id and api and that device's data caches under its own id.
+// a scoped caller (a useHostScope consumer, the sidebar's remote
+// fan-out) passes a peer's id and api and that device's data caches
+// under its own id.
 export type HostForestScope = Partial<HostScope>;
 
 // Single source of truth for the worktrees-list query, so imperative

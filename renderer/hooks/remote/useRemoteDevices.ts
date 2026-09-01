@@ -1,9 +1,9 @@
 // React binding over the remote device registry (v2 step 3, slice B).
 // useSyncExternalStore subscribes a component to the registry's live
 // snapshot, so device status (connecting, connected, backoff, blocked)
-// renders without any polling or prop threading. No settings UI or
-// forest view lives here: that is slice C. This is the reactive read
-// side of the registry.
+// renders without any polling or prop threading. Read side only: no
+// settings UI and no scoped data live here, just the live snapshot the
+// scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
 import { type RemoteDevice, remoteDeviceStore } from "@/lib/remote/devices";
 

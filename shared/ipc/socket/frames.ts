@@ -64,8 +64,8 @@ export const HELLO_TIMEOUT_MS = 10_000;
 // request is refused rather than spawning yet another git or CLI
 // subprocess. 64, raised from 32: each forwarded TCP connection parks a
 // long-poll in this budget (host/ipc/modules/forward.ts), so 32 starved
-// a peer's ordinary invokes once a forwarded browser tab and the forest
-// UI were active together.
+// a peer's ordinary invokes once a forwarded browser tab and the
+// sidebar's merged tree were active together.
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Skip a push once the outbound socket buffer passes this, shared by

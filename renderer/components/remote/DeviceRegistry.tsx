@@ -1,12 +1,13 @@
 // The account's device registry: a summary line and one card per
 // machine, this one first. This component owns every query the rows
-// read, so a row is a pure function of what it is handed and the page
-// makes one fan-out instead of one per row.
+// read -- the account list, the grants, the host chips and the per-peer
+// command-access verdicts -- so a row is a pure function of what it is
+// handed and the page makes one fan-out instead of one per row.
 //
-// The dot, the summary count and the "View forest" gate all derive from
-// the LIVE relay store rather than the account:listDevices HTTP
-// snapshot (which only invalidates on account:changed), so a device
-// coming online or going away updates without a refetch.
+// The dot, the summary count and the host chips' cached marker all
+// derive from the LIVE relay store rather than the account:listDevices
+// HTTP snapshot (which only invalidates on account:changed), so a
+// device coming online or going away updates without a refetch.
 import {
   useAccountDevices,
   useGrantCommands,
@@ -15,6 +16,7 @@ import {
   useRevokeDevice,
   useWatchGrantsChanges,
 } from "@/hooks/account/useAccount";
+import { usePeerCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -38,14 +40,21 @@ export function DeviceRegistry({
   const grantCommands = useGrantCommands();
   const revokeCommands = useRevokeCommands();
   const revokeDevice = useRevokeDevice();
+  const relayDevices = useRemoteDevices();
   const relayById = new Map(
-    useRemoteDevices().map((device) => [device.deviceId, device] as const),
+    relayDevices.map((device) => [device.deviceId, device] as const),
   );
   // THIS device's tunnel endpoint state (v2 step 10, slice B), as the
   // derived primitive off the shared relay status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
   const tunnelUp = useTunnelUp();
   const hosts = useHostChipIndex(localDeviceId);
+  // Whether THIS device may drive verbs on each peer -- the mirror of
+  // `grantedSet` above, which is what this host allows peers to do here.
+  // Asked once for the whole list (the rows' forward blocks would
+  // otherwise each mount their own copy under the same keys), and only
+  // for peers, since the local device is granted by contract.
+  const peerAccess = usePeerCommandAccess(relayDevices);
 
   // This device first, everything else in the order the relay listed
   // it, so the peers keep their registry order.
@@ -60,6 +69,7 @@ export function DeviceRegistry({
       device,
       isThisDevice,
       status: deviceRowStatus(device, isThisDevice, relayDevice),
+      canCommandPeer: peerAccess.get(device.deviceId)?.granted ?? false,
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice
@@ -86,39 +96,43 @@ export function DeviceRegistry({
         {rows.length} {rows.length === 1 ? "device" : "devices"} &middot;{" "}
         {online} online
       </p>
-      {rows.map(({ device, isThisDevice, status, appVersion }) => (
-        <DeviceRegistryRow
-          key={device.deviceId}
-          device={device}
-          isThisDevice={isThisDevice}
-          localDeviceName={localDeviceName}
-          status={status}
-          appVersion={appVersion}
-          chips={hosts.byDevice.get(device.deviceId) ?? []}
-          // An unreachable peer's queries are disabled, so it is never
-          // the one still fetching: without this gate one slow peer
-          // would suppress every other row's empty state.
-          chipsLoading={
-            isThisDevice
-              ? hosts.localLoading
-              : hosts.remoteLoading && status.reachable
-          }
-          granted={grantedSet.has(device.deviceId)}
-          grantPending={
-            (grantCommands.isPending &&
-              grantCommands.variables === device.deviceId) ||
-            (revokeCommands.isPending &&
-              revokeCommands.variables === device.deviceId)
-          }
-          onGrant={() => grantCommands.mutate(device.deviceId)}
-          onRevokeCommands={() => revokeCommands.mutate(device.deviceId)}
-          onRevokeDevice={() => revokeDevice.mutate(device.deviceId)}
-          revokePending={
-            revokeDevice.isPending && revokeDevice.variables === device.deviceId
-          }
-          tunnelUp={isThisDevice && tunnelUp}
-        />
-      ))}
+      {rows.map(
+        ({ device, isThisDevice, status, appVersion, canCommandPeer }) => (
+          <DeviceRegistryRow
+            key={device.deviceId}
+            device={device}
+            isThisDevice={isThisDevice}
+            localDeviceName={localDeviceName}
+            status={status}
+            appVersion={appVersion}
+            chips={hosts.byDevice.get(device.deviceId) ?? []}
+            // An unreachable peer's queries are disabled, so it is never
+            // the one still fetching: without this gate one slow peer
+            // would suppress every other row's empty state.
+            chipsLoading={
+              isThisDevice
+                ? hosts.localLoading
+                : hosts.remoteLoading && status.reachable
+            }
+            granted={grantedSet.has(device.deviceId)}
+            grantPending={
+              (grantCommands.isPending &&
+                grantCommands.variables === device.deviceId) ||
+              (revokeCommands.isPending &&
+                revokeCommands.variables === device.deviceId)
+            }
+            onGrant={() => grantCommands.mutate(device.deviceId)}
+            onRevokeCommands={() => revokeCommands.mutate(device.deviceId)}
+            onRevokeDevice={() => revokeDevice.mutate(device.deviceId)}
+            revokePending={
+              revokeDevice.isPending &&
+              revokeDevice.variables === device.deviceId
+            }
+            tunnelUp={isThisDevice && tunnelUp}
+            canCommandPeer={canCommandPeer}
+          />
+        ),
+      )}
     </section>
   );
 }

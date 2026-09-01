@@ -79,19 +79,12 @@ export function useWorktreeNav() {
       });
     },
 
-    // Where "leave this worktree's pages" lands: the device's forest
-    // page remotely, home locally. Not one of the twin pairs above: the
-    // local arm is the root, not a /projects path.
+    // Where "leave this worktree's pages" lands. The root in both
+    // scopes: a remote worktree has no place of its own to fall back
+    // to, and the root is the merged tree's home either way (the web
+    // shell's root dispatches to /devices).
     toFallback(replace = false) {
-      if (remote) {
-        void navigate({
-          to: "/devices/$deviceId",
-          params: { deviceId },
-          replace,
-        });
-      } else {
-        void navigate({ to: "/", replace });
-      }
+      void navigate({ to: "/", replace });
     },
   };
 }

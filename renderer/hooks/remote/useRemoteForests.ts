@@ -1,26 +1,49 @@
 // Every registered remote device's forest at once, for the sidebar's
-// merged tree. One projects query per device and one worktrees query
-// per (device, project), through the same device-scoped builders the
-// forest page uses, so the cache is shared and the sidebar can never
-// disagree with the page. Devices stay in the list whether or not a
-// direct session is up: the options gate fetching on the api being
-// present, and a disconnected device serves whatever its last session
-// cached -- the same staleness contract every query in the app has.
+// merged tree -- the only place a peer's forest is read, since remote
+// work is meant to look local rather than live on a page of its own.
+// One projects query per device and one worktrees query per (device,
+// project). Both scope the SHARED local options builders to a peer
+// (they derive the key registry from the device id via queryKeysFor,
+// and their queryFns call that device's api instead of window.api), so
+// a peer's rows land under the same keys the device-scoped worktree
+// pages read and the two can never disagree. Devices stay in the list
+// whether or not a direct session is up: the options gate fetching on
+// the api being present, and a disconnected device serves whatever its
+// last session cached -- the same staleness contract every query in the
+// app has.
 //
-// This fan-out is always mounted, so it refetches calmly: the forest
-// page keeps its own fresher observers on the same keys (plus the
-// useWatchRemoteHost push channel while it is open), and any observer
-// wanting a refetch refreshes this one's rows for free.
+// This fan-out is always mounted, so it refetches calmly: an open
+// remote worktree page keeps its own fresher observers on the same
+// keys (plus the useWatchRemoteHost push channel while it is open),
+// and any observer wanting a refetch refreshes this one's rows for
+// free.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
+import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
+import type { RemoteDeviceApi } from "@/lib/remote/devices";
 import {
-  remoteProjectsQueryOptions,
-  remoteWorktreesQueryOptions,
-} from "./useRemoteForest";
+  combineFanOut,
+  worktreesQueryOptions,
+} from "@/hooks/worktrees/useWorktrees";
 import { useRemoteDevices } from "./useRemoteDevices";
+
+// A peer's projects, scoped off the shared local builder. The base meta
+// is overridden to stay silent because a peer that is merely asleep
+// would otherwise toast on every disabled-to-enabled transition. The
+// sidebar shows a device's rows as stale instead. Note this swallows a
+// genuine listing failure too: such a device contributes zero items and
+// simply reads as empty.
+function remoteProjectsQueryOptions(
+  deviceId: string,
+  api: RemoteDeviceApi | undefined,
+) {
+  return {
+    ...projectsQueryOptions({ deviceId, api }),
+    meta: { silentError: true },
+  };
+}
 
 // One remote project's slice, flat because that is exactly the unit
 // the row builder merges by repo identity.
@@ -82,7 +105,10 @@ export function useRemoteForests(
   );
   const worktreeQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
-      ...remoteWorktreesQueryOptions(device.deviceId, device.api, project.id),
+      ...worktreesQueryOptions(project.id, {
+        deviceId: device.deviceId,
+        api: device.api,
+      }),
       ...refetch,
     })),
     combine: combineFanOut,

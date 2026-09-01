@@ -28,8 +28,8 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   const navigateToSibling = () => {
     // Prefer the sibling above so the user's eye stays in place. The
     // nav helper keeps this on whichever device tree the page lives in
-    // (a remote delete lands on the remote sibling, or the device's
-    // forest page when it was the last one).
+    // (a remote delete lands on the remote sibling, or the root when it
+    // was the last one).
     const index = siblings.findIndex((w) => w.id === worktree.id);
     const next =
       index >= 0 ? (siblings[index - 1] ?? siblings[index + 1]) : undefined;

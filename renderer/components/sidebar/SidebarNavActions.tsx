@@ -15,14 +15,7 @@ export function SidebarNavActions({
   return (
     <>
       {devicesEnabled && (
-        // Prefix match: a device's forest belongs to the same "your
-        // machines" surface this button opens.
-        <NavIconButton
-          to="/devices"
-          tip="Devices"
-          label="Devices"
-          exact={false}
-        >
+        <NavIconButton to="/devices" tip="Devices" label="Devices">
           <MonitorSmartphone className="size-3.5" />
         </NavIconButton>
       )}

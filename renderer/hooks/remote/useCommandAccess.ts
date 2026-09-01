@@ -39,7 +39,7 @@ function verdictOf(
 }
 
 // Does the CALLING device hold command access on the scoped host? Drives
-// whether the remote forest renders mutation controls (v2 step 6). The
+// whether a scoped page renders mutation controls (v2 step 6). The
 // local device is always granted by contract, so it short-circuits with
 // no IPC. A remote device answers via the per-caller remoteAccess
 // preflight, cached under its own host key. A refused verdict is a
