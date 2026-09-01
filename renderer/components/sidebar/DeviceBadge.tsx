@@ -1,7 +1,7 @@
 // Compact device attribution for the merged tree: a two-letter badge
 // per contributing device on project headers, and the single-badge form
 // on remote worktree rows. Tone is the device's connection tone
-// (deviceStatusView), the same one its dot carries on the devices rail,
+// (deviceStatusView), the same one its dot carries on the devices page,
 // drawn through the shared TONE_PILL table so a badge and a dot can
 // never disagree about a machine.
 import { TONE_PILL, type StatusTone } from "@/components/ui/status-dot";

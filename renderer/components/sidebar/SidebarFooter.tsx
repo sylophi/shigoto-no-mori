@@ -15,7 +15,6 @@ import {
   useSidebarView,
 } from "@/hooks/projects/useSidebarView";
 import { useUpdater } from "@/hooks/system/useUpdater";
-import { DevicesSummaryRow } from "./DevicesSummaryRow";
 import { SidebarNavActions } from "./SidebarNavActions";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 import { cn } from "@/lib/utils";
@@ -79,34 +78,31 @@ export function SidebarFooter({
     );
   }
   return (
-    <>
-      {devicesEnabled && <DevicesSummaryRow />}
-      <div className={SIDEBAR_FOOTER_BAR}>
-        <SegmentedControl<SidebarView>
-          value={view}
-          onChange={setView}
-          options={VIEW_OPTIONS}
-          aria-label="Sidebar layout"
-          aria-keyshortcuts="Tab"
-          optionClassName="px-1.5 py-1"
-        />
-        <div className="flex-1" />
-        <SimpleTooltip tip="Add project (⌘N)">
-          <button
-            type="button"
-            onClick={openAddProject}
-            aria-label="Add project"
-            aria-keyshortcuts={`${modName}+N`}
-            className={SIDEBAR_ICON_BUTTON}
-          >
-            <FolderPlus className="size-3.5" />
-          </button>
-        </SimpleTooltip>
-        <SidebarNavActions
-          devicesEnabled={devicesEnabled}
-          updateReady={updateReady}
-        />
-      </div>
-    </>
+    <div className={SIDEBAR_FOOTER_BAR}>
+      <SegmentedControl<SidebarView>
+        value={view}
+        onChange={setView}
+        options={VIEW_OPTIONS}
+        aria-label="Sidebar layout"
+        aria-keyshortcuts="Tab"
+        optionClassName="px-1.5 py-1"
+      />
+      <div className="flex-1" />
+      <SimpleTooltip tip="Add project (⌘N)">
+        <button
+          type="button"
+          onClick={openAddProject}
+          aria-label="Add project"
+          aria-keyshortcuts={`${modName}+N`}
+          className={SIDEBAR_ICON_BUTTON}
+        >
+          <FolderPlus className="size-3.5" />
+        </button>
+      </SimpleTooltip>
+      <SidebarNavActions
+        devicesEnabled={devicesEnabled}
+        updateReady={updateReady}
+      />
+    </div>
   );
 }
