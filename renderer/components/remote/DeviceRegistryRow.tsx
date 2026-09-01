@@ -73,8 +73,8 @@ export function DeviceRegistryRow({
   // covering the list cannot offer. The shared two-step confirm carries
   // the armed flag, so an untouched banner disarms itself.
   const revoke = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
-  // The banner outlives the arming while the revoke is in flight, so
-  // the row shows "Revoking…" where the confirm button was instead of
+  // The banner outlives the arming while the removal is in flight, so
+  // the row shows "Removing…" where the confirm button was instead of
   // snapping back to its actions.
   const confirming = revoke.armed || revokePending;
   // Held here rather than inside the name field so the Rename trigger
@@ -137,7 +137,12 @@ export function DeviceRegistryRow({
         </div>
 
         {!confirming && (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          // Shrinkable on purpose: with shrink-0 the strip keeps its
+          // one-line width once it wraps under the name, so its own
+          // flex-wrap never engages and the last action spills past the
+          // card. Letting it shrink makes the buttons stack instead,
+          // which the narrowest allowed window (640px) needs.
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
             {isThisDevice ? (
               <>
                 {!renaming && (
@@ -188,12 +193,18 @@ export function DeviceRegistryRow({
                   </Button>
                 )}
                 <Button
+                  // "Remove from account", not "Revoke device": the
+                  // relay call underneath is a credential revoke, but
+                  // that is the mechanism, not what the user is
+                  // deciding. Naming the account also keeps this
+                  // distinct from the "Revoke commands" button beside
+                  // it, which only withdraws a permission.
                   variant="ghost-destructive"
                   size="xs"
                   onClick={() => revoke.trigger(onRevokeDevice)}
                 >
                   <Trash2 />
-                  Revoke device
+                  Remove from account
                 </Button>
               </>
             )}
@@ -207,8 +218,10 @@ export function DeviceRegistryRow({
         <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
           <AlertTriangle aria-hidden className="size-4 shrink-0" />
           <p className="min-w-0 flex-1 basis-64">
-            <span className="font-medium">Revoke {device.name}?</span> It loses
-            access the moment it next connects, and its cached projects
+            <span className="font-medium">
+              Remove {device.name} from your account?
+            </span>{" "}
+            It loses access the moment it next connects, and its cached projects
             disappear from your sidebar. Worktrees and files on the machine
             itself are left alone. Pair again with a new code to undo.
           </p>
@@ -227,7 +240,7 @@ export function DeviceRegistryRow({
               disabled={revokePending}
               onClick={() => revoke.trigger(onRevokeDevice)}
             >
-              {revokePending ? "Revoking…" : "Revoke device"}
+              {revokePending ? "Removing…" : "Remove device"}
             </Button>
           </div>
         </div>

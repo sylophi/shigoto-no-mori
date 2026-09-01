@@ -86,7 +86,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
             <span className="font-mono text-foreground">
               {abbreviateId(status.accountId)}
             </span>
-            . This browser is enrolled as a device of its own. Revoking it below
+            . This browser is enrolled as a device of its own. Removing it below
             signs it out.
           </p>
         </div>
@@ -251,8 +251,8 @@ function SelfRevokeButton() {
     <ConfirmDestructiveButton
       armed={confirm.armed}
       pending={signOut.isPending}
-      pendingLabel="Revoking…"
-      idleLabel="Revoke and sign out"
+      pendingLabel="Removing…"
+      idleLabel="Remove and sign out"
       onClick={() => confirm.trigger(() => signOut.mutate())}
     />
   );
@@ -271,8 +271,8 @@ function PeerRevokeButton({ deviceId }: { deviceId: string }) {
     <ConfirmDestructiveButton
       armed={confirm.armed}
       pending={revoke.isPending}
-      pendingLabel="Revoking…"
-      idleLabel="Revoke"
+      pendingLabel="Removing…"
+      idleLabel="Remove from account"
       onClick={() => confirm.trigger(() => revoke.mutate(deviceId))}
     />
   );

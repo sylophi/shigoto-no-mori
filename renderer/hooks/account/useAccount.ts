@@ -94,7 +94,7 @@ export function useAccountSignOut() {
 export function useRevokeDevice() {
   return useMutation<void, Error, string>({
     mutationFn: (deviceId) => window.api.account.revokeDevice(deviceId),
-    meta: { errorTitle: "Couldn't revoke this device" },
+    meta: { errorTitle: "Couldn't remove this device" },
   });
 }
 
