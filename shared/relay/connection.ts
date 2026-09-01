@@ -106,7 +106,9 @@ export type RelayConnectionCore = {
 // retry normally, since a fresh ticket is minted per attempt anyway.
 const relayCloseClassifier: CloseClassifier = (code) => {
   if (code === CLOSE_DEVICE_REVOKED) {
-    return { message: "this device was revoked, sign in again" };
+    return {
+      message: "this device was removed from the account, sign in again",
+    };
   }
   if (code === CLOSE_SUPERSEDED) {
     return {

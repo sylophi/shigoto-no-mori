@@ -411,7 +411,10 @@ async function main() {
       await delay(1_300);
       assert.equal(a.connection.status().socket.phase, "blocked");
       assert.equal(a.mints(), minted, "a blocked supervisor redialed");
-      assert.match(a.connection.status().socket.message, /revoked/);
+      assert.match(
+        a.connection.status().socket.message,
+        /removed from the account/,
+      );
       // A fresh device for the superseded arm, booted inside the tracked
       // scope so a failure here still closes the stub.
       const c = await bootDevice(stub, "C", {}, track);
