@@ -7,12 +7,11 @@
 // honest relay reachability messages, and per-device account-level
 // revoke (a browser cannot grant command access, so no grant toggles).
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { MonitorSmartphone, TreePine } from "lucide-react";
+import { MonitorSmartphone } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
-import { Button } from "@/components/ui/button";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -32,11 +31,10 @@ import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { abbreviateId } from "@/lib/abbreviateId";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
-import { navigateTo, redirectTo, webPaths } from "./nav";
+import { redirectTo, webPaths } from "./nav";
 
 function useWebAccess() {
   const store = webBridge().webAccess;
@@ -86,7 +84,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
             <span className="font-mono text-foreground">
               {abbreviateId(status.accountId)}
             </span>
-            . This browser is enrolled as a device of its own. Revoking it below
+            . This browser is enrolled as a device of its own. Removing it below
             signs it out.
           </p>
         </div>
@@ -188,11 +186,6 @@ function DeviceRow({
   const supervisorStatus = isSelf
     ? (relayStatus?.socket ?? { phase: "idle" as const })
     : (entry?.status ?? { phase: "stopped" as const });
-  // The forest gate is REACHABLE (connected, or online in the roster),
-  // never `connected`: only entering the forest dials a direct
-  // session, so gating on an established one would leave the button
-  // permanently disabled (nothing else on this page opens a session).
-  const { reachable } = deviceStatusView(supervisorStatus);
 
   return (
     <div className="flex flex-wrap items-center gap-3 px-3 py-2.5">
@@ -215,20 +208,6 @@ function DeviceRow({
         </span>
       </div>
       <DeviceStatusDot status={supervisorStatus} />
-      {!isSelf && (
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!reachable}
-          title={
-            reachable ? undefined : "This device isn't reachable right now"
-          }
-          onClick={() => navigateTo(webPaths.deviceForest(info.deviceId))}
-        >
-          <TreePine />
-          View forest
-        </Button>
-      )}
       {isSelf ? (
         <SelfRevokeButton />
       ) : (
@@ -251,8 +230,8 @@ function SelfRevokeButton() {
     <ConfirmDestructiveButton
       armed={confirm.armed}
       pending={signOut.isPending}
-      pendingLabel="Revoking…"
-      idleLabel="Revoke and sign out"
+      pendingLabel="Removing…"
+      idleLabel="Remove and sign out"
       onClick={() => confirm.trigger(() => signOut.mutate())}
     />
   );
@@ -271,8 +250,8 @@ function PeerRevokeButton({ deviceId }: { deviceId: string }) {
     <ConfirmDestructiveButton
       armed={confirm.armed}
       pending={revoke.isPending}
-      pendingLabel="Revoking…"
-      idleLabel="Revoke"
+      pendingLabel="Removing…"
+      idleLabel="Remove from account"
       onClick={() => confirm.trigger(() => revoke.mutate(deviceId))}
     />
   );

@@ -10,26 +10,23 @@ import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 
 // One shape for the sidebar's route buttons (tidy, devices, settings):
 // tooltip, icon, active highlight derived from the current location.
-// `exact` off matches a path prefix, for a button whose page owns
-// sub-routes (Devices also claims a device's forest).
+// The match is exact: /devices/$deviceId/... is a peer's WORKTREE, which
+// is meant to read as ordinary work rather than as a device page, so it
+// must not light this button any more than its local twin does.
 export function NavIconButton({
   to,
   tip,
   label,
-  exact = true,
   children,
 }: {
   to: NavigateOptions["to"];
   tip: string;
   label: string;
-  exact?: boolean;
   children: React.ReactNode;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const active = exact
-    ? location.pathname === to
-    : location.pathname.startsWith(to ?? "");
+  const active = location.pathname === to;
   return (
     <SimpleTooltip tip={tip}>
       <button

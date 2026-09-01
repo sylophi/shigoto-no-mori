@@ -14,19 +14,17 @@
 // the rose an error would earn.
 import type { TunnelState } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
-import type { StatusTone } from "@/components/ui/status-dot";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import {
+  deviceStatusView,
+  type DeviceStatusView,
+} from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
-export type DeviceRowStatus = {
-  tone: StatusTone;
-  label: string;
-  // True when the device's api can be used right now, so the row can
-  // gate "View forest" and mark its host chips as a cached snapshot.
-  // Always true for this device, which needs no relay to be reached.
-  reachable: boolean;
-};
+// The same triple every other device surface renders: tone, label,
+// reachable. A registry row differs only in how it ANSWERS that, not in
+// what it answers.
+export type DeviceRowStatus = DeviceStatusView;
 
 // What THIS device's row says about its tunnel endpoint, or null when
 // there is nothing worth saying: "up" earns the muted marker beside
@@ -82,7 +80,6 @@ export function deviceRowStatus(
   }
   // Every other phase (connected, online, connecting, reconnecting,
   // blocked) is a live transport fact, so the shared presentation
-  // mapping owns it.
-  const view = deviceStatusView(relayDevice.status);
-  return { tone: view.tone, label: view.label, reachable: view.reachable };
+  // mapping owns it outright.
+  return deviceStatusView(relayDevice.status);
 }

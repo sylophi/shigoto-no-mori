@@ -165,7 +165,10 @@ async function main() {
       await delay(1_300);
       assert.equal(a.connection.status().socket.phase, "blocked");
       assert.equal(a.mints(), minted, "a blocked connection redialed");
-      assert.match(a.connection.status().socket.message, /revoked/);
+      assert.match(
+        a.connection.status().socket.message,
+        /removed from the account/,
+      );
 
       const c = await bootWeb(stub, "C", {}, track);
       stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");

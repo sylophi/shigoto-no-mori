@@ -1,12 +1,12 @@
 // The one bring-a-peer's-worktree-here mutation (pull: v2 step 7 slice
-// C, transplant: step 9), shared by the remote forest's row controls
-// and the remote worktree detail's footer: capture, transfer, create,
-// and dirty apply ride a single pending state -- create-phase progress
+// C, transplant: step 9), shared by the remote worktree detail's
+// footer and its transplant dialog: capture, transfer, create, and
+// dirty apply ride a single pending state -- create-phase progress
 // streams to the local worktree's own detail page, not the calling
 // surface. The handler re-verifies the identity match, so the gate at the
 // call sites is UX, not the wall. Refusals surface centrally,
 // everything else toasts here: the result lands on another page (the
-// local forest), so the toast is usually the only visible conclusion --
+// local worktree), so the toast is usually the only visible conclusion --
 // a caller that shows the outcome itself passes `quiet`.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";

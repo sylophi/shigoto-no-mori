@@ -2,13 +2,13 @@
 // 6). The host pings git:externalChange after any app-driven mutation
 // (main/ipc/register.ts) and for truly external writes via its fs
 // watcher, and git:refsRefreshed narrows a background fetch to one
-// project's branch state. Subscribing here (mounted once in
-// ConnectedForest, beside the listing queries) makes the remote page
-// refresh on push instead of waiting out staleTime or a window focus.
+// project's branch state. Subscribing here (mounted once per open
+// device scope, in RemoteScope) makes a peer's pages refresh on push
+// instead of waiting out staleTime or a window focus.
 //
 // Deliberately NOT subscribed, so this stays two channels:
 // - projects:usageBumped drives the local sidebar's usage sorts, which
-//   the remote page doesn't render.
+//   a peer's pages don't drive.
 // - git:fetchActive feeds the device-blind fetch-spinner store, which
 //   would misattribute a remote host's sweep to the local forest.
 // - githubCli's PR refresh: the githubCli domain is exempt from
@@ -21,9 +21,9 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 import { invalidateHostDevice, queryKeysFor } from "@/lib/queryKeys";
 
 // Takes the device as a prop rather than reading useHostScope:
-// ConnectedForest mounts this beside the listing queries, OUTSIDE the
-// HostScopeProvider it renders, and the status gate isn't part of the
-// scope anyway.
+// RemoteScope mounts this in the same component that renders the
+// HostScopeProvider, so it sits OUTSIDE that provider, and the status
+// gate isn't part of the scope anyway.
 export function useWatchRemoteHost(device: RemoteDevice): void {
   const queryClient = useQueryClient();
   const { deviceId, api } = device;

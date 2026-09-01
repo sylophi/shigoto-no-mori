@@ -1,6 +1,6 @@
 // The worktree pages' route paths, spelled once. Each of the four
 // exists twice -- under /projects on this machine, and under
-// /devices/$deviceId as the twin serving a peer's forest -- and the
+// /devices/$deviceId as the twin serving a peer's worktree -- and the
 // same strings are needed in three places that must agree byte for
 // byte: the desktop route tree (renderer/router.tsx), the web one
 // (web/app/router.tsx, which reads renderer modules through the same

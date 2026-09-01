@@ -194,8 +194,10 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 
 	// Refresh the remote-tracking ref the new worktree will sit on so
 	// the base isn't whatever the last fetch left behind.
+	var remotes []string
 	if base != "" && remoteRefExists(proj.Path, base) {
-		if remote, branch := splitRemoteRef(base, listRemotes(proj.Path)); remote != "" {
+		remotes = listRemotes(proj.Path)
+		if remote, branch := splitRemoteRef(base, remotes); remote != "" {
 			_, _ = runGit(proj.Path, "fetch", "--quiet", remote, branch)
 		}
 	}
@@ -217,10 +219,10 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		if base == "" {
 			return worktreeJSON{}, errf("Checkout mode requires a base ref")
 		}
-		// No -b: reuse the existing branch. git refuses if it's already
-		// checked out in another worktree. `--` keeps a base ref from
-		// being parsed as flags.
-		if _, err := runGit(proj.Path, "worktree", "add", "--", worktreePath, base); err != nil {
+		// Reuse the existing branch (git refuses if it's already checked
+		// out in another worktree), materializing a local tracking branch
+		// when the base is a remote ref.
+		if err := gitWorktreeCheckout(proj.Path, worktreePath, base, remotes); err != nil {
 			return worktreeJSON{}, err
 		}
 	} else {

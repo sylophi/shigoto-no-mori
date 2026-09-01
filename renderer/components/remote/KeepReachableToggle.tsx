@@ -25,18 +25,16 @@ export function KeepReachableToggle() {
   const keepReachable = clientConfig?.keepReachable === true;
 
   return (
-    <div className="mt-2.5 border-t border-border pt-2.5">
-      <ToggleRow
-        checked={keepReachable}
-        onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
-        disabled={keepReachableUpdate.isPending}
-        label="Keep this device reachable"
-        description={
-          launchAtLoginSupported
-            ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
-            : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform."
-        }
-      />
-    </div>
+    <ToggleRow
+      checked={keepReachable}
+      onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
+      disabled={keepReachableUpdate.isPending}
+      label="Keep this device reachable"
+      description={
+        launchAtLoginSupported
+          ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
+          : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform."
+      }
+    />
   );
 }
