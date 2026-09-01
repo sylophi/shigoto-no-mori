@@ -17,9 +17,6 @@ export function PageShell({
   eyebrow,
   title,
   watermark,
-  status,
-  actions,
-  full = false,
   gap = "gap-6",
   children,
 }: {
@@ -29,31 +26,15 @@ export function PageShell({
   eyebrow: React.ReactNode;
   title: React.ReactNode;
   watermark: string;
-  status?: React.ReactNode;
-  actions?: React.ReactNode;
-  // Default: children flow in the shell's scrollable column. `full`
-  // hands the whole below-header area to the children instead, for a
-  // body that brings its own scroll region and pinned footer.
-  full?: boolean;
   gap?: keyof typeof BODY_CLASS;
   children: React.ReactNode;
 }) {
   return (
     <div data-doubutsu-page={page} className="flex h-full flex-col">
-      <PageHeader
-        eyebrow={eyebrow}
-        title={title}
-        watermark={watermark}
-        status={status}
-        actions={actions}
-      />
-      {full ? (
-        children
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
-          <div className={BODY_CLASS[gap]}>{children}</div>
-        </div>
-      )}
+      <PageHeader eyebrow={eyebrow} title={title} watermark={watermark} />
+      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className={BODY_CLASS[gap]}>{children}</div>
+      </div>
     </div>
   );
 }

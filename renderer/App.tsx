@@ -11,6 +11,7 @@ import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { useWatchGitRefs } from "@/hooks/git/useBranches";
 import { useWatchProjectUsage } from "@/hooks/projects/useProjects";
+import { useWatchPortForwards } from "@/hooks/remote/usePortForwards";
 import { useWatchProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useWatchWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import { router } from "./router";
@@ -37,6 +38,7 @@ function AppErrorFallback({ error }: FallbackProps) {
 export function App() {
   useWatchGitRefs();
   useWatchProjectUsage();
+  useWatchPortForwards();
   useWatchWorktreePullRequests();
   useWatchProjectPullRequests();
 

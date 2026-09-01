@@ -1,12 +1,11 @@
 // The port-forward engine's control surface for one scoped device: the
-// forward list, the broadcast that keeps it live, and the start/stop
-// pair. Everything here is CLIENT-scoped and calls window.api directly,
-// never the surrounding host scope: the listener belongs to this
-// machine, only its target is the scoped device. The list caches under
-// one client key for all devices, and this hook filters to the scope's
-// own so both the devices page's per-peer section and the worktree
-// detail's port row render off the same query and the same error
-// wording.
+// forward list and the start/stop pair. Everything here is CLIENT-scoped
+// and calls window.api directly, never the surrounding host scope: the
+// listener belongs to this machine, only its target is the scoped
+// device. The list caches under one client key for all devices, and this
+// hook filters to the scope's own so both the devices page's per-peer
+// section and the worktree detail's port row render off the same query
+// and the same error wording.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
@@ -19,19 +18,21 @@ import { notifyError } from "@/lib/toast";
 // here so the mechanism and its precondition travel together.
 export const canForwardPorts = window.api.isElectron;
 
-export function usePortForwards() {
-  const { deviceId } = useHostScope();
+// The engine broadcasts on every forward/conn change, so conn counts and
+// engine-side teardowns (peer offline) render live. It also fires for
+// this file's own mutations, so they never invalidate the list
+// themselves (the broadcast-owns-invalidation rule, see
+// renderer/hooks/account/useAccount.ts).
+//
+// Mounted ONCE from App.tsx, not per consumer: the devices page mounts a
+// forward surface per peer, and a subscription each would turn one
+// engine signal into N invalidations of the same key -- which do not
+// collapse, since invalidateQueries cancels and restarts an in-flight
+// refetch by default. The engine already coalesces conn bursts to one
+// signal per 150ms; a per-consumer listener would multiply that straight
+// back up.
+export function useWatchPortForwards(): void {
   const queryClient = useQueryClient();
-  const { data } = useQuery({
-    queryKey: queryKeys.portForwards(),
-    queryFn: () => window.api.portForward.list(),
-    meta: { silentError: true },
-  });
-  // The engine broadcasts on every forward/conn change, so conn counts
-  // and engine-side teardowns (peer offline) render live. It also fires
-  // for this hook's own mutations, so they never invalidate the list
-  // themselves (the broadcast-owns-invalidation rule, see
-  // renderer/hooks/account/useAccount.ts).
   useEffect(
     () =>
       window.api.portForward.onChanged(() => {
@@ -41,6 +42,15 @@ export function usePortForwards() {
       }),
     [queryClient],
   );
+}
+
+export function usePortForwards() {
+  const { deviceId } = useHostScope();
+  const { data } = useQuery({
+    queryKey: queryKeys.portForwards(),
+    queryFn: () => window.api.portForward.list(),
+    meta: { silentError: true },
+  });
   const start = useMutation({
     mutationFn: (remotePort: number) =>
       window.api.portForward.start({ deviceId, remotePort }),

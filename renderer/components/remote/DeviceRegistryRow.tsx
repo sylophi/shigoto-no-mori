@@ -1,7 +1,8 @@
 // One machine on the account, as a card: what it is, what state it is
-// in, what it hosts, and what this host decides about it (whether it
-// may run commands here, which of its ports reach this machine, and
-// whether it stays on the account at all).
+// in, what it hosts, what this host decides about it (whether it may
+// run commands here, and whether it stays on the account at all), and
+// the one thing that runs the other way -- forwarding its ports to this
+// machine, which the PEER's grant allows.
 //
 // The row is the unit of the page. Everything about a device is inside
 // its own card -- the rename and keep-reachable toggle for this device,
@@ -14,20 +15,23 @@ import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
 import { StatusDot, TONE_PILL } from "@/components/ui/status-dot";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import type { RemoteDeviceApi } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
-import { PortForwardSection } from "./PortForwardSection";
+import { PeerPortForwards } from "./PeerPortForwards";
 import type { HostChip } from "./deviceHostChips";
 import type { DeviceRowStatus } from "./deviceRegistryStatus";
+
+// A block hanging under the row's header, indented by its own rule so it
+// reads as a property of the machine named above it rather than as a
+// section of the page.
+const SUB_BLOCK = "mt-2.5 border-t border-border pt-2.5";
 
 export function DeviceRegistryRow({
   device,
@@ -44,7 +48,7 @@ export function DeviceRegistryRow({
   onRevokeDevice,
   revokePending,
   tunnelUp,
-  api,
+  canCommandPeer,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
@@ -70,9 +74,10 @@ export function DeviceRegistryRow({
   // B), a muted marker rather than a state: the other tunnel phases are
   // diagnostics, not something the row should shout.
   tunnelUp: boolean;
-  // A peer's device api, present once it is in the roster. Only the
-  // port-forward block needs it, to scope its calls to this machine.
-  api: RemoteDeviceApi | undefined;
+  // The OTHER direction from `granted`: true when THIS device holds
+  // command access on the peer, so it may drive verbs there. Resolved
+  // once for every row by the registry rather than per row.
+  canCommandPeer: boolean;
 }) {
   // Armed inline instead of in a modal: the sentence names the machine
   // and the row is right there to check it against, which a dialog
@@ -203,18 +208,21 @@ export function DeviceRegistryRow({
         )}
       </div>
 
-      {isThisDevice && <KeepReachableToggle />}
+      {isThisDevice && (
+        <div className={SUB_BLOCK}>
+          <KeepReachableToggle />
+        </div>
+      )}
 
-      {/* Forwarding a peer's port binds a real listener on THIS
-          machine, so it is app-only, and it needs command access on
-          the peer -- which the section itself checks under the scope
-          mounted here. Absent for an unreachable peer, which has no
-          api to forward through, and while the revoke is armed, so the
-          card asks one question at a time. */}
-      {!isThisDevice && !confirming && canForwardPorts && api !== undefined && (
-        <HostScopeProvider deviceId={device.deviceId} api={api}>
-          <PortForwardSection />
-        </HostScopeProvider>
+      {/* Forwarding a peer's port binds a real listener on THIS machine
+          (app-only) and drives a grant-gated verb on the peer, so both
+          are decided before the block mounts rather than inside it.
+          Hidden while the revoke is armed, so the card asks one question
+          at a time. */}
+      {!isThisDevice && !confirming && canForwardPorts && canCommandPeer && (
+        <div className={SUB_BLOCK}>
+          <PeerPortForwards deviceId={device.deviceId} />
+        </div>
       )}
 
       {confirming && (
