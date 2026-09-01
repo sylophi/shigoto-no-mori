@@ -96,7 +96,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		return 0, nil
 	}
 
-	caughtUp, catchUpDetail := catchUpPrimary(proj)
+	caughtUp, catchUpDetail := catchUpPrimary(proj, pr.BaseRefName)
 	if !jsonMode {
 		if caughtUp {
 			note(dimErr(fmt.Sprintf("primary checkout caught up (%s)", catchUpDetail)))
@@ -134,17 +134,37 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
+// Whether a PR merged into prBase puts anything on localPrimary, and
+// the skip reason when it does not. A PR based on a release line or a
+// long-lived feature branch leaves the primary branch untouched, so
+// pulling it would advance the primary checkout by unrelated commits
+// and then report a catch-up that never happened.
+//
+// An empty prBase means the base could not be read, which is the one
+// case that keeps the old unconditional behavior: the default base is
+// overwhelmingly the common one, so guessing it beats skipping.
+func catchUpApplies(prBase, localPrimary string) (applies bool, skip string) {
+	if prBase == "" || prBase == localPrimary {
+		return true, ""
+	}
+	return false, fmt.Sprintf("PR merged into %s, not the primary branch %s", prBase, localPrimary)
+}
+
 // Best-effort fast-forward of the primary checkout after the merge,
 // so the local primary branch sees what just landed. Skipped when the
-// primary checkout isn't sitting on the primary branch or the primary
+// PR merged somewhere other than the primary branch, when the primary
+// checkout isn't sitting on the primary branch, or when the primary
 // ref has no remote; failures never abort the command -- the merge
 // and the cleanup are the substance of land. detail is the pulled ref
 // on success and the skip reason otherwise; the caller renders it per
 // surface.
-func catchUpPrimary(proj project) (caughtUp bool, detail string) {
+func catchUpPrimary(proj project, prBase string) (caughtUp bool, detail string) {
 	pt, err := resolvePrimaryTarget(proj)
 	if err != nil {
 		return false, err.Error()
+	}
+	if applies, skip := catchUpApplies(prBase, pt.localPrimary); !applies {
+		return false, skip
 	}
 	loc, err := primaryOf(proj)
 	if err != nil {

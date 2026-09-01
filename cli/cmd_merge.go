@@ -70,6 +70,10 @@ type prSummary struct {
 	State   string `json:"state"`
 	IsDraft bool   `json:"isDraft"`
 	URL     string `json:"url"`
+	// The branch the PR merges into, which is not always the repo's
+	// default. land needs it to tell whether the primary branch is even
+	// a party to the merge.
+	BaseRefName string `json:"baseRefName"`
 }
 
 // How a branch's PR is located: gh's server-side --head filter, any
@@ -77,7 +81,7 @@ type prSummary struct {
 // looking at different pull requests. extraFields is for callers that
 // need more than prSummary carries.
 func prLookupArgs(branch string, extraFields ...string) []string {
-	fields := "number,title,state,isDraft,url"
+	fields := "number,title,state,isDraft,url,baseRefName"
 	for _, field := range extraFields {
 		fields += "," + field
 	}
