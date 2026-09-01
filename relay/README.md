@@ -19,26 +19,36 @@ or deploying the shared half.
 
 ## Deploy
 
+Two environments live in `wrangler.jsonc`: the top level is
+production (`shigomori-relay`) and `env.dev` is `shigomori-relay-dev`.
+`pnpm run deploy` targets dev and `pnpm run deploy:prod` production,
+so a bare deploy never lands on production by accident. Each has its
+own D1 database (ids pinned in the config) and its own secrets, set
+with `--env dev` for dev and no flag for production. Production stays
+undeployed until launch; everything below is written for dev, drop
+`--env dev` for the production equivalent.
+
 Prerequisites: a Cloudflare account, a Clerk application, and
 `pnpm install` run in this directory.
 
-1. Create the database and paste the printed id into the
-   `database_id` placeholder in `wrangler.jsonc`:
+1. Create the database, if it does not exist yet, and paste the
+   printed id into the matching `database_id` in `wrangler.jsonc`:
 
    ```sh
-   pnpm exec wrangler d1 create sm-relay
+   pnpm exec wrangler d1 create shigomori-relay-dev
    ```
 
 2. Apply the migrations:
 
    ```sh
-   pnpm exec wrangler d1 migrations apply sm-relay --remote
+   pnpm exec wrangler d1 migrations apply shigomori-relay-dev --remote --env dev
    ```
 
-3. Set the Clerk secret key (from the Clerk dashboard, API keys):
+3. Set the Clerk secret key of the matching Clerk instance (from the
+   Clerk dashboard, API keys):
 
    ```sh
-   pnpm exec wrangler secret put CLERK_SECRET_KEY
+   pnpm exec wrangler secret put CLERK_SECRET_KEY --env dev
    ```
 
 4. Deploy:
@@ -46,6 +56,10 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    ```sh
    pnpm run deploy
    ```
+
+At launch production additionally gets the custom domain
+`relay.shigomori.com` (a Workers custom domain on the zone) and its
+workers.dev route switched off; dev stays on workers.dev.
 
 Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
 `MAX_RELAY_MESSAGE_BYTES` change): update all devices BEFORE
@@ -79,27 +93,31 @@ advertise no tunnel candidate, and since data is direct or nothing two
 devices on different networks cannot reach each other at all (the
 Devices page says so on the this-device row).
 
-Prerequisites: a DNS zone on the same Cloudflare account (for the
-per-device CNAMEs), and an API token with Cloudflare Tunnel edit and
-DNS edit permissions scoped to that account and zone. Devices need
+Prerequisites: a DNS zone on the same Cloudflare account that holds
+nothing but tunnels (`shigomori.link`; the per-device CNAMEs go at its
+apex so they stay one level deep, which is all Universal SSL covers),
+and an API token with Cloudflare Tunnel edit on the account and DNS
+edit on that one zone. One zone serves both environments: device
+names hash the Clerk user id, which differs per Clerk instance. Devices need
 nothing installed: the app bundles a pinned `cloudflared`
 (`shared/cloudflaredDist.mts`, fetched at package time and by
 `pnpm start`). The `cloudflaredPath` device config key overrides it,
 and PATH is the fallback for a build that carries none.
 
-1. Set the API token as a secret:
+Set all four as secrets (dashboard-set plain vars do not survive a
+deploy, and the values do not belong in the config file):
 
-   ```sh
-   pnpm exec wrangler secret put CLOUDFLARE_API_TOKEN
-   ```
+```sh
+pnpm exec wrangler secret put CLOUDFLARE_API_TOKEN --env dev
+pnpm exec wrangler secret put CF_ACCOUNT_ID --env dev
+pnpm exec wrangler secret put TUNNEL_ZONE_ID --env dev
+pnpm exec wrangler secret put TUNNEL_DOMAIN --env dev
+```
 
-2. Set the plain vars (in `wrangler.jsonc` `vars` or the dashboard),
-   placeholders shown, use your own values:
-
-   - `CF_ACCOUNT_ID` - the Cloudflare account id.
-   - `TUNNEL_ZONE_ID` - the DNS zone id for the CNAMEs.
-   - `TUNNEL_DOMAIN` - the tunnel parent domain inside that zone,
-     e.g. `sm.example.com`.
+- `CLOUDFLARE_API_TOKEN` - the API token above.
+- `CF_ACCOUNT_ID` - the Cloudflare account id.
+- `TUNNEL_ZONE_ID` - the tunnel zone's id.
+- `TUNNEL_DOMAIN` - the zone apex, e.g. `example.link`.
 
 Revoking a device best-effort deletes its tunnel and DNS record.
 
@@ -118,7 +136,8 @@ None of these are secrets, so they are safe to bake into a build. Never
 commit real values.
 
 - `SM_ACCOUNT_RELAY_URL` - the deployed Worker's base URL, e.g.
-  `https://sm-relay.<account>.workers.dev`. The app joins the device and
+  `https://shigomori-relay-dev.<account>.workers.dev` for dev builds and
+  `https://relay.shigomori.com` for production. The app joins the device and
   ticket routes onto this.
 - `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` - the publishable key
   (`pk_test_...` / `pk_live_...`) of the same Clerk application whose

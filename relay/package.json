@@ -1,5 +1,5 @@
 {
-  "name": "sm-relay",
+  "name": "shigomori-relay",
   "private": true,
   "version": "0.0.0",
   "description": "Cloudflare Worker relay for Shigoto no Mori (v2 step 4): forwards opaque frames between an account's devices, no sm logic.",
@@ -7,7 +7,8 @@
   "packageManager": "pnpm@11.1.1",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "wrangler deploy --env dev",
+    "deploy:prod": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "tsc --noEmit && vitest run"
