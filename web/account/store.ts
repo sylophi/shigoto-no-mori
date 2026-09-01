@@ -3,7 +3,7 @@
 // one localStorage key. Browsers have no OS keychain, so the cipher is
 // permanently unavailable and the core stamps enc:false plaintext
 // envelopes, the same fallback a keychain-less desktop uses. That means
-// the relay credential sits in plaintext site storage: acceptable for a
+// the hub credential sits in plaintext site storage: acceptable for a
 // read-only web client whose credential the account owner can revoke
 // from any device, and the envelope shape means a future encrypted
 // backing slots in without a migration.

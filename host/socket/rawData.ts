@@ -1,5 +1,5 @@
 // Decodes a node ws inbound payload to UTF-8 text, shared by the LAN
-// listener and the relay connection. Lives under host/ rather than the
+// listener and the hub connection. Lives under host/ rather than the
 // shared frame modules because RawData and Buffer are node facts the
 // browser-consumed protocol layer must not import.
 import type { RawData } from "ws";

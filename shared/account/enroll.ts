@@ -18,22 +18,20 @@ export type EnrollDeviceDeps = {
   deviceId: string;
   // The name this device enrolls under when the store holds none yet.
   fallbackDeviceName: string;
-  // Opaque platform label the relay stores beside the device
+  // Opaque platform label the hub stores beside the device
   // (os.platform() on desktop, "web" in a browser).
   platform: string;
 };
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
-// ClerkAccountSync off the live session) for the relay device
+// ClerkAccountSync off the live session) for the hub device
 // credential and persists it with the token's account id.
 export async function enrollDevice(
   deps: EnrollDeviceDeps,
   token: string,
 ): Promise<void> {
   if (!isConfigured(deps.config)) {
-    throw new Error(
-      "the relay account service is not configured on this build",
-    );
+    throw new Error("the hub account service is not configured on this build");
   }
   const deviceName = deps.store.read()?.deviceName ?? deps.fallbackDeviceName;
   const enrollment = await deps.service.enroll(token, {
@@ -48,7 +46,7 @@ export async function enrollDevice(
   });
 }
 
-// Best-effort revoke of THIS device on the relay, then the local
+// Best-effort revoke of THIS device on the hub, then the local
 // credential clear. The revoke failure is reported, not thrown,
 // because local sign-out must always succeed, even offline.
 export async function signOutDevice(deps: {

@@ -1,17 +1,17 @@
 // "/devices" on the web: the account's machines, wearing the desktop
 // Devices page's chrome (PageShell, the "devices" wallpaper zone,
 // Account over Devices sections). Data comes through the same hooks the
-// desktop uses (useAccount) plus the remote device registry the relay
+// desktop uses (useAccount) plus the remote device registry the hub
 // sync maintains, so status semantics cannot drift between the two
 // clients. Web-specific substance: the deployment access banner, the
-// honest relay reachability messages, and per-device account-level
+// honest hub reachability messages, and per-device account-level
 // revoke (a browser cannot grant command access, so no grant toggles).
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
 import type { AccountStatus } from "@shared/ipc/modules/account";
-import type { RelayStatus } from "@shared/ipc/modules/relay";
-import type { DeviceInfo } from "@shared/relay/protocol";
+import type { HubStatus } from "@shared/ipc/modules/hub";
+import type { DeviceInfo } from "@shared/hub/protocol";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { RowTag } from "@/components/ui/row-tag";
@@ -28,13 +28,13 @@ import {
   useRevokeDevice,
 } from "@/hooks/account/useAccount";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
-import { useRelayStatus } from "@/hooks/remote/useRelayStatus";
+import { useHubStatus } from "@/hooks/remote/useHubStatus";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { abbreviateId } from "@/lib/abbreviateId";
 import { platformLabel } from "@/lib/platformLabel";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { isFetchFailure, isRelayRefusedError } from "../account/webAccess";
+import { isFetchFailure, isHubRefusedError } from "../account/webAccess";
 import { webBridge } from "../bridge/install";
 import { redirectTo, webPaths } from "./nav";
 
@@ -74,7 +74,7 @@ export function DevicesPage() {
 function DevicesBody({ status }: { status: AccountStatus }) {
   const devices = useAccountDevices();
   const webAccess = useWebAccess();
-  const relayStatus = useRelayStatus();
+  const hubStatus = useHubStatus();
 
   return (
     <>
@@ -98,8 +98,8 @@ function DevicesBody({ status }: { status: AccountStatus }) {
 
         {webAccess.kind === "blocked" && (
           <ErrorBanner>
-            The relay refused this request ({webAccess.message}). This
-            deployment cannot serve the device list until the relay accepts it.
+            The hub refused this request ({webAccess.message}). This deployment
+            cannot serve the device list until the hub accepts it.
           </ErrorBanner>
         )}
 
@@ -117,7 +117,7 @@ function DevicesBody({ status }: { status: AccountStatus }) {
               <DeviceRow
                 key={info.deviceId}
                 info={info}
-                relayStatus={relayStatus}
+                hubStatus={hubStatus}
               />
             ))}
           </div>
@@ -156,17 +156,17 @@ function BrowserNameField({ deviceName }: { deviceName: string }) {
 }
 
 // One honest sentence per failure shape. A browser cannot tell a
-// refusing relay from an unreachable one when the response carries no
+// refusing hub from an unreachable one when the response carries no
 // CORS headers, so the fetch-failure branch names both possibilities
 // instead of guessing.
 function reachabilityMessage(error: unknown): string {
-  if (isRelayRefusedError(error)) {
-    return "The relay refused this request, so the device list is unavailable.";
+  if (isHubRefusedError(error)) {
+    return "The hub refused this request, so the device list is unavailable.";
   }
   if (isFetchFailure(error)) {
     return (
-      "Couldn't reach the relay. Either you are offline, or this " +
-      "deployment's relay URL does not point at a reachable Worker."
+      "Couldn't reach the hub. Either you are offline, or this " +
+      "deployment's hub URL does not point at a reachable Worker."
     );
   }
   return `Couldn't load the device list: ${errorMessageOf(error)}`;
@@ -174,19 +174,19 @@ function reachabilityMessage(error: unknown): string {
 
 function DeviceRow({
   info,
-  relayStatus,
+  hubStatus,
 }: {
   info: DeviceInfo;
-  relayStatus: RelayStatus | null;
+  hubStatus: HubStatus | null;
 }) {
   const isSelf = info.deviceId === window.api.deviceId;
   const remoteDevices = useRemoteDevices();
   const entry = remoteDevices.find((d) => d.deviceId === info.deviceId);
-  // Own row: the relay socket IS this device's presence. Peers: the
+  // Own row: the hub socket IS this device's presence. Peers: the
   // registry's derived status, or the socket phase before the registry
   // catches up.
   const supervisorStatus = isSelf
-    ? (relayStatus?.socket ?? { phase: "idle" as const })
+    ? (hubStatus?.socket ?? { phase: "idle" as const })
     : (entry?.status ?? { phase: "stopped" as const });
 
   return (
@@ -217,7 +217,7 @@ function DeviceRow({
 
 // Revoking THIS browser must end the Clerk session first (with the
 // session alive, ClerkAccountSync would immediately re-enroll the
-// cleared credential), and the sign-out path (Clerk end, relay revoke,
+// cleared credential), and the sign-out path (Clerk end, hub revoke,
 // local clear) is exactly the self-revoke semantics. Split from the
 // peer button so only the self row touches a Clerk hook (rows exist
 // only when enrolled, which implies a mounted provider).

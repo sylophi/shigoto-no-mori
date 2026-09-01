@@ -7,7 +7,7 @@ import { useClerk } from "@clerk/react";
 import { useMutation } from "@tanstack/react-query";
 
 // Ends the Clerk session first, then the account layer (best-effort
-// relay revoke plus local credential clear). Clerk first, so a relay
+// hub revoke plus local credential clear). Clerk first, so a hub
 // hiccup in the second step cannot leave a live session that
 // ClerkAccountSync would immediately re-enroll. The account half is
 // passed as Clerk's sign-out callback: without one, clerk-js

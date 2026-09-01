@@ -1,4 +1,4 @@
-// The renderer's view of the relay account layer (v2 step 4, slice B):
+// The renderer's view of the hub account layer (v2 step 4, slice B):
 // status, the account's device registry, and the sign-in / sign-out /
 // rename mutations. All client-scoped, so the queries key off the plain
 // "account" prefix (no host sentinel, see queryKeys.ts) and the changed
@@ -6,7 +6,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AccountStatus } from "@shared/ipc/modules/account";
-import type { DeviceInfo } from "@shared/relay/protocol";
+import type { DeviceInfo } from "@shared/hub/protocol";
 import { queryKeys } from "@/lib/queryKeys";
 
 // Account status: configured/signedIn plus this device's stored name.
@@ -26,7 +26,7 @@ export function useAccountStatus() {
   });
 }
 
-// The account's device registry from the relay. Both call sites render
+// The account's device registry from the hub. Both call sites render
 // only under a signed-in guard, so a signed-out or unconfigured app
 // never mounts this and never hits the network (and the handler returns
 // [] in those states anyway).
@@ -57,7 +57,7 @@ export function useWatchAccountChanges(): void {
 // broadcast, and useWatchAccountChanges invalidates the whole "account"
 // prefix off that reliable local IPC, so a per-mutation invalidation
 // would only duplicate it.
-// Exchanges a fresh Clerk session token for the relay device
+// Exchanges a fresh Clerk session token for the hub device
 // credential. Driven by ClerkAccountSync after Clerk reports a
 // session. The Clerk sign-in UI itself never touches this layer.
 // Takes the token mint as a callback so a failed mint lands in the
@@ -73,7 +73,7 @@ export function useEnroll() {
   });
 }
 
-// The account layer's half of sign-out (best-effort relay revoke plus
+// The account layer's half of sign-out (best-effort hub revoke plus
 // local credential clear). ClerkAccountSync drives it when the Clerk
 // session ends, while the UI buttons go through useClerkSignOut, which ends
 // the Clerk session first and then this same IPC call.
@@ -84,7 +84,7 @@ export function useAccountSignOut() {
   });
 }
 
-// Removes another device from the account on the relay. Like the
+// Removes another device from the account on the hub. Like the
 // grant mutations it does not invalidate itself: main broadcasts
 // account:changed (and grantsChanged) after the revoke, and the
 // watchers above turn those into the invalidations. Self-revoke is not

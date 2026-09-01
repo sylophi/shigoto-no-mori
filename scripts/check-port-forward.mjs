@@ -1,7 +1,7 @@
 // Durable proof for the port-forward wire (v2 step 8, slice A;
 // direct-only since step 10 slice C): TCP bytes as chunked,
 // grant-gated invoke responses over a REAL DIRECT websocket between
-// the two fixtures, brokered by the stub relay exactly as production
+// the two fixtures, brokered by the stub hub exactly as production
 // does (scripts/lib/directBoot.mjs). Nothing here is a double on the
 // forward path itself: device A registers the REAL forward contract
 // and handlers on a real ticket-mode listener, B drives them through
@@ -13,9 +13,9 @@
 //   - server-initiated bytes arrive through poll without an uplink
 //     write first (the long-poll downlink).
 //   - a ~1.5 MB transfer crosses chunked, byte-identical, in multiple
-//     send AND poll round trips, while the stub relay's forwardedCount
+//     send AND poll round trips, while the stub hub's forwardedCount
 //     stays FLAT (nothing but the one-time broker frames ever rides
-//     the relay).
+//     the hub).
 //   - a server-side close drains buffered bytes before eof, refuses a
 //     send with the coded "conn-closed", and a drained conn is gone
 //     ("unknown-conn").
@@ -28,7 +28,7 @@
 // Slice B adds the CLIENT ENGINE (main/portForward/engine.ts), which is
 // electron-free and driven here over the same peer transport, so every
 // engine scenario exercises the full chain: a plain local TCP client ->
-// engine listener -> relay stub -> host verbs -> loopback fixture.
+// engine listener -> hub stub -> host verbs -> loopback fixture.
 // Asserts on top of the slice A set:
 //   - a local dial round-trips an echo through the whole chain, and a
 //     duplicate startForward returns the existing forward.
@@ -63,7 +63,7 @@ import {
 } from "../main/portForward/engine.ts";
 import { makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
-import { delay, waitFor } from "./lib/relayBoot.mjs";
+import { delay, waitFor } from "./lib/hubBoot.mjs";
 
 // once() with waitFor's deadline treatment: an event that never fires
 // fails loudly with a descriptive message instead of hanging the check.
@@ -185,7 +185,7 @@ async function main() {
 
   // The direct wire: A hosts the forward surface on a real ticket-mode
   // listener, B drives it through the real dialer and bridge cache,
-  // and the stub relay carries only the broker exchange
+  // and the stub hub carries only the broker exchange
   // (bootDirectWire, the shared fixture).
   const { track, teardown } = makeTracker();
   track(() => echo.close());
@@ -261,14 +261,14 @@ async function main() {
 
     // (4) A ~1.5 MB transfer, chunked both ways: sent in
     // WIRE_CHUNK_BYTES slices, echoed back, polled until complete. The
-    // transfer rides the direct socket, so the stub relay must stay
+    // transfer rides the direct socket, so the stub hub must stay
     // COMPLETELY flat (it only ever saw the one-time broker exchange).
     // Chunking is proven on both halves: the send half counts the
     // registered handler's dispatches SERVER-SIDE (production frames
     // that crossed the wire, not this loop's own iterations), and the
     // poll half counts client round trips through the peer transport.
     const big = randomBytes(1_500_000);
-    const relayBaseline = stub.forwardedCount();
+    const hubBaseline = stub.forwardedCount();
     const sendsBefore = serverSends;
     const pollsBefore = peerA.invokeCount("forward:poll");
     const bulk = await forward.open({ port: echo.port });
@@ -292,12 +292,12 @@ async function main() {
     assert.ok(pollReqs >= 3, `expected >= 3 poll frames, saw ${pollReqs}`);
     assert.equal(
       stub.forwardedCount(),
-      relayBaseline,
-      "the port-forward stream rode the relay instead of the direct socket",
+      hubBaseline,
+      "the port-forward stream rode the hub instead of the direct socket",
     );
     await forward.close({ connId: bulk.connId });
     ok(
-      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the relay flat, byte-identical",
+      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the hub flat, byte-identical",
     );
 
     // (5) The server closes: buffered bytes drain first (eof only once
@@ -513,7 +513,7 @@ async function main() {
     // exported MAX_CONNS_PER_DEVICE so this scenario tracks the
     // constant: the first local socket OVER the cap is destroyed
     // immediately while the capped set stands. Mirrors the host's
-    // MAX_CONNS without spending a relay round trip on the doomed dial.
+    // MAX_CONNS without spending a hub round trip on the doomed dial.
     const capOpensBefore = peerA.invokeCount("forward:open");
     const capSockets = [];
     for (let i = 0; i < MAX_CONNS_PER_DEVICE; i += 1) {
@@ -563,7 +563,7 @@ async function main() {
   } finally {
     engine?.stopAll();
     // Reverse creation order via the shared tracker: the direct
-    // sessions and listener first, then the relay connections, then
+    // sessions and listener first, then the hub connections, then
     // the stub and the fixture server.
     await teardown();
   }

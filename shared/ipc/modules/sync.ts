@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
-import { DeviceIdSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
   CommitHashSchema,
   GitRefNameSchema,

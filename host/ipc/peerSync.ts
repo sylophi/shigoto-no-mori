@@ -3,7 +3,7 @@
 // remote plumbing lives in main/, so this seam owns the api shape and
 // the sync handlers stay free of Electron imports. The injected
 // factory must route through the bridge's SHARED direct-session cache
-// (makeRelayHandlers), never a fresh dial: the host keeps exactly one
+// (makeHubHandlers), never a fresh dial: the host keeps exactly one
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
 import type { syncContract } from "@shared/ipc/modules/sync";

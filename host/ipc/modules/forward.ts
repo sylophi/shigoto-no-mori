@@ -24,7 +24,7 @@ const CONN_IDLE_MS = 10 * 60_000;
 // websocket, so the old cap of 8 saturated on one load and the next
 // socket died silently. It must still sit well under
 // MAX_IN_FLIGHT_PER_PEER = 64 (shared/ipc/socket/frames.ts, raised
-// 32 -> 64 in the paired relay change): each conn parks a long-poll in
+// 32 -> 64 in the paired hub change): each conn parks a long-poll in
 // one of the peer's shared in-flight slots, so a cap near that starves
 // the peer's ordinary UI invokes.
 const MAX_CONNS = 16;

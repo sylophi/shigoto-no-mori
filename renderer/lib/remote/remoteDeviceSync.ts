@@ -1,13 +1,13 @@
 // Producer for the remote device registry (v2 step 4, slice C).
-// Rebuilds the store from the account's device registry plus the relay
-// bridge's live status, on boot, on account changes and on every relay
+// Rebuilds the store from the account's device registry plus the hub
+// bridge's live status, on boot, on account changes and on every hub
 // statusChanged broadcast. There is no per-device
-// supervisor here: the one relay socket lives in main, so a relay
+// supervisor here: the one hub socket lives in main, so a hub
 // device's status DERIVES from the bridge instead of being driven.
 //
 // Status mapping, chosen to lie the least given the
 // RemoteDeviceStatus vocabulary:
-//   - relay socket not connected: mirror the socket's supervisor phase
+//   - hub socket not connected: mirror the socket's supervisor phase
 //     (connecting, backoff, blocked and so on), because no peer is
 //     reachable while the socket is down and the socket's state is the
 //     honest reason.
@@ -29,12 +29,9 @@
 //     switched off), so the slate "Off" is the least-lying option.
 import type { QueryClient } from "@tanstack/react-query";
 import { buildApi } from "@shared/ipc/client";
-import type { RelayStatus } from "@shared/ipc/modules/relay";
-import type { DeviceInfo } from "@shared/relay/protocol";
-import {
-  publishRelayStatus,
-  seedRelayStatus,
-} from "@/hooks/remote/useRelayStatus";
+import type { HubStatus } from "@shared/ipc/modules/hub";
+import type { DeviceInfo } from "@shared/hub/protocol";
+import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
 import { invalidateDeviceSession } from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
@@ -43,17 +40,17 @@ import {
   type RemoteDeviceStatus,
   setRemoteDevices,
 } from "./devices";
-import { createRelayClientTransport } from "./relayTransport";
+import { createHubClientTransport } from "./hubTransport";
 
 // The account device list, cached so presence and backoff transitions
-// rebuild statuses without hitting the relay's HTTP endpoint every
+// rebuild statuses without hitting the hub's HTTP endpoint every
 // time. Refetched when unknown, on account changes, and when the
 // socket transitions into connected (a reconnect may follow an enroll
 // or revoke elsewhere).
 let cachedList: DeviceInfo[] | null = null;
 let lastSocketPhase = "";
 
-// One api per relay deviceId, built on first reachable sighting and
+// One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
 // that peer is supervised desired state (main's keeper redials it
 // forever), so the api never goes stale the way a dead socket does.
@@ -73,25 +70,25 @@ const lastPhases = new Map<string, RemoteDeviceStatus["phase"]>();
 // reruns once with the newest status when work piles up (M3).
 let inFlight = false;
 let dirty = false;
-let queuedStatus: RelayStatus | undefined;
+let queuedStatus: HubStatus | undefined;
 
 function apiFor(deviceId: string): RemoteDeviceApi {
   const existing = apis.get(deviceId);
   if (existing !== undefined) return existing;
   const api = buildApi({
-    host: createRelayClientTransport(deviceId),
+    host: createHubClientTransport(deviceId),
     client: rejectingClientTransport,
   });
   apis.set(deviceId, api);
   return api;
 }
 
-async function reconcileNow(status?: RelayStatus): Promise<void> {
-  const current = status ?? (await window.api.relay.status());
+async function reconcileNow(status?: HubStatus): Promise<void> {
+  const current = status ?? (await window.api.hub.status());
   // A fetched snapshot seeds the shared store (a broadcast that raced
   // it is newer and wins), so this module stays the store's single
   // writer and the hooks never race a fetch of their own.
-  if (status === undefined) seedRelayStatus(current);
+  if (status === undefined) seedHubStatus(current);
   const phase = current.socket.phase;
   const localDeviceId = window.api.deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -166,7 +163,7 @@ function noteConvergence(devices: readonly RemoteDevice[]): void {
 // value is the session's welcome-confirmed version.
 function buildEntry(
   info: DeviceInfo,
-  current: RelayStatus,
+  current: HubStatus,
   online: ReadonlySet<string>,
 ): RemoteDevice {
   const socketConnected = current.socket.phase === "connected";
@@ -205,7 +202,7 @@ function buildEntry(
   };
 }
 
-function reconcile(status?: RelayStatus): void {
+function reconcile(status?: HubStatus): void {
   queuedStatus = status;
   if (inFlight) {
     dirty = true;
@@ -228,10 +225,10 @@ async function drainReconciles(): Promise<void> {
   }
 }
 
-// Boot wiring: reconcile once now, then follow account and relay
+// Boot wiring: reconcile once now, then follow account and hub
 // changes for the life of the window. Never unsubscribed on purpose,
 // exactly like the other boot-scope subscriptions in index.tsx. This
-// subscription is also the ONE writer of the useRelayStatus store:
+// subscription is also the ONE writer of the useHubStatus store:
 // every snapshot it sees is published there, so no hook needs a
 // subscription or an initial fetch of its own. The boot's query client
 // comes in rather than being reached for, because both boots
@@ -242,8 +239,8 @@ export function startRemoteDeviceSync(queryClient: QueryClient): void {
     cachedList = null;
     reconcile();
   });
-  window.api.relay.onStatusChanged((status) => {
-    publishRelayStatus(status);
+  window.api.hub.onStatusChanged((status) => {
+    publishHubStatus(status);
     reconcile(status);
   });
   reconcile();

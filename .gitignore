@@ -61,7 +61,7 @@ typings/
 .env
 .env.test
 
-# Local, non-secret relay account service config (SM_ACCOUNT_* vars) read
+# Local, non-secret hub account service config (SM_ACCOUNT_* vars) read
 # as a dev convenience by main/ipc/modules/account.ts and loaded by Vite
 # for the web build. Never committed.
 .env*.local

@@ -126,7 +126,7 @@ jobs:
           # these ships with remote features unconfigured. Set them as
           # repository Actions variables (they are not secrets).
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_ACCOUNT_RELAY_URL: ${{ vars.SM_ACCOUNT_RELAY_URL }}
+          SM_ACCOUNT_HUB_URL: ${{ vars.SM_ACCOUNT_HUB_URL }}
           SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
         run: pnpm exec electron-forge publish --dry-run
 

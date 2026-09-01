@@ -31,85 +31,85 @@ pre-commit:
     # the invariant through allContractModules), so adding an untagged
     # host invoke also trips it.
     socket:
-      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/relay/protocol.ts,main/ipc/register.ts,scripts/check-socket-host.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,scripts/check-socket-host.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run socket:check
-    # Typechecks the relay Worker package and runs its vitest suite
+    # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,
-    # relay, presence and revocation semantics cannot drift from
-    # shared/relay/protocol.ts. relay/ is a standalone pnpm project with
+    # relaying, presence and revocation semantics cannot drift from
+    # shared/hub/protocol.ts. hub/ is a standalone pnpm project with
     # its own lockfile, which the check installs first. One caveat: the
-    # shared files it imports (shared/relay/protocol.ts and the frames.ts
-    # it re-exports) live outside relay/, so their `zod` import resolves
-    # from the repo-root node_modules, not relay/node_modules. The two
+    # shared files it imports (shared/hub/protocol.ts and the frames.ts
+    # it re-exports) live outside hub/, so their `zod` import resolves
+    # from the repo-root node_modules, not hub/node_modules. The two
     # installs pin the same zod, so a root install is a prerequisite for
     # those shared files.
-    relay:
-      glob: "{relay/**,shared/relay/**}"
-      run: pnpm run relay:check
-    # Boots a stub Durable Object (a node ws server speaking the relay
-    # envelope protocol) and drives two REAL relay connections through
-    # the real link, asserting the sm hello/welcome over the relay, id
+    hub:
+      glob: "{hub/**,shared/hub/**}"
+      run: pnpm run hub:check
+    # Boots a stub Durable Object (a node ws server speaking the hub
+    # envelope protocol) and drives two REAL hub connections through
+    # the real link, asserting the sm hello/welcome over the hub, id
     # correlation, the void-field framing invariant, broadcast gating,
     # message-only error serialization, the local outbound size guard,
     # offline nacks, presence-driven peer teardown, fresh-ticket
     # redials, the revoked/superseded blocked verdicts, the ignored
-    # hello token and the per-peer in-flight cap. Gated to the relay
+    # hello token and the per-peer in-flight cap. Gated to the hub
     # transport surface plus the sm frame layer it multiplexes.
-    relaylink:
-      glob: "{shared/relay/**,shared/remote/**,host/relay/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-relay-link.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run relaylink:check
+    hublink:
+      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-hub-link.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run hublink:check
     # Durable proof for the direct data plane (v2 step 10, supervised
     # in step 11): boots the stub Durable Object plus a REAL
     # ticket-mode listener on an ephemeral loopback port, brokers
-    # connect tickets over the relay via direct:connectInfo, and
+    # connect tickets over the hub via direct:connectInfo, and
     # asserts the whole plane: fail-closed brokering without a caller
     # identity, ticket single-use, expiry and wrong-peer binding, the
     # live grant gate on the direct wire, direct-or-nothing routing
     # (sessionless invokes refuse without dialing) with cache drop on
     # close, the keeper's supervision (presence-driven eager dials,
     # the shared forever ladder, parking on terminal verdicts), invokes
-    # flowing with the relay's forwardedCount flat, and pushes reaching
+    # flowing with the hub's forwardedCount flat, and pushes reaching
     # a direct-connected client through the shared peerPush path. Gated
-    # to the direct surface plus the socket and relay layers it
+    # to the direct surface plus the socket and hub layers it
     # composes.
     direct-plane:
-      glob: "{host/direct/**,shared/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/relay/**,host/relay/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{host/direct/**,shared/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
-    # and moves a >1.5 MB git bundle between two REAL relay connections
+    # and moves a >1.5 MB git bundle between two REAL hub connections
     # as chunked grant-gated invokes (real handlers, real CLI, real
     # git), asserting grant refusal for ungranted peers, the
     # refs/shigomori/-only landing namespace, byte-identical objects,
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/relay/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run sync:check
     # End-to-end proof for the port-forward wire: drives the host-side
-    # forward verbs between two REAL relay connections against real
+    # forward verbs between two REAL hub connections against real
     # loopback TCP fixture servers, asserting grant refusal before any
     # dial, echo round trips, server-initiated bytes over the long-poll
-    # downlink, a ~1.5 MB transfer chunked under the relay frame cap,
+    # downlink, a ~1.5 MB transfer chunked under the hub frame cap,
     # drain-then-eof on server close, the coded connect failure, and
     # idempotent teardown. Slice B adds the client engine (local
     # listeners, both pumps, eof propagation, stopForward teardown and
     # the per-forward conn cap) driven over the same wire. Gated to the
-    # forward surface plus the stub relay it rides.
+    # forward surface plus the stub hub it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/relay/protocol.ts,host/ipc/modules/forward.ts,host/relay/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/relayStub.mjs,scripts/lib/relayBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run forward:check
-    # Boots the same stub Durable Object and drives the BROWSER relay
-    # connection (web/relay/connection.ts, built on the global WebSocket)
+    # Boots the same stub Durable Object and drives the BROWSER hub
+    # connection (web/hub/connection.ts, built on the global WebSocket)
     # under node against a real node host peer, asserting connect,
     # connectPeer hello/welcome, a peer invoke round trip, presence, the
     # revoked/superseded blocked verdicts, a fresh-ticket redial and the
-    # per-dial ticket mint. Gated to the browser connection plus the relay
+    # per-dial ticket mint. Gated to the browser connection plus the hub
     # transport surface it drives.
-    web-relay:
-      glob: "{web/**,shared/relay/**,shared/remote/**,shared/util/limit.ts,host/relay/**,scripts/check-web-relay.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run web:relay:check
+    web-hub:
+      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,scripts/check-web-hub.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run web:hub:check
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),
     # the localStorage-backed clientConfig and credential stores, the
@@ -117,9 +117,9 @@ pre-commit:
     # (platform "web") and the sign-out revoke, the schema-derived
     # stubs for OS-bound channels, and the typed
     # unconfigured/origin-blocked access states that keep a
-    # misconfigured deployment from looping the relay supervisor.
+    # misconfigured deployment from looping the hub supervisor.
     web-bridge:
-      glob: "{web/**,shared/account/**,shared/ipc/**,shared/relay/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:bridge:check
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
@@ -129,7 +129,7 @@ pre-commit:
       glob: "{main/liveness/**,scripts/check-liveness.mjs}"
       run: pnpm run liveness:check
     # Drives the electron-free account layer (main/account/*,
-    # shared/account/*) end to end with stubs: the relay client's
+    # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas
     # (Clerk session token at enroll, device credential everywhere
     # else), the credential store's encrypt and plaintext-fallback
@@ -137,7 +137,7 @@ pre-commit:
     # Sign-in itself is Clerk's embedded UI, so it has no pure core to
     # prove here. Gated to the account surface so it stays off
     # unrelated commits. Proves enrollment and storage cannot drift
-    # from shared/relay/protocol.ts without electron or a browser.
+    # from shared/hub/protocol.ts without electron or a browser.
     account:
-      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/relay/protocol.ts,scripts/check-account.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,scripts/check-account.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run account:check

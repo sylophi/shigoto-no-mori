@@ -1,4 +1,4 @@
-// Non-secret service configuration for the relay account layer, read
+// Non-secret service configuration for the hub account layer, read
 // from the environment at launch. Everything here is a public endpoint
 // or a public Clerk publishable key, never a secret, so it is safe to
 // log and safe to ship empty. Empty required fields mean "the owner has
@@ -6,19 +6,19 @@
 // module is pure (no electron, no node builtins) so the account check
 // script can drive it without a running app.
 
-// The env vars an owner sets after deploying the relay Worker and
+// The env vars an owner sets after deploying the hub Worker and
 // creating a Clerk application. All non-secret.
 export type AccountServiceConfig = {
-  // Base URL of the relay Worker, e.g. https://relay.example.com. The
-  // account service joins RELAY_ROUTES paths onto this.
-  relayUrl: string;
+  // Base URL of the hub Worker, e.g. https://hub.example.com. The
+  // account service joins HUB_ROUTES paths onto this.
+  hubUrl: string;
   // The Clerk publishable key (pk_test_... / pk_live_...) of the same
-  // Clerk application whose secret key the relay Worker verifies
+  // Clerk application whose secret key the hub Worker verifies
   // session tokens with. Publishable by definition: it only names the
   // instance's Frontend API host.
   publishableKey: string;
   // Exact origin of the deployed web client (v2 step 10, slice B).
-  // Desktop-only: the relay serves any origin, this gate does not.
+  // Desktop-only: the hub serves any origin, this gate does not.
   // The direct listener's Origin gate admits browser dials from
   // exactly this origin, so a web client can dial wss tunnel URLs.
   // Empty means no web origin is admitted, which was the only prior
@@ -34,7 +34,7 @@ export function resolveServiceConfig(
   env: Record<string, string | undefined>,
 ): AccountServiceConfig {
   return {
-    relayUrl: (env.SM_ACCOUNT_RELAY_URL ?? "").trim(),
+    hubUrl: (env.SM_ACCOUNT_HUB_URL ?? "").trim(),
     publishableKey: (env.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY ?? "").trim(),
     webOrigin: (env.SM_ACCOUNT_WEB_ORIGIN ?? "").trim(),
   };
@@ -43,7 +43,7 @@ export function resolveServiceConfig(
 // True only when every field the account layer needs is present. The
 // renderer disables Sign in until this is true.
 export function isConfigured(config: AccountServiceConfig): boolean {
-  return config.relayUrl.length > 0 && config.publishableKey.length > 0;
+  return config.hubUrl.length > 0 && config.publishableKey.length > 0;
 }
 
 // Minimal KEY=VALUE dotenv parser for the gitignored .env.local dev

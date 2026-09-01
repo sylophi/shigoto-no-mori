@@ -5,7 +5,7 @@
 // registration (scripts/dev-electron.mts), the socket host's Origin
 // gate (host/socket/server.ts, the renderer's WebSocket dials carry
 // this origin), and the Clerk instance's allowed_origins
-// (relay/README.md).
+// (hub/README.md).
 // A divergence breaks packaged OAuth deep links or direct dials with
 // no build error, so every consumer derives from here. Constant-only
 // module aside from the flavor switch: forge config, main, host and

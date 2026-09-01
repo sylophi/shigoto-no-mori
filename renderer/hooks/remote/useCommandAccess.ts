@@ -21,7 +21,7 @@ function commandAccessQueryOptions(deviceId: string, api: HostApi | undefined) {
     // A permission verdict only moves when the host grants or revokes,
     // which no channel pushes to this side, so the honest refreshes are
     // the session-landed sweep (invalidateDeviceSession) and a window
-    // focus past this window -- not a relay round-trip per mount, which
+    // focus past this window -- not a hub round-trip per mount, which
     // is what the client's staleTime 0 would buy.
     staleTime: 30_000,
     meta: { silentError: true },

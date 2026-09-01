@@ -1,6 +1,6 @@
-// The typed HTTP client for the relay Worker's device and ticket
+// The typed HTTP client for the hub Worker's device and ticket
 // endpoints. Pure: it takes a base URL and an injected fetch, uses the
-// shared route table and zod schemas from shared/relay/protocol.ts, and
+// shared route table and zod schemas from shared/hub/protocol.ts, and
 // imports no electron and no node builtins, so the account check script
 // can drive every method with a recording fetch stub.
 //
@@ -15,7 +15,7 @@ import {
   EnrollRequestSchema,
   EnrollResponseSchema,
   ErrorBodySchema,
-  RELAY_ROUTES,
+  HUB_ROUTES,
   TicketResponseSchema,
   TUNNEL_UNCONFIGURED_STATUS,
   TunnelProvisionRequestSchema,
@@ -24,18 +24,18 @@ import {
   type EnrollResponse,
   type TicketResponse,
   type TunnelProvisionResponse,
-} from "@shared/relay/protocol";
+} from "@shared/hub/protocol";
 
-// A relay call answered non-2xx. Carries the HTTP status so callers
+// A hub call answered non-2xx. Carries the HTTP status so callers
 // that classify outcomes (the tunnel provision path) can read it off
-// the error instead of re-fetching. The message is still the relay's
+// the error instead of re-fetching. The message is still the hub's
 // own `{ error }` body when one parsed, so existing message matchers
 // keep working.
-export class RelayRequestError extends Error {
+export class HubRequestError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {
     super(message);
-    this.name = "RelayRequestError";
+    this.name = "HubRequestError";
     this.status = status;
   }
 }
@@ -46,7 +46,7 @@ export class RelayRequestError extends Error {
 // rather than backing off into a loop that can never succeed.
 export class TunnelUnconfiguredError extends Error {
   constructor() {
-    super("tunnel provisioning is not configured on the relay");
+    super("tunnel provisioning is not configured on the hub");
     this.name = "TunnelUnconfiguredError";
   }
 }
@@ -98,24 +98,24 @@ export type AccountService = {
   ): Promise<TunnelProvisionResponse>;
 };
 
-// Turns a non-2xx response into a thrown RelayRequestError carrying the
-// relay's own `{ error }` message when the body parses, else the status
-// code. The one place a failed relay call becomes an exception.
+// Turns a non-2xx response into a thrown HubRequestError carrying the
+// hub's own `{ error }` message when the body parses, else the status
+// code. The one place a failed hub call becomes an exception.
 async function fail(response: Response): Promise<never> {
-  let message = `relay request failed with status ${response.status}`;
+  let message = `hub request failed with status ${response.status}`;
   try {
     const parsed = ErrorBodySchema.safeParse(await response.json());
     if (parsed.success) message = parsed.data.error;
   } catch {
     // Non-JSON or unreadable body. The status-code message stands.
   }
-  throw new RelayRequestError(message, response.status);
+  throw new HubRequestError(message, response.status);
 }
 
 export function createAccountService(deps: AccountServiceDeps): AccountService {
   const doFetch = deps.fetchImpl ?? fetch;
 
-  // Joins a relay path onto the base URL. new URL keeps a base with a
+  // Joins a hub path onto the base URL. new URL keeps a base with a
   // path prefix intact by making the route absolute-rooted.
   const urlFor = (path: string): string => {
     const base = deps.baseUrl.endsWith("/")
@@ -153,12 +153,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
   return {
     async enroll(sessionToken, fields) {
       // Validate the body before sending so a bad deviceId/name/platform
-      // fails here with a clear zod error, not as a relay 400.
+      // fails here with a clear zod error, not as a hub 400.
       const body = EnrollRequestSchema.parse(fields);
       return EnrollResponseSchema.parse(
         await credentialed(
-          RELAY_ROUTES.enroll,
-          RELAY_ROUTES.enroll.path,
+          HUB_ROUTES.enroll,
+          HUB_ROUTES.enroll.path,
           sessionToken,
           { body },
         ),
@@ -168,19 +168,19 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     async listDevices(credential) {
       return DeviceListResponseSchema.parse(
         await credentialed(
-          RELAY_ROUTES.listDevices,
-          RELAY_ROUTES.listDevices.path,
+          HUB_ROUTES.listDevices,
+          HUB_ROUTES.listDevices.path,
           credential,
         ),
       ).devices;
     },
 
     async revoke(credential, deviceId) {
-      // The relay answers a successful revoke with 204 No Content. Any
+      // The hub answers a successful revoke with 204 No Content. Any
       // other non-2xx is a real failure.
       await credentialed(
-        RELAY_ROUTES.revokeDevice,
-        RELAY_ROUTES.revokeDevice.path(deviceId),
+        HUB_ROUTES.revokeDevice,
+        HUB_ROUTES.revokeDevice.path(deviceId),
         credential,
       );
     },
@@ -188,8 +188,8 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     async mintTicket(credential, signal) {
       return TicketResponseSchema.parse(
         await credentialed(
-          RELAY_ROUTES.mintTicket,
-          RELAY_ROUTES.mintTicket.path,
+          HUB_ROUTES.mintTicket,
+          HUB_ROUTES.mintTicket.path,
           credential,
           { signal },
         ),
@@ -198,13 +198,13 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
 
     async provisionTunnel(credential, port, signal) {
       // Validate before sending, like enroll, so a bad port fails here
-      // with a clear zod error instead of a relay 400.
+      // with a clear zod error instead of a hub 400.
       const body = TunnelProvisionRequestSchema.parse({ port });
       try {
         return TunnelProvisionResponseSchema.parse(
           await credentialed(
-            RELAY_ROUTES.provisionTunnel,
-            RELAY_ROUTES.provisionTunnel.path,
+            HUB_ROUTES.provisionTunnel,
+            HUB_ROUTES.provisionTunnel.path,
             credential,
             { body, signal },
           ),
@@ -215,7 +215,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         // any other 4xx is a refusal that a timed retry cannot change
         // (revoked credential, older Worker deploy). 5xx and network
         // failures rethrow as-is and stay retryable.
-        if (error instanceof RelayRequestError) {
+        if (error instanceof HubRequestError) {
           if (error.status === TUNNEL_UNCONFIGURED_STATUS) {
             throw new TunnelUnconfiguredError();
           }

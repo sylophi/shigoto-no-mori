@@ -19,7 +19,7 @@ import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { relayContract } from "@shared/ipc/modules/relay";
+import { hubContract } from "@shared/ipc/modules/hub";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -72,7 +72,7 @@ export const allContractModules: readonly ContractModule[] = [
   portPoolContract,
   projectLauncherContract,
   projectsContract,
-  relayContract,
+  hubContract,
   remoteAccessContract,
   runtimeContract,
   scriptsContract,
@@ -113,7 +113,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const portPoolClient = c(portPoolContract);
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
-  const relayClient = c(relayContract);
+  const hubClient = c(hubContract);
   const remoteAccessClient = c(remoteAccessContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
@@ -312,11 +312,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       icon: (projectId: string) => projectsClient.icon({ projectId }),
     },
 
-    relay: {
-      status: relayClient.status,
-      invokePeer: relayClient.invokePeer,
-      onStatusChanged: relayClient.statusChanged,
-      onPeerPush: relayClient.peerPush,
+    hub: {
+      status: hubClient.status,
+      invokePeer: hubClient.invokePeer,
+      onStatusChanged: hubClient.statusChanged,
+      onPeerPush: hubClient.peerPush,
     },
 
     remoteAccess: {

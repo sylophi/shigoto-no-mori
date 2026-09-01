@@ -165,7 +165,7 @@ export const GlobalConfigSchema = z.object({
   // pairing, so nothing else should grow to depend on the token's shape.
   // Direct data plane (v2 step 10, slice A): when false, this device
   // neither runs the direct listener nor is advertised to peers, so
-  // all its remote traffic stays on the relay. ON by default (absent =
+  // all its remote traffic stays on the hub. ON by default (absent =
   // enrolled, explicit `false` is the opt-out), matching the feature
   // being an internal transport optimization rather than a capability.
   // Config-only for now (no Settings UI, like socketHost below):
@@ -275,7 +275,7 @@ export const ClientConfigSchema = z.object({
   // When on, the app registers a login item so it starts when the user
   // logs in, and it best-effort relaunches itself after a recoverable
   // crash so a machine the user hosts stays online for the account
-  // relay. Per-machine and never synced, like the rest of client config:
+  // hub. Per-machine and never synced, like the rest of client config:
   // the CLI never reads it and it does not ride any sync path. Default is
   // off (absent = off), explicit `true` is the opt-in.
   keepReachable: z.boolean().optional(),

@@ -15,7 +15,7 @@
 // only channels explicitly registered mutating:false are served, and
 // anything else (a mutation, or an untagged channel) is refused with
 // the shared command-refused code before its handler can run. Commands
-// for a remote peer ride the relay's per-peer grant instead.
+// for a remote peer ride the hub's per-peer grant instead.
 //
 // DIRECT DATA PLANE (v2 step 10, slice A): the same binding, created
 // with a WsServerTicketAuth, serves a SECOND instance for direct
@@ -60,7 +60,7 @@ import { toText } from "./rawData";
 // Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
 // SECOND binding instance serves device-to-device data over direct
 // sockets, brokered by short-lived single-use connect tickets minted
-// over the relay. Injected at binding creation so this module stays
+// over the hub. Injected at binding creation so this module stays
 // free of the ticket store and the grant store alike. Absent means the
 // legacy LAN behavior: static-token auth and the read-only dispatch
 // gate, unchanged.
@@ -71,7 +71,7 @@ export type WsServerTicketAuth = {
   verifyTicket(ticket: string, deviceId: string): boolean;
   // Whether the named peer may run MUTATING calls on this host, read
   // live at every dispatch (never cached on the session) so a grant or
-  // revoke takes effect without a reconnect, mirroring the relay link.
+  // revoke takes effect without a reconnect, mirroring the hub link.
   isCommandGranted(peerDeviceId: string): boolean;
 };
 
@@ -135,10 +135,10 @@ export type WsServerBinding = ServerTransport & {
   status(): WsServerStatus;
   // Ticket mode: kill the authed sockets whose peer deviceId is not in
   // the given roster. Presence scopes the data plane (v2 step 10): the
-  // relay brokers membership, so a peer absent from a live roster (a
+  // hub brokers membership, so a peer absent from a live roster (a
   // revoked device, an account switch on its side) loses its direct
   // socket within one presence broadcast. The caller must only pass a
-  // roster it trusts as live, see shared/relay/directPresence.ts.
+  // roster it trusts as live, see shared/hub/directPresence.ts.
   closePeersNotIn(online: readonly string[]): void;
 };
 
@@ -149,7 +149,7 @@ const MAX_CONNECTIONS = 64;
 // of connections that never say hello cannot crowd out real peers.
 const MAX_PREAUTH_CONNECTIONS = 16;
 // The in-flight, push-backpressure and terminate-grace bounds are the
-// shared wire caps in frames.ts, so this binding and the relay link
+// shared wire caps in frames.ts, so this binding and the hub link
 // cannot drift apart on them.
 // Let a rejection's close frame flush before the socket is destroyed,
 // so the peer sees the code. The dead flag already blocks any frame
@@ -258,7 +258,7 @@ export function createWsServerBinding(
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
   // The channel names EXPLICITLY registered read-only (mutating:false),
-  // collected fail-closed exactly like the relay binding's set: dispatch
+  // collected fail-closed exactly like the hub binding's set: dispatch
   // serves a channel over this wire ONLY when it is in here, so a
   // mutation or an untagged channel is refused even though it is
   // registered. Registration stays unconditional (the Electron wire
@@ -408,7 +408,7 @@ export function createWsServerBinding(
       // registered mutating:false). Legacy mode: the LAN wire has no
       // grant model, so a mutation or an untagged channel is always
       // refused BEFORE its handler runs. Ticket mode (the direct data
-      // plane): mirror the relay link's dispatch and consult the
+      // plane): mirror the hub link's dispatch and consult the
       // injected per-peer grant LIVE at each call, never cached on the
       // session, so a grant or revoke takes effect without a
       // reconnect. Either refusal carries the typed code so the client
@@ -643,7 +643,7 @@ export function createWsServerBinding(
           });
           return;
         }
-        // bye is a relay-wire frame (the relay has no per-peer socket
+        // bye is a hub-wire frame (the hub has no per-peer socket
         // close). This wire has a real socket close, so a bye here is
         // meaningless and silently ignored.
         if (frame !== null && frame.t === "bye") return;
@@ -820,7 +820,7 @@ export function createWsServerBinding(
       handlers.set(channel, fn);
       // Record an EXPLICITLY read-only channel (mutating:false) so
       // dispatch may serve it over this wire. Fail-closed, mirroring
-      // the relay binding: a channel left untagged, or tagged
+      // the hub binding: a channel left untagged, or tagged
       // mutating:true, is deliberately NOT recorded, so the read-only
       // gate refuses it.
       if (opts?.mutating === false) readOnlyChannels.add(channel);

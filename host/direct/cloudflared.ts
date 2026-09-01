@@ -1,5 +1,5 @@
 // The cloudflared runtime for tunnel endpoints (v2 step 10, slice B):
-// discover the binary, ask the relay Worker to provision this device's
+// discover the binary, ask the hub Worker to provision this device's
 // named tunnel against the direct listener's current loopback port,
 // and supervise `cloudflared tunnel run` as a child process. The
 // tunnel fronts 127.0.0.1 only (the ingress the Worker writes pins
@@ -28,7 +28,7 @@ import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,
 } from "@shared/account/service";
-import type { TunnelState } from "@shared/ipc/modules/relay";
+import type { TunnelState } from "@shared/ipc/modules/hub";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
@@ -149,8 +149,8 @@ const PROBE_TIMEOUT_MS = 10_000;
 
 // ---- the supervised runner ----
 
-// The state vocabulary is the wire's (RelayStatusSchema.tunnel in
-// shared/ipc/modules/relay.ts), imported rather than redeclared so the
+// The state vocabulary is the wire's (HubStatusSchema.tunnel in
+// shared/ipc/modules/hub.ts), imported rather than redeclared so the
 // runner and the status surface cannot drift. off: not wanted
 // (listener down, opted out, signed out). no-binary: wanted, but no
 // usable cloudflared. unconfigured: the Worker has no tunnel env
@@ -181,7 +181,7 @@ export type TunnelChild = {
 export type CloudflaredRunnerDeps = {
   // Resolves the usable binary, null when absent.
   resolveBinary(): Promise<string | null>;
-  // The relay Worker's provision call for the given listener port.
+  // The hub Worker's provision call for the given listener port.
   // Throws TunnelUnconfiguredError when the Worker has no tunnel env,
   // TunnelProvisionDeniedError on any other 4xx refusal.
   provision(

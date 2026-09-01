@@ -1,19 +1,19 @@
-// The stable per-browser relay device identity (v2 step 5, slice B).
+// The stable per-browser hub device identity (v2 step 5, slice B).
 // The desktop's deviceId is a UUID naming a shigomori root, minted once
 // and persisted in registry.json (host/lib/config/deviceId.ts). The web
 // client has no root, so its analogue is a UUID naming this browser
 // profile, minted on first use and persisted in localStorage: the same
-// browser is the same relay device across sessions, and clearing site
+// browser is the same hub device across sessions, and clearing site
 // data re-enrolls it as a brand new device, exactly like a registry
 // reset does on desktop.
-import { DeviceIdSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 
 const DEVICE_ID_KEY = "sm.web.deviceId";
 
 // The same well-formed-UUID acceptance rule the desktop applies: the
 // stored value is user-visible storage and the id flows into query keys
-// and relay routing, so anything mangled is replaced rather than
+// and hub routing, so anything mangled is replaced rather than
 // trusted. crypto.randomUUID output always passes both this shape and
 // the wire's DeviceIdSchema bound.
 const UUID_SHAPE =

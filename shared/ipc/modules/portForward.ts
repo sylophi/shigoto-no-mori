@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { DeviceIdSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 
 // Client-scoped control surface for the port-forward engine (v2 step 8,
 // slice B). The engine binds real TCP listeners on THIS machine's

@@ -69,7 +69,7 @@ export interface RemoteForests {
   // True while any remote listing is actually fetching (isLoading, not
   // isPending: a disconnected device's disabled queries stay pending
   // forever). The web sidebar's empty state hangs on this so a slow
-  // relay reads as loading, not as "no projects".
+  // hub reads as loading, not as "no projects".
   loading: boolean;
 }
 

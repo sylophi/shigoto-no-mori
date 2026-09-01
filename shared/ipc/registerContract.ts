@@ -36,7 +36,7 @@ export type RegisterContractOpts = {
 
 // The per-call wrapper: ONE definition of what serving a contract call
 // means, shared by the registrar loop below and any single-slot
-// binding (the relay broker in host/ipc/modules/direct.ts), so
+// binding (the hub broker in host/ipc/modules/direct.ts), so
 // dispatch policy cannot diverge between the wires. Input parsing is
 // UNCONDITIONAL, never gated by build type: the moment handlers are
 // reachable over a socket, this parse is the wall between a malformed

@@ -3,7 +3,7 @@
 // (web/main.tsx), because several renderer modules read window.api at
 // module scope (queryKeys' device id, the remote registry's local
 // facts). Keeps only the boot concerns that exist on the web: the query
-// client with the shared error-toast wiring, the relay device sync, and
+// client with the shared error-toast wiring, the hub device sync, and
 // the provider tree around the router.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -28,8 +28,8 @@ import "@/index.css";
 // shared module rather than a copy that could drift.
 const queryClient = createAppQueryClient();
 
-// The registry's relay half: enrolled devices plus live presence, from
-// the bridge's account and relay modules, exactly as on desktop.
+// The registry's hub half: enrolled devices plus live presence, from
+// the bridge's account and hub modules, exactly as on desktop.
 startRemoteDeviceSync(queryClient);
 
 function AppErrorFallback({ error }: FallbackProps) {

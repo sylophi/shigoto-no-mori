@@ -1,7 +1,7 @@
 // Durable proof for the electron-free account layer (main/account/*,
 // shared/account/*). Drives the pure modules end to end with stubs and
 // asserts the security and wire-shape invariants without electron,
-// without a browser and without the network: the relay client's
+// without a browser and without the network: the hub client's
 // route/method/auth-tier discipline against the shared schemas, the
 // credential store's encrypt and plaintext-fallback round trips plus
 // its corrupt/missing tolerance, deriveAccountId's tolerance of a
@@ -47,13 +47,13 @@ import {
   AccountStatusSchema,
   accountContract,
 } from "@shared/ipc/modules/account";
-import { DeviceInfoSchema, RELAY_ROUTES } from "@shared/relay/protocol";
+import { DeviceInfoSchema, HUB_ROUTES } from "@shared/hub/protocol";
 import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
 
 // A resolved config that isConfigured accepts, for the flows that need
-// one. The relay URL is never dialled: fetch is always stubbed.
+// one. The hub URL is never dialled: fetch is always stubbed.
 const CONFIG = resolveServiceConfig({
-  SM_ACCOUNT_RELAY_URL: "https://relay.test",
+  SM_ACCOUNT_HUB_URL: "https://hub.test",
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
 });
 
@@ -84,7 +84,7 @@ const PLAINTEXT_CIPHER = {
   decrypt: (p) => p,
 };
 
-// The one device the relay stubs report.
+// The one device the hub stubs report.
 const DEVICE = {
   deviceId: "device-uuid",
   name: "Test Mac",
@@ -105,13 +105,13 @@ async function main() {
       assert.equal(isConfigured(CONFIG), true);
       assert.equal(isConfigured(resolveServiceConfig({})), false);
       const missingKey = resolveServiceConfig({
-        SM_ACCOUNT_RELAY_URL: "https://relay.test",
+        SM_ACCOUNT_HUB_URL: "https://hub.test",
       });
       assert.equal(isConfigured(missingKey), false);
-      const missingRelay = resolveServiceConfig({
+      const missingHub = resolveServiceConfig({
         SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
       });
-      assert.equal(isConfigured(missingRelay), false);
+      assert.equal(isConfigured(missingHub), false);
     },
   );
 
@@ -122,7 +122,7 @@ async function main() {
         json({ credential: "device-credential", device: DEVICE }),
       );
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       const result = await service.enroll("session-token", {
@@ -132,10 +132,7 @@ async function main() {
       });
       assert.equal(result.credential, "device-credential");
       assert.deepEqual(result.device, DEVICE);
-      assert.equal(
-        calls[0].url,
-        "https://relay.test" + RELAY_ROUTES.enroll.path,
-      );
+      assert.equal(calls[0].url, "https://hub.test" + HUB_ROUTES.enroll.path);
       assert.equal(calls[0].init.method, "POST");
       assert.equal(calls[0].init.headers.authorization, "Bearer session-token");
       const body = JSON.parse(calls[0].init.body);
@@ -154,14 +151,14 @@ async function main() {
         json({ devices: [DEVICE] }),
       );
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       const devices = await service.listDevices("device-credential");
       assert.deepEqual(devices, [DEVICE]);
       assert.equal(
         calls[0].url,
-        "https://relay.test" + RELAY_ROUTES.listDevices.path,
+        "https://hub.test" + HUB_ROUTES.listDevices.path,
       );
       assert.equal(calls[0].init.method, "GET");
       assert.equal(
@@ -178,14 +175,13 @@ async function main() {
         () => new Response(null, { status: 204 }),
       );
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       await service.revoke("device-credential", "other device/id");
       assert.equal(
         calls[0].url,
-        "https://relay.test" +
-          RELAY_ROUTES.revokeDevice.path("other device/id"),
+        "https://hub.test" + HUB_ROUTES.revokeDevice.path("other device/id"),
       );
       assert.match(
         calls[0].url,
@@ -207,14 +203,14 @@ async function main() {
         json({ ticket: "the-ticket", expiresInMs: 30_000 }),
       );
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       const ticket = await service.mintTicket("device-credential");
       assert.equal(ticket.ticket, "the-ticket");
       assert.equal(
         calls[0].url,
-        "https://relay.test" + RELAY_ROUTES.mintTicket.path,
+        "https://hub.test" + HUB_ROUTES.mintTicket.path,
       );
       assert.equal(calls[0].init.method, "POST");
       assert.equal(
@@ -228,14 +224,14 @@ async function main() {
     "service: the auth tier differs, enroll under the session token and the rest under the credential",
     async () => {
       const responder = (url) => {
-        if (url.endsWith(RELAY_ROUTES.enroll.path)) {
+        if (url.endsWith(HUB_ROUTES.enroll.path)) {
           return json({ credential: "device-credential", device: DEVICE });
         }
         return json({ devices: [DEVICE] });
       };
       const { fetchImpl, calls } = recordingFetch(responder);
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       await service.enroll("session-token", {
@@ -253,13 +249,13 @@ async function main() {
   );
 
   await check(
-    "service: a non-2xx with an ErrorBody throws the relay's error message",
+    "service: a non-2xx with an ErrorBody throws the hub's error message",
     async () => {
       const { fetchImpl } = recordingFetch(() =>
         json({ error: "device revoked" }, 403),
       );
       const service = createAccountService({
-        baseUrl: "https://relay.test",
+        baseUrl: "https://hub.test",
         fetchImpl,
       });
       await assert.rejects(
@@ -294,7 +290,7 @@ async function main() {
         json({ credential: "cred-1", device: DEVICE }),
       );
       const service = createAccountService({
-        baseUrl: CONFIG.relayUrl,
+        baseUrl: CONFIG.hubUrl,
         fetchImpl,
       });
       const store = memoryStore();
@@ -357,7 +353,7 @@ async function main() {
         () => new Response(null, { status: 204 }),
       );
       const service = createAccountService({
-        baseUrl: CONFIG.relayUrl,
+        baseUrl: CONFIG.hubUrl,
         fetchImpl,
       });
       const store = memoryStore();
@@ -375,7 +371,7 @@ async function main() {
       // The failure path: revoke rejects, the clear still lands and the
       // failure reaches the caller's reporter instead of throwing.
       const failing = createAccountService({
-        baseUrl: CONFIG.relayUrl,
+        baseUrl: CONFIG.hubUrl,
         fetchImpl: () => Promise.reject(new TypeError("offline")),
       });
       store.write({ credential: "cred-2", accountId: "a", deviceName: "d" });
@@ -676,7 +672,7 @@ async function main() {
         !("credential" in status),
         "an AccountStatus carries a credential",
       );
-      // DeviceInfo is the per-device shape the relay reports and the
+      // DeviceInfo is the per-device shape the hub reports and the
       // renderer lists. The credential belongs only to the enroll
       // response, never to a listed device.
       assert.ok(
@@ -724,7 +720,7 @@ async function main() {
           "# a comment",
           "",
           "   ",
-          "SM_ACCOUNT_RELAY_URL=https://relay.test",
+          "SM_ACCOUNT_HUB_URL=https://hub.test",
           'QUOTED="double quoted"',
           "SINGLE='single quoted'",
           "no_equals_here",
@@ -732,7 +728,7 @@ async function main() {
           "__proto__=polluted",
         ].join("\n"),
       );
-      assert.equal(parsed.SM_ACCOUNT_RELAY_URL, "https://relay.test");
+      assert.equal(parsed.SM_ACCOUNT_HUB_URL, "https://hub.test");
       assert.equal(parsed.QUOTED, "double quoted");
       assert.equal(parsed.SINGLE, "single quoted");
       assert.ok(!("no_equals_here" in parsed), "a line with no = was kept");
@@ -752,19 +748,19 @@ async function main() {
     () => {
       const merged = mergeServiceEnv(
         {
-          SM_ACCOUNT_RELAY_URL: "https://file.example",
+          SM_ACCOUNT_HUB_URL: "https://file.example",
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_file",
           ONLY_FILE: "f",
         },
         {
-          SM_ACCOUNT_RELAY_URL: "https://baked.example",
+          SM_ACCOUNT_HUB_URL: "https://baked.example",
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_baked",
           ONLY_BAKED: "b",
         },
-        { SM_ACCOUNT_RELAY_URL: "https://env.example", ONLY_ENV: "e" },
+        { SM_ACCOUNT_HUB_URL: "https://env.example", ONLY_ENV: "e" },
       );
       assert.equal(
-        merged.SM_ACCOUNT_RELAY_URL,
+        merged.SM_ACCOUNT_HUB_URL,
         "https://env.example",
         "process.env did not win over baked and file",
       );

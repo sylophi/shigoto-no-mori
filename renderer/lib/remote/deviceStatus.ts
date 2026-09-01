@@ -12,7 +12,7 @@ export type DeviceStatusView = {
   tone: StatusTone;
   label: string;
   // True when using the device's api can work right now: a direct
-  // session is up ("connected"), or the peer is in the relay roster
+  // session is up ("connected"), or the peer is in the hub roster
   // and the keeper is establishing one ("online"). The ONE vocabulary
   // for reach-gated affordances (editing a peer's settings, offering it
   // as a new-worktree target), so components stop each spelling the same
@@ -30,7 +30,7 @@ function presentationOf(status: RemoteDeviceStatus): {
   switch (status.phase) {
     case "connected":
       return { tone: "emerald", label: "Connected" };
-    // The peer is in the relay roster but no direct session is
+    // The peer is in the hub roster but no direct session is
     // established (v2 step 10, slice C: data is direct or nothing).
     // Honest on both axes: the roster fact shows ("Online"), and
     // nothing claims a data connection, because the keeper's eager

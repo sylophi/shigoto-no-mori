@@ -30,9 +30,9 @@ export function installWebBridge(): WebBridge {
   });
   window.api = bridge.api;
   installed = bridge;
-  // Boot reconcile: connect the relay socket when a credential is
+  // Boot reconcile: connect the hub socket when a credential is
   // already stored, mirroring the desktop's ready-handler refresh.
-  void bridge.refreshRelay();
+  void bridge.refreshHub();
   // Cross-tab correction: sign-in/out in another tab rewrites the
   // shared localStorage key, and the storage event fires only in the
   // OTHER tabs. Fan it out like a local transition so every tab's

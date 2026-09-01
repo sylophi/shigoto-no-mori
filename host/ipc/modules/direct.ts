@@ -1,7 +1,7 @@
 // Host side of the direct data plane's brokering surface (v2 step 10,
 // slice A). A factory rather than a plain handler object because the
 // deps are owned by whoever assembled the direct listener: main wires
-// the real listener status, ticket store and relay roster in, and the
+// the real listener status, ticket store and hub roster in, and the
 // direct-plane check drives the same factory with its own instances.
 //
 // This file must stay Electron free (host:check).
@@ -16,14 +16,14 @@ import {
 import { wrapContractCall } from "@shared/ipc/registerContract";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { RelayBroker, RelayBrokerContext } from "@shared/relay/link";
+import type { HubBroker, HubBrokerContext } from "@shared/hub/link";
 import { candidateAddresses } from "@host/direct/addresses";
 
 // The one context fact connectInfo reads. Both the full HandlerContext
 // (the Electron and direct wires through the shared registrar) and the
-// relay's minimal RelayBrokerContext satisfy it, which is what lets
+// hub's minimal HubBrokerContext satisfy it, which is what lets
 // one handler serve every wire without a no-op notifier being minted
-// for the relay's sake.
+// for the hub's sake.
 export type ConnectInfoContext = Pick<HandlerContext, "callerDeviceId">;
 
 export type DirectHandlerDeps = {
@@ -34,7 +34,7 @@ export type DirectHandlerDeps = {
   // the named peer, replacing that peer's previous pending set. Null
   // means the store refused (global backstop cap).
   mintTickets(peerDeviceId: string, count: number): string[] | null;
-  // Whether the named peer is currently in the relay's live presence
+  // Whether the named peer is currently in the hub's live presence
   // roster. connectInfo can arrive over an existing direct socket too,
   // and presence is what scopes the data plane (a revoked device drops
   // off the roster), so a caller the control plane no longer vouches
@@ -63,7 +63,7 @@ export function makeDirectHandlers(
   return {
     connectInfo: (input: DirectConnectInfoInput, ctx): DirectConnectInfo => {
       // Fail closed without an authenticated peer identity: a ticket
-      // is bound to the deviceId it is minted for, and only the relay
+      // is bound to the deviceId it is minted for, and only the hub
       // link and the direct listener supply one. Every other wire
       // (Electron, legacy LAN, loopback) reads as unavailable.
       const peerDeviceId = ctx.callerDeviceId;
@@ -89,7 +89,7 @@ export function makeDirectHandlers(
       // cloudflared child is healthy: a stale hostname would only burn
       // a ticket on a dead racer, but a healthy tunnel must always be
       // offered so a peer with no route to any interface address stays
-      // dialable (data is direct or nothing, there is no relay
+      // dialable (data is direct or nothing, there is no hub
       // fallback).
       const tunnelUrl = deps.tunnelUrl?.() ?? null;
       if (callerKinds.has("tunnel") && tunnelUrl !== null) {
@@ -113,23 +113,23 @@ export function makeDirectHandlers(
   };
 }
 
-// The channel-plus-handler pair the relay binding's one broker slot
-// takes (RelayBroker in link.ts), built on the shared registrar's own
+// The channel-plus-handler pair the hub binding's one broker slot
+// takes (HubBroker in link.ts), built on the shared registrar's own
 // per-call wrapper so the brokered path serves EXACTLY the policy
 // every other wire does (unconditional input parse, hooks, dev-gated
 // output parse) and can never silently diverge when that policy
 // changes. The hooks no-op here by construction: connectInfo is an
 // untracked read, so wrapContractCall resolves both to undefined. The
-// relay binding is deliberately not a ServerTransport, and both real
+// hub binding is deliberately not a ServerTransport, and both real
 // wirings (main/ipc/register.ts and the check fixtures) share this.
 export function brokerHandlerFor(
   handlers: Handlers<typeof directContract, ConnectInfoContext>,
   opts: { validateOutputs: boolean },
-): Required<RelayBroker> {
+): Required<HubBroker> {
   const def = directContract.calls.connectInfo;
   return {
     channel: def.channel,
-    handler: wrapContractCall<RelayBrokerContext>(
+    handler: wrapContractCall<HubBrokerContext>(
       def,
       // The cast narrows the wrapper's post-parse unknown back to the
       // schema's own inferred type, mirroring the registrar loop.
