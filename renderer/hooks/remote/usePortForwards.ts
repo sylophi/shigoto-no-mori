@@ -1,15 +1,19 @@
-// The port-forward engine's control surface for one scoped device: the
-// forward list and the start/stop pair. Everything here is CLIENT-scoped
-// and calls window.api directly, never the surrounding host scope: the
-// listener belongs to this machine, only its target is the scoped
-// device. The list caches under one client key for all devices, and this
-// hook filters to the scope's own so both the devices page's per-peer
-// section and the worktree detail's port row render off the same query
-// and the same error wording.
+// The port-forward engine's control surface for one device: the forward
+// list and the start/stop pair. Everything here is CLIENT-scoped and
+// calls window.api directly: the listener belongs to THIS machine, only
+// its target is the named device. The list caches under one client key
+// for all devices, and this hook filters to the one asked for, so both
+// the devices page's per-peer section and the worktree detail's port row
+// render off the same query and the same error wording.
+//
+// The device is a plain argument, not a read off the surrounding host
+// scope, because nothing here needs that device to be REACHABLE -- a
+// forward outlives the peer going to sleep, and stopping one is a purely
+// local act. Taking it from a scope would have tied the stop control to
+// an api the caller does not need.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import { useHostScope } from "@/hooks/remote/useHostScope";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 
@@ -44,8 +48,7 @@ export function useWatchPortForwards(): void {
   );
 }
 
-export function usePortForwards() {
-  const { deviceId } = useHostScope();
+export function usePortForwards(deviceId: string) {
   const { data } = useQuery({
     queryKey: queryKeys.portForwards(),
     queryFn: () => window.api.portForward.list(),

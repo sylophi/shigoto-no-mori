@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
-import { PeerPortForwards } from "./PeerPortForwards";
+import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
 import type { DeviceRowStatus } from "./deviceRegistryStatus";
 
@@ -214,15 +214,17 @@ export function DeviceRegistryRow({
         </div>
       )}
 
-      {/* Forwarding a peer's port binds a real listener on THIS machine
-          (app-only) and drives a grant-gated verb on the peer, so both
-          are decided before the block mounts rather than inside it.
-          Hidden while the revoke is armed, so the card asks one question
-          at a time. */}
-      {!isThisDevice && !confirming && canForwardPorts && canCommandPeer && (
-        <div className={SUB_BLOCK}>
-          <PeerPortForwards deviceId={device.deviceId} />
-        </div>
+      {/* Forwarding binds a real listener on THIS machine, so it is
+          app-only. Whether the peer will ACCEPT a new forward is
+          `canCommandPeer`; the section renders itself away when it can
+          neither start one nor show a live one. Hidden while the revoke
+          is armed, so the card asks one question at a time. */}
+      {!isThisDevice && !confirming && canForwardPorts && (
+        <PortForwardSection
+          deviceId={device.deviceId}
+          canStart={canCommandPeer}
+          className={SUB_BLOCK}
+        />
       )}
 
       {confirming && (

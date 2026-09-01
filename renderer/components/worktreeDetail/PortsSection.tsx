@@ -58,7 +58,7 @@ function RemotePortRow({ port, deviceId }: { port: number; deviceId: string }) {
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   // Already filtered to the scoped device, so the worktree's own
   // forward is the one on its port.
-  const { forwards, start, stop } = usePortForwards();
+  const { forwards, start, stop } = usePortForwards(deviceId);
   const forward = forwards.find((entry) => entry.remotePort === port);
 
   return (
