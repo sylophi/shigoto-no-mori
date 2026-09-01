@@ -66,23 +66,26 @@ localStorage to forge the header. The desktop's `SM_ACCOUNT_WEB_ORIGIN`
 (below) is a separate gate on a separate process and is NOT paired with
 anything here.
 
-### Per-device tunnels (optional)
+### Per-device tunnels (needed for devices off the LAN)
 
 With the tunnel env configured, `POST /tunnel` provisions one named
 Cloudflare Tunnel per device (v2 step 10, slice B): the Worker creates
 or reuses the tunnel, points its remotely managed ingress at the
 device's loopback direct listener, writes a proxied CNAME under
 `TUNNEL_DOMAIN`, and returns the connector run token the app hands to
-a local `cloudflared`. Tunnel data never touches the Worker. Unset,
-the tunnel route answers a typed "not configured" and devices simply
-skip tunnels.
+the `cloudflared` the app ships. Tunnel data never touches the Worker.
+Unset, the tunnel route answers a typed "not configured", devices
+advertise no tunnel candidate, and since data is direct or nothing two
+devices on different networks cannot reach each other at all (the
+Devices page says so on the this-device row).
 
 Prerequisites: a DNS zone on the same Cloudflare account (for the
 per-device CNAMEs), and an API token with Cloudflare Tunnel edit and
 DNS edit permissions scoped to that account and zone. Devices need
-`cloudflared` installed (`brew install cloudflared` on macOS, see
-Cloudflare's docs for other platforms); the app finds it on PATH or
-via the `cloudflaredPath` device config key.
+nothing installed: the app bundles a pinned `cloudflared`
+(`shared/cloudflaredDist.mts`, fetched at package time and by
+`pnpm start`). The `cloudflaredPath` device config key overrides it,
+and PATH is the fallback for a build that carries none.
 
 1. Set the API token as a secret:
 

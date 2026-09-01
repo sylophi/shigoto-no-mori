@@ -18,7 +18,7 @@ import {
 } from "@/hooks/account/useAccount";
 import { usePeerCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { useTunnelUp } from "@/hooks/remote/useRelayStatus";
+import { useTunnelState } from "@/hooks/remote/useRelayStatus";
 import { localDeviceId } from "@/lib/queryKeys";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import { useHostChipIndex } from "./deviceHostChips";
@@ -47,7 +47,7 @@ export function DeviceRegistry({
   // THIS device's tunnel endpoint state (v2 step 10, slice B), as the
   // derived primitive off the shared relay status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
-  const tunnelUp = useTunnelUp();
+  const tunnel = useTunnelState();
   const hosts = useHostChipIndex(localDeviceId);
   // Whether THIS device may drive verbs on each peer -- the mirror of
   // `grantedSet` above, which is what this host allows peers to do here.
@@ -128,7 +128,7 @@ export function DeviceRegistry({
               revokeDevice.isPending &&
               revokeDevice.variables === device.deviceId
             }
-            tunnelUp={isThisDevice && tunnelUp}
+            tunnel={isThisDevice ? tunnel : undefined}
             canCommandPeer={canCommandPeer}
           />
         ),

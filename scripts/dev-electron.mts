@@ -53,6 +53,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DEV_NAME_SUFFIX } from "../shared/appName.mts";
 import { APP_BUNDLE_ID } from "../shared/cliDist.mts";
+import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "../shared/infoPlist.mts";
 import { rendererSchemeName } from "../shared/rendererScheme.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -61,7 +62,7 @@ const require = createRequire(import.meta.url);
 // Bumped when the bundle recipe below changes shape, so existing
 // clones rebuild. The value-derived stamp fields cover everything
 // else.
-const BUNDLE_LAYOUT = 2;
+const BUNDLE_LAYOUT = 3;
 
 const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Versions/A" +
@@ -155,6 +156,14 @@ function ensureDevBundle(): string {
       plutilReplace(plist, "CFBundleIdentifier", "string", bundleId);
       plutilReplace(plist, "CFBundleName", "string", devName);
       plutilReplace(plist, "CFBundleDisplayName", "string", devName);
+      // Same entry forge writes into the packaged app, so a dev build's
+      // first LAN dial gets the Local Network prompt too.
+      plutilReplace(
+        plist,
+        "NSLocalNetworkUsageDescription",
+        "string",
+        LOCAL_NETWORK_USAGE_DESCRIPTION,
+      );
       plutilReplace(
         plist,
         "CFBundleURLTypes",

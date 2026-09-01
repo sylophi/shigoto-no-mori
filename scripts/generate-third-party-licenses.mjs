@@ -6,6 +6,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import {
+  CLOUDFLARED_LICENSE,
+  CLOUDFLARED_REPOSITORY,
+  CLOUDFLARED_VERSION,
+} from "../shared/cloudflaredDist.mts";
+
 const require = createRequire(import.meta.url);
 const licenseChecker = require("license-checker");
 
@@ -44,6 +50,22 @@ function normalizeEntry([key, value]) {
   };
 }
 
+// Binaries the packaged app ships beside its npm dependencies. Not npm
+// packages, so license-checker cannot see them. Listed by hand from
+// the same pinned metadata the fetch script reads, through the same
+// normalizer as every npm entry so the record shape has one owner.
+const BUNDLED_BINARIES = [
+  normalizeEntry([
+    `cloudflared@${CLOUDFLARED_VERSION}`,
+    {
+      licenses: CLOUDFLARED_LICENSE,
+      repository: CLOUDFLARED_REPOSITORY,
+      publisher: "Cloudflare, Inc.",
+      licenseText: `Apache License 2.0. Full text: ${CLOUDFLARED_REPOSITORY}/blob/${CLOUDFLARED_VERSION}/LICENSE`,
+    },
+  ]),
+];
+
 function isMissingLicense(entry) {
   return (
     !entry.licenses ||
@@ -57,7 +79,8 @@ function renderText(entries) {
     "Third-Party Licenses",
     "====================",
     "",
-    "This file is generated from production npm dependencies with license-checker.",
+    "This file is generated from production npm dependencies with license-checker,",
+    "plus the binaries the packaged app bundles.",
     `Packages: ${entries.length}`,
     "",
   ];
@@ -104,11 +127,12 @@ async function main() {
     },
   });
 
-  const entries = Object.entries(packages)
-    .map(normalizeEntry)
-    .toSorted((a, b) =>
-      `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`),
-    );
+  const entries = [
+    ...Object.entries(packages).map(normalizeEntry),
+    ...BUNDLED_BINARIES,
+  ].toSorted((a, b) =>
+    `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`),
+  );
 
   const missingLicenses = entries.filter(isMissingLicense);
   if (missingLicenses.length > 0) {

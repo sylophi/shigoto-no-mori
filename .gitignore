@@ -115,6 +115,9 @@ assets/icon.iconset/
 # sgm CLI compiled binary
 dist-cli/
 
+# bundled cloudflared, fetched by scripts/fetch-cloudflared.mjs
+dist-cloudflared/
+
 # go build artifacts in the module dir (compiled output belongs in dist-cli/)
 cli/sm
 cli/smd

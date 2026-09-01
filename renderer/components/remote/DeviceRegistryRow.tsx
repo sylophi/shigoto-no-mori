@@ -11,6 +11,7 @@
 // has to re-name the machine it applies to.
 import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
+import type { TunnelState } from "@shared/ipc/modules/relay";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
-import type { DeviceRowStatus } from "./deviceRegistryStatus";
+import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
 
 // A block hanging under the row's header, indented by its own rule so it
 // reads as a property of the machine named above it rather than as a
@@ -47,7 +48,7 @@ export function DeviceRegistryRow({
   onRevokeCommands,
   onRevokeDevice,
   revokePending,
-  tunnelUp,
+  tunnel,
   canCommandPeer,
 }: {
   device: DeviceInfo;
@@ -70,10 +71,12 @@ export function DeviceRegistryRow({
   onRevokeCommands: () => void;
   onRevokeDevice: () => void;
   revokePending: boolean;
-  // True when THIS device's tunnel endpoint is up (v2 step 10, slice
-  // B), a muted marker rather than a state: the other tunnel phases are
-  // diagnostics, not something the row should shout.
-  tunnelUp: boolean;
+  // THIS device's tunnel endpoint state (v2 step 10, slice B), set on
+  // the this-device row only. "up" is a muted marker beside the name;
+  // the phases that mean "peers off this network cannot reach me" get
+  // one quiet line under the id (tunnelNote), because that fact is
+  // what decides whether the other machine can load this one's forest.
+  tunnel: TunnelState | undefined;
   // The OTHER direction from `granted`: true when THIS device holds
   // command access on the peer, so it may drive verbs there. Resolved
   // once for every row by the registry rather than per row.
@@ -92,6 +95,7 @@ export function DeviceRegistryRow({
   // can sit with the row's other actions while the editor opens on the
   // name itself.
   const [renaming, setRenaming] = useState(false);
+  const note = tunnelNote(tunnel);
 
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2.5">
@@ -115,7 +119,7 @@ export function DeviceRegistryRow({
                 (this device)
               </span>
             )}
-            {tunnelUp && (
+            {tunnel === "up" && (
               <span className="text-xs text-muted-foreground">tunnel</span>
             )}
             <span
@@ -135,6 +139,10 @@ export function DeviceRegistryRow({
             {device.platform} &middot; {device.deviceId}
             {appVersion !== "" && <> &middot; v{appVersion}</>}
           </span>
+
+          {note !== null && (
+            <span className="text-[11px] text-muted-foreground">{note}</span>
+          )}
 
           <DeviceHosts
             chips={chips}

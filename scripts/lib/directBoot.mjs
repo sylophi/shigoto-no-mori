@@ -11,6 +11,7 @@ import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/relay/directPlane";
+import { WebSocket as WsClient } from "ws";
 import { startStubRelay } from "./relayStub.mjs";
 import { bootDevice, waitFor } from "./relayBoot.mjs";
 
@@ -140,6 +141,10 @@ export function makeDirectBridge(client, opts = {}) {
     broadcastStatus: (status) => opts.onStatusChange?.(status),
     broadcastPeerPush: (push) => opts.onPeerPush?.(push),
     dialableKinds: opts.dialableKinds,
+    // The production socket (main injects ws), so the proof exercises
+    // the errno detail the seam exists for rather than the bare 1006
+    // of Node's global.
+    openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? 3000,
     // The keeper's clock/ladder seam, so retry scenarios advance a
     // fake clock instead of sleeping the real ladder out.

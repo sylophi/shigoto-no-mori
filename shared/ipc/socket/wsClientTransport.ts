@@ -57,6 +57,38 @@ export class RemoteDisconnectedError extends Error {
   }
 }
 
+// The socket surface openDevice drives, structurally: exactly the
+// browser WebSocket API this file always used (the four events through
+// addEventListener, a string send, readyState) and nothing more, so
+// the platform global satisfies it unchanged. A node owner may inject
+// the `ws` package's WebSocket instead, which implements this same
+// surface. The reason to: Node's global WebSocket (undici) reports
+// every connect failure as an empty TypeError followed by a bare 1006
+// close, so a refused port, an unroutable address and a permission
+// block all read identically, while `ws` names the errno
+// (ECONNREFUSED, EHOSTUNREACH, ETIMEDOUT), which is the one fact that
+// tells "wrong network" from "the OS is blocking local network access".
+export type ClientSocket = {
+  send(data: string): void;
+  close(): void;
+  addEventListener(type: "open", listener: () => void): void;
+  addEventListener(
+    type: "message",
+    listener: (event: { data: unknown }) => void,
+  ): void;
+  addEventListener(
+    type: "error",
+    listener: (event: { message?: string; error?: unknown }) => void,
+  ): void;
+  addEventListener(
+    type: "close",
+    listener: (event: { code: number }) => void,
+  ): void;
+};
+export type OpenClientSocket = (url: string) => ClientSocket;
+
+const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
+
 export type ConnectDeviceOptions = {
   // ws:// URL of the host listener.
   url: string;
@@ -84,6 +116,9 @@ export type ConnectDeviceOptions = {
   // channels. A throw here is contained, mirroring the relay link's
   // onPeerPush.
   onAnyPush?: (channel: string, payload: unknown) => void;
+  // The socket constructor, defaulting to the platform global. See
+  // ClientSocket for why a node owner injects `ws` here.
+  openSocket?: OpenClientSocket;
   // Test seam. Real callers take the frames.ts default.
   helloTimeoutMs?: number;
 };
@@ -173,7 +208,7 @@ export function openDevice(
   });
   whenOpen.catch(() => {});
 
-  const socket = new WebSocket(options.url);
+  const socket = (options.openSocket ?? openGlobalSocket)(options.url);
 
   // Correlation state for invokes on this socket.
   let nextId = 1;
@@ -260,7 +295,7 @@ export function openDevice(
     if (helloRequested) sendHello();
   });
 
-  socket.addEventListener("message", (event: MessageEvent) => {
+  socket.addEventListener("message", (event) => {
     if (closed) return;
     // The host only ever sends text frames. A binary frame is not part
     // of the contract, so drop it rather than treat it as fatal.
@@ -373,13 +408,39 @@ export function openDevice(
     console.warn("[socket] dropping unexpected server frame");
   });
 
-  socket.addEventListener("error", () => {
-    // The browser fires error with no useful detail, and always
-    // follows it with close. Let the close handler own the outcome so
-    // the reject reason carries the close code.
+  // Whatever the platform said about WHY the socket failed, when it
+  // said anything: the browser and Node's global fire error with no
+  // detail, `ws` hands over the system error. Folded into the
+  // pre-welcome close's message below, since the close is what settles
+  // the attempt. The errno CODE is preferred over the message because
+  // it is address-free ("ECONNREFUSED", where the message would be
+  // "connect ECONNREFUSED 192.168.1.5:7431"): the dialer groups
+  // candidates by reason, and six interface addresses refusing the
+  // same way must read as one reason, not six.
+  let errorDetail = "";
+  socket.addEventListener("error", (event) => {
+    // The error event is always followed by close, so the close
+    // handler owns the outcome and the reject reason carries the close
+    // code. Only the detail is kept here.
+    const cause = event.error;
+    const code =
+      cause instanceof Error &&
+      "code" in cause &&
+      typeof cause.code === "string"
+        ? cause.code
+        : "";
+    const detail =
+      code !== ""
+        ? code
+        : typeof event.message === "string" && event.message !== ""
+          ? event.message
+          : cause instanceof Error
+            ? cause.message
+            : "";
+    if (detail !== "") errorDetail = detail;
   });
 
-  socket.addEventListener("close", (event: CloseEvent) => {
+  socket.addEventListener("close", (event) => {
     clearTimeout(helloTimer);
     // The owner tore this connection down. close() already rejected any
     // pending invokes, so stay silent: no onClose, and reject the
@@ -399,7 +460,9 @@ export function openDevice(
       // block vs retry, and the supervisor reads it off the error.
       const code = event.code;
       const error = new RemoteConnectError(
-        `connection closed before welcome (code ${code})`,
+        `connection closed before welcome (code ${code}${
+          errorDetail === "" ? "" : `, ${errorDetail}`
+        })`,
         code,
         isBlockingCloseCode(code),
       );

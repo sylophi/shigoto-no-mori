@@ -18,11 +18,25 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Ensure release tag is on main
+      # Signing secrets are only ever exposed to commits on main. A
+      # PRERELEASE tag off another branch (a test build cut from v2)
+      # still builds, but unsigned: the signing and notarization steps
+      # are skipped and the Apple secrets never enter the job, so the
+      # guard's point (no secrets for unreviewed commits) holds. An
+      # unsigned test build needs a right-click open on first launch.
+      - name: Decide the signing mode
+        id: mode
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           git fetch --no-tags origin main
-          if ! git merge-base --is-ancestor HEAD origin/main; then
-            echo "Release tag must point to a commit on origin/main before signing secrets are used."
+          if git merge-base --is-ancestor HEAD origin/main; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$PRERELEASE" == "true" ]]; then
+            echo "Tag is not on origin/main and the release is a prerelease: building unsigned, without the signing secrets."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "A full release tag must point to a commit on origin/main before signing secrets are used."
             exit 1
           fi
 
@@ -63,6 +77,7 @@ jobs:
           npm pkg set version="$VERSION"
 
       - name: Import Developer ID certificate
+        if: steps.mode.outputs.signed == 'true'
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -86,6 +101,7 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
       - name: Validate notarization credentials
+        if: steps.mode.outputs.signed == 'true'
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -98,13 +114,24 @@ jobs:
 
       - name: Build distributables
         env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Empty in unsigned mode, so the secrets never reach a build
+          # of a commit main has not reviewed. forge.config.ts treats
+          # an unset APPLE_SIGNING_IDENTITY as "do not sign".
+          APPLE_SIGNING_IDENTITY: ${{ steps.mode.outputs.signed == 'true' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ steps.mode.outputs.signed == 'true' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.mode.outputs.signed == 'true' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.mode.outputs.signed == 'true' && secrets.APPLE_TEAM_ID || '' }}
+          # The account service config baked into the bundle (#238). A
+          # packaged app only sees build-time env, so a build without
+          # these ships with remote features unconfigured. Set them as
+          # repository Actions variables (they are not secrets).
+          SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
+          SM_ACCOUNT_RELAY_URL: ${{ vars.SM_ACCOUNT_RELAY_URL }}
+          SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
         run: pnpm exec electron-forge publish --dry-run
 
       - name: Verify signing and notarization
+        if: steps.mode.outputs.signed == 'true'
         run: |
           APP_PATH="out/Shigoto no Mori-darwin-arm64/Shigoto no Mori.app"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
