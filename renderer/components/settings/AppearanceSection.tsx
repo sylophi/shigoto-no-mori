@@ -2,7 +2,7 @@ import { Moon, Sun, SunMoon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
-import { ToggleRow } from "./ToggleRow";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 
 interface AppearanceSectionProps {
   theme: Theme;

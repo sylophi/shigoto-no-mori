@@ -85,8 +85,10 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
           and side by side the longer one just eats the other.
           The kind glyph leads it, since it describes this worktree and
           not the project above. Shelved is the one kind left out: it
-          would restate the shelf header the row is already under, and
-          primaries never reach the inbox at all. */}
+          would restate the shelf header the row is already under. The
+          primary's house glyph stays -- when it's opted into the inbox
+          it's the only thing telling the root apart from a worktree
+          named after the project. */}
       <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/70">
         {!worktree.shelved && (
           <WorktreeKindIcon worktree={worktree} showTooltip={false} />

@@ -68,6 +68,12 @@ export const ShigomoriConfigSchema = z.object({
   // Falls back to whatever the repo allows when the saved value is
   // disabled at GitHub.
   lastMergeMethod: MergeMethodSchema.optional(),
+  // When true, the inbox view lists this project's primary checkout
+  // alongside its worktrees (always live, never shelved or merged).
+  // Per project because the primary means different things in
+  // different repos: in some it's a place you work, in most it's just
+  // the root. Off by default -- absent = hidden.
+  showPrimaryInInbox: z.boolean().optional(),
 });
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
 
