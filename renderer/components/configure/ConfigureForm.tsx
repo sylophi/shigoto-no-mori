@@ -21,6 +21,10 @@ import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
+import {
+  LAUNCH_TAB,
+  selectSettingsTab,
+} from "@/components/settings/settingsNav";
 
 interface FormState {
   defaultBranch: string;
@@ -268,7 +272,10 @@ export function ConfigureForm({
                 every project (editors, agents), use{" "}
                 <button
                   type="button"
-                  onClick={() => navigate({ to: "/settings" })}
+                  onClick={() => {
+                    selectSettingsTab(LAUNCH_TAB);
+                    void navigate({ to: "/settings" });
+                  }}
                   className="underline underline-offset-2 hover:text-foreground"
                 >
                   Settings

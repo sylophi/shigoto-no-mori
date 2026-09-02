@@ -1,37 +1,28 @@
 import type { Dispatch, SetStateAction } from "react";
-import { Plus } from "lucide-react";
-import type { DetectedLauncher } from "@shared/schemas";
-import { Button } from "@/components/ui/button";
-import { LauncherIcon } from "@/components/LauncherIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
-import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
-import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
 import { TerrierLink } from "./TerrierLink";
 import { ToggleRow } from "./ToggleRow";
 
-// The device-managed settings sections, shared verbatim between the
-// local Settings form and the remote device settings body (v2 step 6).
-// Everything here reads and writes only the device-managed keys
-// on SettingsFormState, and every query it runs (tool detection,
-// port-pool install check, gh readiness) goes through host-scoped
-// hooks, so the same JSX answers for whichever device the surrounding
-// HostScope names. Client-scoped concerns (appearance, updater,
-// hosting, account, ...) stay in SettingsForm and must not move here.
-
-interface DeviceSectionProps {
+// The device-managed toggle sections, shared verbatim between this
+// device's tab and every peer's tab on the Settings page. Everything
+// here reads and writes only device-managed keys on SettingsFormState,
+// and every query it runs (port-pool install check, gh and terrier
+// readiness) goes through host-scoped hooks, so the same JSX answers
+// for whichever device the surrounding HostScope names. Client-scoped
+// concerns (appearance) and local-by-nature ones (the launch tools)
+// live on their own tabs and must not move here.
+export function DeviceToggleSections({
+  form,
+  setForm,
+}: {
   form: SettingsFormState;
   setForm: Dispatch<SetStateAction<SettingsFormState>>;
-}
-
-// The Worktrees / Integrations / Launch toggle sections.
-export function DeviceToggleSections({ form, setForm }: DeviceSectionProps) {
+}) {
   const { data: portPoolInstalled = true } = usePortPoolInstalled();
   const { data: terrierReadiness } = useTerrierReadiness();
   const terrierInstalled = terrierReadiness?.installed ?? true;
@@ -110,114 +101,7 @@ export function DeviceToggleSections({ form, setForm }: DeviceSectionProps) {
           )}
         />
       </section>
-
-      <section className="space-y-3">
-        <SectionHeading className="mb-1">Launch</SectionHeading>
-        <ToggleRow
-          checked={form.launchScripts}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, launchScripts: v }))
-          }
-          label="Show scripts in the Launch section"
-          description="Adds a row of the worktree's package.json scripts under the launch tools. Shows as many as fit on one line, ordered the same way the Scripts section sorts them."
-        />
-      </section>
     </>
-  );
-}
-
-// The launcher-catalog sections: detected-tool visibility toggles, the
-// supported-but-not-installed pills, and the custom launcher editor.
-export function DeviceLauncherSections({ form, setForm }: DeviceSectionProps) {
-  const { data: detected = [] } = useDetectedLaunchers();
-  const availableTools = detected.filter((d) => d.available);
-  const missingTools = detected.filter((d) => !d.available);
-
-  const toggleToolHidden = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      hiddenLaunchers: prev.hiddenLaunchers.includes(id)
-        ? prev.hiddenLaunchers.filter((h) => h !== id)
-        : [...prev.hiddenLaunchers, id].toSorted(),
-    }));
-  };
-
-  const { addLauncher, updateLauncher, removeLauncher } =
-    useLauncherListEditor(setForm);
-
-  return (
-    <>
-      <DetectedToolsSection
-        tools={availableTools}
-        hidden={form.hiddenLaunchers}
-        onToggle={toggleToolHidden}
-      />
-
-      {missingTools.length > 0 && (
-        <section className="space-y-4">
-          <div>
-            <SectionHeading className="mb-1">Supported tools</SectionHeading>
-            <p className="text-xs text-muted-foreground">
-              Shigomori knows how to open worktrees in these too. Install any of
-              them and they'll show up under detected.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {missingTools.map((d) => (
-              <ToolPill key={d.id} entry={d} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section className="space-y-3">
-        <div>
-          <SectionHeading className="mb-1">Custom tools</SectionHeading>
-          <p className="text-xs text-muted-foreground">
-            Custom commands available in every worktree (e.g.{" "}
-            <span className="font-mono">claude</span>,{" "}
-            <span className="font-mono">tmux new-session</span>,{" "}
-            <span className="font-mono">open .</span>
-            ).
-          </p>
-        </div>
-        {form.launchers.length === 0 ? (
-          <p className="text-xs text-muted-foreground/70">
-            None yet. Add one to surface a command in every project's launcher
-            row.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {form.launchers.map((launcher) => (
-              <CustomLauncherInput
-                key={launcher.id}
-                launcher={launcher}
-                onChange={(patch) => updateLauncher(launcher.id, patch)}
-                onRemove={() => removeLauncher(launcher.id)}
-              />
-            ))}
-          </div>
-        )}
-        <Button variant="ghost" size="sm" onClick={addLauncher}>
-          <Plus />
-          Add global launcher
-        </Button>
-      </section>
-    </>
-  );
-}
-
-// Static pill for a supported-but-not-installed tool. Detected tools are
-// interactive toggles instead -- see DetectedToolsSection.
-function ToolPill({ entry }: { entry: DetectedLauncher }) {
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border py-0.5 pr-2 pl-1.5 text-xs text-muted-foreground/60"
-      title="Not installed"
-    >
-      <LauncherIcon entry={entry} className="size-3.5 opacity-60" />
-      {entry.label}
-    </span>
   );
 }
 
