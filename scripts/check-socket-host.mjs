@@ -386,7 +386,7 @@ async function main() {
   await check(
     "Origin gate: the app's own renderer origins complete hello/welcome",
     async () => {
-      // Browser-global WebSocket clients (the web client's relay path,
+      // Browser-global WebSocket clients (the web client's hub path,
       // and any future in-app consumer of this listener) ALWAYS send
       // an Origin: the renderer-scheme origin from the app's own
       // window (both flavors), or a loopback http origin from a
@@ -604,7 +604,7 @@ async function main() {
       // The remote-viewer externalChange ping (main/ipc/register.ts)
       // hangs off this registrar hook, so pin its semantics at the seam
       // with an in-memory transport: the LAN wire refuses mutating
-      // invokes outright, and the Electron+relay composite that
+      // invokes outright, and the Electron+hub composite that
       // actually emits the ping imports electron, out of reach here.
       const handlers = new Map();
       const server = {
@@ -699,7 +699,7 @@ async function main() {
           );
           // Every remote:true invoke also classifies itself as a command
           // or a read, so a new remote call cannot silently join the wire
-          // without declaring whether the relay grant model must gate it.
+          // without declaring whether the hub grant model must gate it.
           // remote:false invokes never reach the grant check, so theirs
           // may stay undefined.
           if (def.remote === true) {

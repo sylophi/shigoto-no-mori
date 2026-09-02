@@ -24,7 +24,7 @@
 // imports resolve. See package.json "web:bridge:check".
 import assert from "node:assert/strict";
 import { buildApi } from "@shared/ipc/client";
-import { DeviceIdSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { createWebBridge } from "../web/bridge/createWebBridge.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
 import {
@@ -60,10 +60,10 @@ function memoryStorage() {
   };
 }
 
-const RELAY_URL = "https://relay.example.test";
+const HUB_URL = "https://hub.example.test";
 const PUBLISHABLE_KEY = "pk_test_check";
 const CONFIGURED_ENV = {
-  SM_ACCOUNT_RELAY_URL: RELAY_URL,
+  SM_DEVICE_HUB_URL: HUB_URL,
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
 };
 const CHROME_MAC_UA =
@@ -356,7 +356,7 @@ async function main() {
       const fetchImpl = async (input, init = {}) => {
         const url = String(input);
         requests.push({ url, init });
-        if (url === `${RELAY_URL}/devices/enroll`) {
+        if (url === `${HUB_URL}/devices/enroll`) {
           const body = JSON.parse(init.body);
           assert.equal(body.platform, "web");
           assert.equal(body.deviceId, deviceId);
@@ -379,10 +379,11 @@ async function main() {
             },
           });
         }
-        if (url === `${RELAY_URL}/tickets`) {
-          // The post-enroll relay refresh mints here, and failing it plainly
-          // parks the supervisor in backoff until the tracked stop.
-          return jsonResponse(500, { error: "no relay in this check" });
+        if (url === `${HUB_URL}/tickets`) {
+          // The post-enroll hub refresh mints here, and failing it
+          // plainly parks the supervisor in backoff until the tracked
+          // stop.
+          return jsonResponse(500, { error: "no device hub in this check" });
         }
         throw new Error(`unexpected fetch in enroll check: ${url}`);
       };
@@ -412,7 +413,7 @@ async function main() {
   );
 
   await check(
-    "sign-out: revokes THIS device on the relay, clears the envelope, and still signs out when the revoke fails",
+    "sign-out: revokes THIS device on the device hub, clears the envelope, and still signs out when the revoke fails",
     async (track) => {
       const localStorage = memoryStorage();
       localStorage.setItem("sm.web.account", STORED_ENVELOPE);
@@ -431,7 +432,7 @@ async function main() {
       assert.equal(deletes.length, 1);
       assert.equal(
         deletes[0].url,
-        `${RELAY_URL}/devices/${encodeURIComponent(bridge.api.deviceId)}`,
+        `${HUB_URL}/devices/${encodeURIComponent(bridge.api.deviceId)}`,
       );
       assert.equal(deletes[0].auth, "Bearer cred-stored");
       assert.equal(localStorage.getItem("sm.web.account"), null);
@@ -453,7 +454,7 @@ async function main() {
   );
 
   await check(
-    "unconfigured: status reports configured false, enroll rejects, and the relay refresh yields the typed state with a stopped socket",
+    "unconfigured: status reports configured false, enroll rejects, and the hub refresh yields the typed state with a stopped socket",
     async (track) => {
       const bridge = createWebBridge(makeDeps({ env: {} }));
       track(() => bridge.stop());
@@ -464,24 +465,24 @@ async function main() {
         bridge.api.account.enroll(fakeSessionJwt("acct_1")),
         /not configured/,
       );
-      await bridge.refreshRelay();
+      await bridge.refreshHub();
       assert.deepEqual(bridge.webAccess.get(), { kind: "unconfigured" });
-      const relay = await bridge.api.relay.status();
-      assert.notEqual(relay.socket.phase, "connecting");
-      assert.notEqual(relay.socket.phase, "backoff");
-      assert.deepEqual(relay.onlineDeviceIds, []);
+      const hub = await bridge.api.hub.status();
+      assert.notEqual(hub.socket.phase, "connecting");
+      assert.notEqual(hub.socket.phase, "backoff");
+      assert.deepEqual(hub.onlineDeviceIds, []);
     },
   );
 
   await check(
-    "refused: a relay 403 on the ticket mint yields the typed blocked state and stops the supervisor after one mint, no retry loop",
+    "refused: a hub 403 on the ticket mint yields the typed blocked state and stops the supervisor after one mint, no retry loop",
     async (track) => {
       const localStorage = memoryStorage();
       localStorage.setItem("sm.web.account", STORED_ENVELOPE);
       let mints = 0;
       const fetchImpl = async (input) => {
         const url = String(input);
-        if (url === `${RELAY_URL}/tickets`) {
+        if (url === `${HUB_URL}/tickets`) {
           mints += 1;
           return jsonResponse(403, { error: "malformed ticket" });
         }
@@ -489,7 +490,7 @@ async function main() {
       };
       const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
       track(() => bridge.stop());
-      await bridge.refreshRelay();
+      await bridge.refreshHub();
       await waitFor(
         () => bridge.webAccess.get().kind === "blocked",
         "the blocked access state",
@@ -499,8 +500,8 @@ async function main() {
       // would have minted again by now.
       await delay(1_300);
       assert.equal(mints, 1, "the blocked deployment was redialed");
-      const relay = await bridge.api.relay.status();
-      assert.equal(relay.socket.phase, "stopped");
+      const hub = await bridge.api.hub.status();
+      assert.equal(hub.socket.phase, "stopped");
     },
   );
 

@@ -1,6 +1,6 @@
 // Bounded concurrency for work that fans out as wide as the caller
 // happens to ask for. Pure (no node builtins, no electron), so it lives
-// in shared/ and both the host probes and the web relay connection's
+// in shared/ and both the host probes and the web hub connection's
 // single-slot lifecycle serializer use the one implementation.
 //
 // The tidy surface is the reason it started here: it asks about every

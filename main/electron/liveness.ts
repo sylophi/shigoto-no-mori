@@ -1,6 +1,6 @@
 // Host liveness (v2 step 4, slice E). One opt-in, `keepReachable` in
 // client config, drives two capabilities so a machine the user hosts
-// stays online for the account relay:
+// stays online for the device hub:
 //   1. Launch-at-login, via setLoginItemSettings, so the app starts when
 //      the user logs in.
 //   2. Best-effort recovery from a recoverable crash: a renderer that
@@ -32,8 +32,8 @@ import {
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a
   // machine stays available TO the account, its UI is unreachable when
-  // the SM_ACCOUNT_* env is absent, and boot's reconcile clears a login
-  // item left behind by a previously configured build.
+  // the account service env is absent, and boot's reconcile clears a
+  // login item left behind by a previously configured build.
   if (!accountServiceConfigured()) return false;
   try {
     return readClientConfigSync().keepReachable === true;
@@ -266,7 +266,7 @@ export function installFatalRecovery(deps: {
     tryRelaunch();
     app.exit(1);
   });
-  // Unhandled rejections are treated as recoverable: a stray relay
+  // Unhandled rejections are treated as recoverable: a stray hub
   // reconnect, fetch, or updater promise without a .catch is frequently
   // non-fatal, so only a genuinely fatal uncaughtException relaunches.
   // Logging here intentionally suppresses a rejection-triggered process

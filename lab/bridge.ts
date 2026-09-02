@@ -2,7 +2,7 @@
 // entirely from lab/fixtures.ts. The real renderer boots on top of it
 // unmodified: startRemoteDeviceSync, HostScope, the sidebar tree and
 // every remote view all derive from these answers exactly as they
-// would from a live relay. Channels no fixture handler covers fall
+// would from a live device hub. Channels no fixture handler covers fall
 // back to schema-derived stubs (fabricated arms allowed: this is a
 // design lab, not a product surface).
 //
@@ -12,7 +12,7 @@ import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type { ShigomoriWorktreeData } from "@shared/schemas";
 import type { ContractScope } from "@shared/ipc/contract";
-import type { RelayStatus } from "@shared/ipc/modules/relay";
+import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import { invokeIndexFor } from "../web/bridge/loopback";
@@ -365,13 +365,13 @@ function initPresence(): void {
     if (state === "connected") directSessions.add(id);
   }
 }
-let socketPhase: RelayStatus["socket"] = {
+let socketPhase: HubStatus["socket"] = {
   phase: "connected",
   remoteDeviceId: "",
   remoteAppVersion: "",
 };
 
-function relaySnapshot(): RelayStatus {
+function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
   for (const id of directSessions) peerAppVersions[id] = LAB_APP_VERSION;
   return {
@@ -386,7 +386,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   WEB_SHELL = opts.webShell === true;
   initPresence();
   // Remote hosts: one fixture wire per device, reached only through
-  // relay:invokePeer exactly like the real relay bridge. Under the web
+  // hub:invokePeer exactly like the real hub bridge. Under the web
   // shell every machine forest (Studio Mac included) is a peer of the
   // browser device, while on desktop Studio Mac is the local host.
   const selfDeviceId = WEB_SHELL ? WEB_DEVICE_ID : LOCAL_DEVICE_ID;
@@ -462,7 +462,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "account:revokeDevice": (deviceId: string) => {
       // Mirrors the real handler's registry effect: the device leaves
       // the account list and account:changed fans out the refetch.
-      // Fixture presence is untouched, matching the relay's lag.
+      // Fixture presence is untouched, matching the device hub's lag.
       revoked.add(deviceId);
       client.emit("account:changed", undefined);
     },
@@ -483,8 +483,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "clientConfig:write": ({ config }) => {
       localStorage.setItem("sm.lab.clientConfig", JSON.stringify(config));
     },
-    "relay:status": relaySnapshot,
-    "relay:invokePeer": ({ deviceId, channel, input }) => {
+    "hub:status": hubSnapshot,
+    "hub:invokePeer": ({ deviceId, channel, input }) => {
       const wire = peerWires.get(deviceId);
       if (wire === undefined) {
         return Promise.reject(new Error(`[lab] unknown peer ${deviceId}`));
@@ -549,7 +549,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   // the lab bridge satisfies the same runtime surface.
   (window as any).api = api;
 
-  const pushRelay = () => client.emit("relay:statusChanged", relaySnapshot());
+  const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());
 
   (window as any).smLab = {
     // "connected" | "online" | "offline"
@@ -558,11 +558,11 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       directSessions.delete(deviceId);
       if (state !== "offline") roster.add(deviceId);
       if (state === "connected") directSessions.add(deviceId);
-      pushRelay();
+      pushHub();
     },
-    setSocket(phase: RelayStatus["socket"]) {
+    setSocket(phase: HubStatus["socket"]) {
       socketPhase = phase;
-      pushRelay();
+      pushHub();
     },
     emitClient: client.emit,
     emitHost: localHost.emit,

@@ -1,8 +1,8 @@
 // Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub relay (scripts/lib/relayStub.mjs): a ticket-mode ws
-// listener (host/socket/server.ts), the broker slot registration on a
-// relay host device, and the REAL shared composition
-// (shared/relay/directPlane.ts) a client drives. Extracted from
+// beside the stub device hub (scripts/lib/hubStub.mjs): a ticket-mode
+// ws listener (host/socket/server.ts), the broker slot registration on
+// a hub host device, and the REAL shared composition
+// (shared/hub/directPlane.ts) a client drives. Extracted from
 // check-direct-plane.mjs so check-sync-transfer.mjs and
 // check-port-forward.mjs move their transfer scenarios onto a real
 // direct connection without a second copy of the plumbing. Runs under
@@ -10,10 +10,10 @@
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
-import { createDirectPlane } from "@shared/relay/directPlane";
+import { createDirectPlane } from "@shared/hub/directPlane";
 import { WebSocket as WsClient } from "ws";
-import { startStubRelay } from "./relayStub.mjs";
-import { bootDevice, waitFor } from "./relayBoot.mjs";
+import { startStubHub } from "./hubStub.mjs";
+import { bootDevice, waitFor } from "./hubBoot.mjs";
 
 // A REAL ticket-mode listener on an ephemeral loopback port, with its
 // ticket store and a toggleable grant set. `registerHandlers`, when
@@ -50,8 +50,8 @@ export async function startDirectListener(track, opts = {}) {
   };
 }
 
-// Boots the relay pair: B wires the REAL direct broker pair into its
-// binding's one slot (the ONLY thing the relay wire serves, with the
+// Boots the hub pair: B wires the REAL direct broker pair into its
+// binding's one slot (the ONLY thing the hub wire serves, with the
 // same channel and zod parse wiring main uses), A is the dialing
 // client. The two devices are independent, so they boot concurrently.
 export async function bootBrokeredPair(stub, track, listener, opts = {}) {
@@ -93,9 +93,9 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 }
 
 // The whole direct wire the transfer checks share, exactly as
-// production composes it: the stub relay, a REAL ticket-mode listener
-// on device A serving the check's contracts, the brokered relay pair
-// (A hosting the broker, B the dialing client), the REAL shared
+// production composes it: the stub device hub, a REAL ticket-mode
+// listener on device A serving the check's contracts, the brokered hub
+// pair (A hosting the broker, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
 // The plane's presence path is wired to the client connection exactly
 // as production wires it (late-bound, plus one catch-up call for the
@@ -104,7 +104,7 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 // which is the supervised model the transfer checks now ride.
 // Everything registers its teardown on the caller's tracker.
 export async function bootDirectWire(track, opts = {}) {
-  const stub = await startStubRelay();
+  const stub = await startStubHub();
   track(() => stub.close());
   const listener = await startDirectListener(track, {
     deviceId: "A",
@@ -155,7 +155,7 @@ export function makeDirectBridge(client, opts = {}) {
 
 // A ClientTransport riding the bridge's cached direct session, with a
 // per-channel invoke counter so a transfer check can pin poll-side
-// chunking as round trips (the relay stub sees none of them, which the
+// chunking as round trips (the hub stub sees none of them, which the
 // checks assert separately via forwardedCount).
 export function bridgePeerTransport(bridge, deviceId) {
   const counts = new Map();

@@ -1,7 +1,7 @@
 // Vite config for the UI lab (design exploration only, never deployed):
 // the DESKTOP renderer tree mounted in a browser over a fixture
 // window.api bridge (lab/bridge.ts), so every multi-device surface can
-// be posed and screenshotted without a relay, a second machine, or
+// be posed and screenshotted without a device hub, a second machine, or
 // Clerk. Mirrors vite.web.config.ts (same plugins, same aliases) with
 // three differences: the lab root, a distinct port, and the @clerk/*
 // aliases onto the lab's in-memory stub so account UI renders signed-in

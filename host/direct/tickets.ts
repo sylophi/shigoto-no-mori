@@ -1,6 +1,6 @@
 // In-memory store of the direct data plane's connect tickets (v2 step
 // 10, slice A). direct:connectInfo mints one set per calling peer over
-// the relay (one ticket per candidate address), and the direct
+// the device hub (one ticket per candidate address), and the direct
 // listener's hello consumes them. Tickets are short-lived, single-use
 // bearer strings bound to the peer deviceId they were minted for, so a
 // leaked ticket is useless to any other device and goes stale in a
@@ -19,8 +19,8 @@
 import { DIRECT_TICKET_TTL_MS } from "@shared/ipc/modules/direct";
 import { mintHexId } from "@host/lib/idleRegistry";
 
-// The distinguishing prefix, following the relay worker's smrt_/smdc_
-// convention (relay/src/ticket.ts): smpt_ for a peer-to-peer connect
+// The distinguishing prefix, following the hub worker's smrt_/smdc_
+// convention (hub/src/ticket.ts): smpt_ for a peer-to-peer connect
 // ticket. Purely cosmetic for logs and debugging, never parsed.
 export const DIRECT_TICKET_PREFIX = "smpt_";
 

@@ -16,8 +16,9 @@ import { cn } from "@/lib/utils";
 import type { DeviceBlock, DeviceTarget } from "./deviceTargets";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
-// is the relay's job, granting happens on the other machine's Devices
-// page, and cloning a missing repo is not something this form does.
+// is the device hub's job, granting happens on the other machine's
+// Devices page, and cloning a missing repo is not something this form
+// does.
 const BLOCK_REASON: Record<DeviceBlock, string> = {
   offline: "Creating needs a live connection.",
   "no-project":

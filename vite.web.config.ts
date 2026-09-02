@@ -3,8 +3,8 @@
 // identically: same plugins (tailwind, react with the compiler preset),
 // same aliases, same build-info defines. Differences are the web root,
 // the dist-web output at the repo root, a distinct dev port so the
-// desktop's renderer dev server can run beside it, and the SM_ACCOUNT_*
-// env prefix that bakes the non-secret account service config into the
+// desktop's renderer dev server can run beside it, and the envPrefix
+// entries that bake the non-secret account service config into the
 // bundle (see web/account/config.ts).
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -12,6 +12,7 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
+import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
 
 function gitOutput(args: string): string | null {
   try {
@@ -39,10 +40,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: resolve(__dirname, "web"),
-    // Every SM_ACCOUNT_* value is a public endpoint or client id by
-    // design (shared/account/serviceConfig.ts), so exposing the prefix
-    // to the client bundle leaks nothing.
-    envPrefix: ["VITE_", "SM_ACCOUNT_"],
+    // Vite matches envPrefix entries as prefixes, so the full key names
+    // from ACCOUNT_ENV_KEYS expose exactly those vars and nothing else
+    // that happens to share a prefix. Every value is a public endpoint
+    // or client id by design, so inlining them leaks nothing.
+    envPrefix: ["VITE_", ...ACCOUNT_ENV_KEYS],
     // Env files are read from the repo root, beside the desktop's.
     envDir: __dirname,
     resolve: {

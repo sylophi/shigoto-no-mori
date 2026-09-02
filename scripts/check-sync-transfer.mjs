@@ -1,7 +1,7 @@
-// Durable proof for the device-sync transfer plumbing (v2 step 7
-// slice B, direct-only since step 10 slice C): git bundles as chunked,
-// grant-gated invoke responses over a REAL DIRECT websocket between
-// the two fixtures, brokered by the stub relay exactly as production
+// Durable proof for the device-sync transfer plumbing (v2 step 7 slice
+// B, direct-only since step 10 slice C): git bundles as chunked,
+// grant-gated invoke responses over a REAL DIRECT websocket between the
+// two fixtures, brokered by the stub device hub exactly as production
 // does (scripts/lib/directBoot.mjs). Nothing here is a double on the
 // sync path itself: device A registers the REAL sync contract and
 // handlers on a real ticket-mode listener, the handlers shell the REAL
@@ -16,8 +16,8 @@
 //     crosses in >= 3 chunks and lands ONLY under refs/shigomori/ on
 //     the receiver with the source's exact tips, byte-identical
 //     content via git cat-file, and no branch materialized -- while
-//     the stub relay's forwardedCount stays FLAT (nothing but the
-//     one-time broker frames ever rides the relay);
+//     the stub device hub's forwardedCount stays FLAT (nothing but the
+//     one-time broker frames ever rides the device hub);
 //   - the host drops a finished transfer (a stale chunk request is
 //     refused) and bundleAbort cleans up an abandoned one;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle".
@@ -287,7 +287,7 @@ async function main() {
 
   // ---- The direct wire: A hosts the real sync surface on a real
   // ticket-mode listener, B receives through the real dialer and
-  // bridge cache, with the stub relay carrying ONLY the broker
+  // bridge cache, with the stub device hub carrying ONLY the broker
   // exchange (bootDirectWire, the shared fixture). Teardowns collect
   // on the shared tracker for the finally below.
   const { track, teardown } = makeTracker();
@@ -357,10 +357,10 @@ async function main() {
     // (3) The full transfer: branch + capture ref, thinned by the
     // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces
     // only, byte-identical objects. The direct session is established
-    // by now (the refusals above dialed it), so the relay must stay
-    // COMPLETELY flat for the whole transfer: no frame of it may ride
-    // the stub.
-    const relayBaseline = stub.forwardedCount();
+    // by now (the refusals above dialed it), so the device hub must
+    // stay COMPLETELY flat for the whole transfer: no frame of it may
+    // ride the stub.
+    const hubBaseline = stub.forwardedCount();
     const chunksBefore = peerA.invokeCount("sync:bundleChunk");
     const refsBefore = await refSnapshot(targetRepo);
     const { fetched } = await fetchBundleFromPeer(sync, {
@@ -376,8 +376,8 @@ async function main() {
     );
     assert.equal(
       stub.forwardedCount(),
-      relayBaseline,
-      "the bundle transfer rode the relay instead of the direct socket",
+      hubBaseline,
+      "the bundle transfer rode the device hub instead of the direct socket",
     );
     const wantTips = {
       "refs/shigomori/incoming/feature": featureTip,
@@ -808,7 +808,7 @@ async function main() {
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct
-    // sessions and listener first, then the relay connections, then
+    // sessions and listener first, then the hub connections, then
     // the stub.
     await teardown();
   }

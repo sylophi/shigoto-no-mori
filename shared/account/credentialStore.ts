@@ -1,4 +1,4 @@
-// The storage-agnostic core of this device's relay credential store. It
+// The storage-agnostic core of this device's hub credential store. It
 // owns the on-storage envelope and the pure doc-shape logic (the
 // { v:1, enc, credential, accountId, deviceName } document, the enc
 // branch, the corrupt-reads-null tolerance) while the raw storage

@@ -1,13 +1,13 @@
 // Renderer registry of remote devices: the account's devices,
 // deviceId-keyed. There is no per-device supervisor in the renderer.
-// The one relay socket lives in main and a device's status DERIVES from
+// The one hub socket lives in main and a device's status DERIVES from
 // the bridge (remoteDeviceSync.ts rebuilds the list wholesale on boot, on
-// account changes and on every relay status change). The registry is
+// account changes and on every hub status change). The registry is
 // the external store a React binding reads through useSyncExternalStore,
 // so device status renders live without prop threading.
 //
 // This file is renderer-only: it reads window.api for the local device's
-// facts. It is NOT the transport machinery (that is the relay bridge in
+// facts. It is NOT the transport machinery (that is the hub bridge in
 // main); it is the renderer's wiring around it, so it stays out of the
 // headless proof.
 import type { buildApi } from "@shared/ipc/client";
@@ -19,8 +19,8 @@ import type { SupervisorStatus } from "@shared/remote/supervisor";
 export type RemoteDeviceApi = ReturnType<typeof buildApi>;
 
 // A remote device's derived status: the supervisor vocabulary the
-// relay socket reports, plus the one renderer-local phase the direct
-// data plane needs. "online" means the peer is in the relay roster but
+// hub socket reports, plus the one renderer-local phase the direct
+// data plane needs. "online" means the peer is in the hub roster but
 // no direct session is established (not dialed yet, or the dial
 // failed), so it is NOT rendered as connected (v2 step 10, slice C:
 // data is direct or nothing, and a roster fact must not claim a data
@@ -41,12 +41,12 @@ export type RemoteDevice = {
   // Present while the peer is online in the roster, whether or not a
   // direct session exists yet. Nothing here ever opens one: sessions
   // are supervised desired state owned by main's keeper
-  // (shared/relay/directKeeper.ts), which dials every rostered peer
+  // (shared/hub/directKeeper.ts), which dials every rostered peer
   // eagerly and redials forever. The api ships early anyway so a view
   // can stand ready through the dial window -- a call landing on the
   // in-flight dial joins it, one landing on no session rejects, and
   // the online-to-connected transition refetches it
-  // (remoteDeviceSync.ts). Host calls route over the relay bridge onto
+  // (remoteDeviceSync.ts). Host calls route over the hub bridge onto
   // the direct wire. Client-scoped calls reject (see
   // rejectingClientTransport).
   api?: RemoteDeviceApi;
@@ -110,8 +110,8 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
 }
 
 // Replace the store wholesale. Called by remoteDeviceSync.ts on boot,
-// on account changes and on relay status changes. The rebuild arrives
-// on every relay transition, most of which change nothing for most
+// on account changes and on hub status changes. The rebuild arrives
+// on every hub transition, most of which change nothing for most
 // devices, so unchanged entries keep their previous object identity
 // (a memoized row skips its re-render) and a fully identical rebuild
 // bails without notifying at all. The dedupe is keyed by deviceId, not

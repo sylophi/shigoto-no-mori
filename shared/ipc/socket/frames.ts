@@ -37,8 +37,9 @@ export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // MAX_INBOUND_FRAME_BYTES and what gives both directions flow control
 // (each chunk is one awaited invoke round trip). The base64 form
 // (853_336 chars) leaves headroom under the 1 MiB inbound cap for the
-// frame fields around it. Raising the chunk size now that the relay's
-// envelope cap no longer applies is a deliberately deferred follow-up.
+// frame fields around it. Raising the chunk size now that the device
+// hub's envelope cap no longer applies is a deliberately deferred
+// follow-up.
 export const WIRE_CHUNK_BYTES = 640_000;
 export const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
 
@@ -60,7 +61,7 @@ export const ChunkB64Schema = z
 export const HELLO_TIMEOUT_MS = 10_000;
 
 // Concurrent dispatched requests per connection, shared by the LAN
-// binding (per socket) and the relay link (per peer). Over the cap a
+// binding (per socket) and the hub link (per peer). Over the cap a
 // request is refused rather than spawning yet another git or CLI
 // subprocess. 64, raised from 32: each forwarded TCP connection parks a
 // long-poll in this budget (host/ipc/modules/forward.ts), so 32 starved
@@ -69,14 +70,14 @@ export const HELLO_TIMEOUT_MS = 10_000;
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Skip a push once the outbound socket buffer passes this, shared by
-// the LAN binding and the relay link, so a stalled peer or relay cannot
+// the LAN binding and the hub link, so a stalled peer or hub cannot
 // grow main-process memory without bound via queued pushes. Pushes are
 // recoverable refresh signals, so dropping one is safe.
 export const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
 
 // After a shutdown or owner close, how long a non-cooperating peer or a
-// stalled relay has before its socket is terminated, so it cannot wedge
-// a lifecycle queue for ws's ~30s close window.
+// stalled device hub has before its socket is terminated, so it cannot
+// wedge a lifecycle queue for ws's ~30s close window.
 export const TERMINATE_GRACE_MS = 1_500;
 
 // Application close codes (the 4000-4999 range websockets reserve for
@@ -133,8 +134,8 @@ export const ReqFrameSchema = z.object({
 });
 export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 
-// Sent by a client peer when it closes its side on purpose (v2 step
-// 10, slice A). The relay carries no per-peer socket close, so without
+// Sent by a client peer when it closes its side on purpose (v2 step 10,
+// slice A). The device hub carries no per-peer socket close, so without
 // this a host would keep a hostSession for a departed peer until the
 // next presence drop and fan every broadcast at it through the Durable
 // Object. Additive per the version-skew policy: an old host fails to
@@ -170,21 +171,21 @@ export const ResOkFrameSchema = z.object({
 });
 
 // The one refusal code either remote gate stamps on a res error today:
-// the relay's per-peer command-grant gate and the LAN wire's read-only
-// gate (v2 step 6, slice B). One shared constant so both client roles
-// mint one typed error for "that machine will not run commands from
-// here", distinct from a real handler failure.
+// the device hub's per-peer command-grant gate and the LAN wire's
+// read-only gate (v2 step 6, slice B). One shared constant so both
+// client roles mint one typed error for "that machine will not run
+// commands from here", distinct from a real handler failure.
 export const COMMAND_REFUSED_CODE = "command-refused";
 
 // The refusal message both gates carry. The exact text predates the
-// code (the relay grant gate shipped it in step 4), so an OLD peer
+// code (the hub grant gate shipped it in step 4), so an OLD peer
 // still sends it WITHOUT a code and message-based matching keeps
 // working across version skew in both directions.
 export const COMMAND_REFUSED_MESSAGE =
   "this device is not permitted to run commands on the remote machine";
 
 // The typed client-side surface of a command refusal, minted by both
-// client roles (the LAN socket client transport and the relay link's
+// client roles (the LAN socket client transport and the hub link's
 // client role) when a res error carries COMMAND_REFUSED_CODE. The
 // message is preserved verbatim so every message-text matcher keeps
 // behaving as before.
@@ -196,7 +197,7 @@ export class CommandRefusedError extends Error {
 }
 
 // Matcher that survives Electron's IPC error serialization (which
-// flattens an error to its message text): the renderer behind the relay
+// flattens an error to its message text): the renderer behind the hub
 // bridge sees a plain Error carrying the refusal message, not the
 // instance minted in main, and an OLD peer sends the message with no
 // code at all. Either form means "ask that machine to allow commands".

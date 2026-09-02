@@ -78,9 +78,9 @@ void queryClient.prefetchQuery({
   queryFn: () => window.api.globalConfig.read(),
 });
 
-// Relay devices (v2 step 4, slice C): the remote device registry,
-// rebuilt from the account's device list plus the relay bridge status,
-// on boot and on every account or relay change.
+// Remote devices (v2 step 4, slice C): the remote device registry,
+// rebuilt from the account's device list plus the hub bridge status,
+// on boot and on every account or hub change.
 startRemoteDeviceSync(queryClient);
 
 // State changed on disk under the app (a CLI run in a terminal):

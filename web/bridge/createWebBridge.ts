@@ -3,7 +3,7 @@
 // scalar facts (deviceId, appVersion, isDev, isElectron) plus buildApi over
 // one ClientTransport per scope. The transports are in-page loopback
 // wires instead of the IPC bridge, with the browser-servable client
-// modules (clientConfig, account, relay, shell) registered through the
+// modules (clientConfig, account, hub, shell) registered through the
 // shared registrar and every OS-bound channel answered by a typed stub
 // default. Renderer components therefore mount unmodified: they cannot
 // tell this bridge from the preload's.
@@ -21,22 +21,22 @@ import {
 } from "@shared/ipc/modules/account";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { directContract } from "@shared/ipc/modules/direct";
-import { relayContract } from "@shared/ipc/modules/relay";
+import { hubContract } from "@shared/ipc/modules/hub";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
-import { createDirectPlane } from "@shared/relay/directPlane";
+import { createDirectPlane } from "@shared/hub/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
 import { enrollDevice, signOutDevice } from "@shared/account/enroll";
-import { createRelayConnection } from "../relay/connection";
+import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName } from "../account/deviceName";
 import { createWebAccountStore } from "../account/store";
 import {
   createWebAccessStore,
-  isRelayRefusedError,
+  isHubRefusedError,
   type WebAccessStore,
 } from "../account/webAccess";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
@@ -46,7 +46,7 @@ export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
   // client): the device id, the credential envelope and clientConfig.
   localStorage: KeyValueStorage;
-  // The env record the SM_ACCOUNT_* service config resolves from
+  // The env record the account service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
   // navigator.userAgent, for the default device name.
@@ -69,16 +69,16 @@ export type WebBridge = {
     isElectron: boolean;
   } & ReturnType<typeof buildApi>;
   // The deployment-level access state the shell surfaces when the
-  // build is unconfigured or the relay refuses this origin.
+  // build is unconfigured or the device hub refuses this origin.
   webAccess: WebAccessStore;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
   // the local loopback broadcast and this never double-fire.
   notifyAccountChanged(): void;
-  // Reconciles the relay socket with the current account state.
-  refreshRelay(): Promise<void>;
-  // Tears the relay socket down (tab teardown, tests), along with the
+  // Reconciles the hub socket with the current account state.
+  refreshHub(): Promise<void>;
+  // Tears the hub socket down (tab teardown, tests), along with the
   // direct plane it fronts.
   stop(): Promise<void>;
 };
@@ -90,7 +90,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const store = createWebAccountStore(deps.localStorage);
   const deviceId = getWebDeviceId(deps.localStorage);
   const service = createAccountService({
-    baseUrl: config.relayUrl,
+    baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,
   });
   const webAccess = createWebAccessStore();
@@ -99,9 +99,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const hostWire = createLoopbackWire("host");
   const registrarOpts = { validateOutputs: deps.isDev };
 
-  // ---- relay socket lifecycle ----
+  // ---- hub socket lifecycle ----
 
-  // The direct plane's shared composition (shared/relay/directPlane.ts),
+  // The direct plane's shared composition (shared/hub/directPlane.ts),
   // the same assembly main/ipc/register.ts uses. The browser
   // differences are exactly the declared deps: identity facts from
   // this bridge, fan-out over the loopback wire, dialableKinds
@@ -115,14 +115,14 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     localDeviceId: () => deviceId,
     localAppVersion: () => deps.appVersion,
     broadcastStatus: (status) =>
-      broadcastAll(relayContract, "statusChanged", status, clientWire.server),
+      broadcastAll(hubContract, "statusChanged", status, clientWire.server),
     broadcastPeerPush: (push) =>
-      broadcastAll(relayContract, "peerPush", push, clientWire.server),
+      broadcastAll(hubContract, "peerPush", push, clientWire.server),
     dialableKinds: ["tunnel"],
   });
-  const relayHandlers = directPlane.handlers;
+  const hubHandlers = directPlane.handlers;
 
-  const connection = createRelayConnection({
+  const connection = createHubConnection({
     // The one channel the wire brokers, supplied here so the binding
     // stays contract-free: a browser dials the broker leg only, it
     // never serves it.
@@ -130,14 +130,14 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     onChange: () => directPlane.handleConnectionChange(),
   });
 
-  // Mirrors main/ipc/register.ts refreshRelayConnection: reconcile the
+  // Mirrors main/ipc/register.ts refreshHubConnection: reconcile the
   // socket with the account state, resolving inside the serialized
   // lifecycle, and degrade any failure to a log line. The two web-only
   // additions are the typed access states: an unconfigured build stops
   // the socket instead of dialing nowhere, and an exact origin refusal
   // on the ticket mint stops it instead of a retry loop that can never
   // succeed (see webAccess.ts).
-  async function refreshRelay(): Promise<void> {
+  async function refreshHub(): Promise<void> {
     try {
       await connection.refresh(async () => {
         if (!isConfigured(config)) {
@@ -148,20 +148,20 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         const record = store.read();
         if (record === null) return null;
         return {
-          relayUrl: config.relayUrl,
+          hubUrl: config.hubUrl,
           accountId: record.accountId,
           deviceId,
           appVersion: deps.appVersion,
           mintTicket: async (signal) => {
             const fresh = store.read();
             if (fresh === null) {
-              throw new Error("signed out, no relay credential");
+              throw new Error("signed out, no hub credential");
             }
             try {
               return (await service.mintTicket(fresh.credential, signal))
                 .ticket;
             } catch (error) {
-              if (isRelayRefusedError(error)) {
+              if (isHubRefusedError(error)) {
                 webAccess.set({
                   kind: "blocked",
                   message: errorMessageOf(error),
@@ -177,9 +177,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         };
       });
     } catch (error) {
-      console.warn(
-        `[relay] connection refresh failed: ${errorMessageOf(error)}`,
-      );
+      console.warn(`[hub] connection refresh failed: ${errorMessageOf(error)}`);
     }
   }
 
@@ -199,17 +197,17 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     };
   }
 
-  // Any account transition re-reconciles the relay socket and fans the
+  // Any account transition re-reconciles the hub socket and fans the
   // change out so every account query re-reads, matching the desktop's
   // emitChanged wiring in main/ipc/index.ts.
   function accountChanged(): void {
     broadcastAll(accountContract, "changed", undefined, clientWire.server);
-    void refreshRelay();
+    void refreshHub();
   }
 
   // Re-entrancy guards mirroring the desktop handler's: a re-fired
   // reconciler effect or a second tab must not race two enrolls (the
-  // relay rotates the credential per enroll, so racers can strand the
+  // hub rotates the credential per enroll, so racers can strand the
   // stored one) or two revokes. Same-tab only: the storage key is
   // still shared across tabs, but a cross-tab race is closed by the
   // reconciler's re-read after the storage event.
@@ -226,7 +224,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     await service.revoke(record.credential, targetDeviceId);
     // Revoking THIS browser invalidates its own credential, so the
     // local sign-out follows immediately rather than waiting for the
-    // relay to refuse the next call. Callers revoking self MUST end
+    // hub to refuse the next call. Callers revoking self MUST end
     // the Clerk session first (DevicesPage's SelfRevokeButton does):
     // with the session still live, ClerkAccountSync sees "signed in,
     // not enrolled" and re-enrolls, silently undoing the revoke.
@@ -238,7 +236,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     status: () => readStatus(),
 
     // Exchanges the Clerk session token ClerkAccountSync minted for the
-    // relay device credential, enrolling this browser under platform
+    // hub device credential, enrolling this browser under platform
     // "web" (a legal opaque label beside the desktop's os.platform()
     // values in EnrollRequestSchema's 1..64 bound).
     enroll: async (token) => {
@@ -299,7 +297,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       return readStatus();
     },
 
-    // A web client is a refuse-all host (web/relay/connection.ts): it
+    // A web client is a refuse-all host (web/hub/connection.ts): it
     // serves no peer calls, so a command grant would promise something
     // the transport can never honor. Failing loudly beats a grant that
     // silently does nothing.
@@ -354,12 +352,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     clientWire.server,
     registrarOpts,
   );
-  registerContract(
-    relayContract,
-    relayHandlers,
-    clientWire.server,
-    registrarOpts,
-  );
+  registerContract(hubContract, hubHandlers, clientWire.server, registrarOpts);
   registerContract(
     shellContract,
     shellHandlers,
@@ -388,7 +381,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     notifyAccountChanged: accountChanged,
 
-    refreshRelay,
+    refreshHub,
 
     stop: () => {
       directPlane.stop();

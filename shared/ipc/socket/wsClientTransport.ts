@@ -112,8 +112,8 @@ export type ConnectDeviceOptions = {
   expectedDeviceId?: string;
   // Wildcard push tap, fired for EVERY push frame before the
   // per-channel subscribers, so a bridge can forward this connection's
-  // pushes wholesale (the relay peerPush path) without enumerating
-  // channels. A throw here is contained, mirroring the relay link's
+  // pushes wholesale (the device hub peerPush path) without enumerating
+  // channels. A throw here is contained, mirroring the hub link's
   // onPeerPush.
   onAnyPush?: (channel: string, payload: unknown) => void;
   // The socket constructor, defaulting to the platform global. See
@@ -175,7 +175,7 @@ function isBlockingCloseCode(code: number | null): boolean {
 }
 
 // The single-phase connect every non-racing caller uses (the LAN
-// supervisor, the relay peer dial helpers): open and hello in one
+// supervisor, the hub peer dial helpers): open and hello in one
 // motion, the behavior this function always had.
 export function connectDevice(
   options: ConnectDeviceOptions,
@@ -387,7 +387,7 @@ export function openDevice(
       if (options.onAnyPush !== undefined) {
         // The wildcard tap sees every push before the per-channel
         // fan-out. Contained so a throwing bridge callback cannot
-        // starve local subscribers, mirroring the relay link.
+        // starve local subscribers, mirroring the hub link.
         try {
           options.onAnyPush(frame.channel, frame.payload);
         } catch (error) {

@@ -5,7 +5,7 @@ import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
 import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
-// "Account": sign in to the relay so this device can reach the
+// "Account": sign in to the device hub so this device can reach the
 // account's other devices (v2 step 4, slice B). Two states. Signed out
 // is one panel with one button. Signed in, the whole page is the device
 // registry, which carries the account line (id, headcount, sign-out)
@@ -61,7 +61,7 @@ export function AccountSection() {
 // above. Sign-in opens Clerk's embedded modal, and ClerkAccountSync
 // turns the resulting session into the enrollment. When Clerk is already
 // signed in but the device is not enrolled (the automatic attempt
-// failed: relay down, mint error), opening the modal again would do
+// failed: hub down, mint error), opening the modal again would do
 // nothing, so the button becomes the manual enrollment retry instead.
 function ClerkSignInButton() {
   const clerk = useClerk();

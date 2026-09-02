@@ -1,0 +1,93 @@
+// Cloudflare Worker config for the sm device hub. Two environments
+// share this file, the wrangler way: the top level IS production
+// (`shigomori-hub`) and `env.dev` overrides the name and the D1 binding
+// to make `shigomori-hub-dev`. Bindings are not inherited by named
+// environments, so `env.dev` repeats the binding blocks. Plain settings
+// (`observability`, `migrations`) are inherited and appear once.
+//
+// `pnpm run deploy` targets dev (`--env dev`) and `pnpm run
+// deploy:prod` the top level, so a bare deploy never lands on
+// production by accident. Secrets are per environment too: `wrangler
+// secret put NAME --env dev` for dev, no flag for production.
+//
+// Secrets never live here. CLERK_SECRET_KEY is a wrangler secret, read
+// by src/index.ts to verify Clerk session tokens at enrollment. Each
+// environment holds the key of ITS Clerk instance (development for
+// dev, production for prod).
+//
+// Plain vars the owner may set (via `vars`, which `env.dev` must then
+// repeat since vars are not inherited, or the dashboard):
+// - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
+//   test seam, production should leave it unset.
+//
+// Tunnel provisioning (v2 step 10, slice B) reads four more wrangler
+// secrets, CLOUDFLARE_API_TOKEN, CF_ACCOUNT_ID, TUNNEL_ZONE_ID and
+// TUNNEL_DOMAIN, all optional: with any unset, POST /tunnel answers
+// the typed "not configured" and the rest of the Worker works as
+// before. They are secrets rather than `vars` because dashboard-set
+// plain vars do not survive a deploy. What each holds and the zone
+// layout they assume is in README.md (Domains, Tunnel provisioning),
+// and src/env.ts types them.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shigomori-hub",
+  "main": "src/index.ts",
+  // Recent, and within the range supported by the workerd that
+  // @cloudflare/vitest-pool-workers runs the test suite on.
+  "compatibility_date": "2026-08-01",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DEVICE_HUB",
+        "class_name": "DeviceHub",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      // SQLite-backed storage is required for new DO classes and is
+      // what the hibernation-era APIs assume. The class name was
+      // edited in place through its renames (AccountRelay, AccountHub,
+      // DeviceHub) because both Worker names are new and carry no
+      // applied migrations. A Worker that already ran v1 under an
+      // older class name needs a `rename_class` tag instead.
+      "new_sqlite_classes": ["DeviceHub"],
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "shigomori-hub",
+      // The deployed production database's id (printed by `wrangler
+      // d1 create`, not a secret). Local dev and the vitest suite
+      // ignore it.
+      "database_id": "1b5905c8-53a0-4e90-851d-f011aa539ef1",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "observability": {
+    "enabled": true,
+  },
+  "env": {
+    "dev": {
+      "name": "shigomori-hub-dev",
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "DEVICE_HUB",
+            "class_name": "DeviceHub",
+          },
+        ],
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "shigomori-hub-dev",
+          "database_id": "e762aa88-9dc7-4a16-8698-a6c58029a061",
+          "migrations_dir": "migrations",
+        },
+      ],
+    },
+  },
+}

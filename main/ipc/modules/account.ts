@@ -1,11 +1,11 @@
-// The one electron-facing file of the relay account layer. Everything
+// The one electron-facing file of the hub account layer. Everything
 // under main/account/ is pure and electron-free so the account check
 // script can drive it. This module is where electron enters: safeStorage
 // builds the at-rest cipher, app names the userData store path, and
 // process.env supplies the service config. Sign-in itself lives in the
 // renderer (Clerk's embedded components over the @clerk/electron
 // bridge). This module only exchanges the resulting session token for
-// the relay device credential. The handlers stay thin, delegating to
+// the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
 import { readFileSync } from "node:fs";
 import { hostname, platform } from "node:os";
@@ -64,7 +64,7 @@ function buildCipher(): StoreCipher {
   if (!available && !cipherWarned) {
     cipherWarned = true;
     console.warn(
-      "[account] OS encryption unavailable, storing the relay credential " +
+      "[account] OS encryption unavailable, storing the hub credential " +
         "as plaintext in userData.",
     );
   }
@@ -134,10 +134,10 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 
 // The resolved service config, resolved once and cached. Three layers,
 // lowest to highest precedence: the optional .env.local file (dev
-// convenience), the SM_ACCOUNT_* values baked into the bundle when it
-// was built, then real environment variables. The baked layer is what
-// configures a shipped build: a packaged .app launched from Finder or
-// the Dock inherits launchd's environment, not a shell's, so runtime
+// convenience), the account service values baked into the bundle when
+// it was built, then real environment variables. The baked layer is
+// what configures a shipped build: a packaged .app launched from Finder
+// or the Dock inherits launchd's environment, not a shell's, so runtime
 // process.env carries none of these -- but the env layer on top still
 // lets an owner override a baked build. Caching keeps account:status
 // cheap since it runs on every poll.
@@ -147,7 +147,7 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 //
 // The file read is gated behind !app.isPackaged for security: in a
 // packaged build an attacker-planted .env.local in the launch directory
-// could both enable sign-in and point the Clerk key/relay URL at hostile
+// could both enable sign-in and point the Clerk key/hub URL at hostile
 // infrastructure, so a shipped build sources config ONLY from the values
 // baked in at build time and real environment variables, neither of
 // which a file can plant. The dev-convenience file stays in dev.
@@ -209,7 +209,7 @@ function readStatus(): AccountStatus {
 }
 
 // The signed-in preamble most account-backed calls share: the resolved
-// service against the configured relay plus the stored credential
+// service against the configured hub plus the stored credential
 // record. Null when the build is unconfigured or no credential is
 // stored, which every caller reads as its own flavor of "nothing to
 // do". Kept module private so the store and config stay private too.
@@ -222,7 +222,7 @@ function signedInService(): {
   const record = store().read();
   if (record === null) return null;
   return {
-    service: createAccountService({ baseUrl: config.relayUrl }),
+    service: createAccountService({ baseUrl: config.hubUrl }),
     record,
   };
 }
@@ -264,14 +264,14 @@ export function provisionDeviceTunnel(
   );
 }
 
-// What the relay socket needs from the account layer, kept here so the
+// What the hub socket needs from the account layer, kept here so the
 // store and config stay module private. Null when unconfigured or
-// signed out, which the relay refresh reads as "stop". mintTicket is a
+// signed out, which the hub refresh reads as "stop". mintTicket is a
 // closure that re-reads the stored credential on every call, so a
 // rotated credential is picked up per connect attempt without any
 // refresh plumbing.
-export function relayConnectInputs(): {
-  relayUrl: string;
+export function hubConnectInputs(): {
+  hubUrl: string;
   accountId: string;
   mintTicket: (signal: AbortSignal) => Promise<string>;
 } | null {
@@ -279,16 +279,16 @@ export function relayConnectInputs(): {
   if (signedIn === null) return null;
   const { service, record } = signedIn;
   return {
-    relayUrl: serviceConfig().relayUrl,
+    hubUrl: serviceConfig().hubUrl,
     // Identifies the signed-in account so a re-enroll onto a different
-    // account forces the relay socket to reconnect (C7). A Clerk
+    // account forces the hub socket to reconnect (C7). A Clerk
     // session token is always a JWT with a sub, so the stored record
     // always carries a real account id.
     accountId: record.accountId,
     mintTicket: async (signal) => {
       const fresh = store().read();
       if (fresh === null) {
-        throw new Error("signed out, no relay credential");
+        throw new Error("signed out, no hub credential");
       }
       // The signal aborts the mint on stop and on the dial's mint
       // timeout, so a black-holed route cannot strand the connect (C6).
@@ -323,17 +323,17 @@ export function makeAccountHandlers(
         await enrollDevice(
           {
             config,
-            service: createAccountService({ baseUrl: config.relayUrl }),
+            service: createAccountService({ baseUrl: config.hubUrl }),
             store: store(),
-            // The relay device identity is tied to registry.json:
+            // The hub device identity is tied to registry.json:
             // getDeviceId mints and persists this root's UUID there, so
-            // a registry reset re-enrolls this app as a brand new relay
+            // a registry reset re-enrolls this app as a brand new hub
             // device.
             deviceId: getDeviceId(),
             fallbackDeviceName: defaultDeviceName(),
             // os.platform() is the same value as process.platform,
-            // which the linter restricts here. The relay stores it as
-            // an opaque label.
+            // which the linter restricts here. The device hub stores it
+            // as an opaque label.
             platform: platform(),
           },
           token,
@@ -354,7 +354,7 @@ export function makeAccountHandlers(
         const config = serviceConfig();
         await signOutDevice({
           config,
-          service: createAccountService({ baseUrl: config.relayUrl }),
+          service: createAccountService({ baseUrl: config.hubUrl }),
           store: store(),
           deviceId: getDeviceId(),
           // The failure is swallowed (local sign-out must always land)
@@ -398,10 +398,10 @@ export function makeAccountHandlers(
       await service.revoke(record.credential, deviceId);
       if (deviceId === getDeviceId()) {
         // Self-revoke invalidated our own credential, so drop it now
-        // rather than waiting for the relay to refuse the next call.
-        // The desktop UI routes this device through Sign out instead
-        // (which ends the Clerk session first). This arm exists so the
-        // handler is still correct for any other caller.
+        // rather than waiting for the device hub to refuse the next
+        // call. The desktop UI routes this device through Sign out
+        // instead (which ends the Clerk session first). This arm exists
+        // so the handler is still correct for any other caller.
         store().clear();
         grantStore().clear();
       } else {

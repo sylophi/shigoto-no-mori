@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
-import { DeviceIdSchema, DeviceInfoSchema } from "@shared/relay/protocol";
+import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
 
-// The relay account layer as the renderer sees it. Client-scoped on
+// The hub account layer as the renderer sees it. Client-scoped on
 // purpose: enrollment writes an OS-keychain credential on the machine
 // showing the window, so it must never be served to a remote peer.
 // Being client-scoped also keeps every call structurally off the
@@ -29,33 +29,33 @@ export const accountContract = defineContract("client", {
   // the stored credential metadata is a readFileSync plus an OS-keychain
   // decrypt on EVERY call, so invoke this on account events, not on a
   // poll. The device list is a separate call so a status read never
-  // hits the relay.
+  // hits the device hub.
   status: invoke("account:status", z.void(), AccountStatusSchema),
-  // Enrolls this device on the relay under a fresh Clerk session token
-  // (the renderer owns the Clerk sign-in UI and mints the token) and
-  // stores the returned device credential. Resolves to the
+  // Enrolls this device on the device hub under a fresh Clerk session
+  // token (the renderer owns the Clerk sign-in UI and mints the token)
+  // and stores the returned device credential. Resolves to the
   // post-enrollment status.
   enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
-  // Best-effort revokes THIS device on the relay, then clears the stored
-  // credential locally. The revoke is best-effort so local sign-out
-  // always succeeds even offline.
+  // Best-effort revokes THIS device on the device hub, then clears the
+  // stored credential locally. The revoke is best-effort so local
+  // sign-out always succeeds even offline.
   signOut: invoke("account:signOut", z.void(), z.void()),
-  // Removes a device from the ACCOUNT on the relay, under this device's
-  // credential: the target's credential stops working the moment it next
-  // calls, and it disappears from every other device's registry. Unlike
-  // signOut this is not best-effort -- a failed relay call must surface,
-  // because nothing local stands in for "the device is still enrolled".
-  // Bounded by DeviceIdSchema so a listed peer's id always parses. The
-  // handler mirrors web/bridge/createWebBridge.ts's revokeDevice,
-  // including the self-revoke caveat: revoking THIS device invalidates
-  // our own credential, so the local one is cleared in the same breath
-  // (the desktop UI offers Sign out for this device instead, which ends
-  // the Clerk session first -- with the session still live
-  // ClerkAccountSync would see "signed in, not enrolled" and silently
-  // re-enroll, undoing the revoke).
+  // Removes a device from the ACCOUNT on the device hub, under this
+  // device's credential: the target's credential stops working the
+  // moment it next calls, and it disappears from every other device's
+  // registry. Unlike signOut this is not best-effort -- a failed hub
+  // call must surface, because nothing local stands in for "the device
+  // is still enrolled". Bounded by DeviceIdSchema so a listed peer's id
+  // always parses. The handler mirrors web/bridge/createWebBridge.ts's
+  // revokeDevice, including the self-revoke caveat: revoking THIS
+  // device invalidates our own credential, so the local one is cleared
+  // in the same breath (the desktop UI offers Sign out for this device
+  // instead, which ends the Clerk session first -- with the session
+  // still live ClerkAccountSync would see "signed in, not enrolled" and
+  // silently re-enroll, undoing the revoke).
   revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
-  // The account's device registry from the relay, under the stored
-  // credential. Element shape is the shared relay DeviceInfo so the app
+  // The account's device registry from the device hub, under the stored
+  // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
   listDevices: invoke(
     "account:listDevices",
@@ -63,7 +63,7 @@ export const accountContract = defineContract("client", {
     z.array(DeviceInfoSchema),
   ),
   // Renames this device locally (the stored metadata). A future slice may
-  // push the rename to the relay. Resolves to the updated status.
+  // push the rename to the device hub. Resolves to the updated status.
   setDeviceName: invoke(
     "account:setDeviceName",
     // Bounded to match EnrollRequestSchema.name so a stored name can
@@ -72,9 +72,9 @@ export const accountContract = defineContract("client", {
     AccountStatusSchema,
   ),
   // Grants a peer device command access on THIS host: after the grant,
-  // this machine serves that peer's MUTATING relay calls instead of
+  // this machine serves that peer's MUTATING hub calls instead of
   // refusing them (reads were always served). Scoped to the current
-  // account and enforced host-local, so it never rides the relay wire
+  // account and enforced host-local, so it never rides the hub wire
   // (client-scoped). Throws if signed out. The deviceId bound matches
   // DeviceInfo.deviceId so a listed peer's id always parses.
   grantCommands: invoke("account:grantCommands", DeviceIdSchema, z.void()),

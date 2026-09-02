@@ -169,7 +169,7 @@ function buildQueryKeys(deviceId: string) {
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
 
-    // Client-scoped: the relay account credential lives in this app
+    // Client-scoped: the hub account credential lives in this app
     // instance's userData, not a host's state. Status and the device list
     // share the "account" prefix so the changed broadcast can invalidate
     // both at once.

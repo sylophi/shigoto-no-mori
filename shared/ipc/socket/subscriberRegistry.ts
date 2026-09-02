@@ -2,13 +2,13 @@
 // unsubscribe that deletes an empty set, and a fan-out that isolates a
 // throwing handler so one bad subscriber cannot stop delivery to the
 // rest. Written once here because four transports need the identical
-// bookkeeping (the LAN client transport, the relay link's per-peer
-// subscribers, the renderer's relay transport, and the web bridge's
+// bookkeeping (the LAN client transport, the hub link's per-peer
+// subscribers, the renderer's hub transport, and the web bridge's
 // loopback), and one copy had drifted without the try/catch that keeps
 // a throwing subscriber from halting the loop.
 //
 // Pure on purpose: it knows nothing about sockets or the wire. The
-// caller keys by whatever it likes, a bare channel on the LAN and relay
+// caller keys by whatever it likes, a bare channel on the LAN and hub
 // link paths or a composite deviceId plus channel on the renderer path.
 import { errorMessageOf } from "@shared/errors";
 

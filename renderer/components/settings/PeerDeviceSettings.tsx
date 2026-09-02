@@ -28,7 +28,7 @@ import { VersionSection } from "./VersionSection";
 // a disk and a shell, and only the local section renders them.
 export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   const { reachable } = deviceStatusView(device.status);
-  // The api of the last session the registry handed over. A relay or
+  // The api of the last session the registry handed over. A hub or
   // session blip drops device.api while the keeper redials, and the
   // api object is one per device for the window's lifetime, so keeping
   // the last one mounted keeps a seeded form (and its unsaved edits)

@@ -1,7 +1,7 @@
 // What one registry row says about a device's state, in one place so
 // the summary line and the rows can never disagree.
 //
-// Two sources answer different halves of the question. The LIVE relay
+// Two sources answer different halves of the question. The LIVE hub
 // store (useRemoteDevices) knows whether a peer is in the roster right
 // now and whether a direct session is up -- that is deviceStatusView's
 // vocabulary and it is what the dot must show. The account registry's
@@ -12,8 +12,8 @@
 // is not running the app is the NORMAL state of a laptop in a bag, so
 // it gets amber (calm, "not right now") plus the last-seen time, never
 // the rose an error would earn.
-import type { TunnelState } from "@shared/ipc/modules/relay";
-import type { DeviceInfo } from "@shared/relay/protocol";
+import type { TunnelState } from "@shared/ipc/modules/hub";
+import type { DeviceInfo } from "@shared/hub/protocol";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
   deviceStatusView,
@@ -42,7 +42,7 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
     case "no-binary":
       return `No tunnel: no usable cloudflared (see the log), so ${LOCAL_ONLY}`;
     case "unconfigured":
-      return `No tunnel: the relay isn't set up for tunnels, so ${LOCAL_ONLY}`;
+      return `No tunnel: the device hub isn't set up for tunnels, so ${LOCAL_ONLY}`;
     case "error":
       return `Tunnel is down (retrying). Until it's back, ${LOCAL_ONLY}`;
     case "starting":
@@ -55,18 +55,18 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
 export function deviceRowStatus(
   device: DeviceInfo,
   isThisDevice: boolean,
-  relayDevice: RemoteDevice | undefined,
+  hubDevice: RemoteDevice | undefined,
 ): DeviceRowStatus {
   // This machine is not a remote device to itself: it is running the
   // app the row is rendered by, so it is online by construction and
-  // never appears in the relay store.
+  // never appears in the hub store.
   if (isThisDevice) {
     return { tone: "emerald", label: "Online", reachable: true };
   }
-  // A peer absent from the relay roster -- or with no store entry at
+  // A peer absent from the hub roster -- or with no store entry at
   // all, which is the same fact before the first reconcile lands -- is
   // off, not broken.
-  if (relayDevice === undefined || relayDevice.status.phase === "stopped") {
+  if (hubDevice === undefined || hubDevice.status.phase === "stopped") {
     return {
       tone: "amber",
       // lastSeenAt is null until a device first connects, and a device
@@ -81,5 +81,5 @@ export function deviceRowStatus(
   // Every other phase (connected, online, connecting, reconnecting,
   // blocked) is a live transport fact, so the shared presentation
   // mapping owns it outright.
-  return deviceStatusView(relayDevice.status);
+  return deviceStatusView(hubDevice.status);
 }

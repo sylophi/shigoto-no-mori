@@ -1,6 +1,6 @@
 // The on-disk home of this host's command-execution grants (v2 step 4,
 // slice D). A grant is a list of peer deviceIds this machine trusts to
-// run MUTATING calls on it over the account relay, scoped to the CURRENT
+// run MUTATING calls on it over the device hub, scoped to the CURRENT
 // account so signing into a different account never inherits the old
 // account's grants. Pure core: the file path is injected, so this file
 // stays electron-free (node:fs plus the shared electron-free atomic-write
@@ -16,9 +16,9 @@ import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 
 // A ceiling on the stored grant list so a runaway local write cannot
 // grow grants.json without bound. A plain host-local constant,
-// deliberately NOT tied to the relay's roster cap: grants persist for
-// offline devices (an enrolled machine keeps its grant while off), so
-// this bounds a persisted registry, not concurrent presence. A host
+// deliberately NOT tied to the device hub's roster cap: grants persist
+// for offline devices (an enrolled machine keeps its grant while off),
+// so this bounds a persisted registry, not concurrent presence. A host
 // granting more than this many of its OWN devices is not a real
 // scenario, so refusing past it is safe.
 const MAX_GRANTED_PEERS = 256;

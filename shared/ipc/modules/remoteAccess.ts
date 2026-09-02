@@ -9,7 +9,8 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // binding via HandlerContext.isCallerCommandGranted:
 //   - Electron (local window): always granted.
 //   - LAN socket: never granted, that wire is read-only by policy.
-//   - Relay: the host's live per-peer grant for the caller's deviceId.
+//   - Device hub: the host's live per-peer grant for the caller's
+//     deviceId.
 // The answer is a single boolean about the caller alone; the full grant
 // list never rides a remote wire (it stays client-scoped in
 // account.listGrantedDevices). Fail-closed: a transport supplying no

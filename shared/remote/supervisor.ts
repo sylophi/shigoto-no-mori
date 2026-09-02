@@ -1,5 +1,5 @@
 // Reconnect supervisor for one remote connection (v2 step 3, slice B,
-// moved to shared/ in step 4 so the main-process relay socket reuses
+// moved to shared/ in step 4 so the main-process hub socket reuses
 // it). It is the SINGLE owner of retry for a connection: nothing else
 // drives the connect function for it, so there is exactly one backoff
 // ladder and one timer per connection, never a fan of overlapping
@@ -11,7 +11,7 @@
 // A connection that STAYS OPEN past the stable threshold resets the
 // ladder to the bottom, so a healthy link that blips once does not
 // inherit a punishing delay. A blocking close (a wrong token on the LAN
-// path, a revoked device on the relay path) goes to blocked with NO
+// path, a revoked device on the hub path) goes to blocked with NO
 // further retry: those failures must block rather than spin into a
 // hammering loop. Every other close backs off.
 //
@@ -82,7 +82,7 @@ export type ConnectFn = (
 // The block-vs-retry verdict for a close code, injectable because each
 // wire has its own terminal codes. A non-null verdict blocks with its
 // message. The default is the LAN rule: only a wrong token blocks.
-// The relay connection supplies its own classifier for the revoked and
+// The hub connection supplies its own classifier for the revoked and
 // superseded close codes.
 //
 // Every classifier here is an ALLOWLIST of blocking codes, so an
@@ -95,7 +95,7 @@ export type CloseClassifier = (
 const AUTH_FAILED_MESSAGE = "authentication failed";
 
 // Not exported: it is only the default classifier for this module. The
-// relay path injects its own, and nothing else references it. The
+// hub path injects its own, and nothing else references it. The
 // host's failed-auth lockout (CLOSE_AUTH_LOCKED_OUT) is pointedly NOT
 // here: it is a temporary bench on the client IP, not a verdict on
 // this device's token, so a LAN supervisor rides it out on the ladder

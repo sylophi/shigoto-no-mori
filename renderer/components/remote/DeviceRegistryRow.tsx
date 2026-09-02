@@ -14,8 +14,8 @@
 // list cannot offer.
 import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
-import type { TunnelState } from "@shared/ipc/modules/relay";
-import type { DeviceInfo } from "@shared/relay/protocol";
+import type { TunnelState } from "@shared/ipc/modules/hub";
+import type { DeviceInfo } from "@shared/hub/protocol";
 import { ToggleRow } from "@/components/settings/ToggleRow";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
@@ -55,7 +55,7 @@ export function DeviceRegistryRow({
   device: DeviceInfo;
   isThisDevice: boolean;
   // This device's stored name, which setDeviceName writes locally while
-  // the relay registry keeps the name it enrolled under. The local one
+  // the hub registry keeps the name it enrolled under. The local one
   // is the truth the user just typed, so the row shows it.
   localDeviceName: string;
   // Derived once by the registry, which needs the same reading for its

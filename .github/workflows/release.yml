@@ -112,6 +112,13 @@ jobs:
             exit 1
           fi
 
+      # A packaged build with no hub URL is valid but useless for remote
+      # features. An unset repository variable expands to "", so warn
+      # loudly instead of shipping an unconfigured release in silence.
+      - name: Warn when the account service config is unset
+        if: vars.SM_DEVICE_HUB_URL == '' || vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY == ''
+        run: echo "::warning::SM_DEVICE_HUB_URL or SM_ACCOUNT_CLERK_PUBLISHABLE_KEY is not set as a repository variable, so this build ships with remote features unconfigured"
+
       - name: Build distributables
         env:
           # Empty in unsigned mode, so the secrets never reach a build
@@ -126,7 +133,7 @@ jobs:
           # these ships with remote features unconfigured. Set them as
           # repository Actions variables (they are not secrets).
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: ${{ vars.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY }}
-          SM_ACCOUNT_RELAY_URL: ${{ vars.SM_ACCOUNT_RELAY_URL }}
+          SM_DEVICE_HUB_URL: ${{ vars.SM_DEVICE_HUB_URL }}
           SM_ACCOUNT_WEB_ORIGIN: ${{ vars.SM_ACCOUNT_WEB_ORIGIN }}
         run: pnpm exec electron-forge publish --dry-run
 

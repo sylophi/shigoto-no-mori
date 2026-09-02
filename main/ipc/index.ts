@@ -16,7 +16,7 @@ import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { relayContract } from "@shared/ipc/modules/relay";
+import { hubContract } from "@shared/ipc/modules/hub";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -65,9 +65,9 @@ import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
   directHandlers,
-  refreshRelayConnection,
+  refreshHubConnection,
   registerContract,
-  relayHandlers,
+  hubHandlers,
 } from "./register";
 
 // The pull/transplant orchestrations' and the port-forward engine's
@@ -79,7 +79,7 @@ import {
 const peerTransportFor = (deviceId: string) => ({
   invoke: (channel: string, input: unknown) =>
     Promise.resolve(
-      relayHandlers.invokePeer({ deviceId, channel, input }, undefined),
+      hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
     ),
   subscribe: (): (() => void) => {
     throw new Error("the peer api is invoke-only");
@@ -91,7 +91,7 @@ export function registerIpcHandlers(): void {
   // Client-scoped: sign-in drives the OS browser and writes an
   // OS-keychain credential on this machine, so it never rides the socket
   // wire. The changed broadcast fans out to every window after any
-  // sign-in, sign-out or rename, and the relay socket re-reconciles
+  // sign-in, sign-out or rename, and the hub socket re-reconciles
   // against the fresh account state at the same moment.
   registerContract(
     accountContract,
@@ -107,30 +107,30 @@ export function registerIpcHandlers(): void {
         broadcastAll(accountContract, "grantsChanged", undefined);
         // Also reconciles the direct listener from its tail, which
         // follows the same enrollment condition.
-        void refreshRelayConnection();
+        void refreshHubConnection();
       },
       // A grant or revoke fans out on its own channel so a toggle does
-      // not thrash the account status and device queries. No relay
+      // not thrash the account status and device queries. No hub
       // reconnect: the link reads the grant predicate live.
       () => {
         broadcastAll(accountContract, "grantsChanged", undefined);
       },
     ),
   );
-  // Client-scoped bridge onto the main-process relay socket: status,
+  // Client-scoped bridge onto the main-process hub socket: status,
   // invokes over the keeper-held direct sessions, and the
   // peerPush/statusChanged fan-outs. The
   // handlers themselves are constructed in register.ts, which owns
   // every dep and folds directPeerVersions back into the status
   // snapshot.
-  registerContract(relayContract, relayHandlers);
+  registerContract(hubContract, hubHandlers);
   // The direct data plane's brokering surface: host-scoped and
-  // remote:true, so a peer asks over the relay (or an existing direct
-  // session) how to dial this host directly. The handlers are
-  // constructed in register.ts, which owns every dep (the listener,
-  // the ticket store, the relay roster). The handler fails closed
-  // without an authenticated callerDeviceId, so the Electron wire
-  // always reads available:false.
+  // remote:true, so a peer asks over the device hub (or an existing
+  // direct session) how to dial this host directly. The handlers are
+  // constructed in register.ts, which owns every dep (the listener, the
+  // ticket store, the hub roster). The handler fails closed without an
+  // authenticated callerDeviceId, so the Electron wire always reads
+  // available:false.
   registerContract(directContract, directHandlers);
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.

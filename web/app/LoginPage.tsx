@@ -26,8 +26,8 @@ export function LoginPage() {
           Your forests, from anywhere
         </h1>
         <p className="text-sm text-muted-foreground">
-          Sign in to reach this account&apos;s devices through the relay. This
-          browser enrolls as a device of its own.
+          Sign in to reach this account&apos;s devices through the device hub.
+          This browser enrolls as a device of its own.
         </p>
       </div>
       {status?.configured === true ? (
@@ -67,7 +67,7 @@ function ConfiguredLogin() {
     return (
       <div className="flex w-full max-w-sm flex-col items-start gap-3 rounded-lg border border-border bg-card px-4 py-4 shadow-sm">
         <p className="text-sm text-muted-foreground">
-          Signed in. Enrolling this browser with the relay&hellip;
+          Signed in. Enrolling this browser with the device hub&hellip;
         </p>
         <Button
           variant="outline"

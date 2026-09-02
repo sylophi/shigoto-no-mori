@@ -2,29 +2,29 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
 // Brokering surface for the direct data plane (v2 step 10, slice A): a
-// peer asks this host, over the relay, how to dial it directly. The
-// answer is a list of fully dialable CANDIDATES, each carrying its
+// peer asks this host, over the device hub, how to dial it directly.
+// The answer is a list of fully dialable CANDIDATES, each carrying its
 // kind (a LAN interface address or the wss tunnel endpoint, v2 step 10
 // slice B), the complete dial URL, and ONE short-lived single-use
 // connect ticket of its own, each bound to the CALLING peer's
 // authenticated deviceId (HandlerContext.callerDeviceId, populated by
-// the relay link and the direct listener, absent on every other wire,
-// so the handler fails closed to available:false without a peer
-// identity). Per-candidate tickets are what let the dialer race every
-// candidate at once: a candidate that reaches the host but loses the
-// race burns only its own ticket, never another candidate's.
+// the hub link and the direct listener, absent on every other wire, so
+// the handler fails closed to available:false without a peer identity).
+// Per-candidate tickets are what let the dialer race every candidate at
+// once: a candidate that reaches the host but loses the race burns only
+// its own ticket, never another candidate's.
 //
 // connectInfo is a read (remote:true, mutating:false): it must work
 // pre-grant because the direct wire it brokers enforces the exact same
-// read/mutate gate the relay does, so knowing how to dial grants
-// nothing that the relay session did not already grant. `candidates`
+// read/mutate gate the device hub does, so knowing how to dial grants
+// nothing that the hub session did not already grant. `candidates`
 // is optional per the version-skew policy: absence means the direct
-// plane is unsupported and old peers keep working over the relay.
+// plane is unsupported and old peers keep working over the device hub.
 
 // How long a minted connect ticket stays valid. Long enough for the
 // peer's dial to reach us over any candidate address, short enough
 // that a stale connectInfo answer cannot be replayed much later.
-// Matches the relay worker's connect-ticket TTL. Lives here, beside
+// Matches the hub worker's connect-ticket TTL. Lives here, beside
 // the connectInfo contract whose answers the ticket rides, rather than
 // in its one consumer (host/direct/tickets.ts): the TTL is a fact of
 // the brokered exchange both ends read, and shared/ cannot import

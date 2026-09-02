@@ -7,7 +7,7 @@
 //
 // Three categories deliberately do NOT route through here:
 // - Client-scoped calls (dialog, shell, menu, nav, window, account,
-//   relay, clientConfig, projectLauncher, portForward): they
+//   hub, clientConfig, projectLauncher, portForward): they
 //   belong to the machine the window runs on, so their call sites keep
 //   window.api and HostApi excludes them.
 // - Local broadcast subscriptions (the fs watcher's externalChange in
@@ -73,7 +73,7 @@ export interface HostScope {
   // comparison against localDeviceId.
   remote: boolean;
   // The api those calls go through: window.api locally, a connected
-  // remote device's socket- or relay-backed api under a provider.
+  // remote device's socket- or hub-backed api under a provider.
   api: HostApi;
   // The key registry the subtree's queries cache under, bound to
   // deviceId. Referentially stable per device (queryKeysFor memoizes),

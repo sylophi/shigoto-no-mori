@@ -12,7 +12,7 @@ import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { relayContract } from "@shared/ipc/modules/relay";
+import { hubContract } from "@shared/ipc/modules/hub";
 import {
   broadcastAll as broadcastAllCore,
   registerContract as registerContractCore,
@@ -40,16 +40,16 @@ import {
   resolveCloudflaredBinary,
 } from "@host/direct/cloudflared";
 import { createConnectTicketStore } from "@host/direct/tickets";
-import { createRelayConnection } from "@host/relay/connection";
+import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
 import { directContract } from "@shared/ipc/modules/direct";
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
-import { createDirectPlane } from "@shared/relay/directPlane";
+import { createDirectPlane } from "@shared/hub/directPlane";
 import {
   allowedWebOrigin,
   isPeerCommandGranted,
   provisionDeviceTunnel,
-  relayConnectInputs,
+  hubConnectInputs,
 } from "./modules/account";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
@@ -129,7 +129,7 @@ const wsServer = createWsServerBinding();
 
 // The direct data plane (v2 step 10, slice A): a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
-// minted by direct:connectInfo over the relay, and dispatch gates
+// minted by direct:connectInfo over the device hub, and dispatch gates
 // mutating channels on the live per-peer grant this listener reads
 // (isPeerCommandGranted). Unconditional like the other bindings so
 // registration records handlers at boot, while listening is gated on
@@ -172,23 +172,23 @@ const tunnelRunner = createCloudflaredRunner({
   // crashed Electron's leftover connector is killed on the next
   // launch. A getter because userData is an app-ready fact.
   pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
-  // Tunnel state rides the same status snapshot the relay and direct
-  // transitions feed, so the devices page updates live.
+  // Tunnel state rides the same status snapshot the device hub and
+  // direct transitions feed, so the devices page updates live.
   onChange: () => directPlane.notifyStatusChanged(),
 });
 
-// The direct plane's shared composition (shared/relay/directPlane.ts):
+// The direct plane's shared composition (shared/hub/directPlane.ts):
 // the dialer, the renderer-facing bridge handlers, the status snapshot
 // and the presence reconcile, assembled identically for the web bridge.
 // This side supplies the Electron facts and the host half: the direct
 // listener's roster close and the tunnel runner's state.
 const directPlane = createDirectPlane({
-  connection: () => relayServer,
+  connection: () => hubServer,
   localDeviceId: () => getDeviceId(),
   localAppVersion: () => app.getVersion(),
   broadcastStatus: (status) =>
-    broadcastAll(relayContract, "statusChanged", status),
-  broadcastPeerPush: (push) => broadcastAll(relayContract, "peerPush", push),
+    broadcastAll(hubContract, "statusChanged", status),
+  broadcastPeerPush: (push) => broadcastAll(hubContract, "peerPush", push),
   // The candidate sockets ride the `ws` package so a failed dial names
   // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
   // nor Node's global sends an Origin header, so the peer's upgrade
@@ -200,19 +200,19 @@ const directPlane = createDirectPlane({
   },
 });
 
-// The renderer-facing relay bridge, exported so index.ts can register
+// The renderer-facing hub bridge, exported so index.ts can register
 // it on the contract and lend its invokePeer to the peer transports.
-export const relayHandlers = directPlane.handlers;
+export const hubHandlers = directPlane.handlers;
 
-// The relay connection, unconditional like the listener bindings:
+// The hub connection, unconditional like the listener bindings:
 // handler registration is recorded at boot, connecting itself is gated
-// in refreshRelayConnection below (signed out or unconfigured means no
+// in refreshHubConnection below (signed out or unconfigured means no
 // socket). Its onChange hands status transitions to the direct plane,
 // which fans a fresh snapshot out to every window through the
-// client-scoped relay contract and reconciles direct-session presence
+// client-scoped hub contract and reconciles direct-session presence
 // on each transition. Peer pushes arrive over direct sessions only
-// (the dialer's onAnyPush inside the plane), never over the relay.
-const relayServer = createRelayConnection({
+// (the dialer's onAnyPush inside the plane), never over the device hub.
+const hubServer = createHubConnection({
   // The one channel the wire brokers, named at creation so the client
   // role can dial before the handler pair below is registered.
   brokerChannel: directContract.calls.connectInfo.channel,
@@ -221,10 +221,10 @@ const relayServer = createRelayConnection({
 
 // The remote wires (LAN socket, direct listener), looped wherever a
 // channel or broadcast must reach them all so a new wire lands in one
-// place. The relay is deliberately NOT here (v2 step 10, slice C): it
-// is orchestration only, its wire serves nothing but the broker
-// surface registered below, and host broadcasts and viewer pings
-// reach remote peers over their direct sessions alone.
+// place. The device hub is deliberately NOT here (v2 step 10, slice C):
+// it is orchestration only, its wire serves nothing but the broker
+// surface registered below, and host broadcasts and viewer pings reach
+// remote peers over their direct sessions alone.
 const remoteWires: readonly ServerTransport[] = [wsServer, directWsServer];
 
 // Host-scoped calls are served on every wire that may carry them.
@@ -388,47 +388,47 @@ export async function refreshSocketHost(): Promise<void> {
   }
 }
 
-// Reconciles the relay socket with the account state. Runs at boot and
+// Reconciles the hub socket with the account state. Runs at boot and
 // after every account change (sign-in, sign-out, rename), so the
 // socket follows the credential without a relaunch. The account read
 // runs INSIDE the binding's serialized lifecycle, mirroring
 // refreshSocketHost, and a failure degrades to a log line because a
 // connect problem must never fail the account write that triggered it.
-export async function refreshRelayConnection(): Promise<void> {
+export async function refreshHubConnection(): Promise<void> {
   try {
-    await relayServer.refresh(async () => {
-      const inputs = relayConnectInputs();
+    await hubServer.refresh(async () => {
+      const inputs = hubConnectInputs();
       if (inputs === null) return null;
       return {
-        relayUrl: inputs.relayUrl,
+        hubUrl: inputs.hubUrl,
         // A DIFFERENT account rotates the credential, so accountId is in
-        // RelayConnectOpts/sameOpts to force a reconnect onto the new
+        // HubConnectOpts/sameOpts to force a reconnect onto the new
         // account's DO instead of leaving the old socket live (C7).
         accountId: inputs.accountId,
         mintTicket: inputs.mintTicket,
         deviceId: getDeviceId(),
-        // appVersion is an Electron fact, injected here so host/relay
+        // appVersion is an Electron fact, injected here so host/hub
         // never imports electron.
         appVersion: app.getVersion(),
       };
     });
   } catch (error) {
-    console.warn(`[relay] connection refresh failed: ${errorMessageOf(error)}`);
+    console.warn(`[hub] connection refresh failed: ${errorMessageOf(error)}`);
   }
   // The direct listener follows the same enrollment condition (it
-  // reads relayConnectInputs too), so it reconciles on exactly the
-  // relay's cadence: boot and every account change. Folded here so
+  // reads hubConnectInputs too), so it reconciles on exactly the
+  // hub's cadence: boot and every account change. Folded here so
   // call sites cannot forget one half.
   await refreshDirectHost();
 }
 
-// Teardown for before-quit: closes the relay socket so the DO sees a
+// Teardown for before-quit: closes the hub socket so the DO sees a
 // clean departure instead of waiting out a dead connection.
-export function stopRelayConnection(): Promise<void> {
-  return relayServer.stop();
+export function stopHubConnection(): Promise<void> {
+  return hubServer.stop();
 }
 
-// Teardown for before-quit, alongside stopRelayConnection: closes the
+// Teardown for before-quit, alongside stopHubConnection: closes the
 // direct listener so connected peers see a clean going-away instead of
 // a dead socket, AND the cached outbound direct sessions, or each
 // remote host would keep a dead socket in its per-device slot and land
@@ -445,8 +445,8 @@ export function stopDirectHost(): Promise<void> {
 }
 
 // Reconciles the direct data-plane listener with the account and
-// device state: run from refreshRelayConnection's tail (enrollment is
-// exactly the relay's condition: a device with no relay peers has
+// device state: run from refreshHubConnection's tail (enrollment is
+// exactly the device hub's condition: a device with no hub peers has
 // nobody to serve directly) and on every global-config change (the
 // hostImpls subscriber), so the directConnections opt-out applies
 // without a relaunch. Dual-stack bind ("::", both families accept)
@@ -458,11 +458,11 @@ export function stopDirectHost(): Promise<void> {
 export async function refreshDirectHost(): Promise<void> {
   try {
     await directWsServer.refresh(async () => {
-      const inputs = relayConnectInputs();
+      const inputs = hubConnectInputs();
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
       // false stops the listener (peers then get available:false and
-      // stay on the relay).
+      // stay on the device hub).
       const config = await readGlobalConfig();
       if (config.directConnections === false) return null;
       return {
@@ -517,13 +517,13 @@ export const directHandlers = makeDirectHandlers({
   },
   mintTickets: (peerDeviceId, count) => directTickets.mint(peerDeviceId, count),
   isPeerOnline: (peerDeviceId) =>
-    relayServer.status().onlineDeviceIds.includes(peerDeviceId),
+    hubServer.status().onlineDeviceIds.includes(peerDeviceId),
   // The tunnel candidate (v2 step 10, slice B), advertised only while
   // the cloudflared child is currently healthy (probed routable).
   tunnelUrl: () => tunnelRunner.tunnelUrl(),
 });
 
-// The broker surface on the RELAY wire: the binding exposes ONE slot
+// The broker surface on the HUB wire: the binding exposes ONE slot
 // (not a ServerTransport), so direct:connectInfo is the only channel
 // it can ever serve and mounting anything else is a type error.
 // brokerHandlerFor supplies the channel-plus-handler pair, built on
@@ -531,6 +531,6 @@ export const directHandlers = makeDirectHandlers({
 // serves the same dispatch policy as every other wire. index.ts still
 // registers the same handlers on the Electron and remote wires, where
 // connectInfo fails closed without an authenticated caller.
-relayServer.registerBroker(
+hubServer.registerBroker(
   brokerHandlerFor(directHandlers, { validateOutputs: VALIDATE_OUTPUTS }),
 );

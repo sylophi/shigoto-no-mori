@@ -2,7 +2,7 @@
 // after the owner's v2 flow mockups: Studio Mac local, Thinkpad online
 // with a direct session, Mini and Work PC offline. Pure data, served
 // over fixture transports by the bridge (lab/bridge.ts).
-import type { DeviceInfo } from "@shared/relay/protocol";
+import type { DeviceInfo } from "@shared/hub/protocol";
 import type {
   CommitSummary,
   CustomPort,
@@ -287,7 +287,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       path: "/Users/rin/dev/t3code",
       isPrimary: true,
       recentCommits: [
-        commit("77aa210", "Vendor the relay protocol notes", 6 * DAY, 5, 0),
+        commit("77aa210", "Vendor the hub protocol notes", 6 * DAY, 5, 0),
       ],
     }),
   ],
