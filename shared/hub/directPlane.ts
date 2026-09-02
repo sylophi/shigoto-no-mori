@@ -114,10 +114,10 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
   let dialer: DirectDialer | null = null;
   function getDialer(): DirectDialer {
     dialer ??= createDirectDialer({
-      // The ONLY consumer of the device hub's client role: the broker leg
-      // that asks a peer for its connect info. The bridge below never
-      // sees connectBroker, and the session it resolves carries one
-      // typed invoke only, so contract traffic structurally cannot
+      // The ONLY consumer of the device hub's client role: the broker
+      // leg that asks a peer for its connect info. The bridge below
+      // never sees connectBroker, and the session it resolves carries
+      // one typed invoke only, so contract traffic structurally cannot
       // ride the device hub.
       connectBroker: (deviceId) => deps.connection().connectBroker(deviceId),
       localDeviceId: deps.localDeviceId(),
@@ -168,8 +168,8 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
 
   // openPeer is direct or nothing (v2 step 10, slice C): the bridge
   // gets the dialer and nothing else, and a direct session opening or
-  // closing fires the same statusChanged fan-out a device hub transition
-  // does so the snapshot stays live.
+  // closing fires the same statusChanged fan-out a device hub
+  // transition does so the snapshot stays live.
   const handlers = makeHubHandlers({
     status,
     connectDirect: (deviceId, opts) =>

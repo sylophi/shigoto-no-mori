@@ -1,21 +1,21 @@
 // Durable proof for the port-forward wire (v2 step 8, slice A;
-// direct-only since step 10 slice C): TCP bytes as chunked,
-// grant-gated invoke responses over a REAL DIRECT websocket between
-// the two fixtures, brokered by the stub device hub exactly as production
-// does (scripts/lib/directBoot.mjs). Nothing here is a double on the
-// forward path itself: device A registers the REAL forward contract
-// and handlers on a real ticket-mode listener, B drives them through
-// the real dialer and bridge cache, and the handlers dial REAL
-// loopback TCP fixture servers. Asserts:
+// direct-only since step 10 slice C): TCP bytes as chunked, grant-gated
+// invoke responses over a REAL DIRECT websocket between the two
+// fixtures, brokered by the stub device hub exactly as production does
+// (scripts/lib/directBoot.mjs). Nothing here is a double on the forward
+// path itself: device A registers the REAL forward contract and
+// handlers on a real ticket-mode listener, B drives them through the
+// real dialer and bridge cache, and the handlers dial REAL loopback TCP
+// fixture servers. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) before
 //     the handler runs, so the fixture server sees no connection.
 //   - a granted echo round trip (open, send, poll, close).
 //   - server-initiated bytes arrive through poll without an uplink
 //     write first (the long-poll downlink).
 //   - a ~1.5 MB transfer crosses chunked, byte-identical, in multiple
-//     send AND poll round trips, while the stub device hub's forwardedCount
-//     stays FLAT (nothing but the one-time broker frames ever rides
-//     the device hub).
+//     send AND poll round trips, while the stub device hub's
+//     forwardedCount stays FLAT (nothing but the one-time broker
+//     frames ever rides the device hub).
 //   - a server-side close drains buffered bytes before eof, refuses a
 //     send with the coded "conn-closed", and a drained conn is gone
 //     ("unknown-conn").
@@ -262,12 +262,13 @@ async function main() {
 
     // (4) A ~1.5 MB transfer, chunked both ways: sent in
     // WIRE_CHUNK_BYTES slices, echoed back, polled until complete. The
-    // transfer rides the direct socket, so the stub device hub must stay
-    // COMPLETELY flat (it only ever saw the one-time broker exchange).
-    // Chunking is proven on both halves: the send half counts the
-    // registered handler's dispatches SERVER-SIDE (production frames
-    // that crossed the wire, not this loop's own iterations), and the
-    // poll half counts client round trips through the peer transport.
+    // transfer rides the direct socket, so the stub device hub must
+    // stay COMPLETELY flat (it only ever saw the one-time broker
+    // exchange). Chunking is proven on both halves: the send half
+    // counts the registered handler's dispatches SERVER-SIDE
+    // (production frames that crossed the wire, not this loop's own
+    // iterations), and the poll half counts client round trips through
+    // the peer transport.
     const big = randomBytes(1_500_000);
     const hubBaseline = stub.forwardedCount();
     const sendsBefore = serverSends;

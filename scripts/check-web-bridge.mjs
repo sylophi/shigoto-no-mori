@@ -380,8 +380,9 @@ async function main() {
           });
         }
         if (url === `${HUB_URL}/tickets`) {
-          // The post-enroll hub refresh mints here, and failing it plainly
-          // parks the supervisor in backoff until the tracked stop.
+          // The post-enroll hub refresh mints here, and failing it
+          // plainly parks the supervisor in backoff until the tracked
+          // stop.
           return jsonResponse(500, { error: "no device hub in this check" });
         }
         throw new Error(`unexpected fetch in enroll check: ${url}`);

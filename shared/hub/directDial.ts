@@ -1,12 +1,12 @@
 // Client half of the direct data plane (v2 step 10, slice A): dial a
-// peer's direct listener, brokered over the device hub. The dialer asks the
-// peer for connect info (direct:connectInfo, a read served pre-grant)
-// over a short-lived hub peer session, then dials the returned
-// candidates, each a complete URL (ws:// interface candidates, the
-// wss:// tunnel endpoint, v2 step 10 slice B) with its own single-use
-// ticket. The result is the SAME DeviceConnection shape the LAN client
-// resolves, so everything downstream (the bridge cache, sync,
-// port-forward) stays transport agnostic.
+// peer's direct listener, brokered over the device hub. The dialer asks
+// the peer for connect info (direct:connectInfo, a read served
+// pre-grant) over a short-lived hub peer session, then dials the
+// returned candidates, each a complete URL (ws:// interface candidates,
+// the wss:// tunnel endpoint, v2 step 10 slice B) with its own
+// single-use ticket. The result is the SAME DeviceConnection shape the
+// LAN client resolves, so everything downstream (the bridge cache,
+// sync, port-forward) stays transport agnostic.
 //
 // DIAL STRATEGY: one overall deadline around the WHOLE attempt (broker
 // leg included: a wedged peer that never answers connectInfo must not
@@ -171,18 +171,18 @@ export type DirectDialerDeps = {
   // Opens the hub broker session for the connectInfo exchange. The
   // NARROWED session type is the point (v2 step 10, slice C): it
   // exposes one typed broker invoke plus close, so this dep cannot be
-  // used to move contract traffic over the device hub even by accident. The
-  // dialer runs only on a bridge cache miss, so no cached session for
-  // this device exists to be superseded, and the temporary session is
-  // closed before the dial result settles either way.
+  // used to move contract traffic over the device hub even by accident.
+  // The dialer runs only on a bridge cache miss, so no cached session
+  // for this device exists to be superseded, and the temporary session
+  // is closed before the dial result settles either way.
   connectBroker(deviceId: string): Promise<HubBrokerSession>;
   // This device's identity, carried in the direct hello alongside the
   // ticket.
   localDeviceId: string;
   localAppVersion: string;
   // Every push received on a direct connection, tagged with the peer's
-  // deviceId, so the owner can feed the same peerPush path the device hub
-  // feeds.
+  // deviceId, so the owner can feed the same peerPush path the device
+  // hub feeds.
   onAnyPush?: (deviceId: string, channel: string, payload: unknown) => void;
   // The candidate kinds THIS platform can dial (v2 step 10, slice B),
   // declared to the host in the connectInfo input so it only mints

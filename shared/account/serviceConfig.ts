@@ -27,6 +27,16 @@ export type AccountServiceConfig = {
   webOrigin: string;
 };
 
+// The env var names the account layer reads. The desktop build bakes
+// exactly these (vite.node.config.ts) and the web build mirrors them
+// with envPrefix (vite.web.config.ts), so a renamed var cannot
+// silently drop out of a shipped build.
+export const ACCOUNT_ENV_KEYS = [
+  "SM_DEVICE_HUB_URL",
+  "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY",
+  "SM_ACCOUNT_WEB_ORIGIN",
+] as const;
+
 // Reads the config from a plain env-like record so tests can pass a
 // literal instead of mutating process.env. A missing var reads as the
 // empty string, which flows through to isConfigured as "not set".

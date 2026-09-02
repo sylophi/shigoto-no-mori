@@ -31,28 +31,28 @@ export const accountContract = defineContract("client", {
   // poll. The device list is a separate call so a status read never
   // hits the device hub.
   status: invoke("account:status", z.void(), AccountStatusSchema),
-  // Enrolls this device on the device hub under a fresh Clerk session token
-  // (the renderer owns the Clerk sign-in UI and mints the token) and
-  // stores the returned device credential. Resolves to the
+  // Enrolls this device on the device hub under a fresh Clerk session
+  // token (the renderer owns the Clerk sign-in UI and mints the token)
+  // and stores the returned device credential. Resolves to the
   // post-enrollment status.
   enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
-  // Best-effort revokes THIS device on the device hub, then clears the stored
-  // credential locally. The revoke is best-effort so local sign-out
-  // always succeeds even offline.
+  // Best-effort revokes THIS device on the device hub, then clears the
+  // stored credential locally. The revoke is best-effort so local
+  // sign-out always succeeds even offline.
   signOut: invoke("account:signOut", z.void(), z.void()),
-  // Removes a device from the ACCOUNT on the device hub, under this device's
-  // credential: the target's credential stops working the moment it next
-  // calls, and it disappears from every other device's registry. Unlike
-  // signOut this is not best-effort -- a failed hub call must surface,
-  // because nothing local stands in for "the device is still enrolled".
-  // Bounded by DeviceIdSchema so a listed peer's id always parses. The
-  // handler mirrors web/bridge/createWebBridge.ts's revokeDevice,
-  // including the self-revoke caveat: revoking THIS device invalidates
-  // our own credential, so the local one is cleared in the same breath
-  // (the desktop UI offers Sign out for this device instead, which ends
-  // the Clerk session first -- with the session still live
-  // ClerkAccountSync would see "signed in, not enrolled" and silently
-  // re-enroll, undoing the revoke).
+  // Removes a device from the ACCOUNT on the device hub, under this
+  // device's credential: the target's credential stops working the
+  // moment it next calls, and it disappears from every other device's
+  // registry. Unlike signOut this is not best-effort -- a failed hub
+  // call must surface, because nothing local stands in for "the device
+  // is still enrolled". Bounded by DeviceIdSchema so a listed peer's id
+  // always parses. The handler mirrors web/bridge/createWebBridge.ts's
+  // revokeDevice, including the self-revoke caveat: revoking THIS
+  // device invalidates our own credential, so the local one is cleared
+  // in the same breath (the desktop UI offers Sign out for this device
+  // instead, which ends the Clerk session first -- with the session
+  // still live ClerkAccountSync would see "signed in, not enrolled" and
+  // silently re-enroll, undoing the revoke).
   revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app

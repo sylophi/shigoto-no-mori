@@ -40,13 +40,13 @@ export type HandlerContext = {
   // verdict reads as not granted.
   isCallerCommandGranted?: () => boolean;
   // The AUTHENTICATED deviceId of the calling peer, supplied only by a
-  // wire that verified one: the direct data-plane listener (the
-  // connect ticket bound the hello to a deviceId). The Electron wire,
-  // the legacy LAN socket and in-page loopbacks leave it undefined, so
-  // a handler that needs a peer identity (direct:connectInfo minting a
-  // ticket for its caller) fails closed on absence. The device hub's broker
-  // slot carries its own minimal context (shared/hub/link.ts) and
-  // never mints a HandlerContext at all.
+  // wire that verified one: the direct data-plane listener (the connect
+  // ticket bound the hello to a deviceId). The Electron wire, the
+  // legacy LAN socket and in-page loopbacks leave it undefined, so a
+  // handler that needs a peer identity (direct:connectInfo minting a
+  // ticket for its caller) fails closed on absence. The device hub's
+  // broker slot carries its own minimal context (shared/hub/link.ts)
+  // and never mints a HandlerContext at all.
   callerDeviceId?: string;
 };
 

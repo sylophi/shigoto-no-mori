@@ -4,17 +4,17 @@
 // enrolled". The transitions this component drives:
 //
 // - Clerk signed in, no credential stored: mint a fresh session token
-//   (skipCache, so the device hub never sees one mid-expiry) and exchange it
-//   for a device credential via account:enroll. One automatic attempt
-//   per Clerk user per session (armedFor), re-armed by a sign-out. A
-//   failure (hub down, mint failed) surfaces as the mutation's error
-//   toast, and the account UI offers a manual retry (the enroll-retry
-//   buttons in AccountSection / LoginPage). Main's in-flight guard is
-//   the authoritative dedupe for re-fired effects.
+//   (skipCache, so the device hub never sees one mid-expiry) and
+//   exchange it for a device credential via account:enroll. One
+//   automatic attempt per Clerk user per session (armedFor), re-armed
+//   by a sign-out. A failure (hub down, mint failed) surfaces as the
+//   mutation's error toast, and the account UI offers a manual retry
+//   (the enroll-retry buttons in AccountSection / LoginPage). Main's
+//   in-flight guard is the authoritative dedupe for re-fired effects.
 // - Clerk signed in as a DIFFERENT user than the stored credential:
-//   sign the account layer out first (the device hub refuses a cross-account
-//   re-enroll of the same deviceId), then the effect re-runs into the
-//   enroll branch.
+//   sign the account layer out first (the device hub refuses a
+//   cross-account re-enroll of the same deviceId), then the effect
+//   re-runs into the enroll branch.
 // - Clerk session ended: sign the account layer out too, but only for
 //   a session this process actually observed (sawSession). "No session
 //   at boot" is NOT a sign-out: the stored credential is long-lived and

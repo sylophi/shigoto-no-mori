@@ -12,14 +12,14 @@ export interface Env {
   // Per-device tunnel provisioning (v2 step 10, slice B). All four
   // must be set for POST /tunnel to work. Any unset means the tunnel
   // routes answer the typed "not configured" and everything else works
-  // as before. CLOUDFLARE_API_TOKEN is a wrangler secret (needs
-  // Cloudflare Tunnel edit and DNS edit permissions), the rest are
-  // plain vars. Placeholders only in wrangler.jsonc, never real
-  // values.
+  // as before. All four are wrangler secrets (dashboard-set plain
+  // vars do not survive a deploy); the API token needs Cloudflare
+  // Tunnel edit and DNS edit on the tunnel zone. See README.md.
   CLOUDFLARE_API_TOKEN?: string;
   CF_ACCOUNT_ID?: string;
   TUNNEL_ZONE_ID?: string;
-  // The DNS zone's tunnel parent domain, e.g. sm.example.com: each
-  // device gets `<name>.<TUNNEL_DOMAIN>`.
+  // The tunnel zone apex, e.g. example.link: each device gets
+  // `<name>.<TUNNEL_DOMAIN>`, one label deep so Universal SSL covers
+  // it.
   TUNNEL_DOMAIN?: string;
 }

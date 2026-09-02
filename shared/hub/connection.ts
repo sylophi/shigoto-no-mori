@@ -48,7 +48,8 @@ import { createLimiter } from "@shared/util/limit";
 
 // The deadline for one dial phase: the ticket mint, and separately the
 // socket accept (the first presence envelope). Named rather than a bare
-// knob because the device hub has one honest value here, HELLO_TIMEOUT_MS.
+// knob because the device hub has one honest value here,
+// HELLO_TIMEOUT_MS.
 const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 
 // One dialed hub socket as the platform adapter exposes it to the

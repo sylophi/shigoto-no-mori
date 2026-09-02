@@ -3,11 +3,11 @@
 // A session token is always a JWT whose `sub` claim is the Clerk user
 // id, the same value the device hub's verifier keys D1 rows and Durable
 // Objects on. The token is never verified here, it is only read so the
-// stored credential record carries the account id. The device hub is the
-// sole authority on identity (enroll fails there if the token is bad).
-// Anything malformed yields "". atob is a global in both node 22 and
-// browsers, so no Buffer is needed and the one implementation serves
-// both runtimes.
+// stored credential record carries the account id. The device hub is
+// the sole authority on identity (enroll fails there if the token is
+// bad). Anything malformed yields "". atob is a global in both node 22
+// and browsers, so no Buffer is needed and the one implementation
+// serves both runtimes.
 export function deriveAccountId(token: string): string {
   const parts = token.split(".");
   if (parts.length !== 3) return "";

@@ -134,10 +134,10 @@ export function isPeerCommandGranted(peerDeviceId: string): boolean {
 
 // The resolved service config, resolved once and cached. Three layers,
 // lowest to highest precedence: the optional .env.local file (dev
-// convenience), the SM_ACCOUNT_* values baked into the bundle when it
-// was built, then real environment variables. The baked layer is what
-// configures a shipped build: a packaged .app launched from Finder or
-// the Dock inherits launchd's environment, not a shell's, so runtime
+// convenience), the account service values baked into the bundle when
+// it was built, then real environment variables. The baked layer is
+// what configures a shipped build: a packaged .app launched from Finder
+// or the Dock inherits launchd's environment, not a shell's, so runtime
 // process.env carries none of these -- but the env layer on top still
 // lets an owner override a baked build. Caching keeps account:status
 // cheap since it runs on every poll.
@@ -332,8 +332,8 @@ export function makeAccountHandlers(
             deviceId: getDeviceId(),
             fallbackDeviceName: defaultDeviceName(),
             // os.platform() is the same value as process.platform,
-            // which the linter restricts here. The device hub stores it as
-            // an opaque label.
+            // which the linter restricts here. The device hub stores it
+            // as an opaque label.
             platform: platform(),
           },
           token,
@@ -398,10 +398,10 @@ export function makeAccountHandlers(
       await service.revoke(record.credential, deviceId);
       if (deviceId === getDeviceId()) {
         // Self-revoke invalidated our own credential, so drop it now
-        // rather than waiting for the device hub to refuse the next call.
-        // The desktop UI routes this device through Sign out instead
-        // (which ends the Clerk session first). This arm exists so the
-        // handler is still correct for any other caller.
+        // rather than waiting for the device hub to refuse the next
+        // call. The desktop UI routes this device through Sign out
+        // instead (which ends the Clerk session first). This arm exists
+        // so the handler is still correct for any other caller.
         store().clear();
         grantStore().clear();
       } else {

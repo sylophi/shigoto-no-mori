@@ -60,12 +60,11 @@ export const TunnelStateSchema = z.enum([
 ]);
 export type TunnelState = z.infer<typeof TunnelStateSchema>;
 
-// Despite the module's historical name, HubStatus is the
-// REMOTE-PLANE snapshot: the hub control plane's socket and roster
-// plus the direct data plane it brokers (sessions, versions, the
-// tunnel endpoint). The device hub itself carries orchestration only (v2
-// step 10, slice C), so every per-peer data fact below is about
-// direct sessions.
+// Despite the module name, HubStatus is the REMOTE-PLANE snapshot: the
+// hub control plane's socket and roster plus the direct data plane it
+// brokers (sessions, versions, the tunnel endpoint). The device hub
+// itself carries orchestration only (v2 step 10, slice C), so every
+// per-peer data fact below is about direct sessions.
 export const HubStatusSchema = z.object({
   socket: HubSocketStatusSchema,
   // The account's online deviceIds from the latest presence broadcast,

@@ -672,8 +672,8 @@ async function main() {
         !("credential" in status),
         "an AccountStatus carries a credential",
       );
-      // DeviceInfo is the per-device shape the device hub reports and the
-      // renderer lists. The credential belongs only to the enroll
+      // DeviceInfo is the per-device shape the device hub reports and
+      // the renderer lists. The credential belongs only to the enroll
       // response, never to a listed device.
       assert.ok(
         !("credential" in DeviceInfoSchema.shape),

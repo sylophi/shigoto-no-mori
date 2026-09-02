@@ -1,15 +1,15 @@
-// The hub link: the multiplexing core of the hub transport (v2
-// step 4, slice C). One device holds ONE socket to its account's
-// Durable Object, and both roles share it. Since v2 step 10 slice C
-// the device hub is ORCHESTRATION ONLY: the HOST role serves exactly the
-// broker surface (sm hello/req for direct:connectInfo, bye) and
-// refuses every other channel, and the CLIENT role opens the
-// short-lived sm-level peer sessions the direct dialer brokers
-// through (shared/hub/directDial.ts). Contract data, broadcasts and
-// pushes never ride this wire anymore. They belong to the direct
-// sockets the broker hands out. Role discrimination is purely the
-// inner sm frame's `t` field: hello, req and bye are requests TO us,
-// welcome and res are replies FOR us. One decoder, one switch.
+// The hub link: the multiplexing core of the hub transport (v2 step 4,
+// slice C). One device holds ONE socket to its account's Durable
+// Object, and both roles share it. Since v2 step 10 slice C the device
+// hub is ORCHESTRATION ONLY: the HOST role serves exactly the broker
+// surface (sm hello/req for direct:connectInfo, bye) and refuses every
+// other channel, and the CLIENT role opens the short-lived sm-level
+// peer sessions the direct dialer brokers through
+// (shared/hub/directDial.ts). Contract data, broadcasts and pushes
+// never ride this wire anymore. They belong to the direct sockets the
+// broker hands out. Role discrimination is purely the inner sm frame's
+// `t` field: hello, req and bye are requests TO us, welcome and res are
+// replies FOR us. One decoder, one switch.
 //
 // TRUST MODEL (see also protocol.ts): the device hub is our own managed
 // service. Enrollment is Clerk-verified, the per-device credential is
@@ -61,24 +61,25 @@ export const MAX_HUB_IN_FLIGHT_PER_PEER = 4;
 // The inner frame union both roles decode from a delivered envelope.
 const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
 
-// Every sm frame the device hub carries is wrapped with the session epoch.
-// The wrapper lives in the hub layer only, so frames.ts and the LAN
-// binding never learn about epochs. The DO forwards this whole object
-// verbatim as the opaque `frame`, so the epoch survives the hop exactly
-// as the sm frame does. The CLIENT owns the epoch: it mints a fresh one
-// per connectBroker and sends it in hello, the HOST records it and echoes
-// it on welcome and res, and the client drops any inbound frame whose
-// epoch is not its current one. A redial mints a new epoch, so late
-// frames from the prior pairing are dropped rather than mis-matched.
+// Every sm frame the device hub carries is wrapped with the session
+// epoch. The wrapper lives in the hub layer only, so frames.ts and the
+// LAN binding never learn about epochs. The DO forwards this whole
+// object verbatim as the opaque `frame`, so the epoch survives the hop
+// exactly as the sm frame does. The CLIENT owns the epoch: it mints a
+// fresh one per connectBroker and sends it in hello, the HOST records
+// it and echoes it on welcome and res, and the client drops any inbound
+// frame whose epoch is not its current one. A redial mints a new epoch,
+// so late frames from the prior pairing are dropped rather than
+// mis-matched.
 const HubFrameSchema = z.object({
   epoch: z.number().int(),
   sm: InnerFrameSchema,
 });
 type HubFrame = z.infer<typeof HubFrameSchema>;
 
-// The addressed peer has no socket on the device hub (an offline nack, or a
-// presence list it vanished from). In-flight calls to it reject with
-// this so a caller sees "that device is offline" distinctly from a
+// The addressed peer has no socket on the device hub (an offline nack,
+// or a presence list it vanished from). In-flight calls to it reject
+// with this so a caller sees "that device is offline" distinctly from a
 // handler error.
 export class HubPeerOfflineError extends Error {
   constructor(deviceId: string) {
@@ -136,9 +137,9 @@ export class HubNoHandlerError extends Error {
 
 // The context a broker dispatch runs under: the authenticated caller
 // and the session's abort signal, nothing more. Deliberately NOT the
-// full HandlerContext: the device hub carries no pushes, so a notifier sink
-// would be a lie, and its absence keeps the broker slot's type honest
-// about what this wire can do.
+// full HandlerContext: the device hub carries no pushes, so a notifier
+// sink would be a lie, and its absence keeps the broker slot's type
+// honest about what this wire can do.
 export type HubBrokerContext = {
   // The authenticated peer identity: the DO consumed this peer's
   // connect ticket and stamps `from`, and the roster gate in
@@ -151,9 +152,9 @@ export type HubBrokerContext = {
 
 // What the client role resolves: the broker leg's whole surface. One
 // typed invoke pinned to the broker channel plus close, so contract
-// traffic structurally cannot ride the device hub from this side either.
-// The identity fields are informational facts of the handshake (the
-// dialed deviceId and the welcome's appVersion), not a data path.
+// traffic structurally cannot ride the device hub from this side
+// either. The identity fields are informational facts of the handshake
+// (the dialed deviceId and the welcome's appVersion), not a data path.
 export type HubBrokerSession = {
   // Sends one req on the broker channel and resolves its res. Input
   // and result are both unknown at this layer: the dialer owns the
@@ -169,13 +170,13 @@ export type HubBrokerSession = {
 // The ONE channel-plus-handler pair the hub wire serves, injected by
 // the composition (main/ipc/register.ts, the web bridge) so the link
 // core never imports a contract. The channel is needed by BOTH roles
-// (the host role's dispatch gate and the client role's req frames).
-// The handler is absent on client-only platforms (the web), where
-// every req is answered with the no-handler shape -- which the dialing
-// side receives as the typed HubNoHandlerError, because "this peer
-// serves nobody" is permanent and must not be retried like a blip.
-// There is no handler map to mount anything else on, so a data path
-// through the device hub is a type error, not a discouraged registration.
+// (the host role's dispatch gate and the client role's req frames). The
+// handler is absent on client-only platforms (the web), where every req
+// is answered with the no-handler shape -- which the dialing side
+// receives as the typed HubNoHandlerError, because "this peer serves
+// nobody" is permanent and must not be retried like a blip. There is no
+// handler map to mount anything else on, so a data path through the
+// device hub is a type error, not a discouraged registration.
 export type HubBroker = {
   channel: string;
   handler?: (ctx: HubBrokerContext, raw: unknown) => Promise<unknown>;
@@ -590,9 +591,9 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         welcome: null,
         helloWaiter: null,
         closed: false,
-        // The channel is pinned to the injected broker surface here,
-        // so no caller can aim another channel's req at the device hub: the
-        // session's public invoke takes an input, never a channel.
+        // The channel is pinned to the injected broker surface here, so
+        // no caller can aim another channel's req at the device hub:
+        // the session's public invoke takes an input, never a channel.
         invoke(input: unknown): Promise<unknown> {
           if (peer.closed) {
             return Promise.reject(new HubLinkDownError());
@@ -707,9 +708,9 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       }
       return;
     }
-    // A push frame. Nothing on this wire pushes anymore, so it can
-    // only be a peer running an older app version fanning a cache ping
-    // at us over the device hub. Pushes are droppable by contract, so it is
+    // A push frame. Nothing on this wire pushes anymore, so it can only
+    // be a peer running an older app version fanning a cache ping at us
+    // over the device hub. Pushes are droppable by contract, so it is
     // counted and dropped rather than routed anywhere.
     warnDrop(() => `dropping hub push from ${truncateId(from)}`);
   }

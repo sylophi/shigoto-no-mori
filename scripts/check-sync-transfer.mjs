@@ -1,7 +1,7 @@
-// Durable proof for the device-sync transfer plumbing (v2 step 7
-// slice B, direct-only since step 10 slice C): git bundles as chunked,
-// grant-gated invoke responses over a REAL DIRECT websocket between
-// the two fixtures, brokered by the stub device hub exactly as production
+// Durable proof for the device-sync transfer plumbing (v2 step 7 slice
+// B, direct-only since step 10 slice C): git bundles as chunked,
+// grant-gated invoke responses over a REAL DIRECT websocket between the
+// two fixtures, brokered by the stub device hub exactly as production
 // does (scripts/lib/directBoot.mjs). Nothing here is a double on the
 // sync path itself: device A registers the REAL sync contract and
 // handlers on a real ticket-mode listener, the handlers shell the REAL
@@ -357,9 +357,9 @@ async function main() {
     // (3) The full transfer: branch + capture ref, thinned by the
     // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces
     // only, byte-identical objects. The direct session is established
-    // by now (the refusals above dialed it), so the device hub must stay
-    // COMPLETELY flat for the whole transfer: no frame of it may ride
-    // the stub.
+    // by now (the refusals above dialed it), so the device hub must
+    // stay COMPLETELY flat for the whole transfer: no frame of it may
+    // ride the stub.
     const hubBaseline = stub.forwardedCount();
     const chunksBefore = peerA.invokeCount("sync:bundleChunk");
     const refsBefore = await refSnapshot(targetRepo);

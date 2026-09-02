@@ -5,32 +5,32 @@
 // and too-large nacks, supersede on a duplicate deviceId) and drives
 // TWO real hub connections against it as devices A and B.
 //
-// The device hub is ORCHESTRATION ONLY (v2 step 10, slice C): its host role
-// serves exactly the broker surface (direct:connectInfo) plus the
+// The device hub is ORCHESTRATION ONLY (v2 step 10, slice C): its host
+// role serves exactly the broker surface (direct:connectInfo) plus the
 // intrinsic frames (hello/welcome, bye, presence), and refuses every
 // other channel with the no-handler shape. There is nothing else to
 // register (the binding exposes one broker slot, not a ServerTransport)
 // and the client side exposes one pinned brokerInvoke (no channel
-// argument), so the refusal scenario drives a raw hand-built req at
-// the wire. The dispatch scenarios all ride the broker channel,
-// multiplexed by an input mode. Also asserted: the sm-level
-// hello/welcome over the device hub, req/res id correlation, the void-field
-// framing invariant, error serialization (message only), the local
-// outbound size guard at the shrunken control-frame budget, offline
-// nacks, presence-driven peer teardown, supervisor redial with a fresh
-// ticket per attempt, the blocked verdicts for the revoked and
-// superseded close codes, the ignored hello token, the per-peer
-// in-flight cap surviving a hostile presence flap and a re-hello, an
-// off-roster hello refused, an oversize RESPONSE downgraded to
-// ok:false rather than a hang, a stale-epoch res dropped after a
-// re-hello, bye tearing the host session down (epoch-guarded), stop()
-// during in-flight work running no further handler, and malformed
-// inbound frames dropped without killing the process.
+// argument), so the refusal scenario drives a raw hand-built req at the
+// wire. The dispatch scenarios all ride the broker channel, multiplexed
+// by an input mode. Also asserted: the sm-level hello/welcome over the
+// device hub, req/res id correlation, the void-field framing invariant,
+// error serialization (message only), the local outbound size guard at
+// the shrunken control-frame budget, offline nacks, presence-driven
+// peer teardown, supervisor redial with a fresh ticket per attempt, the
+// blocked verdicts for the revoked and superseded close codes, the
+// ignored hello token, the per-peer in-flight cap surviving a hostile
+// presence flap and a re-hello, an off-roster hello refused, an
+// oversize RESPONSE downgraded to ok:false rather than a hang, a
+// stale-epoch res dropped after a re-hello, bye tearing the host
+// session down (epoch-guarded), stop() during in-flight work running no
+// further handler, and malformed inbound frames dropped without killing
+// the process.
 //
-// Every sm frame the device hub carries is wrapped as { epoch, sm } (see the
-// SESSION EPOCH note in shared/hub/link.ts), so the stub forwards that
-// wrapper verbatim and the assertions read the inner frame at
-// entry.frame.sm.
+// Every sm frame the device hub carries is wrapped as { epoch, sm }
+// (see the SESSION EPOCH note in shared/hub/link.ts), so the stub
+// forwards that wrapper verbatim and the assertions read the inner
+// frame at entry.frame.sm.
 //
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "hublink:check".

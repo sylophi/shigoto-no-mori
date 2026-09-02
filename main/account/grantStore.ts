@@ -16,9 +16,9 @@ import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 
 // A ceiling on the stored grant list so a runaway local write cannot
 // grow grants.json without bound. A plain host-local constant,
-// deliberately NOT tied to the device hub's roster cap: grants persist for
-// offline devices (an enrolled machine keeps its grant while off), so
-// this bounds a persisted registry, not concurrent presence. A host
+// deliberately NOT tied to the device hub's roster cap: grants persist
+// for offline devices (an enrolled machine keeps its grant while off),
+// so this bounds a persisted registry, not concurrent presence. A host
 // granting more than this many of its OWN devices is not a real
 // scenario, so refusing past it is safe.
 const MAX_GRANTED_PEERS = 256;

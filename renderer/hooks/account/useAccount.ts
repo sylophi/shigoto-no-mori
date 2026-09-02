@@ -34,10 +34,10 @@ export function useLocalDeviceName(): string {
   return account?.deviceName || "This device";
 }
 
-// The account's device registry from the device hub. Both call sites render
-// only under a signed-in guard, so a signed-out or unconfigured app
-// never mounts this and never hits the network (and the handler returns
-// [] in those states anyway).
+// The account's device registry from the device hub. Both call sites
+// render only under a signed-in guard, so a signed-out or unconfigured
+// app never mounts this and never hits the network (and the handler
+// returns [] in those states anyway).
 export function useAccountDevices() {
   return useQuery<DeviceInfo[]>({
     queryKey: queryKeys.accountDevices(),

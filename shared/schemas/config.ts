@@ -167,14 +167,14 @@ export const GlobalConfigSchema = z.object({
   // token is high-entropy generated at enable time, never echoed back
   // over a read (the read contract redacts it, see RedactedSocketHost
   // below). Step 4 replaces this shared-token auth wholesale with
-  // pairing, so nothing else should grow to depend on the token's shape.
-  // Direct data plane (v2 step 10, slice A): when false, this device
-  // neither runs the direct listener nor is advertised to peers, so
-  // all its remote traffic stays on the device hub. ON by default (absent =
-  // enrolled, explicit `false` is the opt-out), matching the feature
-  // being an internal transport optimization rather than a capability.
-  // Config-only for now (no Settings UI, like socketHost below):
-  // toggle by editing config.json or `sm config edit`.
+  // pairing, so nothing else should grow to depend on the token's
+  // shape. Direct data plane (v2 step 10, slice A): when false, this
+  // device neither runs the direct listener nor is advertised to peers,
+  // so all its remote traffic stays on the device hub. ON by default
+  // (absent = enrolled, explicit `false` is the opt-out), matching the
+  // feature being an internal transport optimization rather than a
+  // capability. Config-only for now (no Settings UI, like socketHost
+  // below): toggle by editing config.json or `sm config edit`.
   directConnections: z.boolean().optional(),
   // Tunnel endpoints (v2 step 10, slice B): absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
@@ -279,7 +279,7 @@ export const ClientConfigSchema = z.object({
   // capabilities the main process reconciles (main/electron/liveness.ts).
   // When on, the app registers a login item so it starts when the user
   // logs in, and it best-effort relaunches itself after a recoverable
-  // crash so a machine the user hosts stays online for the account
+  // crash so a machine the user hosts stays online for the device
   // hub. Per-machine and never synced, like the rest of client config:
   // the CLI never reads it and it does not ride any sync path. Default is
   // off (absent = off), explicit `true` is the opt-in.

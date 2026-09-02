@@ -32,8 +32,8 @@ import {
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a
   // machine stays available TO the account, its UI is unreachable when
-  // the SM_ACCOUNT_* env is absent, and boot's reconcile clears a login
-  // item left behind by a previously configured build.
+  // the account service env is absent, and boot's reconcile clears a
+  // login item left behind by a previously configured build.
   if (!accountServiceConfigured()) return false;
   try {
     return readClientConfigSync().keepReachable === true;

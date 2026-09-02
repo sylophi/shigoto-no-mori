@@ -60,10 +60,10 @@ import { toText } from "./rawData";
 // Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
 // SECOND binding instance serves device-to-device data over direct
 // sockets, brokered by short-lived single-use connect tickets minted
-// over the device hub. Injected at binding creation so this module stays
-// free of the ticket store and the grant store alike. Absent means the
-// legacy LAN behavior: static-token auth and the read-only dispatch
-// gate, unchanged.
+// over the device hub. Injected at binding creation so this module
+// stays free of the ticket store and the grant store alike. Absent
+// means the legacy LAN behavior: static-token auth and the read-only
+// dispatch gate, unchanged.
 export type WsServerTicketAuth = {
   // Verifies the connect ticket presented in hello.token against the
   // claimed hello deviceId. The implementation must consume the ticket
@@ -643,9 +643,9 @@ export function createWsServerBinding(
           });
           return;
         }
-        // bye is a hub-wire frame (the device hub has no per-peer socket
-        // close). This wire has a real socket close, so a bye here is
-        // meaningless and silently ignored.
+        // bye is a hub-wire frame (the device hub has no per-peer
+        // socket close). This wire has a real socket close, so a bye
+        // here is meaningless and silently ignored.
         if (frame !== null && frame.t === "bye") return;
         // Past hello, a bad frame is dropped rather than fatal: one
         // malformed message must not kill a connection carrying other

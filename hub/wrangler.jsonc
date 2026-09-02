@@ -1,8 +1,9 @@
-// Cloudflare Worker config for the sm device hub. Two environments share
-// this file, the wrangler way: the top level IS production
-// (`shigomori-hub`) and `env.dev` overrides the name and the D1
-// binding to make `shigomori-hub-dev`. Bindings are not inherited by
-// named environments, so `env.dev` repeats every binding block.
+// Cloudflare Worker config for the sm device hub. Two environments
+// share this file, the wrangler way: the top level IS production
+// (`shigomori-hub`) and `env.dev` overrides the name and the D1 binding
+// to make `shigomori-hub-dev`. Bindings are not inherited by named
+// environments, so `env.dev` repeats the binding blocks; plain settings
+// (`observability`, `migrations`) are inherited and appear once.
 //
 // `pnpm run deploy` targets dev (`--env dev`) and `pnpm run
 // deploy:prod` the top level, so a bare deploy never lands on
@@ -18,23 +19,14 @@
 // - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
 //   test seam, production should leave it unset.
 //
-// Tunnel provisioning (v2 step 10, slice B), all optional: with any of
-// them unset, POST /tunnel answers the typed "not configured" and the
-// rest of the Worker works as before. All four are set as wrangler
-// secrets (dashboard-set plain vars do not survive a deploy, and the
-// real values do not belong in this file). Placeholders only:
-// - CLOUDFLARE_API_TOKEN: an API token with Cloudflare Tunnel edit on
-//   the account and DNS edit on the tunnel zone below, nothing else.
-// - CF_ACCOUNT_ID: the Cloudflare account id tunnels are created
-//   under, e.g. "0000000000000000000000000000000c".
-// - TUNNEL_ZONE_ID: the DNS zone id the per-device CNAMEs are written
-//   into, e.g. "0000000000000000000000000000000z". A zone that holds
-//   nothing but tunnels, so the token cannot touch other records.
-// - TUNNEL_DOMAIN: the zone apex, e.g. "example.link". Each device
-//   gets `sm-<hash>.<TUNNEL_DOMAIN>`; the apex keeps the hostnames one
-//   level deep, which is all Universal SSL covers. Both environments
-//   can share one zone: device names hash the Clerk user id, which
-//   differs per Clerk instance.
+// Tunnel provisioning (v2 step 10, slice B) reads four more wrangler
+// secrets, CLOUDFLARE_API_TOKEN, CF_ACCOUNT_ID, TUNNEL_ZONE_ID and
+// TUNNEL_DOMAIN, all optional: with any unset, POST /tunnel answers
+// the typed "not configured" and the rest of the Worker works as
+// before. They are secrets rather than `vars` because dashboard-set
+// plain vars do not survive a deploy. What each holds and the zone
+// layout they assume is in README.md (Domains, Tunnel provisioning);
+// src/env.ts types them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shigomori-hub",
@@ -54,7 +46,11 @@
     {
       "tag": "v1",
       // SQLite-backed storage is required for new DO classes and is
-      // what the hibernation-era APIs assume.
+      // what the hibernation-era APIs assume. The class name was
+      // edited in place through its renames (AccountRelay, AccountHub,
+      // DeviceHub) because both Worker names are new and carry no
+      // applied migrations. A Worker that already ran v1 under an
+      // older class name needs a `rename_class` tag instead.
       "new_sqlite_classes": ["DeviceHub"],
     },
   ],
@@ -91,9 +87,6 @@
           "migrations_dir": "migrations",
         },
       ],
-      "observability": {
-        "enabled": true,
-      },
     },
   },
 }

@@ -16,9 +16,9 @@
 // verdicts with no redial, a fresh-ticket redial after a drop, and the
 // per-dial ticket mint.
 //
-// Every sm frame the device hub carries is wrapped as { epoch, sm } (see the
-// SESSION EPOCH note in shared/hub/link.ts), which the stub forwards
-// verbatim as the opaque `frame`.
+// Every sm frame the device hub carries is wrapped as { epoch, sm }
+// (see the SESSION EPOCH note in shared/hub/link.ts), which the stub
+// forwards verbatim as the opaque `frame`.
 //
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "web:hub:check".

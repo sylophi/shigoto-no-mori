@@ -26,9 +26,9 @@ import {
   type TunnelProvisionResponse,
 } from "@shared/hub/protocol";
 
-// A hub call answered non-2xx. Carries the HTTP status so callers
-// that classify outcomes (the tunnel provision path) can read it off
-// the error instead of re-fetching. The message is still the device hub's
+// A hub call answered non-2xx. Carries the HTTP status so callers that
+// classify outcomes (the tunnel provision path) can read it off the
+// error instead of re-fetching. The message is still the device hub's
 // own `{ error }` body when one parsed, so existing message matchers
 // keep working.
 export class HubRequestError extends Error {
@@ -176,8 +176,8 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async revoke(credential, deviceId) {
-      // The device hub answers a successful revoke with 204 No Content. Any
-      // other non-2xx is a real failure.
+      // The device hub answers a successful revoke with 204 No Content.
+      // Any other non-2xx is a real failure.
       await credentialed(
         HUB_ROUTES.revokeDevice,
         HUB_ROUTES.revokeDevice.path(deviceId),

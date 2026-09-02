@@ -46,7 +46,7 @@ export type WebBridgeDeps = {
   // Persistent per-browser storage (window.localStorage in the real
   // client): the device id, the credential envelope and clientConfig.
   localStorage: KeyValueStorage;
-  // The env record the SM_ACCOUNT_* service config resolves from
+  // The env record the account service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
   // navigator.userAgent, for the default device name.

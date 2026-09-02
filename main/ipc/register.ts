@@ -172,8 +172,8 @@ const tunnelRunner = createCloudflaredRunner({
   // crashed Electron's leftover connector is killed on the next
   // launch. A getter because userData is an app-ready fact.
   pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
-  // Tunnel state rides the same status snapshot the device hub and direct
-  // transitions feed, so the devices page updates live.
+  // Tunnel state rides the same status snapshot the device hub and
+  // direct transitions feed, so the devices page updates live.
   onChange: () => directPlane.notifyStatusChanged(),
 });
 
@@ -221,10 +221,10 @@ const hubServer = createHubConnection({
 
 // The remote wires (LAN socket, direct listener), looped wherever a
 // channel or broadcast must reach them all so a new wire lands in one
-// place. The device hub is deliberately NOT here (v2 step 10, slice C): it
-// is orchestration only, its wire serves nothing but the broker
-// surface registered below, and host broadcasts and viewer pings
-// reach remote peers over their direct sessions alone.
+// place. The device hub is deliberately NOT here (v2 step 10, slice C):
+// it is orchestration only, its wire serves nothing but the broker
+// surface registered below, and host broadcasts and viewer pings reach
+// remote peers over their direct sessions alone.
 const remoteWires: readonly ServerTransport[] = [wsServer, directWsServer];
 
 // Host-scoped calls are served on every wire that may carry them.

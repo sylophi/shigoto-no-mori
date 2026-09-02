@@ -1,8 +1,8 @@
-// Durable proof for the direct data plane (v2 step 10 slice A, made
-// the ONLY data plane by slice C): the device hub is orchestration and data
-// flows over DIRECT websockets between devices, brokered by
-// short-lived single-use connect tickets, with no hub fallback
-// behind a failed dial.
+// Durable proof for the direct data plane (v2 step 10 slice A, made the
+// ONLY data plane by slice C): the device hub is orchestration and data
+// flows over DIRECT websockets between devices, brokered by short-lived
+// single-use connect tickets, with no hub fallback behind a failed
+// dial.
 //
 // Boots the stub Durable Object (scripts/lib/hubStub.mjs) with two
 // REAL hub connections (A the dialing client, B the host) plus a

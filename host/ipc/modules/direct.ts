@@ -34,11 +34,12 @@ export type DirectHandlerDeps = {
   // the named peer, replacing that peer's previous pending set. Null
   // means the store refused (global backstop cap).
   mintTickets(peerDeviceId: string, count: number): string[] | null;
-  // Whether the named peer is currently in the device hub's live presence
-  // roster. connectInfo can arrive over an existing direct socket too,
-  // and presence is what scopes the data plane (a revoked device drops
-  // off the roster), so a caller the control plane no longer vouches
-  // for must not re-mint tickets over its own direct wire.
+  // Whether the named peer is currently in the device hub's live
+  // presence roster. connectInfo can arrive over an existing direct
+  // socket too, and presence is what scopes the data plane (a revoked
+  // device drops off the roster), so a caller the control plane no
+  // longer vouches for must not re-mint tickets over its own direct
+  // wire.
   isPeerOnline(peerDeviceId: string): boolean;
   // The wss URL of this host's tunnel endpoint while the cloudflared
   // child is currently healthy, else null (v2 step 10, slice B). When

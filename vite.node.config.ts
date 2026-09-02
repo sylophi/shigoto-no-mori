@@ -5,8 +5,10 @@
 // names the constant, so nothing is inlined there.
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
 
-// The SM_ACCOUNT_* values present in the BUILD environment, baked into
+// The account service values (ACCOUNT_ENV_KEYS) present in the BUILD
+// environment, baked into
 // the bundle. A packaged .app launched from Finder or the Dock inherits
 // launchd's environment, not the owner's shell, so at runtime
 // process.env carries none of these. Capturing them at package time is
@@ -20,10 +22,9 @@ import { defineConfig } from "vite";
 // same, while a define is unambiguous in any target.
 function bakedAccountEnv(): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (key.startsWith("SM_ACCOUNT_") && value !== undefined) {
-      out[key] = value;
-    }
+  for (const key of ACCOUNT_ENV_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) out[key] = value;
   }
   return out;
 }

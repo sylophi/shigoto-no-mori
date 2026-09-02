@@ -157,8 +157,8 @@ function BrowserNameField({ deviceName }: { deviceName: string }) {
 }
 
 // One honest sentence per failure shape. A browser cannot tell a
-// refusing device hub from an unreachable one when the response carries no
-// CORS headers, so the fetch-failure branch names both possibilities
+// refusing device hub from an unreachable one when the response carries
+// no CORS headers, so the fetch-failure branch names both possibilities
 // instead of guessing.
 function reachabilityMessage(error: unknown): string {
   if (isHubRefusedError(error)) {

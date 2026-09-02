@@ -3,9 +3,9 @@
 // identically: same plugins (tailwind, react with the compiler preset),
 // same aliases, same build-info defines. Differences are the web root,
 // the dist-web output at the repo root, a distinct dev port so the
-// desktop's renderer dev server can run beside it, and the SM_ACCOUNT_*
-// env prefix that bakes the non-secret account service config into the
-// bundle (see web/account/config.ts).
+// desktop's renderer dev server can run beside it, and the env prefixes
+// that bake the non-secret account service config into the bundle
+// (see web/account/config.ts).
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
@@ -39,10 +39,10 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: resolve(__dirname, "web"),
-    // Every SM_ACCOUNT_* value is a public endpoint or client id by
-    // design (shared/account/serviceConfig.ts), so exposing the prefix
-    // to the client bundle leaks nothing.
-    envPrefix: ["VITE_", "SM_ACCOUNT_"],
+    // The prefixes covering ACCOUNT_ENV_KEYS (shared/account/
+    // serviceConfig.ts). Every value is a public endpoint or client id
+    // by design, so exposing them to the client bundle leaks nothing.
+    envPrefix: ["VITE_", "SM_ACCOUNT_", "SM_DEVICE_"],
     // Env files are read from the repo root, beside the desktop's.
     envDir: __dirname,
     resolve: {

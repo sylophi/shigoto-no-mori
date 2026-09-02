@@ -1,7 +1,7 @@
 // Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub device hub (scripts/lib/hubStub.mjs): a ticket-mode ws
-// listener (host/socket/server.ts), the broker slot registration on a
-// hub host device, and the REAL shared composition
+// beside the stub device hub (scripts/lib/hubStub.mjs): a ticket-mode
+// ws listener (host/socket/server.ts), the broker slot registration on
+// a hub host device, and the REAL shared composition
 // (shared/hub/directPlane.ts) a client drives. Extracted from
 // check-direct-plane.mjs so check-sync-transfer.mjs and
 // check-port-forward.mjs move their transfer scenarios onto a real
@@ -93,9 +93,9 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 }
 
 // The whole direct wire the transfer checks share, exactly as
-// production composes it: the stub device hub, a REAL ticket-mode listener
-// on device A serving the check's contracts, the brokered hub pair
-// (A hosting the broker, B the dialing client), the REAL shared
+// production composes it: the stub device hub, a REAL ticket-mode
+// listener on device A serving the check's contracts, the brokered hub
+// pair (A hosting the broker, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
 // The plane's presence path is wired to the client connection exactly
 // as production wires it (late-bound, plus one catch-up call for the

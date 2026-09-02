@@ -54,7 +54,7 @@ export function SidebarFooter({
   // across sign-in, sign-out and renames, wherever they happen.
   useWatchAccountChanges();
   // The multi-device UI exists only on a build with an account service
-  // (the SM_ACCOUNT_* launch env). Unconfigured, the app looks and
+  // (the account service launch env). Unconfigured, the app looks and
   // behaves like the single-machine app: no Devices button, no page to
   // reach, nothing to explain. Hidden too while the status loads, so an
   // unconfigured build never flashes the button it is about to drop.

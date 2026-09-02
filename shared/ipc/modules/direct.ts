@@ -2,17 +2,17 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
 // Brokering surface for the direct data plane (v2 step 10, slice A): a
-// peer asks this host, over the device hub, how to dial it directly. The
-// answer is a list of fully dialable CANDIDATES, each carrying its
+// peer asks this host, over the device hub, how to dial it directly.
+// The answer is a list of fully dialable CANDIDATES, each carrying its
 // kind (a LAN interface address or the wss tunnel endpoint, v2 step 10
 // slice B), the complete dial URL, and ONE short-lived single-use
 // connect ticket of its own, each bound to the CALLING peer's
 // authenticated deviceId (HandlerContext.callerDeviceId, populated by
-// the hub link and the direct listener, absent on every other wire,
-// so the handler fails closed to available:false without a peer
-// identity). Per-candidate tickets are what let the dialer race every
-// candidate at once: a candidate that reaches the host but loses the
-// race burns only its own ticket, never another candidate's.
+// the hub link and the direct listener, absent on every other wire, so
+// the handler fails closed to available:false without a peer identity).
+// Per-candidate tickets are what let the dialer race every candidate at
+// once: a candidate that reaches the host but loses the race burns only
+// its own ticket, never another candidate's.
 //
 // connectInfo is a read (remote:true, mutating:false): it must work
 // pre-grant because the direct wire it brokers enforces the exact same

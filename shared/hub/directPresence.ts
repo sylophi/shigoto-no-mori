@@ -33,13 +33,13 @@ export function applyDirectPresence(
   online: readonly string[],
   deps: DirectPresenceDeps,
 ): void {
-  // No live roster, no verdicts: a downed hub socket reports an
-  // empty roster, and closing on that would tear down every working
-  // direct session exactly when the device hub cannot help. The keeper DOES
+  // No live roster, no verdicts: a downed hub socket reports an empty
+  // roster, and closing on that would tear down every working direct
+  // session exactly when the device hub cannot help. The keeper DOES
   // reconcile to empty though (never the closes): it cannot dial
-  // without the device hub's broker leg anyway, an outage must cancel its
-  // pending retries rather than let them burn against nothing, and the
-  // post-reconnect roster then reads as all-new peers, whose eager
+  // without the device hub's broker leg anyway, an outage must cancel
+  // its pending retries rather than let them burn against nothing, and
+  // the post-reconnect roster then reads as all-new peers, whose eager
   // dials no-op through the cache for every session that survived the
   // outage and redial the rest -- including parked ones, so our own
   // link coming back is an unpark input.

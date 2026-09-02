@@ -109,10 +109,10 @@ describe("GET /connect", () => {
 
 describe("relaying", () => {
   it("relays an opaque frame between two devices, byte for byte", async () => {
-    const a = await enrollAndConnect("acct-relay", "dev-relay-a");
-    const b = await enrollAndConnect("acct-relay", "dev-relay-b");
-    await a.socket.untilPresence(["dev-relay-a", "dev-relay-b"]);
-    await b.socket.untilPresence(["dev-relay-a", "dev-relay-b"]);
+    const a = await enrollAndConnect("acct-hub", "dev-hub-a");
+    const b = await enrollAndConnect("acct-hub", "dev-hub-b");
+    await a.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
+    await b.socket.untilPresence(["dev-hub-a", "dev-hub-b"]);
     // Deliberately gnarly: nested, unicode, null and undefined-adjacent
     // shapes, exactly what future sm frames may contain.
     const frame = {
@@ -125,18 +125,18 @@ describe("relaying", () => {
         empty: {},
       },
     };
-    a.socket.send({ t: "relay", to: "dev-relay-b", frame });
+    a.socket.send({ t: "relay", to: "dev-hub-b", frame });
     const delivered = await b.socket.next();
     expect(delivered.t).toBe("relay");
     if (delivered.t !== "relay") return;
-    expect(delivered.from).toBe("dev-relay-a");
+    expect(delivered.from).toBe("dev-hub-a");
     expect(JSON.stringify(delivered.frame)).toBe(JSON.stringify(frame));
     // Relaying is symmetric in both directions.
-    b.socket.send({ t: "relay", to: "dev-relay-a", frame: "pong" });
+    b.socket.send({ t: "relay", to: "dev-hub-a", frame: "pong" });
     const back = await a.socket.next();
     expect(back).toMatchObject({
       t: "relay",
-      from: "dev-relay-b",
+      from: "dev-hub-b",
       frame: "pong",
     });
   });
@@ -157,8 +157,8 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // Just past the device hub's control-frame cap (64 KiB since the wire
-    // went orchestration-only): a legitimate broker frame is far
+    // Just past the device hub's control-frame cap (64 KiB since the
+    // wire went orchestration-only): a legitimate broker frame is far
     // smaller, so anything here is a client aiming data at the wrong
     // wire and gets the nack.
     a.socket.send({

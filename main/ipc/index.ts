@@ -125,12 +125,12 @@ export function registerIpcHandlers(): void {
   // snapshot.
   registerContract(hubContract, hubHandlers);
   // The direct data plane's brokering surface: host-scoped and
-  // remote:true, so a peer asks over the device hub (or an existing direct
-  // session) how to dial this host directly. The handlers are
-  // constructed in register.ts, which owns every dep (the listener,
-  // the ticket store, the hub roster). The handler fails closed
-  // without an authenticated callerDeviceId, so the Electron wire
-  // always reads available:false.
+  // remote:true, so a peer asks over the device hub (or an existing
+  // direct session) how to dial this host directly. The handlers are
+  // constructed in register.ts, which owns every dep (the listener, the
+  // ticket store, the hub roster). The handler fails closed without an
+  // authenticated callerDeviceId, so the Electron wire always reads
+  // available:false.
   registerContract(directContract, directHandlers);
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.

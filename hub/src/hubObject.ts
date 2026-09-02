@@ -394,11 +394,11 @@ export class DeviceHub implements DurableObject {
 
   // Every ws.send in this object goes through here. A socket can die
   // between listing and sending, and a dead-but-still-listed peer that
-  // throws on send must not tear down the caller's socket. On the device hub
-  // hot path an unguarded send would let a stale peer kill the sender's
-  // socket. A dropped send loses nothing durable. Presence is resent on
-  // every membership change and relayed frames are the app's retry
-  // concern.
+  // throws on send must not tear down the caller's socket. On the
+  // device hub hot path an unguarded send would let a stale peer kill
+  // the sender's socket. A dropped send loses nothing durable. Presence
+  // is resent on every membership change and relayed frames are the
+  // app's retry concern.
   private safeSend(ws: WebSocket, text: string): void {
     try {
       ws.send(text);
