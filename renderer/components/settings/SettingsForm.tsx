@@ -69,12 +69,15 @@ export function SettingsForm({
 
   // No provider above this component, so this is the local updater:
   // the sidebar's update dot brought the visitor here for its button.
+  // Only on arrival, though. A check that finishes while the page is
+  // open must not yank the visitor out of the section they are editing.
   const { state: localUpdate } = useUpdater();
-  const stagedVersion =
-    localUpdate?.kind === "ready" ? localUpdate.version : null;
+  const [stagedOnArrival] = useState(() =>
+    localUpdate?.kind === "ready" ? localUpdate.version : null,
+  );
   useEffect(() => {
-    if (stagedVersion !== null) landOnStagedUpdate(stagedVersion);
-  }, [stagedVersion]);
+    if (stagedOnArrival !== null) landOnStagedUpdate(stagedOnArrival);
+  }, [stagedOnArrival]);
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
     useDirtyForm<SettingsFormState>(

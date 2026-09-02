@@ -31,7 +31,7 @@ import { setUpdaterImpl } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/jsonFile";
 import { pathExists, shigomoriRoot } from "@host/lib/util/paths";
-import { busyActionRefusal, confirmBusyAction } from "./busyPrompt";
+import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { errorMessageOf } from "@shared/errors";
@@ -198,7 +198,7 @@ async function installUpdate(unattended: boolean): Promise<void> {
   if (installing) return;
   if (!(await hasInstallableStaged())) return;
   if (unattended) {
-    const refusal = busyActionRefusal("restart");
+    const refusal = busyActionRemoteRefusal("restart");
     if (refusal !== null) throw new Error(refusal);
   } else {
     if (!(await confirmBusyAction("restart"))) return;

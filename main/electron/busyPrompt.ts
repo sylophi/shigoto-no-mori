@@ -69,6 +69,22 @@ export function busyActionRefusal(action: BusyAction): string | null {
   return formatBusyDetail(busy, COPY[action].gerund);
 }
 
+// The same verdict worded for the OTHER device's screen: the dialog's
+// detail describes what proceeding would do, which read as if the
+// restart had happened once it crossed the wire as an error. This says
+// what was refused and what to do about it.
+export function busyActionRemoteRefusal(action: BusyAction): string | null {
+  const busy = getBusyOperations();
+  if (!isBusy(busy)) return null;
+  const verb = action === "restart" ? "restarting to update" : "quitting";
+  if (busy.runningScripts > 0) {
+    const n = busy.runningScripts;
+    return `${pluralize(n, `${n} script is`, `${n} scripts are`)} still running there. Stop ${pluralize(n, "it", "them")} before ${verb}.`;
+  }
+  const n = busy.inflightDeletes;
+  return `${pluralize(n, `${n} worktree is`, `${n} worktrees are`)} still being removed there. Wait for that to finish before ${verb}.`;
+}
+
 function dialogOptions(action: BusyAction, detail: string) {
   const copy = COPY[action];
   return {
