@@ -24,7 +24,7 @@ interface BuildInboxRowsArgs {
 
 interface Entry {
   worktree: Worktree;
-  projectName: string;
+  project: Project;
   pr: PullRequest | undefined;
   activityAt: number;
 }
@@ -56,7 +56,7 @@ function worktreeRow(entry: Entry): SidebarRow {
     kind: "inbox-worktree",
     key: `w:${entry.worktree.id}`,
     worktree: entry.worktree,
-    projectName: entry.projectName,
+    project: entry.project,
     pr: entry.pr,
   };
 }
@@ -94,7 +94,7 @@ export function buildInboxRows({
         continue;
       const entry: Entry = {
         worktree,
-        projectName: project.name,
+        project,
         pr: prs?.[worktree.branch],
         activityAt: worktreeLastActivityAt(worktree),
       };

@@ -17,18 +17,24 @@ function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
   return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
 }
 
-function DropdownMenuContent({
-  align = "start",
-  alignOffset = 0,
-  side = "bottom",
-  sideOffset = 4,
-  className,
-  ...props
-}: MenuPrimitive.Popup.Props &
+type MenuPopupSurfaceProps = MenuPrimitive.Popup.Props &
   Pick<
     MenuPrimitive.Positioner.Props,
     "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+  >;
+
+// Portal, Positioner, Popup: the surface every menu popup renders.
+// Base UI's ContextMenu parts are the same components, so
+// ui/context-menu.tsx renders this too -- with placement left unset,
+// which is how Base UI knows to anchor at the pointer.
+export function MenuPopupSurface({
+  align,
+  alignOffset,
+  side,
+  sideOffset,
+  className,
+  ...props
+}: MenuPopupSurfaceProps) {
   return (
     <MenuPrimitive.Portal>
       <MenuPrimitive.Positioner
@@ -48,6 +54,24 @@ function DropdownMenuContent({
         />
       </MenuPrimitive.Positioner>
     </MenuPrimitive.Portal>
+  );
+}
+
+function DropdownMenuContent({
+  align = "start",
+  alignOffset = 0,
+  side = "bottom",
+  sideOffset = 4,
+  ...props
+}: MenuPopupSurfaceProps) {
+  return (
+    <MenuPopupSurface
+      align={align}
+      alignOffset={alignOffset}
+      side={side}
+      sideOffset={sideOffset}
+      {...props}
+    />
   );
 }
 
