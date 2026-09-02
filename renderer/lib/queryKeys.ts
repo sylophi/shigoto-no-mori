@@ -10,7 +10,7 @@
 // sentinel followed by a device id, so a second device's data can
 // enter the cache without colliding and scope stays decidable from the
 // tuple alone. Client-scoped keys belong to this app instance alone
-// (updaterState, clientConfig) and never get either.
+// (clientConfig, account, portForwards) and never get either.
 import type { QueryClient } from "@tanstack/react-query";
 
 const PR_BRANCH_SCOPE = "branch";
@@ -107,6 +107,11 @@ function buildQueryKeys(deviceId: string) {
       host("packageScriptSort", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
+    // The merged pool + custom port list with its liveness probe. Polled
+    // while a detail page shows it, so a dev server starting or
+    // stopping on the host shows up without a refetch trigger.
+    worktreePorts: (projectId: string, worktreeId: string) =>
+      host("worktreePorts", projectId, worktreeId),
     terrierReadiness: () => host("terrierReadiness"),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),
@@ -177,7 +182,11 @@ function buildQueryKeys(deviceId: string) {
     // list.
     accountGrantedDevices: () => ["accountGrants"] as const,
 
-    updaterState: () => ["updater", "state"] as const,
+    // Host-scoped: the update is a fact about the machine the app runs
+    // on, and a peer's Settings tab shows that device's state under its
+    // own id. Seeded by updater:get and then driven by the updater:state
+    // broadcast, which a remote scope receives over its direct session.
+    updaterState: () => host("updater"),
 
     // Client-scoped: the port-forward engine (its listeners and conns)
     // lives in this app instance's main process, whichever device a
@@ -221,8 +230,9 @@ export const queryKeys = queryKeysFor(localDeviceId);
 //   sweep is several git calls or a directory walk per worktree) and
 //   invalidation ignores staleTime. Focus, mount and the removal flow
 //   still cover them.
-// - runtime and updater: static per-host facts and this install's
-//   updater state. No host state change touches either.
+// - runtime and updater: static per-host facts and that device's
+//   updater state, which its own broadcast drives. No git-state change
+//   touches either.
 // - portForwards for the same reason as updater: the forward set is
 //   this install's engine state, driven by its own changed broadcast,
 //   and no host git-state ping moves it.

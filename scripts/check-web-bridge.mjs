@@ -270,7 +270,17 @@ async function main() {
       // outputs would otherwise stub to (cli.status's first arm is
       // "installed").
       await assert.rejects(bridge.api.cli.status(), refused);
-      await assert.rejects(bridge.api.updater.get(), refused);
+      // updater:get IS a classified read (a peer's Settings tab shows
+      // that device's update state), but its output is a discriminated
+      // union, so the structural stubber refuses it rather than
+      // fabricate an "idle" that would claim the browser is up to date.
+      // The two commands refuse like every other mutation.
+      await assert.rejects(
+        bridge.api.updater.get(),
+        /has no safe empty answer in the browser/,
+      );
+      await assert.rejects(bridge.api.updater.check(), refused);
+      await assert.rejects(bridge.api.updater.install(), refused);
       // The port-forward engine binds real TCP listeners, so its whole
       // client-scoped surface must refuse on the web (the UI never
       // mounts there, gated on isElectron, but the wire is the wall).

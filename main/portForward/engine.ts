@@ -18,7 +18,10 @@
 // host side promises to keep, see the note above its handlers).
 import { createServer, type Server, type Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
-import type { forwardContract } from "@shared/ipc/modules/forward";
+import {
+  FORWARD_UNKNOWN_CONN,
+  type forwardContract,
+} from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { mintHexId } from "@host/lib/idleRegistry";
@@ -52,7 +55,7 @@ const CHANGE_COALESCE_MS = 150;
 const UPLINK_HIGH_WATER = 4 * 1024 * 1024;
 
 const isUnknownConn = (error: unknown) =>
-  errorMessageOf(error).includes("unknown-conn");
+  errorMessageOf(error).includes(FORWARD_UNKNOWN_CONN);
 
 export type PortForwardSummary = {
   forwardId: string;
@@ -110,6 +113,18 @@ export function createPortForwardEngine(deps: {
     }, CHANGE_COALESCE_MS);
     changeTimer.unref?.();
   };
+
+  function findForward(
+    deviceId: string,
+    remotePort: number,
+  ): Forward | undefined {
+    for (const forward of forwards.values()) {
+      if (forward.deviceId === deviceId && forward.remotePort === remotePort) {
+        return forward;
+      }
+    }
+    return undefined;
+  }
 
   function liveConnsTo(deviceId: string): number {
     let count = 0;
@@ -264,15 +279,18 @@ export function createPortForwardEngine(deps: {
     localPort?: number;
   }): Promise<{ forwardId: string; localPort: number }> {
     // One forward per (deviceId, remotePort): starting an existing pair
-    // returns it unchanged. Idempotent by choice, the simpler contract
-    // for a UI whose start doubles as "make sure this is forwarded".
-    for (const existing of forwards.values()) {
-      if (
-        existing.deviceId === input.deviceId &&
-        existing.remotePort === input.remotePort
-      ) {
-        return { forwardId: existing.forwardId, localPort: existing.localPort };
-      }
+    // returns it unchanged, unless the caller names a different local
+    // port, which moves the listener there. The old listener stays up
+    // until the new one is bound (below), so a move that fails (port
+    // taken, peer gone) leaves the working forward exactly as it was.
+    // Idempotent otherwise, the simpler contract for a UI whose start
+    // doubles as "make sure this is forwarded".
+    const existing = findForward(input.deviceId, input.remotePort);
+    if (
+      existing !== undefined &&
+      (input.localPort === undefined || input.localPort === existing.localPort)
+    ) {
+      return { forwardId: existing.forwardId, localPort: existing.localPort };
     }
     const api = deps.forwardApiFor(input.deviceId);
     // Probe the remote service before binding anything: one open and
@@ -311,16 +329,15 @@ export function createPortForwardEngine(deps: {
     });
     // The dedupe scan above ran before two awaits, so a concurrent
     // start for the same pair may have bound in the meantime: yield to
-    // the twin and release the just-bound listener.
-    for (const existing of forwards.values()) {
-      if (
-        existing.deviceId === input.deviceId &&
-        existing.remotePort === input.remotePort
-      ) {
-        server.close();
-        return { forwardId: existing.forwardId, localPort: existing.localPort };
-      }
+    // the twin and release the just-bound listener. The forward being
+    // moved is not a twin: it is what the new listener replaces, and
+    // only now, with the replacement bound, does it go.
+    const twin = findForward(input.deviceId, input.remotePort);
+    if (twin !== undefined && twin !== existing) {
+      server.close();
+      return { forwardId: twin.forwardId, localPort: twin.localPort };
     }
+    if (existing !== undefined) stopForward(existing.forwardId);
     const forward: Forward = {
       forwardId: mintHexId(),
       deviceId: input.deviceId,

@@ -4,10 +4,11 @@
 // over fixture transports by the bridge (lab/bridge.ts).
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type {
+  CommitSummary,
+  CustomPort,
   Project,
   ProjectIcon,
   Worktree,
-  CommitSummary,
 } from "@shared/schemas";
 
 export const LAB_ACCOUNT_ID = "user_2rin8xk3";
@@ -222,7 +223,6 @@ const localWorktrees: Record<string, Worktree[]> = {
       branch: "fix-stale-locks",
       path: "/Users/rin/shigomori/worktrees/shigoto-no-mori/brave-badger",
       ahead: 2,
-      port: 5731,
       lastChangeAt: now - 5 * HOUR,
       recentCommits: [
         commit(
@@ -343,7 +343,6 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
       path: "/home/rin/shigomori/worktrees/shigoto-no-mori/gentle-gecko",
       ahead: 1,
       changedCount: 7,
-      port: 5173,
       lastChangeAt: now - 40 * 60_000,
       recentCommits: [
         commit(
@@ -453,3 +452,30 @@ export const labGlobalConfig = {
   githubCli: true,
   directConnections: true,
 };
+
+// ---- ports ----
+
+// port-pool's allocations by worktree id, in the project's declared
+// order, and the user-added ports (what the worktree data file holds).
+// Which numbers have a server behind them is a flat set: the lab poses
+// liveness, it does not run servers.
+export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
+  wt_sm_badger: [{ name: "renderer", port: 5731 }],
+  wt_sm_hum: [{ name: "renderer", port: 5741 }],
+  aa11bb22cc33: [{ name: "renderer", port: 5174 }],
+  ba9876543210: [
+    { name: "renderer", port: 5182 },
+    { name: "api", port: 5183 },
+  ],
+  a1b2c3d4e5f6: [
+    { name: "renderer", port: 5173 },
+    { name: "storybook", port: 6006 },
+  ],
+};
+
+export const labCustomPorts: Record<string, CustomPort[]> = {
+  wt_sm_badger: [{ port: 5732, label: "api" }],
+  a1b2c3d4e5f6: [{ port: 8787, label: "api" }, { port: 5555 }],
+};
+
+export const labListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);

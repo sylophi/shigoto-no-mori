@@ -10,7 +10,7 @@
 // control use -- so a peer with a differently-named clone still counts
 // and a same-named unrelated repo never does.
 import type { Project } from "@shared/schemas";
-import { useAccountStatus } from "@/hooks/account/useAccount";
+import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { usePeerCommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -56,13 +56,13 @@ export function useDeviceTargets(
   // page must not kick a fresh re-listing of every peer's forest.
   const forests = useRemoteForests({ refetchOnMount: false });
   const access = usePeerCommandAccess(devices);
-  const { data: account } = useAccountStatus();
+  const localName = useLocalDeviceName();
 
   if (devices.length === 0 || project === undefined) return [];
 
   const here: DeviceTarget = {
     deviceId: localDeviceId,
-    label: account?.deviceName ?? "This device",
+    label: localName,
     isThisDevice: true,
     status: null,
     api: undefined,

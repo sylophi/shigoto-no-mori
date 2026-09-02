@@ -9,6 +9,9 @@ interface AppearanceSectionProps {
   onPick: (theme: Theme) => void;
   doubutsu: boolean;
   onDoubutsuChange: (next: boolean) => void;
+  // "Appearance" where the section stands alone (the web page). The
+  // desktop's Appearance section already says that and names it "Theme".
+  heading?: string;
 }
 
 export function AppearanceSection({
@@ -16,6 +19,7 @@ export function AppearanceSection({
   onPick,
   doubutsu,
   onDoubutsuChange,
+  heading = "Appearance",
 }: AppearanceSectionProps) {
   const options: { value: Theme; label: string; Icon: typeof Sun }[] = [
     { value: "light", label: "Light", Icon: Sun },
@@ -24,7 +28,7 @@ export function AppearanceSection({
   ];
   return (
     <section className="space-y-3">
-      <SectionHeading className="mb-1">Appearance</SectionHeading>
+      <SectionHeading className="mb-1">{heading}</SectionHeading>
       <div className="flex flex-wrap items-center gap-1.5">
         {options.map(({ value, label, Icon }) => (
           <Button

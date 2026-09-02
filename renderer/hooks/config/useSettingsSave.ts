@@ -93,21 +93,21 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
   );
 }
 
-// The remote encoding of the same managed keys (v2 step 6): the
-// globalConfig.writeDeviceSettings patch. EXPLICIT values throughout,
-// where managedDeviceConfig omits a key at its default: the host
-// applies the patch as absent-means-keep (an undefined key cannot
-// survive the wire), so the omit-on-default encoding would silently
-// fail to revert a remote key back to its default. No default literal
-// is respelled here — the form state already carries every key's
-// concrete value.
+// The remote encoding (v2 step 6): the globalConfig.writeDeviceSettings
+// patch, carrying ONLY the keys a peer's Settings section edits. The
+// host applies the patch as absent-means-keep, which is what keeps the
+// launch catalog (launchers, hiddenLaunchers, launchScripts) out of it:
+// those keys are local by nature and edited only on this machine's
+// Launch tools section, so a peer save must not re-send a snapshot of
+// them taken when the peer's form was seeded. The keys it does carry
+// are EXPLICIT values, where managedDeviceConfig omits a key at its
+// default: an undefined key cannot survive the wire, so the
+// omit-on-default encoding would silently fail to revert a remote key
+// back to its default. No default literal is respelled here.
 export function toDeviceSettingsPatch(
   state: SettingsFormState,
 ): DeviceSettingsPatch {
   return {
-    launchers: validLaunchers(state),
-    hiddenLaunchers: state.hiddenLaunchers,
-    launchScripts: state.launchScripts,
     deleteBranchOnRemove: state.deleteBranchOnRemove,
     autoPopulateInstall: state.autoPopulateInstall,
     portPool: state.portPool,

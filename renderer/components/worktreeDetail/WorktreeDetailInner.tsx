@@ -26,7 +26,7 @@ import type {
 } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
-import { PortsSection } from "./PortsSection";
+import { PortsSection } from "./ports/PortsSection";
 import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptLaunchRow } from "./ScriptLaunchRow";

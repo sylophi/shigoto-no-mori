@@ -31,7 +31,8 @@
 // engine listener -> hub stub -> host verbs -> loopback fixture.
 // Asserts on top of the slice A set:
 //   - a local dial round-trips an echo through the whole chain, and a
-//     duplicate startForward returns the existing forward.
+//     duplicate startForward returns the existing forward, while one
+//     naming a different local port moves the listener.
 //   - a ~1.5 MB local transfer lands byte-identical.
 //   - the fixture server closing its socket ends the local client
 //     socket (eof propagation).
@@ -61,7 +62,7 @@ import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
 } from "../main/portForward/engine.ts";
-import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 import { delay, waitFor } from "./lib/hubBoot.mjs";
 
@@ -395,7 +396,7 @@ async function main() {
 
     // (9) Local round trip through the whole chain, and duplicate
     // startForward semantics (one forward per device+port pair).
-    const started = await engine.startForward({
+    let started = await engine.startForward({
       deviceId: "A",
       remotePort: echo.port,
     });
@@ -416,6 +417,35 @@ async function main() {
     ok(
       "engine: a local dial round-trips through the whole chain, and a duplicate start returns the existing forward",
     );
+
+    // (9b) A start naming a DIFFERENT local port moves the listener:
+    // the old number refuses, the new one round-trips, still one
+    // forward. Moving back onto the number just released proves the
+    // old listener was closed once the new one was bound.
+    const before = started.localPort;
+    const freePort = await freeLoopbackPort();
+    const moved = await engine.startForward({
+      deviceId: "A",
+      remotePort: echo.port,
+      localPort: freePort,
+    });
+    assert.notEqual(moved.forwardId, started.forwardId);
+    assert.equal(moved.localPort, freePort);
+    assert.equal(engine.listForwards().length, 1);
+    await assert.rejects(
+      dialAndCollect(before, Buffer.from("x"), 1, 1_000),
+      "the released local port still accepts",
+    );
+    const movedPing = await dialAndCollect(freePort, Buffer.from("moved"), 5);
+    assert.equal(movedPing.toString("utf8"), "moved");
+    started = await engine.startForward({
+      deviceId: "A",
+      remotePort: echo.port,
+      localPort: before,
+    });
+    assert.equal(started.localPort, before);
+    assert.equal(engine.listForwards().length, 1);
+    ok("engine: a start naming another local port moves the listener");
 
     // (10) A ~1.5 MB transfer through the local listener, chunked by
     // the engine's uplink pump and reassembled off its poll loop.
