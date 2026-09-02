@@ -43,16 +43,22 @@
       },
     ],
   },
+  // Migrations are history, not state: the dev Worker applied v1 while
+  // the class was still called AccountHub, so v1 keeps that name and
+  // v2 carries the rename to DeviceHub. A fresh Worker (production at
+  // launch) replays both and lands on DeviceHub as well. Never edit an
+  // applied tag in place, Cloudflare refuses the deploy ("does not
+  // export class ... depended on by existing Durable Objects").
   "migrations": [
     {
       "tag": "v1",
       // SQLite-backed storage is required for new DO classes and is
-      // what the hibernation-era APIs assume. The class name was
-      // edited in place through its renames (AccountRelay, AccountHub,
-      // DeviceHub) because both Worker names are new and carry no
-      // applied migrations. A Worker that already ran v1 under an
-      // older class name needs a `rename_class` tag instead.
-      "new_sqlite_classes": ["DeviceHub"],
+      // what the hibernation-era APIs assume.
+      "new_sqlite_classes": ["AccountHub"],
+    },
+    {
+      "tag": "v2",
+      "renamed_classes": [{ "from": "AccountHub", "to": "DeviceHub" }],
     },
   ],
   "d1_databases": [
