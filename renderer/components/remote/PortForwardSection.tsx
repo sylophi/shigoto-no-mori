@@ -30,7 +30,7 @@ import {
   Plus,
   X,
 } from "lucide-react";
-import { PortSchema } from "@shared/ipc/modules/portForward";
+import { parsePortNumber } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import { ExternalLink } from "@/components/ui/external-link";
@@ -47,7 +47,7 @@ export function PortForwardSection({
   const [port, setPort] = useState("");
   const [adding, setAdding] = useState(false);
   const { forwards, start, stop } = usePortForwards(deviceId);
-  const parsedPort = parsePort(port);
+  const parsedPort = parsePortNumber(port);
 
   // Folding the field away always drops the draft: a half-typed port
   // has no meaning once the chip is back.
@@ -119,7 +119,7 @@ export function PortForwardSection({
               if (parsedPort !== undefined) {
                 // Folding the field is this form's business, not the
                 // shared mutation's.
-                start.mutate(parsedPort, { onSuccess: close });
+                start.mutate({ remotePort: parsedPort }, { onSuccess: close });
               }
             }}
           >
@@ -179,9 +179,4 @@ export function PortForwardSection({
         ))}
     </div>
   );
-}
-
-function parsePort(raw: string): number | undefined {
-  const parsed = PortSchema.safeParse(Number(raw));
-  return parsed.success ? parsed.data : undefined;
 }

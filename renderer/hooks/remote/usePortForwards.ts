@@ -2,9 +2,9 @@
 // list and the start/stop pair. Everything here is CLIENT-scoped and
 // calls window.api directly: the listener belongs to THIS machine, only
 // its target is the named device. The list caches under one client key
-// for all devices, and this hook filters to the one asked for, so both
-// the devices page's per-peer section and the worktree detail's port row
-// render off the same query and the same error wording.
+// for all devices, and these hooks filter to the one asked for, so both
+// the devices page's per-peer section and the worktree detail's port
+// rows render off the same query and the same error wording.
 //
 // The device is a plain argument, not a read off the surrounding host
 // scope, because nothing here needs that device to be REACHABLE -- a
@@ -13,6 +13,11 @@
 // an api the caller does not need.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { errorMessageOf } from "@shared/errors";
+import {
+  FORWARD_CONNECT_FAILED,
+  FORWARD_TOO_MANY_CONNS,
+} from "@shared/ipc/modules/forward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -48,20 +53,53 @@ export function useWatchPortForwards(): void {
   );
 }
 
-export function usePortForwards(deviceId: string) {
-  const { data } = useQuery({
+function usePortForwardList() {
+  return useQuery({
     queryKey: queryKeys.portForwards(),
     queryFn: () => window.api.portForward.list(),
     meta: { silentError: true },
   });
+}
+
+// The host's coded refusals (the FORWARD_* markers beside the contract)
+// and node's bind errors (stable OS codes), in words a row can show
+// inline. Anything else passes through as the engine said it.
+export function describeForwardError(
+  error: unknown,
+  ports: { remotePort: number; localPort?: number },
+): string {
+  if (isCommandRefusedError(error)) {
+    return "Needs command access, granted from that device's Devices page.";
+  }
+  const message = errorMessageOf(error);
+  if (message.includes("EADDRINUSE")) {
+    return `localhost:${ports.localPort ?? ports.remotePort} is already taken on this machine. Pick another local port.`;
+  }
+  if (message.includes("EACCES")) {
+    return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
+  }
+  if (message.startsWith(FORWARD_CONNECT_FAILED)) {
+    return `Nothing answered on port ${ports.remotePort} over there. Is the server running?`;
+  }
+  if (message.startsWith(FORWARD_TOO_MANY_CONNS)) {
+    return "That device already has as many forwarded connections open as it allows.";
+  }
+  return message;
+}
+
+export function usePortForwards(deviceId: string) {
+  const { data } = usePortForwardList();
   const start = useMutation({
-    mutationFn: (remotePort: number) =>
-      window.api.portForward.start({ deviceId, remotePort }),
+    mutationFn: (input: { remotePort: number; localPort?: number }) =>
+      window.api.portForward.start({ deviceId, ...input }),
     // The engine's start probe surfaces the coded errors here
     // (connect-failed, too-many-conns). Refusals surface centrally.
-    onError: (err) => {
+    onError: (err, input) => {
       if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't forward the port", err);
+        notifyError(
+          "Couldn't forward the port",
+          describeForwardError(err, input),
+        );
       }
     },
     meta: { silentError: true },
@@ -81,5 +119,50 @@ export function usePortForwards(deviceId: string) {
     ),
     start,
     stop,
+  };
+}
+
+// One port's forward as a switch: `apply` asks the engine for the
+// wanted state, off or on at a local port. The engine owns the rest: a
+// start on a pair it already holds is a no-op, and one naming another
+// local port moves the listener. One mutation, so the row has a single
+// pending flag and a single error to show inline. Nothing here toasts:
+// the row is the place the failure belongs.
+export function usePortForwardControl(deviceId: string, remotePort: number) {
+  const { data } = usePortForwardList();
+  const forward = data?.forwards.find(
+    (entry) => entry.deviceId === deviceId && entry.remotePort === remotePort,
+  );
+  const apply = useMutation({
+    mutationFn: async (
+      target: { on: false } | { on: true; localPort: number },
+    ) => {
+      if (target.on) {
+        await window.api.portForward.start({
+          deviceId,
+          remotePort,
+          localPort: target.localPort,
+        });
+      } else if (forward !== undefined) {
+        await window.api.portForward.stop(forward.forwardId);
+      }
+    },
+    meta: { silentError: true },
+  });
+  const failed = apply.error;
+  return {
+    forward,
+    apply: apply.mutate,
+    isPending: apply.isPending,
+    error:
+      failed === null
+        ? null
+        : describeForwardError(failed, {
+            remotePort,
+            localPort: apply.variables?.on
+              ? apply.variables.localPort
+              : undefined,
+          }),
+    clearError: apply.reset,
   };
 }

@@ -6,14 +6,10 @@ import {
   useWorktreeData,
   useWorktreeDataWrite,
 } from "@/hooks/worktrees/useWorktreeData";
-import type { Worktree } from "@shared/schemas";
+import { hasWorktreeData, type Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
-  // The primary checkout (the main repo root) lives at the project path,
-  // which never sits under a managed prefix, so it's flagged external --
-  // but it's ours to annotate, so notes stay available for it. Only
-  // genuinely external worktrees (manual checkouts elsewhere) are skipped.
-  if (worktree.isExternal && !worktree.isPrimary) return null;
+  if (!hasWorktreeData(worktree)) return null;
   return <NotesSectionLoader key={worktree.id} worktree={worktree} />;
 }
 
@@ -49,14 +45,15 @@ function NotesSectionInner({
     write.mutate({
       projectId: worktree.projectId,
       worktreeId: worktree.id,
-      data: { notes: next.trim().length === 0 ? undefined : next },
+      patch: { notes: next.trim().length === 0 ? undefined : next },
     });
   };
 
   // Compare against what the last write actually sent, not `saved` --
   // the prop lags behind until the invalidation refetch lands, which
   // would blank the status right after a successful save.
-  const submitted = write.variables?.data.notes ?? "";
+  const submitted =
+    (write.variables?.patch as { notes?: string } | undefined)?.notes ?? "";
   const status = write.isPending
     ? "Saving…"
     : write.isSuccess && draft === submitted

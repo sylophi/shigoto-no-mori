@@ -45,13 +45,30 @@ export const TONE_PILL: Record<StatusTone, string> = {
 export function StatusDot({
   tone,
   label,
+  pulse = false,
+  className,
 }: {
   tone: StatusTone;
   label?: React.ReactNode;
+  // A soft breathing halo in the dot's own tone, for a state that is
+  // live right now (a server answering on a port) rather than merely
+  // recorded.
+  pulse?: boolean;
+  className?: string;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm">
-      <span className={cn("size-1.5 rounded-full", TONE_BG[tone])} />
+    <span className={cn("inline-flex items-center gap-1.5 text-sm", className)}>
+      <span className="relative flex size-1.5 shrink-0">
+        {pulse && (
+          <span
+            className={cn(
+              "absolute -inset-1 animate-pulse rounded-full opacity-25",
+              TONE_BG[tone],
+            )}
+          />
+        )}
+        <span className={cn("relative size-1.5 rounded-full", TONE_BG[tone])} />
+      </span>
       {label}
     </span>
   );

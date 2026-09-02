@@ -93,7 +93,6 @@ export const WorktreeSchema = z.object({
   // Bounded by the backend (currently 4) so the IPC payload stays
   // small: 3 for the teaser plus 1 extra to signal "more available".
   recentCommits: z.array(CommitSummarySchema),
-  port: z.number().int().positive().optional(),
   // The repo's primary checkout. Shown in the UI for context but never
   // removable — deleting it would mean detaching the project itself.
   isPrimary: z.boolean(),
@@ -181,6 +180,17 @@ export function isManagedWorktree(
   worktree: Pick<Worktree, "isPrimary" | "isExternal">,
 ): boolean {
   return !worktree.isPrimary && !worktree.isExternal;
+}
+
+// Whether the worktree has a data file (notes, custom ports) of its own.
+// The primary checkout lives at the project path, which never sits under
+// a managed prefix, so it's flagged external -- but it's ours to
+// annotate. Only genuinely external worktrees (manual checkouts
+// elsewhere) deliberately have no on-disk state.
+export function hasWorktreeData(
+  worktree: Pick<Worktree, "isPrimary" | "isExternal">,
+): boolean {
+  return !worktree.isExternal || worktree.isPrimary;
 }
 
 export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({

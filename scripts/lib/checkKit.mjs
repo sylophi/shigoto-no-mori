@@ -1,6 +1,7 @@
 // Shared plumbing for the repo's check scripts. Scripts collect their
 // own failure strings and hand them to `report` for the one epilogue
 // shape every check prints.
+import { createServer } from "node:net";
 import { readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +43,19 @@ export function* walk(dir, extensions) {
 // not hide the rest. Returns both so the script can hand `failures` to
 // `report` below. Synchronous, matching the assertion callbacks that use
 // it.
+// A loopback port number nothing holds right now: bind an ephemeral
+// listener and release it. Free the instant the close lands, and
+// nothing else grabs an ephemeral port in the same tick.
+export function freeLoopbackPort() {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
 export function makeChecker() {
   const failures = [];
   function check(label, fn) {
