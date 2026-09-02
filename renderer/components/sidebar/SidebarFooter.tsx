@@ -5,10 +5,7 @@ import {
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  useAccountStatus,
-  useWatchAccountChanges,
-} from "@/hooks/account/useAccount";
+import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import {
   useSetSidebarView,
@@ -53,13 +50,6 @@ export function SidebarFooter({
   // mounted watch is what keeps it (and every other account read) fresh
   // across sign-in, sign-out and renames, wherever they happen.
   useWatchAccountChanges();
-  // The multi-device UI exists only on a build with an account service
-  // (the account service launch env). Unconfigured, the app looks and
-  // behaves like the single-machine app: no Devices button, no page to
-  // reach, nothing to explain. Hidden too while the status loads, so an
-  // unconfigured build never flashes the button it is about to drop.
-  const { data: accountStatus } = useAccountStatus();
-  const devicesEnabled = accountStatus?.configured === true;
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
@@ -99,10 +89,9 @@ export function SidebarFooter({
           <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
-      <SidebarNavActions
-        devicesEnabled={devicesEnabled}
-        updateReady={updateReady}
-      />
+      {/* Devices is always reachable here: unconfigured, the page itself
+          explains the state (AccountSection) instead of the button hiding. */}
+      <SidebarNavActions devicesEnabled updateReady={updateReady} />
     </div>
   );
 }
