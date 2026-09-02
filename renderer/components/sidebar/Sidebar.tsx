@@ -252,7 +252,10 @@ export function Sidebar() {
         </>
       )}
       <SidebarFooter
-        arrangeMode={arrangeMode}
+        // Arranging is a tree mode. While Settings holds the sidebar the
+        // footer shows its normal actions, and the mode resumes with the
+        // tree.
+        arrangeMode={arrangeMode && !onSettings}
         onToggleArrange={() => setArrangeMode((v) => !v)}
       />
     </aside>
