@@ -20,7 +20,8 @@ or deploying the shared half.
 ## Domains (production)
 
 Two zones on the one Cloudflare account, both required at launch.
-Dev needs none of this: dev builds point at `workers.dev` and Vercel
+Dev needs only the `shigomori.com` zone for its own Worker host
+(`hub-dev.shigomori.com`, below): dev web builds point at Vercel
 preview URLs, and dev tunnels share the tunnel zone below.
 
 | Host | Serves | Pinned where |
@@ -28,6 +29,7 @@ preview URLs, and dev tunnels share the tunnel zone below.
 | `shigomori.com` | Marketing site | Nowhere in code |
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
 | `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
+| `hub-dev.shigomori.com` | The dev Worker (Workers custom domain, `env.dev` in `wrangler.jsonc`) | Baked into dev builds as `SM_DEVICE_HUB_URL` |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
 | `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME). `vercel.json` `script-src` still lists only the dev pattern, add it when going live |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
@@ -91,9 +93,12 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    pnpm run deploy
    ```
 
-At launch production additionally gets the custom domain
-`hub.shigomori.com` (a Workers custom domain on the zone) and its
-workers.dev route switched off. Dev stays on workers.dev.
+The dev deploy also creates the `hub-dev.shigomori.com` custom domain
+(DNS record and certificate) and serves no workers.dev route: the
+workers.dev host carries the account's subdomain label, which
+Cloudflare derives from the account email. At launch production gets
+the same treatment with `hub.shigomori.com`, pinned in the top-level
+config rather than `env.dev`.
 
 Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
 `MAX_HUB_MESSAGE_BYTES` change): update all devices BEFORE
@@ -169,8 +174,8 @@ Account section showing a "not configured" state and sign-in disabled.
 None of these are secrets, so they are safe to bake into a build. Never
 commit real values.
 
-- `SM_DEVICE_HUB_URL` - the deployed Worker's base URL, e.g.
-  `https://shigomori-hub-dev.<account>.workers.dev` for dev builds and
+- `SM_DEVICE_HUB_URL` - the deployed Worker's base URL,
+  `https://hub-dev.shigomori.com` for dev builds and
   `https://hub.shigomori.com` for production. The app joins the device and
   ticket routes onto this.
 - `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` - the publishable key
