@@ -84,7 +84,7 @@ const DEVICE_PATH = new RegExp(
 
 // The DO stub needs an absolute URL. The host is never routable, only
 // the path matters.
-const DO_ORIGIN = "https://account-hub.internal";
+const DO_ORIGIN = "https://device-hub.internal";
 
 // Error responses are compiler-checked against ErrorBody, so the
 // `{ error }` contract in protocol.ts is load-bearing, not a
@@ -109,7 +109,7 @@ async function readJson(request: Request): Promise<unknown> {
 }
 
 function accountStub(env: Env, accountId: string): DurableObjectStub {
-  return env.ACCOUNT_HUB.get(env.ACCOUNT_HUB.idFromName(accountId));
+  return env.DEVICE_HUB.get(env.DEVICE_HUB.idFromName(accountId));
 }
 
 // The one path every internal DO call goes through. It checks
@@ -498,7 +498,7 @@ export function createWorker(deps: HubDeps): HubWorker {
   // structurally malformed ticket cannot even name a DO and is
   // rejected here with plain HTTP. Everything past parsing (unknown,
   // expired, replayed) is the DO's call and surfaces as a close code
-  // after the upgrade, see AccountHub.rejectSocket.
+  // after the upgrade, see DeviceHub.rejectSocket.
   async function connect(request: Request, env: Env, url: URL) {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
       return jsonError(426, { error: "websocket upgrade required" });

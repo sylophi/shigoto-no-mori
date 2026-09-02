@@ -15,7 +15,7 @@
 // only channels explicitly registered mutating:false are served, and
 // anything else (a mutation, or an untagged channel) is refused with
 // the shared command-refused code before its handler can run. Commands
-// for a remote peer ride the hub's per-peer grant instead.
+// for a remote peer ride the device hub's per-peer grant instead.
 //
 // DIRECT DATA PLANE (v2 step 10, slice A): the same binding, created
 // with a WsServerTicketAuth, serves a SECOND instance for direct
@@ -60,7 +60,7 @@ import { toText } from "./rawData";
 // Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
 // SECOND binding instance serves device-to-device data over direct
 // sockets, brokered by short-lived single-use connect tickets minted
-// over the hub. Injected at binding creation so this module stays
+// over the device hub. Injected at binding creation so this module stays
 // free of the ticket store and the grant store alike. Absent means the
 // legacy LAN behavior: static-token auth and the read-only dispatch
 // gate, unchanged.
@@ -643,7 +643,7 @@ export function createWsServerBinding(
           });
           return;
         }
-        // bye is a hub-wire frame (the hub has no per-peer socket
+        // bye is a hub-wire frame (the device hub has no per-peer socket
         // close). This wire has a real socket close, so a bye here is
         // meaningless and silently ignored.
         if (frame !== null && frame.t === "bye") return;

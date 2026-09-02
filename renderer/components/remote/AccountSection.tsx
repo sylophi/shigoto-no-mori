@@ -5,7 +5,7 @@ import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
 import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
-// "Account": sign in to the hub so this device can reach the
+// "Account": sign in to the device hub so this device can reach the
 // account's other devices (v2 step 4, slice B). Two states. Signed out
 // is one panel with one button. Signed in, the whole page is the device
 // registry, which carries the account line (id, headcount, sign-out)

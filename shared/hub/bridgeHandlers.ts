@@ -14,7 +14,7 @@
 // fallback: a failed dial rejects with the dialer's typed error
 // (NoDialableCandidateError for the structural
 // nothing-this-platform-can-dial verdict, a transient error
-// otherwise), and the entry drops. The hub rides underneath only as
+// otherwise), and the entry drops. The device hub rides underneath only as
 // the dialer's broker transport (direct:connectInfo), never as a data
 // path. The web bridge injects the same dialer with a wss-only
 // candidate filter (v2 step 10, slice B): a browser page cannot dial

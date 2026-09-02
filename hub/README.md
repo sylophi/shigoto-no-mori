@@ -1,8 +1,8 @@
-# sm hub
+# sm device hub
 
 Cloudflare Worker that relays frames between a Clerk account's sm
 devices when they are not on the same LAN (v2 step 4). Every device
-holds one outbound websocket to its account's `AccountHub` Durable
+holds one outbound websocket to its account's `DeviceHub` Durable
 Object, which forwards opaque envelopes between them. No sm logic runs
 here: the Worker verifies Clerk tokens, keeps a device registry in D1,
 mints short-lived connection tickets and forwards frames it never
@@ -27,7 +27,7 @@ preview URLs, and dev tunnels share the tunnel zone below.
 |---|---|---|
 | `shigomori.com` | Marketing site | Nowhere in code |
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
-| `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_ACCOUNT_HUB_URL` |
+| `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
 | `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME) |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
@@ -169,7 +169,7 @@ Account section showing a "not configured" state and sign-in disabled.
 None of these are secrets, so they are safe to bake into a build. Never
 commit real values.
 
-- `SM_ACCOUNT_HUB_URL` - the deployed Worker's base URL, e.g.
+- `SM_DEVICE_HUB_URL` - the deployed Worker's base URL, e.g.
   `https://shigomori-hub-dev.<account>.workers.dev` for dev builds and
   `https://hub.shigomori.com` for production. The app joins the device and
   ticket routes onto this.
@@ -182,7 +182,7 @@ commit real values.
   from exactly this origin so the web client can dial wss tunnel URLs;
   without it those dials die at the desktop's Origin gate (the host
   logs the refused origin, throttled). Unset, only Origin-less and
-  app-local clients are admitted, as before. Unlike the hub, this
+  app-local clients are admitted, as before. Unlike the device hub, this
   gate stays strict on purpose: it guards a loopback listener on the
   user's own machine, which any page they visit can reach.
 

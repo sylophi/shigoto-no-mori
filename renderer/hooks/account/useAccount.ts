@@ -26,7 +26,7 @@ export function useAccountStatus() {
   });
 }
 
-// The account's device registry from the hub. Both call sites render
+// The account's device registry from the device hub. Both call sites render
 // only under a signed-in guard, so a signed-out or unconfigured app
 // never mounts this and never hits the network (and the handler returns
 // [] in those states anyway).
@@ -84,7 +84,7 @@ export function useAccountSignOut() {
   });
 }
 
-// Removes another device from the account on the hub. Like the
+// Removes another device from the account on the device hub. Like the
 // grant mutations it does not invalidate itself: main broadcasts
 // account:changed (and grantsChanged) after the revoke, and the
 // watchers above turn those into the invalidations. Self-revoke is not

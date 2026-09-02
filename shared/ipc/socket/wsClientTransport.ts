@@ -112,7 +112,7 @@ export type ConnectDeviceOptions = {
   expectedDeviceId?: string;
   // Wildcard push tap, fired for EVERY push frame before the
   // per-channel subscribers, so a bridge can forward this connection's
-  // pushes wholesale (the hub peerPush path) without enumerating
+  // pushes wholesale (the device hub peerPush path) without enumerating
   // channels. A throw here is contained, mirroring the hub link's
   // onPeerPush.
   onAnyPush?: (channel: string, payload: unknown) => void;

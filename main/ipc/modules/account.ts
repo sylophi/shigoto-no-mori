@@ -332,7 +332,7 @@ export function makeAccountHandlers(
             deviceId: getDeviceId(),
             fallbackDeviceName: defaultDeviceName(),
             // os.platform() is the same value as process.platform,
-            // which the linter restricts here. The hub stores it as
+            // which the linter restricts here. The device hub stores it as
             // an opaque label.
             platform: platform(),
           },
@@ -398,7 +398,7 @@ export function makeAccountHandlers(
       await service.revoke(record.credential, deviceId);
       if (deviceId === getDeviceId()) {
         // Self-revoke invalidated our own credential, so drop it now
-        // rather than waiting for the hub to refuse the next call.
+        // rather than waiting for the device hub to refuse the next call.
         // The desktop UI routes this device through Sign out instead
         // (which ends the Clerk session first). This arm exists so the
         // handler is still correct for any other caller.

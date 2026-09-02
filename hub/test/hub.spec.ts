@@ -1,6 +1,6 @@
 // The websocket half: connect, ticket consumption, presence, relaying,
 // nacks, supersede, revoke and cross-account isolation. Everything
-// runs against the real AccountHub Durable Object under workerd.
+// runs against the real DeviceHub Durable Object under workerd.
 import { afterEach, describe, expect, it } from "vitest";
 import { env } from "cloudflare:test";
 import {
@@ -157,7 +157,7 @@ describe("relaying", () => {
     const b = await enrollAndConnect("acct-big", "dev-big-b");
     await a.socket.untilPresence(["dev-big-a", "dev-big-b"]);
     await b.socket.untilPresence(["dev-big-a", "dev-big-b"]);
-    // Just past the hub's control-frame cap (64 KiB since the wire
+    // Just past the device hub's control-frame cap (64 KiB since the wire
     // went orchestration-only): a legitimate broker frame is far
     // smaller, so anything here is a client aiming data at the wrong
     // wire and gets the nack.

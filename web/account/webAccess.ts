@@ -4,10 +4,10 @@
 // retry loop or a dead button:
 //
 //   - "unconfigured": the SM_ACCOUNT_* variables were not baked into
-//     this build, so there is no hub to talk to.
-//   - "blocked": the hub answered the ticket mint with a 403. The
+//     this build, so there is no device hub to talk to.
+//   - "blocked": the device hub answered the ticket mint with a 403. The
 //     refusal is deterministic for the deployment, so retrying the
-//     supervisor forever would loop without ever succeeding. The hub
+//     supervisor forever would loop without ever succeeding. The device hub
 //     no longer refuses browser origins (its CORS is open, since every
 //     route authenticates from the bearer alone), so this is now the
 //     backstop for any other 403 rather than a config mistake.
@@ -48,7 +48,7 @@ export function createWebAccessStore(): WebAccessStore {
   };
 }
 
-// True when the hub refused the call outright with a 403. Keyed on
+// True when the device hub refused the call outright with a 403. Keyed on
 // the status rather than the message text: the refusal is terminal for
 // this deployment whatever the worker's wording, and retrying cannot
 // turn it into a success. A response the browser cannot read at all
@@ -60,7 +60,7 @@ export function isHubRefusedError(error: unknown): boolean {
 
 // True for the browser's opaque network failure shape (a fetch
 // TypeError). Used by the UI's reachability probe to explain an
-// unreachable hub without treating it as terminal the way a 403 is.
+// unreachable device hub without treating it as terminal the way a 403 is.
 export function isFetchFailure(error: unknown): boolean {
   return error instanceof TypeError;
 }

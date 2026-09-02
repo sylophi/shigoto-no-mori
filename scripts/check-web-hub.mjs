@@ -16,7 +16,7 @@
 // verdicts with no redial, a fresh-ticket redial after a drop, and the
 // per-dial ticket mint.
 //
-// Every sm frame the hub carries is wrapped as { epoch, sm } (see the
+// Every sm frame the device hub carries is wrapped as { epoch, sm } (see the
 // SESSION EPOCH note in shared/hub/link.ts), which the stub forwards
 // verbatim as the opaque `frame`.
 //
@@ -103,7 +103,7 @@ async function main() {
   );
 
   await check(
-    "invoke: the broker channel round-trips through the hub",
+    "invoke: the broker channel round-trips through the device hub",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());

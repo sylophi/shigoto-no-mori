@@ -1,10 +1,10 @@
 // Deployment entry: the worker with the real Clerk verifier, plus the
-// Durable Object class wrangler binds as ACCOUNT_HUB.
+// Durable Object class wrangler binds as DEVICE_HUB.
 import { verifyToken } from "@clerk/backend";
 import { createWorker } from "./worker.ts";
 import type { Env } from "./env.ts";
 
-export { AccountHub } from "./hubObject.ts";
+export { DeviceHub } from "./hubObject.ts";
 
 // The enroll bearer is a Clerk session token: both clients render
 // Clerk's embedded sign-in and mint the token off the live session

@@ -98,8 +98,9 @@ function DevicesBody({ status }: { status: AccountStatus }) {
 
         {webAccess.kind === "blocked" && (
           <ErrorBanner>
-            The hub refused this request ({webAccess.message}). This deployment
-            cannot serve the device list until the hub accepts it.
+            The device hub refused this request ({webAccess.message}). This
+            deployment cannot serve the device list until the device hub accepts
+            it.
           </ErrorBanner>
         )}
 
@@ -156,16 +157,16 @@ function BrowserNameField({ deviceName }: { deviceName: string }) {
 }
 
 // One honest sentence per failure shape. A browser cannot tell a
-// refusing hub from an unreachable one when the response carries no
+// refusing device hub from an unreachable one when the response carries no
 // CORS headers, so the fetch-failure branch names both possibilities
 // instead of guessing.
 function reachabilityMessage(error: unknown): string {
   if (isHubRefusedError(error)) {
-    return "The hub refused this request, so the device list is unavailable.";
+    return "The device hub refused this request, so the device list is unavailable.";
   }
   if (isFetchFailure(error)) {
     return (
-      "Couldn't reach the hub. Either you are offline, or this " +
+      "Couldn't reach the device hub. Either you are offline, or this " +
       "deployment's hub URL does not point at a reachable Worker."
     );
   }

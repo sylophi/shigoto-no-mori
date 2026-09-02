@@ -129,7 +129,7 @@ const wsServer = createWsServerBinding();
 
 // The direct data plane (v2 step 10, slice A): a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
-// minted by direct:connectInfo over the hub, and dispatch gates
+// minted by direct:connectInfo over the device hub, and dispatch gates
 // mutating channels on the live per-peer grant this listener reads
 // (isPeerCommandGranted). Unconditional like the other bindings so
 // registration records handlers at boot, while listening is gated on
@@ -172,7 +172,7 @@ const tunnelRunner = createCloudflaredRunner({
   // crashed Electron's leftover connector is killed on the next
   // launch. A getter because userData is an app-ready fact.
   pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
-  // Tunnel state rides the same status snapshot the hub and direct
+  // Tunnel state rides the same status snapshot the device hub and direct
   // transitions feed, so the devices page updates live.
   onChange: () => directPlane.notifyStatusChanged(),
 });
@@ -211,7 +211,7 @@ export const hubHandlers = directPlane.handlers;
 // which fans a fresh snapshot out to every window through the
 // client-scoped hub contract and reconciles direct-session presence
 // on each transition. Peer pushes arrive over direct sessions only
-// (the dialer's onAnyPush inside the plane), never over the hub.
+// (the dialer's onAnyPush inside the plane), never over the device hub.
 const hubServer = createHubConnection({
   // The one channel the wire brokers, named at creation so the client
   // role can dial before the handler pair below is registered.
@@ -221,7 +221,7 @@ const hubServer = createHubConnection({
 
 // The remote wires (LAN socket, direct listener), looped wherever a
 // channel or broadcast must reach them all so a new wire lands in one
-// place. The hub is deliberately NOT here (v2 step 10, slice C): it
+// place. The device hub is deliberately NOT here (v2 step 10, slice C): it
 // is orchestration only, its wire serves nothing but the broker
 // surface registered below, and host broadcasts and viewer pings
 // reach remote peers over their direct sessions alone.
@@ -445,7 +445,7 @@ export function stopDirectHost(): Promise<void> {
 
 // Reconciles the direct data-plane listener with the account and
 // device state: run from refreshHubConnection's tail (enrollment is
-// exactly the hub's condition: a device with no hub peers has
+// exactly the device hub's condition: a device with no hub peers has
 // nobody to serve directly) and on every global-config change (the
 // hostImpls subscriber), so the directConnections opt-out applies
 // without a relaunch. Dual-stack bind ("::", both families accept)
@@ -461,7 +461,7 @@ export async function refreshDirectHost(): Promise<void> {
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
       // false stops the listener (peers then get available:false and
-      // stay on the hub).
+      // stay on the device hub).
       const config = await readGlobalConfig();
       if (config.directConnections === false) return null;
       return {

@@ -5,7 +5,7 @@
 // and too-large nacks, supersede on a duplicate deviceId) and drives
 // TWO real hub connections against it as devices A and B.
 //
-// The hub is ORCHESTRATION ONLY (v2 step 10, slice C): its host role
+// The device hub is ORCHESTRATION ONLY (v2 step 10, slice C): its host role
 // serves exactly the broker surface (direct:connectInfo) plus the
 // intrinsic frames (hello/welcome, bye, presence), and refuses every
 // other channel with the no-handler shape. There is nothing else to
@@ -14,7 +14,7 @@
 // argument), so the refusal scenario drives a raw hand-built req at
 // the wire. The dispatch scenarios all ride the broker channel,
 // multiplexed by an input mode. Also asserted: the sm-level
-// hello/welcome over the hub, req/res id correlation, the void-field
+// hello/welcome over the device hub, req/res id correlation, the void-field
 // framing invariant, error serialization (message only), the local
 // outbound size guard at the shrunken control-frame budget, offline
 // nacks, presence-driven peer teardown, supervisor redial with a fresh
@@ -27,7 +27,7 @@
 // during in-flight work running no further handler, and malformed
 // inbound frames dropped without killing the process.
 //
-// Every sm frame the hub carries is wrapped as { epoch, sm } (see the
+// Every sm frame the device hub carries is wrapped as { epoch, sm } (see the
 // SESSION EPOCH note in shared/hub/link.ts), so the stub forwards that
 // wrapper verbatim and the assertions read the inner frame at
 // entry.frame.sm.
@@ -61,7 +61,7 @@ const BROKER_CHANNEL = directContract.calls.connectInfo.channel;
 const OVERSIZE = "x".repeat(70_000);
 
 // The inner sm frame of a recorded device envelope, unwrapped from the
-// epoch wrapper the hub carries.
+// epoch wrapper the device hub carries.
 const smOf = (entry) => entry?.frame?.sm;
 
 // ---- The stub Durable Object ----

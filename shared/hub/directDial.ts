@@ -1,5 +1,5 @@
 // Client half of the direct data plane (v2 step 10, slice A): dial a
-// peer's direct listener, brokered over the hub. The dialer asks the
+// peer's direct listener, brokered over the device hub. The dialer asks the
 // peer for connect info (direct:connectInfo, a read served pre-grant)
 // over a short-lived hub peer session, then dials the returned
 // candidates, each a complete URL (ws:// interface candidates, the
@@ -171,7 +171,7 @@ export type DirectDialerDeps = {
   // Opens the hub broker session for the connectInfo exchange. The
   // NARROWED session type is the point (v2 step 10, slice C): it
   // exposes one typed broker invoke plus close, so this dep cannot be
-  // used to move contract traffic over the hub even by accident. The
+  // used to move contract traffic over the device hub even by accident. The
   // dialer runs only on a bridge cache miss, so no cached session for
   // this device exists to be superseded, and the temporary session is
   // closed before the dial result settles either way.
@@ -181,7 +181,7 @@ export type DirectDialerDeps = {
   localDeviceId: string;
   localAppVersion: string;
   // Every push received on a direct connection, tagged with the peer's
-  // deviceId, so the owner can feed the same peerPush path the hub
+  // deviceId, so the owner can feed the same peerPush path the device hub
   // feeds.
   onAnyPush?: (deviceId: string, channel: string, payload: unknown) => void;
   // The candidate kinds THIS platform can dial (v2 step 10, slice B),
@@ -464,7 +464,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     // temporary by design and closed below (which also tells the host
     // to drop its session, the bye frame): on success the direct
     // socket replaces it, on failure the whole attempt rejects and
-    // nothing keeps riding the hub. When the deadline abandons a
+    // nothing keeps riding the device hub. When the deadline abandons a
     // still-pending hello, the late session is closed on arrival
     // instead of leaking.
     const brokerPromise = deps.connectBroker(deviceId);

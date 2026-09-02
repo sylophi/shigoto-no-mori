@@ -3,7 +3,7 @@
 // importing each other.
 export interface Env {
   DB: D1Database;
-  ACCOUNT_HUB: DurableObjectNamespace;
+  DEVICE_HUB: DurableObjectNamespace;
   // Wrangler secret, only read by the real Clerk verifier in index.ts.
   CLERK_SECRET_KEY: string;
   // Ticket TTL override in milliseconds, a test seam. Production

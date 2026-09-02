@@ -23,7 +23,7 @@ import { candidateAddresses } from "@host/direct/addresses";
 // (the Electron and direct wires through the shared registrar) and the
 // hub's minimal HubBrokerContext satisfy it, which is what lets
 // one handler serve every wire without a no-op notifier being minted
-// for the hub's sake.
+// for the device hub's sake.
 export type ConnectInfoContext = Pick<HandlerContext, "callerDeviceId">;
 
 export type DirectHandlerDeps = {
@@ -34,7 +34,7 @@ export type DirectHandlerDeps = {
   // the named peer, replacing that peer's previous pending set. Null
   // means the store refused (global backstop cap).
   mintTickets(peerDeviceId: string, count: number): string[] | null;
-  // Whether the named peer is currently in the hub's live presence
+  // Whether the named peer is currently in the device hub's live presence
   // roster. connectInfo can arrive over an existing direct socket too,
   // and presence is what scopes the data plane (a revoked device drops
   // off the roster), so a caller the control plane no longer vouches

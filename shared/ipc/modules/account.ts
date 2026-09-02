@@ -29,18 +29,18 @@ export const accountContract = defineContract("client", {
   // the stored credential metadata is a readFileSync plus an OS-keychain
   // decrypt on EVERY call, so invoke this on account events, not on a
   // poll. The device list is a separate call so a status read never
-  // hits the hub.
+  // hits the device hub.
   status: invoke("account:status", z.void(), AccountStatusSchema),
-  // Enrolls this device on the hub under a fresh Clerk session token
+  // Enrolls this device on the device hub under a fresh Clerk session token
   // (the renderer owns the Clerk sign-in UI and mints the token) and
   // stores the returned device credential. Resolves to the
   // post-enrollment status.
   enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
-  // Best-effort revokes THIS device on the hub, then clears the stored
+  // Best-effort revokes THIS device on the device hub, then clears the stored
   // credential locally. The revoke is best-effort so local sign-out
   // always succeeds even offline.
   signOut: invoke("account:signOut", z.void(), z.void()),
-  // Removes a device from the ACCOUNT on the hub, under this device's
+  // Removes a device from the ACCOUNT on the device hub, under this device's
   // credential: the target's credential stops working the moment it next
   // calls, and it disappears from every other device's registry. Unlike
   // signOut this is not best-effort -- a failed hub call must surface,
@@ -54,7 +54,7 @@ export const accountContract = defineContract("client", {
   // ClerkAccountSync would see "signed in, not enrolled" and silently
   // re-enroll, undoing the revoke).
   revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
-  // The account's device registry from the hub, under the stored
+  // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
   listDevices: invoke(
@@ -63,7 +63,7 @@ export const accountContract = defineContract("client", {
     z.array(DeviceInfoSchema),
   ),
   // Renames this device locally (the stored metadata). A future slice may
-  // push the rename to the hub. Resolves to the updated status.
+  // push the rename to the device hub. Resolves to the updated status.
   setDeviceName: invoke(
     "account:setDeviceName",
     // Bounded to match EnrollRequestSchema.name so a stored name can

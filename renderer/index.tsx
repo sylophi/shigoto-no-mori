@@ -78,7 +78,7 @@ void queryClient.prefetchQuery({
   queryFn: () => window.api.globalConfig.read(),
 });
 
-// Hub devices (v2 step 4, slice C): the remote device registry,
+// Remote devices (v2 step 4, slice C): the remote device registry,
 // rebuilt from the account's device list plus the hub bridge status,
 // on boot and on every account or hub change.
 startRemoteDeviceSync(queryClient);

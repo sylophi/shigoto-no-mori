@@ -1,7 +1,7 @@
 // Durable proof for the port-forward wire (v2 step 8, slice A;
 // direct-only since step 10 slice C): TCP bytes as chunked,
 // grant-gated invoke responses over a REAL DIRECT websocket between
-// the two fixtures, brokered by the stub hub exactly as production
+// the two fixtures, brokered by the stub device hub exactly as production
 // does (scripts/lib/directBoot.mjs). Nothing here is a double on the
 // forward path itself: device A registers the REAL forward contract
 // and handlers on a real ticket-mode listener, B drives them through
@@ -13,9 +13,9 @@
 //   - server-initiated bytes arrive through poll without an uplink
 //     write first (the long-poll downlink).
 //   - a ~1.5 MB transfer crosses chunked, byte-identical, in multiple
-//     send AND poll round trips, while the stub hub's forwardedCount
+//     send AND poll round trips, while the stub device hub's forwardedCount
 //     stays FLAT (nothing but the one-time broker frames ever rides
-//     the hub).
+//     the device hub).
 //   - a server-side close drains buffered bytes before eof, refuses a
 //     send with the coded "conn-closed", and a drained conn is gone
 //     ("unknown-conn").
@@ -185,7 +185,7 @@ async function main() {
 
   // The direct wire: A hosts the forward surface on a real ticket-mode
   // listener, B drives it through the real dialer and bridge cache,
-  // and the stub hub carries only the broker exchange
+  // and the stub device hub carries only the broker exchange
   // (bootDirectWire, the shared fixture).
   const { track, teardown } = makeTracker();
   track(() => echo.close());
@@ -261,7 +261,7 @@ async function main() {
 
     // (4) A ~1.5 MB transfer, chunked both ways: sent in
     // WIRE_CHUNK_BYTES slices, echoed back, polled until complete. The
-    // transfer rides the direct socket, so the stub hub must stay
+    // transfer rides the direct socket, so the stub device hub must stay
     // COMPLETELY flat (it only ever saw the one-time broker exchange).
     // Chunking is proven on both halves: the send half counts the
     // registered handler's dispatches SERVER-SIDE (production frames
@@ -293,11 +293,11 @@ async function main() {
     assert.equal(
       stub.forwardedCount(),
       hubBaseline,
-      "the port-forward stream rode the hub instead of the direct socket",
+      "the port-forward stream rode the device hub instead of the direct socket",
     );
     await forward.close({ connId: bulk.connId });
     ok(
-      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the hub flat, byte-identical",
+      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the device hub flat, byte-identical",
     );
 
     // (5) The server closes: buffered bytes drain first (eof only once

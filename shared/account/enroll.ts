@@ -18,7 +18,7 @@ export type EnrollDeviceDeps = {
   deviceId: string;
   // The name this device enrolls under when the store holds none yet.
   fallbackDeviceName: string;
-  // Opaque platform label the hub stores beside the device
+  // Opaque platform label the device hub stores beside the device
   // (os.platform() on desktop, "web" in a browser).
   platform: string;
 };
@@ -31,7 +31,7 @@ export async function enrollDevice(
   token: string,
 ): Promise<void> {
   if (!isConfigured(deps.config)) {
-    throw new Error("the hub account service is not configured on this build");
+    throw new Error("the device hub is not configured on this build");
   }
   const deviceName = deps.store.read()?.deviceName ?? deps.fallbackDeviceName;
   const enrollment = await deps.service.enroll(token, {
@@ -46,7 +46,7 @@ export async function enrollDevice(
   });
 }
 
-// Best-effort revoke of THIS device on the hub, then the local
+// Best-effort revoke of THIS device on the device hub, then the local
 // credential clear. The revoke failure is reported, not thrown,
 // because local sign-out must always succeed, even offline.
 export async function signOutDevice(deps: {

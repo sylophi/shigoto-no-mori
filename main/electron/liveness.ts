@@ -1,6 +1,6 @@
 // Host liveness (v2 step 4, slice E). One opt-in, `keepReachable` in
 // client config, drives two capabilities so a machine the user hosts
-// stays online for the account hub:
+// stays online for the device hub:
 //   1. Launch-at-login, via setLoginItemSettings, so the app starts when
 //      the user logs in.
 //   2. Best-effort recovery from a recoverable crash: a renderer that

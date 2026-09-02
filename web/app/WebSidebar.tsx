@@ -80,7 +80,7 @@ function WebForest({
   // without it a peer's project would silently vanish from the tree.
   useFanOutErrorToast(view.failedCount);
   if (view.rows.length === 0) {
-    // Loading and empty are different answers: a slow hub must not
+    // Loading and empty are different answers: a slow device hub must not
     // read as "no projects".
     return (
       <SidebarEmptyState

@@ -63,7 +63,7 @@ function memoryStorage() {
 const HUB_URL = "https://hub.example.test";
 const PUBLISHABLE_KEY = "pk_test_check";
 const CONFIGURED_ENV = {
-  SM_ACCOUNT_HUB_URL: HUB_URL,
+  SM_DEVICE_HUB_URL: HUB_URL,
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: PUBLISHABLE_KEY,
 };
 const CHROME_MAC_UA =
@@ -372,7 +372,7 @@ async function main() {
         if (url === `${HUB_URL}/tickets`) {
           // The post-enroll hub refresh mints here, and failing it plainly
           // parks the supervisor in backoff until the tracked stop.
-          return jsonResponse(500, { error: "no hub in this check" });
+          return jsonResponse(500, { error: "no device hub in this check" });
         }
         throw new Error(`unexpected fetch in enroll check: ${url}`);
       };
@@ -402,7 +402,7 @@ async function main() {
   );
 
   await check(
-    "sign-out: revokes THIS device on the hub, clears the envelope, and still signs out when the revoke fails",
+    "sign-out: revokes THIS device on the device hub, clears the envelope, and still signs out when the revoke fails",
     async (track) => {
       const localStorage = memoryStorage();
       localStorage.setItem("sm.web.account", STORED_ENVELOPE);

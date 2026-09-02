@@ -49,7 +49,7 @@ pre-commit:
       run: pnpm run hub:check
     # Boots a stub Durable Object (a node ws server speaking the hub
     # envelope protocol) and drives two REAL hub connections through
-    # the real link, asserting the sm hello/welcome over the hub, id
+    # the real link, asserting the sm hello/welcome over the device hub, id
     # correlation, the void-field framing invariant, broadcast gating,
     # message-only error serialization, the local outbound size guard,
     # offline nacks, presence-driven peer teardown, fresh-ticket
@@ -62,14 +62,14 @@ pre-commit:
     # Durable proof for the direct data plane (v2 step 10, supervised
     # in step 11): boots the stub Durable Object plus a REAL
     # ticket-mode listener on an ephemeral loopback port, brokers
-    # connect tickets over the hub via direct:connectInfo, and
+    # connect tickets over the device hub via direct:connectInfo, and
     # asserts the whole plane: fail-closed brokering without a caller
     # identity, ticket single-use, expiry and wrong-peer binding, the
     # live grant gate on the direct wire, direct-or-nothing routing
     # (sessionless invokes refuse without dialing) with cache drop on
     # close, the keeper's supervision (presence-driven eager dials,
     # the shared forever ladder, parking on terminal verdicts), invokes
-    # flowing with the hub's forwardedCount flat, and pushes reaching
+    # flowing with the device hub's forwardedCount flat, and pushes reaching
     # a direct-connected client through the shared peerPush path. Gated
     # to the direct surface plus the socket and hub layers it
     # composes.
@@ -96,7 +96,7 @@ pre-commit:
     # idempotent teardown. Slice B adds the client engine (local
     # listeners, both pumps, eof propagation, stopForward teardown and
     # the per-forward conn cap) driven over the same wire. Gated to the
-    # forward surface plus the stub hub it rides.
+    # forward surface plus the stub device hub it rides.
     port-forward:
       glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run forward:check

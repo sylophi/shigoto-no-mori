@@ -123,7 +123,7 @@ export function registerIpcHandlers(): void {
   // snapshot.
   registerContract(hubContract, hubHandlers);
   // The direct data plane's brokering surface: host-scoped and
-  // remote:true, so a peer asks over the hub (or an existing direct
+  // remote:true, so a peer asks over the device hub (or an existing direct
   // session) how to dial this host directly. The handlers are
   // constructed in register.ts, which owns every dep (the listener,
   // the ticket store, the hub roster). The handler fails closed

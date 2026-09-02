@@ -19,7 +19,7 @@ export type InvokeDef<
   // can never silently join the remote surface by inheriting a default.
   // Routing treats anything other than exactly true as local-only.
   remote?: boolean;
-  // Command-vs-read axis for the account hub grant model. `mutating`
+  // Command-vs-read axis for the hub grant model. `mutating`
   // marks a call that changes state (spawns a subprocess, writes files
   // or config, or performs a git or network action), as opposed to a
   // pure read of existing state. Reads are always served to any account

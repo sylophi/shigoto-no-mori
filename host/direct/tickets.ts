@@ -1,6 +1,6 @@
 // In-memory store of the direct data plane's connect tickets (v2 step
 // 10, slice A). direct:connectInfo mints one set per calling peer over
-// the hub (one ticket per candidate address), and the direct
+// the device hub (one ticket per candidate address), and the direct
 // listener's hello consumes them. Tickets are short-lived, single-use
 // bearer strings bound to the peer deviceId they were minted for, so a
 // leaked ticket is useless to any other device and goes stale in a

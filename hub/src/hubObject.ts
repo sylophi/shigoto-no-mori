@@ -1,4 +1,4 @@
-// AccountHub: one Durable Object per account (named by accountId),
+// DeviceHub: one Durable Object per account (named by accountId),
 // holding every connected device socket for that account and relaying
 // opaque envelopes between them. Cross-account isolation is
 // structural: a socket only ever lives in its own account's object,
@@ -81,7 +81,7 @@ const STORAGE_DELETE_BATCH = 128;
 // account's tickets live in a different object entirely.
 const MAX_UNCONSUMED_TICKETS = 64;
 
-export class AccountHub implements DurableObject {
+export class DeviceHub implements DurableObject {
   private readonly ctx: DurableObjectState;
   private readonly env: Env;
 
@@ -394,7 +394,7 @@ export class AccountHub implements DurableObject {
 
   // Every ws.send in this object goes through here. A socket can die
   // between listing and sending, and a dead-but-still-listed peer that
-  // throws on send must not tear down the caller's socket. On the hub
+  // throws on send must not tear down the caller's socket. On the device hub
   // hot path an unguarded send would let a stale peer kill the sender's
   // socket. A dropped send loses nothing durable. Presence is resent on
   // every membership change and relayed frames are the app's retry

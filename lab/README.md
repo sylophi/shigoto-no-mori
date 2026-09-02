@@ -3,7 +3,7 @@
 Design-exploration harness: the real app UI mounted in a browser over
 a fixture `window.api` (four devices, mixed presence, shared and
 remote-only projects), so every multi-device surface can be posed and
-screenshotted without a hub, a second machine, or Clerk. Dev-only;
+screenshotted without a device hub, a second machine, or Clerk. Dev-only;
 nothing here ships.
 
 Two flavors:

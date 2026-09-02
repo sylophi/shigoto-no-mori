@@ -18,7 +18,7 @@ export type AccountServiceConfig = {
   // instance's Frontend API host.
   publishableKey: string;
   // Exact origin of the deployed web client (v2 step 10, slice B).
-  // Desktop-only: the hub serves any origin, this gate does not.
+  // Desktop-only: the device hub serves any origin, this gate does not.
   // The direct listener's Origin gate admits browser dials from
   // exactly this origin, so a web client can dial wss tunnel URLs.
   // Empty means no web origin is admitted, which was the only prior
@@ -34,7 +34,7 @@ export function resolveServiceConfig(
   env: Record<string, string | undefined>,
 ): AccountServiceConfig {
   return {
-    hubUrl: (env.SM_ACCOUNT_HUB_URL ?? "").trim(),
+    hubUrl: (env.SM_DEVICE_HUB_URL ?? "").trim(),
     publishableKey: (env.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY ?? "").trim(),
     webOrigin: (env.SM_ACCOUNT_WEB_ORIGIN ?? "").trim(),
   };

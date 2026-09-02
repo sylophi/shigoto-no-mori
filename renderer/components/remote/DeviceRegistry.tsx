@@ -62,7 +62,7 @@ export function DeviceRegistry({
   // for peers, since the local device is granted by contract.
   const peerAccess = usePeerCommandAccess(hubDevices);
 
-  // This device first, everything else in the order the hub listed
+  // This device first, everything else in the order the device hub listed
   // it, so the peers keep their registry order.
   const devices = devicesQuery.data ?? [];
   const rows = [

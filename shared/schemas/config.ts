@@ -165,7 +165,7 @@ export const GlobalConfigSchema = z.object({
   // pairing, so nothing else should grow to depend on the token's shape.
   // Direct data plane (v2 step 10, slice A): when false, this device
   // neither runs the direct listener nor is advertised to peers, so
-  // all its remote traffic stays on the hub. ON by default (absent =
+  // all its remote traffic stays on the device hub. ON by default (absent =
   // enrolled, explicit `false` is the opt-out), matching the feature
   // being an internal transport optimization rather than a capability.
   // Config-only for now (no Settings UI, like socketHost below):

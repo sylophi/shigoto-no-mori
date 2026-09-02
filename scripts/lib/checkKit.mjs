@@ -173,7 +173,7 @@ export function report({ name, failures, hint }) {
 
 // A fake Clerk session JWT whose payload carries the given sub,
 // unsigned on purpose: deriveAccountId (shared/account/token.ts) never
-// verifies, it only reads the account id. The hub is the sole
+// verifies, it only reads the account id. The device hub is the sole
 // verifier. Shared by the account and web-bridge checks so the one
 // stub token shape cannot drift between them.
 const jwtSegment = (obj) =>

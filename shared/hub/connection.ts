@@ -48,7 +48,7 @@ import { createLimiter } from "@shared/util/limit";
 
 // The deadline for one dial phase: the ticket mint, and separately the
 // socket accept (the first presence envelope). Named rather than a bare
-// knob because the hub has one honest value here, HELLO_TIMEOUT_MS.
+// knob because the device hub has one honest value here, HELLO_TIMEOUT_MS.
 const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 
 // One dialed hub socket as the platform adapter exposes it to the
@@ -112,7 +112,7 @@ const hubCloseClassifier: CloseClassifier = (code) => {
   }
   if (code === CLOSE_SUPERSEDED) {
     return {
-      message: "another instance of this device took over the hub",
+      message: "another instance of this device took over the device hub",
     };
   }
   return null;
@@ -284,7 +284,7 @@ export function createHubConnectionCore(
                   nextLink.teardown();
                   socket.close();
                   // close() is advisory: node ws can hold it for ~30s
-                  // against a stalled hub. Where the adapter can
+                  // against a stalled device hub. Where the adapter can
                   // terminate, arm a short grace so it cannot.
                   if (socket.terminate !== undefined) {
                     setTimeout(() => socket.terminate?.(), TERMINATE_GRACE_MS);

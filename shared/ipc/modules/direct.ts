@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
 // Brokering surface for the direct data plane (v2 step 10, slice A): a
-// peer asks this host, over the hub, how to dial it directly. The
+// peer asks this host, over the device hub, how to dial it directly. The
 // answer is a list of fully dialable CANDIDATES, each carrying its
 // kind (a LAN interface address or the wss tunnel endpoint, v2 step 10
 // slice B), the complete dial URL, and ONE short-lived single-use
@@ -16,10 +16,10 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 //
 // connectInfo is a read (remote:true, mutating:false): it must work
 // pre-grant because the direct wire it brokers enforces the exact same
-// read/mutate gate the hub does, so knowing how to dial grants
+// read/mutate gate the device hub does, so knowing how to dial grants
 // nothing that the hub session did not already grant. `candidates`
 // is optional per the version-skew policy: absence means the direct
-// plane is unsupported and old peers keep working over the hub.
+// plane is unsupported and old peers keep working over the device hub.
 
 // How long a minted connect ticket stays valid. Long enough for the
 // peer's dial to reach us over any candidate address, short enough

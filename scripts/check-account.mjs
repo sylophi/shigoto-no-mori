@@ -53,7 +53,7 @@ import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
 // A resolved config that isConfigured accepts, for the flows that need
 // one. The hub URL is never dialled: fetch is always stubbed.
 const CONFIG = resolveServiceConfig({
-  SM_ACCOUNT_HUB_URL: "https://hub.test",
+  SM_DEVICE_HUB_URL: "https://hub.test",
   SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_test_abc",
 });
 
@@ -84,7 +84,7 @@ const PLAINTEXT_CIPHER = {
   decrypt: (p) => p,
 };
 
-// The one device the hub stubs report.
+// The one device the device hub stubs report.
 const DEVICE = {
   deviceId: "device-uuid",
   name: "Test Mac",
@@ -105,7 +105,7 @@ async function main() {
       assert.equal(isConfigured(CONFIG), true);
       assert.equal(isConfigured(resolveServiceConfig({})), false);
       const missingKey = resolveServiceConfig({
-        SM_ACCOUNT_HUB_URL: "https://hub.test",
+        SM_DEVICE_HUB_URL: "https://hub.test",
       });
       assert.equal(isConfigured(missingKey), false);
       const missingHub = resolveServiceConfig({
@@ -249,7 +249,7 @@ async function main() {
   );
 
   await check(
-    "service: a non-2xx with an ErrorBody throws the hub's error message",
+    "service: a non-2xx with an ErrorBody throws the device hub's error message",
     async () => {
       const { fetchImpl } = recordingFetch(() =>
         json({ error: "device revoked" }, 403),
@@ -672,7 +672,7 @@ async function main() {
         !("credential" in status),
         "an AccountStatus carries a credential",
       );
-      // DeviceInfo is the per-device shape the hub reports and the
+      // DeviceInfo is the per-device shape the device hub reports and the
       // renderer lists. The credential belongs only to the enroll
       // response, never to a listed device.
       assert.ok(
@@ -720,7 +720,7 @@ async function main() {
           "# a comment",
           "",
           "   ",
-          "SM_ACCOUNT_HUB_URL=https://hub.test",
+          "SM_DEVICE_HUB_URL=https://hub.test",
           'QUOTED="double quoted"',
           "SINGLE='single quoted'",
           "no_equals_here",
@@ -728,7 +728,7 @@ async function main() {
           "__proto__=polluted",
         ].join("\n"),
       );
-      assert.equal(parsed.SM_ACCOUNT_HUB_URL, "https://hub.test");
+      assert.equal(parsed.SM_DEVICE_HUB_URL, "https://hub.test");
       assert.equal(parsed.QUOTED, "double quoted");
       assert.equal(parsed.SINGLE, "single quoted");
       assert.ok(!("no_equals_here" in parsed), "a line with no = was kept");
@@ -748,19 +748,19 @@ async function main() {
     () => {
       const merged = mergeServiceEnv(
         {
-          SM_ACCOUNT_HUB_URL: "https://file.example",
+          SM_DEVICE_HUB_URL: "https://file.example",
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_file",
           ONLY_FILE: "f",
         },
         {
-          SM_ACCOUNT_HUB_URL: "https://baked.example",
+          SM_DEVICE_HUB_URL: "https://baked.example",
           SM_ACCOUNT_CLERK_PUBLISHABLE_KEY: "pk_baked",
           ONLY_BAKED: "b",
         },
-        { SM_ACCOUNT_HUB_URL: "https://env.example", ONLY_ENV: "e" },
+        { SM_DEVICE_HUB_URL: "https://env.example", ONLY_ENV: "e" },
       );
       assert.equal(
-        merged.SM_ACCOUNT_HUB_URL,
+        merged.SM_DEVICE_HUB_URL,
         "https://env.example",
         "process.env did not win over baked and file",
       );

@@ -1,5 +1,5 @@
 // Durable proof for the direct data plane (v2 step 10 slice A, made
-// the ONLY data plane by slice C): the hub is orchestration and data
+// the ONLY data plane by slice C): the device hub is orchestration and data
 // flows over DIRECT websockets between devices, brokered by
 // short-lived single-use connect tickets, with no hub fallback
 // behind a failed dial.
@@ -13,7 +13,7 @@
 // dialer over the broker leg, the bridge cache over the dialer),
 // through the shared fixtures in scripts/lib/directBoot.mjs. Asserts:
 //
-//   - connectInfo over the hub answers available:true with fully
+//   - connectInfo over the device hub answers available:true with fully
 //     dialable candidates (kind, complete URL, one smpt_ ticket EACH)
 //     while the listener is up, available:false when it is not,
 //     available:false without an authenticated callerDeviceId, and
@@ -443,7 +443,7 @@ async function main() {
   console.log("direct data plane proof\n");
 
   await check(
-    "brokering: connectInfo over the hub carries fully dialable candidates with one ticket each while the listener is up, and available:false when it is down",
+    "brokering: connectInfo over the device hub carries fully dialable candidates with one ticket each while the listener is up, and available:false when it is down",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());
@@ -515,7 +515,7 @@ async function main() {
   );
 
   await check(
-    "direct dial: the handshake completes with the pinned identity and invokes flow while the hub's forwardedCount stays flat",
+    "direct dial: the handshake completes with the pinned identity and invokes flow while the device hub's forwardedCount stays flat",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());
@@ -539,7 +539,7 @@ async function main() {
       );
       const baseline = stub.forwardedCount();
       for (let i = 0; i < 5; i += 1) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential invokes measure the hub stays flat
+        // oxlint-disable-next-line no-await-in-loop -- sequential invokes measure the device hub stays flat
         const result = await bridge.invokePeer({
           deviceId: "B",
           channel: "test:echo",
@@ -550,7 +550,7 @@ async function main() {
       assert.equal(
         stub.forwardedCount(),
         baseline,
-        "direct invokes still rode the hub",
+        "direct invokes still rode the device hub",
       );
     },
   );
@@ -1225,7 +1225,7 @@ async function main() {
         0,
         "a mutating handler ran for an ungranted peer",
       );
-      // Reads are served pre-grant on this wire, like the hub.
+      // Reads are served pre-grant on this wire, like the device hub.
       assert.equal(
         await connection.transport.invoke("test:echo", "read"),
         "read",
@@ -1311,7 +1311,7 @@ async function main() {
           entry.frame?.sm?.t === "bye",
       );
       assert.ok(bye, "the broker session close never sent a bye");
-      // The hub stays quiet from here: data flows on the direct
+      // The device hub stays quiet from here: data flows on the direct
       // socket only, so nothing else rides the stub. (The wire itself
       // refusing non-broker channels is pinned in check-hub-link.mjs,
       // and there is no registration surface left here to prove twice.)
@@ -1328,7 +1328,7 @@ async function main() {
       assert.equal(
         stub.forwardedCount(),
         baseline,
-        "post-dial traffic still rode the hub",
+        "post-dial traffic still rode the device hub",
       );
     },
   );
@@ -1360,7 +1360,7 @@ async function main() {
       );
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       // Our own hub link down (no live roster): the working direct
-      // session must survive an account-hub outage, but the keeper
+      // session must survive an device-hub outage, but the keeper
       // reconciles to EMPTY (its schedule is useless without the
       // broker leg) so the post-reconnect roster reads as all-new
       // peers and redials whatever the outage cost, parked peers
@@ -1575,7 +1575,7 @@ async function main() {
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       // The plane fans a status snapshot out on every direct open and
-      // close (the same statusChanged fan-out a hub transition
+      // close (the same statusChanged fan-out a device hub transition
       // fires), so the counter reads that seam.
       let directChanges = 0;
       const { bridge } = makeDirectBridge(client, {
@@ -1585,7 +1585,7 @@ async function main() {
       });
       track(() => bridge.closeDirectPeers());
       // Direct available: the keeper-shaped dial establishes the
-      // session, and invokes ride it leaving the hub flat.
+      // session, and invokes ride it leaving the device hub flat.
       await bridge.dialPeer("B");
       assert.deepEqual(
         await bridge.invokePeer({
@@ -1616,7 +1616,7 @@ async function main() {
       assert.equal(
         stub.forwardedCount(),
         baseline,
-        "a cached direct session still rode the hub",
+        "a cached direct session still rode the device hub",
       );
       // Closing the direct socket (listener teardown) drops the cache
       // and the direct marker.
@@ -1693,7 +1693,7 @@ async function main() {
       assert.deepEqual(bridge.directPeerVersions(), {});
       // No hub session was created for the data: the throwaway
       // broker session closed with a bye, and after it nothing from A
-      // rides the hub at B anymore.
+      // rides the device hub at B anymore.
       const bye = stub.received.find(
         (entry) =>
           entry.from === "A" &&
@@ -1706,7 +1706,7 @@ async function main() {
       assert.equal(
         stub.receivedCount(),
         baseline,
-        "something kept riding the hub after the failed dial",
+        "something kept riding the device hub after the failed dial",
       );
     },
   );
@@ -1739,7 +1739,7 @@ async function main() {
       assert.equal(
         stub.forwardedCount(),
         baseline,
-        "the push rode the hub instead of the direct socket",
+        "the push rode the device hub instead of the direct socket",
       );
     },
   );

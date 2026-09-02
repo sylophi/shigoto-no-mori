@@ -28,7 +28,7 @@ import {
 
 // A hub call answered non-2xx. Carries the HTTP status so callers
 // that classify outcomes (the tunnel provision path) can read it off
-// the error instead of re-fetching. The message is still the hub's
+// the error instead of re-fetching. The message is still the device hub's
 // own `{ error }` body when one parsed, so existing message matchers
 // keep working.
 export class HubRequestError extends Error {
@@ -46,7 +46,7 @@ export class HubRequestError extends Error {
 // rather than backing off into a loop that can never succeed.
 export class TunnelUnconfiguredError extends Error {
   constructor() {
-    super("tunnel provisioning is not configured on the hub");
+    super("tunnel provisioning is not configured on the device hub");
     this.name = "TunnelUnconfiguredError";
   }
 }
@@ -176,7 +176,7 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
     },
 
     async revoke(credential, deviceId) {
-      // The hub answers a successful revoke with 204 No Content. Any
+      // The device hub answers a successful revoke with 204 No Content. Any
       // other non-2xx is a real failure.
       await credentialed(
         HUB_ROUTES.revokeDevice,

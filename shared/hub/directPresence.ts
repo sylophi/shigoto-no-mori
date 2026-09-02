@@ -1,5 +1,5 @@
 // The one rule scoping direct data-plane sessions to control-plane
-// presence (v2 step 10, slice A): the hub brokers account
+// presence (v2 step 10, slice A): the device hub brokers account
 // membership, so a peer absent from a LIVE roster loses its direct
 // sessions on both sides within seconds. This is what gives
 // revocation teeth (a revoked device drops off the roster and its
@@ -9,7 +9,7 @@
 // The gate matters as much as the closes: when OUR OWN hub link is
 // down, the roster is not knowledge about the peers, it is knowledge
 // about us, so acting on it would sever perfectly working direct
-// connections during an account-hub outage. Extracted here (pure,
+// connections during an device-hub outage. Extracted here (pure,
 // electron-free) so main's presence wiring and the direct-plane check
 // drive the identical rule.
 export type DirectPresenceDeps = {
@@ -35,9 +35,9 @@ export function applyDirectPresence(
 ): void {
   // No live roster, no verdicts: a downed hub socket reports an
   // empty roster, and closing on that would tear down every working
-  // direct session exactly when the hub cannot help. The keeper DOES
+  // direct session exactly when the device hub cannot help. The keeper DOES
   // reconcile to empty though (never the closes): it cannot dial
-  // without the hub's broker leg anyway, an outage must cancel its
+  // without the device hub's broker leg anyway, an outage must cancel its
   // pending retries rather than let them burn against nothing, and the
   // post-reconnect roster then reads as all-new peers, whose eager
   // dials no-op through the cache for every session that survived the

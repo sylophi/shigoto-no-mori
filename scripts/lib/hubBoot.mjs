@@ -19,7 +19,7 @@ export async function waitFor(predicate, what, timeoutMs = 5_000) {
   throw new Error(`timed out waiting for ${what}`);
 }
 
-// Boots one device on the stub hub and waits until it connects.
+// Boots one device on the stub device hub and waits until it connects.
 // Returns the connection plus the ticket-mint counter the redial
 // assertions read. The binding's ONE broker slot (the only thing the
 // hub wire can serve) takes a channel-plus-handler pair:

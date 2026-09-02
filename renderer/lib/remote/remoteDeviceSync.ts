@@ -43,7 +43,7 @@ import {
 import { createHubClientTransport } from "./hubTransport";
 
 // The account device list, cached so presence and backoff transitions
-// rebuild statuses without hitting the hub's HTTP endpoint every
+// rebuild statuses without hitting the device hub's HTTP endpoint every
 // time. Refetched when unknown, on account changes, and when the
 // socket transitions into connected (a reconnect may follow an enroll
 // or revoke elsewhere).

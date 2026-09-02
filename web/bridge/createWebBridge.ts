@@ -69,7 +69,7 @@ export type WebBridge = {
     isElectron: boolean;
   } & ReturnType<typeof buildApi>;
   // The deployment-level access state the shell surfaces when the
-  // build is unconfigured or the hub refuses this origin.
+  // build is unconfigured or the device hub refuses this origin.
   webAccess: WebAccessStore;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local

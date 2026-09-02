@@ -2,7 +2,7 @@
 // entirely from lab/fixtures.ts. The real renderer boots on top of it
 // unmodified: startRemoteDeviceSync, HostScope, the sidebar tree and
 // every remote view all derive from these answers exactly as they
-// would from a live hub. Channels no fixture handler covers fall
+// would from a live device hub. Channels no fixture handler covers fall
 // back to schema-derived stubs (fabricated arms allowed: this is a
 // design lab, not a product surface).
 //
@@ -414,7 +414,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "account:revokeDevice": (deviceId: string) => {
       // Mirrors the real handler's registry effect: the device leaves
       // the account list and account:changed fans out the refetch.
-      // Fixture presence is untouched, matching the hub's lag.
+      // Fixture presence is untouched, matching the device hub's lag.
       revoked.add(deviceId);
       client.emit("account:changed", undefined);
     },

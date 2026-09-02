@@ -6,14 +6,14 @@
 // shared/ipc/socket/frames.ts apply: zod only, no node builtins, no
 // electron.
 //
-// The hub never parses sm traffic. The `frame` field of a hub
+// The device hub never parses sm traffic. The `frame` field of a hub
 // envelope is opaque to the Worker. It carries only the broker-surface
 // sm frames (hello/welcome, the direct:connectInfo req/res, bye), but
 // nothing here may depend on that shape. Contract data never rides
-// this wire (v2 step 10, slice C): the hub is orchestration only,
+// this wire (v2 step 10, slice C): the device hub is orchestration only,
 // and data flows over the direct sockets it brokers.
 //
-// TRUST MODEL: the hub is our own managed service, not an adversary.
+// TRUST MODEL: the device hub is our own managed service, not an adversary.
 // Enrollment requires a Clerk-verified login, each device holds a
 // long-lived credential it exchanges for short-lived single-use connect
 // tickets, and the DO authenticates the account when it burns the
@@ -26,7 +26,7 @@
 // shared/hub/link.ts). The size and count bounds in this file are
 // sanity bounds that keep a bug or a runaway client from ballooning
 // allocations, and the session epoch on the sm frames defends against
-// cross-session mismatch after a redial, not against the hub itself.
+// cross-session mismatch after a redial, not against the device hub itself.
 //
 // Ticket and credential string mechanics live in hub/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
@@ -34,7 +34,7 @@
 import { z } from "zod";
 
 // Largest hub envelope the DO will forward, in bytes of the
-// serialized JSON. The hub carries orchestration only (v2 step 10,
+// serialized JSON. The device hub carries orchestration only (v2 step 10,
 // slice C): hello/welcome, the direct:connectInfo broker exchange, bye
 // and presence, all small control frames, so this is a control-frame
 // budget rather than a data budget. Contract data rides the direct
@@ -219,11 +219,11 @@ export const TUNNEL_UNCONFIGURED_STATUS = 501;
 
 // ---- Hub socket envelopes ----
 
-// Device to DO: ask the hub to forward the opaque frame to another
+// Device to DO: ask the device hub to forward the opaque frame to another
 // device of the same account. There is no hello on this socket, the
 // consumed ticket already binds the connection to a deviceId. `to` is
 // bounded to match a deviceId, since it is fed straight to
-// getWebSockets on the hub hot path.
+// getWebSockets on the device hub hot path.
 export const HubSendEnvelopeSchema = z.object({
   t: z.literal("relay"),
   to: DeviceIdSchema,
@@ -238,7 +238,7 @@ export const DeviceEnvelopeSchema = z.discriminatedUnion("t", [
 ]);
 export type DeviceEnvelope = z.infer<typeof DeviceEnvelopeSchema>;
 
-// DO to device: a frame forwarded from another device. The hub
+// DO to device: a frame forwarded from another device. The device hub
 // copies `frame` verbatim, it never parses or rewrites it.
 export const HubDeliverEnvelopeSchema = z.object({
   t: z.literal("relay"),
@@ -283,7 +283,7 @@ export type ServerEnvelope = z.infer<typeof ServerEnvelopeSchema>;
 
 // The one sanctioned serializer, mirroring frames.ts: undefined
 // fields are omitted and come back as undefined, so an opaque frame
-// value survives the hub hop unchanged.
+// value survives the device hub hop unchanged.
 export function encodeEnvelope(
   envelope: DeviceEnvelope | ServerEnvelope,
 ): string {

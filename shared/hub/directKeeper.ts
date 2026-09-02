@@ -71,7 +71,7 @@ export type DirectKeeperDeps = {
 export type DirectKeeper = {
   // Feed the desired set: the live roster on every hub transition,
   // and [] whenever our own hub link is down (no roster, no
-  // verdicts, and nothing to dial: the broker leg rides the hub).
+  // verdicts, and nothing to dial: the broker leg rides the device hub).
   // Peers new to the set dial at once, peers gone from it drop their
   // keeper state (their sessions are the presence sweep's job), peers
   // steadily in it keep whatever schedule they have.
@@ -203,7 +203,7 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
       for (const deviceId of live) {
         if (states.has(deviceId)) continue;
         // New to the roster: dial at once. The bridge's cache makes
-        // this a no-op resolve for a session that survived a hub
+        // this a no-op resolve for a session that survived a device hub
         // blip, so a reconnect's full-roster diff costs nothing for
         // peers still connected.
         const state: PeerState = {

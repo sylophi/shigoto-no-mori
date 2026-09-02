@@ -1,4 +1,4 @@
-// Cloudflare Worker config for the sm hub. Two environments share
+// Cloudflare Worker config for the sm device hub. Two environments share
 // this file, the wrangler way: the top level IS production
 // (`shigomori-hub`) and `env.dev` overrides the name and the D1
 // binding to make `shigomori-hub-dev`. Bindings are not inherited by
@@ -45,8 +45,8 @@
   "durable_objects": {
     "bindings": [
       {
-        "name": "ACCOUNT_HUB",
-        "class_name": "AccountHub",
+        "name": "DEVICE_HUB",
+        "class_name": "DeviceHub",
       },
     ],
   },
@@ -55,7 +55,7 @@
       "tag": "v1",
       // SQLite-backed storage is required for new DO classes and is
       // what the hibernation-era APIs assume.
-      "new_sqlite_classes": ["AccountHub"],
+      "new_sqlite_classes": ["DeviceHub"],
     },
   ],
   "d1_databases": [
@@ -78,8 +78,8 @@
       "durable_objects": {
         "bindings": [
           {
-            "name": "ACCOUNT_HUB",
-            "class_name": "AccountHub",
+            "name": "DEVICE_HUB",
+            "class_name": "DeviceHub",
           },
         ],
       },
