@@ -53,7 +53,7 @@ import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
-import { updaterHandlers } from "./modules/updater";
+import { updaterHandlers } from "@host/ipc/modules/updater";
 import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
@@ -153,9 +153,8 @@ export function registerIpcHandlers(): void {
       },
     }),
   );
-  // Client-scoped like dialog and updater: the listeners belong to the
-  // machine the window runs on, so the surface never mounts on a
-  // remote wire.
+  // Client-scoped like dialog: the listeners belong to the machine the
+  // window runs on, so the surface never mounts on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);
   registerContract(windowContract, windowHandlers);
   // Host-scoped preflight for the remote execution surface: each wire's
@@ -185,5 +184,7 @@ export function registerIpcHandlers(): void {
   // the Electron wire and both remote wires, where the grant model
   // gates every verb (all mutating:true).
   registerContract(forwardContract, forwardHandlers);
+  // Host-scoped: a peer's Settings page reads this device's update
+  // state and, when granted, checks or restarts into an update here.
   registerContract(updaterContract, updaterHandlers);
 }

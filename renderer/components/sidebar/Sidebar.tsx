@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useLocation } from "@tanstack/react-router";
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +27,7 @@ import {
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import { buildSidebarRows } from "./buildSidebarRows";
 import { buildInboxRows } from "./inbox/buildInboxRows";
@@ -64,7 +66,13 @@ export function Sidebar() {
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [arrangeMode, setArrangeMode] = useState(false);
-  useSidebarViewHotkey(!arrangeMode);
+  // While Settings is open the sidebar is its section list: the tree
+  // steps aside (header and footer stay) and comes back on the next
+  // route. The tree's queries never unmount, so the swap costs nothing.
+  const onSettings = useLocation({
+    select: (location) => location.pathname === "/settings",
+  });
+  useSidebarViewHotkey(!arrangeMode && !onSettings);
 
   const toggleExpanded = (projectId: string) => {
     toggleCollapsed.mutate(projectId);
@@ -183,56 +191,66 @@ export function Sidebar() {
       className="flex h-full flex-col"
     >
       <SidebarHeader />
-      {/* Each view puts what it actually needs above its list. The inbox
+      {onSettings ? (
+        <div className="min-h-0 flex-1">
+          <ScrollArea className="size-full">
+            <SettingsSidebarNav />
+          </ScrollArea>
+        </div>
+      ) : (
+        <>
+          {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
           the tree instead gets the controls that only apply to it.
           Arranging takes over the whole sidebar, so neither shows. */}
-      {arrangeMode ? null : inbox ? (
-        // px-2 like the rows below it, which is where v1 wants it.
-        // doubutsu pulls it in to its banner card, hence the slot.
-        <div
-          data-slot="sidebar-inbox-create"
-          className="flex items-center gap-1 px-2 pb-1.5"
-        >
-          <div className="min-w-0 flex-1">
-            <NewWorktreeButton projects={orderedProjects} />
-          </div>
-          {/* The tidy page has no other way in, so it can't live only in
-              the tree's toolbar. */}
-          <TidyButton />
-        </div>
-      ) : (
-        <SidebarToolbar onArrange={() => setArrangeMode(true)} />
-      )}
-      <div className="min-h-0 flex-1">
-        <ScrollArea className="size-full" viewportRef={viewportRef}>
-          {/* Dragging reorders projects, which the inbox doesn't show --
-              so it doesn't mount the DnD context at all. */}
-          {inbox ? (
-            list
-          ) : (
-            <DndContext
-              sensors={sensors}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragCancel={() => setActiveId(null)}
+          {arrangeMode ? null : inbox ? (
+            // px-2 like the rows below it, which is where v1 wants it.
+            // doubutsu pulls it in to its banner card, hence the slot.
+            <div
+              data-slot="sidebar-inbox-create"
+              className="flex items-center gap-1 px-2 pb-1.5"
             >
-              <SortableContext
-                items={orderedProjects.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {list}
-              </SortableContext>
-              <DragOverlay>
-                {activeProject ? (
-                  <ProjectDragPreview project={activeProject} />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
+              <div className="min-w-0 flex-1">
+                <NewWorktreeButton projects={orderedProjects} />
+              </div>
+              {/* The tidy page has no other way in, so it can't live only in
+              the tree's toolbar. */}
+              <TidyButton />
+            </div>
+          ) : (
+            <SidebarToolbar onArrange={() => setArrangeMode(true)} />
           )}
-          <SidebarEmptyState message={emptyMessage} />
-        </ScrollArea>
-      </div>
+          <div className="min-h-0 flex-1">
+            <ScrollArea className="size-full" viewportRef={viewportRef}>
+              {/* Dragging reorders projects, which the inbox doesn't show --
+              so it doesn't mount the DnD context at all. */}
+              {inbox ? (
+                list
+              ) : (
+                <DndContext
+                  sensors={sensors}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={() => setActiveId(null)}
+                >
+                  <SortableContext
+                    items={orderedProjects.map((p) => p.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {list}
+                  </SortableContext>
+                  <DragOverlay>
+                    {activeProject ? (
+                      <ProjectDragPreview project={activeProject} />
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              )}
+              <SidebarEmptyState message={emptyMessage} />
+            </ScrollArea>
+          </div>
+        </>
+      )}
       <SidebarFooter
         arrangeMode={arrangeMode}
         onToggleArrange={() => setArrangeMode((v) => !v)}

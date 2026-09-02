@@ -26,6 +26,14 @@ export function useAccountStatus() {
   });
 }
 
+// This device's display name: its account name, or a neutral fallback
+// while signed out (or while a cleared name is empty). One rule so the
+// Settings sidebar, its header and the new-worktree picker agree.
+export function useLocalDeviceName(): string {
+  const { data: account } = useAccountStatus();
+  return account?.deviceName || "This device";
+}
+
 // The account's device registry from the relay. Both call sites render
 // only under a signed-in guard, so a signed-out or unconfigured app
 // never mounts this and never hits the network (and the handler returns

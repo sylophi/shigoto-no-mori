@@ -323,10 +323,11 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 
 // Fan-out broadcast for state every window cares about (updater,
 // background refreshes). Scope picks the wire set: host-scoped
-// fan-outs (git refresh, script events, nuke progress) reach every
-// window AND every authenticated socket peer, while client-scoped ones
-// (updater state) stay on the Electron wire -- an update prompt is
-// about THIS install, not the host a remote client is looking at.
+// fan-outs (git refresh, script events, nuke progress, updater state)
+// reach every window AND every authenticated socket peer, while
+// client-scoped ones (port forwards, account changes) stay on the
+// Electron wire -- they are about THIS install, not the host a remote
+// client is looking at.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,

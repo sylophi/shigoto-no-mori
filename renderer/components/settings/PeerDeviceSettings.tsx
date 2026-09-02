@@ -1,8 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { errorMessageOf } from "@shared/errors";
 import type { ReadGlobalConfig } from "@shared/schemas";
 import { EmptyPanel } from "@/components/remote/EmptyPanel";
-import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
@@ -16,71 +15,57 @@ import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
-import {
-  DeviceLauncherSections,
-  DeviceToggleSections,
-} from "./DeviceSettingsSections";
-import { SettingsPane } from "./SettingsPane";
+import { DeviceToggleSections } from "./DeviceSettingsSections";
+import { useRegisterSettingsEditor } from "./useSettingsEditors";
+import { VersionSection } from "./VersionSection";
 
-// The appearance half of the Settings page, staged and saved by
-// SettingsForm. It stays editable while a peer is selected (it belongs
-// to this window, not to any device), so its dirty state and its save
-// ride the same footer as the peer's device settings: one page, one
-// Save.
-export interface ClientHalfEditor {
-  isDirty: boolean;
-  isPending: boolean;
-  isSuccess: boolean;
-  error: Error | null;
-  // Never rejects: SettingsForm reports the failure through `error` and
-  // the mutation's toast.
-  save: () => Promise<void>;
-  discard: () => void;
-}
-
-interface PeerProps {
-  device: RemoteDevice;
-  // The client-scoped sections plus the device switcher, rendered above
-  // whichever device body is selected.
-  header: ReactNode;
-  client: ClientHalfEditor;
-}
-
-// Another device's settings, edited in place on /settings (the switcher
-// picks which). Everything below the header routes through the
-// HostScope this mounts (the scoped config read, the host-scoped
-// queries inside the shared section components, and the
-// writeDeviceSettings patch save), so no client-scoped call reaches for
-// a peer, and the web shell renders it unchanged. Client-scoped and
-// host-secret sections (CLI, data location, danger zone) are absent by
-// construction: SettingsForm renders those only for this device.
-export function PeerDeviceSettings({ device, header, client }: PeerProps) {
+// Another device's section on the Settings page. Everything under the
+// version routes through the HostScope this mounts (the scoped config
+// read, the host-scoped queries inside the shared section components,
+// the updater, and the writeDeviceSettings patch save), so no
+// client-scoped call reaches for a peer. The local-only sections (CLI,
+// data location, danger zone) are absent by construction: they act on
+// a disk and a shell, and only the local section renders them.
+export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   const { reachable } = deviceStatusView(device.status);
-  const api = device.api;
+  // The api of the last session the registry handed over. A relay or
+  // session blip drops device.api while the keeper redials, and the
+  // api object is one per device for the window's lifetime, so keeping
+  // the last one mounted keeps a seeded form (and its unsaved edits)
+  // alive across the blip instead of unmounting it with the note.
+  const [api, setApi] = useState(device.api);
+  if (device.api !== undefined && device.api !== api) setApi(device.api);
+  const offline = !reachable || device.api === undefined;
 
-  // Unreachable: no wire to read the device's config over, so there is
-  // nothing honest to render. Say where the settings are instead of
-  // showing a form that could not save (or, worse, defaults that would
-  // look like the device's real answers).
-  if (!reachable || api === undefined) {
-    return (
-      <PeerShell header={header} footer={<ClientFooter client={client} />}>
-        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-          {device.label} is offline. Its settings live on that device and load
-          when it reconnects.
-        </p>
-      </PeerShell>
-    );
-  }
+  // Never reached at all: no wire to read the device's config over, so
+  // there is nothing honest to render. Say where the settings are
+  // instead of showing a form that could not save (or, worse, defaults
+  // that would look like the device's real answers).
+  if (api === undefined) return <OfflineNote device={device} />;
 
   return (
     <HostScopeProvider deviceId={device.deviceId} api={api}>
-      <ReachablePeerSettings device={device} header={header} client={client} />
+      <ReachablePeerSettings device={device} offline={offline} />
     </HostScopeProvider>
   );
 }
 
-function ReachablePeerSettings({ device, header, client }: PeerProps) {
+function OfflineNote({ device }: { device: RemoteDevice }) {
+  return (
+    <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
+      {device.label} is offline. Its settings live on that device and load when
+      it reconnects.
+    </p>
+  );
+}
+
+function ReachablePeerSettings({
+  device,
+  offline,
+}: {
+  device: RemoteDevice;
+  offline: boolean;
+}) {
   const {
     data: config,
     isError,
@@ -94,37 +79,56 @@ function ReachablePeerSettings({ device, header, client }: PeerProps) {
   // real settings. Gate on data presence only, not isError, so a failed
   // BACKGROUND refetch (focus refetch over a flaky socket) cannot
   // unmount an already-seeded form and discard unsaved edits.
-  if (config === undefined) {
-    return (
-      <PeerShell header={header} footer={<ClientFooter client={client} />}>
-        {isError ? (
+  return (
+    <>
+      {offline ? (
+        <OfflineNote device={device} />
+      ) : (
+        <PeerVersionSection device={device} />
+      )}
+      {config === undefined ? (
+        offline ? null : isError ? (
           <EmptyPanel>
             Couldn&apos;t load this device&apos;s settings:{" "}
             {errorMessageOf(error)}.
           </EmptyPanel>
         ) : (
           <p className="text-sm text-muted-foreground">Loading…</p>
-        )}
-      </PeerShell>
-    );
-  }
+        )
+      ) : (
+        <PeerSettingsForm
+          device={device}
+          initialConfig={config}
+          offline={offline}
+        />
+      )}
+    </>
+  );
+}
 
+function PeerVersionSection({ device }: { device: RemoteDevice }) {
   return (
-    <PeerSettingsForm
-      device={device}
-      header={header}
-      client={client}
-      initialConfig={config}
+    <VersionSection
+      version={
+        device.appVersion === "" ? (
+          <span className="text-muted-foreground">Not reported yet</span>
+        ) : (
+          `v${device.appVersion}`
+        )
+      }
     />
   );
 }
 
 function PeerSettingsForm({
   device,
-  header,
-  client,
   initialConfig,
-}: PeerProps & { initialConfig: ReadGlobalConfig }) {
+  offline,
+}: {
+  device: RemoteDevice;
+  initialConfig: ReadGlobalConfig;
+  offline: boolean;
+}) {
   const save = useDeviceSettingsSave();
   // A reachable device this client may read but not command: the
   // verdict is a normal state, not an error. Show what the device has,
@@ -138,16 +142,18 @@ function PeerSettingsForm({
   // theme/doubutsu seed from an empty client config, nothing in this
   // subtree renders or edits them (so they can never turn this form
   // dirty), and the patch encoder carries only the device-managed keys.
-  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
+  const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<SettingsFormState>(fromConfig(initialConfig, {}));
-  const deviceDirty = isDirty && !readOnly;
+  // The section stays mounted across visits, so a background refetch of
+  // the device's config (its own user changed a toggle) rebases the
+  // form. Clean, it adopts the change. Dirty, the snapshot moves so
+  // Save diffs against what the device has now.
+  useEffect(() => {
+    reseed(fromConfig(initialConfig, {}));
+  }, [initialConfig, reseed]);
 
   const handleSave = async () => {
-    // The appearance half first: it lands on this machine's disk and
-    // cannot be refused, so a peer that rejects the patch never strands
-    // an already-staged theme change.
-    await client.save();
-    if (!deviceDirty) return;
+    if (!isDirty) return;
     try {
       await save.mutateAsync(form);
       setSavedSnapshot(form);
@@ -157,22 +163,24 @@ function PeerSettingsForm({
     }
   };
 
+  // The page's one footer saves and discards this form with the rest.
+  // Dirty is dirty even once the grant verdict lands as read-only
+  // (edits made while it was in flight): the host refuses the save
+  // and says so, rather than the footer quietly forgetting them.
+  useRegisterSettingsEditor(device.deviceId, {
+    isDirty,
+    isPending: save.isPending,
+    isSuccess: save.isSuccess,
+    save: handleSave,
+    discard: () => setForm(savedSnapshot),
+  });
+
+  // Offline: the note above stands in for the sections. The form state
+  // (and the registration) stays alive for when the device is back.
+  if (offline) return null;
+
   return (
-    <PeerShell
-      header={header}
-      footer={
-        <EditorFooter
-          isDirty={client.isDirty || deviceDirty}
-          isPending={client.isPending || save.isPending}
-          isSuccess={client.isSuccess || save.isSuccess}
-          onDiscard={() => {
-            client.discard();
-            setForm(savedSnapshot);
-          }}
-          onSave={() => void handleSave()}
-        />
-      }
-    >
+    <>
       {readOnly && (
         // Same shape as the offline note, in the neutral family: this is
         // a normal permission state, not a warning.
@@ -183,54 +191,16 @@ function PeerSettingsForm({
       )}
 
       {/* inert rather than a disabled prop on every row: the sections
-          are shared verbatim with the local form, and a read-only
+          are shared verbatim with the local tab, and a read-only
           visitor needs them readable, just not operable. */}
       <div
         inert={readOnly}
         className={cn("flex flex-col gap-10", readOnly && "opacity-60")}
       >
         <DeviceToggleSections form={form} setForm={setForm} />
-        <DeviceLauncherSections form={form} setForm={setForm} />
       </div>
 
       {save.error && <ErrorBanner>{save.error.message}</ErrorBanner>}
-      {client.error && <ErrorBanner>{client.error.message}</ErrorBanner>}
-    </PeerShell>
-  );
-}
-
-// The footer for a peer body with no editable device form (offline,
-// loading, or a failed read): only the appearance half can be saved.
-function ClientFooter({ client }: { client: ClientHalfEditor }) {
-  return (
-    <EditorFooter
-      isDirty={client.isDirty}
-      isPending={client.isPending}
-      isSuccess={client.isSuccess}
-      onDiscard={client.discard}
-      onSave={() => void client.save()}
-    />
-  );
-}
-
-// The same scroll-region-plus-footer chrome the local body renders, so
-// switching devices swaps only what is inside the column.
-function PeerShell({
-  header,
-  footer,
-  children,
-}: {
-  header: ReactNode;
-  footer: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <SettingsPane>
-        {header}
-        {children}
-      </SettingsPane>
-      {footer}
     </>
   );
 }

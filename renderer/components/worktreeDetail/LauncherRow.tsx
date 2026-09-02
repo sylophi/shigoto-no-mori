@@ -9,6 +9,10 @@ import {
 } from "@/hooks/launchers/useLaunchers";
 import { LauncherIcon } from "@/components/LauncherIcon";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
+import {
+  LAUNCH_TAB,
+  selectSettingsTab,
+} from "@/components/settings/settingsNav";
 
 interface LauncherRowProps {
   worktree: Worktree;
@@ -73,7 +77,10 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => void navigate({ to: "/settings" })}
+          onClick={() => {
+            selectSettingsTab(LAUNCH_TAB);
+            void navigate({ to: "/settings" });
+          }}
         >
           Choose tools
         </Button>

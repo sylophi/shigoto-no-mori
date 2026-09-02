@@ -27,11 +27,11 @@ import {
   UpdateStageEventSchema,
   UpdateStageResultSchema,
 } from "@shared/schemas";
-import { setUpdaterImpl } from "../ipc/modules/updater";
+import { setUpdaterImpl } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/jsonFile";
 import { pathExists, shigomoriRoot } from "@host/lib/util/paths";
-import { confirmBusyAction } from "./busyPrompt";
+import { busyActionRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { errorMessageOf } from "@shared/errors";
@@ -187,21 +187,29 @@ async function hasInstallableStaged(): Promise<boolean> {
   return false;
 }
 
-// The install handoff, shared by Settings and the CLI's bridge
-// request: verify something really is staged (the disk manifest, not
-// this process's possibly-stale state machine), confirm with the user
-// if scripts are running, then spawn the detached installer and quit.
-async function installUpdate(): Promise<void> {
+// The install handoff, shared by Settings (this window's or a peer's),
+// and the CLI's bridge request: verify something really is staged
+// (the disk manifest, not this process's possibly-stale state
+// machine), confirm with the user if scripts are running, then spawn
+// the detached installer and quit. An UNATTENDED install (asked for
+// from another device) cannot confirm anything, so a busy host throws
+// the refusal instead and the caller's toast carries it.
+async function installUpdate(unattended: boolean): Promise<void> {
   if (installing) return;
   if (!(await hasInstallableStaged())) return;
-  if (!(await confirmBusyAction("restart"))) return;
-  // The dialog can sit open arbitrarily long. Re-check that another
-  // path didn't start the install during it, and that the staged
-  // update still exists -- a terminal run whose feed answered 204
-  // clears it, and quitting with nothing staged would be a quit the
-  // installer can't follow with a relaunch.
-  if (installing) return;
-  if (!(await hasInstallableStaged())) return;
+  if (unattended) {
+    const refusal = busyActionRefusal("restart");
+    if (refusal !== null) throw new Error(refusal);
+  } else {
+    if (!(await confirmBusyAction("restart"))) return;
+    // The dialog can sit open arbitrarily long. Re-check that another
+    // path didn't start the install during it, and that the staged
+    // update still exists -- a terminal run whose feed answered 204
+    // clears it, and quitting with nothing staged would be a quit the
+    // installer can't follow with a relaunch.
+    if (installing) return;
+    if (!(await hasInstallableStaged())) return;
+  }
   installing = true;
   try {
     // Resolves only once the installer actually spawned: quitting on a
@@ -218,6 +226,16 @@ async function installUpdate(): Promise<void> {
       kind: "error",
       message: errorMessageOf(err),
     });
+    return;
+  }
+  // A peer's invoke is answered when this handler resolves, and quit
+  // tears the direct listener down before a queued frame can leave, so
+  // an unattended install returns first and quits a beat later. The
+  // caller then sees success instead of a dropped-session error for an
+  // update that is installing fine. `installing` blocks a second run
+  // in the gap.
+  if (unattended) {
+    setTimeout(() => app.quit(), 500);
     return;
   }
   app.quit();
@@ -240,8 +258,9 @@ export function startUpdater(): void {
     return;
   }
   started = true;
-  // The only bridge request is "install" (UpdateRequestSchema).
-  startUpdaterBridge(() => void installUpdate());
+  // The only bridge request is "install" (UpdateRequestSchema). The
+  // CLI runs at this machine's own terminal, so it is attended.
+  startUpdaterBridge(() => void installUpdate(false));
   void (async () => {
     // Seed from disk before any network work: an update staged earlier
     // (a previous run, or `sm update --stage` in a terminal) is ready

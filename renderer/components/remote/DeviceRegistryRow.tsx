@@ -14,14 +14,13 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import type { DeviceInfo } from "@shared/relay/protocol";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { Button } from "@/components/ui/button";
-import { StatusDot, TONE_PILL } from "@/components/ui/status-dot";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import { cn } from "@/lib/utils";
 import { DeviceHosts } from "./DeviceHosts";
+import { DeviceStatusPill } from "./DeviceStatusPill";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
@@ -118,17 +117,7 @@ export function DeviceRegistryRow({
             {tunnelUp && (
               <span className="text-xs text-muted-foreground">tunnel</span>
             )}
-            <span
-              className={cn(
-                "inline-flex shrink-0 items-center rounded-full px-2 py-0.5",
-                TONE_PILL[status.tone],
-              )}
-            >
-              <StatusDot
-                tone={status.tone}
-                label={<span className="text-xs">{status.label}</span>}
-              />
-            </span>
+            <DeviceStatusPill tone={status.tone} label={status.label} />
           </div>
 
           <span className="truncate font-mono text-[10px] text-muted-foreground">

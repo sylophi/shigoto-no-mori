@@ -135,6 +135,15 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
+    // Thinkpad has an update staged, so its Settings section's
+    // restart-to-update button has something to show. Everyone else is
+    // up to date.
+    "updater:get": () =>
+      forest.deviceId === THINKPAD_ID
+        ? { kind: "ready", version: "2.1.0", releaseDate: null }
+        : { kind: "idle" },
+    "updater:check": () => undefined,
+    "updater:install": () => undefined,
     "launchers:detect": () => LAB_DETECTED,
     "launchers:forProject": () => ({
       entries: [

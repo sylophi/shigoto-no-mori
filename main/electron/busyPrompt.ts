@@ -54,7 +54,22 @@ function parentWindow(): BrowserWindow | undefined {
   return undefined;
 }
 
-function buildDialogOptions(action: BusyAction, busy: BusyOperations) {
+function isBusy(busy: BusyOperations): boolean {
+  return busy.runningScripts > 0 || busy.inflightDeletes > 0;
+}
+
+// The busy verdict every entry point starts from: null when nothing is
+// running and the action may proceed, else the sentence the dialog
+// would show. An action requested by ANOTHER device (a peer's Settings
+// page restarting this app into an update) has nobody here to answer a
+// dialog, so it takes this refusal as its error instead of prompting.
+export function busyActionRefusal(action: BusyAction): string | null {
+  const busy = getBusyOperations();
+  if (!isBusy(busy)) return null;
+  return formatBusyDetail(busy, COPY[action].gerund);
+}
+
+function dialogOptions(action: BusyAction, detail: string) {
   const copy = COPY[action];
   return {
     type: "warning" as const,
@@ -62,19 +77,15 @@ function buildDialogOptions(action: BusyAction, busy: BusyOperations) {
     defaultId: 0,
     cancelId: 0,
     message: copy.message,
-    detail: formatBusyDetail(busy, copy.gerund),
+    detail,
   };
 }
 
-function isBusy(busy: BusyOperations): boolean {
-  return busy.runningScripts > 0 || busy.inflightDeletes > 0;
-}
-
 export function confirmBusyActionSync(action: BusyAction): boolean {
-  const busy = getBusyOperations();
-  if (!isBusy(busy)) return true;
+  const refusal = busyActionRefusal(action);
+  if (refusal === null) return true;
   const parent = parentWindow();
-  const opts = buildDialogOptions(action, busy);
+  const opts = dialogOptions(action, refusal);
   const choice = parent
     ? dialog.showMessageBoxSync(parent, opts)
     : dialog.showMessageBoxSync(opts);
@@ -82,10 +93,10 @@ export function confirmBusyActionSync(action: BusyAction): boolean {
 }
 
 export async function confirmBusyAction(action: BusyAction): Promise<boolean> {
-  const busy = getBusyOperations();
-  if (!isBusy(busy)) return true;
+  const refusal = busyActionRefusal(action);
+  if (refusal === null) return true;
   const parent = parentWindow();
-  const opts = buildDialogOptions(action, busy);
+  const opts = dialogOptions(action, refusal);
   const result = parent
     ? await dialog.showMessageBox(parent, opts)
     : await dialog.showMessageBox(opts);

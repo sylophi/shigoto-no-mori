@@ -1,46 +1,58 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { EditorFooter } from "@/components/shared/EditorFooter";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
-import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import {
   fromConfig,
   type SettingsFormState,
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
+import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useUpdater } from "@/hooks/system/useUpdater";
+import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { localDeviceId } from "@/lib/queryKeys";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
+import type { RemoteDevice } from "@/lib/remote/devices";
 import { AppearanceSection } from "./AppearanceSection";
-import { DangerZone } from "./DangerZone";
-import { DataLocationSection } from "./DataLocationSection";
-import { DeviceSwitcher } from "./DeviceSwitcher";
+import { DeviceStatusPill } from "@/components/remote/DeviceStatusPill";
+import { LaunchToolsPanel } from "./LaunchToolsPanel";
+import { LocalDevicePanel } from "./LocalDevicePanel";
+import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import {
-  DeviceLauncherSections,
-  DeviceToggleSections,
-} from "./DeviceSettingsSections";
-import { CliSection } from "./CliSection";
+  APPEARANCE_TAB,
+  deviceTab,
+  LAUNCH_TAB,
+  landOnStagedUpdate,
+  LOCAL_DEVICE_TAB,
+  settingsPanelId,
+  useActiveSettingsTab,
+} from "./settingsNav";
 import {
-  type ClientHalfEditor,
-  PeerDeviceSettings,
-} from "./PeerDeviceSettings";
-import { SettingsPane } from "./SettingsPane";
-import { VersionSection } from "./VersionSection";
+  SettingsEditorRegistryProvider,
+  useSettingsEditorRegistry,
+} from "./useSettingsEditors";
 
-// The Settings page, in three bands. The client-scoped sections
-// (version, appearance) belong to THIS window and stay at the top for
-// every selection. Under them, a device switcher scopes the
-// device-managed sections to any machine on the account. Local-only
-// sections (CLI, data location, danger zone) render for this device
-// only -- they act on this machine's disk and mean nothing for a peer.
+// The Settings page: one panel per section, picked from the app
+// sidebar (SettingsSidebarNav takes the project tree's place while this
+// page is open).
 //
-// This component keeps the whole client half plus the local device's
-// form: it is never unmounted by a device switch, so unsaved appearance
-// or local-device edits survive a look at another machine. A peer's
-// form lives in PeerDeviceSettings, seeded from that device's own
-// config read.
+// "Visual" is what this window shows (Appearance, Launch tools):
+// controlled on this machine and never offered for another. "Devices"
+// is one section per machine on the account, this one first,
+// and everything in such a section is stored on that machine: its
+// update, its worktree and integration toggles, and (for this machine
+// alone) the sections that act on its disk.
+//
+// One form backs the three local sections (client config and this
+// device's config save together through useSettingsSave), and each
+// peer section seeds its own form from that device's config read.
+// Sections mount on first visit and stay mounted (SettingsPanel), so
+// switching never drops an edit, and the one footer saves and discards
+// every form at once.
 export function SettingsForm({
   initialConfig,
   initialClientConfig,
@@ -52,11 +64,17 @@ export function SettingsForm({
   const { setOverride } = useTheme();
   const { setOverride: setDoubutsuOverride } = useDoubutsu();
   const devices = useRemoteDevices();
-  const [selectedDeviceId, setSelectedDeviceId] = useState(localDeviceId);
-  // The selected peer, or undefined for this device. A device that
-  // leaves the registry mid-visit (revoked, or the account signed out)
-  // falls back to this device rather than stranding an empty selection.
-  const peer = devices.find((d) => d.deviceId === selectedDeviceId);
+  const localName = useLocalDeviceName();
+  const { activeTab, peer } = useActiveSettingsTab(devices);
+
+  // No provider above this component, so this is the local updater:
+  // the sidebar's update dot brought the visitor here for its button.
+  const { state: localUpdate } = useUpdater();
+  const stagedVersion =
+    localUpdate?.kind === "ready" ? localUpdate.version : null;
+  useEffect(() => {
+    if (stagedVersion !== null) landOnStagedUpdate(stagedVersion);
+  }, [stagedVersion]);
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
     useDirtyForm<SettingsFormState>(
@@ -75,9 +93,7 @@ export function SettingsForm({
 
   const handleSave = async () => {
     // Two stores behind one Save. useSettingsSave routes each field to
-    // its engine and skips whichever store is unchanged -- so while a
-    // peer is selected, with no local device section rendered to edit,
-    // this writes the appearance half alone.
+    // its engine and skips whichever store is unchanged.
     try {
       await save.mutateAsync(form);
       setSavedSnapshot(form);
@@ -114,74 +130,161 @@ export function SettingsForm({
     setDoubutsuOverride(next);
   };
 
-  const header = (
-    <>
-      <VersionSection />
+  // The peer forms, as the footer sees them.
+  const {
+    registry,
+    summary: peers,
+    saveAll,
+    discardAll,
+  } = useSettingsEditorRegistry();
+  const anyDirty = isDirty || peers.isDirty;
+  const anyPending = save.isPending || peers.isPending;
+  const anySuccess = save.isSuccess || peers.isSuccess;
 
-      <AppearanceSection
-        theme={form.theme}
-        onPick={pickTheme}
-        doubutsu={form.doubutsu}
-        onDoubutsuChange={setDoubutsu}
-      />
+  // This machine first: its write lands on this disk and cannot be
+  // refused, so a peer that rejects its patch never strands a staged
+  // local change. Each peer surfaces its own failure and stays dirty.
+  const handleSaveAll = async () => {
+    if (isDirty) await handleSave();
+    await saveAll();
+  };
+  const handleDiscardAll = () => {
+    handleDiscard();
+    discardAll();
+  };
 
-      {/* One device means no choice to offer: the sections below are
-          simply this machine's, exactly as before the switcher. */}
-      {devices.length > 0 && (
-        <DeviceSwitcher
-          devices={devices}
-          selectedPeer={peer}
-          onChange={setSelectedDeviceId}
-        />
-      )}
-    </>
-  );
-
-  if (peer !== undefined) {
-    // Keyed: a different device is a different form, seeded from that
-    // device's own config read.
-    const client: ClientHalfEditor = {
-      isDirty,
-      isPending: save.isPending,
-      isSuccess: save.isSuccess,
-      error: save.error,
-      save: handleSave,
-      discard: handleDiscard,
-    };
-    return (
-      <PeerDeviceSettings
-        key={peer.deviceId}
-        device={peer}
-        header={header}
-        client={client}
-      />
-    );
-  }
+  const heading = headingFor(activeTab, peer, localName, devices.length === 0);
 
   return (
     <>
-      <SettingsPane>
-        {header}
+      <PageHeader
+        eyebrow={heading.eyebrow}
+        title={heading.title}
+        watermark="設定"
+      />
 
-        <DeviceToggleSections form={form} setForm={setForm} />
+      <SettingsEditorRegistryProvider registry={registry}>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <SettingsPanel
+            id={APPEARANCE_TAB}
+            active={activeTab === APPEARANCE_TAB}
+          >
+            <AppearanceSection
+              heading="Theme"
+              theme={form.theme}
+              onPick={pickTheme}
+              doubutsu={form.doubutsu}
+              onDoubutsuChange={setDoubutsu}
+            />
+          </SettingsPanel>
 
-        <CliSection />
+          <SettingsPanel id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
+            <LaunchToolsPanel form={form} setForm={setForm} />
+          </SettingsPanel>
 
-        <DeviceLauncherSections form={form} setForm={setForm} />
+          <SettingsPanel
+            id={LOCAL_DEVICE_TAB}
+            active={activeTab === LOCAL_DEVICE_TAB}
+          >
+            <LocalDevicePanel form={form} setForm={setForm} />
+          </SettingsPanel>
 
-        <DataLocationSection />
+          {devices.map((device) => {
+            const id = deviceTab(device.deviceId);
+            return (
+              <SettingsPanel
+                key={device.deviceId}
+                id={id}
+                active={activeTab === id}
+              >
+                {/* Keyed by device: a different machine is a different
+                    form, seeded from that device's own config read. */}
+                <PeerDeviceSettings device={device} />
+              </SettingsPanel>
+            );
+          })}
+        </div>
+      </SettingsEditorRegistryProvider>
 
-        <DangerZone />
+      {/* The local save spans three sections, so its failure is shown
+          above the footer where every section can see it. Peer saves
+          report inside their own section. */}
+      {save.error && (
+        <div className="px-6 pb-3">
+          <ErrorBanner>{save.error.message}</ErrorBanner>
+        </div>
+      )}
 
-        {save.error && <ErrorBanner>{save.error.message}</ErrorBanner>}
-      </SettingsPane>
       <EditorFooter
-        isDirty={isDirty}
-        isPending={save.isPending}
-        isSuccess={save.isSuccess}
-        onDiscard={handleDiscard}
-        onSave={() => void handleSave()}
+        isDirty={anyDirty}
+        isPending={anyPending}
+        isSuccess={anySuccess}
+        onDiscard={handleDiscardAll}
+        onSave={() => void handleSaveAll()}
       />
     </>
+  );
+}
+
+// The header names the section the sidebar picked, the way a
+// sidebar-driven settings window does, so the pane never has to repeat
+// the list. A device's title carries its state pill: the one fact about
+// a machine worth showing above its settings.
+function headingFor(
+  activeTab: string,
+  peer: RemoteDevice | undefined,
+  localName: string,
+  // One machine on the account: no roster to place it in, so its
+  // title carries neither the device eyebrow nor a presence pill.
+  solo: boolean,
+): { eyebrow: string; title: ReactNode } {
+  if (activeTab === APPEARANCE_TAB) {
+    return { eyebrow: "Settings", title: "Appearance" };
+  }
+  if (activeTab === LAUNCH_TAB) {
+    return { eyebrow: "Settings", title: "Launch tools" };
+  }
+  if (solo) return { eyebrow: "Settings", title: localName };
+  return {
+    eyebrow: "Device settings",
+    title: (
+      <span className="inline-flex max-w-full items-center gap-2">
+        <span className="truncate">{peer?.label ?? localName}</span>
+        {peer === undefined ? (
+          <DeviceStatusPill tone="emerald" label="This device" />
+        ) : (
+          <DeviceStatusPill {...deviceStatusView(peer.status)} />
+        )}
+      </span>
+    ),
+  };
+}
+
+// One section's body: its own scroll region (so each section keeps its
+// scroll position) around the width-capped settings column. Mounts its
+// content on the first visit and keeps it mounted afterwards (`hidden`
+// parks it), so a form and its scroll position survive a look at
+// another section, while a section never visited costs nothing.
+function SettingsPanel({
+  id,
+  active,
+  children,
+}: {
+  id: string;
+  active: boolean;
+  children: ReactNode;
+}) {
+  const [shown, setShown] = useState(active);
+  if (active && !shown) setShown(true);
+  return (
+    <div
+      id={settingsPanelId(id)}
+      hidden={!active}
+      className="min-h-0 flex-1 overflow-y-auto p-6"
+    >
+      {shown && (
+        <div className="flex max-w-3xl flex-col gap-10">{children}</div>
+      )}
+    </div>
   );
 }
