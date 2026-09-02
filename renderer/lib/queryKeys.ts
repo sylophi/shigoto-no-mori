@@ -89,11 +89,11 @@ export const queryKeys = {
 
   fsListDirectory: (path: string) => ["fs", "listDirectory", path] as const,
   fsIsGitRepo: (path: string) => ["fs", "isGitRepo", path] as const,
-  fsListEntries: (path: string) => ["fs", "listEntries", path] as const,
-  fsStat: (path: string | null) => ["fs", "stat", path] as const,
 
-  ignoredPaths: (projectId: string | null) =>
-    ["ignoredPaths", projectId] as const,
+  carryOverListing: (projectId: string, relative: string) =>
+    ["carryOver", "listing", projectId, relative] as const,
+  carryOverStats: (projectId: string, paths: string[]) =>
+    ["carryOver", "stats", projectId, paths] as const,
   worktreeIncludeStatus: (projectId: string | null) =>
     ["worktreeIncludeStatus", projectId] as const,
 

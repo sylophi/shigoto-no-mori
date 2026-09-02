@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink } from "@/components/ui/external-link";
+import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
 import type { CarryOverEntry } from "@shared/schemas";
@@ -54,15 +55,20 @@ export function CarryOverSection({
           return manualPaths.has(p) ? [] : [p];
         })
       : [];
+  const { data: stats } = useCarryOverStats(projectId, [
+    ...entries.map((e) => e.path),
+    ...includePaths,
+  ]);
 
   return (
     <section className="space-y-3">
       <div>
         <SectionHeading className="mb-1">Carry over</SectionHeading>
         <p className="text-xs text-muted-foreground">
-          Files and folders from the main checkout to copy or symlink into every
-          new worktree. Useful for things git ignores, like{" "}
-          <span className="font-mono">.env</span>,{" "}
+          Files and folders to copy or symlink into every new worktree, taken
+          from the main checkout or, failing that, another worktree that has
+          them (symlinks only ever point at the main checkout). Useful for
+          things git ignores, like <span className="font-mono">.env</span>,{" "}
           <span className="font-mono">node_modules</span>, or editor state.
         </p>
       </div>
@@ -99,7 +105,7 @@ export function CarryOverSection({
             <CarryOverRow
               key={entry.path}
               entry={entry}
-              projectPath={projectPath}
+              stat={stats?.[entry.path]}
               covered={isCovered(normalizeRelPath(entry.path))}
               onChangeMode={(mode) => onChangeMode(entry.path, mode)}
               onRemove={() => onRemove(entry.path)}
@@ -109,7 +115,7 @@ export function CarryOverSection({
             <CarryOverRow
               key={`worktreeinclude:${path}`}
               entry={{ path, mode: "copy" }}
-              projectPath={projectPath}
+              stat={stats?.[path]}
               origin="worktreeinclude"
             />
           ))}
@@ -123,7 +129,6 @@ export function CarryOverSection({
 
       {picking && (
         <CarryOverPickerModal
-          key={projectPath}
           projectId={projectId}
           projectPath={projectPath}
           selectedPaths={selectedPaths}

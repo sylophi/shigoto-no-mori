@@ -4,7 +4,7 @@ import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { PROJECTS_KEY, registryStore } from "../../lib/config/store";
-import { listBranches, listIgnoredPaths } from "../../lib/git/branches";
+import { listBranches } from "../../lib/git/branches";
 import { isGitRepo } from "../../lib/git/core";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
 import { pickAvailableWorktreeName } from "../../lib/git/worktrees";
@@ -24,6 +24,10 @@ import {
   writeSidebarView,
 } from "../../lib/projects/sidebarView";
 import { readProjectSort, writeProjectSort } from "../../lib/projects/usage";
+import {
+  listCarryOverCandidates,
+  statCarryOverPaths,
+} from "../../lib/worktrees/carryOver";
 import { readWorktreeIncludeStatus } from "../../lib/worktrees/worktreeInclude";
 import {
   clearProjectDeleteInflight,
@@ -141,14 +145,19 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     return pickAvailableWorktreeName(project.id, project.path);
   },
 
-  listIgnoredPaths: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return listIgnoredPaths(project.path);
-  },
-
   worktreeIncludeStatus: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);
-    return readWorktreeIncludeStatus(project.path);
+    return readWorktreeIncludeStatus(project.id, project.path);
+  },
+
+  carryOverListing: async ({ projectId, relative }) => {
+    const project = findProjectOrThrow(projectId);
+    return listCarryOverCandidates(project.id, project.path, relative);
+  },
+
+  carryOverStats: async ({ projectId, paths }) => {
+    const project = findProjectOrThrow(projectId);
+    return statCarryOverPaths(project.id, project.path, paths);
   },
 
   icon: async ({ projectId }) => {
