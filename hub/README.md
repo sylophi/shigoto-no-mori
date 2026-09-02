@@ -29,7 +29,7 @@ preview URLs, and dev tunnels share the tunnel zone below.
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
 | `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
-| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME); `vercel.json` `script-src` still lists only the dev pattern, add it when going live |
+| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME). `vercel.json` `script-src` still lists only the dev pattern, add it when going live |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
 | `accounts.shigomori.com` | Clerk Account Portal, optional | Clerk prod instance |
 
@@ -45,8 +45,8 @@ Rules the layout depends on:
   Device hostnames hash the Clerk user id, which differs per Clerk
   instance, so dev and prod devices coexist in the zone.
 - **`app` and `hub` are baked into every desktop build.** Renaming
-  either means a new desktop release; the Origin gate on the direct
-  listener matches `SM_ACCOUNT_WEB_ORIGIN` exactly. Pick once.
+  either means a new desktop release, and the Origin gate on the
+  direct listener matches `SM_ACCOUNT_WEB_ORIGIN` exactly. Pick once.
 - **Clerk hosts must be DNS-only** (grey cloud), which Clerk requires
   for its CNAME verification. Add them when the production Clerk
   instance is created, not before.
@@ -59,7 +59,7 @@ production (`shigomori-hub`) and `env.dev` is `shigomori-hub-dev`.
 so a bare deploy never lands on production by accident. Each has its
 own D1 database (ids pinned in the config) and its own secrets, set
 with `--env dev` for dev and no flag for production. Production stays
-undeployed until launch; everything below is written for dev, drop
+undeployed until launch. Everything below is written for dev, drop
 `--env dev` for the production equivalent.
 
 Prerequisites: a Cloudflare account, a Clerk application, and
@@ -93,7 +93,7 @@ Prerequisites: a Cloudflare account, a Clerk application, and
 
 At launch production additionally gets the custom domain
 `hub.shigomori.com` (a Workers custom domain on the zone) and its
-workers.dev route switched off; dev stays on workers.dev.
+workers.dev route switched off. Dev stays on workers.dev.
 
 Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
 `MAX_HUB_MESSAGE_BYTES` change): update all devices BEFORE
@@ -128,7 +128,7 @@ devices on different networks cannot reach each other at all (the
 Devices page says so on the this-device row).
 
 Prerequisites: a DNS zone on the same Cloudflare account that holds
-nothing but tunnels (`shigomori.link`; the per-device CNAMEs go at its
+nothing but tunnels (`shigomori.link`, with the per-device CNAMEs at its
 apex so they stay one level deep, which is all Universal SSL covers),
 and an API token with Cloudflare Tunnel edit on the account and DNS
 edit on that one zone. One zone serves both environments: device

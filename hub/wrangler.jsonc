@@ -2,7 +2,7 @@
 // share this file, the wrangler way: the top level IS production
 // (`shigomori-hub`) and `env.dev` overrides the name and the D1 binding
 // to make `shigomori-hub-dev`. Bindings are not inherited by named
-// environments, so `env.dev` repeats the binding blocks; plain settings
+// environments, so `env.dev` repeats the binding blocks. Plain settings
 // (`observability`, `migrations`) are inherited and appear once.
 //
 // `pnpm run deploy` targets dev (`--env dev`) and `pnpm run
@@ -26,8 +26,8 @@
 // the typed "not configured" and the rest of the Worker works as
 // before. They are secrets rather than `vars` because dashboard-set
 // plain vars do not survive a deploy. What each holds and the zone
-// layout they assume is in README.md (Domains, Tunnel provisioning);
-// src/env.ts types them.
+// layout they assume is in README.md (Domains, Tunnel provisioning),
+// and src/env.ts types them.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shigomori-hub",
@@ -60,7 +60,7 @@
       "binding": "DB",
       "database_name": "shigomori-hub",
       // The deployed production database's id (printed by `wrangler
-      // d1 create`; not a secret). Local dev and the vitest suite
+      // d1 create`, not a secret). Local dev and the vitest suite
       // ignore it.
       "database_id": "1b5905c8-53a0-4e90-851d-f011aa539ef1",
       "migrations_dir": "migrations",

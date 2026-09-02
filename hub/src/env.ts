@@ -13,7 +13,7 @@ export interface Env {
   // must be set for POST /tunnel to work. Any unset means the tunnel
   // routes answer the typed "not configured" and everything else works
   // as before. All four are wrangler secrets (dashboard-set plain
-  // vars do not survive a deploy); the API token needs Cloudflare
+  // vars do not survive a deploy). The API token needs Cloudflare
   // Tunnel edit and DNS edit on the tunnel zone. See README.md.
   CLOUDFLARE_API_TOKEN?: string;
   CF_ACCOUNT_ID?: string;
