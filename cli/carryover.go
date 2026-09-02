@@ -18,18 +18,34 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"sync"
 )
 
 type carryOverFailure struct {
 	Path   string `json:"path"`
 	Reason string `json:"reason"`
+	// The checkout the failure is about, when it isn't the primary
+	// (a sibling's broken .worktreeinclude).
+	Source string `json:"source,omitempty"`
+}
+
+// An entry that was found somewhere other than the primary checkout,
+// so the user can tell which sibling's file they ended up with.
+// CopiedInstead: the entry asked for a symlink, but links only ever
+// target the primary (a sibling can be torn down), so it was copied.
+type carryOverSourced struct {
+	Path          string `json:"path"`
+	Source        string `json:"source"`
+	CopiedInstead bool   `json:"copiedInstead,omitempty"`
 }
 
 type carryOverReport struct {
 	Applied         int                `json:"applied"`
 	Failures        []carryOverFailure `json:"failures"`
 	IncludeFailures []carryOverFailure `json:"includeFailures,omitempty"`
+	Sourced         []carryOverSourced `json:"sourced,omitempty"`
 }
 
 const worktreeIncludeFile = ".worktreeinclude"
@@ -91,11 +107,16 @@ func isSafeRelPath(p string) bool {
 	return true
 }
 
+// The integration is opt-out: absent means on.
+func worktreeIncludeEnabled(config *projectConfig) bool {
+	return config == nil || config.UseWorktreeInclude == nil || *config.UseWorktreeInclude
+}
+
 // Entries whose paths match a .worktreeinclude pattern AND are
 // gitignored; always copy mode. Returns nil when the integration is
 // off or the file is absent.
 func resolveWorktreeInclude(projectPath string, config *projectConfig) ([]carryOverEntry, error) {
-	if config != nil && config.UseWorktreeInclude != nil && !*config.UseWorktreeInclude {
+	if !worktreeIncludeEnabled(config) {
 		return nil, nil
 	}
 	includePath := filepath.Join(projectPath, worktreeIncludeFile)
@@ -105,6 +126,9 @@ func resolveWorktreeInclude(projectPath string, config *projectConfig) ([]carryO
 	candidates, err := listOthersIgnored(projectPath, "--exclude-from="+includePath)
 	if err != nil {
 		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
 	}
 	ignored, err := listOthersIgnored(projectPath, "--exclude-standard")
 	if err != nil {
@@ -119,6 +143,41 @@ func resolveWorktreeInclude(projectPath string, config *projectConfig) ([]carryO
 		}
 	}
 	return entries, nil
+}
+
+// Every checkout's own .worktreeinclude, resolved against that
+// checkout's gitignore, unioned in source order: an entry that
+// overlaps one already taken from an earlier source is dropped
+// (mergeCarryOver's rule). Sources resolve in parallel (two ls-files
+// walks each). A broken file in one checkout is reported and skipped,
+// never fatal.
+func resolveWorktreeIncludeAcross(sources []worktreeIdentity, config *projectConfig) ([]carryOverEntry, []carryOverFailure) {
+	resolved := make([][]carryOverEntry, len(sources))
+	errs := make([]error, len(sources))
+	var wg sync.WaitGroup
+	for i, source := range sources {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resolved[i], errs[i] = resolveWorktreeInclude(source.Path, config)
+		}()
+	}
+	wg.Wait()
+
+	var entries []carryOverEntry
+	var failures []carryOverFailure
+	for i, source := range sources {
+		if errs[i] != nil {
+			failure := carryOverFailure{Path: worktreeIncludeFile, Reason: errs[i].Error()}
+			if !source.IsPrimary {
+				failure.Source = source.Name
+			}
+			failures = append(failures, failure)
+			continue
+		}
+		entries = mergeCarryOver(entries, resolved[i])
+	}
+	return entries, failures
 }
 
 // Collapse duplicate separators and trailing slashes before comparing
@@ -160,18 +219,92 @@ func mergeCarryOver(manual, include []carryOverEntry) []carryOverEntry {
 	return merged
 }
 
+// --- sources ---
+
+// Where entries are looked up, in order: the worktree holding the base
+// branch (its gitignored files are the ones a branch-from of it
+// expects), then the primary, then every other checkout by name. The
+// destination itself is never a source. Mirrors the Configure picker,
+// which unions the same checkouts so an entry can name a file the
+// primary doesn't have.
+func carryOverSources(proj project, destPath, base string) []worktreeIdentity {
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return []worktreeIdentity{{Name: "primary", Path: proj.Path, IsPrimary: true}}
+	}
+	baseBranch := ""
+	if base != "" {
+		// Same ref resolution a checkout uses: `origin/feat` lands on
+		// local `feat` when it exists, which is the branch a worktree
+		// would be holding.
+		baseBranch, _ = resolveCheckoutRef(proj.Path, base, nil)
+	}
+	return orderCarryOverSources(identities, destPath, baseBranch)
+}
+
+func orderCarryOverSources(identities []worktreeIdentity, destPath, baseBranch string) []worktreeIdentity {
+	rank := func(id worktreeIdentity) int {
+		switch {
+		case baseBranch != "" && !id.Detached && id.Branch == baseBranch:
+			return 0
+		case id.IsPrimary:
+			return 1
+		default:
+			return 2
+		}
+	}
+	var sources []worktreeIdentity
+	for _, id := range identities {
+		if id.Path != destPath {
+			sources = append(sources, id)
+		}
+	}
+	sort.SliceStable(sources, func(i, j int) bool {
+		ri, rj := rank(sources[i]), rank(sources[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return sources[i].Name < sources[j].Name
+	})
+	return sources
+}
+
+// First source that has the path, in lookup order.
+func findCarryOverSource(sources []worktreeIdentity, relPath string) (worktreeIdentity, os.FileInfo, bool) {
+	for _, source := range sources {
+		if info, err := os.Stat(filepath.Join(source.Path, relPath)); err == nil {
+			return source, info, true
+		}
+	}
+	return worktreeIdentity{}, nil, false
+}
+
+// Whether some checkout currently has the entry.
+func carryOverPathExists(proj project, relPath string) bool {
+	_, _, ok := findCarryOverSource(carryOverSources(proj, "", ""), relPath)
+	return ok
+}
+
 // --- application ---
 
-func applyCarryOver(sourcePath, destPath string, entries []carryOverEntry) carryOverReport {
+func applyCarryOver(sources []worktreeIdentity, destPath string, entries []carryOverEntry) carryOverReport {
 	report := carryOverReport{Failures: []carryOverFailure{}}
 	if len(entries) == 0 {
 		return report
 	}
 	var excludes []string
 	for _, entry := range entries {
-		failure, excludePath := applyOneCarryOver(sourcePath, destPath, entry)
+		failure, excludePath, source := applyOneCarryOver(sources, destPath, entry)
+		sibling := source.Name != "" && !source.IsPrimary
 		if failure != nil {
+			if sibling {
+				failure.Source = source.Name
+			}
 			report.Failures = append(report.Failures, *failure)
+		} else if sibling {
+			report.Sourced = append(report.Sourced, carryOverSourced{
+				Path: entry.Path, Source: source.Name, CopiedInstead: entry.Mode == "symlink",
+			})
 		}
 		if excludePath != "" {
 			excludes = append(excludes, excludePath)
@@ -182,37 +315,43 @@ func applyCarryOver(sourcePath, destPath string, entries []carryOverEntry) carry
 	return report
 }
 
-func applyOneCarryOver(sourcePath, destPath string, entry carryOverEntry) (*carryOverFailure, string) {
-	src := filepath.Join(sourcePath, entry.Path)
+// First source that has the entry wins. Returns the failure, the path
+// to hide from git (directory symlinks only), and the source used
+// (zero when none had the entry).
+func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryOverEntry) (failure *carryOverFailure, excludePath string, source worktreeIdentity) {
+	source, srcInfo, ok := findCarryOverSource(sources, entry.Path)
+	if !ok {
+		return &carryOverFailure{Path: entry.Path, Reason: "Source missing in every checkout"}, "", source
+	}
+	src := filepath.Join(source.Path, entry.Path)
 	dst := filepath.Join(destPath, entry.Path)
-	srcInfo, err := os.Stat(src)
-	if err != nil {
-		return &carryOverFailure{Path: entry.Path, Reason: "Source missing in main checkout"}, ""
-	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, ""
+		return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, "", source
 	}
-	if entry.Mode == "symlink" {
+	// Symlinks only ever target the primary: a sibling worktree can be
+	// torn down, which would leave every link into it dangling. A
+	// symlink entry found only in a sibling is copied instead.
+	if entry.Mode == "symlink" && source.IsPrimary {
 		// Absolute target so the link survives moving the worktree dir.
 		if err := os.Symlink(src, dst); err != nil {
 			if errors.Is(err, os.ErrExist) {
-				return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, ""
+				return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, "", source
 			}
-			return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, ""
+			return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, "", source
 		}
 		// Only directory symlinks are hidden from git (file symlinks
 		// diff fine as 120000 patches).
 		if srcInfo.IsDir() {
-			return nil, entry.Path
+			return nil, entry.Path, source
 		}
-		return nil, ""
+		return nil, "", source
 	}
 	// Copy mode, no overwrite of files git just laid down. cp -R is the
 	// pragmatic stand-in for node's fs.cp(recursive, force:false):
 	// -n refuses overwrites silently, so pre-check the destination to
 	// report the same "already exists" failure the app does.
 	if _, err := os.Lstat(dst); err == nil {
-		return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, ""
+		return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, "", source
 	}
 	cmd := exec.Command("cp", "-R", "-P", src, dst)
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -220,9 +359,9 @@ func applyOneCarryOver(sourcePath, destPath string, entry carryOverEntry) (*carr
 		if reason == "" {
 			reason = err.Error()
 		}
-		return &carryOverFailure{Path: entry.Path, Reason: reason}, ""
+		return &carryOverFailure{Path: entry.Path, Reason: reason}, "", source
 	}
-	return nil, ""
+	return nil, "", source
 }
 
 // --- .git/info/exclude (exclude.ts parity) ---

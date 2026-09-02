@@ -2,15 +2,15 @@ import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { cn } from "@/lib/utils";
-import type { CarryOverEntry, FsEntry } from "@shared/schemas";
+import type { CarryOverCandidate, CarryOverEntry } from "@shared/schemas";
+import { OnlyInWorktrees } from "./OnlyInWorktrees";
 
 interface PickerRowProps {
-  entry: FsEntry;
+  entry: CarryOverCandidate;
   added: boolean;
   // .worktreeinclude already copies this path into every new worktree; a
   // manual entry would be auto-removed at the next creation.
   covered: boolean;
-  ignored: boolean;
   index: number;
   highlighted: boolean;
   onNavigate: () => void;
@@ -22,14 +22,13 @@ export function PickerRow({
   entry,
   added,
   covered,
-  ignored,
   index,
   highlighted,
   onNavigate,
   onHover,
   onPick,
 }: PickerRowProps) {
-  const isFolder = entry.isDirectory;
+  const { isDirectory: isFolder, ignored } = entry;
   return (
     // oxlint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- keyboard nav lives on the focused filter input above
     <li
@@ -56,6 +55,11 @@ export function PickerRow({
         {entry.name}
         {isFolder ? "/" : ""}
       </span>
+      <OnlyInWorktrees
+        inPrimary={entry.inPrimary}
+        worktrees={entry.worktrees}
+        className="max-w-40"
+      />
       {added ? (
         <span className="px-2 text-[11px] text-muted-foreground">Added</span>
       ) : covered ? (

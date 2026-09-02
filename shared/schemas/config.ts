@@ -98,6 +98,43 @@ export const WorktreeIncludeStatusSchema = z.object({
 });
 export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 
+// The carry-over picker reads a union of the primary and every
+// worktree: entries are root-relative, so any checkout can hold them
+// and the CLI copies from whichever has the file at creation.
+export const CarryOverListingPayloadSchema = ProjectScopedPayloadSchema.extend({
+  // Folder being browsed, root-relative, with "" for the root.
+  relative: z.union([z.literal(""), CarryOverEntrySchema.shape.path]),
+});
+export type CarryOverListingPayload = z.infer<
+  typeof CarryOverListingPayloadSchema
+>;
+
+// One name in the browsed folder, across checkouts. `ignored` is judged
+// by the gitignore of a checkout that has it. `worktrees` names the
+// non-primary checkouts holding it.
+export const CarryOverCandidateSchema = z.object({
+  name: z.string(),
+  isDirectory: z.boolean(),
+  ignored: z.boolean(),
+  inPrimary: z.boolean(),
+  worktrees: z.array(z.string()),
+});
+export type CarryOverCandidate = z.infer<typeof CarryOverCandidateSchema>;
+
+export const CarryOverStatsPayloadSchema = ProjectScopedPayloadSchema.extend({
+  paths: z.array(CarryOverEntrySchema.shape.path),
+});
+export type CarryOverStatsPayload = z.infer<typeof CarryOverStatsPayloadSchema>;
+
+// Where a configured entry currently exists. Missing everywhere when
+// neither `inPrimary` nor any `worktrees`.
+export const CarryOverStatSchema = z.object({
+  isDirectory: z.boolean(),
+  inPrimary: z.boolean(),
+  worktrees: z.array(z.string()),
+});
+export type CarryOverStat = z.infer<typeof CarryOverStatSchema>;
+
 // Per-worktree persistent data. Only kept for shigomori-managed worktrees;
 // external worktrees deliberately have no on-disk state.
 export const ShigomoriWorktreeDataSchema = z.object({

@@ -687,10 +687,11 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if _, statErr := os.Stat(filepath.Join(proj.Path, path)); statErr != nil {
-			// Not fatal: gitignored sources may come and go, and the
-			// entry only acts at worktree creation.
-			note("warning: " + path + " doesn't currently exist in the primary checkout")
+		// Any checkout can be the source (carryOverSources), so only
+		// warn when none has it. Not fatal: gitignored sources may come
+		// and go, and the entry only acts at worktree creation.
+		if !carryOverPathExists(proj, path) {
+			note("warning: " + path + " doesn't currently exist in the primary checkout or any worktree")
 		}
 		updated := false
 		err = scope.update(func(doc map[string]any) error {

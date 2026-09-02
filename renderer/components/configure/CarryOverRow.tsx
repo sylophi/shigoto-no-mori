@@ -1,14 +1,15 @@
 import { AlertTriangle, Copy as CopyIcon, X } from "lucide-react";
 import { MaterialIcon } from "@/components/ui/material-icon";
-import { useFsStat } from "@/hooks/fs/useFsStat";
 import { cn } from "@/lib/utils";
-import type { CarryOverEntry } from "@shared/schemas";
+import type { CarryOverEntry, CarryOverStat } from "@shared/schemas";
 import { ModePicker } from "./ModePicker";
+import { OnlyInWorktrees } from "./OnlyInWorktrees";
 import { ChipButton } from "@/components/ui/chip-button";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;
-  projectPath: string;
+  // Where the path currently exists. Undefined while still loading.
+  stat: CarryOverStat | undefined;
   // .worktreeinclude already covers this path; the entry will be
   // auto-removed the next time a worktree is created.
   covered?: boolean;
@@ -21,14 +22,14 @@ interface CarryOverRowProps {
 
 export function CarryOverRow({
   entry,
-  projectPath,
+  stat,
   covered = false,
   origin = "manual",
   onChangeMode,
   onRemove,
 }: CarryOverRowProps) {
-  const { data: stat, isLoading } = useFsStat(`${projectPath}/${entry.path}`);
-  const missing = !isLoading && stat?.exists === false;
+  const missing =
+    stat !== undefined && !stat.inPrimary && stat.worktrees.length === 0;
   const basename = entry.path.split("/").pop() ?? entry.path;
   const fromInclude = origin === "worktreeinclude";
   return (
@@ -51,11 +52,18 @@ export function CarryOverRow({
         {missing && (
           <span
             className="inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
-            title="Source no longer exists in the main checkout. New worktrees will skip this entry."
+            title="Source doesn't exist in the main checkout or any worktree. New worktrees will skip this entry."
           >
             <AlertTriangle className="size-3" />
             missing
           </span>
+        )}
+        {stat && (
+          <OnlyInWorktrees
+            inPrimary={stat.inPrimary}
+            worktrees={stat.worktrees}
+            className="shrink-0"
+          />
         )}
         {covered && (
           <span

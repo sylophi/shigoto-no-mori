@@ -13,6 +13,10 @@ import {
   SetSidebarViewPayloadSchema,
   SidebarViewSchema,
   ToggleCollapsedProjectPayloadSchema,
+  CarryOverCandidateSchema,
+  CarryOverListingPayloadSchema,
+  CarryOverStatSchema,
+  CarryOverStatsPayloadSchema,
   WorktreeIncludeStatusSchema,
 } from "@shared/schemas";
 
@@ -58,15 +62,20 @@ export const projectsContract = {
     ProjectScopedPayloadSchema,
     z.string(),
   ),
-  listIgnoredPaths: invoke(
-    "projects:listIgnoredPaths",
-    ProjectScopedPayloadSchema,
-    z.array(z.string()),
-  ),
   worktreeIncludeStatus: invoke(
     "projects:worktreeIncludeStatus",
     ProjectScopedPayloadSchema,
     WorktreeIncludeStatusSchema,
+  ),
+  carryOverListing: invoke(
+    "projects:carryOverListing",
+    CarryOverListingPayloadSchema,
+    z.array(CarryOverCandidateSchema),
+  ),
+  carryOverStats: invoke(
+    "projects:carryOverStats",
+    CarryOverStatsPayloadSchema,
+    z.record(z.string(), CarryOverStatSchema),
   ),
   icon: invoke(
     "projects:icon",
