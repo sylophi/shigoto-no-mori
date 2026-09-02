@@ -45,7 +45,7 @@ pre-commit:
     # installs pin the same zod, so a root install is a prerequisite for
     # those shared files.
     hub:
-      glob: "{hub/src/**,hub/test/**,hub/migrations/**,hub/package.json,hub/pnpm-lock.yaml,hub/tsconfig.json,hub/vitest.config.ts,hub/wrangler.jsonc,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
+      glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
       run: pnpm run hub:check
     # Boots a stub Durable Object (a node ws server speaking the hub
     # envelope protocol) and drives two REAL hub connections through the
@@ -115,7 +115,7 @@ pre-commit:
     # per-dial ticket mint. Gated to the browser connection plus the hub
     # transport surface it drives.
     web-hub:
-      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,scripts/check-web-hub.mjs,scripts/lib/checkKit.mjs}"
+      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,scripts/check-web-hub.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:hub:check
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),

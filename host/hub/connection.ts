@@ -27,11 +27,6 @@ import type {
 } from "@shared/hub/connectionTypes";
 import { toText } from "@host/socket/rawData";
 
-// Re-exported so existing importers keep resolving the option and status
-// shapes from this module while the one definition lives in shared/ for
-// the browser connection to share.
-export type { HubConnectOpts, HubConnectionStatus };
-
 export type HubConnectionOpts = {
   // The one channel the hub wire brokers, supplied by the
   // composition at creation (register.ts derives it from the direct

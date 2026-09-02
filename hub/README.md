@@ -29,7 +29,7 @@ preview URLs, and dev tunnels share the tunnel zone below.
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
 | `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
-| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME); also the `script-src` in `vercel.json` |
+| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME); `vercel.json` `script-src` still lists only the dev pattern, add it when going live |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
 | `accounts.shigomori.com` | Clerk Account Portal, optional | Clerk prod instance |
 

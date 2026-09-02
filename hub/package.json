@@ -6,9 +6,9 @@
   "type": "module",
   "packageManager": "pnpm@11.1.1",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --env dev",
     "deploy": "wrangler deploy --env dev",
-    "deploy:prod": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env \"\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "tsc --noEmit && vitest run"

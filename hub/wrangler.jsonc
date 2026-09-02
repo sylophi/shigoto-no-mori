@@ -15,7 +15,8 @@
 // environment holds the key of ITS Clerk instance (development for
 // dev, production for prod).
 //
-// Plain vars the owner may set (via `vars` here or the dashboard):
+// Plain vars the owner may set (via `vars`, which `env.dev` must then
+// repeat since vars are not inherited, or the dashboard):
 // - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
 //   test seam, production should leave it unset.
 //

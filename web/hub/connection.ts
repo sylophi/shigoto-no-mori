@@ -26,8 +26,6 @@ import type {
   HubConnectionStatus,
 } from "@shared/hub/connectionTypes";
 
-export type { HubConnectOpts, HubConnectionStatus };
-
 export type HubConnectionOpts = {
   // The one channel the hub wire brokers, supplied by the
   // composition (the web bridge derives it from the direct contract)

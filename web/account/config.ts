@@ -2,7 +2,7 @@
 // account service variables (ACCOUNT_ENV_KEYS) from the process
 // environment at launch; a static web build has no process, so the same
 // variables are baked in at build time through Vite's import.meta.env
-// (vite.web.config.ts lists their prefixes in envPrefix). Everything
+// (vite.web.config.ts passes their names to envPrefix). Everything
 // here is a public endpoint or a public Clerk publishable key, never a
 // secret (serviceConfig.ts), so inlining the values into the shipped
 // bundle is safe by design.

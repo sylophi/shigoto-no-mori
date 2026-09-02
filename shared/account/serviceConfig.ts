@@ -27,15 +27,17 @@ export type AccountServiceConfig = {
   webOrigin: string;
 };
 
-// The env var names the account layer reads. The desktop build bakes
-// exactly these (vite.node.config.ts) and the web build mirrors them
-// with envPrefix (vite.web.config.ts), so a renamed var cannot
+// Each config field and the env var it reads, in one place: the
+// resolver below and both build bakes (vite.node.config.ts defines
+// exactly these keys, vite.web.config.ts passes them to envPrefix)
+// derive from it, so a field cannot be renamed on one side only and
 // silently drop out of a shipped build.
-export const ACCOUNT_ENV_KEYS = [
-  "SM_DEVICE_HUB_URL",
-  "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY",
-  "SM_ACCOUNT_WEB_ORIGIN",
-] as const;
+export const ACCOUNT_ENV = {
+  hubUrl: "SM_DEVICE_HUB_URL",
+  publishableKey: "SM_ACCOUNT_CLERK_PUBLISHABLE_KEY",
+  webOrigin: "SM_ACCOUNT_WEB_ORIGIN",
+} as const satisfies Record<keyof AccountServiceConfig, string>;
+export const ACCOUNT_ENV_KEYS = Object.values(ACCOUNT_ENV);
 
 // Reads the config from a plain env-like record so tests can pass a
 // literal instead of mutating process.env. A missing var reads as the
@@ -44,9 +46,9 @@ export function resolveServiceConfig(
   env: Record<string, string | undefined>,
 ): AccountServiceConfig {
   return {
-    hubUrl: (env.SM_DEVICE_HUB_URL ?? "").trim(),
-    publishableKey: (env.SM_ACCOUNT_CLERK_PUBLISHABLE_KEY ?? "").trim(),
-    webOrigin: (env.SM_ACCOUNT_WEB_ORIGIN ?? "").trim(),
+    hubUrl: (env[ACCOUNT_ENV.hubUrl] ?? "").trim(),
+    publishableKey: (env[ACCOUNT_ENV.publishableKey] ?? "").trim(),
+    webOrigin: (env[ACCOUNT_ENV.webOrigin] ?? "").trim(),
   };
 }
 
