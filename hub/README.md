@@ -17,6 +17,40 @@ the repo-root `node_modules`, not `hub/node_modules`. Both installs
 pin the same zod, so a repo-root install is a prerequisite for building
 or deploying the shared half.
 
+## Domains (production)
+
+Two zones on the one Cloudflare account, both required at launch.
+Dev needs none of this: dev builds point at `workers.dev` and Vercel
+preview URLs, and dev tunnels share the tunnel zone below.
+
+| Host | Serves | Pinned where |
+|---|---|---|
+| `shigomori.com` | Marketing site | Nowhere in code |
+| `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
+| `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_ACCOUNT_HUB_URL` |
+| `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
+| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME) |
+| `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
+| `accounts.shigomori.com` | Clerk Account Portal, optional | Clerk prod instance |
+
+Rules the layout depends on:
+
+- **Every host is one label deep.** Cloudflare's Universal SSL covers
+  the apex and one subdomain level only, so `x.y.shigomori.com` gets no
+  edge certificate without Advanced Certificate Manager. This is why
+  tunnels get their own zone instead of `*.tunnel.shigomori.com`.
+- **The tunnel zone holds nothing else.** The Worker's API token needs
+  DNS edit on the whole zone it writes into. Keeping `shigomori.link`
+  tunnel-only means that token can never touch the brand's records.
+  Device hostnames hash the Clerk user id, which differs per Clerk
+  instance, so dev and prod devices coexist in the zone.
+- **`app` and `hub` are baked into every desktop build.** Renaming
+  either means a new desktop release; the Origin gate on the direct
+  listener matches `SM_ACCOUNT_WEB_ORIGIN` exactly. Pick once.
+- **Clerk hosts must be DNS-only** (grey cloud), which Clerk requires
+  for its CNAME verification. Add them when the production Clerk
+  instance is created, not before.
+
 ## Deploy
 
 Two environments live in `wrangler.jsonc`: the top level is
