@@ -1,23 +1,30 @@
 import { Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
   worktreeLastActivityAt,
+  type Project,
   type PullRequest,
   type Worktree,
 } from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
 import { ProjectIcon } from "../ProjectIcon";
+import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
 import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";
 import { useWorktreeRowState } from "../useWorktreeRowState";
 
 interface InboxRowProps {
   worktree: Worktree;
-  projectName: string;
+  project: Project;
   pr: PullRequest | undefined;
 }
 
@@ -32,18 +39,26 @@ interface InboxRowProps {
 //   [icon] project                                  14m ago
 //   feat/the-branch                            ±3  ↑2  #142
 //   [kind] dirname
-export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
+//
+// Right-click opens the project's menu -- the same list the tree hangs
+// off a project header's `…`. The inbox has no project headers, so this
+// is the only place its project-level actions can live.
+export function InboxRow({ worktree, project, pr }: InboxRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
+  const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
 
-  return (
+  // An element for the trigger to `render`, so it wraps no extra div.
+  const row = (
     <button
       type="button"
       onClick={open}
       title={title}
       className={cn(
         "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors outline-none",
-        "hover:bg-accent/60 focus-visible:bg-accent/60",
+        // data-popup-open is Base UI's mark on a trigger whose menu is
+        // up: keep the row lit so it's clear whose menu this is.
+        "hover:bg-accent/60 focus-visible:bg-accent/60 data-popup-open:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
         worktree.shelved && !isSelected && "opacity-70",
@@ -55,7 +70,7 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
           className="size-3"
           fallback={Folder}
         />
-        <span className="min-w-0 truncate font-medium">{projectName}</span>
+        <span className="min-w-0 truncate font-medium">{project.name}</span>
         <TrailingSlot
           worktree={worktree}
           activity={activity}
@@ -94,6 +109,19 @@ export function InboxRow({ worktree, projectName, pr }: InboxRowProps) {
         <span className="min-w-0 truncate">{worktree.name}</span>
       </span>
     </button>
+  );
+
+  return (
+    <ContextMenu onOpenChange={onOpenChange}>
+      <ContextMenuTrigger render={row} />
+      <ContextMenuContent>
+        <ProjectMenuItems
+          project={project}
+          subject="worktree"
+          removeArm={removeArm}
+        />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 

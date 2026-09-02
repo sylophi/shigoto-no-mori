@@ -2,20 +2,16 @@ import { useRef } from "react";
 import { Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
-import { useRemoveProject } from "@/hooks/projects/useProjects";
 import type { Project } from "@shared/schemas";
 import { ProjectHeader } from "./ProjectHeader";
+import { ProjectMenuItems, useProjectMenuRemoveArm } from "./ProjectMenuItems";
 
 interface ProjectRowProps {
   project: Project;
@@ -53,26 +49,13 @@ export function ProjectRow({
     transform: CSS.Transform.toString(transform),
     transition,
   };
-  const navigate = useNavigate();
   const missing = project.pathExists === false;
-  const removeProject = useRemoveProject();
   const {
     quickCreate,
     openCreateForm,
     isPending: creating,
   } = useQuickCreateWorktree();
-  // Two-step confirm so accidentally landing on "Remove" doesn't drop the
-  // project. Menu stays open while armed; second click within the timeout
-  // fires the actual remove. The arm is cleared whenever the dropdown
-  // closes so a leftover armed state can't fire on the next open.
-  const {
-    armed: removeArmed,
-    trigger: triggerRemove,
-    reset: resetRemoveArm,
-  } = useConfirmTwice(CONFIRM_QUICK_MS);
-  const onMenuOpenChange = (open: boolean) => {
-    if (!open) resetRemoveArm();
-  };
+  const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get
@@ -100,24 +83,6 @@ export function ProjectRow({
         </button>
       }
     />
-  );
-
-  // A terrier-sourced project has nothing here to remove: its presence
-  // is terrier's call (`terrier rm`), so say that instead of offering a
-  // remove that the main process would refuse anyway.
-  const removeItem = fromTerrier ? (
-    <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
-  ) : (
-    <DropdownMenuItem
-      variant="destructive"
-      closeOnClick={removeArmed}
-      onClick={(event) => {
-        if (!removeArmed) event.preventDefault();
-        triggerRemove(() => removeProject.mutate(project.id));
-      }}
-    >
-      {removeArmed ? "Click again to confirm" : "Remove"}
-    </DropdownMenuItem>
   );
 
   return (
@@ -166,67 +131,14 @@ export function ProjectRow({
                 )}
               </button>
             )}
-            <DropdownMenu onOpenChange={onMenuOpenChange}>
+            <DropdownMenu onOpenChange={onOpenChange}>
               {triggerButton}
               <DropdownMenuContent align="end" sideOffset={2}>
-                {!missing && (
-                  <>
-                    <DropdownMenuItem
-                      disabled={creating}
-                      onClick={() => void quickCreate(project.id)}
-                    >
-                      Quick create
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => openCreateForm(project.id)}
-                    >
-                      New worktree from…
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/convert-external",
-                          params: { projectId: project.id },
-                        })
-                      }
-                    >
-                      Convert external worktrees
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/worktree-location",
-                          params: { projectId: project.id },
-                        })
-                      }
-                    >
-                      Set worktree location
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/branches",
-                          params: { projectId: project.id },
-                        })
-                      }
-                    >
-                      Manage branches
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() =>
-                        void navigate({
-                          to: "/projects/$projectId/configure",
-                          params: { projectId: project.id },
-                        })
-                      }
-                    >
-                      Configure
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {removeItem}
+                <ProjectMenuItems
+                  project={project}
+                  subject="project"
+                  removeArm={removeArm}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
           </>
