@@ -18,6 +18,7 @@ import type {
   ShigomoriConfig,
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
@@ -33,6 +34,7 @@ interface FormState {
   launchers: LauncherCommand[];
   carryOver: CarryOverEntry[];
   useWorktreeInclude: boolean;
+  showPrimaryInInbox: boolean;
 }
 
 function fromConfig(
@@ -46,6 +48,7 @@ function fromConfig(
     launchers: config?.launchers ?? [],
     carryOver: config?.carryOver ?? [],
     useWorktreeInclude: config?.useWorktreeInclude !== false,
+    showPrimaryInInbox: config?.showPrimaryInInbox ?? false,
   };
 }
 
@@ -69,6 +72,8 @@ function toConfig(
     carryOver: state.carryOver.length > 0 ? state.carryOver : undefined,
     // Enabled is the default; only persist the opt-out.
     useWorktreeInclude: state.useWorktreeInclude ? undefined : false,
+    // Hidden is the default, so only the opt-in is persisted.
+    showPrimaryInInbox: state.showPrimaryInInbox ? true : undefined,
   };
 }
 
@@ -216,6 +221,18 @@ export function ConfigureForm({
                 first local branch) when the branch you set here doesn't exist.
               </p>
             </div>
+          </section>
+
+          <section className="space-y-3">
+            <SectionHeading className="mb-1">Primary checkout</SectionHeading>
+            <ToggleRow
+              checked={form.showPrimaryInInbox}
+              onCheckedChange={(v) =>
+                setForm((prev) => ({ ...prev, showPrimaryInInbox: v }))
+              }
+              label="Show in the inbox"
+              description="Lists it alongside the worktrees. The project view always shows it."
+            />
           </section>
 
           <CarryOverSection

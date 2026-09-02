@@ -61,7 +61,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	} else {
 		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
-	code := finishCreateLifecycle(proj, worktree)
+	code := finishCreateLifecycle(proj, worktree, parsed.strings["base"])
 	// Callers who can be moved land in the new worktree (a subshell,
 	// or their own shell via the integration directive, same as
 	// `sm cd`). --no-cd, --json, and scripts skip it. Exit 3 from a
@@ -80,8 +80,8 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 // Shared tail of create and adopt: run the lifecycle, report script
 // failures, print the path as the stdout result. 0 when everything
 // ran; 3 when the worktree exists but a lifecycle step failed.
-func finishCreateLifecycle(proj project, worktree worktreeJSON) int {
-	failures := runCreateLifecycle(proj, worktree)
+func finishCreateLifecycle(proj project, worktree worktreeJSON, base string) int {
+	failures := runCreateLifecycle(proj, worktree, base)
 	ok := len(failures) == 0
 	if jsonMode {
 		emit(map[string]any{
@@ -118,27 +118,32 @@ func emitPhase(phase string) {
 }
 
 // Carry-over -> setup -> port-pool, collecting non-zero script exits.
-func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
+// `base` is the ref the worktree was branched from ("" when unknown).
+// It decides which checkout carry-over looks in first.
+func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scriptFailure {
 	failures := []scriptFailure{}
 	config := readProjectConfig(proj.ID)
 
-	// .worktreeinclude resolution is best-effort: a broken file must
-	// not abort creation; its error rides the report instead.
+	// Manual entries and every checkout's .worktreeinclude are looked
+	// up across the same ordered sources. Include resolution is
+	// best-effort: a broken file must not abort creation. Its error
+	// rides the report instead.
 	manual := []carryOverEntry{}
 	if config != nil {
 		manual = config.CarryOver
 	}
+	var sources []worktreeIdentity
+	var include []carryOverEntry
 	var includeFailures []carryOverFailure
-	include, err := resolveWorktreeInclude(proj.Path, config)
-	if err != nil {
-		includeFailures = append(includeFailures,
-			carryOverFailure{Path: worktreeIncludeFile, Reason: err.Error()})
+	if len(manual) > 0 || worktreeIncludeEnabled(config) {
+		sources = carryOverSources(proj, worktree.Path, base)
+		include, includeFailures = resolveWorktreeIncludeAcross(sources, config)
 	}
 
 	entries := mergeCarryOver(manual, include)
 	if len(entries) > 0 || len(includeFailures) > 0 {
 		emitPhase("carryOver")
-		report := applyCarryOver(proj.Path, worktree.Path, entries)
+		report := applyCarryOver(sources, worktree.Path, entries)
 		if len(includeFailures) > 0 {
 			report.IncludeFailures = includeFailures
 		}
@@ -150,8 +155,19 @@ func runCreateLifecycle(proj project, worktree worktreeJSON) []scriptFailure {
 				line += fmt.Sprintf(", %d failed", len(report.Failures))
 			}
 			note(line)
+			for _, s := range report.Sourced {
+				how := ""
+				if s.CopiedInstead {
+					how = " (copied: symlinks only target the primary)"
+				}
+				note(dimErr("[carry-over]") + fmt.Sprintf(" %s from %s%s", s.Path, s.Source, how))
+			}
 			for _, f := range append(report.Failures, report.IncludeFailures...) {
-				note(dimErr("[carry-over]") + fmt.Sprintf(" %s: %s", f.Path, f.Reason))
+				where := ""
+				if f.Source != "" {
+					where = " in " + f.Source
+				}
+				note(dimErr("[carry-over]") + fmt.Sprintf(" %s%s: %s", f.Path, where, f.Reason))
 			}
 		}
 	}

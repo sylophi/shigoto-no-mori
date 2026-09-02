@@ -148,10 +148,11 @@ function buildQueryKeys(deviceId: string) {
 
     fsListDirectory: (path: string) => host("fs", "listDirectory", path),
     fsIsGitRepo: (path: string) => host("fs", "isGitRepo", path),
-    fsListEntries: (path: string) => host("fs", "listEntries", path),
-    fsStat: (path: string | null) => host("fs", "stat", path),
 
-    ignoredPaths: (projectId: string | null) => host("ignoredPaths", projectId),
+    carryOverListing: (projectId: string, relative: string) =>
+      host("carryOver", "listing", projectId, relative),
+    carryOverStats: (projectId: string, paths: string[]) =>
+      host("carryOver", "stats", projectId, paths),
     worktreeIncludeStatus: (projectId: string | null) =>
       host("worktreeIncludeStatus", projectId),
 

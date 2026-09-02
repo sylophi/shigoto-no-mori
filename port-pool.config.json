@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "portNames": ["renderer"],
   "envFiles": {
-    ".env": {
+    ".env.local": {
       "PORT": "${renderer}"
     }
   }

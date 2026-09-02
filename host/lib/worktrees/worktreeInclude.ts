@@ -13,6 +13,7 @@ import {
   listIgnoredPaths,
   listUntrackedMatchingExcludeFile,
 } from "../git/branches";
+import { listCarryOverCheckouts } from "./carryOver";
 
 const WORKTREE_INCLUDE_FILE = ".worktreeinclude";
 
@@ -40,15 +41,35 @@ async function resolveMatchedPaths(projectPath: string): Promise<string[]> {
 // matchedPaths keep git's raw shape (directories keep their trailing
 // slash) so the renderer's coverage matcher sees the same input as
 // creation-time reconciliation.
+//
+// Every checkout's own .worktreeinclude counts, resolved against that
+// checkout's gitignore and unioned, the same way the CLI resolves it at
+// creation (resolveWorktreeIncludeAcross in cli/carryover.go). So a
+// pattern that only exists on a feature branch's worktree still shows
+// up as covered here.
 export async function readWorktreeIncludeStatus(
+  projectId: string,
   projectPath: string,
 ): Promise<WorktreeIncludeStatus> {
-  if (!(await pathExists(join(projectPath, WORKTREE_INCLUDE_FILE)))) {
+  const checkouts = await listCarryOverCheckouts(projectId, projectPath);
+  const perCheckout = await Promise.all(
+    checkouts.map((checkout) => readOneStatus(checkout.path)),
+  );
+  return {
+    fileExists: perCheckout.some((status) => status.fileExists),
+    matchedPaths: [...new Set(perCheckout.flatMap((s) => s.matchedPaths))],
+  };
+}
+
+async function readOneStatus(
+  checkoutPath: string,
+): Promise<WorktreeIncludeStatus> {
+  if (!(await pathExists(join(checkoutPath, WORKTREE_INCLUDE_FILE)))) {
     return { fileExists: false, matchedPaths: [] };
   }
   let matchedPaths: string[] = [];
   try {
-    matchedPaths = await resolveMatchedPaths(projectPath);
+    matchedPaths = await resolveMatchedPaths(checkoutPath);
   } catch {
     // Leave empty; creation-time resolution surfaces the real error.
   }

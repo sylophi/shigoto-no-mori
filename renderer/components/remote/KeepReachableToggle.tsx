@@ -7,7 +7,7 @@
 //
 // Written immediately through the client store, never staged in a form:
 // flipping it is the whole action.
-import { ToggleRow } from "@/components/settings/ToggleRow";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
 

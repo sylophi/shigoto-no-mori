@@ -1,11 +1,6 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
-import {
-  DirectoryListingSchema,
-  FsListingSchema,
-  FsStatSchema,
-  PathPayloadSchema,
-} from "@shared/schemas";
+import { DirectoryListingSchema, PathPayloadSchema } from "@shared/schemas";
 
 // Every fs call is remote:true, mutating:true (v2 step 6, slice B).
 // They are reads, but the `mutating` axis is enforced as "requires the
@@ -28,14 +23,6 @@ export const fsContract = defineContract("host", {
     { remote: true, mutating: true },
   ),
   isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean(), {
-    remote: true,
-    mutating: true,
-  }),
-  stat: invoke("fs:stat", PathPayloadSchema, FsStatSchema, {
-    remote: true,
-    mutating: true,
-  }),
-  listEntries: invoke("fs:listEntries", PathPayloadSchema, FsListingSchema, {
     remote: true,
     mutating: true,
   }),

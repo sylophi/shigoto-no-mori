@@ -216,6 +216,9 @@ export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
 const CarryOverFailureSchema = z.object({
   path: z.string(),
   reason: z.string(),
+  // The checkout the failure is about when it isn't the primary (a
+  // sibling worktree's broken .worktreeinclude).
+  source: z.string().optional(),
 });
 
 export const CarryOverReportSchema = z.object({
@@ -224,6 +227,19 @@ export const CarryOverReportSchema = z.object({
   // .worktreeinclude resolution errors. Not carry-over entries, so they
   // are reported separately from the per-entry failures above.
   includeFailures: z.array(CarryOverFailureSchema).optional(),
+  // Entries taken from a worktree other than the primary (the CLI looks
+  // in the base ref's worktree first, then the primary, then the rest).
+  // copiedInstead: a symlink entry copied because links only ever
+  // target the primary. Absent when everything came from the primary.
+  sourced: z
+    .array(
+      z.object({
+        path: z.string(),
+        source: z.string(),
+        copiedInstead: z.boolean().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const CreateWorktreeResultSchema = z.object({

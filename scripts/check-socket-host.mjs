@@ -744,13 +744,7 @@ async function main() {
       // mutating: they read, but they disclose arbitrary absolute
       // paths, so they ride the command grant rather than the ungated
       // read set.
-      for (const key of [
-        "listDirectory",
-        "scanForGitRepos",
-        "isGitRepo",
-        "stat",
-        "listEntries",
-      ]) {
+      for (const key of ["listDirectory", "scanForGitRepos", "isGitRepo"]) {
         assert.equal(fsContract.calls[key].remote, true, `fs.${key} remote`);
         assert.equal(
           fsContract.calls[key].mutating,

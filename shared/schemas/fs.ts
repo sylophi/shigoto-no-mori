@@ -16,29 +16,6 @@ export const PickFolderPayloadSchema = z
   .optional();
 export type PickFolderPayload = z.infer<typeof PickFolderPayloadSchema>;
 
-// Slim subset of fs.Stats; "exists: false" means the path is missing or
-// unreadable. Used by the carry-over row to render a missing warning and
-// pick the right icon (file vs folder).
-export const FsStatSchema = z.object({
-  exists: z.boolean(),
-  isDirectory: z.boolean(),
-});
-export type FsStat = z.infer<typeof FsStatSchema>;
-
-// Filesystem entry as returned by FsListEntries. Includes dotfiles so the
-// carry-over picker can surface .env, .vscode, etc., but skips the special
-// .git directory since carrying it over makes no sense.
-export const FsEntrySchema = z.object({
-  name: z.string(),
-  isDirectory: z.boolean(),
-});
-export const FsListingSchema = z.object({
-  path: z.string(),
-  entries: z.array(FsEntrySchema),
-});
-export type FsEntry = z.infer<typeof FsEntrySchema>;
-export type FsListing = z.infer<typeof FsListingSchema>;
-
 export const DirectoryEntrySchema = z.object({
   name: z.string(),
   isGitRepo: z.boolean(),

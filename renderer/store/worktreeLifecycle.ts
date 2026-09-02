@@ -76,7 +76,25 @@ class WorktreeLifecycleStore {
       if (includeFailures.length > 0) {
         this.warn("Couldn't resolve .worktreeinclude", {
           description: clippedLines(
-            includeFailures.map((f) => f.reason),
+            includeFailures.map((f) =>
+              f.source ? `${f.source}: ${f.reason}` : f.reason,
+            ),
+            4,
+          ),
+        });
+      }
+      const sourced = evt.report.sourced ?? [];
+      if (sourced.length > 0) {
+        this.info("Carried over from other worktrees", {
+          description: clippedLines(
+            sourced.map(
+              (s) =>
+                `${s.path} from ${s.source}${
+                  s.copiedInstead
+                    ? " (copied: symlinks only target the main checkout)"
+                    : ""
+                }`,
+            ),
             4,
           ),
         });
@@ -86,7 +104,10 @@ class WorktreeLifecycleStore {
         `Carried over ${applied} of ${applied + failures.length} entries`,
         {
           description: clippedLines(
-            failures.map((f) => `${f.path}: ${f.reason}`),
+            failures.map(
+              (f) =>
+                `${f.path}${f.source ? ` in ${f.source}` : ""}: ${f.reason}`,
+            ),
             4,
           ),
         },

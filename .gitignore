@@ -59,7 +59,8 @@ typings/
 
 # dotenv environment variables file
 .env
-.env.test
+.env.*
+!.env.example
 
 # Local, non-secret account service config (ACCOUNT_ENV_KEYS) read
 # as a dev convenience by main/ipc/modules/account.ts and loaded by Vite

@@ -190,8 +190,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       listDirectory: (path: string) => fsClient.listDirectory({ path }),
       scanForGitRepos: (path: string) => fsClient.scanForGitRepos({ path }),
       isGitRepo: (path: string) => fsClient.isGitRepo({ path }),
-      stat: (path: string) => fsClient.stat({ path }),
-      listEntries: (path: string) => fsClient.listEntries({ path }),
     },
 
     git: {
@@ -313,10 +311,10 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         projectsClient.listBranches({ projectId }),
       pickWorktreeName: (projectId: string) =>
         projectsClient.pickWorktreeName({ projectId }),
-      listIgnoredPaths: (projectId: string) =>
-        projectsClient.listIgnoredPaths({ projectId }),
       worktreeIncludeStatus: (projectId: string) =>
         projectsClient.worktreeIncludeStatus({ projectId }),
+      carryOverListing: projectsClient.carryOverListing,
+      carryOverStats: projectsClient.carryOverStats,
       icon: (projectId: string) => projectsClient.icon({ projectId }),
     },
 

@@ -19,15 +19,15 @@ export type SidebarRow =
     }
   | { kind: "worktree"; key: string; worktree: Worktree }
   // The inbox's own row: taller, cross-project, and built to be triaged
-  // rather than picked out of a short list. See InboxRow. The PR rides
-  // along because the builder already had to look it up to decide which
-  // box the row belongs in -- resolving it again per row would put a
-  // query observer on every visible row for an answer already in hand.
+  // rather than picked out of a short list. See InboxRow. The project
+  // and PR ride along because the builder already had both in hand --
+  // resolving either again per row would put a query observer on every
+  // visible row for an answer it already knew.
   | {
       kind: "inbox-worktree";
       key: string;
       worktree: Worktree;
-      projectName: string;
+      project: Project;
       pr: PullRequest | undefined;
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }

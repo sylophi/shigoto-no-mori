@@ -61,11 +61,7 @@ export function RowContent({
       );
     case "inbox-worktree":
       return (
-        <InboxRow
-          worktree={row.worktree}
-          projectName={row.projectName}
-          pr={row.pr}
-        />
+        <InboxRow worktree={row.worktree} project={row.project} pr={row.pr} />
       );
     case "worktree-skeleton":
       return (

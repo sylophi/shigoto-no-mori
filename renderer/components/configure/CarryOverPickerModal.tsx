@@ -11,12 +11,10 @@ import {
 } from "lucide-react";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { useFsListEntries } from "@/hooks/fs/useFsListEntries";
-import { useIgnoredPaths } from "@/hooks/projects/useIgnoredPaths";
+import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
-import { makeIgnoreMatcher } from "@shared/gitPaths";
-import type { CarryOverEntry, FsEntry } from "@shared/schemas";
+import type { CarryOverEntry } from "@shared/schemas";
 import { PickerRow } from "./PickerRow";
 
 interface CarryOverPickerModalProps {
@@ -39,18 +37,23 @@ export function CarryOverPickerModal({
   onPick,
   onClose,
 }: CarryOverPickerModalProps) {
-  // react-doctor-disable-next-line react-doctor/no-derived-useState -- cwd diverges from projectPath as the user navigates; CarryOverSection remounts via key={projectPath} to reseed
-  const [cwd, setCwd] = useState(projectPath);
+  // The browsed folder, root-relative ("" at the root). Relative rather
+  // than absolute because the listing is a union across checkouts: a
+  // folder may exist in a worktree and not in the primary.
+  const [relative, setRelative] = useState("");
   const [filter, setFilter] = useState("");
   const [highlightedIdx, setHighlightedIdx] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
 
-  const { data: listing, isLoading, error } = useFsListEntries(cwd);
-  const { data: ignoredPaths = [] } = useIgnoredPaths(projectId);
-  const isIgnored = makeIgnoreMatcher(ignoredPaths);
-  const atRoot = cwd === projectPath;
+  const {
+    data: listing,
+    isPending,
+    error,
+  } = useCarryOverListing(projectId, relative);
+  const atRoot = relative === "";
+  const cwd = relative ? `${projectPath}/${relative}` : projectPath;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -63,42 +66,27 @@ export function CarryOverPickerModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const resetView = (nextCwd: string) => {
-    setCwd(nextCwd);
+  const resetView = (next: string) => {
+    setRelative(next);
     setFilter("");
     setHighlightedIdx(0);
   };
 
   const goUp = () => {
     if (atRoot) return;
-    const idx = cwd.lastIndexOf("/");
-    if (idx <= 0) return;
-    const parent = cwd.slice(0, idx);
-    if (parent.length < projectPath.length) return;
-    resetView(parent);
+    const idx = relative.lastIndexOf("/");
+    resetView(idx === -1 ? "" : relative.slice(0, idx));
   };
+
+  const relativeFor = (name: string): string =>
+    relative ? `${relative}/${name}` : name;
 
   const navigateInto = (name: string) => {
-    resetView(`${cwd}/${name}`);
-  };
-
-  const relativeFor = (name: string): string => {
-    const abs = `${cwd}/${name}`;
-    if (abs === projectPath) return "";
-    if (abs.startsWith(`${projectPath}/`)) {
-      return abs.slice(projectPath.length + 1);
-    }
-    return abs;
-  };
-
-  const pick = (entry: FsEntry, mode: CarryOverEntry["mode"]) => {
-    const path = relativeFor(entry.name);
-    if (!path) return;
-    onPick({ path, mode });
+    resetView(relativeFor(name));
   };
 
   const trimmed = filter.trim().toLowerCase();
-  const entries = (listing?.entries ?? []).filter((e) =>
+  const entries = (listing ?? []).filter((e) =>
     trimmed ? e.name.toLowerCase().includes(trimmed) : true,
   );
 
@@ -195,7 +183,7 @@ export function CarryOverPickerModal({
           </button>
         )}
 
-        {isLoading && !listing ? (
+        {isPending ? (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
             Loading…
@@ -215,21 +203,18 @@ export function CarryOverPickerModal({
         ) : (
           <ul ref={listRef} className="divide-y divide-border/40">
             {entries.map((entry, idx) => {
-              const relative = relativeFor(entry.name);
-              const ignored = isIgnored(relative);
-              const added = selectedPaths.has(relative);
+              const path = relativeFor(entry.name);
               return (
                 <PickerRow
                   key={entry.name}
                   entry={entry}
-                  added={added}
-                  covered={isCovered(relative)}
-                  ignored={ignored}
+                  added={selectedPaths.has(path)}
+                  covered={isCovered(path)}
                   index={idx}
                   highlighted={idx === highlightedIdx}
                   onNavigate={() => navigateInto(entry.name)}
                   onHover={() => setHighlightedIdx(idx)}
-                  onPick={(mode) => pick(entry, mode)}
+                  onPick={(mode) => onPick({ path, mode })}
                 />
               );
             })}

@@ -6,7 +6,7 @@ import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { PortPoolLink } from "./PortPoolLink";
 import { TerrierLink } from "./TerrierLink";
-import { ToggleRow } from "./ToggleRow";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 
 // The device-managed toggle sections, shared verbatim between this
 // device's tab and every peer's tab on the Settings page. Everything

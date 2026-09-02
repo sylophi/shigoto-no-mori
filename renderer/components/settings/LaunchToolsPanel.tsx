@@ -9,7 +9,7 @@ import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { DetectedToolsSection } from "./DetectedToolsSection";
-import { ToggleRow } from "./ToggleRow";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 
 // The Launch tools tab: what the Launch section on THIS machine offers.
 // The keys it edits (launchers, hiddenLaunchers, launchScripts) live in

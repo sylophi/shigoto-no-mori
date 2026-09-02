@@ -17,6 +17,7 @@ import {
   useCollapsedProjects,
   useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
+import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
@@ -100,11 +101,13 @@ export function Sidebar() {
   // Peers' forests, merged into the tree beside the local rows. The
   // inbox stays local: it triages this machine's work.
   const { items: remoteItems, loading: remoteLoading } = useRemoteForests();
+  const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
         worktreeQueries,
         pullRequestQueries,
+        configQueries,
         openShelves,
       })
     : buildSidebarRows({

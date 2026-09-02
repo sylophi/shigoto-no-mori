@@ -298,8 +298,6 @@ async function main() {
       await assert.rejects(bridge.api.fs.listDirectory("/tmp"), refused);
       await assert.rejects(bridge.api.fs.scanForGitRepos("/tmp"), refused);
       await assert.rejects(bridge.api.fs.isGitRepo("/tmp"), refused);
-      await assert.rejects(bridge.api.fs.stat("/tmp"), refused);
-      await assert.rejects(bridge.api.fs.listEntries("/tmp"), refused);
       await assert.rejects(bridge.api.projects.remove("p1"), refused);
       await assert.rejects(bridge.api.projects.setSort("name"), refused);
       await assert.rejects(bridge.api.projects.toggleCollapsed("p1"), refused);
