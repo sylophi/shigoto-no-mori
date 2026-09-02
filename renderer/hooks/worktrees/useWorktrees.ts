@@ -24,7 +24,7 @@ export function worktreesQueryOptions(projectId: string | null) {
   });
 }
 
-// Shared by the two sidebar fan-outs; see useAllProjectWorktrees.
+// Shared by the sidebar fan-outs. See useAllProjectWorktrees.
 export function combineFanOut<T>(
   results: readonly {
     data: T | undefined;

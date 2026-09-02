@@ -116,6 +116,8 @@ var projectConfigKeys = []configKey{
 		desc: "port-pool base port"},
 	{name: "lastMergeMethod", kind: enumKind, enum: []string{"merge", "squash", "rebase"},
 		desc: "Preferred PR merge method"},
+	{name: "showPrimaryInInbox", kind: boolKind, def: false,
+		desc: "List the primary checkout in the inbox view"},
 	{name: "carryOver", kind: jsonKind, def: []any{}, elem: validCarryOverEntry,
 		desc: "Files carried into new worktrees (`carryover` verbs)",
 		hint: "projects config carryover add/rm"},

@@ -16,6 +16,7 @@ import {
   useCollapsedProjects,
   useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
+import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
@@ -88,11 +89,13 @@ export function Sidebar() {
   // which re-probe git for every project on mount -- never unmount.
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
+  const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
         worktreeQueries,
         pullRequestQueries,
+        configQueries,
         openShelves,
       })
     : buildSidebarRows({

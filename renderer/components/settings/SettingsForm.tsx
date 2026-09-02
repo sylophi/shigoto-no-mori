@@ -28,7 +28,7 @@ import { DetectedToolsSection } from "./DetectedToolsSection";
 import { PortPoolLink } from "./PortPoolLink";
 import { TerrierLink } from "./TerrierLink";
 import { CliSection } from "./CliSection";
-import { ToggleRow } from "./ToggleRow";
+import { ToggleRow } from "@/components/shared/ToggleRow";
 import { VersionSection } from "./VersionSection";
 
 interface FormState {

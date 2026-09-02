@@ -1,3 +1,4 @@
+import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import {
@@ -10,9 +11,11 @@ import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
 
 interface BuildInboxRowsArgs {
   projects: Project[];
-  // Both positionally aligned with `projects`.
+  // All three positionally aligned with `projects`.
   worktreeQueries: ProjectWorktreeQueries;
   pullRequestQueries: ProjectPullRequestQueries;
+  // Carries each project's showPrimaryInInbox opt-in.
+  configQueries: ProjectShigomoriConfigQueries;
   // Which shelves are open. Absence means shut, so both shelves start
   // folded on every launch -- the same reasoning as the per-project
   // "Show shelved" reveal in the classic view.
@@ -28,11 +31,14 @@ interface Entry {
 
 // A worktree lands in exactly one box. Shelving is an explicit user
 // decision, so it outranks mergedness: a shelved branch that also merged
-// stays where the user filed it.
+// stays where the user filed it. A primary is always live: it can't be
+// shelved, and a merged PR on whatever branch it happens to have checked
+// out doesn't make the project's root "done".
 function bucketFor(
   worktree: Worktree,
   pr: PullRequest | undefined,
 ): InboxShelf | "live" {
+  if (worktree.isPrimary) return "live";
   if (worktree.shelved) return "shelved";
   if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
   return "live";
@@ -57,9 +63,10 @@ function worktreeRow(entry: Entry): SidebarRow {
 
 // Flattens every project's worktrees into the inbox view's three boxes:
 // live work at the top with no header, then the Shelved and Merged
-// shelves. Primary checkouts are left out entirely -- they're a
-// project's root, not a piece of in-flight work, and one per project
-// would crowd out everything the list exists to show.
+// shelves. Primary checkouts are left out unless the project opts in
+// (ShigomoriConfigSchema.showPrimaryInInbox) -- they're a project's
+// root, not a piece of in-flight work, and one per project would crowd
+// out everything the list exists to show.
 //
 // A plain function for the same reason as buildSidebarRows: the queries
 // belong to the Sidebar, so switching views is free.
@@ -67,6 +74,7 @@ export function buildInboxRows({
   projects,
   worktreeQueries,
   pullRequestQueries,
+  configQueries,
   openShelves,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const failedCount = worktreeQueries.filter((q) => q.error).length;
@@ -82,7 +90,8 @@ export function buildInboxRows({
     const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
     const prs = pullRequestQueries[i]?.data;
     for (const worktree of trees) {
-      if (worktree.isPrimary) continue;
+      if (worktree.isPrimary && !configQueries[i]?.data?.showPrimaryInInbox)
+        continue;
       const entry: Entry = {
         worktree,
         projectName: project.name,
