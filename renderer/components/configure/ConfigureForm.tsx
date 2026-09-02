@@ -220,20 +220,14 @@ export function ConfigureForm({
           </section>
 
           <section className="space-y-3">
-            <div>
-              <SectionHeading className="mb-1">Primary checkout</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                How the repo's own checkout, the one worktrees branch from,
-                shows up in the app.
-              </p>
-            </div>
+            <SectionHeading className="mb-1">Primary checkout</SectionHeading>
             <ToggleRow
               checked={form.showPrimaryInInbox}
               onCheckedChange={(v) =>
                 setForm((prev) => ({ ...prev, showPrimaryInInbox: v }))
               }
               label="Show in the inbox"
-              description="Lists the primary checkout among the inbox's live rows, sorted by activity like everything else. It never lands on the Shelved or Merged shelves. The project tree view always shows it."
+              description="Lists it alongside the worktrees. The project view always shows it."
             />
           </section>
 
