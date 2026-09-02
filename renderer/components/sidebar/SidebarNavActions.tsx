@@ -1,7 +1,7 @@
 // The footer's page-nav cluster (Devices, Settings), shared by the
 // desktop footer and the web sidebar's so the two shells' right edges
 // cannot drift. Everything shell-specific arrives as props: the web
-// has no updater, the desktop gates Devices on the account service.
+// has no updater, and each shell states its own Devices policy.
 import { MonitorSmartphone, Settings as SettingsIcon } from "lucide-react";
 import { NavIconButton } from "./NavIconButton";
 

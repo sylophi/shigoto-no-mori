@@ -1,50 +1,47 @@
 import { useAuth, useClerk } from "@clerk/react";
-import { LogIn, MonitorSmartphone } from "lucide-react";
+import {
+  CloudOff,
+  LogIn,
+  MonitorSmartphone,
+  type LucideIcon,
+} from "lucide-react";
+import { ACCOUNT_ENV } from "@shared/account/serviceConfig";
 import { Button } from "@/components/ui/button";
 import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
 import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
 // "Account": sign in to the device hub so this device can reach the
-// account's other devices (v2 step 4, slice B). Two states. Signed out
-// is one panel with one button. Signed in, the whole page is the device
-// registry, which carries the account line (id, headcount, sign-out)
-// itself, since that line is the registry's caption and nothing else.
+// account's other devices (v2 step 4, slice B). Three states. Not
+// configured (no account service in this build's launch env) is one
+// panel that says so and how to fix it. Signed out is one panel with
+// one button. Signed in, the whole page is the device registry, which
+// carries the account line (id, headcount, sign-out) itself, since that
+// line is the registry's caption and nothing else.
 export function AccountSection() {
   const { data: status } = useAccountStatus();
-  const signedIn = status?.signedIn === true;
-
-  // Unreachable in practice: the sidebar's Devices button renders only
-  // when the account service is configured, so an unconfigured build
-  // never navigates here. Render nothing rather than keep explanatory
-  // copy alive for a state the nav already prevents.
-  if (status !== undefined && !status.configured) return null;
 
   if (status === undefined) {
     return <p className="text-xs text-muted-foreground/70">Loading&hellip;</p>;
   }
 
-  if (!signedIn) {
+  if (!status.configured) {
+    return <NotConfiguredPanel />;
+  }
+
+  if (!status.signedIn) {
     return (
-      <EmptyPanel>
-        <div className="flex flex-col items-center gap-3">
-          <MonitorSmartphone
-            aria-hidden
-            className="size-6 text-muted-foreground/60"
-          />
-          <div className="flex flex-col gap-1">
-            <p className="font-medium text-foreground">
-              Your other machines go here.
-            </p>
-            <p className="max-w-sm text-xs">
-              Sign in and every device on the account shows up in your sidebar,
-              worktrees and all. Enrollment stores a device credential in your
-              OS keychain.
-            </p>
-          </div>
-          <ClerkSignInButton />
-        </div>
-      </EmptyPanel>
+      <StatePanel
+        icon={MonitorSmartphone}
+        title="Your other machines go here."
+        action={<ClerkSignInButton />}
+      >
+        <p className="max-w-sm text-xs">
+          Sign in and every device on the account shows up in your sidebar,
+          worktrees and all. Enrollment stores a device credential in your OS
+          keychain.
+        </p>
+      </StatePanel>
     );
   }
 
@@ -53,6 +50,57 @@ export function AccountSection() {
       accountId={status.accountId}
       localDeviceName={status.deviceName}
     />
+  );
+}
+
+// The chrome the two empty states share: an icon, a heading with its
+// copy grouped tight beneath it, and an optional action set apart.
+function StatePanel({
+  icon: Icon,
+  title,
+  action,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <EmptyPanel>
+      <div className="flex flex-col items-center gap-3">
+        <Icon aria-hidden className="size-6 text-muted-foreground/60" />
+        <div className="flex flex-col gap-1">
+          <p className="font-medium text-foreground">{title}</p>
+          {children}
+        </div>
+        {action}
+      </div>
+    </EmptyPanel>
+  );
+}
+
+// The .env.local hint is dev-only: a packaged build sources the account
+// service from its build environment alone (hub/README.md), so the
+// advice would mislead there.
+function NotConfiguredPanel() {
+  return (
+    <StatePanel icon={CloudOff} title="Device sync isn't set up in this build.">
+      <p className="max-w-sm text-xs">
+        The account service settings{" "}
+        <code className="font-mono">{ACCOUNT_ENV.hubUrl}</code> and{" "}
+        <code className="font-mono">{ACCOUNT_ENV.publishableKey}</code> are
+        missing, so sign-in is unavailable and other devices cannot appear here.
+      </p>
+      {window.api.isDev && (
+        <p className="max-w-sm text-xs">
+          Dev builds read them from a{" "}
+          <code className="font-mono">.env.local</code> in the checkout the app
+          was started from (or the launch environment). Add the file and restart
+          the app.
+        </p>
+      )}
+    </StatePanel>
   );
 }
 
