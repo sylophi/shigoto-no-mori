@@ -4,13 +4,21 @@
 // shared/ipc/modules/forward.ts). The registry rides the shared idle
 // registry (host/lib/idleRegistry.ts). Connections are ephemeral by
 // design, nothing survives a restart and nothing is persisted.
-import { connect, type Socket } from "node:net";
-import { forwardContract } from "@shared/ipc/modules/forward";
+import type { Socket } from "node:net";
+import { errorMessageOf } from "@shared/errors";
+import {
+  FORWARD_CONN_CLOSED,
+  FORWARD_CONNECT_FAILED,
+  FORWARD_POLL_IN_FLIGHT,
+  FORWARD_TOO_MANY_CONNS,
+  FORWARD_UNKNOWN_CONN,
+  forwardContract,
+} from "@shared/ipc/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { waitForDrainOrClose } from "@host/lib/net";
+import { dialLoopback, waitForDrainOrClose } from "@host/lib/net";
 
 // How long a poll with nothing to report holds before answering empty.
 // The wire has no per-call timeout, so the long-poll is what keeps a
@@ -108,10 +116,10 @@ function takeBuffered(conn: Conn, limit: number): Buffer {
   return Buffer.concat(taken, size);
 }
 
-// Error messages below are stable markers, not prose: Electron IPC and
-// the device wires both preserve only the message string, so the slice
-// B client matches these exact texts to tell "re-dial the conn" from a
-// real failure. Keep them in sync with the checks.
+// Error messages below are stable markers, not prose (the FORWARD_*
+// constants beside the contract): Electron IPC and the device wires
+// both preserve only the message string, so the slice B client and the
+// UI match these exact texts.
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
   {
@@ -119,30 +127,23 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
       // The schema already pinned the range. Re-check so this handler
       // stays fail-closed even if it is ever reached off-contract.
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error("connect-failed: port out of range");
+        throw new Error(`${FORWARD_CONNECT_FAILED}: port out of range`);
       }
-      if (conns.size() >= MAX_CONNS) throw new Error("too-many-conns");
+      if (conns.size() >= MAX_CONNS) throw new Error(FORWARD_TOO_MANY_CONNS);
       // Loopback only, always: the feature is reaching the host's OWN
-      // dev server, never using the host as a hop to its network.
-      const socket = await new Promise<Socket>((resolve, reject) => {
-        const dialing = connect({ host: "127.0.0.1", port });
-        const onError = (error: Error) =>
-          reject(new Error(`connect-failed: ${error.message}`));
-        dialing.once("error", onError);
-        // A wedged listener (SYN dropped, backlog full) answers neither
-        // connect nor error, and this socket is not in the registry yet
-        // so no sweep can reach it: without a deadline the invoke hangs
-        // forever and burns one of the peer's in-flight slots.
-        dialing.setTimeout(DIAL_TIMEOUT_MS, () => {
-          dialing.destroy();
-          reject(new Error("connect-failed: dial timed out"));
+      // dev server, never using the host as a hop to its network. The
+      // shared dial (host/lib/net.ts) tries 127.0.0.1 then ::1 and
+      // carries its own deadline: this socket is not in the registry
+      // yet so no sweep could reach a hung dial, and without one the
+      // invoke would burn one of the peer's in-flight slots forever.
+      let socket: Socket;
+      try {
+        socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
+      } catch (error) {
+        throw new Error(`${FORWARD_CONNECT_FAILED}: ${errorMessageOf(error)}`, {
+          cause: error,
         });
-        dialing.once("connect", () => {
-          dialing.setTimeout(0);
-          dialing.off("error", onError);
-          resolve(dialing);
-        });
-      });
+      }
       // Nagle batches small writes against the poll-based downlink's
       // round trips, so keystrokes and small frames must not wait on it.
       socket.setNoDelay(true);
@@ -173,9 +174,9 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
 
     send: async ({ connId, dataB64 }) => {
       const conn = conns.get(connId);
-      if (conn === undefined) throw new Error("unknown-conn");
+      if (conn === undefined) throw new Error(FORWARD_UNKNOWN_CONN);
       conns.touch(connId);
-      if (conn.remoteEnded) throw new Error("conn-closed");
+      if (conn.remoteEnded) throw new Error(FORWARD_CONN_CLOSED);
       const data = Buffer.from(dataB64, "base64");
       if (!conn.socket.write(data)) {
         // Awaiting drain paces the sender to what the loopback service
@@ -186,18 +187,18 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
       // conn dropped or ended while the write was parked kept that
       // promise for none of them, so it must refuse, not resolve.
       if (conns.get(connId) !== conn || conn.remoteEnded) {
-        throw new Error("conn-closed");
+        throw new Error(FORWARD_CONN_CLOSED);
       }
     },
 
     poll: async ({ connId }) => {
       const conn = conns.get(connId);
-      if (conn === undefined) throw new Error("unknown-conn");
+      if (conn === undefined) throw new Error(FORWARD_UNKNOWN_CONN);
       conns.touch(connId);
       // The slice B client keeps exactly one poll in flight per conn.
       // A second is a bug, and serving it would race the two responses
       // over one byte stream.
-      if (conn.waker !== null) throw new Error("poll-in-flight");
+      if (conn.waker !== null) throw new Error(FORWARD_POLL_IN_FLIGHT);
       if (conn.buffered === 0 && !conn.remoteEnded) {
         await waitForActivity(conn);
       }

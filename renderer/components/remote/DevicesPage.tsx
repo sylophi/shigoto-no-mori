@@ -6,8 +6,8 @@ import { AccountSection } from "./AccountSection";
 // fact about the account, not a preference of this machine, so it lives
 // here rather than under Settings -- along with the one device fact the
 // other machines depend on, whether this one stays reachable to them,
-// which now sits inside this device's own row instead of in a section
-// of its own.
+// which sits inside this device's own row instead of in a section of
+// its own.
 export function DevicesPage() {
   return (
     <PageShell

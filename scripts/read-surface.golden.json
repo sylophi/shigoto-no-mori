@@ -15,6 +15,7 @@
   "packageScripts:list",
   "portPool:isActive",
   "portPool:isInstalled",
+  "ports:list",
   "projects:defaultBranch",
   "projects:getCollapsed",
   "projects:getSidebarView",

@@ -49,8 +49,9 @@
 // the conservative belt against a peer whose close code cannot be
 // trusted (an old build predating CLOSE_AUTH_LOCKED_OUT): such a
 // blocked-but-never-helloed error retires just that candidate, and if
-// it is the LAST one the exhaustion reject converts it to its
-// transient form (same message, same close code, no blocked verdict)
+// it is the LAST one the exhaustion reject carries it in its transient
+// form (its close code kept, no blocked verdict, its message folded
+// into the per-candidate summary every exhaustion reject names)
 // rather than letting a stale-shaped lockout park the peer. Both
 // halves err toward retrying, which is the safe direction: a redial
 // costs one refused connection, a wrong park costs the peer until the
@@ -91,8 +92,10 @@ import {
   type DirectConnectInfoInput,
   DirectConnectInfoSchema,
 } from "@shared/ipc/modules/direct";
+import { errorMessageOf } from "@shared/errors";
 import {
   openDevice,
+  type OpenClientSocket,
   RemoteConnectError,
   type DeviceConnection,
   type PendingDeviceConnection,
@@ -190,6 +193,11 @@ export type DirectDialerDeps = {
   // dial ws:// under https, mixed content), the app takes the default
   // and races everything.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
+  // The candidate sockets' constructor, defaulting to the platform
+  // global WebSocket. The Electron main process injects the `ws`
+  // package so a failed candidate names its errno instead of a bare
+  // 1006 (see ClientSocket in wsClientTransport.ts).
+  openSocket?: OpenClientSocket;
   // Test seams. Real callers take the defaults and real time.
   deadlineMs?: number;
   now?: () => number;
@@ -202,22 +210,73 @@ export type DirectDialer = {
   ): Promise<PeerConnection>;
 };
 
-// The exhaustion reject's one conversion (see BLOCKED VERDICTS in the
-// header). A current host names its lockout on the wire
-// (CLOSE_AUTH_LOCKED_OUT), so nothing blocked should reach here at
-// all: the hello-sent case rejects the attempt early, and a lockout is
-// not blocked in the first place. This is the SKEW belt. An old peer
-// still refuses a locked-out connection with CLOSE_AUTH_FAILED, and if
-// that candidate is the last to retire, its error is what the attempt
-// would reject with -- a temporary bench wearing a permanent verdict's
-// clothes, which the keeper answers by parking with no timer while the
-// lockout quietly expires. The message and close code survive so the
-// reason stays truthful. Only the blocked semantics are dropped.
-function asTransientVerdict(error: unknown): unknown {
-  if (error instanceof RemoteConnectError && error.blocked) {
-    return new RemoteConnectError(error.message, error.code, false);
+type CandidateFailure = { candidate: DirectCandidate; error: unknown };
+
+// The exhaustion reject: every candidate retired and none refused a
+// hello it had read. Its message names EVERY candidate and how it
+// died, because the last candidate's error alone ("closed before
+// welcome (code 1006)") says nothing about which address was even
+// tried, and on a platform whose WebSocket reports no cause a refused
+// port, an unroutable address and a permission block all produce
+// exactly that line. Grouped by reason so six interface addresses
+// dying the same way read as one clause. The hints name the two facts
+// a user can act on: a peer that advertised no tunnel (no tunnel
+// candidate among the retired ones) is reachable from its own network
+// only, and EHOSTUNREACH on a LAN address is macOS refusing the app
+// Local Network access far more often than a routing problem.
+//
+// Still a RemoteConnectError carrying the last candidate's close code,
+// and NEVER blocked (see BLOCKED VERDICTS in the header). A current
+// host names its lockout on the wire (CLOSE_AUTH_LOCKED_OUT), so
+// nothing blocked should reach here at all: the hello-sent case
+// rejects the attempt early, and a lockout is not blocked in the first
+// place. This is the SKEW belt. An old peer still refuses a locked-out
+// connection with CLOSE_AUTH_FAILED, and if that candidate is the last
+// to retire, its verdict is a temporary bench wearing a permanent
+// verdict's clothes, which the keeper would answer by parking with no
+// timer while the lockout quietly expires. So only the code and the
+// message survive, never the blocked semantics.
+function exhaustionError(
+  deviceId: string,
+  failures: readonly CandidateFailure[],
+): RemoteConnectError {
+  const byReason = new Map<string, string[]>();
+  for (const { candidate, error } of failures) {
+    const reason = errorMessageOf(error);
+    const urls = byReason.get(reason) ?? [];
+    urls.push(`${candidate.kind} ${candidate.url}`);
+    byReason.set(reason, urls);
   }
-  return error;
+  // Sorted so the text does not depend on retirement order (a race
+  // outcome): the keeper logs a failure only when its text changes.
+  const attempts = [...byReason]
+    .toSorted(([a], [b]) => a.localeCompare(b))
+    .map(([reason, urls]) => `${urls.join(", ")}: ${reason}`)
+    .join(". ");
+  const hints: string[] = [];
+  if (!failures.some(({ candidate }) => candidate.kind === "tunnel")) {
+    hints.push(
+      "The peer offered no tunnel endpoint, so it can only be reached from its own local network.",
+    );
+  }
+  if (
+    failures.some(
+      ({ candidate, error }) =>
+        candidate.kind === "lan" &&
+        errorMessageOf(error).includes("EHOSTUNREACH"),
+    )
+  ) {
+    hints.push(
+      "No route to host: if both machines share a network, macOS may be denying this app Local Network access (System Settings > Privacy & Security > Local Network).",
+    );
+  }
+  const last = failures[failures.length - 1]?.error;
+  return new RemoteConnectError(
+    `could not reach peer ${deviceId} on any candidate (${attempts})` +
+      (hints.length === 0 ? "" : `. ${hints.join(" ")}`),
+    last instanceof RemoteConnectError ? last.code : null,
+    false,
+  );
 }
 
 // A leg abandoned by the deadline may still resolve later. Its
@@ -260,9 +319,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       let done = false;
       let winnerIndex = -1;
       let outstanding = candidates.length;
-      let lastError: unknown = new Error(
-        `no dialable candidate for peer ${deviceId}`,
-      );
+      // Every retired candidate with its error, in retirement order,
+      // for the exhaustion reject's per-candidate summary.
+      const failures: CandidateFailure[] = [];
       // Indexes whose socket is open and whose hello is queued behind
       // the one in flight. Null helloIndex means the pump may send the
       // next hello.
@@ -273,6 +332,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         (candidate, index) =>
           openDevice({
             url: candidate.url,
+            openSocket: deps.openSocket,
             // This candidate's own single-use ticket rides the
             // existing hello token field.
             token: candidate.ticket,
@@ -306,7 +366,11 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // One settlement per candidate: either its whenOpen rejected
       // (never queued) or its authenticate rejected (its hello turn
       // failed, or its socket died while queued).
-      const failCandidate = (error: unknown, helloWasSent: boolean): void => {
+      const failCandidate = (
+        index: number,
+        error: unknown,
+        helloWasSent: boolean,
+      ): void => {
         if (done) return;
         if (
           helloWasSent &&
@@ -326,14 +390,14 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           reject(error);
           return;
         }
-        lastError = error;
+        failures.push({ candidate: candidates[index], error });
         outstanding -= 1;
         if (outstanding === 0) {
           done = true;
           // Every candidate retired without a hello-sent refusal, so a
           // blocked verdict among them came from a peer whose close
           // code cannot be trusted, and is surfaced as transient.
-          reject(asTransientVerdict(lastError));
+          reject(exhaustionError(deviceId, failures));
         }
       };
 
@@ -359,7 +423,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           },
           (error: unknown) => {
             helloIndex = null;
-            failCandidate(error, handles[index].helloSent());
+            failCandidate(index, error, handles[index].helloSent());
             pump();
           },
         );
@@ -373,7 +437,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             pump();
           },
           (error: unknown) => {
-            failCandidate(error, false);
+            failCandidate(index, error, false);
           },
         );
       });

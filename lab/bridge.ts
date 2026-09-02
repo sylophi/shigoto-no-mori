@@ -9,6 +9,8 @@
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
 import { buildApi } from "@shared/ipc/client";
+import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
+import type { ShigomoriWorktreeData } from "@shared/schemas";
 import type { ContractScope } from "@shared/ipc/contract";
 import type { RelayStatus } from "@shared/ipc/modules/relay";
 import type { ClientTransport } from "@shared/ipc/transport";
@@ -19,11 +21,15 @@ import {
   accountDevices,
   forests,
   grantedDeviceIds,
+  labCustomPorts,
   labGlobalConfig,
+  labListeningPorts,
+  labPoolPorts,
   LAB_ACCOUNT_ID,
   LAB_APP_VERSION,
   LOCAL_DEVICE_ID,
   MINI_ID,
+  projectIconFor,
   THINKPAD_ID,
   WORKPC_ID,
   type DeviceForest,
@@ -75,6 +81,11 @@ function createFixtureWire(
 
 function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
   const collapsed = new Set<string>();
+  // The worktree data files, seeded from the fixtures and mutated by
+  // worktreeData:write so adding and removing ports shows its outcome.
+  const worktreeData = new Map<string, ShigomoriWorktreeData>(
+    Object.entries(labCustomPorts).map(([id, ports]) => [id, { ports }]),
+  );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
@@ -100,7 +111,10 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
       remote: ["origin/main"],
     }),
     "projects:pickWorktreeName": () => "tender-tanuki",
-    "projects:icon": () => null,
+    "projects:icon": ({ projectId }) =>
+      projectIconFor(
+        forest.projects.find((project) => project.id === projectId)?.name ?? "",
+      ),
     "projects:listIgnoredPaths": () => [".env.local", "node_modules"],
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
@@ -132,6 +146,20 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:diff": () => LAB_DIFF,
     "worktrees:commitDiff": () => LAB_DIFF,
+    "worktreeData:read": ({ worktreeId }) =>
+      worktreeData.get(worktreeId) ?? null,
+    "worktreeData:write": ({ worktreeId, data }) => {
+      worktreeData.set(worktreeId, data);
+    },
+    // The host's own merge, with the posed liveness mapped on.
+    "ports:list": ({ worktreeId }) => ({
+      ports: mergeWorktreePorts(
+        labPoolPorts[worktreeId] ?? [],
+        worktreeData.get(worktreeId)?.ports ?? [],
+      ).map((entry) =>
+        Object.assign(entry, { listening: labListeningPorts.has(entry.port) }),
+      ),
+    }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
@@ -232,7 +260,6 @@ async function labSyncPull(
     isExternal: false,
     detached: false,
     shelved: false,
-    port: undefined,
   };
   (local.worktrees[project.id] ??= []).push(landed as any);
   if (transplant && source !== undefined) {
@@ -404,6 +431,22 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
   });
 
+  // The engine's forward table, mutated by start/stop so the switches
+  // on a remote worktree's ports really flip. One forward pre-posed so
+  // the live state is visible without a click.
+  const forwards = new Map<string, any>([
+    [
+      "a3f19c2e77b04d5586e1f20c9ab34d61",
+      {
+        forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
+        deviceId: THINKPAD_ID,
+        remotePort: 5173,
+        localPort: 5173,
+        connCount: 2,
+      },
+    ],
+  ]);
+
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,
     "account:listDevices": () => registryDevices(),
@@ -452,22 +495,44 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       window.open(url, "_blank", "noopener,noreferrer");
     },
     "shell:showItemInFolder": () => undefined,
-    "portForward:list": () => ({
-      forwards: [
-        {
-          forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
-          deviceId: THINKPAD_ID,
-          remotePort: 5173,
-          localPort: 5173,
-          connCount: 2,
-        },
-      ],
-    }),
-    "portForward:start": ({ remotePort, localPort }) => ({
-      forwardId: "b4e20d3f88c15e6697f2031dabc45e72",
-      localPort: localPort ?? remotePort,
-    }),
-    "portForward:stop": () => undefined,
+    "portForward:list": () => ({ forwards: [...forwards.values()] }),
+    "portForward:start": async ({ deviceId, remotePort, localPort }) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const bound = localPort ?? remotePort;
+      // One local port posed as taken, so the inline bind error can be
+      // seen: node's EADDRINUSE wording, as the engine would pass on.
+      if (bound === 3000) {
+        throw new Error(
+          `listen EADDRINUSE: address already in use 127.0.0.1:${bound}`,
+        );
+      }
+      // The engine's rule: one forward per (device, remote port), and a
+      // start naming another local port moves it.
+      for (const [id, forward] of forwards) {
+        if (
+          forward.deviceId === deviceId &&
+          forward.remotePort === remotePort
+        ) {
+          if (forward.localPort === bound)
+            return { forwardId: id, localPort: bound };
+          forwards.delete(id);
+        }
+      }
+      const forwardId = crypto.randomUUID().replace(/-/g, "");
+      forwards.set(forwardId, {
+        forwardId,
+        deviceId,
+        remotePort,
+        localPort: bound,
+        connCount: 0,
+      });
+      client.emit("portForward:changed", undefined);
+      return { forwardId, localPort: bound };
+    },
+    "portForward:stop": ({ forwardId }) => {
+      forwards.delete(forwardId);
+      client.emit("portForward:changed", undefined);
+    },
   };
 
   const client = createFixtureWire("client", clientHandlers, "client");

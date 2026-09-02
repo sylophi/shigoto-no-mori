@@ -1,6 +1,7 @@
 import { BranchLabel } from "@/components/ui/branch-label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
+import { RowTag } from "@/components/ui/row-tag";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -142,15 +143,5 @@ export function TidyRow({
         />
       </div>
     </label>
-  );
-}
-
-// Neutral marker for a property of the worktree itself, as opposed to
-// the verdict badge's judgement about removing it.
-function RowTag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-      {children}
-    </span>
   );
 }

@@ -133,7 +133,10 @@
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "direct:check".
 import assert from "node:assert/strict";
+import { rmSync, writeFileSync } from "node:fs";
 import { createServer, connect as netConnect } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
 import {
   CLOSE_AUTH_FAILED,
@@ -168,6 +171,7 @@ import {
   cloudflaredArgs,
   cloudflaredEnv,
   createCloudflaredRunner,
+  resolveCloudflaredBinary,
   TUNNEL_BACKOFF_LADDER_MS,
   TUNNEL_PROBE_DEADLINE_MS,
   TUNNEL_PROBE_DELAYS_MS,
@@ -262,6 +266,9 @@ function fakeBrokerDialer(answer, opts = {}) {
     localDeviceId: "A",
     localAppVersion: "1.0.0",
     dialableKinds: opts.dialableKinds,
+    // The production socket (main injects ws), so the errno path the
+    // seam exists for is what the proof runs.
+    openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? 4000,
   });
   return { dialer, brokerCalls: () => brokerCalls };
@@ -1676,7 +1683,12 @@ async function main() {
       );
       await assert.rejects(
         () => dialing,
-        (error) => error instanceof RemoteConnectError,
+        (error) =>
+          error instanceof RemoteConnectError &&
+          // The exhaustion message names the candidate and, through
+          // the ws socket main injects, the errno itself, which is
+          // what makes a failed dial diagnosable on the Devices page.
+          /lan ws:\/\/.*ECONNREFUSED/.test(error.message),
       );
       assert.deepEqual(bridge.directPeerVersions(), {});
       // No relay session was created for the data: the throwaway
@@ -2141,7 +2153,7 @@ async function main() {
 
   await check(
     "cloudflared deciders are pure and disciplined: the tunnel ladder caps through the supervisor's shared lookup, and the token rides env only, never argv",
-    async () => {
+    async (track) => {
       // The shared lookup clamps at both ends of the tunnel ladder.
       assert.equal(
         backoffDelayMs(
@@ -2159,7 +2171,9 @@ async function main() {
       // env's TUNNEL_TOKEN and NOWHERE in argv.
       const token = "test-connector-token-value";
       const args = cloudflaredArgs();
-      assert.deepEqual(args, ["tunnel", "run"]);
+      // --no-autoupdate is load-bearing: the shipped copy must never
+      // replace its own (signed) binary.
+      assert.deepEqual(args, ["tunnel", "--no-autoupdate", "run"]);
       assert.ok(
         args.every((arg) => !arg.includes(token)),
         "the token leaked into argv",
@@ -2167,6 +2181,23 @@ async function main() {
       const env = cloudflaredEnv({ PATH: "/usr/bin" }, token);
       assert.equal(env.TUNNEL_TOKEN, token);
       assert.equal(env.PATH, "/usr/bin");
+      // Resolution order: the configured override, then the copy the
+      // app ships, then PATH. A stand-in that answers --version plays
+      // both the override and the bundled copy.
+      const fake = join(tmpdir(), `sm-fake-cloudflared-${process.pid}`);
+      writeFileSync(fake, "#!/bin/sh\necho fake 0.0.0\n", { mode: 0o755 });
+      track(() => rmSync(fake, { force: true }));
+      assert.equal(await resolveCloudflaredBinary(undefined, fake), fake);
+      assert.equal(
+        await resolveCloudflaredBinary(fake, "/nonexistent/cloudflared"),
+        fake,
+        "the configured override must beat the bundled copy",
+      );
+      assert.notEqual(
+        await resolveCloudflaredBinary(undefined, "/nonexistent/cloudflared"),
+        "/nonexistent/cloudflared",
+        "a missing bundled copy must fall through, never be returned",
+      );
     },
   );
 

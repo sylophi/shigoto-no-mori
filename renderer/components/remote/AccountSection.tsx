@@ -1,18 +1,15 @@
 import { useAuth, useClerk } from "@clerk/react";
-import { LogIn } from "lucide-react";
+import { LogIn, MonitorSmartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
-import { abbreviateId } from "@/lib/abbreviateId";
 import { DeviceRegistry } from "./DeviceRegistry";
+import { EmptyPanel } from "./EmptyPanel";
 
 // "Account": sign in to the relay so this device can reach the
 // account's other devices (v2 step 4, slice B). Two states. Signed out
-// is a single button under one line of copy. Signed in, the account
-// itself is one thin line -- an id and nothing else, because a relay
-// account has no other properties -- and everything below it is the
-// device registry, which is what the page is actually for. Sign out
-// lives on this device's row there, next to the machine it signs out.
+// is one panel with one button. Signed in, the whole page is the device
+// registry, which carries the account line (id, headcount, sign-out)
+// itself, since that line is the registry's caption and nothing else.
 export function AccountSection() {
   const { data: status } = useAccountStatus();
   const signedIn = status?.signedIn === true;
@@ -29,29 +26,33 @@ export function AccountSection() {
 
   if (!signedIn) {
     return (
-      <section className="space-y-3">
-        <div>
-          <SectionHeading className="mb-1">Account</SectionHeading>
-          <p className="text-xs text-muted-foreground">
-            Sign in to reach this account&apos;s other devices through the
-            relay. Enrollment stores a device credential in your OS keychain.
-          </p>
+      <EmptyPanel>
+        <div className="flex flex-col items-center gap-3">
+          <MonitorSmartphone
+            aria-hidden
+            className="size-6 text-muted-foreground/60"
+          />
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-foreground">
+              Your other machines go here.
+            </p>
+            <p className="max-w-sm text-xs">
+              Sign in and every device on the account shows up in your sidebar,
+              worktrees and all. Enrollment stores a device credential in your
+              OS keychain.
+            </p>
+          </div>
+          <ClerkSignInButton />
         </div>
-        <ClerkSignInButton />
-      </section>
+      </EmptyPanel>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <SectionHeading>Account</SectionHeading>
-        <span className="font-mono text-xs text-foreground">
-          {abbreviateId(status.accountId)}
-        </span>
-      </div>
-      <DeviceRegistry localDeviceName={status.deviceName} />
-    </div>
+    <DeviceRegistry
+      accountId={status.accountId}
+      localDeviceName={status.deviceName}
+    />
   );
 }
 
@@ -69,7 +70,6 @@ function ClerkSignInButton() {
   if (isSignedIn) {
     return (
       <Button
-        variant="outline"
         size="sm"
         disabled={enroll.isPending}
         onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
@@ -80,7 +80,7 @@ function ClerkSignInButton() {
     );
   }
   return (
-    <Button variant="outline" size="sm" onClick={() => clerk.openSignIn()}>
+    <Button size="sm" onClick={() => clerk.openSignIn()}>
       <LogIn />
       Sign in
     </Button>

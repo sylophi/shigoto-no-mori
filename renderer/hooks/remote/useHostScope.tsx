@@ -51,6 +51,7 @@ export type HostApi = Pick<
   | "launchers"
   | "packageScripts"
   | "portPool"
+  | "ports"
   | "projects"
   | "remoteAccess"
   | "runtime"

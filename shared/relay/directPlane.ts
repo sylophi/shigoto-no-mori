@@ -35,6 +35,7 @@ import {
   type DirectKeeper,
 } from "@shared/relay/directKeeper";
 import { applyDirectPresence } from "@shared/relay/directPresence";
+import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
 import type { SupervisorClock } from "@shared/remote/supervisor";
 
 // The slice of a relay connection the plane composes over, common to
@@ -65,6 +66,10 @@ export type DirectPlaneDeps = {
   // web bridge declares ["tunnel"], the app takes the dialer's
   // race-everything default.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
+  // The candidate sockets' constructor (directDial.ts). The Electron
+  // main process injects the `ws` package so a failed dial names its
+  // errno. The web bridge and the checks take the platform global.
+  openSocket?: OpenClientSocket;
   // The dialer's overall attempt deadline. A check seam: the fixtures
   // shrink it so failure scenarios settle fast, real owners omit it
   // and take the dialer's HELLO_TIMEOUT_MS default.
@@ -131,6 +136,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
         deps.broadcastPeerPush({ deviceId, channel, payload });
       },
       dialableKinds: deps.dialableKinds,
+      openSocket: deps.openSocket,
       deadlineMs: deps.deadlineMs,
     });
     return dialer;

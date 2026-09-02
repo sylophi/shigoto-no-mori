@@ -14,6 +14,11 @@ import {
   UPDATE_FEED_REPO,
 } from "./shared/cliDist.mts";
 import { productName, version } from "./package.json";
+import {
+  CLOUDFLARED_BINARY_NAME,
+  CLOUDFLARED_DIST_DIR,
+} from "./shared/cloudflaredDist.mts";
+import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/infoPlist.mts";
 import { rendererSchemeName } from "./shared/rendererScheme.mts";
 import {
   DMG_APP_ICON,
@@ -79,7 +84,16 @@ const config: ForgeConfig = {
     extraResource: [
       "resources/licenses",
       `${CLI_DIST_DIR}/${cliBinaryName("prod")}`,
+      // The tunnel connector, fetched by the prePackage hook below for
+      // the target platform (shared/cloudflaredDist.mts pins it), so
+      // remote access needs nothing installed.
+      `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
     ],
+    // The Local Network prompt's sentence (macOS 15+), shared with the
+    // dev bundle. See shared/infoPlist.mts.
+    extendInfo: {
+      NSLocalNetworkUsageDescription: LOCAL_NETWORK_USAGE_DESCRIPTION,
+    },
     ...(shouldSignMac
       ? {
           osxSign: {
@@ -95,7 +109,7 @@ const config: ForgeConfig = {
   },
   rebuildConfig: {},
   hooks: {
-    prePackage: async () => {
+    prePackage: async (_config, platform, arch) => {
       execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
@@ -105,6 +119,20 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
+      // Fetch the pinned cloudflared for the TARGET platform, not the
+      // build machine's: a cross-arch package must ship the arch it
+      // runs on.
+      execFileSync(
+        "node",
+        [
+          "scripts/fetch-cloudflared.mjs",
+          "--platform",
+          platform,
+          "--arch",
+          arch,
+        ],
+        { cwd: import.meta.dirname, stdio: "inherit" },
+      );
     },
   },
   // The dmg is what humans download: it opens the familiar

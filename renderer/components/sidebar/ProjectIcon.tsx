@@ -10,16 +10,21 @@ import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 // rather than decoration: the inbox is one row per project in no
 // particular grouping, so a missing icon would ripple the whole left
 // edge and cost more than the shift it saves.
+//
+// `deviceId` names the machine the project lives on when the caller is
+// not inside that device's scope (see useProjectIcon).
 export function ProjectIcon({
   projectId,
+  deviceId,
   className,
   fallback: Fallback,
 }: {
   projectId: string;
+  deviceId?: string;
   className?: string;
   fallback?: ComponentType<SVGProps<SVGSVGElement>>;
 }) {
-  const src = useProjectIcon(projectId);
+  const src = useProjectIcon(projectId, deviceId);
   // `className` stays last in both branches so a caller can still
   // override the defaults.
   const base = "size-3.5 shrink-0 select-none";

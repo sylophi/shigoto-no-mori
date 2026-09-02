@@ -5,9 +5,10 @@ import {
 } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 
-// A device's state as a tinted pill: the Devices page's registry rows
-// and the Settings header beside a device's name draw the same one, so
-// a machine reads the same in both places.
+// A device's state as a tinted pill, drawn beside the device's name in
+// the Settings header. The tint comes from the same tone families the
+// Devices page uses for its dots and avatars, so a machine's state
+// reads the same in both places.
 export function DeviceStatusPill({
   tone,
   label,

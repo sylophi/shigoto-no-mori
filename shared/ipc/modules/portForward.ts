@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/relay/protocol";
+import { PortNumberSchema } from "@shared/schemas";
 
 // Client-scoped control surface for the port-forward engine (v2 step 8,
 // slice B). The engine binds real TCP listeners on THIS machine's
@@ -18,20 +19,16 @@ import { DeviceIdSchema } from "@shared/relay/protocol";
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
-// Exported so the UI's port-input parsing shares this exact bound
-// instead of restating 1..65535.
-export const PortSchema = z.number().int().min(1).max(65535);
-
 export const PortForwardStartPayloadSchema = z.strictObject({
   deviceId: DeviceIdSchema,
-  remotePort: PortSchema,
+  remotePort: PortNumberSchema,
   // Omitted means an ephemeral local port, the common case.
-  localPort: PortSchema.optional(),
+  localPort: PortNumberSchema.optional(),
 });
 
 export const PortForwardStartResultSchema = z.strictObject({
   forwardId: ForwardIdSchema,
-  localPort: PortSchema,
+  localPort: PortNumberSchema,
 });
 
 export const PortForwardStopPayloadSchema = z.strictObject({
@@ -41,8 +38,8 @@ export const PortForwardStopPayloadSchema = z.strictObject({
 export const PortForwardSummarySchema = z.strictObject({
   forwardId: ForwardIdSchema,
   deviceId: DeviceIdSchema,
-  remotePort: PortSchema,
-  localPort: PortSchema,
+  remotePort: PortNumberSchema,
+  localPort: PortNumberSchema,
   connCount: z.number().int().min(0),
 });
 

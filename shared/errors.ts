@@ -18,8 +18,10 @@ export function unknownWorktreeError(worktreeId: string): Error {
   return new Error(`Unknown worktree: ${worktreeId}`);
 }
 
-// Matches both the raw main-process error and the renderer-side form
-// Electron wraps as "Error invoking remote method '…': Error: <msg>".
+// Message-text match, so it works on every wire alike: the preload
+// transport strips Electron's "Error invoking remote method" wrapper
+// before a rejection reaches the renderer, and the socket transports
+// deliver the handler's message as-is.
 export function isEntityGoneError(error: unknown): boolean {
   const message = errorMessageOf(error);
   return ENTITY_GONE_PREFIXES.some((prefix) => message.includes(prefix));

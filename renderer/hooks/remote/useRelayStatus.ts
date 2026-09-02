@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import type { RelayStatus } from "@shared/ipc/modules/relay";
+import type { RelayStatus, TunnelState } from "@shared/ipc/modules/relay";
 
 // The relay bridge's live status snapshot as a module-scope store with
 // ONE writer: remoteDeviceSync (renderer/lib/remote/remoteDeviceSync.ts)
@@ -39,12 +39,14 @@ export function useRelayStatus(): RelayStatus | null {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-// Derived primitive for consumers that only care whether THIS device's
-// tunnel endpoint is up (the muted marker on the this-device row):
+// Derived primitive for consumers that only care about THIS device's
+// tunnel endpoint (the marker and the note on the this-device row):
 // useSyncExternalStore re-renders only when the selected value changes,
 // so roster and socket transitions leave those components alone.
-const getTunnelUp = (): boolean => snapshot?.tunnel === "up";
+// Undefined until the first snapshot lands, and on a platform with no
+// host half (the web bridge runs no cloudflared).
+const getTunnelState = (): TunnelState | undefined => snapshot?.tunnel;
 
-export function useTunnelUp(): boolean {
-  return useSyncExternalStore(subscribe, getTunnelUp, getTunnelUp);
+export function useTunnelState(): TunnelState | undefined {
+  return useSyncExternalStore(subscribe, getTunnelState, getTunnelState);
 }
