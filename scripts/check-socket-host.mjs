@@ -32,7 +32,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import {
   CLOSE_AUTH_FAILED,
   CLOSE_GOING_AWAY,
@@ -42,7 +42,6 @@ import {
   encodeFrame,
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
-import { WebSocketServer } from "ws";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
 import { z } from "zod";
@@ -69,20 +68,12 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { makeProof } from "./lib/checkKit.mjs";
+import { makeProof, waitFor } from "./lib/checkKit.mjs";
 
 const TOKEN = "correct-horse-battery-staple-token-of-good-length";
 const WS_CLOSE_TOO_BIG = 1009;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function waitUntil(predicate, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error("timed out waiting");
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(10);
-  }
-}
 
 // Shared handler state referenced by registerTestHandlers. Reset by the
 // tests that use it.
@@ -684,7 +675,11 @@ async function main() {
           },
           heartbeat: { intervalMs: 40, timeoutMs: 150 },
         });
-        await waitUntil(() => closedWith !== "unset", 2_000);
+        await waitFor(
+          () => closedWith !== "unset",
+          "the heartbeat death",
+          2_000,
+        );
         assert.equal(
           closedWith,
           null,
@@ -722,7 +717,11 @@ async function main() {
         });
         const probedAt = Date.now();
         probed.probe();
-        await waitUntil(() => probedClose !== "unset", 2_000);
+        await waitFor(
+          () => probedClose !== "unset",
+          "the probe verdict",
+          2_000,
+        );
         const probeElapsed = Date.now() - probedAt;
         assert.ok(
           probeElapsed >= 100 && probeElapsed < 1_000,

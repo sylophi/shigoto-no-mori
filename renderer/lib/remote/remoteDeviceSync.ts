@@ -70,7 +70,7 @@ let boundQueryClient: QueryClient | null = null;
 // that dropped and redialed inside one reconcile drain would otherwise
 // read as "connected before, connected after" and its landing would
 // go unswept.
-const liveSessions = new Set<string>();
+let liveSessions: ReadonlySet<string> = new Set();
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -157,8 +157,7 @@ function noteSessions(status: HubStatus): void {
       invalidateDeviceSession(boundQueryClient, deviceId);
     }
   }
-  liveSessions.clear();
-  for (const deviceId of now) liveSessions.add(deviceId);
+  liveSessions = now;
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status

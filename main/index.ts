@@ -59,6 +59,7 @@ import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { reconcileGitWatchers, startGitWatcher } from "./electron/gitWatcher";
+import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -440,6 +441,11 @@ app.on("ready", async () => {
     onChange: (projectId) =>
       broadcastAll(gitContract, "projectChanged", { projectId }),
     suppressed: () => cliChildCount() > 0,
+  });
+  // The app's own registry writes never reach the state watcher (its
+  // self-write suppression), so follow them here.
+  registryStore.onWrite((key) => {
+    if (key === PROJECTS_KEY) reconcileGitWatchers();
   });
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other

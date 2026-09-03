@@ -270,9 +270,21 @@ export function createWsServerBinding(
   // registered. Registration stays unconditional (the Electron wire
   // serves everything); only the LAN dispatch consults this.
   const readOnlyChannels = new Set<string>();
-  // Sockets past hello. broadcastAll fans out to exactly this set, so
-  // an unauthenticated connection can never receive a push.
-  const authed = new Set<WebSocket>();
+  // Sockets past hello, each with its liveness record
+  // (HOST_LIVENESS_TIMEOUT_MS in frames.ts): when its last frame
+  // arrived, whether it has ever pinged (only a peer that proved it
+  // heartbeats is judged, so an older client that never pings is left
+  // alone), and the kill that ends it. broadcastAll fans out to exactly
+  // this set, so an unauthenticated connection can never receive a
+  // push, and one timer per listener sweeps it so a dead client socket
+  // cannot sit here until the OS notices.
+  type Liveness = {
+    lastInboundAt: number;
+    heartbeats: boolean;
+    kill(code: number, reason: string): void;
+  };
+  const authed = new Map<WebSocket, Liveness>();
+  let livenessTimer: NodeJS.Timeout | null = null;
   // Ticket mode only: the one authed peer per deviceId. A device dials
   // at most one direct socket to a given peer, so a duplicate authed
   // connection from the same deviceId supersedes the older one,
@@ -287,19 +299,6 @@ export function createWsServerBinding(
     kill(code: number, reason: string): void;
   };
   const authedByDevice = new Map<string, AuthedPeer>();
-  // Liveness per authed socket (HOST_LIVENESS_TIMEOUT_MS in frames.ts):
-  // when its last frame arrived, whether it has ever pinged (only a
-  // peer that proved it heartbeats is judged, so an older client that
-  // never pings is left alone), and the kill that ends it. Swept by
-  // one timer per listener, so a dead client socket cannot sit in the
-  // authed set until the OS notices.
-  type Liveness = {
-    lastInboundAt: number;
-    heartbeats: boolean;
-    kill(code: number, reason: string): void;
-  };
-  const liveness = new Map<WebSocket, Liveness>();
-  let livenessTimer: NodeJS.Timeout | null = null;
   let listener: {
     wss: WebSocketServer;
     opts: WsServerStartOpts;
@@ -549,7 +548,6 @@ export function createWsServerBinding(
           authedByDevice.delete(id);
         }
         controller.abort();
-        liveness.delete(socket);
         closeThenTerminate(socket, code, reason);
       };
 
@@ -557,7 +555,6 @@ export function createWsServerBinding(
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
-        liveness.delete(socket);
         // A superseded socket must not evict its replacement, so the
         // per-device entry is dropped only while it still names THIS
         // socket, mirroring the DO. The authed identity lives on the
@@ -579,7 +576,7 @@ export function createWsServerBinding(
         const frame = isBinary
           ? null
           : decodeFrame(toText(data), ClientFrameSchema);
-        const alive = liveness.get(socket);
+        const alive = authed.get(socket);
         if (alive !== undefined) alive.lastInboundAt = Date.now();
         if (ctx === null) {
           if (frame === null || frame.t !== "hello") {
@@ -656,8 +653,7 @@ export function createWsServerBinding(
               ?.kill(CLOSE_GOING_AWAY, "superseded");
             authedByDevice.set(callerDeviceId, { socket, kill });
           }
-          authed.add(socket);
-          liveness.set(socket, {
+          authed.set(socket, {
             lastInboundAt: Date.now(),
             heartbeats: false,
             kill,
@@ -765,7 +761,7 @@ export function createWsServerBinding(
       livenessTimer = setInterval(
         () => {
           const now = Date.now();
-          for (const entry of liveness.values()) {
+          for (const entry of authed.values()) {
             if (
               entry.heartbeats &&
               now - entry.lastInboundAt > livenessTimeoutMs
@@ -827,7 +823,6 @@ export function createWsServerBinding(
     listener = null;
     authed.clear();
     authedByDevice.clear();
-    liveness.clear();
     if (livenessTimer !== null) {
       clearInterval(livenessTimer);
       livenessTimer = null;
@@ -894,7 +889,7 @@ export function createWsServerBinding(
       // must not pay a stringify per broadcast.
       if (authed.size === 0) return;
       const text = encodeFrame({ t: "push", channel, payload });
-      for (const socket of authed) sendPushText(socket, text);
+      for (const socket of authed.keys()) sendPushText(socket, text);
     },
     closePeersNotIn(online) {
       // Deleting the visited entry (kill does) is fine under Map

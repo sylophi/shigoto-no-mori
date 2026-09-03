@@ -7,17 +7,11 @@
 import { directContract } from "@shared/ipc/modules/direct";
 import { createHubConnection } from "@host/hub/connection";
 
-export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export async function waitFor(predicate, what, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
+// The polling pair lives in checkKit.mjs (dependency-free, so the
+// non-hub checks reach it too); re-exported for the hub checks that
+// always took it from here.
+import { delay, waitFor } from "./checkKit.mjs";
+export { delay, waitFor };
 
 // Boots one device on the stub device hub and waits until it connects.
 // Returns the connection plus the ticket-mint counter the redial

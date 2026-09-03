@@ -263,6 +263,20 @@ const externalChangeExempt = new Set([
   "worktreeDiskUsage",
 ]);
 
+// Whether a key takes part in the state-moved sweeps below: everything
+// but the exempt domains.
+function externalChangeAllows(queryKey: readonly unknown[]): boolean {
+  return !externalChangeExempt.has(String(queryKeyDomain(queryKey)));
+}
+
+// The project-id slot of a project-scoped host key, derived from a
+// sample built key like the PR matcher below, so the slot follows the
+// builders if the prefix ever grows instead of silently drifting.
+const projectIdIndex = queryKeysFor("d").worktrees("p").indexOf("p");
+function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
+  return queryKey[0] === HOST_SCOPE ? queryKey[projectIdIndex] : undefined;
+}
+
 // The EXTERNAL-CHANGE sweep, scoped to one device. Host-scoped keys
 // invalidate only when bound to THIS device id: a remote device's
 // queries cache under its own id in the same host families, so a
@@ -281,7 +295,7 @@ export function invalidateHostDevice(
     predicate: (query) => {
       const keyDeviceId = hostKeyDeviceId(query.queryKey);
       if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
-      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+      return externalChangeAllows(query.queryKey);
     },
   });
 }
@@ -290,10 +304,10 @@ export function invalidateHostDevice(
 // state moved on that device (a commit, a checkout, a ref written by
 // any tool), so only the host keys carrying that project id refetch,
 // under the same domain exemptions as the device-wide sweep. Every
-// project-scoped host builder puts the project id in the fourth slot
-// (right after the domain), which is what the match reads; keys shaped
-// otherwise (a client key, a whole-host key, a githubCli sub-tree) do
-// not carry a project id there and are left alone.
+// project-scoped host builder puts the project id right after the
+// domain, which is what hostKeyProjectId reads; keys shaped otherwise
+// (a client key, a whole-host key, a githubCli sub-tree) carry no
+// project id there and are left alone.
 export function invalidateHostProject(
   queryClient: QueryClient,
   deviceId: string,
@@ -302,8 +316,8 @@ export function invalidateHostProject(
   void queryClient.invalidateQueries({
     predicate: (query) => {
       if (hostKeyDeviceId(query.queryKey) !== deviceId) return false;
-      if (query.queryKey[3] !== projectId) return false;
-      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+      if (hostKeyProjectId(query.queryKey) !== projectId) return false;
+      return externalChangeAllows(query.queryKey);
     },
   });
 }

@@ -25,35 +25,18 @@ import {
   startGitWatcher,
   stopGitWatcher,
 } from "../main/electron/gitWatcher.ts";
-import { makeProof } from "./lib/checkKit.mjs";
+import { delay, makeProof, scrubbedGitEnv, waitFor } from "./lib/checkKit.mjs";
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate, what, timeoutMs = 4_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
-
-// The environment for the sandbox's git commands, with every GIT_*
-// variable removed. This check runs from the pre-commit hook, where git
-// exports GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL
-// repository; inherited, they would point every command below at the
-// commit in progress (which is exactly what happened once: the sandbox
-// commit landed as the user's commit, under the sandbox's message).
-const gitEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-);
+// The sandbox's git commands run under the scrubbed environment: this
+// check runs from the pre-commit hook, whose GIT_* variables would
+// otherwise point every command below at the commit in progress.
+const gitEnv = scrubbedGitEnv();
 
 function git(cwd, ...args) {
   return execFileSync(
     "git",
     ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
-    { cwd, env: { ...gitEnv, LC_ALL: "C" }, encoding: "utf8" },
+    { cwd, env: gitEnv, encoding: "utf8" },
   );
 }
 
@@ -124,14 +107,19 @@ async function main() {
 
       const changes = [];
       let projects = [{ id: "p1", name: "repo", path: repo }];
-      startGitWatcher({
-        onChange: (projectId) => changes.push(projectId),
-        suppressed: () => false,
-        projects: () => projects,
-      });
+      // (Re)start the watcher over the sandbox and let the platform
+      // watcher settle before producing events.
+      const restart = async (suppressed = false) => {
+        stopGitWatcher();
+        startGitWatcher({
+          onChange: (projectId) => changes.push(projectId),
+          suppressed: () => suppressed,
+          projects: () => projects,
+        });
+        await delay(150);
+      };
       track(() => stopGitWatcher());
-      // Let the platform watcher settle before producing events.
-      await delay(150);
+      await restart();
 
       // Noise first: status refreshes, a working-tree edit, and the
       // objects a `git add` writes, none of which may ping.
@@ -165,13 +153,7 @@ async function main() {
       assert.deepEqual(changes, ["p1", "p1", "p1"]);
 
       // Suppressed events (a running sm CLI child) never ping.
-      stopGitWatcher();
-      startGitWatcher({
-        onChange: (projectId) => changes.push(projectId),
-        suppressed: () => true,
-        projects: () => projects,
-      });
-      await delay(150);
+      await restart(true);
       writeFileSync(join(worktree, "c.txt"), "three\n");
       git(worktree, "add", "c.txt");
       git(worktree, "commit", "-q", "-m", "three");
@@ -180,13 +162,7 @@ async function main() {
 
       // The project leaves the registry: its watch closes and a later
       // commit is not observed.
-      stopGitWatcher();
-      startGitWatcher({
-        onChange: (projectId) => changes.push(projectId),
-        suppressed: () => false,
-        projects: () => projects,
-      });
-      await delay(150);
+      await restart();
       projects = [];
       reconcileGitWatchers();
       writeFileSync(join(worktree, "d.txt"), "four\n");

@@ -18,7 +18,11 @@ import {
   registerContract as registerContractCore,
   resolveBroadcast,
 } from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import {
+  type HandlerContext,
+  isRemoteCaller,
+  type ServerTransport,
+} from "@shared/ipc/transport";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
@@ -45,7 +49,6 @@ import { createWsServerBinding } from "@host/socket/server";
 import { directContract } from "@shared/ipc/modules/direct";
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createDirectPlane } from "@shared/hub/directPlane";
-import { reconcileGitWatchers } from "../electron/gitWatcher";
 import {
   acceptsPeerCommands,
   allowedWebOrigin,
@@ -280,9 +283,7 @@ const serverFor = (module: ContractModule): ServerTransport =>
 // start paying a broad invalidation for every one of its own writes,
 // while a change a peer drove is external to this window exactly like
 // a CLI write, and would otherwise sit unseen until a focus refetch.
-// The direct listener is the only wire that serves mutations AND
-// stamps a callerDeviceId (the LAN wire is read-only), so a stamped
-// caller is what "a remote peer acted" means. A trailing coalesce
+// A trailing coalesce
 // folds a burst of mutations into one ping per wire set without
 // re-arming, so a steady stream still pings at a bounded rate. If the
 // watcher fires for the same change anyway, viewer-side invalidation
@@ -291,7 +292,7 @@ const MUTATION_PING_MS = 300;
 let mutationPingTimer: NodeJS.Timeout | null = null;
 let mutationPingLocal = false;
 function pingViewers(ctx: HandlerContext): void {
-  if (ctx.callerDeviceId !== undefined) mutationPingLocal = true;
+  if (isRemoteCaller(ctx)) mutationPingLocal = true;
   if (mutationPingTimer !== null) return;
   mutationPingTimer = setTimeout(() => {
     mutationPingTimer = null;
@@ -308,10 +309,6 @@ function pingViewers(ctx: HandlerContext): void {
     );
     for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
     if (pingLocal) electronServer.broadcastAll(channel, parsed);
-    // A settled mutation may have added, removed or relocated a
-    // project: follow the registry with the git-directory watches,
-    // on the same coalesced cadence.
-    reconcileGitWatchers();
   }, MUTATION_PING_MS);
 }
 

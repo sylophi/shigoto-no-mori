@@ -13,13 +13,13 @@
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shared/errors";
 import {
-  HEARTBEAT_INTERVAL_MS,
-  HEARTBEAT_TIMEOUT_MS,
   HELLO_TIMEOUT_MS,
-  PROBE_TIMEOUT_MS,
   TERMINATE_GRACE_MS,
 } from "@shared/ipc/socket/frames";
-import type { HeartbeatOptions } from "@shared/ipc/socket/wsClientTransport";
+import {
+  createHeartbeat,
+  type HeartbeatOptions,
+} from "@shared/ipc/socket/heartbeat";
 import {
   type DeviceConnection,
   RemoteConnectError,
@@ -96,9 +96,8 @@ export type HubConnectionCoreDeps = {
   // by construction: the link then answers every req with the
   // no-handler shape.
   broker: HubBroker;
-  // Test seams for the liveness heartbeat (HEARTBEAT_INTERVAL_MS in
-  // frames.ts, the rule the direct sockets follow too). Real owners
-  // take the shared defaults.
+  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
+  // the rule the direct sockets follow too).
   heartbeat?: HeartbeatOptions;
 };
 
@@ -167,15 +166,11 @@ function killSocket(socket: HubSocketAdapter): void {
 export function createHubConnectionCore(
   deps: HubConnectionCoreDeps,
 ): HubConnectionCore {
-  const heartbeatIntervalMs =
-    deps.heartbeat?.intervalMs ?? HEARTBEAT_INTERVAL_MS;
-  const heartbeatTimeoutMs = deps.heartbeat?.timeoutMs ?? HEARTBEAT_TIMEOUT_MS;
-  const probeTimeoutMs = deps.heartbeat?.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
   let link: HubLink | null = null;
-  // The established socket's probe, installed when a dial lands and
-  // cleared when that socket goes, so probe() below reaches exactly
-  // the live socket.
-  let probeLive: (() => void) | null = null;
+  // The established connection as the supervisor reports it (null the
+  // moment it is lost or torn down), so probe() reaches exactly the
+  // live socket.
+  let live: DeviceConnection | null = null;
   let current: { supervisor: Supervisor; opts: HubConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
   // The in-flight dial's cancel handle, so stop() can abort a dial that
@@ -268,73 +263,27 @@ export function createHubConnectionCore(
           if (established && !ownerClosed) onClose(code);
         };
 
-        // Liveness (HEARTBEAT_INTERVAL_MS in frames.ts): after the
-        // accept, a bare HUB_PING goes out every interval, ANY inbound
-        // message answers it, and a ping still unanswered after the
-        // timeout means the socket is dead. Measured from the OLDEST
-        // unanswered ping, so a throttled background tab's slow cadence
-        // cannot misjudge its own socket. Enforced from the first ping
-        // on purpose (no "seen a pong yet" latch): a socket that dies
-        // right after the accept must still be found, and the cost of
-        // that is only that a Worker predating the pair (which drops
-        // pings as malformed envelopes) is redialed once a minute until
-        // it is redeployed, so the Worker deploys first (hub/README.md).
-        // A death tears the link down and reports to the supervisor
-        // like a drop, without waiting on the platform close handshake
-        // (a browser can hold that a minute against a dead peer).
-        let pingSentAt: number | null = null;
-        let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-        let probeTimer: ReturnType<typeof setTimeout> | null = null;
-        const stopHeartbeat = (): void => {
-          if (heartbeatTimer !== null) {
-            clearInterval(heartbeatTimer);
-            heartbeatTimer = null;
-          }
-          if (probeTimer !== null) {
-            clearTimeout(probeTimer);
-            probeTimer = null;
-          }
-          if (probeLive === probeSocket) probeLive = null;
-        };
-        const declareDead = (): void => {
-          if (dead) return;
-          dead = true;
-          stopHeartbeat();
-          if (link === nextLink) link = null;
-          nextLink.teardown();
-          killSocket(socket);
-          reportClose(null);
-          notifyChange();
-        };
-        const sendPing = (): void => {
-          if (dead) return;
-          try {
-            socket.send(HUB_PING);
-          } catch {
-            // The adapter throws once the socket is unusable: the
-            // close event that follows owns the outcome.
-            return;
-          }
-          if (pingSentAt === null) pingSentAt = Date.now();
-        };
-        const startHeartbeat = (): void => {
-          heartbeatTimer = setInterval(() => {
-            if (pingSentAt !== null) {
-              if (Date.now() - pingSentAt >= heartbeatTimeoutMs) declareDead();
-              return;
-            }
-            sendPing();
-          }, heartbeatIntervalMs);
-        };
-        const probeSocket = (): void => {
-          if (dead || probeTimer !== null) return;
-          sendPing();
-          const sentAt = Date.now();
-          probeTimer = setTimeout(() => {
-            probeTimer = null;
-            if (pingSentAt !== null && pingSentAt <= sentAt) declareDead();
-          }, probeTimeoutMs);
-        };
+        // Liveness (shared/ipc/socket/heartbeat.ts), armed at the accept.
+        // Enforced from the first ping on purpose (no "seen a pong yet"
+        // latch): a socket that dies right after the accept must still
+        // be found, and the cost of that is only that a Worker
+        // predating the pair (which drops pings as malformed envelopes)
+        // is redialed once a minute until it is redeployed, so the
+        // Worker deploys first (hub/README.md). A death tears the link
+        // down and reports to the supervisor like a drop.
+        const heartbeat = createHeartbeat({
+          ...deps.heartbeat,
+          sendPing: () => socket.send(HUB_PING),
+          onDead: () => {
+            if (dead) return;
+            dead = true;
+            if (link === nextLink) link = null;
+            nextLink.teardown();
+            killSocket(socket);
+            reportClose(null);
+            notifyChange();
+          },
+        });
 
         const acceptTimer = setTimeout(() => {
           if (settled) return;
@@ -360,8 +309,7 @@ export function createHubConnectionCore(
               clearTimeout(acceptTimer);
               clearPending();
               link = nextLink;
-              startHeartbeat();
-              probeLive = probeSocket;
+              heartbeat.start();
               resolve({
                 transport: {
                   // The hub socket carries no direct sm transport
@@ -380,7 +328,7 @@ export function createHubConnectionCore(
                 close: () => {
                   ownerClosed = true;
                   dead = true;
-                  stopHeartbeat();
+                  heartbeat.stop();
                   // Tear the link down SYNCHRONOUSLY so host sessions
                   // abort at once and no in-flight handler answers into a
                   // dead socket, rather than waiting on the close event
@@ -395,9 +343,7 @@ export function createHubConnectionCore(
                     setTimeout(() => socket.terminate?.(), TERMINATE_GRACE_MS);
                   }
                 },
-                // The wake-time probe rides the supervisor's shape too,
-                // though the core reaches it through probeLive.
-                probe: probeSocket,
+                probe: heartbeat.probe,
                 remoteDeviceId: "",
                 remoteAppVersion: "",
               });
@@ -411,9 +357,9 @@ export function createHubConnectionCore(
           // frame runs a handler even though the socket may still
           // deliver buffered frames while closing (S3).
           if (dead) return;
-          // Any inbound message answers the oldest unanswered ping; a
-          // pong is not an envelope, so it stops here.
-          pingSentAt = null;
+          // Any inbound message proves the hub alive; a pong is not an
+          // envelope, so it stops here.
+          heartbeat.noteInbound();
           if (text === HUB_PONG) return;
           // Wrap so a throw cannot escape into the platform's event
           // delivery and become an uncaught exception (M4).
@@ -429,7 +375,7 @@ export function createHubConnectionCore(
           dead = true;
           clearTimeout(acceptTimer);
           clearPending();
-          stopHeartbeat();
+          heartbeat.stop();
           if (link === nextLink) link = null;
           nextLink.teardown();
           if (!settled) {
@@ -488,6 +434,9 @@ export function createHubConnectionCore(
         socketStatus = next;
         notifyChange();
       },
+      onConnection: (connection) => {
+        live = connection;
+      },
     });
     current = { supervisor, opts };
     supervisor.start();
@@ -528,7 +477,7 @@ export function createHubConnectionCore(
       }),
 
     probe: () => {
-      probeLive?.();
+      live?.probe();
     },
 
     status: () => {

@@ -18,12 +18,13 @@ import {
   CommandRefusedError,
   decodeFrame,
   encodeFrame,
-  HEARTBEAT_INTERVAL_MS,
-  HEARTBEAT_TIMEOUT_MS,
   HELLO_TIMEOUT_MS,
-  PROBE_TIMEOUT_MS,
   ServerFrameSchema,
 } from "@shared/ipc/socket/frames";
+import {
+  createHeartbeat,
+  type HeartbeatOptions,
+} from "@shared/ipc/socket/heartbeat";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type { ClientTransport } from "@shared/ipc/transport";
 
@@ -124,15 +125,8 @@ export type ConnectDeviceOptions = {
   openSocket?: OpenClientSocket;
   // Test seam. Real callers take the frames.ts default.
   helloTimeoutMs?: number;
-  // Test seams for the liveness heartbeat (see HEARTBEAT_INTERVAL_MS in
-  // frames.ts). Real callers take the shared defaults.
+  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts).
   heartbeat?: HeartbeatOptions;
-};
-
-export type HeartbeatOptions = {
-  intervalMs?: number;
-  timeoutMs?: number;
-  probeTimeoutMs?: number;
 };
 
 export type DeviceConnection = {
@@ -206,11 +200,6 @@ export function openDevice(
   options: ConnectDeviceOptions,
 ): PendingDeviceConnection {
   const helloTimeoutMs = options.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
-  const heartbeatIntervalMs =
-    options.heartbeat?.intervalMs ?? HEARTBEAT_INTERVAL_MS;
-  const heartbeatTimeoutMs =
-    options.heartbeat?.timeoutMs ?? HEARTBEAT_TIMEOUT_MS;
-  const probeTimeoutMs = options.heartbeat?.probeTimeoutMs ?? PROBE_TIMEOUT_MS;
 
   let resolve!: (connection: DeviceConnection) => void;
   let reject!: (error: unknown) => void;
@@ -312,81 +301,27 @@ export function openDevice(
     pending.clear();
   };
 
-  // Liveness (see HEARTBEAT_INTERVAL_MS in frames.ts). Armed after the
-  // welcome: a ping goes out every interval, ANY inbound frame answers
-  // it (a res or push proves the host alive as well as a pong does),
-  // and a ping still unanswered after the timeout means the socket is
-  // dead. `pingSentAt` is the OLDEST unanswered ping, so the verdict
-  // never depends on this side's own timer cadence: a throttled
-  // background tab that wakes once a minute measures from its last
-  // ping, not from an interval it could not keep. A death here is
-  // reported exactly like a socket close (pending rejected, onClose
-  // fired) so the supervisor or keeper redials on it, and the socket
-  // is closed without waiting for the platform's close handshake,
-  // which against a dead peer can itself take the browser a minute.
-  let pingSentAt: number | null = null;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  let probeTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const stopHeartbeat = (): void => {
-    if (heartbeatTimer !== null) {
-      clearInterval(heartbeatTimer);
-      heartbeatTimer = null;
-    }
-    if (probeTimer !== null) {
-      clearTimeout(probeTimer);
-      probeTimer = null;
-    }
-  };
-
-  const declareDead = (): void => {
-    if (closed) return;
-    closed = true;
-    stopHeartbeat();
-    // Silence the platform close that follows: the death is reported
-    // here, once, and the late close event must not report it again.
-    ownerClosed = true;
-    try {
-      socket.close();
-    } catch {
-      // Already closing.
-    }
-    rejectAllPending(null);
-    options.onClose(null);
-  };
-
-  const sendPing = (): void => {
-    if (closed) return;
-    try {
-      socket.send(encodeFrame({ t: "ping" }));
-    } catch {
-      // A send that throws is a socket already unusable: the close
-      // event that follows owns the outcome.
-      return;
-    }
-    if (pingSentAt === null) pingSentAt = Date.now();
-  };
-
-  const startHeartbeat = (): void => {
-    heartbeatTimer = setInterval(() => {
-      if (pingSentAt !== null) {
-        if (Date.now() - pingSentAt >= heartbeatTimeoutMs) declareDead();
-        return;
+  // Liveness (shared/ipc/socket/heartbeat.ts), armed after the welcome.
+  // A death is reported exactly like a socket close (pending rejected,
+  // onClose fired) so the supervisor or keeper redials on it.
+  const heartbeat = createHeartbeat({
+    ...options.heartbeat,
+    sendPing: () => socket.send(encodeFrame({ t: "ping" })),
+    onDead: () => {
+      if (closed) return;
+      closed = true;
+      // Silence the platform close that follows: the death is reported
+      // here, once, and the late close event must not report it again.
+      ownerClosed = true;
+      try {
+        socket.close();
+      } catch {
+        // Already closing.
       }
-      sendPing();
-    }, heartbeatIntervalMs);
-  };
-
-  const probe = (): void => {
-    if (closed || welcome === null || probeTimer !== null) return;
-    sendPing();
-    const sentAt = Date.now();
-    probeTimer = setTimeout(() => {
-      probeTimer = null;
-      // Any frame since the probe went out is the answer.
-      if (pingSentAt !== null && pingSentAt <= sentAt) declareDead();
-    }, probeTimeoutMs);
-  };
+      rejectAllPending(null);
+      options.onClose(null);
+    },
+  });
 
   socket.addEventListener("open", () => {
     if (closed) return;
@@ -410,9 +345,8 @@ export function openDevice(
       console.warn("[socket] dropping unparseable server frame");
       return;
     }
-    // Every parseable frame proves the host alive and answers the
-    // oldest unanswered ping, whatever it carries.
-    pingSentAt = null;
+    // Every parseable frame proves the host alive, whatever it carries.
+    heartbeat.noteInbound();
 
     if (welcome === null) {
       // Before the welcome, the only frame we act on is the welcome.
@@ -451,11 +385,11 @@ export function openDevice(
         remoteDeviceId: frame.deviceId,
         remoteAppVersion: frame.appVersion,
       };
-      startHeartbeat();
+      heartbeat.start();
       resolve({
         transport,
         close,
-        probe,
+        probe: heartbeat.probe,
         remoteDeviceId: welcome.remoteDeviceId,
         remoteAppVersion: welcome.remoteAppVersion,
       });
@@ -559,7 +493,7 @@ export function openDevice(
 
   socket.addEventListener("close", (event) => {
     clearTimeout(helloTimer);
-    stopHeartbeat();
+    heartbeat.stop();
     // The owner tore this connection down (or the heartbeat already
     // declared and reported the death). close() already rejected any
     // pending invokes, so stay silent: no onClose, and reject the
@@ -632,7 +566,7 @@ export function openDevice(
     closed = true;
     ownerClosed = true;
     clearTimeout(helloTimer);
-    stopHeartbeat();
+    heartbeat.stop();
     rejectAllPending(null);
     try {
       socket.close();

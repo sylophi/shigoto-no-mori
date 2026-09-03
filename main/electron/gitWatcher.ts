@@ -41,12 +41,9 @@ const DEBOUNCE_MS = 300;
 // moved. Paths arrive with the platform separator; normalized to `/`
 // before matching.
 const RELEVANT = [
-  /^HEAD$/,
-  /^ORIG_HEAD$/,
-  /^packed-refs$/,
+  /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
-  /^worktrees\/[^/]+$/,
-  /^worktrees\/[^/]+\/(HEAD|ORIG_HEAD)$/,
+  /^worktrees\/[^/]+(\/(HEAD|ORIG_HEAD))?$/,
 ];
 
 // Exported for the git-watcher check, which pins the allowlist: the
@@ -56,7 +53,7 @@ export function isRelevantGitPath(file: string): boolean {
   // into place; the rename lands as an event for the final name, so
   // the lock itself is noise.
   if (file.endsWith(".lock")) return false;
-  const normalized = file.split("\\").join("/");
+  const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
   return RELEVANT.some((pattern) => pattern.test(normalized));
 }
 
@@ -148,9 +145,9 @@ function openWatched(projectId: string, gitDir: string): void {
 
 // Bring the watched set in line with the registry: one watch per
 // project whose git directory resolves, dropped when the project
-// leaves the registry or its git directory moves. Cheap (one small
-// JSON read plus a stat per project), so it runs at boot, on every
-// managed-root change and after every host mutation settles, which
+// leaves the registry or its git directory moves. Runs at boot, on
+// every managed-root change (a CLI or an external write) and on every
+// app-side registry write (main/index.ts hooks the store), which
 // together cover every way a project is added, removed or relocated.
 export function reconcileGitWatchers(): void {
   if (deps === null) return;

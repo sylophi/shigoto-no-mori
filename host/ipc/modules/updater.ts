@@ -1,5 +1,5 @@
 import { updaterContract } from "@shared/ipc/modules/updater";
-import type { HandlerContext } from "@shared/ipc/transport";
+import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { UpdaterState } from "@shared/schemas";
 
@@ -35,7 +35,5 @@ export const updaterHandlers: Handlers<typeof updaterContract, HandlerContext> =
   {
     get: () => impl.getState(),
     check: () => impl.check(),
-    // Only a wire that authenticated a peer supplies callerDeviceId, so
-    // its presence is exactly "another device asked".
-    install: (_input, ctx) => impl.install(ctx.callerDeviceId !== undefined),
+    install: (_input, ctx) => impl.install(isRemoteCaller(ctx)),
   };
