@@ -5,6 +5,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink } from "@/components/ui/external-link";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
+import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
 import type { CarryOverEntry } from "@shared/schemas";
@@ -45,16 +46,12 @@ export function CarryOverSection({
       : () => false;
 
   // .worktreeinclude matches render as read-only rows in the same list as
-  // manual entries. On an exact path collision the manual row wins; it
-  // carries the covered badge until creation-time reconciliation removes it.
-  const manualPaths = new Set(entries.map((e) => normalizeRelPath(e.path)));
-  const includePaths =
-    useWorktreeInclude && status?.fileExists
-      ? status.matchedPaths.flatMap((raw) => {
-          const p = normalizeRelPath(raw);
-          return manualPaths.has(p) ? [] : [p];
-        })
-      : [];
+  // manual entries.
+  const includePaths = worktreeIncludeExtras(
+    entries,
+    useWorktreeInclude,
+    status,
+  );
   const { data: stats } = useCarryOverStats(projectId, [
     ...entries.map((e) => e.path),
     ...includePaths,

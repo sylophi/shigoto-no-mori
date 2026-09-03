@@ -5,7 +5,10 @@
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { syncContract } from "@shared/ipc/modules/sync";
+import {
+  SyncBundleStartResultSchema,
+  type syncContract,
+} from "@shared/ipc/modules/sync";
 import type { Client } from "@shared/ipc/types";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
 import { findProjectOrThrow } from "@host/lib/projects";
@@ -22,6 +25,11 @@ export interface FetchBundleInput {
   refs: string[];
   // Local tips the peer may thin the bundle against.
   haves: string[];
+  // Byte progress for a caller that reports it: once with 0 when the
+  // peer announces the size, then coalesced to about half a percent
+  // or 100ms between reports (every frame is an IPC round trip and a
+  // render), and always once more at the end.
+  onProgress?: (bytes: number, totalBytes: number) => void;
 }
 
 // Where a fetched ref lands locally: capture refs keep their name,
@@ -49,11 +57,30 @@ export async function fetchBundleFromPeer(
   input: FetchBundleInput,
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
   const project = findProjectOrThrow(input.targetProjectId);
-  const start = await peer.bundleStart({
-    projectId: input.sourceProjectId,
-    refs: input.refs,
-    haves: input.haves,
-  });
+  // Re-parsed here because the byte count flows into the progress
+  // frames' strict schema and bounds the loop below: the peer's own
+  // output validation is not this device's wall.
+  const start = SyncBundleStartResultSchema.parse(
+    await peer.bundleStart({
+      projectId: input.sourceProjectId,
+      refs: input.refs,
+      haves: input.haves,
+    }),
+  );
+  input.onProgress?.(0, start.bytes);
+  let lastReportedMark = 0;
+  let lastReportedAt = Date.now();
+  const report = (bytes: number, final: boolean) => {
+    if (input.onProgress === undefined) return;
+    const mark = Math.floor((bytes / Math.max(1, start.bytes)) * 200);
+    const now = Date.now();
+    if (!final && mark === lastReportedMark && now - lastReportedAt < 100) {
+      return;
+    }
+    lastReportedMark = mark;
+    lastReportedAt = now;
+    input.onProgress(bytes, start.bytes);
+  };
   const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
   try {
     const path = join(dir, "incoming.bundle");
@@ -80,6 +107,7 @@ export async function fetchBundleFromPeer(
         await handle.write(data, 0, data.length, offset);
         offset += data.length;
         eof = chunk.eof;
+        report(offset, eof);
       }
     } finally {
       await handle.close();

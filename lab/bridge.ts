@@ -43,13 +43,19 @@ type FixtureWire = {
   emit: (channel: string, payload: unknown) => void;
 };
 
+// Handlers are built from the wire's own emitter, so a fixture that
+// streams (the pull's progress frames) broadcasts on the wire it
+// answers on.
 function createFixtureWire(
   scope: ContractScope,
-  handlers: FixtureHandlers,
+  handlersFor: (emit: FixtureWire["emit"]) => FixtureHandlers,
   name: string,
 ): FixtureWire {
   const registry = createSubscriberRegistry(`lab:${name}`);
   const index = invokeIndexFor(scope);
+  const emit: FixtureWire["emit"] = (channel, payload) =>
+    registry.emit(channel, payload);
+  const handlers = handlersFor(emit);
   return {
     transport: {
       invoke(channel, input) {
@@ -73,13 +79,16 @@ function createFixtureWire(
         return registry.subscribe(channel, handler);
       },
     },
-    emit: (channel, payload) => registry.emit(channel, payload),
+    emit,
   };
 }
 
 // ---- per-device host fixtures ----
 
-function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
+function hostHandlersFor(
+  forest: DeviceForest,
+  emit: FixtureWire["emit"],
+): FixtureHandlers {
   const collapsed = new Set<string>();
   // The worktree data files, seeded from the fixtures and mutated by
   // worktreeData:write so adding and removing ports shows its outcome.
@@ -206,20 +215,29 @@ function hostHandlersFor(forest: DeviceForest): FixtureHandlers {
     }),
     // Local-orchestrator sync verbs, mutating the fixture world so the
     // outcome is visible: the worktree lands in the identity-matched
-    // local project, and a transplant removes the source row.
+    // local project, and a teardown removes the source row.
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
-          "sync:pullWorktree": (input: any) =>
-            labSyncPull(forest, input, false),
-          "sync:transplantWorktree": (input: any) =>
-            labSyncPull(forest, input, true),
+          "sync:pullWorktree": (input: any) => labSyncPull(forest, emit, input),
+          "sync:teardownSource": (input: any) => {
+            const source = forests[input.sourceDeviceId];
+            if (source !== undefined) {
+              source.worktrees[input.sourceProjectId] = (
+                source.worktrees[input.sourceProjectId] ?? []
+              ).filter((entry) => entry.id !== input.sourceWorktreeId);
+            }
+            return { sourceRemoved: true };
+          },
         }
       : {}),
   };
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function labSyncPull(
   local: DeviceForest,
+  emit: FixtureWire["emit"],
   input: {
     sourceDeviceId: string;
     sourceProjectId: string;
@@ -227,9 +245,32 @@ async function labSyncPull(
     sourceIdentity: string;
     branch: string;
   },
-  transplant: boolean,
 ) {
-  await new Promise((resolve) => setTimeout(resolve, 1600));
+  // A posed pull: each step lingers long enough to be seen, and the
+  // transfer counts up in chunks like the real one.
+  const progress = (frame: Record<string, unknown>) =>
+    emit("sync:pullProgress", {
+      sourceWorktreeId: input.sourceWorktreeId,
+      ...frame,
+    });
+  progress({ step: "capture" });
+  await sleep(900);
+  const totalBytes = 4_820_000;
+  for (let bytes = 0; bytes < totalBytes; bytes += 640_000) {
+    progress({ step: "transfer", bytes, totalBytes });
+    // oxlint-disable-next-line no-await-in-loop -- a posed transfer
+    await sleep(220);
+  }
+  progress({ step: "transfer", bytes: totalBytes, totalBytes });
+  progress({ step: "create" });
+  await sleep(600);
+  for (const createPhase of ["carryOver", "setup", "portPoolProvision"]) {
+    progress({ step: "create", createPhase });
+    // oxlint-disable-next-line no-await-in-loop -- a posed create
+    await sleep(700);
+  }
+  progress({ step: "apply" });
+  await sleep(700);
   const project = local.projects.find(
     (entry) => entry.identity === input.sourceIdentity,
   );
@@ -262,16 +303,10 @@ async function labSyncPull(
     shelved: false,
   };
   (local.worktrees[project.id] ??= []).push(landed as any);
-  if (transplant && source !== undefined) {
-    source.worktrees[input.sourceProjectId] = sourceList.filter(
-      (entry) => entry.id !== input.sourceWorktreeId,
-    );
-  }
   return {
     worktree: landed,
     captured: (sourceWorktree?.changedCount ?? 0) > 0,
     dirtyApplied: (sourceWorktree?.changedCount ?? 0) > 0,
-    ...(transplant ? { sourceRemoved: true } : {}),
   };
 }
 
@@ -397,7 +432,11 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     if (forest.deviceId === selfDeviceId) continue;
     peerWires.set(
       forest.deviceId,
-      createFixtureWire("host", hostHandlersFor(forest), forest.deviceId),
+      createFixtureWire(
+        "host",
+        (emit) => hostHandlersFor(forest, emit),
+        forest.deviceId,
+      ),
     );
   }
 
@@ -406,7 +445,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   // matching the real browser bridge's shape.
   const localHost = createFixtureWire(
     "host",
-    WEB_SHELL ? {} : hostHandlersFor(forests[LOCAL_DEVICE_ID]),
+    (emit) =>
+      WEB_SHELL ? {} : hostHandlersFor(forests[LOCAL_DEVICE_ID], emit),
     "local",
   );
 
@@ -495,7 +535,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "shell:showItemInFolder": () => undefined,
     "portForward:list": () => ({ forwards: [...forwards.values()] }),
     "portForward:start": async ({ deviceId, remotePort, localPort }) => {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await sleep(500);
       const bound = localPort ?? remotePort;
       // One local port posed as taken, so the inline bind error can be
       // seen: node's EADDRINUSE wording, as the engine would pass on.
@@ -533,7 +573,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     },
   };
 
-  const client = createFixtureWire("client", clientHandlers, "client");
+  const client = createFixtureWire("client", () => clientHandlers, "client");
 
   const api = {
     deviceId: selfDeviceId,

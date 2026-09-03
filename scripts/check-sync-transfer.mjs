@@ -504,6 +504,20 @@ async function main() {
       signal: new AbortController().signal,
       notifier: () => () => {},
     };
+    // The transplant as the dialog drives it: the pull, then the
+    // teardown reading the pull's own receipt.
+    const transplant = async (input) => {
+      const pulled = await syncHandlers.pullWorktree(input, pullCtx);
+      const torn = await syncHandlers.teardownSource(
+        {
+          sourceDeviceId: input.sourceDeviceId,
+          sourceProjectId: input.sourceProjectId,
+          sourceWorktreeId: input.sourceWorktreeId,
+        },
+        pullCtx,
+      );
+      return { ...pulled, ...torn };
+    };
     const identity = await getRepoIdentity(sourceRepo);
     assert.ok(identity, "fixture repos should carry a non-null identity");
     assert.equal(
@@ -626,10 +640,10 @@ async function main() {
       "pull refusals: an already-existing branch and an unmatched repo identity both refuse up front",
     );
 
-    // ---- The transplant orchestration (step 9): the pull above plus
-    // tearing the source worktree down on A through its wire-served
-    // worktrees:delete. Fresh worktrees per scenario, since the earlier
-    // tests consumed wt and wt2.
+    // ---- The transplant (step 9): the pull above plus tearing the
+    // source worktree down on A through its wire-served
+    // worktrees:delete, gated by the pull's receipt. Fresh worktrees
+    // per scenario, since the earlier tests consumed wt and wt2.
 
     // (9) Clean transplant: the branch crosses, the worktree lands, and
     // the SOURCE side loses the worktree directory, its sm worktree
@@ -663,16 +677,13 @@ async function main() {
     );
     mkdirSync(dirname(wt3DataPath), { recursive: true });
     writeFileSync(wt3DataPath, "{}\n");
-    const cleanTransplant = await syncHandlers.transplantWorktree(
-      {
-        sourceDeviceId: "A",
-        sourceProjectId,
-        sourceWorktreeId: wt3Id,
-        sourceIdentity: identity,
-        branch: "feature3",
-      },
-      pullCtx,
-    );
+    const cleanTransplant = await transplant({
+      sourceDeviceId: "A",
+      sourceProjectId,
+      sourceWorktreeId: wt3Id,
+      sourceIdentity: identity,
+      branch: "feature3",
+    });
     assert.equal(cleanTransplant.sourceRemoved, true);
     assert.equal(cleanTransplant.sourceError, undefined);
     assert.equal(cleanTransplant.dirtyApplied, false);
@@ -718,16 +729,13 @@ async function main() {
     await git(wt4Path, ["add", "staged.txt"]);
     writeFileSync(join(wt4Path, "committed.txt"), "committed, then edited\n");
     writeFileSync(join(wt4Path, "untracked.txt"), "untracked\n");
-    const dirtyTransplant = await syncHandlers.transplantWorktree(
-      {
-        sourceDeviceId: "A",
-        sourceProjectId,
-        sourceWorktreeId: worktreeIdFromPath(wt4Path),
-        sourceIdentity: identity,
-        branch: "feature4",
-      },
-      pullCtx,
-    );
+    const dirtyTransplant = await transplant({
+      sourceDeviceId: "A",
+      sourceProjectId,
+      sourceWorktreeId: worktreeIdFromPath(wt4Path),
+      sourceIdentity: identity,
+      branch: "feature4",
+    });
     assert.equal(dirtyTransplant.captured, true);
     assert.equal(dirtyTransplant.dirtyApplied, true);
     assert.equal(dirtyTransplant.sourceRemoved, true);
@@ -768,16 +776,13 @@ async function main() {
       notify: () => {},
     });
     try {
-      const refusedTransplant = await syncHandlers.transplantWorktree(
-        {
-          sourceDeviceId: "A",
-          sourceProjectId,
-          sourceWorktreeId: wt5Id,
-          sourceIdentity: identity,
-          branch: "feature5",
-        },
-        pullCtx,
-      );
+      const refusedTransplant = await transplant({
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: wt5Id,
+        sourceIdentity: identity,
+        branch: "feature5",
+      });
       assert.equal(refusedTransplant.worktree.branch, "feature5");
       assert.equal(
         existsSync(refusedTransplant.worktree.path),
@@ -805,6 +810,62 @@ async function main() {
     }
     ok(
       "transplant (scripts running): the teardown refuses with the scripts-running marker and the source survives",
+    );
+
+    // (12) The receipt gate: a teardown for a worktree this device never
+    // pulled refuses before dialing the peer. A receipt serves exactly
+    // one successful teardown. A source that changed after the pull
+    // (edits after the capture, or a moved tip) keeps its copy until it
+    // matches the receipt again.
+    await assert.rejects(
+      syncHandlers.teardownSource(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: "0123456789ab",
+        },
+        pullCtx,
+      ),
+      /No pull recorded/,
+    );
+    await assert.rejects(
+      syncHandlers.teardownSource(
+        { sourceDeviceId: "A", sourceProjectId, sourceWorktreeId: wt3Id },
+        pullCtx,
+      ),
+      /No pull recorded/,
+    );
+    const wt6Path = join(sandbox, "wt6");
+    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature6", wt6Path]);
+    writeFileSync(join(wt6Path, "sixth.txt"), "sixth\n");
+    await git(wt6Path, ["add", "-A"]);
+    await git(wt6Path, ["commit", "-qm", "sixth feature"]);
+    writeFileSync(join(wt6Path, "draft.txt"), "draft\n");
+    const wt6Id = worktreeIdFromPath(wt6Path);
+    const wt6Source = {
+      sourceDeviceId: "A",
+      sourceProjectId,
+      sourceWorktreeId: wt6Id,
+    };
+    const latePull = await syncHandlers.pullWorktree(
+      { ...wt6Source, sourceIdentity: identity, branch: "feature6" },
+      pullCtx,
+    );
+    assert.equal(latePull.captured, true);
+    assert.equal(latePull.dirtyApplied, true);
+    // The user takes their time. Meanwhile something edits the source.
+    writeFileSync(join(wt6Path, "draft.txt"), "draft, then edited\n");
+    const refusedLate = await syncHandlers.teardownSource(wt6Source, pullCtx);
+    assert.equal(refusedLate.sourceRemoved, false);
+    assert.match(refusedLate.sourceError ?? "", /changed after/);
+    assert.equal(existsSync(wt6Path), true, "a changed source must survive");
+    // Back to exactly the captured state, the receipt matches again.
+    writeFileSync(join(wt6Path, "draft.txt"), "draft\n");
+    const lateTeardown = await syncHandlers.teardownSource(wt6Source, pullCtx);
+    assert.equal(lateTeardown.sourceRemoved, true, lateTeardown.sourceError);
+    assert.equal(existsSync(wt6Path), false);
+    ok(
+      "teardownSource: refuses without a receipt, refuses a source that changed after the pull, and removes it once it matches again",
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct
