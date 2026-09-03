@@ -205,8 +205,8 @@ async function main() {
       // mutating:false reads stub to structural emptiness.
       assert.deepEqual(await bridge.api.projects.list(), []);
       assert.deepEqual(await bridge.api.worktrees.list("p1"), []);
-      // Real handler, not a stub, but the same empty answer.
-      assert.deepEqual(await bridge.api.account.listGrantedDevices(), []);
+      // Real handler, not a stub, but the same closed answer.
+      assert.equal(await bridge.api.account.acceptsCommands(), false);
       // The one allowlisted channel: ThemeProvider fires it per theme
       // change and a browser has no native chrome to sync.
       assert.equal(await bridge.api.window.previewTheme("dark"), undefined);
@@ -317,13 +317,9 @@ async function main() {
       assert.deepEqual(await bridge.api.remoteAccess.commandAccess(), {
         granted: false,
       });
-      // The real refuse-all handlers name their refusal precisely.
+      // The real refuse-all handler names its refusal precisely.
       await assert.rejects(
-        bridge.api.account.grantCommands("d1"),
-        /cannot grant command access/,
-      );
-      await assert.rejects(
-        bridge.api.account.revokeCommands("d1"),
+        bridge.api.account.setAcceptsCommands(true),
         /cannot change command access/,
       );
     },
@@ -517,9 +513,71 @@ async function main() {
         defaultWebDeviceName(
           "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
         ),
-        "Safari on iOS",
+        "Safari on iPhone",
+      );
+      assert.equal(
+        defaultWebDeviceName(
+          "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+        ),
+        "Safari on iPad",
       );
       assert.equal(defaultWebDeviceName("weird/0.0"), "Browser");
+    },
+  );
+
+  await check(
+    "device names: client hints name the Chromium forks whose user agent says Chrome, and say nothing extra when they only repeat it",
+    () => {
+      // Edge and Brave over a Chrome user agent: the brand entry (or
+      // the navigator.brave object) is the only thing that tells.
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Not A;Brand", "Chromium", "Microsoft Edge"],
+        }),
+        "Edge on macOS",
+      );
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Chromium", "Not/A)Brand", "Brave"],
+        }),
+        "Brave on macOS",
+      );
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Chromium", "Google Chrome", "Not?A_Brand"],
+          brave: true,
+        }),
+        "Brave on macOS",
+      );
+      // Chrome itself, and a fork that only names Chromium: both fall
+      // through to what the user agent already says.
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Google Chrome", "Chromium", "Not.A/Brand"],
+        }),
+        "Chrome on macOS",
+      );
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Chromium", "Not_A Brand"],
+        }),
+        "Chrome on macOS",
+      );
+      // A fork the table does not know passes through as it spelled
+      // itself, and a browser with no hints at all is the plain case.
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: ["Not A;Brand", "Chromium", "Opera"],
+        }),
+        "Opera on macOS",
+      );
+      assert.equal(
+        defaultWebDeviceName(CHROME_MAC_UA, {
+          brands: undefined,
+          brave: false,
+        }),
+        "Chrome on macOS",
+      );
     },
   );
 

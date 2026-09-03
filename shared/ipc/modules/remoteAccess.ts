@@ -9,11 +9,11 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // binding via HandlerContext.isCallerCommandGranted:
 //   - Electron (local window): always granted.
 //   - LAN socket: never granted, that wire is read-only by policy.
-//   - Device hub: the host's live per-peer grant for the caller's
-//     deviceId.
-// The answer is a single boolean about the caller alone; the full grant
-// list never rides a remote wire (it stays client-scoped in
-// account.listGrantedDevices). Fail-closed: a transport supplying no
+//   - Direct data plane: the host's live command-access switch (does
+//     it accept commands from the account's other devices at all).
+// The answer is a single boolean about the caller alone. The switch
+// itself is read only on its own machine (client-scoped in
+// account.acceptsCommands). Fail-closed: a transport supplying no
 // verdict reads as not granted.
 export const remoteAccessContract = defineContract("host", {
   commandAccess: invoke(

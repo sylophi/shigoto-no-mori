@@ -16,8 +16,8 @@ import { EmptyPanel } from "./EmptyPanel";
 // configured (no account service in this build's launch env) is one
 // panel that says so and how to fix it. Signed out is one panel with
 // one button. Signed in, the whole page is the device registry, which
-// carries the account line (id, headcount, sign-out) itself, since that
-// line is the registry's caption and nothing else.
+// carries the account line (who is signed in, sign-out) itself, since
+// that line is the registry's caption and nothing else.
 export function AccountSection() {
   const { data: status } = useAccountStatus();
 
@@ -45,12 +45,7 @@ export function AccountSection() {
     );
   }
 
-  return (
-    <DeviceRegistry
-      accountId={status.accountId}
-      localDeviceName={status.deviceName}
-    />
-  );
+  return <DeviceRegistry accountId={status.accountId} />;
 }
 
 // The chrome the two empty states share: an icon, a heading with its
@@ -67,16 +62,21 @@ function StatePanel({
   children: React.ReactNode;
 }) {
   return (
-    <EmptyPanel>
-      <div className="flex flex-col items-center gap-3">
-        <Icon aria-hidden className="size-6 text-muted-foreground/60" />
-        <div className="flex flex-col gap-1">
-          <p className="font-medium text-foreground">{title}</p>
-          {children}
+    // The page runs full width for the registry's rows. A centred
+    // placeholder stretched edge to edge is not a design, so the two
+    // empty states keep the prose cap.
+    <div className="max-w-3xl">
+      <EmptyPanel>
+        <div className="flex flex-col items-center gap-3">
+          <Icon aria-hidden className="size-6 text-muted-foreground/60" />
+          <div className="flex flex-col gap-1">
+            <p className="font-medium text-foreground">{title}</p>
+            {children}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
-    </EmptyPanel>
+      </EmptyPanel>
+    </div>
   );
 }
 

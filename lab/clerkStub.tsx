@@ -28,6 +28,21 @@ export function useAuth() {
   };
 }
 
+// The profile the Devices page names the account by. Only the fields
+// useAccountIdentity reads.
+export function useUser() {
+  return {
+    isLoaded: true,
+    isSignedIn: true,
+    user: {
+      id: LAB_ACCOUNT_ID,
+      primaryEmailAddress: { emailAddress: "rin@example.com" },
+      fullName: "Rin Hoshizora",
+      username: null,
+    },
+  };
+}
+
 export function useClerk() {
   return {
     openSignIn: () => {

@@ -48,21 +48,23 @@ export function SettingsPage() {
       eyebrow="This browser"
       title="Settings"
       watermark="設定"
-      gap="gap-10"
     >
-      <AppearanceSection
-        theme={theme.applied}
-        onPick={onPickTheme}
-        doubutsu={doubutsu.applied}
-        onDoubutsuChange={onDoubutsuChange}
-      />
-      <section className="space-y-1">
-        <SectionHeading>About</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          Shigoto no Mori web client{" "}
-          <span className="font-mono">{window.api.appVersion}</span>
-        </p>
-      </section>
+      {/* Prose-shaped, so it caps its own width where Devices runs full. */}
+      <div className="flex max-w-3xl flex-col gap-10">
+        <AppearanceSection
+          theme={theme.applied}
+          onPick={onPickTheme}
+          doubutsu={doubutsu.applied}
+          onDoubutsuChange={onDoubutsuChange}
+        />
+        <section className="space-y-1">
+          <SectionHeading>About</SectionHeading>
+          <p className="text-xs text-muted-foreground">
+            Shigoto no Mori web client{" "}
+            <span className="font-mono">{window.api.appVersion}</span>
+          </p>
+        </section>
+      </div>
     </PageShell>
   );
 }

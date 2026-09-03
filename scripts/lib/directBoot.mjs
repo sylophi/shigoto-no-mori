@@ -16,15 +16,17 @@ import { startStubHub } from "./hubStub.mjs";
 import { bootDevice, waitFor } from "./hubBoot.mjs";
 
 // A REAL ticket-mode listener on an ephemeral loopback port, with its
-// ticket store and a toggleable grant set. `registerHandlers`, when
+// ticket store and a toggleable command-access switch (the host-wide
+// "accepts commands from its account's devices" answer the real
+// binding reads from main). `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
 // before it starts.
 export async function startDirectListener(track, opts = {}) {
   const tickets = createConnectTicketStore(opts.ticketOpts);
-  const granted = new Set();
+  let accepts = false;
   const binding = createWsServerBinding({
     verifyTicket: (ticket, deviceId) => tickets.consume(ticket, deviceId),
-    isCommandGranted: (peerDeviceId) => granted.has(peerDeviceId),
+    isCommandGranted: () => accepts,
   });
   opts.registerHandlers?.(binding);
   const port = await binding.start({
@@ -41,7 +43,9 @@ export async function startDirectListener(track, opts = {}) {
   return {
     binding,
     tickets,
-    granted,
+    setAccepts: (next) => {
+      accepts = next;
+    },
     port,
     listenerPort: () => {
       const status = binding.status();

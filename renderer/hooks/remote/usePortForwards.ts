@@ -21,6 +21,7 @@ import {
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // Forwarding binds a real local TCP listener, which only the app can do
 // -- the capability gate for every surface that offers a forward, kept
@@ -69,7 +70,7 @@ export function describeForwardError(
   ports: { remotePort: number; localPort?: number },
 ): string {
   if (isCommandRefusedError(error)) {
-    return "Needs command access, granted from that device's Devices page.";
+    return peerReadOnlyNote();
   }
   const message = errorMessageOf(error);
   if (message.includes("EADDRINUSE")) {

@@ -8,7 +8,7 @@
 // the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
 import { readFileSync } from "node:fs";
-import { hostname, platform } from "node:os";
+import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { accountContract } from "@shared/ipc/modules/account";
@@ -21,6 +21,11 @@ import {
   type StoreCipher,
   type StoredAccount,
 } from "../../account/credentialStore";
+import {
+  defaultDesktopDeviceName,
+  isLegacyDefaultName,
+  type DefaultDeviceName,
+} from "../../account/defaultDeviceName";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
 import { enrollDevice, signOutDevice } from "@shared/account/enroll";
 import {
@@ -86,7 +91,7 @@ function store(): AccountStore {
   return cachedStore;
 }
 
-// The command-grant store, plaintext in userData (a grant list is not a
+// The command-access store, plaintext in userData (the switch is not a
 // bearer secret, see grantStore.ts). Built lazily for the same
 // app-ready reason as the credential store.
 function grantStore(): GrantStore {
@@ -97,39 +102,34 @@ function grantStore(): GrantStore {
   return cachedGrantStore;
 }
 
-// In-memory mirror of the granted peers for the CURRENT account, so the
-// direct listener's synchronous dispatch predicate (isPeerCommandGranted)
-// never hits the disk or the OS keychain on the hot path. Null means not
-// yet built (an empty set is a real built-empty answer, not "unbuilt").
-// Invalidated on every event that can change the answer: a grant or
-// revoke, and any account change (sign-in, sign-out, rename), so a grant
-// takes effect immediately without a reconnect.
-let grantCache: ReadonlySet<string> | null = null;
+// In-memory mirror of the command-access switch for the CURRENT
+// account, so the direct listener's synchronous dispatch predicate
+// (acceptsPeerCommands) never hits the disk or the OS keychain on the
+// hot path. Null means not yet built (false is a real built answer,
+// not "unbuilt"). Invalidated on every event that can change the
+// answer: the switch flipping, and any account change (sign-in,
+// sign-out, rename), so a flip takes effect immediately without a
+// reconnect.
+let grantCache: boolean | null = null;
 
 function invalidateGrantCache(): void {
   grantCache = null;
 }
 
-function currentGrantedPeers(): ReadonlySet<string> {
+// The predicate the direct listener consults live at dispatch to decide
+// whether a peer may run a mutating call on this host. Every peer that
+// reaches the direct listener is a device of this account (the connect
+// ticket bound it to one), so the answer is the account-wide switch,
+// not a per-peer lookup. Reads the cached answer, rebuilding it from
+// disk on the first call after an invalidation.
+export function acceptsPeerCommands(): boolean {
   if (grantCache !== null) return grantCache;
   const record = store().read();
-  // Signed out has no grants, even if a stale grants.json lingers under
-  // a previous account's id. Signed in, the store's per-account scoping
-  // yields an empty list whenever the stored account no longer matches.
-  const peers =
-    record !== null
-      ? new Set(grantStore().list(record.accountId))
-      : new Set<string>();
-  grantCache = peers;
-  return peers;
-}
-
-// The predicate the direct listener consults live at dispatch to decide
-// whether a peer may run a mutating call on this host. Reads the cached
-// granted set, rebuilding it from disk on the first call after an
-// invalidation.
-export function isPeerCommandGranted(peerDeviceId: string): boolean {
-  return currentGrantedPeers().has(peerDeviceId);
+  // Signed out accepts nothing, even if a stale grants.json lingers
+  // under a previous account's id. Signed in, the store's per-account
+  // scoping reads as off whenever the stored account no longer matches.
+  grantCache = record !== null && grantStore().enabled(record.accountId);
+  return grantCache;
 }
 
 // The resolved service config, resolved once and cached. Three layers,
@@ -173,10 +173,29 @@ function serviceConfig(): AccountServiceConfig {
   return cachedConfig;
 }
 
-// The default name a not-yet-renamed device enrolls under.
-function defaultDeviceName(): string {
-  return hostname();
+// The default name a not-yet-renamed device enrolls under. The macOS
+// half shells out (defaultDeviceName.ts), asynchronously so a status
+// read never blocks main on the child. A settled answer is kept for
+// the process. A provisional one (scutil did not answer this time) is
+// served but not kept, so the next read asks again.
+let settledDefaultName: string | null = null;
+let defaultNameInFlight: Promise<DefaultDeviceName> | null = null;
+async function defaultDeviceName(): Promise<DefaultDeviceName> {
+  if (settledDefaultName !== null) {
+    return { name: settledDefaultName, provisional: false };
+  }
+  defaultNameInFlight ??= defaultDesktopDeviceName().finally(() => {
+    defaultNameInFlight = null;
+  });
+  const resolved = await defaultNameInFlight;
+  if (!resolved.provisional) settledDefaultName = resolved.name;
+  return resolved;
 }
+
+// Starts the resolve at boot so it overlaps window creation instead of
+// gating the first status read. It cannot reject (the resolver falls
+// back to the hostname), so nothing awaits it.
+void defaultDeviceName();
 
 // Whether this build has an account service at all, for callers outside
 // the account module (liveness gates keepReachable on it: with no
@@ -194,18 +213,23 @@ export function clerkPublishableKey(): string {
   return serviceConfig().publishableKey;
 }
 
-// Assembles the current status from the stored credential metadata and
-// the resolved config. accountId and the stored deviceName come from the
-// record when signed in, else empty and the hostname default.
-function readStatus(): AccountStatus {
-  const config = serviceConfig();
-  const record = store().read();
+// Assembles the status from the stored credential metadata and the
+// resolved config. accountId and the stored deviceName come from the
+// record when signed in, else empty and the machine's default name.
+function statusOf(
+  record: StoredAccount | null,
+  defaultName: string,
+): AccountStatus {
   return {
-    configured: isConfigured(config),
+    configured: isConfigured(serviceConfig()),
     signedIn: record !== null,
     accountId: record?.accountId ?? "",
-    deviceName: record?.deviceName ?? defaultDeviceName(),
+    deviceName: record?.deviceName ?? defaultName,
   };
+}
+
+async function readStatus(): Promise<AccountStatus> {
+  return statusOf(store().read(), (await defaultDeviceName()).name);
 }
 
 // The signed-in preamble most account-backed calls share: the resolved
@@ -299,18 +323,67 @@ export function hubConnectInputs(): {
 
 export function makeAccountHandlers(
   emitChanged: () => void,
-  emitGrantsChanged: () => void,
+  emitCommandAccessChanged: () => void,
 ): Handlers<typeof accountContract> {
   // Fires the account-changed fan-out and invalidates the grant cache
   // together, since any account transition (sign-in, sign-out, rename)
-  // may change which grants apply (a new account scopes to a different
-  // grant list, sign-out drops them all).
+  // may change the answer (a new account scopes to its own switch,
+  // sign-out turns it off).
   const accountChanged = (): void => {
     invalidateGrantCache();
     emitChanged();
   };
+  // A device enrolled before the default learned to drop the hostname's
+  // domain (and to prefer the macOS computer name) still stores the raw
+  // hostname, "Name.local" on a Mac. A stored name that IS the raw
+  // hostname was never chosen by anyone, so it follows the default
+  // forward, once per process, the first time status is read while
+  // signed in with a SETTLED default (a provisional one would bake the
+  // hostname stand-in in for good) -- through the same fan-out a rename
+  // takes, so every window sees the new name. The device hub keeps the
+  // name a device enrolled under (there is no rename call), so peers
+  // see it after the next enrollment, like any rename. A name the user
+  // typed cannot match the raw hostname unless they typed exactly that,
+  // in which case the default is what they asked for. Returns the
+  // record status should report. A write that fails leaves the old
+  // name, since a cosmetic rename must never turn a status read into
+  // an error.
+  let defaultNameMigrated = false;
+  const migrateDefaultName = (
+    record: StoredAccount | null,
+    defaultName: DefaultDeviceName,
+  ): StoredAccount | null => {
+    if (defaultNameMigrated || record === null || defaultName.provisional) {
+      return record;
+    }
+    defaultNameMigrated = true;
+    if (
+      !isLegacyDefaultName(record.deviceName) ||
+      record.deviceName === defaultName.name
+    ) {
+      return record;
+    }
+    const renamed = { ...record, deviceName: defaultName.name };
+    try {
+      store().write(renamed);
+    } catch (error) {
+      console.warn(
+        "[account] could not rename the device to its default",
+        error,
+      );
+      return record;
+    }
+    accountChanged();
+    return renamed;
+  };
   return {
-    status: () => readStatus(),
+    status: async () => {
+      const defaultName = await defaultDeviceName();
+      return statusOf(
+        migrateDefaultName(store().read(), defaultName),
+        defaultName.name,
+      );
+    },
 
     enroll: async (token) => {
       // A second concurrent caller rides the first enrollment instead
@@ -330,7 +403,7 @@ export function makeAccountHandlers(
             // a registry reset re-enrolls this app as a brand new hub
             // device.
             deviceId: getDeviceId(),
-            fallbackDeviceName: defaultDeviceName(),
+            fallbackDeviceName: (await defaultDeviceName()).name,
             // os.platform() is the same value as process.platform,
             // which the linter restricts here. The device hub stores it
             // as an opaque label.
@@ -369,11 +442,11 @@ export function makeAccountHandlers(
             );
           },
         });
-        // Drop this host's command grants too, so re-signing into the
-        // SAME account does not resurrect the prior grants from a
-        // lingering grants.json. accountChanged() below also
-        // invalidates the grant cache, so the in-memory mirror is
-        // dropped in the same breath.
+        // Drop this host's command-access switch too, so re-signing
+        // into the SAME account does not resurrect it from a lingering
+        // grants.json. accountChanged() below also invalidates the
+        // grant cache, so the in-memory mirror is dropped in the same
+        // breath.
         grantStore().clear();
         accountChanged();
       })();
@@ -404,18 +477,11 @@ export function makeAccountHandlers(
         // so the handler is still correct for any other caller.
         store().clear();
         grantStore().clear();
-      } else {
-        // A device that is no longer on the account cannot be a
-        // meaningful grant target, and leaving the entry would silently
-        // re-trust the id if it ever re-enrolled under the same uuid.
-        grantStore().revoke(record.accountId, deviceId);
       }
-      // Both fan-outs: the registry list and this host's granted set
-      // each just changed. accountChanged also drops the grant cache,
-      // so the direct listener's dispatch predicate sees the removal
-      // without a reconnect.
+      // accountChanged also drops the grant cache, so a self-revoke's
+      // cleared switch is what the direct listener's dispatch predicate
+      // reads next, without a reconnect.
       accountChanged();
-      emitGrantsChanged();
     },
 
     listDevices: async () => {
@@ -436,32 +502,22 @@ export function makeAccountHandlers(
       return readStatus();
     },
 
-    grantCommands: (deviceId) => {
-      const record = store().read();
-      // A grant is meaningless with no account to scope it to, and would
-      // silently write under the empty account. Fail loudly instead.
-      if (record === null) {
-        throw new Error("cannot grant command access while signed out");
-      }
-      grantStore().grant(record.accountId, deviceId);
-      invalidateGrantCache();
-      emitGrantsChanged();
-    },
+    acceptsCommands: acceptsPeerCommands,
 
-    revokeCommands: (deviceId) => {
+    setAcceptsCommands: (enabled) => {
       const record = store().read();
+      // The switch is meaningless with no account to scope it to, and
+      // would silently write under the empty account. Fail loudly
+      // instead.
       if (record === null) {
-        throw new Error("cannot revoke command access while signed out");
+        throw new Error("cannot change command access while signed out");
       }
-      grantStore().revoke(record.accountId, deviceId);
-      invalidateGrantCache();
-      emitGrantsChanged();
-    },
-
-    listGrantedDevices: () => {
-      const record = store().read();
-      if (record === null) return [];
-      return grantStore().list(record.accountId);
+      grantStore().set(record.accountId, enabled);
+      // The answer just written IS the cache, for the account the
+      // record names: the renderer's refetch off the fan-out must not
+      // cost another keychain decrypt to learn it.
+      grantCache = enabled;
+      emitCommandAccessChanged();
     },
   };
 }

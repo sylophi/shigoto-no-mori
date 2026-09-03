@@ -11,6 +11,12 @@ import type { AccountStore } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
 
+// The platform label a browser enrolls under, beside the desktop's
+// os.platform() values. Producers (the web bridge, the lab) and the
+// one consumer that branches on it (the registry row's traits) share
+// this so a typo cannot silently turn a browser into a desktop row.
+export const WEB_PLATFORM = "web";
+
 export type EnrollDeviceDeps = {
   config: AccountServiceConfig;
   service: AccountService;
@@ -19,7 +25,7 @@ export type EnrollDeviceDeps = {
   // The name this device enrolls under when the store holds none yet.
   fallbackDeviceName: string;
   // Opaque platform label the device hub stores beside the device
-  // (os.platform() on desktop, "web" in a browser).
+  // (os.platform() on desktop, WEB_PLATFORM in a browser).
   platform: string;
 };
 

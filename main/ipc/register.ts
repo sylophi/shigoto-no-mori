@@ -46,8 +46,8 @@ import { directContract } from "@shared/ipc/modules/direct";
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import {
+  acceptsPeerCommands,
   allowedWebOrigin,
-  isPeerCommandGranted,
   provisionDeviceTunnel,
   hubConnectInputs,
 } from "./modules/account";
@@ -130,14 +130,16 @@ const wsServer = createWsServerBinding();
 // The direct data plane (v2 step 10, slice A): a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
 // minted by direct:connectInfo over the device hub, and dispatch gates
-// mutating channels on the live per-peer grant this listener reads
-// (isPeerCommandGranted). Unconditional like the other bindings so
+// mutating channels on the host's live command-access switch
+// (acceptsPeerCommands: every ticketed peer is a device of this
+// account, so the switch is the whole verdict). Unconditional like the
+// other bindings so
 // registration records handlers at boot, while listening is gated on
 // enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const directWsServer = createWsServerBinding({
   verifyTicket: (ticket, deviceId) => directTickets.consume(ticket, deviceId),
-  isCommandGranted: isPeerCommandGranted,
+  isCommandGranted: acceptsPeerCommands,
 });
 
 // The tunnel endpoint (v2 step 10, slice B): a supervised cloudflared

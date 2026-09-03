@@ -1,27 +1,29 @@
 // The account's device registry: one line naming the account with its
-// headcount and the sign-out, then one row per machine, this one
-// first. This component owns every query the rows read -- the account
-// list, the grants, the host chips and the per-peer command-access
-// verdicts -- so a row is a pure function of what it is handed and the
-// page makes one fan-out instead of one per row.
+// sign-out, then one row per machine, this one first. This component
+// owns every query the rows read -- the account list, the host chips
+// and the per-peer command-access verdicts -- so a row is a pure
+// function of what it is handed and the page makes one fan-out instead
+// of one per row.
 //
-// The marks, the summary count and the host chips' last-known marker
-// all derive from the LIVE hub store rather than the
-// account:listDevices HTTP snapshot (which only invalidates on
-// account:changed), so a device coming online or going away updates
-// without a refetch.
+// The marks and the host chips' last-known marker derive from the LIVE
+// hub store rather than the account:listDevices HTTP snapshot (which
+// only invalidates on account:changed), so a device coming online or
+// going away updates without a refetch.
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
   useAccountDevices,
-  useGrantCommands,
-  useGrantedDevices,
-  useRevokeCommands,
+  useLocalDeviceName,
   useRevokeDevice,
-  useWatchGrantsChanges,
+  useWatchCommandAccessChanges,
 } from "@/hooks/account/useAccount";
-import { usePeerCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useAccountIdentity } from "@/hooks/account/useClerkAccount";
+import {
+  commandAccessOf,
+  usePeerCommandAccess,
+} from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { useTunnelState } from "@/hooks/remote/useHubStatus";
+import { useHubStatus, useTunnelState } from "@/hooks/remote/useHubStatus";
 import { abbreviateId } from "@/lib/abbreviateId";
 import { localDeviceId } from "@/lib/queryKeys";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
@@ -30,21 +32,18 @@ import { deviceRowStatus } from "./deviceRegistryStatus";
 
 export function DeviceRegistry({
   accountId,
-  localDeviceName,
+  describeError,
 }: {
   accountId: string;
-  // This device's locally stored name, from account status.
-  localDeviceName: string;
+  // A sentence for a device list that would not load, shown in place
+  // of the list. The desktop leaves the failure to the query's toast.
+  // The web page, which cannot tell a refusing hub from an unreachable
+  // one, says which it might be.
+  describeError?: (error: unknown) => string;
 }) {
-  useWatchGrantsChanges();
+  useWatchCommandAccessChanges();
+  const localDeviceName = useLocalDeviceName();
   const devicesQuery = useAccountDevices();
-  // The peers this host grants command access. Host-local, so it is
-  // independent of whether the peer is online -- and so the toggle
-  // keeps working on an offline row, which is the point: you decide
-  // what a machine may do here before it next knocks.
-  const grantedSet = new Set(useGrantedDevices().data ?? []);
-  const grantCommands = useGrantCommands();
-  const revokeCommands = useRevokeCommands();
   const revokeDevice = useRevokeDevice();
   const hubDevices = useRemoteDevices();
   const hubById = new Map(
@@ -54,12 +53,13 @@ export function DeviceRegistry({
   // derived primitive off the shared hub status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
   const tunnel = useTunnelState();
+  const socket = useHubStatus()?.socket ?? null;
   const hosts = useHostChipIndex(localDeviceId);
-  // Whether THIS device may drive verbs on each peer -- the mirror of
-  // `grantedSet` above, which is what this host allows peers to do here.
-  // Asked once for the whole list (the rows' forward strips would
-  // otherwise each mount their own copy under the same keys), and only
-  // for peers, since the local device is granted by contract.
+  // Whether THIS device may drive verbs on each peer: the peer's own
+  // "allow control from other devices" switch, as it answers us. Asked
+  // once for the whole list (the rows' forward strips would otherwise
+  // each mount their own copy under the same keys), and only for
+  // peers, since the local device is granted by contract.
   const peerAccess = usePeerCommandAccess(hubDevices);
 
   // This device first, everything else in the order the device hub
@@ -74,8 +74,12 @@ export function DeviceRegistry({
     return {
       device,
       isThisDevice,
-      status: deviceRowStatus(device, isThisDevice, hubDevice),
-      canCommandPeer: peerAccess.get(device.deviceId)?.granted ?? false,
+      // setDeviceName writes this device's name locally while the hub
+      // registry keeps the name it enrolled under. The local one is the
+      // truth the user just typed, so the row shows it.
+      name: isThisDevice ? localDeviceName : device.name,
+      status: deviceRowStatus(device, isThisDevice, hubDevice, socket),
+      access: commandAccessOf(peerAccess, device.deviceId),
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice
@@ -83,28 +87,24 @@ export function DeviceRegistry({
         : (hubDevice?.appVersion ?? ""),
     };
   });
-  const online = rows.filter((row) => row.status.reachable).length;
+  // Two machines wearing the same name are told apart by their ids,
+  // which the rows otherwise keep out of sight: an id is nothing a
+  // person recognises, so it only earns its place when the name alone
+  // cannot say which machine the Remove confirm is about.
+  const nameCount = new Map<string, number>();
+  for (const row of rows) {
+    nameCount.set(row.name, (nameCount.get(row.name) ?? 0) + 1);
+  }
 
   return (
     <section className="flex flex-col gap-5">
-      {/* The account is one thin line -- an id and a headcount, because
-          a hub account has no other properties -- and the sign-out
-          sits with it: ending the session is what removes THIS machine
-          from the account (see the Remove button's note in the row). */}
+      {/* The account is one thin line -- who is signed in -- and the
+          sign-out sits with it: ending the session is what removes THIS
+          machine from the account (see the Remove button's note in the
+          row). A hub account has no other properties, and the rows say
+          everything about its devices, so no headcount repeats them. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <p className="text-xs text-muted-foreground">
-          Signed in as{" "}
-          <span className="font-mono text-foreground select-text">
-            {abbreviateId(accountId)}
-          </span>
-          {rows.length > 0 && (
-            <>
-              {" "}
-              &middot; {rows.length} {rows.length === 1 ? "device" : "devices"}{" "}
-              &middot; {online} online
-            </>
-          )}
-        </p>
+        <AccountIdentity accountId={accountId} />
         <ClerkSignOutButton className="-my-1 text-muted-foreground" />
       </div>
 
@@ -112,17 +112,24 @@ export function DeviceRegistry({
         <p className="text-xs text-muted-foreground/70">
           Loading devices&hellip;
         </p>
+      ) : devicesQuery.isError ? (
+        // A failed list is unknown, not empty, so no "No devices yet"
+        // under it.
+        describeError && (
+          <ErrorBanner>{describeError(devicesQuery.error)}</ErrorBanner>
+        )
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (
         <ul className="divide-y divide-border">
           {rows.map(
-            ({ device, isThisDevice, status, appVersion, canCommandPeer }) => (
+            ({ device, isThisDevice, name, status, access, appVersion }) => (
               <DeviceRegistryRow
                 key={device.deviceId}
                 device={device}
                 isThisDevice={isThisDevice}
-                localDeviceName={localDeviceName}
+                name={name}
+                showId={(nameCount.get(name) ?? 0) > 1}
                 status={status}
                 appVersion={appVersion}
                 chips={hosts.byDevice.get(device.deviceId) ?? []}
@@ -135,27 +142,36 @@ export function DeviceRegistry({
                     ? hosts.localLoading
                     : hosts.remoteLoading && status.reachable
                 }
-                granted={grantedSet.has(device.deviceId)}
-                grantPending={
-                  (grantCommands.isPending &&
-                    grantCommands.variables === device.deviceId) ||
-                  (revokeCommands.isPending &&
-                    revokeCommands.variables === device.deviceId)
-                }
-                onGrant={() => grantCommands.mutate(device.deviceId)}
-                onRevokeCommands={() => revokeCommands.mutate(device.deviceId)}
                 onRevokeDevice={() => revokeDevice.mutate(device.deviceId)}
                 revokePending={
                   revokeDevice.isPending &&
                   revokeDevice.variables === device.deviceId
                 }
                 tunnel={isThisDevice ? tunnel : undefined}
-                canCommandPeer={canCommandPeer}
+                access={access}
               />
             ),
           )}
         </ul>
       )}
     </section>
+  );
+}
+
+// The person, not the account's key: the hub keys on the Clerk user
+// id, but nobody recognises that string as themselves, so the line
+// reads the email (or name) Clerk knows and only falls back to the
+// abbreviated id while the profile is still loading. A leaf, like the
+// sign-out button beside it, so Clerk's session churn re-renders one
+// span and not the registry.
+function AccountIdentity({ accountId }: { accountId: string }) {
+  const identity = useAccountIdentity(abbreviateId(accountId));
+  return (
+    <p className="text-xs text-muted-foreground">
+      Signed in as{" "}
+      <span className="font-medium text-foreground select-text">
+        {identity}
+      </span>
+    </p>
   );
 }

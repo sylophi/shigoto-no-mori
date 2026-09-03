@@ -98,22 +98,23 @@ export function registerIpcHandlers(): void {
     makeAccountHandlers(
       () => {
         broadcastAll(accountContract, "changed", undefined);
-        // A direct account switch that stays signed in changes which
-        // grants apply, so refresh the renderer's granted-set query too.
-        // Main's grant cache is already invalidated in makeAccountHandlers
-        // (enforcement is correct without this); this only keeps the
-        // renderer display fresh, since `changed` invalidates the
-        // ["account"] prefix but not ["accountGrants"].
-        broadcastAll(accountContract, "grantsChanged", undefined);
+        // A direct account switch that stays signed in changes the
+        // command-access answer, so refresh the renderer's switch query
+        // too. Main's grant cache is already invalidated in
+        // makeAccountHandlers, so enforcement is correct without this.
+        // This only keeps the renderer display fresh, since `changed`
+        // invalidates the ["account"] prefix but not
+        // ["accountCommandAccess"].
+        broadcastAll(accountContract, "commandAccessChanged", undefined);
         // Also reconciles the direct listener from its tail, which
         // follows the same enrollment condition.
         void refreshHubConnection();
       },
-      // A grant or revoke fans out on its own channel so a toggle does
-      // not thrash the account status and device queries. No hub
-      // reconnect: the link reads the grant predicate live.
+      // The switch flipping fans out on its own channel so the toggle
+      // does not thrash the account status and device queries. No hub
+      // reconnect: the listener reads the predicate live.
       () => {
-        broadcastAll(accountContract, "grantsChanged", undefined);
+        broadcastAll(accountContract, "commandAccessChanged", undefined);
       },
     ),
   );

@@ -233,7 +233,7 @@ async function main() {
       "ungranted peer: forward:open is refused with the typed CommandRefusedError and no conn is dialed",
     );
 
-    listener.granted.add("B");
+    listener.setAccepts(true);
 
     // (2) The basic round trip: open, send, poll the echo, close.
     const { connId } = await forward.open({ port: echo.port });

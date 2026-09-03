@@ -340,7 +340,7 @@ async function main() {
       "ungranted peer: bundleStart, captureDirty and worktrees:delete are refused with the typed CommandRefusedError",
     );
 
-    listener.granted.add("B");
+    listener.setAccepts(true);
 
     // (2) captureDirty over the wire: a dirty worktree snapshots to
     // its capture ref on the host, tip echoed back.

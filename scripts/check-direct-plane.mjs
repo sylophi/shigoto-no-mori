@@ -1231,14 +1231,14 @@ async function main() {
         "read",
       );
       // Grant: the SAME socket serves the mutation, no reconnect.
-      listener.granted.add("A");
+      listener.setAccepts(true);
       assert.equal(
         await connection.transport.invoke("test:mutate", undefined),
         "mutated",
       );
       assert.equal(listener.mutateRuns(), 1);
       // Revoke: takes effect live at the next dispatch.
-      listener.granted.delete("A");
+      listener.setAccepts(false);
       await assert.rejects(
         () => connection.transport.invoke("test:mutate", undefined),
         (error) => error instanceof CommandRefusedError,
@@ -1252,7 +1252,7 @@ async function main() {
     "supersede kills the old socket dead: nothing it delivers after the supersede executes a handler",
     async (track) => {
       const listener = await startDirectListener(track);
-      listener.granted.add("A");
+      listener.setAccepts(true);
       const first = await dialWith(
         listener.port,
         listener.tickets.mint("A", 1)[0],
@@ -1547,7 +1547,7 @@ async function main() {
         ),
         { granted: false },
       );
-      listener.granted.add("A");
+      listener.setAccepts(true);
       assert.deepEqual(
         await connection.transport.invoke(
           "remoteAccess:commandAccess",
@@ -1556,7 +1556,7 @@ async function main() {
         { granted: true },
       );
       // And a revoke flips the verdict live on the same socket.
-      listener.granted.delete("A");
+      listener.setAccepts(false);
       assert.deepEqual(
         await connection.transport.invoke(
           "remoteAccess:commandAccess",

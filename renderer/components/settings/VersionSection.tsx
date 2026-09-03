@@ -7,6 +7,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useUpdater } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { UpdaterStatusLine } from "./UpdaterStatusLine";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // The Version section of a device: the build it runs and the update
 // action. One shape and one set of words on every device section. Only
@@ -33,9 +34,7 @@ export function VersionSection({
   const kind = state?.kind ?? "idle";
   const ready = state?.kind === "ready" ? state : null;
   const busy = kind === "checking" || kind === "downloading";
-  const blockedTitle = canCommand
-    ? undefined
-    : "Read-only until this device grants command access";
+  const blockedTitle = canCommand ? undefined : peerReadOnlyNote("this device");
   // No state to show: the first read failed. Over a wire that is
   // still dialing, or on a peer build without the channel, the error
   // looks the same, so say only what is known and offer a retry.

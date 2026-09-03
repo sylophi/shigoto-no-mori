@@ -177,11 +177,11 @@ function buildQueryKeys(deviceId: string) {
     account: () => ["account"] as const,
     accountStatus: () => ["account", "status"] as const,
     accountDevices: () => ["account", "devices"] as const,
-    // The peer deviceIds this host grants command access. Kept OUTSIDE the
-    // "account" prefix so a grant toggle (which fans out on grantsChanged)
-    // invalidates only this query and never thrashes status or the device
-    // list.
-    accountGrantedDevices: () => ["accountGrants"] as const,
+    // Whether this host accepts commands from the account's other
+    // devices. Kept OUTSIDE the "account" prefix so the toggle (which
+    // fans out on commandAccessChanged) invalidates only this query and
+    // never thrashes status or the device list.
+    accountCommandAccess: () => ["accountCommandAccess"] as const,
 
     // Host-scoped: the update is a fact about the machine the app runs
     // on, and a peer's Settings tab shows that device's state under its

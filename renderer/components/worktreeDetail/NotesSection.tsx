@@ -7,6 +7,7 @@ import {
   useWorktreeDataWrite,
 } from "@/hooks/worktrees/useWorktreeData";
 import { hasWorktreeData, type Worktree } from "@shared/schemas";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
   if (!hasWorktreeData(worktree)) return null;
@@ -72,11 +73,7 @@ function NotesSectionInner({
         onBlur={commit}
         rows={3}
         readOnly={!granted}
-        title={
-          !granted
-            ? "Read-only. Command access is granted from that device."
-            : undefined
-        }
+        title={!granted ? peerReadOnlyNote() : undefined}
         className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
       />
     </section>

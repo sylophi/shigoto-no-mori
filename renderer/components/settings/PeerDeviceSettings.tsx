@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { DeviceToggleSections } from "./DeviceSettingsSections";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import { VersionSection } from "./VersionSection";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // Another device's section on the Settings page. Everything under the
 // version routes through the HostScope this mounts (the scoped config
@@ -185,8 +186,7 @@ function PeerSettingsForm({
         // Same shape as the offline note, in the neutral family: this is
         // a normal permission state, not a warning.
         <p className="rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground select-text">
-          Read-only until {device.label} grants command access from its Devices
-          page.
+          {peerReadOnlyNote(device.label)}
         </p>
       )}
 
