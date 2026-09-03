@@ -13,7 +13,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { TransplantDialog } from "./TransplantDialog";
+import { TransplantDialog } from "./transplant/TransplantDialog";
 
 export function RemoteWorktreeActions({
   worktree,
@@ -45,9 +45,9 @@ export function RemoteWorktreeActions({
       />
       <TransplantButton
         worktree={worktree}
-        sourceProjectId={project.id}
+        project={project}
         sourceIdentity={project.identity}
-        localProjectId={localProject.id}
+        localProject={localProject}
       />
     </div>
   );
@@ -58,14 +58,14 @@ export function RemoteWorktreeActions({
 // confirmation.
 function TransplantButton({
   worktree,
-  sourceProjectId,
+  project,
   sourceIdentity,
-  localProjectId,
+  localProject,
 }: {
   worktree: Worktree;
-  sourceProjectId: string;
+  project: Project;
   sourceIdentity: string;
-  localProjectId: string;
+  localProject: Project;
 }) {
   const [open, setOpen] = useState(false);
   const { deviceId } = useHostScope();
@@ -86,10 +86,10 @@ function TransplantButton({
       {open && (
         <TransplantDialog
           worktree={worktree}
-          sourceProjectId={sourceProjectId}
+          project={project}
           sourceIdentity={sourceIdentity}
+          localProject={localProject}
           sourceDeviceLabel={deviceLabel}
-          localProjectId={localProjectId}
           onClose={() => setOpen(false)}
         />
       )}
@@ -103,7 +103,7 @@ function BringButton(props: {
   sourceIdentity: string;
   localProjectId: string;
 }) {
-  const bring = useBringWorktreeHere({ ...props, transplant: false });
+  const bring = useBringWorktreeHere(props);
   return (
     <Button
       type="button"

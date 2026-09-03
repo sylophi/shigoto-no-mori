@@ -847,10 +847,14 @@ async function main() {
       // registered on either remote wire.
       assert.equal(syncContract.calls.pullWorktree.remote, false);
       assert.equal(syncContract.calls.pullWorktree.mutating, true);
-      // The transplant orchestrator (v2 step 9) is the same local-only
-      // shape: its remote half is the peer's ordinary worktrees:delete.
-      assert.equal(syncContract.calls.transplantWorktree.remote, false);
-      assert.equal(syncContract.calls.transplantWorktree.mutating, true);
+      // The source teardown after a pull (v2 step 9) is the same
+      // local-only shape: its remote half is the peer's ordinary
+      // worktrees:delete.
+      assert.equal(syncContract.calls.teardownSource.remote, false);
+      assert.equal(syncContract.calls.teardownSource.mutating, true);
+      // The pull's progress frames go back to the invoking renderer
+      // only: an untagged broadcast never reaches a remote wire.
+      assert.notEqual(syncContract.calls.pullProgress.remote, true);
       // The preflight read is remote and explicitly a read, so every
       // wire serves it ungated.
       assert.equal(remoteAccessContract.calls.commandAccess.remote, true);

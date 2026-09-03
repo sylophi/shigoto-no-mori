@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { defineContract, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
   CommitHashSchema,
+  CreatePhaseSchema,
   GitRefNameSchema,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -31,11 +32,15 @@ import {
 // worktree here, driving the remote verbs above against that peer.
 // Tagged {remote:false}, so it is never registered on any remote wire
 // (main/ipc/register.ts only forwards remote:true) and the web
-// loopback refuses it as a mutation. transplantWorktree (step 9) is
-// the same local orchestrator shape: the pull plus tearing the source
-// worktree down on the peer afterwards, where the teardown runs only
-// when nothing can be lost (the dirty state landed here, or there was
-// none) and rides the peer's ordinary grant-gated worktrees:delete.
+// loopback refuses it as a mutation. teardownSource (step 9) is the
+// transplant's second half: tearing the source worktree down on the
+// peer after a pull landed here, which runs only when nothing can be
+// lost (the dirty state landed here, or there was none) and rides the
+// peer's ordinary grant-gated worktrees:delete. The two are separate
+// verbs so the transplant dialog can show the landed worktree before
+// the user decides what happens to the copy on the source device.
+// pullProgress is the pull's running commentary back to the renderer
+// that invoked it (local-only, like the orchestrators themselves).
 
 // The refs a peer may request into a bundle, fail-closed: a branch
 // (refs/heads/<name>) or a dirty-state capture
@@ -145,6 +150,28 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
   ),
 });
 
+// The pull's progress, one frame per step change and per transferred
+// chunk, keyed by the SOURCE worktree id (the only id the caller holds
+// before the local worktree exists). `create` frames carry the new
+// worktree's ordinary lifecycle phase as it streams (carry-over, setup,
+// port provision). `transfer` frames carry the byte count.
+export const SyncPullStepSchema = z.enum([
+  "capture",
+  "transfer",
+  "create",
+  "apply",
+]);
+export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
+
+export const SyncPullProgressSchema = z.strictObject({
+  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+  step: SyncPullStepSchema,
+  bytes: z.number().int().nonnegative().optional(),
+  totalBytes: z.number().int().nonnegative().optional(),
+  createPhase: CreatePhaseSchema.optional(),
+});
+export type SyncPullProgress = z.infer<typeof SyncPullProgressSchema>;
+
 export const SyncPullWorktreeResultSchema = z.strictObject({
   worktree: WorktreeSchema,
   // captured && !dirtyApplied is the partial-success case: the source
@@ -158,20 +185,28 @@ export type SyncPullWorktreeResult = z.infer<
   typeof SyncPullWorktreeResultSchema
 >;
 
-// The pull result plus the teardown's fate. A refused or failed
-// teardown never fails the call: by then the pull succeeded and the
-// state is safe on both sides, so the caller learns via
-// sourceRemoved:false with sourceError carrying the stable marker or
-// message ("scripts-running", a cleanup-script failure, a dirty state
-// that did not land here).
-export const SyncTransplantWorktreeResultSchema =
-  SyncPullWorktreeResultSchema.extend({
-    sourceRemoved: z.boolean(),
-    sourceError: z.string().optional(),
-  });
-export type SyncTransplantWorktreeResult = z.infer<
-  typeof SyncTransplantWorktreeResultSchema
+// The teardown's fate. A refused or failed teardown never fails the
+// call: by then the pull succeeded and the state is safe on both
+// sides, so the caller learns via sourceRemoved:false with sourceError
+// carrying the stable marker or message ("scripts-running", a
+// cleanup-script failure, a dirty state that did not land here).
+export const SyncTeardownSourceResultSchema = z.strictObject({
+  sourceRemoved: z.boolean(),
+  sourceError: z.string().optional(),
+});
+export type SyncTeardownSourceResult = z.infer<
+  typeof SyncTeardownSourceResultSchema
 >;
+
+// The teardown's input: which peer worktree. What the preceding pull
+// captured and applied is NOT on the wire: the host records its own
+// pull's outcome and reads it back here, so the data-loss rule runs
+// on facts the host produced, never on a caller's say-so.
+export const SyncTeardownSourcePayloadSchema = z.strictObject({
+  sourceDeviceId: DeviceIdSchema,
+  sourceProjectId: z.string().min(1),
+  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+});
 
 export const syncContract = defineContract("host", {
   refTips: invoke(
@@ -219,13 +254,16 @@ export const syncContract = defineContract("host", {
     SyncPullWorktreeResultSchema,
     { remote: false, mutating: true },
   ),
-  // Pull plus source teardown (see the header note). Same payload as
-  // pullWorktree: the teardown targets exactly the source worktree the
-  // pull captured from.
-  transplantWorktree: invoke(
-    "sync:transplantWorktree",
-    SyncPullWorktreePayloadSchema,
-    SyncTransplantWorktreeResultSchema,
+  // The source teardown after a pull (see the header note): local-only
+  // like the pull, its remote half is the peer's ordinary grant-gated
+  // worktrees:delete.
+  teardownSource: invoke(
+    "sync:teardownSource",
+    SyncTeardownSourcePayloadSchema,
+    SyncTeardownSourceResultSchema,
     { remote: false, mutating: true },
   ),
+  // Untagged (local-only): the pull runs on the device whose renderer
+  // invoked it, and the notifier hands the frames back to that caller.
+  pullProgress: broadcast("sync:pullProgress", SyncPullProgressSchema),
 });

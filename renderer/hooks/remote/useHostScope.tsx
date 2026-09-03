@@ -111,6 +111,16 @@ export function HostScopeProvider({
   );
 }
 
+// Re-pins a subtree to THIS machine from inside a remote scope, for
+// the half of a cross-device flow that belongs here (the transplant
+// dialog's destination: its project config, carry-over and runtime
+// paths). The same constant the provider-less default resolves to, so
+// the value is stable and the hooks beneath behave exactly as they do
+// on a local page.
+export function LocalHostScope({ children }: { children: ReactNode }) {
+  return <HostScopeContext value={localHostScope}>{children}</HostScopeContext>;
+}
+
 // No null check: the context always resolves (to the local device when
 // no provider wraps the caller), so converting a host-scoped hook to
 // read its scope from here must not change its local behavior.

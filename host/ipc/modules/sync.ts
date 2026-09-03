@@ -9,10 +9,14 @@ import { join } from "node:path";
 import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
+  type SyncPullProgress,
   type SyncPullWorktreePayloadSchema,
   SyncRefTipsResultSchema,
+  type SyncTeardownSourcePayloadSchema,
+  type SyncTeardownSourceResult,
   syncContract,
 } from "@shared/ipc/modules/sync";
+
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
@@ -40,6 +44,37 @@ import {
 } from "@host/lib/projects";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { notifierFor } from "./worktrees";
+
+type SourceRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
+
+// What each pull captured and applied, by source worktree, for the
+// teardown that may follow. Written by the pull itself and read by the
+// teardown, so the data-loss rule runs on the host's own facts: a
+// caller cannot claim a capture landed when it did not. The branch tip
+// and the capture's tree let the teardown prove the source is still
+// exactly what was brought here, however long the user took to decide.
+// Ephemeral by design (a restart forgets, and the teardown then
+// refuses), bounded so a host that pulls for weeks never grows it.
+type PullReceipt = {
+  targetProjectId: string;
+  branch: string;
+  branchTip: string;
+  captured: boolean;
+  dirtyApplied: boolean;
+  captureTree?: string;
+};
+const RECEIPT_LIMIT = 64;
+const pullReceipts = new Map<string, PullReceipt>();
+const receiptKey = (source: SourceRef) =>
+  `${source.sourceDeviceId}/${source.sourceProjectId}/${source.sourceWorktreeId}`;
+function rememberPull(source: SourceRef, receipt: PullReceipt): void {
+  pullReceipts.delete(receiptKey(source));
+  pullReceipts.set(receiptKey(source), receipt);
+  for (const key of pullReceipts.keys()) {
+    if (pullReceipts.size <= RECEIPT_LIMIT) break;
+    pullReceipts.delete(key);
+  }
+}
 
 // A registered transfer: the bundle file (inside its own mkdtemp dir,
 // 0700, so the data is no more readable than the repo it came from).
@@ -154,68 +189,145 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   pullWorktree: runPullWorktree,
 
-  // Transplant (v2 step 9): the pull plus tearing the source worktree
-  // down on the peer afterwards. The teardown runs ONLY when nothing
-  // can be lost: an unapplied capture means the uncommitted work still
-  // exists solely on the source, so the source is kept and the caller
-  // learns why via sourceError. Teardown failures never fail the call
-  // either -- by then the pull succeeded and the worktree simply exists
-  // on both sides. An external (adopted) source worktree keeps its
-  // local branch after teardown because sm rm skips branch deletion for
-  // externals (cli/gitx.go deleteBranchAfterWorktreeRemoval), so the
-  // branch then exists on both devices, which is not lossy.
-  transplantWorktree: async (input, ctx) => {
-    const pulled = await runPullWorktree(input, ctx);
-    if (pulled.captured && !pulled.dirtyApplied) {
-      return {
-        ...pulled,
-        sourceRemoved: false,
-        sourceError:
-          "the uncommitted changes could not be applied here and only exist on the source worktree",
-      };
-    }
-    try {
-      // Force only when the dirty state was actually captured and
-      // applied here. The CLI's --force does more than skip its own
-      // clean-tree guard (cmd_rm.go requireClean): it also switches to
-      // `git worktree remove --force` and enables the ENOTEMPTY
-      // force-wipe fallback, which would silently destroy work a
-      // capture cannot carry (submodule-only dirt captures as clean,
-      // see the cli/cmd_dirty.go header) or edits made after the
-      // capture. So on a capture that said clean, git's own pre-removal
-      // check must independently agree before the source dies, and a
-      // disagreement surfaces as sourceRemoved:false with the git
-      // message instead of silent loss. Accepted cost: worktrees with
-      // populated submodules report sourceRemoved:false on clean
-      // transplants because git refuses non-forced removal of them.
-      // refuseRunningScripts is the app-side guard the local
-      // kill-then-delete path deliberately lacks.
-      const removed = DeleteWorktreeResultSchema.parse(
-        await peerWorktreesApiFor(input.sourceDeviceId).delete({
-          projectId: input.sourceProjectId,
-          worktreeId: input.sourceWorktreeId,
-          force: pulled.captured,
-          refuseRunningScripts: true,
-        }),
+  // The source teardown (v2 step 9), after a pull landed here. The
+  // pull's own receipt decides whether it may run at all. Without one
+  // (no pull, or a restart in between) the call refuses outright
+  // rather than guess. The receipt is kept until a teardown actually
+  // removes the source, so a refused or failed one can be retried.
+  teardownSource: async (source) => {
+    const key = receiptKey(source);
+    const receipt = pullReceipts.get(key);
+    if (receipt === undefined) {
+      throw new Error(
+        "No pull recorded for that worktree on this device. Bring it here first.",
       );
-      if (removed.ok) return { ...pulled, sourceRemoved: true };
-      // ok:false means the worktree was NOT removed: cleanup scripts
-      // run before `git worktree remove` and a failure aborts the
-      // pipeline with the worktree left in place (cli/cmd_rm.go).
-      return {
-        ...pulled,
-        sourceRemoved: false,
-        sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,
-      };
-    } catch (error) {
-      return {
-        ...pulled,
-        sourceRemoved: false,
-        sourceError: errorMessageOf(error),
-      };
     }
+    const changed = await sourceChangedSince(source, receipt);
+    if (changed !== undefined) {
+      return { sourceRemoved: false, sourceError: changed };
+    }
+    const result = await tearDownSource(source, receipt);
+    if (result.sourceRemoved) pullReceipts.delete(key);
+    return result;
   },
 };
+
+// The teardown may run any time after the pull, so the source is
+// re-checked against the receipt first: the branch tip must not have
+// moved, and the uncommitted state must still be exactly the tree the
+// pull captured (a fresh capture on the peer, fetched thin against the
+// tip and compared by tree hash, since capture commits are not
+// deterministic). Anything else is work that never crossed, and the
+// reason comes back as the kept-source explanation.
+async function sourceChangedSince(
+  source: SourceRef,
+  receipt: PullReceipt,
+): Promise<string | undefined> {
+  const peer = peerSyncApiFor(source.sourceDeviceId);
+  const branchRef = `refs/heads/${receipt.branch}`;
+  const { tips } = SyncRefTipsResultSchema.parse(
+    await peer.refTips({
+      projectId: source.sourceProjectId,
+      refs: [branchRef],
+    }),
+  );
+  if (tips.find((tip) => tip.ref === branchRef)?.commit !== receipt.branchTip) {
+    return "the branch on the source device moved after it was brought here.";
+  }
+  const fresh = SyncCaptureDirtyResultSchema.parse(
+    await peer.captureDirty({
+      projectId: source.sourceProjectId,
+      worktreeId: source.sourceWorktreeId,
+    }),
+  );
+  const changedSince =
+    "the source worktree changed after its uncommitted work was captured.";
+  if (!fresh.captured) return receipt.captured ? changedSince : undefined;
+  if (!receipt.captured || receipt.captureTree === undefined) {
+    return "the source worktree has uncommitted changes that were never brought here.";
+  }
+  const project = findProjectOrThrow(receipt.targetProjectId);
+  const dirtyRef = `refs/shigomori/dirty/${source.sourceWorktreeId}`;
+  try {
+    await fetchBundleFromPeer(peer, {
+      sourceProjectId: source.sourceProjectId,
+      targetProjectId: project.id,
+      refs: [dirtyRef],
+      haves: [receipt.branchTip],
+    });
+    const tree = await treeOf(project.path, fresh.commit ?? "");
+    return tree === receipt.captureTree ? undefined : changedSince;
+  } finally {
+    await deleteRef(project.path, dirtyRef).catch(() => {});
+  }
+}
+
+async function treeOf(projectPath: string, commit: string): Promise<string> {
+  const out = await run(projectPath, [
+    "rev-parse",
+    "--verify",
+    "--end-of-options",
+    `${commit}^{tree}`,
+  ]);
+  return out.trim();
+}
+
+// The source teardown. It runs ONLY when nothing can be lost: an unapplied
+// capture means the uncommitted work still exists solely on the
+// source, so the source is kept and the caller learns why via
+// sourceError. Teardown failures never throw either -- by then the
+// pull succeeded and the worktree simply exists on both sides. An
+// external (adopted) source worktree keeps its local branch after
+// teardown because sm rm skips branch deletion for externals
+// (cli/gitx.go deleteBranchAfterWorktreeRemoval), so the branch then
+// exists on both devices, which is not lossy.
+async function tearDownSource(
+  source: SourceRef,
+  pulled: { captured: boolean; dirtyApplied: boolean },
+): Promise<SyncTeardownSourceResult> {
+  if (pulled.captured && !pulled.dirtyApplied) {
+    return {
+      sourceRemoved: false,
+      sourceError:
+        "the uncommitted changes could not be applied here and only exist on the source worktree",
+    };
+  }
+  try {
+    // Force only when the dirty state was actually captured and
+    // applied here. The CLI's --force does more than skip its own
+    // clean-tree guard (cmd_rm.go requireClean): it also switches to
+    // `git worktree remove --force` and enables the ENOTEMPTY
+    // force-wipe fallback, which would silently destroy work a
+    // capture cannot carry (submodule-only dirt captures as clean,
+    // see the cli/cmd_dirty.go header) or edits made after the
+    // capture. So on a capture that said clean, git's own pre-removal
+    // check must independently agree before the source dies, and a
+    // disagreement surfaces as sourceRemoved:false with the git
+    // message instead of silent loss. Accepted cost: worktrees with
+    // populated submodules report sourceRemoved:false on clean
+    // transplants because git refuses non-forced removal of them.
+    // refuseRunningScripts is the app-side guard the local
+    // kill-then-delete path deliberately lacks.
+    const removed = DeleteWorktreeResultSchema.parse(
+      await peerWorktreesApiFor(source.sourceDeviceId).delete({
+        projectId: source.sourceProjectId,
+        worktreeId: source.sourceWorktreeId,
+        force: pulled.captured,
+        refuseRunningScripts: true,
+      }),
+    );
+    if (removed.ok) return { sourceRemoved: true };
+    // ok:false means the worktree was NOT removed: cleanup scripts
+    // run before `git worktree remove` and a failure aborts the
+    // pipeline with the worktree left in place (cli/cmd_rm.go).
+    return {
+      sourceRemoved: false,
+      sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,
+    };
+  } catch (error) {
+    return { sourceRemoved: false, sourceError: errorMessageOf(error) };
+  }
+}
 
 // The pull orchestration (v2 step 7, slice C), shared with the
 // transplant orchestrator above: bring a peer device's worktree here.
@@ -245,6 +357,13 @@ async function runPullWorktree(
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
 ) {
+  // Running commentary back to the caller, keyed by the source id (the
+  // only id it holds until the create lands). Frames are droppable
+  // presence, never state: the result is the single source of truth.
+  const notifyProgress = ctx.notifier(syncContract, "pullProgress");
+  const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
+    notifyProgress({ sourceWorktreeId, ...frame });
+
   // 1. The local target repo, re-resolved by identity from disk.
   const project = await findProjectByIdentityOrThrow(sourceIdentity);
 
@@ -277,6 +396,7 @@ async function runPullWorktree(
   if (branchTip === undefined) {
     throw new Error(`${branch} no longer exists on the source device.`);
   }
+  progress({ step: "capture" });
   const capture = SyncCaptureDirtyResultSchema.parse(
     await peer.captureDirty({
       projectId: sourceProjectId,
@@ -295,10 +415,14 @@ async function runPullWorktree(
   const incomingRef = `refs/shigomori/incoming/${branch}`;
   try {
     if (wantRefs.length > 0) {
+      // The fetch opens the transfer step itself with its (0, total)
+      // frame, so only the nothing-to-fetch case needs a bare tick.
       await fetchBundleFromPeer(peer, {
         sourceProjectId,
         targetProjectId: project.id,
         refs: wantRefs,
+        onProgress: (bytes, totalBytes) =>
+          progress({ step: "transfer", bytes, totalBytes }),
         // With the tip local the only novel commit is the capture, so
         // the tip itself is the perfect (and safe) have. Otherwise every
         // local branch tip thins the bundle, and none can cover the
@@ -308,6 +432,8 @@ async function runPullWorktree(
         // before anything is mutated, never as silent corruption.
         haves: tipIsLocal ? [branchTip] : await localBranchTips(project.path),
       });
+    } else {
+      progress({ step: "transfer" });
     }
     if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
 
@@ -315,11 +441,24 @@ async function runPullWorktree(
     // checkout stays UNSET: checkout:true would leave the worktree ON
     // the incoming ref instead of the new branch. resolveOn "exit"
     // holds the mutation until carry-over and setup finished, so the
-    // dirty apply below never races the setup scripts.
+    // dirty apply below never races the setup scripts. The new
+    // worktree's own lifecycle phases still reach its detail page as
+    // usual. They are mirrored into the pull's progress because the
+    // caller cannot subscribe by an id that does not exist yet.
+    progress({ step: "create" });
+    const notify = notifierFor(ctx);
     const { worktree } = await createViaCli(
       project,
       { branchName: branch, base: incomingRef },
-      notifierFor(ctx),
+      {
+        ...notify,
+        notifyPhase: (payload) => {
+          notify.notifyPhase(payload);
+          if (payload.phase !== "idle") {
+            progress({ step: "create", createPhase: payload.phase });
+          }
+        },
+      },
       { resolveOn: "exit" },
     );
 
@@ -337,6 +476,7 @@ async function runPullWorktree(
     // apply, and the caller learns via dirtyApplied:false.
     let dirtyApplied = false;
     if (capture.captured && capture.commit !== undefined) {
+      progress({ step: "apply" });
       const localDirtyRef = `refs/shigomori/dirty/${worktree.id}`;
       await updateRef(project.path, localDirtyRef, capture.commit);
       if (localDirtyRef !== sourceDirtyRef) {
@@ -349,6 +489,20 @@ async function runPullWorktree(
         console.warn("[sync] dirty apply failed after create:", error);
       }
     }
+    rememberPull(
+      { sourceDeviceId, sourceProjectId, sourceWorktreeId },
+      {
+        targetProjectId: project.id,
+        branch,
+        branchTip,
+        captured: capture.captured,
+        dirtyApplied,
+        captureTree:
+          capture.captured && capture.commit !== undefined
+            ? await treeOf(project.path, capture.commit)
+            : undefined,
+      },
+    );
     return { worktree, captured: capture.captured, dirtyApplied };
   } finally {
     // Sweep the landing ref success or fail. A survivor is not

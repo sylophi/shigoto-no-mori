@@ -17,13 +17,11 @@ import {
   type ScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
-import { useWorktreeCreatePhase } from "@/store/worktreeLifecycle";
-import type {
-  CleanupError,
-  CreatePhase,
-  Project,
-  Worktree,
-} from "@shared/schemas";
+import {
+  CREATE_PHASE_LABEL,
+  useWorktreeCreatePhase,
+} from "@/store/worktreeLifecycle";
+import type { CleanupError, Project, Worktree } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { PortsSection } from "./ports/PortsSection";
@@ -39,12 +37,6 @@ import {
 import { BranchHeaderRow } from "./branch/BranchHeader";
 import { CommitsSection } from "./commits/CommitsSection";
 import { NotesSection } from "./NotesSection";
-
-const CREATE_PHASE_LABEL = {
-  carryOver: "Carrying over files...",
-  setup: "Setting up...",
-  portPoolProvision: "Provisioning ports...",
-} satisfies Record<CreatePhase, string>;
 
 interface InnerProps {
   worktree: Worktree;

@@ -11,6 +11,15 @@ import { KeyedSubscribers } from "./keyedSubscribers";
 
 export type { CreatePhase } from "@shared/schemas";
 
+// The phase as a banner reads it, shared by the detail page's banner
+// and the transplant dialog's create step so a new phase is worded
+// once.
+export const CREATE_PHASE_LABEL = {
+  carryOver: "Carrying over files...",
+  setup: "Setting up...",
+  portPoolProvision: "Provisioning ports...",
+} satisfies Record<CreatePhase, string>;
+
 type WorktreesApi = Pick<
   RendererApi["worktrees"],
   "onLifecyclePhase" | "onCarryOverComplete"
