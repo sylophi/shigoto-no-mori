@@ -55,9 +55,10 @@ import { refreshTerrierListings } from "@host/lib/terrier";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
-import { killAllCli } from "./electron/cliRunner";
+import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
+import { reconcileGitWatchers, startGitWatcher } from "./electron/gitWatcher";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -408,6 +409,9 @@ app.on("ready", async () => {
   // focused the whole time an agent works in a terminal beside it.)
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
+    // The registry may have changed (a project added or removed by
+    // the CLI): follow it with the git-directory watches.
+    reconcileGitWatchers();
     // The same refresh is the app's only chance to notice an `sm rm`
     // run in a terminal: the CLI removes the worktree without knowing
     // the app exists, leaving any script the app started in it running
@@ -427,6 +431,15 @@ app.on("ready", async () => {
           `[scripts] reap after external change failed: ${errorMessageOf(err)}`,
         );
       });
+  });
+  // Git state inside every project (commits, checkouts, refs written
+  // by any tool) surfaces through the per-project watch, as a
+  // project-scoped ping on every wire: this window and every device
+  // viewing this host refetch that project's rows.
+  startGitWatcher({
+    onChange: (projectId) =>
+      broadcastAll(gitContract, "projectChanged", { projectId }),
+    suppressed: () => cliChildCount() > 0,
   });
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other

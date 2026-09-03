@@ -197,6 +197,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onRefsRefreshed: gitClient.refsRefreshed,
       onFetchActive: gitClient.fetchActive,
       onExternalChange: gitClient.externalChange,
+      onProjectChanged: gitClient.projectChanged,
     },
 
     githubCli: {

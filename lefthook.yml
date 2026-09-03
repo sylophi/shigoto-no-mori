@@ -135,6 +135,16 @@ pre-commit:
     liveness:
       glob: "{main/liveness/**,scripts/check-liveness.mjs}"
       run: pnpm run liveness:check
+    # Drives the per-project git-directory watcher against a REAL git
+    # repository with a linked worktree: a commit in the worktree, a
+    # checkout and a branch delete each land as one project-scoped
+    # change, while the churn the allowlist exists to ignore (objects,
+    # logs, index refreshes from `git status`, lock files, FETCH_HEAD)
+    # produces none. Loop-safety of the watcher rests on that
+    # allowlist, so it is pinned here.
+    git-watcher:
+      glob: "{main/electron/gitWatcher.ts,scripts/check-git-watcher.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run gitwatch:check
     # Drives the electron-free account layer (main/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

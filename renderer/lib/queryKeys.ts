@@ -286,6 +286,28 @@ export function invalidateHostDevice(
   });
 }
 
+// The PROJECT-SCOPED sweep, for git:projectChanged: one project's git
+// state moved on that device (a commit, a checkout, a ref written by
+// any tool), so only the host keys carrying that project id refetch,
+// under the same domain exemptions as the device-wide sweep. Every
+// project-scoped host builder puts the project id in the fourth slot
+// (right after the domain), which is what the match reads; keys shaped
+// otherwise (a client key, a whole-host key, a githubCli sub-tree) do
+// not carry a project id there and are left alone.
+export function invalidateHostProject(
+  queryClient: QueryClient,
+  deviceId: string,
+  projectId: string,
+): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => {
+      if (hostKeyDeviceId(query.queryKey) !== deviceId) return false;
+      if (query.queryKey[3] !== projectId) return false;
+      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+    },
+  });
+}
+
 // The SESSION-LANDED sweep: a device's data wire just came up, so
 // everything host-scoped for it is fetchable now and none of it was a
 // moment ago. Same device-id scoping as invalidateHostDevice and

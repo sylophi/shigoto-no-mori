@@ -45,6 +45,7 @@ import { createWsServerBinding } from "@host/socket/server";
 import { directContract } from "@shared/ipc/modules/direct";
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createDirectPlane } from "@shared/hub/directPlane";
+import { reconcileGitWatchers } from "../electron/gitWatcher";
 import {
   acceptsPeerCommands,
   allowedWebOrigin,
@@ -307,6 +308,10 @@ function pingViewers(ctx: HandlerContext): void {
     );
     for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
     if (pingLocal) electronServer.broadcastAll(channel, parsed);
+    // A settled mutation may have added, removed or relocated a
+    // project: follow the registry with the git-directory watches,
+    // on the same coalesced cadence.
+    reconcileGitWatchers();
   }, MUTATION_PING_MS);
 }
 

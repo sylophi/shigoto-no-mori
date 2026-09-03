@@ -10,6 +10,7 @@ import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
 import {
   invalidateHostDevice,
+  invalidateHostProject,
   localDeviceId,
   queryKeys,
 } from "./lib/queryKeys";
@@ -96,6 +97,12 @@ startRemoteHostWatch(queryClient);
 // invalidateHostDevice for the breadth and exemption rationale.
 window.api.git.onExternalChange(() => {
   invalidateHostDevice(queryClient, localDeviceId);
+});
+// One project's git state moved on this machine (a commit or checkout
+// by an agent or a terminal, seen by main's git-directory watcher):
+// refetch that project's rows only.
+window.api.git.onProjectChanged(({ projectId }) => {
+  invalidateHostProject(queryClient, localDeviceId, projectId);
 });
 
 // Main rewrote project.json (carry-over entries removed in favor of
