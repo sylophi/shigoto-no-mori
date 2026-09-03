@@ -4,7 +4,7 @@
 // the app within a debounce, on this machine and on every device
 // viewing it, instead of on the next focus or the minute sweep. The
 // state watcher (stateWatcher.ts) covers the managed root, which is
-// where sm's own bookkeeping lives; the git facts a worktree row shows
+// where sm's own bookkeeping lives. The git facts a worktree row shows
 // (branch, tip, ahead/behind) live in the PROJECT's git directory, and
 // a linked worktree's metadata lives under its `worktrees/<name>/`
 // there too, so one recursive watch per project covers every worktree
@@ -18,7 +18,7 @@
 // `git status` the app runs to list a worktree, which would loop a
 // refetch into another refetch. Uncommitted file edits are therefore
 // NOT observed here (they live in the working tree, which is far too
-// big to watch); dirty state still refreshes on focus and on every
+// big to watch). Dirty state still refreshes on focus and on every
 // other ping, and the moment the edit is committed the ref moves and
 // this fires.
 //
@@ -37,8 +37,8 @@ import { loadProjects } from "@host/lib/projects";
 const DEBOUNCE_MS = 300;
 
 // Git-dir relative paths whose change means the project's git state
-// moved. Paths arrive with the platform separator; normalized to `/`
-// before matching.
+// moved. Paths arrive with the platform separator and are normalized
+// to `/` before matching.
 const RELEVANT = [
   /^(HEAD|ORIG_HEAD|packed-refs)$/,
   /^refs(\/|$)/,
@@ -49,7 +49,7 @@ const RELEVANT = [
 // loop-safety of this watcher rests on it.
 export function isRelevantGitPath(file: string): boolean {
   // Every ref write goes through a `.lock` sibling that is renamed
-  // into place; the rename lands as an event for the final name, so
+  // into place. The rename lands as an event for the final name, so
   // the lock itself is noise.
   if (file.endsWith(".lock")) return false;
   const normalized = file.includes("\\") ? file.replaceAll("\\", "/") : file;
@@ -98,7 +98,7 @@ export type GitWatcherDeps = {
   // child, an app-run mutating git command in flight or just done),
   // already invalidated by its caller.
   suppressed: (gitDir: string) => boolean;
-  // The projects to follow. Defaults to the registry; the git-watcher
+  // The projects to follow. Defaults to the registry. The git-watcher
   // check injects its own list against a sandbox repository.
   projects?: () => Project[];
 };
@@ -137,8 +137,8 @@ function openWatched(projectId: string, gitDir: string): void {
     }, DEBOUNCE_MS);
   });
   watcher.on("error", () => {
-    // The repository went away (deleted, unmounted). Drop the watch;
-    // a later reconcile re-adds it if it comes back.
+    // The repository went away (deleted, unmounted). Drop the watch.
+    // A later reconcile re-adds it if it comes back.
     closeWatched(projectId, entry);
   });
   watched.set(projectId, entry);
@@ -157,7 +157,7 @@ export function reconcileGitWatchers(): void {
   try {
     projects = (deps.projects ?? loadProjects)();
   } catch {
-    // The registry is unreadable right now; keep what is watched.
+    // The registry is unreadable right now, so keep what is watched.
     return;
   }
   const wanted = new Map<string, string>();

@@ -31,7 +31,7 @@ export function selfWroteWithin(ms: number): boolean {
 const inFlightGitWrites = new Map<string, number>();
 const completedGitWrites = new Map<string, number>();
 
-// Marks a mutating git command in `cwd` as running; the returned
+// Marks a mutating git command in `cwd` as running. The returned
 // function marks it done.
 export function beginGitSelfWrite(cwd: string): () => void {
   inFlightGitWrites.set(cwd, (inFlightGitWrites.get(cwd) ?? 0) + 1);

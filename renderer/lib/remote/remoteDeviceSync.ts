@@ -133,7 +133,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
 
 // Resync on every session LANDING. A device in phase "online" already
 // carries an api (see buildEntry), so its queries run and hard-reject
-// with "no direct connection"; the keeper landing seconds later is
+// with "no direct connection". The keeper landing seconds later is
 // invisible to react-query, whose own failure budget is long spent.
 // And a session that dropped and came back (a sleep, a network change,
 // a heartbeat death) missed every push the host sent meanwhile, so its

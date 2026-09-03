@@ -126,8 +126,8 @@ export async function waitFor(predicate, what, timeoutMs = 5_000) {
 
 // process.env with every GIT_* variable removed, for a check that runs
 // git against a sandbox repository. The pre-commit hook exports
-// GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL repository;
-// inherited, they point every sandbox command at the commit in
+// GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL repository.
+// Inherited, they point every sandbox command at the commit in
 // progress (the sandbox commit then lands as the user's own, under the
 // sandbox's message, which has happened). The global and system git
 // config are also cut off so the host's identity and hooks never leak

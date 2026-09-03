@@ -357,7 +357,7 @@ export function createHubConnectionCore(
           // frame runs a handler even though the socket may still
           // deliver buffered frames while closing (S3).
           if (dead) return;
-          // Any inbound message proves the hub alive; a pong is not an
+          // Any inbound message proves the hub alive. A pong is not an
           // envelope, so it stops here.
           heartbeat.noteInbound();
           if (text === HUB_PONG) return;

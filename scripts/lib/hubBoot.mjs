@@ -8,7 +8,7 @@ import { directContract } from "@shared/ipc/modules/direct";
 import { createHubConnection } from "@host/hub/connection";
 
 // The polling pair lives in checkKit.mjs (dependency-free, so the
-// non-hub checks reach it too); re-exported for the hub checks that
+// non-hub checks reach it too). Re-exported for the hub checks that
 // always took it from here.
 import { delay, waitFor } from "./checkKit.mjs";
 export { delay, waitFor };

@@ -45,8 +45,8 @@ export type Heartbeat = {
 };
 
 // A timer must never be what keeps a node process alive (the checks
-// run this code headlessly, and a leaked socket would hang them);
-// browsers hand back a number, which has no unref.
+// run this code headlessly, and a leaked socket would hang them).
+// Browsers hand back a number, which has no unref.
 function unref(timer: unknown): void {
   (timer as { unref?: () => void }).unref?.();
 }
@@ -54,7 +54,7 @@ function unref(timer: unknown): void {
 export function createHeartbeat(
   deps: HeartbeatOptions & {
     // Writes one ping to the wire. May throw once the socket is
-    // unusable; the close event that follows owns the outcome.
+    // unusable. The close event that follows owns the outcome.
     sendPing(): void;
     onDead(): void;
   },

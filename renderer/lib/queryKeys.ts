@@ -305,7 +305,7 @@ export function invalidateHostDevice(
 // any tool), so only the host keys carrying that project id refetch,
 // under the same domain exemptions as the device-wide sweep. The
 // git-state builders put the project id right after the domain, which
-// is what hostKeyProjectId reads; keys shaped otherwise (a client key,
+// is what hostKeyProjectId reads. Keys shaped otherwise (a client key,
 // a whole-host key, the githubCli and carryOver sub-trees, neither of
 // which is git state) carry no project id there and are left alone.
 export function invalidateHostProject(
