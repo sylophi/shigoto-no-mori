@@ -20,6 +20,7 @@ import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import { createAppQueryClient } from "@/lib/queryClientOptions";
 import { startRemoteDeviceSync } from "@/lib/remote/remoteDeviceSync";
+import { startRemoteHostWatch } from "@/lib/remote/remoteHostWatch";
 import { webRouter } from "./router";
 import "@/index.css";
 
@@ -31,6 +32,9 @@ const queryClient = createAppQueryClient();
 // The registry's hub half: enrolled devices plus live presence, from
 // the bridge's account and hub modules, exactly as on desktop.
 startRemoteDeviceSync(queryClient);
+// Every device is remote here, so the peer push watch is the ONLY
+// thing that keeps the forest live between focus refetches.
+startRemoteHostWatch(queryClient);
 
 function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));

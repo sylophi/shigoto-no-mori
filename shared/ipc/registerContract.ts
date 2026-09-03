@@ -6,7 +6,7 @@ import type {
   Handlers,
 } from "./types";
 
-export type RegisterContractOpts = {
+export type RegisterContractOpts<Ctx = HandlerContext> = {
   // Gates OUTPUT validation only, never input parsing. Bindings pass a
   // dev-build flag here so handler drift (or schemas whose z.input and
   // z.output diverge) surfaces at the registrar instead of as a
@@ -21,17 +21,21 @@ export type RegisterContractOpts = {
   onUsageTracked?: (parsedInput: unknown) => void;
   // Runs after a handler whose def is tagged `mutating: true` resolves
   // (before output validation, which only dev builds run: the mutation
-  // happened either way), whichever wire carried the call. The Electron
-  // binding hangs the remote-viewer cache ping here: an app-driven
-  // mutation never trips the fs watcher (its self-write suppression
-  // exists to keep the app's own writes from echoing), so without this
-  // a remote viewer would never learn the host's state moved. Optional,
-  // since bindings with no remote push surface (the web bridge) omit
-  // it. A def tagged movesHostState:false skips the hook: it is still a
-  // command on the grant axis, but its effects are invisible to viewers
-  // (forward's byte shuttling), so pinging on it would re-invalidate a
-  // peer's whole cached view on every poll or send.
-  onMutationResolved?: () => void;
+  // happened either way), whichever wire carried the call, with the
+  // calling peer's context so the binding can tell which wire that was
+  // (the Electron binding pings its own windows only for a mutation a
+  // REMOTE peer drove, since the acting local renderer already
+  // invalidated its targets). The Electron binding hangs the
+  // remote-viewer cache ping here: an app-driven mutation never trips
+  // the fs watcher (its self-write suppression exists to keep the
+  // app's own writes from echoing), so without this a remote viewer
+  // would never learn the host's state moved. Optional, since bindings
+  // with no remote push surface (the web bridge) omit it. A def tagged
+  // movesHostState:false skips the hook: it is still a command on the
+  // grant axis, but its effects are invisible to viewers (forward's
+  // byte shuttling), so pinging on it would re-invalidate a peer's
+  // whole cached view on every poll or send.
+  onMutationResolved?: (ctx: Ctx) => void;
 };
 
 // The per-call wrapper: ONE definition of what serving a contract call
@@ -49,7 +53,7 @@ export type RegisterContractOpts = {
 export function wrapContractCall<Ctx>(
   def: InvokeDef,
   handler: (input: unknown, ctx: Ctx) => unknown,
-  opts: RegisterContractOpts,
+  opts: RegisterContractOpts<Ctx>,
 ): (ctx: Ctx, raw: unknown) => Promise<unknown> {
   const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
   const onMutated =
@@ -60,7 +64,7 @@ export function wrapContractCall<Ctx>(
     const input = def.input.parse(raw);
     const result = await handler(input, ctx);
     onSuccess?.(input);
-    onMutated?.();
+    onMutated?.(ctx);
     return opts.validateOutputs ? def.output.parse(result) : result;
   };
 }

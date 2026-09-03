@@ -633,6 +633,7 @@ async function main() {
         }),
       });
       let resolved = 0;
+      let resolvedCtx = null;
       registerContract(
         pingContract,
         {
@@ -646,16 +647,26 @@ async function main() {
         server,
         {
           validateOutputs: true,
-          onMutationResolved: () => {
+          onMutationResolved: (ctx) => {
             resolved += 1;
+            resolvedCtx = ctx;
           },
         },
       );
-      const ctx = {};
+      const ctx = { callerDeviceId: "peer-1" };
       await handlers.get("pingtest:read")(ctx, undefined);
       assert.equal(resolved, 0, "a read must not trip the mutation hook");
       await handlers.get("pingtest:mutate")(ctx, undefined);
       assert.equal(resolved, 1, "a resolved mutation must trip the hook");
+      // The Electron binding reads the caller off this to decide
+      // whether a remote peer drove the mutation (and so whether its
+      // own windows need the ping too), so the hook must see the
+      // calling peer's context, not a copy.
+      assert.equal(
+        resolvedCtx,
+        ctx,
+        "the hook must receive the calling peer's context",
+      );
       await assert.rejects(() =>
         handlers.get("pingtest:failMutate")(ctx, undefined),
       );

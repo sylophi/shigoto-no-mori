@@ -7,6 +7,7 @@ import { App } from "./App";
 import { ClerkGate } from "./components/account/ClerkGate";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
+import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
 import {
   invalidateHostDevice,
   localDeviceId,
@@ -82,6 +83,11 @@ void queryClient.prefetchQuery({
 // rebuilt from the account's device list plus the hub bridge status,
 // on boot and on every account or hub change.
 startRemoteDeviceSync(queryClient);
+
+// A remote host's state moved (its app, its CLI, or a background
+// fetch there): invalidate that device's cached forest the same way
+// the local watcher signal below does for this machine.
+startRemoteHostWatch(queryClient);
 
 // State changed on disk under the app (a CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it

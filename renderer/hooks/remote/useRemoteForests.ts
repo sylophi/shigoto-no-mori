@@ -12,11 +12,15 @@
 // last session cached -- the same staleness contract every query in the
 // app has.
 //
-// This fan-out is always mounted, so it refetches calmly: an open
-// remote worktree page keeps its own fresher observers on the same
-// keys (plus the useWatchRemoteHost push channel while it is open),
-// and any observer wanting a refetch refreshes this one's rows for
-// free.
+// This fan-out is always mounted, so it refetches calmly: the boot
+// scoped remote host watch (lib/remote/remoteHostWatch.ts) invalidates
+// a peer's rows the moment that peer pings, an open remote worktree
+// page keeps its own fresher observers on the same keys, and any
+// observer wanting a refetch refreshes this one's rows for free. Focus
+// refetch stays on as the belt the local forest has too (a dropped
+// push under backpressure would otherwise leave an always-mounted row
+// stale for good), gated by the stale window below so a quick alt-tab
+// does not re-list every peer.
 import { useQueries } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -73,7 +77,7 @@ export interface RemoteForests {
   loading: boolean;
 }
 
-const CALM_REFETCH = { staleTime: 30_000, refetchOnWindowFocus: false };
+const CALM_REFETCH = { staleTime: 30_000 };
 
 export interface RemoteForestsOptions {
   // False for a consumer whose copy is decorative (the new-worktree

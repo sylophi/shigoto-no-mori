@@ -220,7 +220,7 @@ export const queryKeys = queryKeysFor(localDeviceId);
 // The "state on this device moved, refetch what you're showing" sweep,
 // shared by both externalChange consumers: the local watcher
 // subscription in renderer/index.tsx (with localDeviceId) and
-// useWatchRemoteHost (with the remote device's id). Deliberately broad
+// lib/remote/remoteHostWatch.ts (with the pinging device's id). Deliberately broad
 // within its scope (the host debounces the signal and only active
 // queries actually refetch), but some domains sit it out:
 //
