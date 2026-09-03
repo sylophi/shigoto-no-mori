@@ -24,12 +24,11 @@
 //
 // The signal is project scoped (git:projectChanged) rather than the
 // broad externalChange sweep: a commit in one repo says nothing about
-// another project's rows, and the app's own git operations trip this
-// watcher too (the ref moves the same way), so the ping must stay
-// cheap enough to be redundant beside the mutation's own targeted
-// invalidation. Writes by a running sm CLI child are skipped exactly
-// like the state watcher does: those are the app's own lifecycle
-// operations, already invalidating their targets.
+// another project's rows. The app's own git operations move refs the
+// same way, so the owner injects a suppression (a running sm CLI
+// child, the echo window after an app-run mutating git command) and
+// those are skipped exactly like the state watcher skips the app's
+// own root writes: their callers already invalidate their targets.
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { Project } from "@shared/schemas";
@@ -94,8 +93,9 @@ type Watched = {
 
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
-  // Whether events should be dropped right now (a running sm CLI
-  // child, whose ref writes are the app's own lifecycle operation).
+  // Whether events should be dropped right now: the app's own git
+  // activity (a running sm CLI child, the echo window after an
+  // app-run mutating git command), already invalidated by its caller.
   suppressed: () => boolean;
   // The projects to follow. Defaults to the registry; the git-watcher
   // check injects its own list against a sandbox repository.
@@ -146,8 +146,9 @@ function openWatched(projectId: string, gitDir: string): void {
 // Bring the watched set in line with the registry: one watch per
 // project whose git directory resolves, dropped when the project
 // leaves the registry or its git directory moves. Runs at boot, on
-// every managed-root change (a CLI or an external write) and on every
-// app-side registry write (main/index.ts hooks the store), which
+// every managed-root change (a CLI or an external write) and after
+// every settled host mutation (an app-side add or remove runs as a CLI
+// child whose write the state watcher drops as the app's own), which
 // together cover every way a project is added, removed or relocated.
 export function reconcileGitWatchers(): void {
   if (deps === null) return;

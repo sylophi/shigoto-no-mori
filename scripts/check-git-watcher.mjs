@@ -137,19 +137,19 @@ async function main() {
       // A commit in the linked worktree moves refs/heads/feat.
       git(worktree, "commit", "-q", "-m", "two");
       await waitFor(() => changes.length >= 1, "the commit to ping");
-      await delay(500);
+      await delay(350);
       assert.deepEqual(changes, ["p1"], "one debounced ping per commit");
 
       // A checkout in the worktree moves worktrees/feat/HEAD.
       git(worktree, "checkout", "-q", "-b", "other");
       await waitFor(() => changes.length >= 2, "the checkout to ping");
-      await delay(500);
+      await delay(350);
       assert.deepEqual(changes, ["p1", "p1"]);
 
       // A branch deleted from the main checkout moves refs/heads.
       git(repo, "branch", "-D", "feat");
       await waitFor(() => changes.length >= 3, "the branch delete to ping");
-      await delay(500);
+      await delay(350);
       assert.deepEqual(changes, ["p1", "p1", "p1"]);
 
       // Suppressed events (a running sm CLI child) never ping.

@@ -796,6 +796,11 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         handleReq(envelope.from, sm, epoch);
       } else if (sm.t === "bye") {
         handleBye(envelope.from, epoch);
+      } else if (sm.t === "ping") {
+        // The direct sockets' liveness frame. The hub socket keeps
+        // its own bare-text heartbeat (protocol.ts), so a ping wrapped
+        // as an sm frame is not part of this wire and is dropped.
+        return;
       } else {
         handleServerFrame(envelope.from, sm, epoch);
       }

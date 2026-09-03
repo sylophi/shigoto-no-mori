@@ -291,6 +291,15 @@ const serverFor = (module: ContractModule): ServerTransport =>
 const MUTATION_PING_MS = 300;
 let mutationPingTimer: NodeJS.Timeout | null = null;
 let mutationPingLocal = false;
+// Followers of "a host mutation settled", on the same coalesced
+// cadence as the ping: the git-directory watcher tracks the project
+// registry through this, because an app-side project add or remove
+// runs as a CLI child whose registry write the state watcher drops as
+// the app's own.
+const mutationSettledListeners = new Set<() => void>();
+export function onHostMutationSettled(listener: () => void): void {
+  mutationSettledListeners.add(listener);
+}
 function pingViewers(ctx: HandlerContext): void {
   if (isRemoteCaller(ctx)) mutationPingLocal = true;
   if (mutationPingTimer !== null) return;
@@ -309,6 +318,7 @@ function pingViewers(ctx: HandlerContext): void {
     );
     for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
     if (pingLocal) electronServer.broadcastAll(channel, parsed);
+    for (const listener of mutationSettledListeners) listener();
   }, MUTATION_PING_MS);
 }
 

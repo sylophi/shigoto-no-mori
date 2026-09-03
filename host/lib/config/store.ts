@@ -160,11 +160,6 @@ interface JsonStore {
     fallback: T,
     update: (current: T) => T | undefined,
   ): void;
-  // Runs after every write through this store, with the key written,
-  // so an in-process follower (the git-directory watcher tracking the
-  // project registry) converges without watching the file: the state
-  // watcher deliberately ignores the app's own writes.
-  onWrite(listener: (key: string) => void): void;
 }
 
 // The two stores say exactly two things: which file they own, and
@@ -173,10 +168,6 @@ interface JsonStore {
 // can't gain a rule on one store and miss it on the other.
 function makeStore(file: string, beforeAccess?: () => void): JsonStore {
   const enter = beforeAccess ?? (() => {});
-  const writeListeners = new Set<(key: string) => void>();
-  const notifyWrite = (key: string): void => {
-    for (const listener of writeListeners) listener(key);
-  };
   return {
     readKey<T>(key: string, fallback: T): T {
       enter();
@@ -194,7 +185,6 @@ function makeStore(file: string, beforeAccess?: () => void): JsonStore {
     writeKey<T>(key: string, value: T): void {
       enter();
       writeKeyIn(file, key, value);
-      notifyWrite(key);
     },
     updateKey<T>(
       key: string,
@@ -203,10 +193,6 @@ function makeStore(file: string, beforeAccess?: () => void): JsonStore {
     ): void {
       enter();
       updateKeyIn(file, key, fallback, update);
-      notifyWrite(key);
-    },
-    onWrite(listener) {
-      writeListeners.add(listener);
     },
   };
 }

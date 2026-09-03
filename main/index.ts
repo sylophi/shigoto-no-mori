@@ -40,6 +40,7 @@ import {
   refreshHubConnection,
   refreshSocketHost,
   stopDirectHost,
+  onHostMutationSettled,
   probeRemoteConnections,
   stopHubConnection,
 } from "./ipc/register";
@@ -59,7 +60,7 @@ import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import { reconcileGitWatchers, startGitWatcher } from "./electron/gitWatcher";
-import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
+import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -440,13 +441,17 @@ app.on("ready", async () => {
   startGitWatcher({
     onChange: (projectId) =>
       broadcastAll(gitContract, "projectChanged", { projectId }),
-    suppressed: () => cliChildCount() > 0,
+    // The app's own git commands move refs the same way an agent's
+    // do, and their callers already invalidate their targets, so the
+    // watcher skips a running sm CLI child and the echo window after
+    // any app-run mutating git command, exactly as the state watcher
+    // skips the app's own root writes.
+    suppressed: () => cliChildCount() > 0 || gitSelfWroteWithin(SELF_ECHO_MS),
   });
-  // The app's own registry writes never reach the state watcher (its
-  // self-write suppression), so follow them here.
-  registryStore.onWrite((key) => {
-    if (key === PROJECTS_KEY) reconcileGitWatchers();
-  });
+  // An app-side project add or remove runs as a CLI child whose
+  // registry write the state watcher drops as the app's own, so the
+  // watched set also follows every settled host mutation.
+  onHostMutationSettled(reconcileGitWatchers);
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other
   // checkout). After applyUserShellPath so PATH checks see the login

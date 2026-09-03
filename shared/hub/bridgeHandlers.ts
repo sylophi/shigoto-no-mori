@@ -226,15 +226,6 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
       return versions;
     },
 
-    // Both sweeps below cover mid-dial entries too, not just
-    // established sessions: a dial completing AFTER its peer left the
-    // roster would otherwise install a live session for a device the
-    // control plane stopped vouching for (including a just-revoked
-    // one), and quit would leave an in-flight dial's socket unclosed.
-    // closeDirectPeer handles both shapes: it evicts the entry now and
-    // attaches a continuation that closes the resulting connection
-    // whenever the promise settles (a rejection means there is nothing
-    // to close).
     probeDirectPeers: () => {
       for (const entry of peers.values()) {
         if (entry.version === null) continue;
@@ -249,6 +240,15 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
       }
     },
 
+    // Both sweeps below cover mid-dial entries too, not just
+    // established sessions: a dial completing AFTER its peer left the
+    // roster would otherwise install a live session for a device the
+    // control plane stopped vouching for (including a just-revoked
+    // one), and quit would leave an in-flight dial's socket unclosed.
+    // closeDirectPeer handles both shapes: it evicts the entry now and
+    // attaches a continuation that closes the resulting connection
+    // whenever the promise settles (a rejection means there is nothing
+    // to close).
     dropDirectPeersNotIn: (online) => {
       const live = new Set(online);
       for (const [deviceId, entry] of peers) {

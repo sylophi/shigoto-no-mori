@@ -3,14 +3,100 @@
 // shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { noteGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
+
+// Subcommands that never move refs, HEAD or a worktree entry, so they
+// need no self-write mark: these run on every listing (a status per
+// worktree, a branch list per project), and marking them would let
+// the app's own refetch swallow the very external commit it should
+// surface. Everything else (fetch, checkout, commit, merge, rebase,
+// reset, branch and worktree mutations, push, update-ref) marks the
+// window, and an unknown subcommand marks it too, the safe direction
+// (a spurious mark costs one dropped ping for a second, a missed mark
+// costs one redundant sweep).
+const READ_ONLY_SUBCOMMANDS = new Set([
+  "blame",
+  "cat-file",
+  "check-ignore",
+  "count-objects",
+  "describe",
+  "diff",
+  "diff-tree",
+  "for-each-ref",
+  "log",
+  "ls-files",
+  "ls-remote",
+  "ls-tree",
+  "merge-base",
+  "merge-tree",
+  "name-rev",
+  "rev-list",
+  "rev-parse",
+  "shortlog",
+  "show",
+  "show-ref",
+  "status",
+]);
+
+function mutatesRepo(args: string[]): boolean {
+  // The subcommand is the first argument that is not a global option
+  // (`-c key=value`, `-C dir`, `--no-pager`).
+  let index = 0;
+  while (index < args.length) {
+    const arg = args[index];
+    if (arg === "-c" || arg === "-C") {
+      index += 2;
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  const subcommand = args[index];
+  const rest = args.slice(index + 1);
+  if (subcommand === undefined) return false;
+  if (READ_ONLY_SUBCOMMANDS.has(subcommand)) return false;
+  // The list forms of otherwise-mutating subcommands.
+  if (subcommand === "worktree") return rest[0] !== "list";
+  if (subcommand === "branch") {
+    return !rest.some(
+      (arg) =>
+        arg === "--list" ||
+        arg === "-a" ||
+        arg === "--all" ||
+        arg === "--show-current" ||
+        arg.startsWith("--format") ||
+        arg.startsWith("--merged") ||
+        arg.startsWith("--no-merged") ||
+        arg.startsWith("--contains"),
+    );
+  }
+  if (subcommand === "remote") {
+    return rest.length > 0 && rest[0] !== "-v" && rest[0] !== "get-url";
+  }
+  if (subcommand === "stash") return rest[0] !== "list";
+  if (subcommand === "tag")
+    return !rest.some((arg) => arg === "-l" || arg === "--list");
+  if (subcommand === "config")
+    return !rest.some((arg) => arg.startsWith("--get"));
+  if (subcommand === "symbolic-ref")
+    return rest.filter((arg) => !arg.startsWith("-")).length > 1;
+  return true;
+}
 
 async function exec(
   args: string[],
   options: { cwd: string; maxBuffer?: number },
 ): Promise<{ stdout: string }> {
   const start = performance.now();
+  // Marked at both ends so the echo window covers the whole command:
+  // the git-directory watcher checks it at event time.
+  const mutating = mutatesRepo(args);
+  if (mutating) noteGitSelfWrite();
   try {
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
     // removeWorktreeForce match on stderr text, which gettext would
@@ -21,8 +107,10 @@ async function exec(
     });
     const elapsed = Math.round(performance.now() - start);
     console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
+    if (mutating) noteGitSelfWrite();
     return { stdout: result.stdout };
   } catch (err) {
+    if (mutating) noteGitSelfWrite();
     const elapsed = Math.round(performance.now() - start);
     console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
     throw err;

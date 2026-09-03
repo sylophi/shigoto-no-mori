@@ -666,14 +666,12 @@ export function createWsServerBinding(
           return;
         }
         // The client's liveness ping (frames.ts): answer it, and note
-        // that this peer heartbeats so the sweep may judge it. A pong
-        // (the answer to a probe we never send) is simply alive.
+        // that this peer heartbeats so the sweep may judge it.
         if (frame !== null && frame.t === "ping") {
           if (alive !== undefined) alive.heartbeats = true;
           send(socket, { t: "pong" });
           return;
         }
-        if (frame !== null && frame.t === "pong") return;
         // bye is a hub-wire frame (the device hub has no per-peer
         // socket close). This wire has a real socket close, so a bye
         // here is meaningless and silently ignored.
@@ -752,27 +750,6 @@ export function createWsServerBinding(
         },
       });
       attach(wss, opts, generation);
-      // The liveness sweep, one timer per listener: a peer that proved it
-      // heartbeats and then fell silent past the timeout is killed like a
-      // roster drop. Quarter-period cadence keeps the worst-case delay
-      // past the timeout small without a busy loop.
-      const livenessTimeoutMs =
-        opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
-      livenessTimer = setInterval(
-        () => {
-          const now = Date.now();
-          for (const entry of authed.values()) {
-            if (
-              entry.heartbeats &&
-              now - entry.lastInboundAt > livenessTimeoutMs
-            ) {
-              entry.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
-            }
-          }
-        },
-        Math.max(50, Math.floor(livenessTimeoutMs / 4)),
-      );
-      livenessTimer.unref?.();
       const onBindError = (error: Error) => {
         wss.close();
         status = {
@@ -796,6 +773,29 @@ export function createWsServerBinding(
           console.warn(`[socket] server error: ${errorMessageOf(error)}`);
         });
         listener = { wss, opts, generation };
+        // The liveness sweep, one timer per LIVE listener (armed here,
+        // after the bind, so a failed bind leaks none): a peer that
+        // proved it heartbeats and then fell silent past the timeout
+        // is killed like a roster drop. Quarter-period cadence keeps
+        // the worst-case delay past the timeout small without a busy
+        // loop.
+        const livenessTimeoutMs =
+          opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
+        livenessTimer = setInterval(
+          () => {
+            const now = Date.now();
+            for (const entry of authed.values()) {
+              if (
+                entry.heartbeats &&
+                now - entry.lastInboundAt > livenessTimeoutMs
+              ) {
+                entry.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+              }
+            }
+          },
+          Math.max(50, Math.floor(livenessTimeoutMs / 4)),
+        );
+        livenessTimer.unref?.();
         const address = wss.address();
         const port =
           typeof address === "object" && address !== null

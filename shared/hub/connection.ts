@@ -254,13 +254,11 @@ export function createHubConnectionCore(
         // Set true once stop() or a rejection lands, so no further
         // inbound frame runs a handler even while the socket drains (S3).
         let dead = false;
-        // One close report per socket, whether the platform's close
-        // event or the heartbeat's verdict lands first.
-        let closeReported = false;
-        const reportClose = (code: number | null): void => {
-          if (closeReported) return;
-          closeReported = true;
-          if (established && !ownerClosed) onClose(code);
+        // The link half of a teardown, shared by every path that ends
+        // this socket (owner close, platform close, heartbeat death).
+        const tearDownLink = (): void => {
+          if (link === nextLink) link = null;
+          nextLink.teardown();
         };
 
         // Liveness (shared/ipc/socket/heartbeat.ts), armed at the accept.
@@ -277,10 +275,12 @@ export function createHubConnectionCore(
           onDead: () => {
             if (dead) return;
             dead = true;
-            if (link === nextLink) link = null;
-            nextLink.teardown();
+            tearDownLink();
             killSocket(socket);
-            reportClose(null);
+            // Report the drop here, once, then read as owner-closed so
+            // the platform close that follows stays silent.
+            if (established) onClose(null);
+            ownerClosed = true;
             notifyChange();
           },
         });
@@ -333,8 +333,7 @@ export function createHubConnectionCore(
                   // abort at once and no in-flight handler answers into a
                   // dead socket, rather than waiting on the close event
                   // (S3).
-                  if (link === nextLink) link = null;
-                  nextLink.teardown();
+                  tearDownLink();
                   socket.close();
                   // close() is advisory: node ws can hold it for ~30s
                   // against a stalled device hub. Where the adapter can
@@ -376,8 +375,7 @@ export function createHubConnectionCore(
           clearTimeout(acceptTimer);
           clearPending();
           heartbeat.stop();
-          if (link === nextLink) link = null;
-          nextLink.teardown();
+          tearDownLink();
           if (!settled) {
             settled = true;
             reject(
@@ -392,8 +390,9 @@ export function createHubConnectionCore(
           }
           // An established socket dropped. The owner-close path stays
           // silent so the supervisor never reconnects against its own
-          // stop, and a heartbeat death already reported itself.
-          reportClose(code);
+          // stop (a heartbeat death reads as owner-closed once it has
+          // reported itself).
+          if (established && !ownerClosed) onClose(code);
           notifyChange();
         });
       }

@@ -176,9 +176,10 @@ export const ByeFrameSchema = z.object({
   t: z.literal("bye"),
 });
 
-// The liveness pair (see HEARTBEAT_INTERVAL_MS). Either side answers a
-// ping with a pong; the client sends pings on its cadence and a probe,
-// the host only ever answers. Additive per the version-skew policy: an
+// The liveness pair (see HEARTBEAT_INTERVAL_MS): the client sends
+// pings on its cadence and on a probe, the host only ever answers with
+// pongs, so each frame lives in exactly one direction's union.
+// Additive per the version-skew policy: an
 // old peer fails to parse a ping and drops it. An old client against a
 // new host is never judged (the host's sweep latches on the first
 // ping), while a new client against an old host sees no pongs and
@@ -192,7 +193,6 @@ export const ClientFrameSchema = z.discriminatedUnion("t", [
   ReqFrameSchema,
   ByeFrameSchema,
   PingFrameSchema,
-  PongFrameSchema,
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 
@@ -280,7 +280,6 @@ export const ServerFrameSchema = z.union([
   ResOkFrameSchema,
   ResErrFrameSchema,
   PushFrameSchema,
-  PingFrameSchema,
   PongFrameSchema,
 ]);
 export type ServerFrame = z.infer<typeof ServerFrameSchema>;

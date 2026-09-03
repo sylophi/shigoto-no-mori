@@ -309,16 +309,9 @@ export function openDevice(
     sendPing: () => socket.send(encodeFrame({ t: "ping" })),
     onDead: () => {
       if (closed) return;
-      closed = true;
-      // Silence the platform close that follows: the death is reported
-      // here, once, and the late close event must not report it again.
-      ownerClosed = true;
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
-      rejectAllPending(null);
+      // The owner teardown (which also silences the platform close
+      // that follows, so the death is reported exactly once, here).
+      close();
       options.onClose(null);
     },
   });
@@ -396,16 +389,6 @@ export function openDevice(
       return;
     }
 
-    if (frame.t === "ping") {
-      // The host asked whether we are here. Answer; the send is best
-      // effort because a throw means the close event is on its way.
-      try {
-        socket.send(encodeFrame({ t: "pong" }));
-      } catch {
-        // Already closing.
-      }
-      return;
-    }
     if (frame.t === "pong") return;
 
     if (frame.t === "res") {

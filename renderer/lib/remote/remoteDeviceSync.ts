@@ -170,26 +170,22 @@ function buildEntry(
   current: HubStatus,
   online: ReadonlySet<string>,
 ): RemoteDevice {
-  const socketConnected = current.socket.phase === "connected";
-  const peerOnline = socketConnected && online.has(info.deviceId);
   const version = current.peerAppVersions[info.deviceId];
   let status: RemoteDeviceStatus;
-  let appVersion = "";
   let api: RemoteDeviceApi | undefined;
   if (version !== undefined) {
     // A live direct session is the whole data plane, and it outlives a
     // hub blip on purpose, so it reads connected first, before the
     // socket phase is even consulted.
-    appVersion = version;
     status = {
       phase: "connected",
       remoteDeviceId: info.deviceId,
-      remoteAppVersion: appVersion,
+      remoteAppVersion: version,
     };
     api = apiFor(info.deviceId);
-  } else if (!socketConnected) {
+  } else if (current.socket.phase !== "connected") {
     status = current.socket;
-  } else if (!peerOnline) {
+  } else if (!online.has(info.deviceId)) {
     status = { phase: "stopped" };
   } else {
     // In the roster but no direct session yet: main's keeper is
@@ -204,7 +200,7 @@ function buildEntry(
     deviceId: info.deviceId,
     label: info.name,
     status,
-    appVersion,
+    appVersion: version ?? "",
     api,
   };
 }

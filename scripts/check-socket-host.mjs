@@ -68,12 +68,10 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { makeProof, waitFor } from "./lib/checkKit.mjs";
+import { delay, makeProof, waitFor } from "./lib/checkKit.mjs";
 
 const TOKEN = "correct-horse-battery-staple-token-of-good-length";
 const WS_CLOSE_TOO_BIG = 1009;
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Shared handler state referenced by registerTestHandlers. Reset by the
 // tests that use it.
