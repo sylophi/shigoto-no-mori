@@ -5,6 +5,11 @@ import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 export interface CommandAccess {
   granted: boolean;
   isLoading: boolean;
+  // The preflight itself failed (no session to ask over, a transport
+  // error), so `granted: false` is the fail-closed default, not the
+  // peer's answer. A surface that would tell the user to flip the
+  // peer's switch checks this first.
+  isError: boolean;
 }
 
 // The per-caller preflight, as options so the scoped hook below and the
@@ -31,11 +36,21 @@ function commandAccessQueryOptions(deviceId: string, api: HostApi | undefined) {
 // The local device is always granted by contract, so it never asks.
 function verdictOf(
   deviceId: string,
-  query: { data?: { granted: boolean }; isPending: boolean } | undefined,
+  query:
+    | { data?: { granted: boolean }; isPending: boolean; isError: boolean }
+    | undefined,
 ): CommandAccess {
-  if (deviceId === localDeviceId) return { granted: true, isLoading: false };
-  if (query === undefined) return { granted: false, isLoading: true };
-  return { granted: query.data?.granted ?? false, isLoading: query.isPending };
+  if (deviceId === localDeviceId) {
+    return { granted: true, isLoading: false, isError: false };
+  }
+  if (query === undefined) {
+    return { granted: false, isLoading: true, isError: false };
+  }
+  return {
+    granted: query.data?.granted ?? false,
+    isLoading: query.isPending,
+    isError: query.isError,
+  };
 }
 
 // Does the CALLING device hold command access on the scoped host? Drives
@@ -51,6 +66,17 @@ export function useCommandAccess(): CommandAccess {
     deviceId,
     useQuery(commandAccessQueryOptions(deviceId, api)),
   );
+}
+
+// The verdict for one device out of a usePeerCommandAccess result: the
+// local device is granted by contract, and a device the list was not
+// asked about (a peer the hub has not rostered) is still loading, the
+// same fail-closed reading verdictOf gives a query that has not run.
+export function commandAccessOf(
+  access: ReadonlyMap<string, CommandAccess>,
+  deviceId: string,
+): CommandAccess {
+  return access.get(deviceId) ?? verdictOf(deviceId, undefined);
 }
 
 // The same verdict for a LIST of peers at once, for a chooser that has to

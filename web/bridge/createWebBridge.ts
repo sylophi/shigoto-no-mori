@@ -28,11 +28,15 @@ import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
-import { enrollDevice, signOutDevice } from "@shared/account/enroll";
+import {
+  enrollDevice,
+  signOutDevice,
+  WEB_PLATFORM,
+} from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
-import { defaultWebDeviceName } from "../account/deviceName";
+import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { createWebAccountStore } from "../account/store";
 import {
   createWebAccessStore,
@@ -49,8 +53,10 @@ export type WebBridgeDeps = {
   // The env record the account service config resolves from
   // (import.meta.env in the real client).
   env: Record<string, string | undefined>;
-  // navigator.userAgent, for the default device name.
+  // navigator.userAgent, for the default device name, plus the client
+  // hints that name a Chromium fork the string cannot.
   userAgent: string;
+  browserHints?: BrowserHints;
   // shell.openExternal's browser form (window.open with noopener).
   openExternal: (url: string) => void;
   isDev: boolean;
@@ -184,7 +190,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // ---- account module ----
 
   function defaultDeviceName(): string {
-    return defaultWebDeviceName(deps.userAgent);
+    return defaultWebDeviceName(deps.userAgent, deps.browserHints);
   }
 
   function readStatus(): AccountStatus {
@@ -249,7 +255,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
             store,
             deviceId,
             fallbackDeviceName: defaultDeviceName(),
-            platform: "web",
+            platform: WEB_PLATFORM,
           },
           token,
         );
@@ -298,16 +304,13 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
 
     // A web client is a refuse-all host (web/hub/connection.ts): it
-    // serves no peer calls, so a command grant would promise something
-    // the transport can never honor. Failing loudly beats a grant that
-    // silently does nothing.
-    grantCommands: () => {
-      throw new Error("a web client cannot grant command access");
-    },
-    revokeCommands: () => {
+    // serves no peer calls, so switching command access on would
+    // promise something the transport can never honor. Failing loudly
+    // beats a switch that silently does nothing.
+    acceptsCommands: () => false,
+    setAcceptsCommands: () => {
       throw new Error("a web client cannot change command access");
     },
-    listGrantedDevices: () => [],
   };
 
   // ---- clientConfig module ----

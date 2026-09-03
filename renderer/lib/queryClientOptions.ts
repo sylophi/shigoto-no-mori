@@ -8,6 +8,7 @@ import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { isEntityGoneError } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { notifyError } from "@/lib/toast";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // Per-query opt-out: pass `meta: { silentError: true }` to suppress the
 // global toast (use when the call site renders a richer inline error).
@@ -55,10 +56,7 @@ export function createAppQueryClient(): QueryClient {
         // do so to show an inline retry/force prompt that doesn't apply to
         // a refusal, so silence would leave the click looking like a no-op.
         if (isCommandRefusedError(err)) {
-          notifyError(
-            "That machine hasn't granted this device command access",
-            err,
-          );
+          notifyError(peerReadOnlyNote("that machine"), err);
           return;
         }
         if (mutation.meta?.silentError) return;

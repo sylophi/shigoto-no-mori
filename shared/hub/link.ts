@@ -18,7 +18,7 @@
 // hello token is ignored here. There is no command surface to
 // authorize here: the broker channel is a read by contract, and every
 // mutating call rides the direct wire, where dispatch gates it on the
-// host's per-peer command grant. The remaining defenses are sanity
+// host's command-access switch. The remaining defenses are sanity
 // bounds, not armor: a per-session epoch stamped on every sm frame so
 // a stale res from a prior peer pairing is never matched against a
 // fresh one, a presence-roster gate on hello so a misrouted `from`

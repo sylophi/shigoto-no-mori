@@ -12,6 +12,7 @@ import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type { ShigomoriWorktreeData } from "@shared/schemas";
 import type { ContractScope } from "@shared/ipc/contract";
+import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
@@ -20,7 +21,6 @@ import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/bridge/stubDefaults";
 import {
   accountDevices,
   forests,
-  grantedDeviceIds,
   labCustomPorts,
   labGlobalConfig,
   labListeningPorts,
@@ -324,7 +324,9 @@ index 4f2c9d1..a91f3c7 100644
 
 // ---- lab-mutable account/presence state ----
 
-const granted = new Set(grantedDeviceIds);
+// Whether Studio Mac accepts commands from the account's other devices
+// (the devices page switch on this device's row).
+let acceptsCommands = true;
 // Devices revoked in this lab session: the fixture registry is static,
 // so the revoke handler records the id here and the list filters it.
 const revoked = new Set<string>();
@@ -415,7 +417,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
           {
             deviceId: WEB_DEVICE_ID,
             name: "Chrome on MacBook",
-            platform: "web",
+            platform: WEB_PLATFORM,
             createdAt: Date.now() - 2 * 24 * 3_600_000,
             lastSeenAt: Date.now(),
             online: true,
@@ -450,14 +452,10 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,
     "account:listDevices": () => registryDevices(),
-    "account:listGrantedDevices": () => [...granted],
-    "account:grantCommands": (deviceId: string) => {
-      granted.add(deviceId);
-      client.emit("account:grantsChanged", undefined);
-    },
-    "account:revokeCommands": (deviceId: string) => {
-      granted.delete(deviceId);
-      client.emit("account:grantsChanged", undefined);
+    "account:acceptsCommands": () => acceptsCommands,
+    "account:setAcceptsCommands": (enabled: boolean) => {
+      acceptsCommands = enabled;
+      client.emit("account:commandAccessChanged", undefined);
     },
     "account:revokeDevice": (deviceId: string) => {
       // Mirrors the real handler's registry effect: the device leaves

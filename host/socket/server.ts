@@ -15,7 +15,7 @@
 // only channels explicitly registered mutating:false are served, and
 // anything else (a mutation, or an untagged channel) is refused with
 // the shared command-refused code before its handler can run. Commands
-// for a remote peer ride the device hub's per-peer grant instead.
+// for a remote peer ride the host's command-access switch instead.
 //
 // DIRECT DATA PLANE (v2 step 10, slice A): the same binding, created
 // with a WsServerTicketAuth, serves a SECOND instance for direct
@@ -69,10 +69,12 @@ export type WsServerTicketAuth = {
   // claimed hello deviceId. The implementation must consume the ticket
   // on first presentation regardless of outcome (single use).
   verifyTicket(ticket: string, deviceId: string): boolean;
-  // Whether the named peer may run MUTATING calls on this host, read
-  // live at every dispatch (never cached on the session) so a grant or
-  // revoke takes effect without a reconnect, mirroring the hub link.
-  isCommandGranted(peerDeviceId: string): boolean;
+  // Whether this host runs MUTATING calls from its ticketed peers at
+  // all (every ticketed peer is a device of the same account), read
+  // live at every dispatch (never cached on the session) so flipping
+  // the switch takes effect without a reconnect, mirroring the hub
+  // link.
+  isCommandGranted(): boolean;
 };
 
 export type WsServerStartOpts = {
@@ -409,8 +411,8 @@ export function createWsServerBinding(
       // grant model, so a mutation or an untagged channel is always
       // refused BEFORE its handler runs. Ticket mode (the direct data
       // plane): mirror the hub link's dispatch and consult the
-      // injected per-peer grant LIVE at each call, never cached on the
-      // session, so a grant or revoke takes effect without a
+      // injected command-access switch LIVE at each call, never cached
+      // on the session, so flipping it takes effect without a
       // reconnect. Either refusal carries the typed code so the client
       // transport surfaces "that machine will not run commands from
       // here" distinctly from a real failure. The session's context
@@ -608,17 +610,15 @@ export function createWsServerBinding(
           // predicate answers false without consulting any store (the
           // LAN wire is read-only by policy). Ticket mode: the ticket
           // bound this hello to a deviceId, so the context carries the
-          // authenticated peer identity and the per-peer grant answer,
-          // read live from the injected predicate so a toggle applies
-          // without a reconnect.
+          // authenticated peer identity and the host's command-access
+          // answer, read live from the injected predicate so a toggle
+          // applies without a reconnect.
           const callerDeviceId =
             auth === undefined ? undefined : frame.deviceId;
           ctx = {
             signal: controller.signal,
             isCallerCommandGranted:
-              auth === undefined
-                ? () => false
-                : () => auth.isCommandGranted(frame.deviceId),
+              auth === undefined ? () => false : () => auth.isCommandGranted(),
             callerDeviceId,
             notifier,
           };

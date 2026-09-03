@@ -5,6 +5,7 @@
 // bridge satisfies the preload's RendererApi surface, since window.api
 // is declared with that exact type (renderer/window.d.ts).
 import { viteEnv } from "../account/config";
+import { browserHintsOf } from "../account/deviceName";
 import { ACCOUNT_KEY } from "../account/store";
 import { createWebBridge, type WebBridge } from "./createWebBridge";
 
@@ -22,6 +23,7 @@ export function installWebBridge(): WebBridge {
     localStorage: window.localStorage,
     env: viteEnv(),
     userAgent: navigator.userAgent,
+    browserHints: browserHintsOf(navigator),
     openExternal: (url) => {
       window.open(url, "_blank", "noopener,noreferrer");
     },

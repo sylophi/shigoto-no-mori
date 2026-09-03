@@ -1,5 +1,5 @@
 // What one registry row says about a device's state, in one place so
-// the summary line and the rows can never disagree.
+// every row answers the same way.
 //
 // Two sources answer different halves of the question. The LIVE hub
 // store (useRemoteDevices) knows whether a peer is in the roster right
@@ -10,9 +10,10 @@
 //
 // "Off" is deliberately not what an offline row reads: a machine that
 // is not running the app is the NORMAL state of a laptop in a bag, so
-// it gets amber (calm, "not right now") plus the last-seen time, never
-// the rose an error would earn.
-import type { TunnelState } from "@shared/ipc/modules/hub";
+// it gets amber (calm, "not right now") and the last-seen time as its
+// whole label -- "last seen 3h ago" already says offline -- never the
+// rose an error would earn.
+import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
@@ -27,8 +28,8 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 export type DeviceRowStatus = DeviceStatusView;
 
 // What THIS device's row says about its tunnel endpoint, or null when
-// there is nothing worth saying: "up" earns the muted marker beside
-// the name, and "off" means the listener itself is down (signed out,
+// there is nothing worth saying: "up" joins the row's state phrase
+// instead, and "off" means the listener itself is down (signed out,
 // or direct connections switched off), so a tunnel is not the missing
 // piece. The copy states the CONSEQUENCE, not the state: data is
 // direct or nothing, so without a tunnel a peer on another network
@@ -56,12 +57,21 @@ export function deviceRowStatus(
   device: DeviceInfo,
   isThisDevice: boolean,
   hubDevice: RemoteDevice | undefined,
+  // THIS device's own hub socket, null before the first snapshot.
+  socket: HubStatus["socket"] | null,
 ): DeviceRowStatus {
-  // This machine is not a remote device to itself: it is running the
-  // app the row is rendered by, so it is online by construction and
-  // never appears in the hub store.
+  // This machine never appears in the hub store, and running the app
+  // is not the same as being on the account: its presence to the
+  // other devices IS its hub socket (a browser's especially), so the
+  // row reads that. A connected socket is "Online" (the roster word,
+  // not "Connected", which is what a direct session to a peer earns).
+  // Any other phase is the same honest transport fact a peer row
+  // would show. No snapshot yet reads as online, the common case.
   if (isThisDevice) {
-    return { tone: "emerald", label: "Online", reachable: true };
+    if (socket === null || socket.phase === "connected") {
+      return { tone: "emerald", label: "Online", reachable: true };
+    }
+    return deviceStatusView(socket);
   }
   // A peer absent from the hub roster -- or with no store entry at
   // all, which is the same fact before the first reconcile lands -- is
@@ -74,7 +84,7 @@ export function deviceRowStatus(
       label:
         device.lastSeenAt === null
           ? "Offline"
-          : `Offline · last seen ${formatRelativeTime(device.lastSeenAt)}`,
+          : `Last seen ${formatRelativeTime(device.lastSeenAt)}`,
       reachable: false,
     };
   }

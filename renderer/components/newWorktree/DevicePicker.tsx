@@ -14,6 +14,7 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { tildify } from "@/lib/projectPaths";
 import { cn } from "@/lib/utils";
 import type { DeviceBlock, DeviceTarget } from "./deviceTargets";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
 // is the device hub's job, granting happens on the other machine's
@@ -23,7 +24,7 @@ const BLOCK_REASON: Record<DeviceBlock, string> = {
   offline: "Creating needs a live connection.",
   "no-project":
     "Doesn't have this repo registered. Matching by git remote found no checkout there.",
-  "no-grant": "Read-only until it grants command access from its Devices page.",
+  "no-grant": peerReadOnlyNote("it"),
 };
 
 export function DevicePicker({

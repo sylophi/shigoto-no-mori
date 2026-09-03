@@ -3,7 +3,7 @@
 // provider requirement is visible at the import site: call these only
 // from components the status.configured gates keep off the tree when
 // Clerk is absent (see ClerkGate).
-import { useClerk } from "@clerk/react";
+import { useClerk, useUser } from "@clerk/react";
 import { useMutation } from "@tanstack/react-query";
 
 // Ends the Clerk session first, then the account layer (best-effort
@@ -24,4 +24,20 @@ export function useClerkSignOut() {
       }),
     meta: { errorTitle: "Couldn't sign out" },
   });
+}
+
+// How the signed-in account reads to a person: the email it signs in
+// with, else a name, else the username. The Clerk user id is what the
+// device hub keys on, but it is an opaque string nobody recognises as
+// themselves, so it is only the fallback while Clerk is still loading
+// the user (or when the profile carries none of the above). The caller
+// supplies that fallback so the id abbreviation rule stays in one place.
+export function useAccountIdentity(fallback: string): string {
+  const { user } = useUser();
+  return (
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.fullName ||
+    user?.username ||
+    fallback
+  );
 }

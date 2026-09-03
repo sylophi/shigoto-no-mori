@@ -43,6 +43,7 @@ import { deriveAccountId } from "../shared/account/token.ts";
 import { createAccountStore } from "../main/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
 import { createGrantStore } from "../main/account/grantStore.ts";
+import { shortHostname } from "../main/account/defaultDeviceName.ts";
 import {
   AccountStatusSchema,
   accountContract,
@@ -518,78 +519,87 @@ async function main() {
     );
 
     await check(
-      "grants: grant then list returns the peer, revoke removes it, and a mismatched account yields no grants",
+      "grants: set then enabled reads the switch, and a mismatched account reads as off",
       () => {
         const filePath = join(tmp, "grants.json");
         const grants = createGrantStore({ filePath });
-        assert.deepEqual(
-          grants.list("acct-1"),
-          [],
-          "a fresh store has no grants",
-        );
-        grants.grant("acct-1", "peer-a");
-        grants.grant("acct-1", "peer-b");
-        // A repeat grant is idempotent, not a duplicate.
-        grants.grant("acct-1", "peer-a");
-        assert.deepEqual(grants.list("acct-1").toSorted(), [
-          "peer-a",
-          "peer-b",
-        ]);
-        grants.revoke("acct-1", "peer-a");
-        assert.deepEqual(grants.list("acct-1"), ["peer-b"]);
-        // A different account never sees acct-1's grants, so grants cannot
-        // leak across accounts even from the same file.
-        assert.deepEqual(
-          grants.list("acct-2"),
-          [],
-          "a mismatched account saw another account's grants",
+        assert.equal(grants.enabled("acct-1"), false, "a fresh store is off");
+        grants.set("acct-1", true);
+        assert.equal(grants.enabled("acct-1"), true);
+        // Setting the same value again is idempotent.
+        grants.set("acct-1", true);
+        assert.equal(grants.enabled("acct-1"), true);
+        grants.set("acct-1", false);
+        assert.equal(grants.enabled("acct-1"), false);
+        grants.set("acct-1", true);
+        // A different account never reads acct-1's switch, so the
+        // answer cannot leak across accounts even from the same file.
+        assert.equal(
+          grants.enabled("acct-2"),
+          false,
+          "a mismatched account read another account's switch",
         );
         const record = grants.read();
         assert.equal(record.accountId, "acct-1");
+        assert.equal(record.enabled, true);
       },
     );
 
     await check(
-      "grants: a grant under a new account resets the record, dropping the old account's grants",
+      "grants: a set under a new account resets the record, dropping the old account's answer",
       () => {
         const filePath = join(tmp, "grants-reset.json");
         const grants = createGrantStore({ filePath });
-        grants.grant("acct-1", "peer-a");
-        grants.grant("acct-1", "peer-b");
-        // Granting under a DIFFERENT account resets to the new account, so
-        // the old grants are gone rather than merged in.
-        grants.grant("acct-2", "peer-c");
-        assert.deepEqual(grants.list("acct-2"), ["peer-c"]);
-        assert.deepEqual(
-          grants.list("acct-1"),
-          [],
-          "the old account's grants survived a reset",
+        grants.set("acct-1", true);
+        // Setting under a DIFFERENT account resets to the new account,
+        // so the old answer is gone rather than kept beside it.
+        grants.set("acct-2", false);
+        assert.equal(grants.enabled("acct-2"), false);
+        assert.equal(
+          grants.enabled("acct-1"),
+          false,
+          "the old account's switch survived a reset",
         );
         assert.equal(grants.read().accountId, "acct-2");
       },
     );
 
     await check(
-      "grants: a missing file and corrupt JSON both read as null, and clear removes the file",
+      "grants: a missing file and corrupt JSON read as off, a v1 per-peer file reads as on only if it trusted someone, and clear removes the file",
       () => {
         const missing = createGrantStore({
           filePath: join(tmp, "grants-missing.json"),
         });
         assert.equal(missing.read(), null, "missing file should read null");
-        assert.deepEqual(
-          missing.list("acct-1"),
-          [],
-          "missing file has no grants",
-        );
+        assert.equal(missing.enabled("acct-1"), false, "missing file is off");
 
         const corruptPath = join(tmp, "grants-corrupt.json");
         writeFileSync(corruptPath, "{ not valid json");
         const corrupt = createGrantStore({ filePath: corruptPath });
         assert.equal(corrupt.read(), null, "corrupt JSON should read null");
 
+        // The pre-switch format listed trusted peer ids. A host that
+        // trusted any of its account's devices keeps accepting the
+        // account's commands, so an update cannot lock out a machine
+        // driven remotely. One that trusted none stays closed, and the
+        // account scoping still applies.
+        const v1Path = join(tmp, "grants-v1.json");
+        writeFileSync(
+          v1Path,
+          JSON.stringify({ v: 1, accountId: "acct-1", grantedPeers: ["p"] }),
+        );
+        const v1 = createGrantStore({ filePath: v1Path });
+        assert.equal(v1.enabled("acct-1"), true, "a trusting v1 file is on");
+        assert.equal(v1.enabled("acct-2"), false, "v1 is still account-scoped");
+        writeFileSync(
+          v1Path,
+          JSON.stringify({ v: 1, accountId: "acct-1", grantedPeers: [] }),
+        );
+        assert.equal(v1.enabled("acct-1"), false, "an empty v1 file is off");
+
         const clearPath = join(tmp, "grants-clear.json");
         const store = createGrantStore({ filePath: clearPath });
-        store.grant("acct-1", "peer-a");
+        store.set("acct-1", true);
         assert.notEqual(store.read(), null);
         store.clear();
         assert.equal(store.read(), null, "clear should remove the file");
@@ -599,38 +609,28 @@ async function main() {
     await check("grants: the atomic write leaves the file mode 0o600", () => {
       const filePath = join(tmp, "grants-mode.json");
       const grants = createGrantStore({ filePath });
-      grants.grant("acct-1", "peer-a");
-      // The grant list is not world-readable in a shared userData dir.
+      grants.set("acct-1", true);
+      // The switch is not world-readable in a shared userData dir.
       // Mode bits are a unix concept, so skip the check on win32.
       if (process.platform !== "win32") {
         assert.equal(statSync(filePath).mode & 0o777, 0o600);
       }
     });
-
-    await check(
-      "grants: the list is capped, so a runaway write past the ceiling is refused while a re-grant at the cap stays idempotent",
-      () => {
-        const filePath = join(tmp, "grants-cap.json");
-        const grants = createGrantStore({ filePath });
-        // Fill exactly to the 256 ceiling (MAX_GRANTED_PEERS, a plain
-        // host-local bound on the persisted list).
-        for (let i = 0; i < 256; i += 1) grants.grant("acct-1", `peer-${i}`);
-        assert.equal(grants.list("acct-1").length, 256);
-        // A NEW peer past the cap is refused rather than growing the file.
-        assert.throws(
-          () => grants.grant("acct-1", "peer-over"),
-          /cannot grant more than 256/,
-        );
-        assert.equal(grants.list("acct-1").length, 256, "the cap was exceeded");
-        // Re-granting an already-trusted peer at the cap is still a no-op,
-        // not a spurious over-cap throw.
-        grants.grant("acct-1", "peer-0");
-        assert.equal(grants.list("acct-1").length, 256);
-      },
-    );
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+
+  await check(
+    "device name: the hostname default drops the mDNS and domain suffixes and never blanks",
+    () => {
+      assert.equal(shortHostname("Rins-MacBook-Pro.local"), "Rins-MacBook-Pro");
+      assert.equal(shortHostname("thinkpad.corp.example"), "thinkpad");
+      assert.equal(shortHostname("DESKTOP-4F2C9D1"), "DESKTOP-4F2C9D1");
+      // A name that would strip to nothing comes back whole.
+      assert.equal(shortHostname(".local"), ".local");
+      assert.equal(shortHostname(""), "");
+    },
+  );
 
   await check(
     'token: deriveAccountId reads a JWT sub and returns "" for anything malformed without throwing',

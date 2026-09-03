@@ -93,9 +93,9 @@ export function useAccountSignOut() {
 }
 
 // Removes another device from the account on the device hub. Like the
-// grant mutations it does not invalidate itself: main broadcasts
-// account:changed (and grantsChanged) after the revoke, and the
-// watchers above turn those into the invalidations. Self-revoke is not
+// command-access write it does not invalidate itself: main broadcasts
+// account:changed after the revoke, and the watcher above turns it
+// into the invalidation. Self-revoke is not
 // offered by the devices page -- this device signs out instead, so the
 // Clerk session ends first and ClerkAccountSync cannot re-enroll it
 // back onto the account.
@@ -113,48 +113,41 @@ export function useSetDeviceName() {
   });
 }
 
-// The peer deviceIds this host grants command access, for the current
-// account. Mounted only under the same signed-in guard as
-// useAccountDevices, and the handler returns [] signed out. Kept off the
-// "account" prefix so a grant toggle invalidates only this.
-export function useGrantedDevices() {
-  return useQuery<string[]>({
-    queryKey: queryKeys.accountGrantedDevices(),
-    queryFn: () => window.api.account.listGrantedDevices(),
-    meta: { errorTitle: "Couldn't load command grants" },
+// Whether this host accepts commands from the account's other devices,
+// for the current account. Mounted only under the same signed-in guard
+// as useAccountDevices, and the handler answers false signed out. Kept
+// off the "account" prefix so the toggle invalidates only this.
+export function useAcceptsCommands() {
+  return useQuery<boolean>({
+    queryKey: queryKeys.accountCommandAccess(),
+    queryFn: () => window.api.account.acceptsCommands(),
+    meta: { errorTitle: "Couldn't read command access" },
   });
 }
 
-// Invalidate the granted-devices query whenever main fans out a grant
-// change, so every window's per-device control reflects the new state
-// without polling. Separate from the account.changed watch so a grant
-// toggle never re-reads status or the device list.
-export function useWatchGrantsChanges(): void {
+// Invalidate the command-access query whenever main fans out a flip,
+// so every window's toggle reflects the new state without polling.
+// Separate from the account.changed watch so the toggle never re-reads
+// status or the device list.
+export function useWatchCommandAccessChanges(): void {
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      window.api.account.onGrantsChanged(() => {
+      window.api.account.onCommandAccessChanged(() => {
         void queryClient.invalidateQueries({
-          queryKey: queryKeys.accountGrantedDevices(),
+          queryKey: queryKeys.accountCommandAccess(),
         });
       }),
     [queryClient],
   );
 }
 
-// Grant and revoke are imperative writes. They do not invalidate
-// themselves: main emits grantsChanged and useWatchGrantsChanges
-// invalidates off it.
-export function useGrantCommands() {
-  return useMutation<void, Error, string>({
-    mutationFn: (deviceId) => window.api.account.grantCommands(deviceId),
-    meta: { errorTitle: "Couldn't allow commands" },
-  });
-}
-
-export function useRevokeCommands() {
-  return useMutation<void, Error, string>({
-    mutationFn: (deviceId) => window.api.account.revokeCommands(deviceId),
-    meta: { errorTitle: "Couldn't revoke commands" },
+// An imperative write. It does not invalidate itself: main emits
+// commandAccessChanged and useWatchCommandAccessChanges invalidates
+// off it.
+export function useSetAcceptsCommands() {
+  return useMutation<void, Error, boolean>({
+    mutationFn: (enabled) => window.api.account.setAcceptsCommands(enabled),
+    meta: { errorTitle: "Couldn't change command access" },
   });
 }

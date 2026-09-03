@@ -8,6 +8,7 @@ import {
   type CleanupError,
   type Worktree,
 } from "@shared/schemas";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 // The footer is a four-state machine. The parent owns the transitions and
 // hands us a discriminated state plus the actions each state can fire, so
@@ -57,7 +58,7 @@ export function WorktreeDetailFooter({
         renderFooterContent(worktree, state, actions)
       ) : (
         <span className="ml-auto text-xs text-muted-foreground">
-          Read-only. Command access is granted from that device.
+          {peerReadOnlyNote()}
         </span>
       )}
     </footer>

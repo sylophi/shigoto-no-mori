@@ -20,6 +20,7 @@ import { usePortForwardControl } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { cn } from "@/lib/utils";
 import { OpenLocalhostButton } from "./OpenLocalhostButton";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
 export function ForwardControl({
   deviceId,
@@ -81,7 +82,7 @@ export function ForwardControl({
     ? "Stop forwarding"
     : granted
       ? `Forward ${deviceLabel}:${remotePort} to localhost:${localPort}`
-      : "Needs command access, granted from that device's Devices page";
+      : peerReadOnlyNote();
 
   const state = describeState(isPending, forward);
 

@@ -123,8 +123,9 @@ export type DeviceForest = {
   deviceId: string;
   projects: Project[];
   worktrees: Record<string, Worktree[]>;
-  // What remoteAccess:commandAccess answers CALLERS (i.e. whether the
-  // local lab client may mutate this device).
+  // What remoteAccess:commandAccess answers CALLERS (i.e. whether this
+  // device accepts commands from the account's other devices, so the
+  // local lab client may mutate it).
   grantsCaller: boolean;
 };
 
@@ -439,9 +440,6 @@ export const forests: Record<string, DeviceForest> = {
     grantsCaller: false,
   },
 };
-
-// Peers THIS host has granted command access (the devices page toggle).
-export const grantedDeviceIds = [THINKPAD_ID];
 
 export const labGlobalConfig = {
   launchScripts: true,
