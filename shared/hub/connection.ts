@@ -276,11 +276,12 @@ export function createHubConnectionCore(
             if (dead) return;
             dead = true;
             tearDownLink();
-            killSocket(socket);
-            // Report the drop here, once, then read as owner-closed so
-            // the platform close that follows stays silent.
+            // Report the drop here, once, and read as owner-closed
+            // BEFORE the kill, so the platform close it triggers stays
+            // silent however promptly it lands.
             if (established) onClose(null);
             ownerClosed = true;
+            killSocket(socket);
             notifyChange();
           },
         });

@@ -96,10 +96,9 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // A fetched snapshot seeds the shared store (a broadcast that raced
   // it is newer and wins), so this module stays the store's single
   // writer and the hooks never race a fetch of their own.
-  if (status === undefined) {
-    seedHubStatus(current);
-    noteSessions(current);
-  }
+  // A fetched snapshot that lost the race to a broadcast is stale, and
+  // must not roll the session diff back either.
+  if (status === undefined && seedHubStatus(current)) noteSessions(current);
   const phase = current.socket.phase;
   const localDeviceId = window.api.deviceId;
   const online = new Set(current.onlineDeviceIds);

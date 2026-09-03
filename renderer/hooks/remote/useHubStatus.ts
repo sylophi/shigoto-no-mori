@@ -22,8 +22,10 @@ export function publishHubStatus(status: HubStatus): void {
 // Seeds the store with a FETCHED snapshot. A broadcast that raced the
 // fetch is newer and wins, so a seed lands only while nothing was
 // published yet.
-export function seedHubStatus(status: HubStatus): void {
-  if (snapshot === null) publishHubStatus(status);
+export function seedHubStatus(status: HubStatus): boolean {
+  if (snapshot !== null) return false;
+  publishHubStatus(status);
+  return true;
 }
 
 function subscribe(listener: () => void): () => void {

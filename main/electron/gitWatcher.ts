@@ -93,10 +93,11 @@ type Watched = {
 
 export type GitWatcherDeps = {
   onChange: (projectId: string) => void;
-  // Whether events should be dropped right now: the app's own git
-  // activity (a running sm CLI child, the echo window after an
-  // app-run mutating git command), already invalidated by its caller.
-  suppressed: () => boolean;
+  // Whether events from the named git directory should be dropped
+  // right now: the app's own git activity there (a running sm CLI
+  // child, an app-run mutating git command in flight or just done),
+  // already invalidated by its caller.
+  suppressed: (gitDir: string) => boolean;
   // The projects to follow. Defaults to the registry; the git-watcher
   // check injects its own list against a sandbox repository.
   projects?: () => Project[];
@@ -128,7 +129,7 @@ function openWatched(projectId: string, gitDir: string): void {
     // Checked at event time, not timer time, mirroring the state
     // watcher: a CLI child finishing right after an external commit
     // must not swallow the refresh that commit deserves.
-    if (deps.suppressed()) return;
+    if (deps.suppressed(gitDir)) return;
     if (entry.timer !== null) clearTimeout(entry.timer);
     entry.timer = setTimeout(() => {
       entry.timer = null;

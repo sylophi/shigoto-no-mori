@@ -3,7 +3,7 @@
 // shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { noteGitSelfWrite } from "../util/selfWrite";
+import { beginGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
 
@@ -15,7 +15,8 @@ const execFileP = promisify(execFile);
 // reset, branch and worktree mutations, push, update-ref) marks the
 // window, and an unknown subcommand marks it too, the safe direction
 // (a spurious mark costs one dropped ping for a second, a missed mark
-// costs one redundant sweep).
+// costs one redundant sweep). The list forms below are the ones the
+// app actually runs.
 const READ_ONLY_SUBCOMMANDS = new Set([
   "blame",
   "cat-file",
@@ -93,10 +94,11 @@ async function exec(
   options: { cwd: string; maxBuffer?: number },
 ): Promise<{ stdout: string }> {
   const start = performance.now();
-  // Marked at both ends so the echo window covers the whole command:
-  // the git-directory watcher checks it at event time.
-  const mutating = mutatesRepo(args);
-  if (mutating) noteGitSelfWrite();
+  // In flight for the command's whole run, then an echo window after
+  // it: the git-directory watcher checks at event time.
+  const endSelfWrite = mutatesRepo(args)
+    ? beginGitSelfWrite(options.cwd)
+    : null;
   try {
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
     // removeWorktreeForce match on stderr text, which gettext would
@@ -107,13 +109,13 @@ async function exec(
     });
     const elapsed = Math.round(performance.now() - start);
     console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
-    if (mutating) noteGitSelfWrite();
     return { stdout: result.stdout };
   } catch (err) {
-    if (mutating) noteGitSelfWrite();
     const elapsed = Math.round(performance.now() - start);
     console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
     throw err;
+  } finally {
+    endSelfWrite?.();
   }
 }
 

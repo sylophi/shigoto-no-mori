@@ -59,7 +59,11 @@ import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
-import { reconcileGitWatchers, startGitWatcher } from "./electron/gitWatcher";
+import {
+  gitDirOf,
+  reconcileGitWatchers,
+  startGitWatcher,
+} from "./electron/gitWatcher";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
@@ -443,10 +447,14 @@ app.on("ready", async () => {
       broadcastAll(gitContract, "projectChanged", { projectId }),
     // The app's own git commands move refs the same way an agent's
     // do, and their callers already invalidate their targets, so the
-    // watcher skips a running sm CLI child and the echo window after
-    // any app-run mutating git command, exactly as the state watcher
-    // skips the app's own root writes.
-    suppressed: () => cliChildCount() > 0 || gitSelfWroteWithin(SELF_ECHO_MS),
+    // watcher skips a running sm CLI child and any app-run mutating
+    // git command in flight or just done IN THAT REPOSITORY (a
+    // command's cwd is the project path or one of its worktrees, both
+    // of which resolve to the same git directory), exactly as the
+    // state watcher skips the app's own root writes.
+    suppressed: (gitDir) =>
+      cliChildCount() > 0 ||
+      gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
   });
   // An app-side project add or remove runs as a CLI child whose
   // registry write the state watcher drops as the app's own, so the

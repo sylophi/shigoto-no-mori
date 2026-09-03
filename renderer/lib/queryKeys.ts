@@ -303,11 +303,11 @@ export function invalidateHostDevice(
 // The PROJECT-SCOPED sweep, for git:projectChanged: one project's git
 // state moved on that device (a commit, a checkout, a ref written by
 // any tool), so only the host keys carrying that project id refetch,
-// under the same domain exemptions as the device-wide sweep. Every
-// project-scoped host builder puts the project id right after the
-// domain, which is what hostKeyProjectId reads; keys shaped otherwise
-// (a client key, a whole-host key, a githubCli sub-tree) carry no
-// project id there and are left alone.
+// under the same domain exemptions as the device-wide sweep. The
+// git-state builders put the project id right after the domain, which
+// is what hostKeyProjectId reads; keys shaped otherwise (a client key,
+// a whole-host key, the githubCli and carryOver sub-trees, neither of
+// which is git state) carry no project id there and are left alone.
 export function invalidateHostProject(
   queryClient: QueryClient,
   deviceId: string,
