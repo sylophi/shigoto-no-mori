@@ -13,8 +13,9 @@ interface SidebarHeaderProps {
   // False for the web shell: a browser tab has no title-bar drag region
   // and no traffic lights to clear.
   windowChrome?: boolean;
-  // A static build marker ("web") in the corner slot the dev sticker
-  // otherwise uses. Providing it replaces the dev affordance.
+  // A static build marker ("web") sharing the corner slot with the dev
+  // sticker. A dev web build carries both: they answer different
+  // questions ("which shell" vs "which build").
   badge?: string;
 }
 
@@ -31,7 +32,7 @@ export function SidebarHeader({
   // Reset on unmount (window reload).
   const [revealProd, setRevealProd] = useState(false);
   const dev: DevAffordance = {
-    showDevStyle: badge === undefined && isDev && !revealProd,
+    showDevStyle: isDev && !revealProd,
     onRevealProd: () => setRevealProd(true),
   };
   return (
@@ -50,6 +51,11 @@ type ThemeHeaderProps = DevAffordance & {
   windowChrome: boolean;
   badge: string | undefined;
 };
+
+// Both doubutsu corner stickers are the same fat little pill, slapped
+// on at the same angle. The fill is what tells them apart.
+const STICKER =
+  "-rotate-6 rounded-full px-2 py-[3px] text-[10px] leading-none font-black tracking-widest uppercase";
 
 // The "album-art" moment of doubutsu mode: a cream pill anchoring the
 // sidebar, with 仕事の森 as the hero and a giant 森 watermark bleeding
@@ -90,27 +96,43 @@ function DoubutsuBrandHeader({
         <span className="relative z-[1] mt-1.5 block text-[12px] font-bold text-muted-foreground">
           Shigoto no Mori
         </span>
-        {badge !== undefined ? (
-          // Static build marker in the dev sticker's corner slot, calmer
-          // (secondary, not the loud primary) because it never goes away.
-          <span className="absolute top-3 right-3 z-[2] -rotate-6 rounded-full bg-secondary px-2 py-[3px] text-[10px] leading-none font-black tracking-widest text-secondary-foreground uppercase">
-            {badge}
-          </span>
-        ) : (
-          showDevStyle && (
-            // Sticker slapped on the corner of the card, AC-style. Doubles
-            // as the reveal-prod affordance (the pill isn't a drag region,
-            // so the click lands without carving a no-drag hole).
+        {/* Stickers slapped on the corner of the card, AC-style. A pair
+            stacks and overlaps rather than sitting in a tidy row: two
+            stickers thrown on at their own angles is the playful read,
+            a row is a toolbar. Empty when neither shows, which paints
+            nothing -- the cluster has no box of its own. */}
+        <span className="absolute top-3 right-3 z-[2] flex flex-col items-center">
+          {badge !== undefined && (
+            // Calmer than the dev sticker (secondary, not the loud
+            // primary) because it never goes away.
+            <span
+              className={cn(STICKER, "bg-secondary text-secondary-foreground")}
+            >
+              {badge}
+            </span>
+          )}
+          {showDevStyle && (
+            // Doubles as the reveal-prod affordance (the pill isn't a
+            // drag region, so the click lands without carving a no-drag
+            // hole). Last in the stack, so it paints over the badge it
+            // overlaps and keeps a whole hit target.
             <button
               type="button"
               onClick={onRevealProd}
               title="Dev build — click to preview production styling"
-              className="absolute top-3 right-3 z-[2] -rotate-6 rounded-full bg-primary px-2 py-[3px] text-[10px] leading-none font-black tracking-widest text-primary-foreground uppercase"
+              className={cn(
+                STICKER,
+                "bg-primary text-primary-foreground",
+                // Under a badge it counter-tilts and overlaps by a hair,
+                // so the two read as a pile rather than a list. Alone it
+                // keeps the sticker's own angle.
+                badge !== undefined && "-mt-px rotate-[8deg]",
+              )}
             >
               dev
             </button>
-          )
-        )}
+          )}
+        </span>
         <span
           aria-hidden
           className="pointer-events-none absolute -right-4 -bottom-10 text-[140px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-15 select-none"
@@ -121,6 +143,12 @@ function DoubutsuBrandHeader({
     </>
   );
 }
+
+// Both v1 corner chips are the same quiet mono pill. Deliberately not
+// ui/chip-button.tsx: that primitive is ring-based and carries
+// data-slot="chip" for doubutsu to restyle, and this markup is v1-only.
+const HEADER_CHIP =
+  "shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] leading-none font-medium tracking-widest text-muted-foreground uppercase";
 
 function DefaultSidebarHeader({
   showDevStyle,
@@ -142,26 +170,24 @@ function DefaultSidebarHeader({
       <div className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">
         Shigoto no Mori
       </div>
-      {badge !== undefined ? (
-        <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] leading-none font-medium tracking-widest text-muted-foreground uppercase">
-          {badge}
-        </span>
-      ) : (
-        showDevStyle && (
-          // Dev keeps the title itself intact and hangs a quiet mono chip
-          // off it -- reads instantly, still lets the wordmark sit right.
-          // Doubles as the reveal-prod affordance, so it carves a no-drag
-          // hole out of the title bar for its own click.
-          <button
-            type="button"
-            onClick={onRevealProd}
-            title="Dev build — click to preview production styling"
-            style={dragRegion("no-drag")}
-            className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] leading-none font-medium tracking-widest text-muted-foreground uppercase transition-colors hover:border-foreground/25 hover:text-foreground"
-          >
-            dev
-          </button>
-        )
+      {badge !== undefined && <span className={HEADER_CHIP}>{badge}</span>}
+      {showDevStyle && (
+        // Dev keeps the title itself intact and hangs a quiet mono chip
+        // off it -- reads instantly, still lets the wordmark sit right.
+        // Doubles as the reveal-prod affordance, so it carves a no-drag
+        // hole out of the title bar for its own click.
+        <button
+          type="button"
+          onClick={onRevealProd}
+          title="Dev build — click to preview production styling"
+          style={dragRegion("no-drag")}
+          className={cn(
+            HEADER_CHIP,
+            "transition-colors hover:border-foreground/25 hover:text-foreground",
+          )}
+        >
+          dev
+        </button>
       )}
     </div>
   );
