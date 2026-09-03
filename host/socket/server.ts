@@ -46,6 +46,7 @@ import {
   decodeFrame,
   encodeFrame,
   HELLO_TIMEOUT_MS,
+  HOST_LIVENESS_TIMEOUT_MS,
   MAX_IN_FLIGHT_PER_PEER,
   MAX_INBOUND_FRAME_BYTES,
   PUSH_BUFFER_LIMIT_BYTES,
@@ -110,6 +111,9 @@ export type WsServerStartOpts = {
   allowedOrigin?: string;
   // Test seam. Real callers take the 10s default.
   helloTimeoutMs?: number;
+  // Test seam for the host-side liveness sweep (HOST_LIVENESS_TIMEOUT_MS
+  // in frames.ts). Real callers take the shared default.
+  livenessTimeoutMs?: number;
 };
 
 // Observable listener state so a bind failure (port taken, EACCES) is
@@ -283,6 +287,19 @@ export function createWsServerBinding(
     kill(code: number, reason: string): void;
   };
   const authedByDevice = new Map<string, AuthedPeer>();
+  // Liveness per authed socket (HOST_LIVENESS_TIMEOUT_MS in frames.ts):
+  // when its last frame arrived, whether it has ever pinged (only a
+  // peer that proved it heartbeats is judged, so an older client that
+  // never pings is left alone), and the kill that ends it. Swept by
+  // one timer per listener, so a dead client socket cannot sit in the
+  // authed set until the OS notices.
+  type Liveness = {
+    lastInboundAt: number;
+    heartbeats: boolean;
+    kill(code: number, reason: string): void;
+  };
+  const liveness = new Map<WebSocket, Liveness>();
+  let livenessTimer: NodeJS.Timeout | null = null;
   let listener: {
     wss: WebSocketServer;
     opts: WsServerStartOpts;
@@ -532,6 +549,7 @@ export function createWsServerBinding(
           authedByDevice.delete(id);
         }
         controller.abort();
+        liveness.delete(socket);
         closeThenTerminate(socket, code, reason);
       };
 
@@ -539,6 +557,7 @@ export function createWsServerBinding(
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
+        liveness.delete(socket);
         // A superseded socket must not evict its replacement, so the
         // per-device entry is dropped only while it still names THIS
         // socket, mirroring the DO. The authed identity lives on the
@@ -560,6 +579,8 @@ export function createWsServerBinding(
         const frame = isBinary
           ? null
           : decodeFrame(toText(data), ClientFrameSchema);
+        const alive = liveness.get(socket);
+        if (alive !== undefined) alive.lastInboundAt = Date.now();
         if (ctx === null) {
           if (frame === null || frame.t !== "hello") {
             dead = true;
@@ -636,6 +657,11 @@ export function createWsServerBinding(
             authedByDevice.set(callerDeviceId, { socket, kill });
           }
           authed.add(socket);
+          liveness.set(socket, {
+            lastInboundAt: Date.now(),
+            heartbeats: false,
+            kill,
+          });
           send(socket, {
             t: "welcome",
             deviceId: opts.deviceId,
@@ -643,6 +669,15 @@ export function createWsServerBinding(
           });
           return;
         }
+        // The client's liveness ping (frames.ts): answer it, and note
+        // that this peer heartbeats so the sweep may judge it. A pong
+        // (the answer to a probe we never send) is simply alive.
+        if (frame !== null && frame.t === "ping") {
+          if (alive !== undefined) alive.heartbeats = true;
+          send(socket, { t: "pong" });
+          return;
+        }
+        if (frame !== null && frame.t === "pong") return;
         // bye is a hub-wire frame (the device hub has no per-peer
         // socket close). This wire has a real socket close, so a bye
         // here is meaningless and silently ignored.
@@ -721,6 +756,27 @@ export function createWsServerBinding(
         },
       });
       attach(wss, opts, generation);
+      // The liveness sweep, one timer per listener: a peer that proved it
+      // heartbeats and then fell silent past the timeout is killed like a
+      // roster drop. Quarter-period cadence keeps the worst-case delay
+      // past the timeout small without a busy loop.
+      const livenessTimeoutMs =
+        opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
+      livenessTimer = setInterval(
+        () => {
+          const now = Date.now();
+          for (const entry of liveness.values()) {
+            if (
+              entry.heartbeats &&
+              now - entry.lastInboundAt > livenessTimeoutMs
+            ) {
+              entry.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
+            }
+          }
+        },
+        Math.max(50, Math.floor(livenessTimeoutMs / 4)),
+      );
+      livenessTimer.unref?.();
       const onBindError = (error: Error) => {
         wss.close();
         status = {
@@ -771,6 +827,11 @@ export function createWsServerBinding(
     listener = null;
     authed.clear();
     authedByDevice.clear();
+    liveness.clear();
+    if (livenessTimer !== null) {
+      clearInterval(livenessTimer);
+      livenessTimer = null;
+    }
     status = { listening: false, port: null, bindAddress: null, error: null };
     for (const socket of wss.clients) {
       socket.close(CLOSE_GOING_AWAY, "server stopping");

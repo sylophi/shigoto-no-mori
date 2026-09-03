@@ -110,6 +110,16 @@ app talking through a new Worker) degrades softly instead: its
 oversize sends get nacked and the calls time out, which is acceptable
 during the owner's own rollout.
 
+Devices heartbeat their hub socket with a bare `ping` text that the
+Durable Object answers `pong` through the hibernation runtime's
+auto-response (`shared/hub/protocol.ts`), so a socket a NAT or a sleep
+killed is found and redialed within seconds. Deploy the Worker BEFORE
+shipping devices that heartbeat: an old Worker drops the ping as a
+malformed envelope, so a new device sees no pong and redials it once a
+minute until the Worker is redeployed (it keeps working meanwhile, just
+noisily). The reverse skew is silent: an old device never pings and the
+auto-response never fires.
+
 The Worker serves any browser origin (`Access-Control-Allow-Origin:
 *`) and needs no origin config. Every route authenticates from an
 explicit `Authorization` bearer, never from a cookie or any other

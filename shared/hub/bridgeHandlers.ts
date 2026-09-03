@@ -78,6 +78,13 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // plane", so a peer the control plane no longer vouches for loses
   // its direct wire too.
   dropDirectPeersNotIn(online: readonly string[]): void;
+  // Probe every ESTABLISHED direct session now (the transport's
+  // wake-time probe), so a session that died while the machine slept
+  // is found out in seconds and the keeper redials it, instead of the
+  // renderer reading "Connected" off a corpse until the next heartbeat
+  // tick. In-flight dials are left alone: their handshake deadline is
+  // already their verdict.
+  probeDirectPeers(): void;
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
@@ -228,6 +235,20 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     // attaches a continuation that closes the resulting connection
     // whenever the promise settles (a rejection means there is nothing
     // to close).
+    probeDirectPeers: () => {
+      for (const entry of peers.values()) {
+        if (entry.version === null) continue;
+        entry.promise
+          .then((connection) => {
+            connection.probe();
+          })
+          .catch(() => {
+            // Established entries never reject, and a rejected one has
+            // nothing to probe.
+          });
+      }
+    },
+
     dropDirectPeersNotIn: (online) => {
       const live = new Set(online);
       for (const [deviceId, entry] of peers) {

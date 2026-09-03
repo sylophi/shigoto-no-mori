@@ -60,6 +60,36 @@ export const ChunkB64Schema = z
 // it. Tests override via WsServerStartOpts.helloTimeoutMs.
 export const HELLO_TIMEOUT_MS = 10_000;
 
+// Liveness. A websocket over a NAT, a tunnel edge or a laptop that just
+// slept can die without either end getting a close: the TCP flow is
+// simply gone, and until the OS gives up (minutes, sometimes never)
+// the socket reads as open, pushes fall into a void and nothing
+// redials. So the CLIENT of every long-lived socket (a direct session,
+// the hub socket) sends an app-level ping on HEARTBEAT_INTERVAL_MS and
+// declares the socket dead when a ping stays unanswered for
+// HEARTBEAT_TIMEOUT_MS, which hands the supervisor or keeper a close to
+// redial on. Client driven because a browser page can neither send a
+// protocol-level ping nor see one, so the app-level frame is the one
+// mechanism every platform has. The timeout is measured from the
+// oldest unanswered ping, never from "time since the last frame", so a
+// background tab whose timers the browser throttles to one wake per
+// minute is not misjudged dead by its own slow cadence. PROBE_TIMEOUT_MS
+// is the short verdict window for a probe fired on a wake or a tab
+// coming back, when waiting out a full interval would be the stale
+// window the user notices.
+export const HEARTBEAT_INTERVAL_MS = 15_000;
+export const HEARTBEAT_TIMEOUT_MS = 40_000;
+export const PROBE_TIMEOUT_MS = 5_000;
+
+// The host side of the same rule: a peer that has proven it heartbeats
+// (sent at least one ping) and then falls silent for this long is
+// terminated, so a dead client socket does not sit in the authed set
+// forever. Generous next to the client's timeout on purpose: a hidden
+// browser tab pings once a minute under timer throttling and must not
+// be killed for it. A peer that never pinged (an older build) is never
+// judged, so a host can roll out ahead of its clients.
+export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
+
 // Concurrent dispatched requests per connection, shared by the LAN
 // binding (per socket) and the hub link (per peer). Over the cap a
 // request is refused rather than spawning yet another git or CLI
@@ -146,10 +176,23 @@ export const ByeFrameSchema = z.object({
   t: z.literal("bye"),
 });
 
+// The liveness pair (see HEARTBEAT_INTERVAL_MS). Either side answers a
+// ping with a pong; the client sends pings on its cadence and a probe,
+// the host only ever answers. Additive per the version-skew policy: an
+// old peer fails to parse a ping and drops it. An old client against a
+// new host is never judged (the host's sweep latches on the first
+// ping), while a new client against an old host sees no pongs and
+// redials it once a minute until that host updates, the soft
+// degradation the owner's own rollout accepts elsewhere.
+export const PingFrameSchema = z.object({ t: z.literal("ping") });
+export const PongFrameSchema = z.object({ t: z.literal("pong") });
+
 export const ClientFrameSchema = z.discriminatedUnion("t", [
   HelloFrameSchema,
   ReqFrameSchema,
   ByeFrameSchema,
+  PingFrameSchema,
+  PongFrameSchema,
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 
@@ -237,6 +280,8 @@ export const ServerFrameSchema = z.union([
   ResOkFrameSchema,
   ResErrFrameSchema,
   PushFrameSchema,
+  PingFrameSchema,
+  PongFrameSchema,
 ]);
 export type ServerFrame = z.infer<typeof ServerFrameSchema>;
 

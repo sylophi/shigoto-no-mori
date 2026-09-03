@@ -437,6 +437,17 @@ export function stopHubConnection(): Promise<void> {
   return hubServer.stop();
 }
 
+// The wake-time liveness probe for both remote planes (the hub socket
+// and every established direct session), wired to the power monitor's
+// resume in main/index.ts. A socket that died while the machine slept
+// gets its verdict within the probe window and redials at once,
+// instead of reading as connected until the next heartbeat tick or,
+// without heartbeats, until the OS gave up on the dead flow.
+export function probeRemoteConnections(): void {
+  hubServer.probe();
+  directPlane.probe();
+}
+
 // Teardown for before-quit, alongside stopHubConnection: closes the
 // direct listener so connected peers see a clean going-away instead of
 // a dead socket, AND the cached outbound direct sessions, or each

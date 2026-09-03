@@ -21,6 +21,7 @@ import {
   createHubConnectionCore,
   type HubSocketAdapter,
 } from "@shared/hub/connection";
+import type { HeartbeatOptions } from "@shared/ipc/socket/wsClientTransport";
 import type {
   HubConnectOpts,
   HubConnectionStatus,
@@ -39,6 +40,8 @@ export type HubConnectionOpts = {
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its windows.
   onChange?: () => void;
+  // Test seams for the liveness heartbeat (shared/hub/connection.ts).
+  heartbeat?: HeartbeatOptions;
 };
 
 export type HubConnectionBinding = {
@@ -62,6 +65,8 @@ export type HubConnectionBinding = {
   refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
   status(): HubConnectionStatus;
+  // The wake-time liveness probe (shared/hub/connection.ts).
+  probe(): void;
 };
 
 // Deploy-skew tolerance for the INBOUND payload bound: the sender-side
@@ -141,6 +146,7 @@ export function createHubConnection(
   const core = createHubConnectionCore({
     openSocket: openWsSocket,
     onChange: opts.onChange,
+    heartbeat: opts.heartbeat,
     broker: {
       channel: opts.brokerChannel,
       handler: (ctx, raw) => {
@@ -172,5 +178,6 @@ export function createHubConnection(
     refresh: core.refresh,
     stop: core.stop,
     status: core.status,
+    probe: core.probe,
   };
 }

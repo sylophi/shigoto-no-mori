@@ -35,6 +35,9 @@ export async function bootDevice(stub, deviceId, opts = {}, track) {
     // main composes the binding.
     brokerChannel: directContract.calls.connectInfo.channel,
     onChange: opts.onChange,
+    // The heartbeat seams, so the liveness scenario runs in
+    // milliseconds instead of the shared production cadence.
+    heartbeat: opts.heartbeat,
   });
   if (track) track(() => connection.stop());
   const broker =

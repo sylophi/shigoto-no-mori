@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, powerMonitor } from "electron";
 import { platform } from "node:os";
 import path from "node:path";
 import { DEV_NAME_SUFFIX } from "@shared/appName.mts";
@@ -40,6 +40,7 @@ import {
   refreshHubConnection,
   refreshSocketHost,
   stopDirectHost,
+  probeRemoteConnections,
   stopHubConnection,
 } from "./ipc/register";
 import {
@@ -395,6 +396,12 @@ app.on("ready", async () => {
   // direct data-plane listener (v2 step 10, slice A) follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();
+  // Sleep is the one event that reliably kills every remote socket
+  // without a close: on resume, probe the hub socket and every direct
+  // session so the dead ones are found and redialed within seconds,
+  // rather than the UI reading "Connected" off corpses until the next
+  // heartbeat tick.
+  powerMonitor.on("resume", () => probeRemoteConnections());
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be

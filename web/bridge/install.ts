@@ -44,6 +44,14 @@ export function installWebBridge(): WebBridge {
       bridge.notifyAccountChanged();
     }
   });
+  // A tab coming back to the foreground, or the browser reporting the
+  // network back, is when a socket that died meanwhile should be found
+  // out at once: probe both planes so dead sessions redial in seconds
+  // (the desktop does the same on the power monitor's resume).
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") bridge.probe();
+  });
+  window.addEventListener("online", () => bridge.probe());
   return bridge;
 }
 
