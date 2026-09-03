@@ -21,6 +21,10 @@ import {
   HELLO_TIMEOUT_MS,
   ServerFrameSchema,
 } from "@shared/ipc/socket/frames";
+import {
+  createHeartbeat,
+  type HeartbeatOptions,
+} from "@shared/ipc/socket/heartbeat";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import type { ClientTransport } from "@shared/ipc/transport";
 
@@ -121,11 +125,20 @@ export type ConnectDeviceOptions = {
   openSocket?: OpenClientSocket;
   // Test seam. Real callers take the frames.ts default.
   helloTimeoutMs?: number;
+  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts).
+  heartbeat?: HeartbeatOptions;
 };
 
 export type DeviceConnection = {
   transport: ClientTransport;
   close(): void;
+  // Ask the host to prove it is still there NOW, with the short probe
+  // verdict window instead of the heartbeat cadence: fired on a wake
+  // from sleep or a tab coming back, when a socket that died while we
+  // were away should be found out in seconds, not at the next
+  // heartbeat tick. A socket that fails the probe closes and reports
+  // through onClose exactly like a heartbeat death.
+  probe(): void;
   remoteDeviceId: string;
   remoteAppVersion: string;
 };
@@ -288,6 +301,21 @@ export function openDevice(
     pending.clear();
   };
 
+  // Liveness (shared/ipc/socket/heartbeat.ts), armed after the welcome.
+  // A death is reported exactly like a socket close (pending rejected,
+  // onClose fired) so the supervisor or keeper redials on it.
+  const heartbeat = createHeartbeat({
+    ...options.heartbeat,
+    sendPing: () => socket.send(encodeFrame({ t: "ping" })),
+    onDead: () => {
+      if (closed) return;
+      // The owner teardown (which also silences the platform close
+      // that follows, so the death is reported exactly once, here).
+      close();
+      options.onClose(null);
+    },
+  });
+
   socket.addEventListener("open", () => {
     if (closed) return;
     opened = true;
@@ -310,6 +338,8 @@ export function openDevice(
       console.warn("[socket] dropping unparseable server frame");
       return;
     }
+    // Every parseable frame proves the host alive, whatever it carries.
+    heartbeat.noteInbound();
 
     if (welcome === null) {
       // Before the welcome, the only frame we act on is the welcome.
@@ -348,14 +378,18 @@ export function openDevice(
         remoteDeviceId: frame.deviceId,
         remoteAppVersion: frame.appVersion,
       };
+      heartbeat.start();
       resolve({
         transport,
         close,
+        probe: heartbeat.probe,
         remoteDeviceId: welcome.remoteDeviceId,
         remoteAppVersion: welcome.remoteAppVersion,
       });
       return;
     }
+
+    if (frame.t === "pong") return;
 
     if (frame.t === "res") {
       const entry = pending.get(frame.id);
@@ -442,7 +476,9 @@ export function openDevice(
 
   socket.addEventListener("close", (event) => {
     clearTimeout(helloTimer);
-    // The owner tore this connection down. close() already rejected any
+    heartbeat.stop();
+    // The owner tore this connection down (or the heartbeat already
+    // declared and reported the death). close() already rejected any
     // pending invokes, so stay silent: no onClose, and reject the
     // connect promise only if it never resolved.
     if (ownerClosed) {
@@ -513,6 +549,7 @@ export function openDevice(
     closed = true;
     ownerClosed = true;
     clearTimeout(helloTimer);
+    heartbeat.stop();
     rejectAllPending(null);
     try {
       socket.close();

@@ -21,6 +21,8 @@ import {
   DeviceEnvelopeSchema,
   decodeEnvelope,
   encodeEnvelope,
+  HUB_PING,
+  HUB_PONG,
   hubTextWithinLimit,
 } from "../../shared/hub/protocol.ts";
 import type { Env } from "./env.ts";
@@ -88,6 +90,14 @@ export class DeviceHub implements DurableObject {
   constructor(ctx: DurableObjectState, env: Env) {
     this.ctx = ctx;
     this.env = env;
+    // The devices' liveness pings (shared/hub/protocol.ts) are answered
+    // by the runtime itself, without waking a hibernated object: a
+    // device heartbeating every few seconds must not cost a request or
+    // an eviction each time, and a ping that reaches webSocketMessage
+    // would only be dropped as a malformed envelope anyway.
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair(HUB_PING, HUB_PONG),
+    );
   }
 
   async fetch(request: Request): Promise<Response> {

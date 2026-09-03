@@ -1,8 +1,11 @@
 // Route-level device scoping for the /devices/$deviceId/... twin
-// routes: resolve the device from the registry, keep the subtree's
-// queries live over its api (HostScopeProvider + push refresh), and
-// render honest connection states instead of the page when the device
-// is not reachable. The wrapped page component is the SAME one the
+// routes: resolve the device from the registry, scope the subtree's
+// queries to its api (HostScopeProvider), and render honest connection
+// states instead of the page when the device is not reachable. Push
+// refresh is not a scope concern: the boot-scoped remote host watch
+// (renderer/lib/remote/remoteHostWatch.ts) invalidates every device's
+// cache on its pings, so the sidebar rows and these pages refresh the
+// same way. The wrapped page component is the SAME one the
 // local route mounts: remoteness stays in the scope, never in the
 // page (v2's core bet).
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -11,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
-import { useWatchRemoteHost } from "@/hooks/remote/useWatchRemoteHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 
@@ -23,32 +25,7 @@ function RemoteScopeGate({ Page }: { Page: ComponentType }) {
     return <UnreachableDevice device={device} />;
   }
   return (
-    <ScopedPage
-      device={device}
-      deviceId={deviceId}
-      api={device.api}
-      Page={Page}
-    />
-  );
-}
-
-function ScopedPage({
-  device,
-  deviceId,
-  api,
-  Page,
-}: {
-  device: RemoteDevice;
-  deviceId: string;
-  api: NonNullable<RemoteDevice["api"]>;
-  Page: ComponentType;
-}) {
-  // Push-driven refresh while this device's pages are open: the host
-  // pings after mutating invokes and the device-scoped cache
-  // invalidates in place.
-  useWatchRemoteHost(device);
-  return (
-    <HostScopeProvider deviceId={deviceId} api={api}>
+    <HostScopeProvider deviceId={deviceId} api={device.api}>
       <Page />
     </HostScopeProvider>
   );

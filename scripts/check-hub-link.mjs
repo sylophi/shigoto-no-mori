@@ -424,6 +424,54 @@ async function main() {
   );
 
   await check(
+    "liveness: a device heartbeats the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket",
+    async (track) => {
+      const stub = await startStubHub();
+      track(() => stub.close());
+      const heartbeat = { intervalMs: 30, timeoutMs: 120 };
+      const a = await bootDevice(stub, "A", { heartbeat }, track);
+      await waitFor(() => stub.pingsFrom("A") >= 2, "A to heartbeat");
+      assert.equal(
+        a.connection.status().socket.phase,
+        "connected",
+        "an answered heartbeat keeps the socket connected",
+      );
+      assert.equal(a.mints(), 1);
+      // The hub goes silent: its socket is still open at the TCP level,
+      // exactly the shape of a flow a NAT or a sleep killed.
+      stub.setAnswerPings(false);
+      await waitFor(
+        () => a.mints() >= 2,
+        "A to declare the silent hub dead and redial",
+        3_000,
+      );
+      // The redial lands against a hub that answers again, and the
+      // supervisor's ladder started from the bottom (a stable socket
+      // that died resets it), so the connection is back at once.
+      stub.setAnswerPings(true);
+      await waitFor(
+        () => a.connection.status().socket.phase === "connected",
+        "A to reconnect after the heartbeat death",
+        3_000,
+      );
+
+      // No latch on this side: a hub that NEVER answers (a Worker
+      // predating the pair) is redialed too, so a socket that dies
+      // before its first pong is still found. That is the deploy order
+      // hub/README.md states, and the cost of getting it wrong is a
+      // redial per timeout, not a dead device.
+      stub.setAnswerPings(false);
+      const b = await bootDevice(stub, "B", { heartbeat }, track);
+      await waitFor(
+        () => b.mints() >= 2,
+        "B to redial a hub that never answered",
+        3_000,
+      );
+      stub.setAnswerPings(true);
+    },
+  );
+
+  await check(
     "token ignored: a hello carrying a garbage token still gets a welcome",
     async (track) => {
       const stub = await startStubHub();

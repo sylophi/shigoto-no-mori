@@ -17,6 +17,10 @@ import {
   TERMINATE_GRACE_MS,
 } from "@shared/ipc/socket/frames";
 import {
+  createHeartbeat,
+  type HeartbeatOptions,
+} from "@shared/ipc/socket/heartbeat";
+import {
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
@@ -35,6 +39,8 @@ import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
   CONNECT_TICKET_PARAM,
+  HUB_PING,
+  HUB_PONG,
   HUB_ROUTES,
 } from "@shared/hub/protocol";
 import {
@@ -90,6 +96,9 @@ export type HubConnectionCoreDeps = {
   // by construction: the link then answers every req with the
   // no-handler shape.
   broker: HubBroker;
+  // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
+  // the rule the direct sockets follow too).
+  heartbeat?: HeartbeatOptions;
 };
 
 // The lifecycle surface both platform bindings re-expose unchanged.
@@ -98,6 +107,13 @@ export type HubConnectionCore = {
   refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
   status(): HubConnectionStatus;
+  // Ask the device hub to prove the socket is still there NOW, under
+  // the short probe window: fired on a wake from sleep or a tab coming
+  // back. A socket that fails it is torn down and reported to the
+  // supervisor exactly like a drop, so the redial starts in seconds
+  // instead of whenever the OS notices the dead flow. A no-op while
+  // nothing is established.
+  probe(): void;
 };
 
 // The block-vs-retry rule for hub close codes. DEVICE_REVOKED is
@@ -151,6 +167,10 @@ export function createHubConnectionCore(
   deps: HubConnectionCoreDeps,
 ): HubConnectionCore {
   let link: HubLink | null = null;
+  // The established connection as the supervisor reports it (null the
+  // moment it is lost or torn down), so probe() reaches exactly the
+  // live socket.
+  let live: DeviceConnection | null = null;
   let current: { supervisor: Supervisor; opts: HubConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
   // The in-flight dial's cancel handle, so stop() can abort a dial that
@@ -234,6 +254,37 @@ export function createHubConnectionCore(
         // Set true once stop() or a rejection lands, so no further
         // inbound frame runs a handler even while the socket drains (S3).
         let dead = false;
+        // The link half of a teardown, shared by every path that ends
+        // this socket (owner close, platform close, heartbeat death).
+        const tearDownLink = (): void => {
+          if (link === nextLink) link = null;
+          nextLink.teardown();
+        };
+
+        // Liveness (shared/ipc/socket/heartbeat.ts), armed at the accept.
+        // Enforced from the first ping on purpose (no "seen a pong yet"
+        // latch): a socket that dies right after the accept must still
+        // be found, and the cost of that is only that a Worker
+        // predating the pair (which drops pings as malformed envelopes)
+        // is redialed once a minute until it is redeployed, so the
+        // Worker deploys first (hub/README.md). A death tears the link
+        // down and reports to the supervisor like a drop.
+        const heartbeat = createHeartbeat({
+          ...deps.heartbeat,
+          sendPing: () => socket.send(HUB_PING),
+          onDead: () => {
+            if (dead) return;
+            dead = true;
+            tearDownLink();
+            // Report the drop here, once, and read as owner-closed
+            // BEFORE the kill, so the platform close it triggers stays
+            // silent however promptly it lands.
+            if (established) onClose(null);
+            ownerClosed = true;
+            killSocket(socket);
+            notifyChange();
+          },
+        });
 
         const acceptTimer = setTimeout(() => {
           if (settled) return;
@@ -259,6 +310,7 @@ export function createHubConnectionCore(
               clearTimeout(acceptTimer);
               clearPending();
               link = nextLink;
+              heartbeat.start();
               resolve({
                 transport: {
                   // The hub socket carries no direct sm transport
@@ -277,12 +329,12 @@ export function createHubConnectionCore(
                 close: () => {
                   ownerClosed = true;
                   dead = true;
+                  heartbeat.stop();
                   // Tear the link down SYNCHRONOUSLY so host sessions
                   // abort at once and no in-flight handler answers into a
                   // dead socket, rather than waiting on the close event
                   // (S3).
-                  if (link === nextLink) link = null;
-                  nextLink.teardown();
+                  tearDownLink();
                   socket.close();
                   // close() is advisory: node ws can hold it for ~30s
                   // against a stalled device hub. Where the adapter can
@@ -291,6 +343,7 @@ export function createHubConnectionCore(
                     setTimeout(() => socket.terminate?.(), TERMINATE_GRACE_MS);
                   }
                 },
+                probe: heartbeat.probe,
                 remoteDeviceId: "",
                 remoteAppVersion: "",
               });
@@ -304,6 +357,10 @@ export function createHubConnectionCore(
           // frame runs a handler even though the socket may still
           // deliver buffered frames while closing (S3).
           if (dead) return;
+          // Any inbound message proves the hub alive. A pong is not an
+          // envelope, so it stops here.
+          heartbeat.noteInbound();
+          if (text === HUB_PONG) return;
           // Wrap so a throw cannot escape into the platform's event
           // delivery and become an uncaught exception (M4).
           try {
@@ -318,8 +375,8 @@ export function createHubConnectionCore(
           dead = true;
           clearTimeout(acceptTimer);
           clearPending();
-          if (link === nextLink) link = null;
-          nextLink.teardown();
+          heartbeat.stop();
+          tearDownLink();
           if (!settled) {
             settled = true;
             reject(
@@ -334,7 +391,8 @@ export function createHubConnectionCore(
           }
           // An established socket dropped. The owner-close path stays
           // silent so the supervisor never reconnects against its own
-          // stop.
+          // stop (a heartbeat death reads as owner-closed once it has
+          // reported itself).
           if (established && !ownerClosed) onClose(code);
           notifyChange();
         });
@@ -376,6 +434,9 @@ export function createHubConnectionCore(
         socketStatus = next;
         notifyChange();
       },
+      onConnection: (connection) => {
+        live = connection;
+      },
     });
     current = { supervisor, opts };
     supervisor.start();
@@ -414,6 +475,10 @@ export function createHubConnectionCore(
       lifecycle(async () => {
         stopNow();
       }),
+
+    probe: () => {
+      live?.probe();
+    },
 
     status: () => {
       const localDeviceId = current?.opts.deviceId;

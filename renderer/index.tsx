@@ -7,8 +7,10 @@ import { App } from "./App";
 import { ClerkGate } from "./components/account/ClerkGate";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
+import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
 import {
   invalidateHostDevice,
+  invalidateHostProject,
   localDeviceId,
   queryKeys,
 } from "./lib/queryKeys";
@@ -83,6 +85,11 @@ void queryClient.prefetchQuery({
 // on boot and on every account or hub change.
 startRemoteDeviceSync(queryClient);
 
+// A remote host's state moved (its app, its CLI, or a background
+// fetch there): invalidate that device's cached forest the same way
+// the local watcher signal below does for this machine.
+startRemoteHostWatch(queryClient);
+
 // State changed on disk under the app (a CLI run in a terminal):
 // invalidate the disk-derived queries so the sidebar reflects it
 // without a focus change. window.api only ever carries this machine's
@@ -90,6 +97,12 @@ startRemoteDeviceSync(queryClient);
 // invalidateHostDevice for the breadth and exemption rationale.
 window.api.git.onExternalChange(() => {
   invalidateHostDevice(queryClient, localDeviceId);
+});
+// One project's git state moved on this machine (a commit or checkout
+// by an agent or a terminal, seen by main's git-directory watcher):
+// refetch that project's rows only.
+window.api.git.onProjectChanged(({ projectId }) => {
+  invalidateHostProject(queryClient, localDeviceId, projectId);
 });
 
 // Main rewrote project.json (carry-over entries removed in favor of

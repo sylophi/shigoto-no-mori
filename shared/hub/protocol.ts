@@ -133,6 +133,19 @@ export const HUB_ROUTES = {
 // The query parameter GET /connect reads the ticket from.
 export const CONNECT_TICKET_PARAM = "ticket";
 
+// The hub socket's liveness pair: the device sends the bare text
+// HUB_PING on the shared heartbeat cadence (HEARTBEAT_INTERVAL_MS in
+// shared/ipc/socket/frames.ts, the same rule the direct sockets
+// follow) and the Durable Object answers HUB_PONG through the
+// hibernation runtime's auto-response, so a ping never wakes the
+// object and never costs a request. Bare text rather than an envelope
+// on purpose: the auto-response matches an exact string, and neither
+// side ever parses the pair. An old Worker drops the ping as a
+// malformed envelope, so a device redials it once a minute until the
+// Worker is redeployed: deploy the Worker before the devices.
+export const HUB_PING = "ping";
+export const HUB_PONG = "pong";
+
 // ---- HTTP bodies ----
 
 // Every error response is `{ error }` with a meaningful status code.

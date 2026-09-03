@@ -84,6 +84,13 @@ export type WebBridge = {
   notifyAccountChanged(): void;
   // Reconciles the hub socket with the current account state.
   refreshHub(): Promise<void>;
+  // The liveness probe for the hub socket and every direct session,
+  // fired by the install when the page comes back to the foreground
+  // or the browser reports the network back: a socket that died while
+  // the tab was hidden or offline is found and redialed in seconds
+  // instead of the sidebar reading "Connected" off a corpse until the
+  // next heartbeat tick.
+  probe(): void;
   // Tears the hub socket down (tab teardown, tests), along with the
   // direct plane it fronts.
   stop(): Promise<void>;
@@ -385,6 +392,11 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     notifyAccountChanged: accountChanged,
 
     refreshHub,
+
+    probe: () => {
+      connection.probe();
+      directPlane.probe();
+    },
 
     stop: () => {
       directPlane.stop();

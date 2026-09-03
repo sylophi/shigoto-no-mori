@@ -39,6 +39,7 @@
     "web:dev": "vite --config vite.web.config.ts",
     "web:build": "vite build --config vite.web.config.ts",
     "liveness:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-liveness.mjs",
+    "gitwatch:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-git-watcher.mjs",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "licenses": "node scripts/generate-third-party-licenses.mjs",

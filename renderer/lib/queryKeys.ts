@@ -220,7 +220,7 @@ export const queryKeys = queryKeysFor(localDeviceId);
 // The "state on this device moved, refetch what you're showing" sweep,
 // shared by both externalChange consumers: the local watcher
 // subscription in renderer/index.tsx (with localDeviceId) and
-// useWatchRemoteHost (with the remote device's id). Deliberately broad
+// lib/remote/remoteHostWatch.ts (with the pinging device's id). Deliberately broad
 // within its scope (the host debounces the signal and only active
 // queries actually refetch), but some domains sit it out:
 //
@@ -263,6 +263,20 @@ const externalChangeExempt = new Set([
   "worktreeDiskUsage",
 ]);
 
+// Whether a key takes part in the state-moved sweeps below: everything
+// but the exempt domains.
+function externalChangeAllows(queryKey: readonly unknown[]): boolean {
+  return !externalChangeExempt.has(String(queryKeyDomain(queryKey)));
+}
+
+// The project-id slot of a project-scoped host key, derived from a
+// sample built key like the PR matcher below, so the slot follows the
+// builders if the prefix ever grows instead of silently drifting.
+const projectIdIndex = queryKeysFor("d").worktrees("p").indexOf("p");
+function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
+  return queryKey[0] === HOST_SCOPE ? queryKey[projectIdIndex] : undefined;
+}
+
 // The EXTERNAL-CHANGE sweep, scoped to one device. Host-scoped keys
 // invalidate only when bound to THIS device id: a remote device's
 // queries cache under its own id in the same host families, so a
@@ -281,7 +295,29 @@ export function invalidateHostDevice(
     predicate: (query) => {
       const keyDeviceId = hostKeyDeviceId(query.queryKey);
       if (keyDeviceId !== undefined && keyDeviceId !== deviceId) return false;
-      return !externalChangeExempt.has(String(queryKeyDomain(query.queryKey)));
+      return externalChangeAllows(query.queryKey);
+    },
+  });
+}
+
+// The PROJECT-SCOPED sweep, for git:projectChanged: one project's git
+// state moved on that device (a commit, a checkout, a ref written by
+// any tool), so only the host keys carrying that project id refetch,
+// under the same domain exemptions as the device-wide sweep. The
+// git-state builders put the project id right after the domain, which
+// is what hostKeyProjectId reads. Keys shaped otherwise (a client key,
+// a whole-host key, the githubCli and carryOver sub-trees, neither of
+// which is git state) carry no project id there and are left alone.
+export function invalidateHostProject(
+  queryClient: QueryClient,
+  deviceId: string,
+  projectId: string,
+): void {
+  void queryClient.invalidateQueries({
+    predicate: (query) => {
+      if (hostKeyDeviceId(query.queryKey) !== deviceId) return false;
+      if (hostKeyProjectId(query.queryKey) !== projectId) return false;
+      return externalChangeAllows(query.queryKey);
     },
   });
 }

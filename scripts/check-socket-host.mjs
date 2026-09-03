@@ -32,9 +32,10 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { WebSocket } from "ws";
+import { WebSocket, WebSocketServer } from "ws";
 import {
   CLOSE_AUTH_FAILED,
+  CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   COMMAND_REFUSED_CODE,
   CommandRefusedError,
@@ -67,12 +68,10 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { makeProof } from "./lib/checkKit.mjs";
+import { delay, makeProof, waitFor } from "./lib/checkKit.mjs";
 
 const TOKEN = "correct-horse-battery-staple-token-of-good-length";
 const WS_CLOSE_TOO_BIG = 1009;
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Shared handler state referenced by registerTestHandlers. Reset by the
 // tests that use it.
@@ -599,6 +598,170 @@ async function main() {
   );
 
   await check(
+    "liveness: the host answers pings and kills a heartbeating peer that falls silent, but never judges a peer that never pinged",
+    async () => {
+      const { binding, url } = await startBinding({ livenessTimeoutMs: 200 });
+      try {
+        // A peer that pings once proves it heartbeats: it gets a pong,
+        // and going silent past the timeout then ends its socket.
+        const { client } = await authenticate(url);
+        client.send({ t: "ping" });
+        const pong = await client.nextFrame();
+        assert.equal(pong.t, "pong", "a ping must be answered with a pong");
+        const closed = await client.waitClose();
+        assert.equal(
+          closed.code,
+          CLOSE_GOING_AWAY,
+          "a silent heartbeating peer must be killed on the going-away code",
+        );
+        // A peer that never pinged (an older build) is left alone,
+        // however long it stays silent: the sweep judges only peers
+        // that proved they heartbeat.
+        const quiet = await authenticate(url);
+        await delay(600);
+        assert.equal(
+          quiet.client.ws.readyState,
+          WebSocket.OPEN,
+          "a peer that never pinged must not be killed by the sweep",
+        );
+        quiet.client.send({
+          t: "req",
+          id: 1,
+          channel: "test:echo",
+          input: "still served",
+        });
+        const res = await quiet.client.nextFrame();
+        assert.equal(res.result, "still served");
+        quiet.client.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "liveness: the client transport heartbeats, declares a silent host dead within its timeout, and a probe reaches the verdict in its own shorter window",
+    async () => {
+      // A raw host that welcomes and then answers nothing: pings arrive,
+      // pongs never leave. The real binding always answers, so the
+      // dead-host path needs a host of its own.
+      const silent = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+      const pingsSeen = [];
+      silent.on("connection", (socket) => {
+        socket.on("message", (data) => {
+          const frame = JSON.parse(data.toString("utf8"));
+          if (frame.t === "hello") {
+            socket.send(
+              encodeFrame({ t: "welcome", deviceId: "mute", appVersion: "1" }),
+            );
+          }
+          if (frame.t === "ping") pingsSeen.push(Date.now());
+        });
+      });
+      await new Promise((resolve) => silent.on("listening", resolve));
+      const silentUrl = `ws://127.0.0.1:${silent.address().port}`;
+      try {
+        let closedWith = "unset";
+        const startedAt = Date.now();
+        const connection = await connectDevice({
+          url: silentUrl,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: (code) => {
+            closedWith = code;
+          },
+          heartbeat: { intervalMs: 40, timeoutMs: 150 },
+        });
+        await waitFor(
+          () => closedWith !== "unset",
+          "the heartbeat death",
+          2_000,
+        );
+        assert.equal(
+          closedWith,
+          null,
+          "a heartbeat death must report through onClose with a null code",
+        );
+        const elapsed = Date.now() - startedAt;
+        assert.ok(
+          elapsed >= 150 && elapsed < 1_000,
+          `the death must land after the timeout and well before a socket-level verdict (took ${elapsed}ms)`,
+        );
+        assert.ok(pingsSeen.length >= 1, "the client must have pinged");
+        await assert.rejects(
+          () => connection.transport.invoke("test:echo", 1),
+          /disconnected/,
+          "the dead connection must reject invokes",
+        );
+
+        // The probe: a fresh connection whose heartbeat cadence is far
+        // away, probed at once, reaches the verdict inside the probe
+        // window instead.
+        let probedClose = "unset";
+        const probed = await connectDevice({
+          url: silentUrl,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: (code) => {
+            probedClose = code;
+          },
+          heartbeat: {
+            intervalMs: 10_000,
+            timeoutMs: 20_000,
+            probeTimeoutMs: 100,
+          },
+        });
+        const probedAt = Date.now();
+        probed.probe();
+        await waitFor(
+          () => probedClose !== "unset",
+          "the probe verdict",
+          2_000,
+        );
+        const probeElapsed = Date.now() - probedAt;
+        assert.ok(
+          probeElapsed >= 100 && probeElapsed < 1_000,
+          `the probe verdict must land in its own window (took ${probeElapsed}ms)`,
+        );
+      } finally {
+        await new Promise((resolve) => {
+          for (const socket of silent.clients) socket.terminate();
+          silent.close(() => resolve());
+        });
+      }
+
+      // Against the REAL binding the same cadence stays connected: pongs
+      // keep answering, so a live host is never misjudged.
+      const { binding, url } = await startBinding();
+      try {
+        let liveClose = "unset";
+        const live = await connectDevice({
+          url,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: (code) => {
+            liveClose = code;
+          },
+          heartbeat: { intervalMs: 20, timeoutMs: 60 },
+        });
+        await delay(300);
+        assert.equal(
+          liveClose,
+          "unset",
+          "a host that answers pings must never be declared dead",
+        );
+        assert.equal(await live.transport.invoke("test:echo", "ok"), "ok");
+        live.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
     "registrar: onMutationResolved fires after a mutating invoke resolves, never for reads or failures",
     async () => {
       // The remote-viewer externalChange ping (main/ipc/register.ts)
@@ -633,6 +796,7 @@ async function main() {
         }),
       });
       let resolved = 0;
+      let resolvedCtx = null;
       registerContract(
         pingContract,
         {
@@ -646,16 +810,26 @@ async function main() {
         server,
         {
           validateOutputs: true,
-          onMutationResolved: () => {
+          onMutationResolved: (ctx) => {
             resolved += 1;
+            resolvedCtx = ctx;
           },
         },
       );
-      const ctx = {};
+      const ctx = { callerDeviceId: "peer-1" };
       await handlers.get("pingtest:read")(ctx, undefined);
       assert.equal(resolved, 0, "a read must not trip the mutation hook");
       await handlers.get("pingtest:mutate")(ctx, undefined);
       assert.equal(resolved, 1, "a resolved mutation must trip the hook");
+      // The Electron binding reads the caller off this to decide
+      // whether a remote peer drove the mutation (and so whether its
+      // own windows need the ping too), so the hook must see the
+      // calling peer's context, not a copy.
+      assert.equal(
+        resolvedCtx,
+        ctx,
+        "the hook must receive the calling peer's context",
+      );
       await assert.rejects(() =>
         handlers.get("pingtest:failMutate")(ctx, undefined),
       );

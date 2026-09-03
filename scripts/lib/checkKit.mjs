@@ -110,6 +110,39 @@ export function makeTracker() {
 //   - done() prints the "<name> OK (N assertions)" summary.
 //   - fail(error) prints the FAILED epilogue and sets a nonzero exit
 //     code, shaped for main().catch(fail).
+// The polling pair every e2e check carries: a sleep, and a bounded
+// wait on a predicate whose timeout names what it waited for.
+export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export async function waitFor(predicate, what, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
+    await delay(25);
+  }
+  throw new Error(`timed out waiting for ${what}`);
+}
+
+// process.env with every GIT_* variable removed, for a check that runs
+// git against a sandbox repository. The pre-commit hook exports
+// GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL repository.
+// Inherited, they point every sandbox command at the commit in
+// progress (the sandbox commit then lands as the user's own, under the
+// sandbox's message, which has happened). The global and system git
+// config are also cut off so the host's identity and hooks never leak
+// into the sandbox.
+export function scrubbedGitEnv() {
+  return {
+    ...Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
+    ),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    LC_ALL: "C",
+  };
+}
+
 export function makeProof(name) {
   const passed = [];
   function ok(label) {

@@ -13,6 +13,8 @@ import {
   MAX_HUB_MESSAGE_BYTES,
   HUB_ROUTES,
   hubTextWithinLimit,
+  HUB_PING,
+  HUB_PONG,
 } from "../../shared/hub/protocol.ts";
 import { deleteDevice } from "../src/db.ts";
 import { buildTicket } from "../src/ticket.ts";
@@ -184,6 +186,30 @@ describe("relaying", () => {
     a.socket.send({ t: "relay", to: "dev-malformed-b", frame: "still alive" });
     const delivered = await b.socket.next();
     expect(delivered).toMatchObject({ t: "relay", frame: "still alive" });
+  });
+
+  it("answers the liveness ping with a pong, without waking the object", async () => {
+    // The devices heartbeat with the bare HUB_PING text and the runtime's
+    // auto-response answers HUB_PONG (hubObject.ts constructor), so a
+    // ping never reaches webSocketMessage and never costs a request. A
+    // bare "pong" is not an envelope, so it is read raw here.
+    const a = await enrollAndConnect("acct-ping", "dev-ping-a");
+    await a.socket.untilPresence(["dev-ping-a"]);
+    const pong = new Promise<string>((resolve) => {
+      a.socket.ws.addEventListener("message", (event) => {
+        if (event.data === HUB_PONG) resolve(event.data);
+      });
+    });
+    a.socket.ws.send(HUB_PING);
+    expect(await pong).toBe(HUB_PONG);
+    // The socket is untouched by the exchange: a relay still works.
+    const b = await enrollAndConnect("acct-ping", "dev-ping-b");
+    await b.socket.untilPresence(["dev-ping-a", "dev-ping-b"]);
+    a.socket.send({ t: "relay", to: "dev-ping-b", frame: "after ping" });
+    expect(await b.socket.next()).toMatchObject({
+      t: "relay",
+      frame: "after ping",
+    });
   });
 
   it("never crosses accounts", async () => {

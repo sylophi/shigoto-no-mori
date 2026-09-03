@@ -7,15 +7,18 @@
 //
 // Status mapping, chosen to lie the least given the
 // RemoteDeviceStatus vocabulary:
-//   - hub socket not connected: mirror the socket's supervisor phase
-//     (connecting, backoff, blocked and so on), because no peer is
-//     reachable while the socket is down and the socket's state is the
-//     honest reason.
-//   - socket connected, the peer in the presence roster AND a direct
-//     session established (a peerAppVersions key): phase "connected"
-//     with the appVersion the session's welcome confirmed. Data is
-//     direct or nothing (v2 step 10, slice C), so an established
-//     direct session is the only thing "connected" may mean.
+//   - a direct session established (a peerAppVersions key): phase
+//     "connected" with the appVersion the session's welcome confirmed,
+//     WHATEVER the hub socket is doing. Data is direct or nothing (v2
+//     step 10, slice C), so an established direct session is the only
+//     thing "connected" may mean, and it is also sufficient: the
+//     device hub is orchestration only, and a live session survives
+//     our own hub outage by design (shared/hub/directPresence.ts), so
+//     a hub blip must not grey out a peer whose data wire is fine.
+//   - no session and the hub socket not connected: mirror the socket's
+//     supervisor phase (connecting, backoff, blocked and so on),
+//     because nothing can be dialed while the socket is down and the
+//     socket's state is the honest reason.
 //   - socket connected, the peer in the roster, no direct session:
 //     phase "online" (renderer-local). The roster fact shows, nothing
 //     claims a data wire, and main's keeper is already dialing or
@@ -60,9 +63,14 @@ const apis = new Map<string, RemoteDeviceApi>();
 // convergence invalidation below.
 let boundQueryClient: QueryClient | null = null;
 
-// The phase each device was last published with, so a reconcile can
-// spot the ONE transition that needs a nudge: online to connected.
-const lastPhases = new Map<string, RemoteDeviceStatus["phase"]>();
+// The devices whose direct session was live in the last snapshot seen,
+// so every snapshot can spot a session LANDING (a key newly present)
+// and sweep that device's cache. Diffed on every snapshot at the
+// subscription itself, never inside the coalesced reconcile: a session
+// that dropped and redialed inside one reconcile drain would otherwise
+// read as "connected before, connected after" and its landing would
+// go unswept.
+let liveSessions: ReadonlySet<string> = new Set();
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -88,7 +96,9 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // A fetched snapshot seeds the shared store (a broadcast that raced
   // it is newer and wins), so this module stays the store's single
   // writer and the hooks never race a fetch of their own.
-  if (status === undefined) seedHubStatus(current);
+  // A fetched snapshot that lost the race to a broadcast is stale, and
+  // must not roll the session diff back either.
+  if (status === undefined && seedHubStatus(current)) noteSessions(current);
   const phase = current.socket.phase;
   const localDeviceId = window.api.deviceId;
   const online = new Set(current.onlineDeviceIds);
@@ -118,42 +128,35 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
     (info) => info.deviceId !== localDeviceId,
   );
   const devices = others.map((info) => buildEntry(info, current, online));
-  noteConvergence(devices);
   setRemoteDevices(devices);
 }
 
-// Converge the views that fired while the keeper was still dialing.
-// A device in phase "online" already carries an api (see buildEntry),
-// so its queries run and hard-reject with "no direct connection". The
-// keeper landing seconds later is invisible to react-query, whose own
-// failure budget is long spent. The status snapshot IS the signal, and
-// this module is its single reader, so the refetch belongs here and
-// NOWHERE else: a per-call-site retry would be a second retry driver
-// racing the keeper's ladder, which is exactly what supervision
-// replaced. Scoped to the device that just landed, through
-// invalidateDeviceSession and NOT the externalChange sweep: a session
-// coming up is not a "that host's state moved" ping, and the sweep's
-// exemptions (runtime, githubCli, fs, portForwards, updater, the two
-// worktree cost domains) name exactly the queries that hard-failed
-// during the dial window, so sweeping through them would refetch
-// everything except what is broken.
-function noteConvergence(devices: readonly RemoteDevice[]): void {
-  const seen = new Set<string>();
-  for (const device of devices) {
-    const phase = device.status.phase;
-    seen.add(device.deviceId);
-    const previous = lastPhases.get(device.deviceId);
-    lastPhases.set(device.deviceId, phase);
-    if (previous !== "online" || phase !== "connected") continue;
+// Resync on every session LANDING. A device in phase "online" already
+// carries an api (see buildEntry), so its queries run and hard-reject
+// with "no direct connection". The keeper landing seconds later is
+// invisible to react-query, whose own failure budget is long spent.
+// And a session that dropped and came back (a sleep, a network change,
+// a heartbeat death) missed every push the host sent meanwhile, so its
+// cached view is stale in ways nothing else will ping. The status
+// snapshot IS the signal, and this module is its single reader, so the
+// refetch belongs here and NOWHERE else: a per-call-site retry would be
+// a second retry driver racing the keeper's ladder, which is exactly
+// what supervision replaced. Scoped to the device that just landed,
+// through invalidateDeviceSession and NOT the externalChange sweep: a
+// session coming up is not a "that host's state moved" ping, and the
+// sweep's exemptions (runtime, githubCli, fs, portForwards, updater,
+// the two worktree cost domains) name exactly the queries that
+// hard-failed during the dial window, so sweeping through them would
+// refetch everything except what is broken.
+function noteSessions(status: HubStatus): void {
+  const now = new Set(Object.keys(status.peerAppVersions));
+  for (const deviceId of now) {
+    if (liveSessions.has(deviceId)) continue;
     if (boundQueryClient !== null) {
-      invalidateDeviceSession(boundQueryClient, device.deviceId);
+      invalidateDeviceSession(boundQueryClient, deviceId);
     }
   }
-  // Forget devices that left the list (revoked, or the account
-  // changed), so a re-enroll starts from no remembered phase.
-  for (const deviceId of lastPhases.keys()) {
-    if (!seen.has(deviceId)) lastPhases.delete(deviceId);
-  }
+  liveSessions = now;
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status
@@ -166,38 +169,37 @@ function buildEntry(
   current: HubStatus,
   online: ReadonlySet<string>,
 ): RemoteDevice {
-  const socketConnected = current.socket.phase === "connected";
-  const peerOnline = socketConnected && online.has(info.deviceId);
   const version = current.peerAppVersions[info.deviceId];
   let status: RemoteDeviceStatus;
-  let appVersion = "";
   let api: RemoteDeviceApi | undefined;
-  if (!socketConnected) {
+  if (version !== undefined) {
+    // A live direct session is the whole data plane, and it outlives a
+    // hub blip on purpose, so it reads connected first, before the
+    // socket phase is even consulted.
+    status = {
+      phase: "connected",
+      remoteDeviceId: info.deviceId,
+      remoteAppVersion: version,
+    };
+    api = apiFor(info.deviceId);
+  } else if (current.socket.phase !== "connected") {
     status = current.socket;
-  } else if (!peerOnline) {
+  } else if (!online.has(info.deviceId)) {
     status = { phase: "stopped" };
-  } else if (version === undefined) {
+  } else {
     // In the roster but no direct session yet: main's keeper is
     // dialing or backing off toward one. The api is present anyway so
     // a view can stand ready and the invoke that races the landing
     // dial joins it -- and when the dial lands a beat later,
-    // noteConvergence refetches whatever failed in the meantime.
+    // noteSessions refetches whatever failed in the meantime.
     status = { phase: "online" };
-    api = apiFor(info.deviceId);
-  } else {
-    appVersion = version;
-    status = {
-      phase: "connected",
-      remoteDeviceId: info.deviceId,
-      remoteAppVersion: appVersion,
-    };
     api = apiFor(info.deviceId);
   }
   return {
     deviceId: info.deviceId,
     label: info.name,
     status,
-    appVersion,
+    appVersion: version ?? "",
     api,
   };
 }
@@ -241,6 +243,10 @@ export function startRemoteDeviceSync(queryClient: QueryClient): void {
   });
   window.api.hub.onStatusChanged((status) => {
     publishHubStatus(status);
+    // Session landings are diffed here, on EVERY snapshot in order,
+    // ahead of the coalesced reconcile that may skip intermediate
+    // snapshots (see liveSessions).
+    noteSessions(status);
     reconcile(status);
   });
   reconcile();

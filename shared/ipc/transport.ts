@@ -50,6 +50,19 @@ export type HandlerContext = {
   callerDeviceId?: string;
 };
 
+// Whether the calling peer is another device rather than this
+// machine's own window. Only a wire that authenticated a peer stamps
+// callerDeviceId (the direct listener), the Electron wire never does,
+// and the legacy LAN wire neither authenticates a device nor serves a
+// command, so the stamp is exactly "another device asked". One
+// definition next to the field it interprets, for every handler or
+// binding that branches on it.
+export function isRemoteCaller(
+  ctx: Pick<HandlerContext, "callerDeviceId">,
+): boolean {
+  return ctx.callerDeviceId !== undefined;
+}
+
 // A server transport owns the wire. `handle` mounts one channel and
 // supplies each call with a context bound to the calling peer.
 // `broadcastAll` ships one payload to every connected peer. Both

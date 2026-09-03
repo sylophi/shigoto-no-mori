@@ -18,7 +18,11 @@ import {
   registerContract as registerContractCore,
   resolveBroadcast,
 } from "@shared/ipc/registerContract";
-import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import {
+  type HandlerContext,
+  isRemoteCaller,
+  type ServerTransport,
+} from "@shared/ipc/transport";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
@@ -268,28 +272,41 @@ const hostServer: ServerTransport = {
 const serverFor = (module: ContractModule): ServerTransport =>
   module.scope === "host" ? hostServer : electronServer;
 
-// App-driven host mutations never reach remote viewers through the fs
+// App-driven host mutations never reach viewers through the fs
 // watcher: its self-write suppression exists precisely so the app's own
 // writes don't echo (stateWatcher.ts). So after any mutating host
-// invoke resolves (whichever wire carried it, this window's own
-// Electron calls included), ping the REMOTE wires with the existing
-// git:externalChange broadcast, the same signal a truly external write
-// produces. Deliberately not the Electron wire: the acting local
-// renderer is already fresh via its mutation's targeted invalidation
-// and must not start paying a broad invalidation for every one of its
-// own writes. Known asymmetry: when the acting client is a REMOTE
-// peer, this window is neither the actor nor pinged, so the local view
-// of a peer-driven change waits for focus refetch. A trailing coalesce
-// folds a burst of mutations into one ping without re-arming, so a
-// steady stream still pings at a bounded rate. If the watcher fires
-// for the same change anyway, viewer-side invalidation is idempotent,
-// so the overlap is harmless.
+// invoke resolves (whichever wire carried it), ping the REMOTE wires
+// with the existing git:externalChange broadcast, the same signal a
+// truly external write produces. The Electron wire is pinged only when
+// the acting client was a REMOTE peer: the acting local renderer is
+// already fresh via its mutation's targeted invalidation and must not
+// start paying a broad invalidation for every one of its own writes,
+// while a change a peer drove is external to this window exactly like
+// a CLI write, and would otherwise sit unseen until a focus refetch.
+// A trailing coalesce
+// folds a burst of mutations into one ping per wire set without
+// re-arming, so a steady stream still pings at a bounded rate. If the
+// watcher fires for the same change anyway, viewer-side invalidation
+// is idempotent, so the overlap is harmless.
 const MUTATION_PING_MS = 300;
 let mutationPingTimer: NodeJS.Timeout | null = null;
-function pingRemoteViewers(): void {
+let mutationPingLocal = false;
+// Followers of "a host mutation settled", on the same coalesced
+// cadence as the ping: the git-directory watcher tracks the project
+// registry through this, because an app-side project add or remove
+// runs as a CLI child whose registry write the state watcher drops as
+// the app's own.
+const mutationSettledListeners = new Set<() => void>();
+export function onHostMutationSettled(listener: () => void): void {
+  mutationSettledListeners.add(listener);
+}
+function pingViewers(ctx: HandlerContext): void {
+  if (isRemoteCaller(ctx)) mutationPingLocal = true;
   if (mutationPingTimer !== null) return;
   mutationPingTimer = setTimeout(() => {
     mutationPingTimer = null;
+    const pingLocal = mutationPingLocal;
+    mutationPingLocal = false;
     // resolveBroadcast runs the (void) payload through the contract
     // schema, exactly like the composite broadcastAll path.
     // externalChange is remote:true by contract, and must stay that
@@ -300,6 +317,8 @@ function pingRemoteViewers(): void {
       undefined,
     );
     for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
+    if (pingLocal) electronServer.broadcastAll(channel, parsed);
+    for (const listener of mutationSettledListeners) listener();
   }, MUTATION_PING_MS);
 }
 
@@ -320,10 +339,10 @@ export function registerContract<M extends ContractModule>(
         });
       }
     },
-    // Only host-scoped modules can move host state a remote viewer
-    // caches. Client-scoped defs never tag mutating anyway, so this
-    // gate is belt and braces.
-    onMutationResolved: module.scope === "host" ? pingRemoteViewers : undefined,
+    // Only host-scoped modules can move host state a viewer caches.
+    // Client-scoped defs never tag mutating anyway, so this gate is
+    // belt and braces.
+    onMutationResolved: module.scope === "host" ? pingViewers : undefined,
   });
 }
 
@@ -428,6 +447,17 @@ export async function refreshHubConnection(): Promise<void> {
 // clean departure instead of waiting out a dead connection.
 export function stopHubConnection(): Promise<void> {
   return hubServer.stop();
+}
+
+// The wake-time liveness probe for both remote planes (the hub socket
+// and every established direct session), wired to the power monitor's
+// resume in main/index.ts. A socket that died while the machine slept
+// gets its verdict within the probe window and redials at once,
+// instead of reading as connected until the next heartbeat tick or,
+// without heartbeats, until the OS gave up on the dead flow.
+export function probeRemoteConnections(): void {
+  hubServer.probe();
+  directPlane.probe();
 }
 
 // Teardown for before-quit, alongside stopHubConnection: closes the

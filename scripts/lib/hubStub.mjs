@@ -11,6 +11,8 @@ import {
   decodeEnvelope,
   DeviceEnvelopeSchema,
   encodeEnvelope,
+  HUB_PING,
+  HUB_PONG,
   hubTextWithinLimit,
 } from "@shared/hub/protocol";
 
@@ -30,6 +32,11 @@ export function startStubHub() {
     // a test can assert a frame never hit the wire.
     const received = [];
     let forwarded = 0;
+    // The liveness pair the real DO answers through its auto-response.
+    // A test flips answerPings off to play a hub whose socket died
+    // silently, and reads pingsFrom to assert a device heartbeats.
+    let answerPings = true;
+    const pings = new Map();
 
     function broadcastPresence() {
       const online = [...sockets.keys()].toSorted();
@@ -53,10 +60,15 @@ export function startStubHub() {
       }
       broadcastPresence();
       ws.on("message", (data) => {
-        const envelope = decodeEnvelope(
-          data.toString("utf8"),
-          DeviceEnvelopeSchema,
-        );
+        const text = data.toString("utf8");
+        if (text === HUB_PING) {
+          pings.set(deviceId, (pings.get(deviceId) ?? 0) + 1);
+          if (answerPings && ws.readyState === WebSocket.OPEN) {
+            ws.send(HUB_PONG);
+          }
+          return;
+        }
+        const envelope = decodeEnvelope(text, DeviceEnvelopeSchema);
         if (envelope === null) return;
         received.push({
           from: deviceId,
@@ -118,6 +130,12 @@ export function startStubHub() {
               ? envelopeOrText
               : encodeEnvelope(envelopeOrText),
           );
+        },
+        // The liveness seams: how many pings a device sent, and whether
+        // the stub answers them (off plays a silently dead hub).
+        pingsFrom: (deviceId) => pings.get(deviceId) ?? 0,
+        setAnswerPings(value) {
+          answerPings = value;
         },
         // Server-initiated close for one device's socket, the seam the
         // revoked/superseded/reconnect tests drive.

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from "electron";
+import { app, BrowserWindow, dialog, powerMonitor } from "electron";
 import { platform } from "node:os";
 import path from "node:path";
 import { DEV_NAME_SUFFIX } from "@shared/appName.mts";
@@ -40,6 +40,8 @@ import {
   refreshHubConnection,
   refreshSocketHost,
   stopDirectHost,
+  onHostMutationSettled,
+  probeRemoteConnections,
   stopHubConnection,
 } from "./ipc/register";
 import {
@@ -54,9 +56,15 @@ import { refreshTerrierListings } from "@host/lib/terrier";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { initShigomoriRoot, shigomoriRoot } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
-import { killAllCli } from "./electron/cliRunner";
+import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
+import {
+  gitDirOf,
+  reconcileGitWatchers,
+  startGitWatcher,
+} from "./electron/gitWatcher";
+import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
 import {
@@ -395,12 +403,21 @@ app.on("ready", async () => {
   // direct data-plane listener (v2 step 10, slice A) follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();
+  // Sleep is the one event that reliably kills every remote socket
+  // without a close: on resume, probe the hub socket and every direct
+  // session so the dead ones are found and redialed within seconds,
+  // rather than the UI reading "Connected" off corpses until the next
+  // heartbeat tick.
+  powerMonitor.on("resume", () => probeRemoteConnections());
   // External CLI writes surface in the UI via an explicit invalidation
   // broadcast. (The focus signal won't do: React Query's focusManager
   // only refetches on a blur->focus transition, and the window may be
   // focused the whole time an agent works in a terminal beside it.)
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
+    // The registry may have changed (a project added or removed by
+    // the CLI): follow it with the git-directory watches.
+    reconcileGitWatchers();
     // The same refresh is the app's only chance to notice an `sm rm`
     // run in a terminal: the CLI removes the worktree without knowing
     // the app exists, leaving any script the app started in it running
@@ -421,6 +438,28 @@ app.on("ready", async () => {
         );
       });
   });
+  // Git state inside every project (commits, checkouts, refs written
+  // by any tool) surfaces through the per-project watch, as a
+  // project-scoped ping on every wire: this window and every device
+  // viewing this host refetch that project's rows.
+  startGitWatcher({
+    onChange: (projectId) =>
+      broadcastAll(gitContract, "projectChanged", { projectId }),
+    // The app's own git commands move refs the same way an agent's
+    // do, and their callers already invalidate their targets, so the
+    // watcher skips a running sm CLI child and any app-run mutating
+    // git command in flight or just done IN THAT REPOSITORY (a
+    // command's cwd is the project path or one of its worktrees, both
+    // of which resolve to the same git directory), exactly as the
+    // state watcher skips the app's own root writes.
+    suppressed: (gitDir) =>
+      cliChildCount() > 0 ||
+      gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),
+  });
+  // An app-side project add or remove runs as a CLI child whose
+  // registry write the state watcher drops as the app's own, so the
+  // watched set also follows every settled host mutation.
+  onHostMutationSettled(reconcileGitWatchers);
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other
   // checkout). After applyUserShellPath so PATH checks see the login
