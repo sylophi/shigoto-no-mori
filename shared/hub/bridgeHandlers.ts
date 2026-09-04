@@ -88,7 +88,7 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   probeDirectPeers(): void;
   // The peer's direct session's byte channels (shared/ipc/socket/
   // channels.ts), for a caller that attaches its end under a minted id
-  // BEFORE opening the far end with forward:open / openMirror. Same
+  // BEFORE opening the far end with forward:open / mirror:openStream. Same
   // session rules as invokePeer: joins an in-flight keeper dial,
   // rejects at once with the keeper's reason when there is none.
   peerChannels(deviceId: string): Promise<Pick<ChannelMux, "attach" | "has">>;

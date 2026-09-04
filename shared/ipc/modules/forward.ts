@@ -1,28 +1,32 @@
+import {
+  CHANNEL_OPEN_NO_CHANNELS,
+  CHANNEL_OPEN_TAKEN,
+  CHANNEL_OPEN_TOO_MANY,
+} from "@shared/ipc/socket/channels";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { PortNumberSchema } from "@shared/schemas";
 
-// Byte streams to a peer (v2 step 8, reworked onto byte channels): a
-// forwarded TCP connection or the file-sync engine's mirror stream
-// crosses the direct websocket as raw binary channel frames
-// (shared/ipc/socket/channels.ts), multiplexed beside the JSON
-// invokes. This contract is only the two OPENS: the caller mints a
+// Port forwarding over byte channels (v2 step 8, reworked): a
+// forwarded TCP connection crosses the direct websocket as raw binary
+// channel frames (shared/ipc/socket/channels.ts), multiplexed beside
+// the JSON invokes. This contract is only the OPEN: the caller mints a
 // channel id, attaches its end of the channel on its own transport
-// first, then invokes open, and the host attaches the far end (a
-// loopback dial, or a fresh `file-sync serve` child) under that id
-// before answering. From then on bytes, ends and resets ride the
-// channel itself, with credit-based backpressure end to end, and no
-// contract verb is involved again. This is the HOST side a remote
-// peer drives; the client half is main/portForward/bridge.ts.
+// first, then invokes open, and the host dials the loopback port and
+// attaches the socket under that id before answering. From then on
+// bytes, ends and resets ride the channel itself, with credit-based
+// backpressure end to end. The mirror stream is the other byte-stream
+// open (mirror:openStream), on the same channel layer. This is the HOST
+// side a remote peer drives. The client half is
+// main/portForward/bridge.ts.
 //
-// Both verbs are {remote:true, mutating:true}: the whole surface rides
-// the per-peer command grant, fail-closed, and the LAN wire (read-only
-// by policy) refuses it outright. open dials 127.0.0.1 only, because
-// the feature IS reaching the remote machine's own loopback dev
-// server, never a hop beyond it. Both set movesHostState:false: an
-// open changes nothing a remote viewer caches (the mirror surface has
-// its own changed broadcast).
+// {remote:true, mutating:true}: the surface rides the per-peer command
+// grant, fail-closed, and the LAN wire (read-only by policy) refuses
+// it outright. open dials 127.0.0.1 only, because the feature IS
+// reaching the remote machine's own loopback dev server, never a hop
+// beyond it. movesHostState:false: an open changes nothing a remote
+// viewer caches.
 
 // Channel ids are CLIENT-minted (shared/ipc/hexId.ts pins the shape):
 // the caller attaches its endpoint under the id before the open, so
@@ -36,23 +40,14 @@ const ChannelIdSchema = HexId32Schema;
 // message: mint and match through these, never a literal.
 // connect-failed is a prefix, the rest are the whole message.
 export const FORWARD_CONNECT_FAILED = "connect-failed";
-export const FORWARD_TOO_MANY_CONNS = "too-many-conns";
-export const FORWARD_NO_CHANNELS = "no-byte-channels";
-export const FORWARD_CHANNEL_TAKEN = "channel-taken";
+// The channel layer's own refusals, under the names the forward UI
+// matches (renderer/hooks/remote/usePortForwards.ts).
+export const FORWARD_TOO_MANY_CONNS = CHANNEL_OPEN_TOO_MANY;
+export const FORWARD_NO_CHANNELS = CHANNEL_OPEN_NO_CHANNELS;
+export const FORWARD_CHANNEL_TAKEN = CHANNEL_OPEN_TAKEN;
 
 export const ForwardOpenPayloadSchema = z.strictObject({
   port: PortNumberSchema,
-  channelId: ChannelIdSchema,
-});
-
-// The mirror stream's open (continuous worktree mirroring, file-sync/
-// engine.go): the same conn shape as a port forward, but the far end
-// is a `file-sync serve` child the host spawns for the named worktree
-// instead of a loopback dial. send/poll/close are shared from there: a
-// conn is a conn, whatever it carries.
-export const ForwardOpenMirrorPayloadSchema = z.strictObject({
-  projectId: z.string().min(1),
-  worktreeId: z.string().regex(/^[0-9a-f]{12}$/),
   channelId: ChannelIdSchema,
 });
 
@@ -62,10 +57,4 @@ export const forwardContract = defineContract("host", {
     mutating: true,
     movesHostState: false,
   }),
-  openMirror: invoke(
-    "forward:openMirror",
-    ForwardOpenMirrorPayloadSchema,
-    z.void(),
-    { remote: true, mutating: true, movesHostState: false },
-  ),
 });

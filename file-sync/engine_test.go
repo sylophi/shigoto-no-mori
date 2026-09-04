@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"github.com/mutagen-io/mutagen/pkg/selection"
 	"io"
 	"net"
 	"os"
@@ -78,16 +79,37 @@ type testDaemon struct {
 	mu       sync.Mutex
 	docs     []map[string]any
 	done     chan error
+	logs     *syncBuffer
+}
+
+// The daemon's stderr (Mutagen's warnings included), for failure
+// messages.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func startTestDaemon(t *testing.T, gateway, dataDir string) *testDaemon {
 	t.Helper()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
-	d := &testDaemon{t: t, requests: inW, done: make(chan error, 1)}
+	logs := &syncBuffer{}
+	d := &testDaemon{t: t, requests: inW, done: make(chan error, 1), logs: logs}
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		d.done <- runMirrorDaemon(ctx, inR, outW, gateway, dataDir, io.Discard)
+		d.done <- runMirrorDaemon(ctx, inR, outW, gateway, dataDir, logs)
 		outW.Close()
 	}()
 	go func() {
@@ -306,7 +328,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 		t.Errorf("preface = %+v", seen[0])
 	}
 
-	// Pause stops propagation; resume picks it back up.
+	// Pause stops propagation. Resume picks it back up.
 	if paused := d.call(mirrorRequest{ID: "2", Op: "pause", Session: session}); paused["ok"] != true {
 		t.Fatalf("pause failed: %v", paused["error"])
 	}
@@ -326,7 +348,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 		return fileEquals(filepath.Join(remote, "while-paused.txt"), "held\n")
 	})
 
-	// Terminate removes the session; the files stay where they are.
+	// Terminate removes the session. The files stay where they are.
 	if terminated := d.call(mirrorRequest{ID: "4", Op: "terminate", Session: session}); terminated["ok"] != true {
 		t.Fatalf("terminate failed: %v", terminated["error"])
 	}
@@ -347,6 +369,31 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("daemon did not exit after stdin closed")
 	}
+}
+
+// A label value outside Mutagen's alphabet would make the session
+// vanish on the next daemon start (the load-time check), and the app
+// reads identity out of the labels, so the create refuses instead of
+// folding the value.
+func TestMirrorCreateRefusesInvalidLabel(t *testing.T) {
+	gateway, _ := startTestGateway(t)
+	daemon := startTestDaemon(t, gateway, filepath.Join(t.TempDir(), "data"))
+	created := daemon.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:  t.TempDir(),
+		DeviceID:   "peer-1",
+		RemoteRoot: t.TempDir(),
+		Name:       "feat/mirror",
+		Labels:     map[string]string{"branch": "feat/mirror"},
+	})
+	if created["ok"] != false {
+		t.Fatalf("create with an invalid label value succeeded: %v", created)
+	}
+	if msg, _ := created["error"].(string); !strings.Contains(msg, "label") {
+		t.Fatalf("refusal does not name the label: %v", created["error"])
+	}
+	daemon.requests.Close()
+	<-daemon.done
 }
 
 func TestMirrorCreateRefusesUnreachablePeer(t *testing.T) {
@@ -439,5 +486,93 @@ func TestMirrorDaemonExitsOnCancelWithStdinOpen(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("daemon did not exit on cancellation while stdin stayed open")
+	}
+}
+
+// A session created under a name Mutagen would reject on load (the
+// branch name, slash included) must still be there after the daemon
+// restarts: persistence is the whole point of the daemon's data dir.
+func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
+	gateway, _ := startTestGateway(t)
+	dataDir := filepath.Join(t.TempDir(), "mirror-data")
+	local := t.TempDir()
+	remote := t.TempDir()
+	writeFileT(t, filepath.Join(local, "a.txt"), "a\n")
+
+	first := startTestDaemon(t, gateway, dataDir)
+	created := first.call(mirrorRequest{
+		ID: "1", Op: "create",
+		LocalRoot:  local,
+		DeviceID:   "peer-1",
+		RemoteRoot: remote,
+		Name:       "feat/mirror",
+		Labels:     map[string]string{"localWorktreeId": "ba9876543210"},
+	})
+	if created["ok"] != true {
+		t.Fatalf("create failed: %v", created["error"])
+	}
+	session, _ := created["session"].(string)
+	waitForT(t, 30*time.Second, "the first daemon to sync", func() bool {
+		return fileEquals(filepath.Join(remote, "a.txt"), "a\n")
+	})
+	// State docs are throttled (streamMirrorState), so the one naming
+	// the session may trail the files by a beat.
+	var state map[string]any
+	waitForT(t, 10*time.Second, "the session state", func() bool {
+		state = first.sessionState(session)
+		return state != nil
+	})
+	if state["name"] != "feat-mirror" {
+		t.Fatalf("session name not folded into Mutagen's alphabet: %v", state)
+	}
+	first.requests.Close()
+	if err := <-first.done; err != nil {
+		t.Fatalf("first daemon exited with: %v", err)
+	}
+
+	second := startTestDaemon(t, gateway, dataDir)
+	deadline := time.Now().Add(45 * time.Second)
+	for {
+		s := second.sessionState(session)
+		if s != nil && s["status"] == "watching" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the restarted daemon never reported the session watching; last state %v; docs %d; daemon log:\n%s", s, len(second.snapshot()), second.logs.String())
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	labels, _ := second.sessionState(session)["labels"].(map[string]any)
+	if labels["localWorktreeId"] != "ba9876543210" {
+		t.Fatalf("labels lost across the restart: %v", labels)
+	}
+	writeFileT(t, filepath.Join(local, "b.txt"), "b\n")
+	waitForT(t, 30*time.Second, "the restarted session to sync", func() bool {
+		return fileEquals(filepath.Join(remote, "b.txt"), "b\n")
+	})
+	second.requests.Close()
+	if err := <-second.done; err != nil {
+		t.Fatalf("second daemon exited with: %v", err)
+	}
+}
+
+// The name is folded into Mutagen's alphabet and pushed out of the
+// shapes it refuses on load (a UUID, a reserved word), so a session
+// never vanishes over a cosmetic name.
+func TestMirrorSessionNameFolding(t *testing.T) {
+	cases := map[string]string{
+		"feat/mirror":                          "feat-mirror",
+		"123-start":                            "m-123-start",
+		"defaults":                             "m-defaults",
+		"d9d02c4d-6328-4cb2-95ac-1eedde979ee0": "m-d9d02c4d-6328-4cb2-95ac-1eedde979ee0",
+	}
+	for in, want := range cases {
+		got := mirrorSessionName(in)
+		if got != want {
+			t.Errorf("mirrorSessionName(%q) = %q, want %q", in, got, want)
+		}
+		if err := selection.EnsureNameValid(got); err != nil {
+			t.Errorf("mirrorSessionName(%q) = %q is still invalid: %v", in, got, err)
+		}
 	}
 }

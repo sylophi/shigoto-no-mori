@@ -10,14 +10,20 @@
 // sessions.
 //
 // The per-socket bridging (attach, open, the adapter's backpressure and
-// teardown) lives in bridge.ts, shared with the mirror gateway; this
+// teardown) lives in bridge.ts, shared with the mirror gateway. This
 // file owns the listeners, the per-device conn cap and the forward
 // registry.
+import { coalesce } from "@host/lib/util/coalesce";
 import { createServer, type Server, type Socket } from "node:net";
 import type { forwardContract } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
 import { mintHexId } from "@host/lib/idleRegistry";
-import { type BridgedConn, bridgeSocket, type PeerChannels } from "./bridge";
+import {
+  type BridgedConn,
+  bridgeSocket,
+  listenLoopback,
+  type PeerChannels,
+} from "./bridge";
 
 export type ForwardApi = Client<typeof forwardContract>;
 
@@ -35,7 +41,7 @@ export const MAX_CONNS_PER_DEVICE = 16;
 // in bursts (one page load moves ~a dozen conns), and each signal
 // triggers a renderer list refetch, so burst members collapse into one
 // signal shortly after the first.
-const CHANGE_COALESCE_MS = 150;
+export const CHANGE_COALESCE_MS = 150;
 
 export type PortForwardSummary = {
   forwardId: string;
@@ -65,17 +71,7 @@ export function createPortForwardEngine(deps: {
   onChange?: () => void;
 }) {
   const forwards = new Map<string, Forward>();
-  // The trailing debounce (CHANGE_COALESCE_MS above). unref'd so a
-  // pending signal never holds the process open on quit.
-  let changeTimer: ReturnType<typeof setTimeout> | null = null;
-  const changed = () => {
-    if (deps.onChange === undefined || changeTimer !== null) return;
-    changeTimer = setTimeout(() => {
-      changeTimer = null;
-      deps.onChange?.();
-    }, CHANGE_COALESCE_MS);
-    changeTimer.unref?.();
-  };
+  const changed = coalesce(() => deps.onChange?.(), CHANGE_COALESCE_MS);
 
   function findForward(
     deviceId: string,
@@ -153,31 +149,12 @@ export function createPortForwardEngine(deps: {
     } finally {
       probe.reset();
     }
-    // allowHalfOpen: a client FIN must not tear the conn down (see the
-    // 'end' note in handleConnection), but node's default would
-    // auto-end the writable side and drop the remote's response.
+    // allowHalfOpen: a client FIN must not tear the conn down (the
+    // adapter in host/socket/channelStreams.ts ends one direction and
+    // keeps the other flowing), but node's default would auto-end the
+    // writable side and drop the remote's response.
     const server = createServer({ allowHalfOpen: true });
-    // Loopback only, matching the host side: the forward is for THIS
-    // machine's processes, never a listener other hosts can reach.
-    const localPort = await new Promise<number>((resolve, reject) => {
-      const onError = (error: Error) => {
-        // e.g. EADDRINUSE on an explicit localPort: release the handle
-        // rather than leak an unbound server.
-        server.close();
-        reject(error);
-      };
-      server.once("error", onError);
-      server.listen(input.localPort ?? 0, "127.0.0.1", () => {
-        server.off("error", onError);
-        const address = server.address();
-        if (address === null || typeof address === "string") {
-          server.close();
-          reject(new Error("listener bound without a TCP address"));
-          return;
-        }
-        resolve(address.port);
-      });
-    });
+    const localPort = await listenLoopback(server, input.localPort ?? 0);
     // The dedupe scan above ran before two awaits, so a concurrent
     // start for the same pair may have bound in the meantime: yield to
     // the twin and release the just-bound listener. The forward being

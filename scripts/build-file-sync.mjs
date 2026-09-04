@@ -1,7 +1,7 @@
 // Compiles the file-sync engine (a Go module in file-sync/, the
 // continuous worktree mirror built on Mutagen) into a standalone
 // binary at dist-file-sync/file-sync. Built by `pnpm dev` beside the
-// dev CLI and by the prePackage hook for a release; the app's main
+// dev CLI and by the prePackage hook for a release. The app's main
 // process spawns it (main/electron/fileSyncRunner.ts) and nothing else
 // ever runs it.
 //

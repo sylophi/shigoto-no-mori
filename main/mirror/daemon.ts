@@ -16,24 +16,22 @@
 // drives this exact supervisor against a freshly built engine.
 import type { StreamChild } from "@host/fileSync/spawn";
 import { errorMessageOf } from "@shared/errors";
-import type { MirrorSessionRaw } from "@host/ipc/modules/mirror";
+import type {
+  MirrorCreateInput,
+  MirrorSessionRaw,
+} from "@host/ipc/modules/mirror";
+import { lineSplitter } from "@host/lib/util/ndjson";
+import {
+  BACKOFF_LADDER_MS,
+  backoffDelayMs,
+  STABLE_CONNECTION_MS,
+} from "@shared/remote/supervisor";
 
 export type MirrorDaemonStatus =
   | "stopped"
   | "starting"
   | "running"
   | "unavailable";
-
-export type MirrorCreateRequest = {
-  localRoot: string;
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-  remoteRoot: string;
-  name: string;
-  labels: Record<string, string>;
-  ignores?: string[];
-};
 
 type DaemonResponse = {
   id?: string;
@@ -49,10 +47,13 @@ type Pending = {
   reject: (error: Error) => void;
 };
 
-// Restart ladder after an unexpected exit, capped. A daemon that keeps
-// dying (a broken build, a locked data directory) settles into a slow
-// retry instead of a hot loop.
-const RESTART_DELAYS_MS = [1_000, 3_000, 10_000, 30_000];
+// Restart ladder after an unexpected exit: the house backoff plus a
+// slow top rung, so a daemon that keeps dying (a broken build, a
+// locked data directory) settles into a slow retry instead of a hot
+// loop, while one that ran long enough to be healthy restarts from
+// the bottom.
+const RESTART_LADDER_MS: readonly number[] = [...BACKOFF_LADDER_MS, 30_000];
+const STABLE_RUN_MS = STABLE_CONNECTION_MS;
 // A create blocks on two endpoint connects (the peer side spawns a
 // process and Mutagen handshakes), so requests get a generous ceiling.
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -66,7 +67,8 @@ export function createMirrorDaemon(deps: {
   // and retries later.
   spawn: (args: string[]) => StreamChild | null;
   // The gateway address the daemon dials peers through, read at each
-  // spawn so a gateway rebound after a restart is picked up.
+  // spawn (throwing when the gateway is not listening yet, which puts
+  // the daemon on the restart ladder until it is).
   gatewayAddress: () => string;
   // Where the engine persists sessions (a directory under the host's
   // state root), read at each spawn.
@@ -107,7 +109,6 @@ export function createMirrorDaemon(deps: {
       return;
     }
     if (doc.event === "ready") {
-      restarts = 0;
       setStatus("running");
       return;
     }
@@ -129,7 +130,7 @@ export function createMirrorDaemon(deps: {
       entry.resolve(doc);
       return;
     }
-    // A malformed-request response carries no id; nothing to match.
+    // A malformed-request response carries no id. Nothing to match.
     if (doc.ok === false)
       log(`[mirror] daemon refused a request: ${doc.error}`);
   }
@@ -155,20 +156,9 @@ export function createMirrorDaemon(deps: {
       return;
     }
     child = spawned;
+    const spawnedAt = Date.now();
     setStatus("starting");
-    let buffer = "";
-    spawned.stream.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
-      for (
-        let newline = buffer.indexOf("\n");
-        newline >= 0;
-        newline = buffer.indexOf("\n")
-      ) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (line !== "") handleLine(line);
-      }
-    });
+    spawned.stream.on("data", lineSplitter(handleLine));
     spawned.stream.on("error", () => {});
     spawned.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8").trim();
@@ -184,6 +174,7 @@ export function createMirrorDaemon(deps: {
         return;
       }
       log(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
+      if (Date.now() - spawnedAt >= STABLE_RUN_MS) restarts = 0;
       setStatus("starting");
       deps.onChange?.();
       scheduleRestart();
@@ -192,9 +183,7 @@ export function createMirrorDaemon(deps: {
 
   function scheduleRestart(): void {
     if (stopping || restartTimer !== null) return;
-    const delay =
-      RESTART_DELAYS_MS[Math.min(restarts, RESTART_DELAYS_MS.length - 1)] ??
-      30_000;
+    const delay = backoffDelayMs(RESTART_LADDER_MS, restarts);
     restarts++;
     restartTimer = setTimeout(() => {
       restartTimer = null;
@@ -281,10 +270,9 @@ export function createMirrorDaemon(deps: {
     stop,
     status: () => status,
     sessions: () => sessions,
-    create: (input: MirrorCreateRequest) => expectOk("create", { ...input }),
+    create: (input: MirrorCreateInput) => expectOk("create", { ...input }),
     terminate: (session: string) => expectOk("terminate", { session }),
     pause: (session: string) => expectOk("pause", { session }),
     resume: (session: string) => expectOk("resume", { session }),
-    flush: (session: string) => expectOk("flush", { session }),
   };
 }

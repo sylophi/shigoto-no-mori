@@ -2,32 +2,38 @@
 // the git state of the local worktree and the peer's worktree the same
 // (host/mirror/gitState.ts defines that state), so a commit, a stage,
 // a checkout or a reset on either machine shows up on the other within
-// a moment. The file-sync engine owns the files; this owns HEAD, the
+// a moment. The file-sync engine owns the files. This owns HEAD, the
 // tip and the staged tree.
 //
 // One rule decides direction, and it is the rule that makes the
-// follower safe: a side is followed only if the OTHER side has not
-// moved since the two last agreed. The follower remembers the state
-// both sides last shared. If only the peer moved, the peer's state is
-// carried here (commits through the existing bundle pull, then a
-// compare-and-set apply). If only this side moved, it is carried to
-// the peer (a bundle push, then the peer's apply). If both moved, the
-// session is reported diverged and neither side is touched until the
-// user resolves it; the same holds for a branch collision the apply
-// refuses. Because "moved since we agreed" rather than ancestry is the
-// test, an amend or a rebase on one side follows cleanly as long as
-// the other side stayed put.
+// follower safe: a side is followed only if the OTHER side's tip has
+// not moved since the two last agreed. The follower remembers the
+// state both sides last shared, and persists it through the injected
+// store so the rule survives an app restart. If only the peer's tip
+// (or branch) moved, the peer's state is carried here (commits through
+// the existing bundle pull, then a compare-and-set apply), its index
+// included. If only this side's moved, it is carried to the peer (a
+// bundle push, then the peer's apply). If both moved, the session is
+// reported diverged and neither side's git state is touched until the
+// user resolves it, which is as simple as putting one side back on the
+// tip they last agreed on (dropping that side's commit). The same
+// holds for a branch collision the apply refuses. Staging alone never
+// makes a divergence unless both sides staged something different
+// with neither committing. Because "moved since we agreed" rather
+// than ancestry is the test, an amend or a rebase on one side follows
+// cleanly as long as the other side stayed put.
 //
-// Before the two sides have ever agreed (a session just created), the
-// peer is taken as the reference when the tips are equal or the local
-// tip is an ancestor of the peer's, which is exactly the state
-// mirror:start leaves behind (a pull, then a mirror); anything else is
-// diverged from the start.
+// Before the two sides have ever agreed (a session with no stored
+// agreement), ancestry decides: the peer is the reference when the
+// tips are equal or the local tip is an ancestor of the peer's, which
+// is exactly the state mirror:start leaves behind (a pull, then a
+// mirror). This side is the reference when the peer's tip is an
+// ancestor of the local one. Anything else is diverged from the start.
 //
 // Signals: the local git-directory watcher (a project ping), a local
 // index watcher per session, the peer's git:projectChanged and
-// mirror:gitChanged pushes, every daemon snapshot (new or gone
-// sessions) and a slow periodic sweep as the backstop. Reconciles are
+// mirror:gitChanged pushes, every daemon snapshot whose session set
+// changed, and a slow periodic sweep as the backstop. Reconciles are
 // coalesced per session: one in flight, one queued.
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
@@ -37,11 +43,15 @@ import {
   MirrorApplyGitStateResultSchema,
 } from "@shared/ipc/modules/mirror";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
-import { hasCommit, localBranchTips } from "@host/lib/git/refs";
+import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
+import {
+  MIRROR_LABEL_LOCAL_PROJECT,
+  MIRROR_LABEL_LOCAL_WORKTREE,
+} from "@host/ipc/modules/mirror";
 import {
   applyGitState,
   type GitHead,
@@ -51,7 +61,6 @@ import {
   readGitState,
   watchIndexFile,
 } from "./gitState";
-import { run } from "@host/lib/git/core";
 
 // The slice of a daemon session the follower reads.
 export type FollowableSession = {
@@ -64,22 +73,29 @@ export type FollowableSession = {
   labels: Record<string, string>;
 };
 
-// The label keys mirror:start writes (host/ipc/modules/mirror.ts).
-const LABEL_LOCAL_PROJECT = "localProjectId";
-const LABEL_LOCAL_WORKTREE = "localWorktreeId";
+// Where the agreed states live between runs: one entry per session id.
+export type AgreedStore = {
+  load(): Record<string, GitStateCore>;
+  save(entries: Record<string, GitStateCore>): void;
+};
 
-type Agreed = GitStateCore;
+// The label keys mirror:start writes.
+const LABEL_LOCAL_PROJECT = MIRROR_LABEL_LOCAL_PROJECT;
+const LABEL_LOCAL_WORKTREE = MIRROR_LABEL_LOCAL_WORKTREE;
 
 type FollowRecord = {
   session: FollowableSession;
   status: MirrorGitStatus;
-  agreed: Agreed | null;
+  agreed: GitStateCore | null;
   running: boolean;
   pending: boolean;
   stopIndexWatch: (() => void) | null;
 };
 
-const DEFAULT_SWEEP_MS = 15_000;
+// The backstop only: every real change arrives as a signal, so the
+// sweep is slow, and each tick costs a local read plus one peer round
+// trip per session.
+const DEFAULT_SWEEP_MS = 60_000;
 
 function sameHead(a: GitHead, b: GitHead): boolean {
   return a.kind === "branch" && b.kind === "branch"
@@ -97,25 +113,7 @@ function core(state: GitState): GitStateCore {
   return { head: state.head, tip: state.tip, indexTree: state.indexTree };
 }
 
-async function isAncestor(
-  cwd: string,
-  ancestor: string,
-  descendant: string,
-): Promise<boolean> {
-  try {
-    await run(cwd, [
-      "merge-base",
-      "--is-ancestor",
-      "--end-of-options",
-      ancestor,
-      descendant,
-    ]);
-    return true;
-  } catch (error) {
-    if ((error as { code?: unknown }).code === 1) return false;
-    throw error;
-  }
-}
+type Outcome = { applied: true } | { applied: false; reason: string };
 
 export type GitFollower = ReturnType<typeof createGitFollower>;
 
@@ -123,6 +121,9 @@ export function createGitFollower(deps: {
   sessions: () => FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
   peerMirrorApiFor: (deviceId: string) => PeerMirrorApi;
+  // Persists the agreed state per session. Absent means memory only
+  // (the checks).
+  agreedStore?: AgreedStore;
   // Fires when any session's git status changes.
   onChange?: () => void;
   sweepMs?: number;
@@ -131,6 +132,23 @@ export function createGitFollower(deps: {
   const records = new Map<string, FollowRecord>();
   const log = deps.log ?? ((message: string) => console.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
+  // The agreed states by session id, loaded on the first start (the
+  // follower is built at module load, before the state root exists)
+  // and written back only when an entry actually changes.
+  let stored: Record<string, GitStateCore> = {};
+  let loaded = false;
+
+  function loadStored(): void {
+    if (loaded) return;
+    loaded = true;
+    try {
+      stored = deps.agreedStore?.load() ?? {};
+    } catch (error) {
+      log(
+        `[mirror] git follow: agreed store unreadable: ${errorMessageOf(error)}`,
+      );
+    }
+  }
 
   function setStatus(record: FollowRecord, status: MirrorGitStatus): void {
     if (
@@ -141,6 +159,23 @@ export function createGitFollower(deps: {
     }
     record.status = status;
     deps.onChange?.();
+  }
+
+  function persist(): void {
+    try {
+      deps.agreedStore?.save(stored);
+    } catch (error) {
+      log(
+        `[mirror] git follow: agreed store unwritable: ${errorMessageOf(error)}`,
+      );
+    }
+  }
+
+  function setAgreed(record: FollowRecord, agreed: GitStateCore): void {
+    if (record.agreed !== null && sameState(record.agreed, agreed)) return;
+    record.agreed = agreed;
+    stored[record.session.session] = agreed;
+    persist();
   }
 
   function trigger(record: FollowRecord): void {
@@ -165,6 +200,14 @@ export function createGitFollower(deps: {
     })();
   }
 
+  function triggerWhere(
+    matches: (session: FollowableSession) => boolean,
+  ): void {
+    for (const record of records.values()) {
+      if (matches(record.session)) trigger(record);
+    }
+  }
+
   async function reconcile(record: FollowRecord): Promise<void> {
     const { session } = record;
     if (session.paused) {
@@ -184,19 +227,19 @@ export function createGitFollower(deps: {
     const peerSync = deps.peerSyncApiFor(session.deviceId);
     const peerMirror = deps.peerMirrorApiFor(session.deviceId);
     try {
-      const local = await readGitState(
-        project.path,
-        localWorktree.path,
-        localWorktree.id,
-      );
-      const peer = GitStateSchema.parse(
-        await peerMirror.gitState({
+      // Independent reads, so the local git work hides under the peer
+      // round trip. The apply's compare-and-set covers either side
+      // moving in between.
+      const [local, peerRaw] = await Promise.all([
+        readGitState(project.path, localWorktree.path, localWorktree.id),
+        peerMirror.gitState({
           projectId: session.projectId,
           worktreeId: session.worktreeId,
         }),
-      );
+      ]);
+      const peer = GitStateSchema.parse(peerRaw);
       if (sameState(local, peer)) {
-        record.agreed = core(peer);
+        setAgreed(record, core(peer));
         setStatus(record, { status: "synced", detail: "" });
         return;
       }
@@ -222,7 +265,7 @@ export function createGitFollower(deps: {
           ? await pull(project, localWorktree, session, peerSync, local, peer)
           : await push(project, session, peerSync, peerMirror, local, peer);
       if (outcome.applied) {
-        record.agreed = direction === "pull" ? core(peer) : core(local);
+        setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });
         return;
       }
@@ -249,28 +292,30 @@ export function createGitFollower(deps: {
     const agreed = record.agreed;
     if (agreed === null) {
       if (local.tip === peer.tip) return "pull";
-      if (
-        (await hasCommit(project.path, peer.tip)) &&
-        (await isAncestor(project.path, local.tip, peer.tip))
-      ) {
-        return "pull";
-      }
-      if (
-        (await hasCommit(project.path, peer.tip)) &&
-        (await isAncestor(project.path, peer.tip, local.tip))
-      ) {
-        return "push";
-      }
-      // The peer's tip is unknown here (never fetched) or unrelated:
-      // fetching it is what a pull does, and a fresh session started
-      // by mirror:start always has the peer's tip, so anything else is
-      // two histories.
+      // The peer's tip is here only if a pull ever landed it (a fresh
+      // session started by mirror:start always has it). An unknown or
+      // unrelated tip is two histories.
+      if (!(await hasCommit(project.path, peer.tip))) return "diverged";
+      if (await isAncestor(project.path, local.tip, peer.tip)) return "pull";
+      if (await isAncestor(project.path, peer.tip, local.tip)) return "push";
       return "diverged";
     }
-    const localMoved = !sameState(local, agreed);
-    const peerMoved = !sameState(peer, agreed);
-    if (localMoved && peerMoved) return "diverged";
-    if (peerMoved) return "pull";
+    // Tips (and the branch) are what divergence is about. A side whose
+    // tip moved is followed, its index included: a commit consumes the
+    // staging on that side, and the other side's index-only changes
+    // give way to it. Only when neither tip moved do the indexes
+    // decide, and only both having changed is a divergence there.
+    const localTipMoved =
+      local.tip !== agreed.tip || !sameHead(local.head, agreed.head);
+    const peerTipMoved =
+      peer.tip !== agreed.tip || !sameHead(peer.head, agreed.head);
+    if (localTipMoved && peerTipMoved) return "diverged";
+    if (peerTipMoved) return "pull";
+    if (localTipMoved) return "push";
+    const localIndexMoved = local.indexTree !== agreed.indexTree;
+    const peerIndexMoved = peer.indexTree !== agreed.indexTree;
+    if (localIndexMoved && peerIndexMoved) return "diverged";
+    if (peerIndexMoved) return "pull";
     return "push";
   }
 
@@ -278,8 +323,9 @@ export function createGitFollower(deps: {
     const parts: string[] = [];
     if (local.tip !== peer.tip) parts.push("both sides have new commits");
     if (!sameHead(local.head, peer.head)) parts.push("different branches");
-    if (local.indexTree !== peer.indexTree)
-      parts.push("different staged changes");
+    if (parts.length === 0 && local.indexTree !== peer.indexTree) {
+      parts.push("different staged changes on both sides");
+    }
     return parts.join(", ") || "both sides changed";
   }
 
@@ -291,7 +337,7 @@ export function createGitFollower(deps: {
     peerSync: PeerSyncApi,
     local: GitState,
     peer: GitState,
-  ): Promise<{ applied: true } | { applied: false; reason: string }> {
+  ): Promise<Outcome> {
     const wantRefs: string[] = [];
     const sweep: string[] = [];
     const tipIsLocal = await hasCommit(project.path, peer.tip);
@@ -319,7 +365,7 @@ export function createGitFollower(deps: {
         targetProjectId: project.id,
         refs: wantRefs,
         // With the tip already here only the index carrier travels
-        // and the tip is the perfect have; otherwise every local
+        // and the tip is the perfect have. Otherwise every local
         // branch tip thins the bundle and none can cover a tip we
         // lack.
         haves: tipIsLocal ? [peer.tip] : await localBranchTips(project.path),
@@ -340,7 +386,7 @@ export function createGitFollower(deps: {
     peerMirror: PeerMirrorApi,
     local: GitState,
     peer: GitState,
-  ): Promise<{ applied: true } | { applied: false; reason: string }> {
+  ): Promise<Outcome> {
     const probe = [
       local.tip,
       ...(local.indexCommit === null ? [] : [local.indexCommit]),
@@ -393,26 +439,35 @@ export function createGitFollower(deps: {
   }
 
   // Bring the followed set in line with the daemon's sessions: a new
-  // session gets a record and an index watcher, a gone one is dropped.
-  function syncSessions(): void {
+  // session gets a record (seeded from the stored agreement) and an
+  // index watcher, a gone one is dropped. Its stored agreement stays:
+  // the daemon reports no sessions while it restarts, and the same
+  // sessions come back a moment later. Only forget() below, on an
+  // explicit terminate, drops the agreement. True when a session
+  // came, went or flipped its pause.
+  function syncSessions(): boolean {
+    loadStored();
     const current = new Map(deps.sessions().map((s) => [s.session, s]));
+    let changed = false;
     for (const [id, record] of records) {
       if (!current.has(id)) {
         record.stopIndexWatch?.();
         records.delete(id);
-        deps.onChange?.();
+        changed = true;
       }
     }
     for (const [id, session] of current) {
       const existing = records.get(id);
       if (existing !== undefined) {
+        if (existing.session.paused !== session.paused) changed = true;
         existing.session = session;
         continue;
       }
+      changed = true;
       const record: FollowRecord = {
         session,
         status: { status: "off", detail: "" },
-        agreed: null,
+        agreed: stored[id] ?? null,
         running: false,
         pending: false,
         stopIndexWatch: null,
@@ -426,6 +481,8 @@ export function createGitFollower(deps: {
         () => {},
       );
     }
+    if (changed) deps.onChange?.();
+    return changed;
   }
 
   function reconcileAll(): void {
@@ -452,41 +509,39 @@ export function createGitFollower(deps: {
       for (const record of records.values()) record.stopIndexWatch?.();
       records.clear();
     },
-    // The daemon reported a snapshot: sessions may have come or gone,
-    // and a re-look costs one round trip per session.
-    sessionsChanged: reconcileAll,
-    onLocalProjectChanged(projectId: string): void {
-      syncSessions();
-      for (const record of records.values()) {
-        if (record.session.labels[LABEL_LOCAL_PROJECT] === projectId) {
-          trigger(record);
-        }
+    // The daemon reported a snapshot: only a session coming, going or
+    // flipping its pause is worth a re-look.
+    sessionsChanged(): void {
+      if (syncSessions()) {
+        for (const record of records.values()) trigger(record);
       }
     },
-    onPeerProjectChanged(deviceId: string, projectId: string): void {
-      for (const record of records.values()) {
-        if (
-          record.session.deviceId === deviceId &&
-          record.session.projectId === projectId
-        ) {
-          trigger(record);
-        }
+    // The session was terminated on purpose: its agreement goes too.
+    forget(session: string): void {
+      loadStored();
+      if (session in stored) {
+        delete stored[session];
+        persist();
       }
+    },
+    onLocalProjectChanged(projectId: string): void {
+      syncSessions();
+      triggerWhere((s) => s.labels[LABEL_LOCAL_PROJECT] === projectId);
+    },
+    onPeerProjectChanged(deviceId: string, projectId: string): void {
+      triggerWhere((s) => s.deviceId === deviceId && s.projectId === projectId);
     },
     onPeerWorktreeChanged(
       deviceId: string,
       projectId: string,
       worktreeId: string,
     ): void {
-      for (const record of records.values()) {
-        if (
-          record.session.deviceId === deviceId &&
-          record.session.projectId === projectId &&
-          record.session.worktreeId === worktreeId
-        ) {
-          trigger(record);
-        }
-      }
+      triggerWhere(
+        (s) =>
+          s.deviceId === deviceId &&
+          s.projectId === projectId &&
+          s.worktreeId === worktreeId,
+      );
     },
     statusOf(session: string): MirrorGitStatus | undefined {
       return records.get(session)?.status;

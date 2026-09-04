@@ -23,7 +23,7 @@ func main() {
 // both roles are children of the host and must not outlive it. When
 // the host dies, the kernel reparents this process (to launchd or
 // init), so a changed parent pid is the host being gone. Polled,
-// because macOS has no parent-death signal; stdin EOF usually wins the
+// because macOS has no parent-death signal. Stdin EOF usually wins the
 // race anyway, and this catches the cases where it cannot (a host that
 // leaked the pipe's write end to another child, say).
 func watchParent(interval time.Duration) {
@@ -55,7 +55,7 @@ func run(args []string) int {
 	switch args[0] {
 	case "serve":
 		// stdout IS the protocol stream here, so nothing else may print
-		// to it; diagnostics go to stderr.
+		// to it. Diagnostics go to stderr.
 		err := serveMirrorEndpoint(stdioStream{in: os.Stdin, out: os.Stdout}, os.Stderr)
 		// The client hanging up is how every stream ends (the session was
 		// terminated, the peer went away, the app quit), and Mutagen

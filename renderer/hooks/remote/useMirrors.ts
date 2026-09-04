@@ -48,13 +48,11 @@ export function useMirrors(): MirrorListResult {
 // device runs INTO it (it is the local copy of a peer's worktree), and
 // the streams this device serves FROM it (peers mirroring it).
 export function useWorktreeMirror(worktree: Worktree): {
-  daemon: MirrorListResult["daemon"];
   session: MirrorSession | undefined;
   serving: MirrorServing[];
 } {
-  const { daemon, sessions, serving } = useMirrors();
+  const { sessions, serving } = useMirrors();
   return {
-    daemon,
     session: sessions.find((s) => s.localWorktreeId === worktree.id),
     serving: serving.filter((s) => s.worktreeId === worktree.id),
   };
@@ -112,7 +110,7 @@ export function useStartMirror({
   });
 }
 
-// This machine's daemon controls. Local by contract; the list refreshes
+// This machine's daemon controls. Local by contract. The list refreshes
 // off the daemon's own state snapshot.
 export function useMirrorControls() {
   const stop = useMutation({

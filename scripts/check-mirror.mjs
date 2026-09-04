@@ -1,40 +1,40 @@
 // Durable proof for continuous worktree mirroring (file-sync/,
-// main/mirror/*, forward:openMirror): two REAL directories converge in
+// main/mirror/*, mirror:openStream): two REAL directories converge in
 // both directions through the whole production chain, with nothing on
 // the sync path doubled. Device B runs the REAL mirror daemon (a
 // freshly built file-sync engine, Mutagen inside) behind the REAL
-// gateway (main/mirror/gateway.ts); the gateway dials device A's REAL
-// forward:openMirror over a REAL direct websocket (brokered by the stub
-// device hub exactly as production does, scripts/lib/directBoot.mjs);
+// gateway (main/mirror/gateway.ts). The gateway dials device A's REAL
+// mirror:openStream over a REAL direct websocket (brokered by the stub
+// device hub exactly as production does, scripts/lib/directBoot.mjs),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
-// worktree; bytes cross as binary channel frames on the direct socket
+// worktree. Bytes cross as binary channel frames on the direct socket
 // (shared/ipc/socket/channels.ts, bridged by main/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
 //   - an ungranted peer: the gateway's open is refused, the daemon's
-//     create fails with the refusal, and A spawned no serve child;
+//     create fails with the refusal, and A spawned no serve child,
 //   - a granted create converges seeded content both ways, including a
-//     gitignored-style file, and holds A's .git pointer file back;
+//     gitignored-style file, and holds A's .git pointer file back,
 //   - live edits after the first cycle cross both ways within seconds,
 //     and a delete propagates, while the device hub's forwardedCount
-//     stays FLAT (only the direct socket carries the stream);
+//     stays FLAT (only the direct socket carries the stream),
 //   - A's serving list names the worktree and the caller while the
 //     stream is up, and empties when the session is terminated, with
-//     the serve child gone;
+//     the serve child gone,
 //   - the daemon's state stream reports the session in the app's
-//     vocabulary (watching, both endpoints connected, cycles counted);
+//     vocabulary (watching, both endpoints connected, cycles counted),
 //   - stopping the daemon ends it and the gateway closes clean.
 // Then the git follower (host/mirror/gitFollow.ts), driven against the
 // same wire with B's worktree a real clone of A's repository:
-//   - a commit on A lands on B: same tip, same branch, clean status;
-//   - staging on A shows as staged on B, without touching files;
-//   - a commit on B lands on A the same way (the push direction);
+//   - a commit on A lands on B: same tip, same branch, clean status,
+//   - staging on A shows as staged on B, without touching files,
+//   - a commit on B lands on A the same way (the push direction),
 //   - commits on both sides since they agreed report diverged and move
-//     nothing, and resolving on B brings the session back to synced;
+//     nothing, and resolving on B brings the session back to synced,
 //   - a checkout on A to a branch another worktree on B holds is
 //     refused with the path, and checking back restores sync.
 //
 // Both "devices" share one node process and one sandboxed
-// SHIGOMORI_ROOT; what separates them is the direct wire between them,
+// SHIGOMORI_ROOT. What separates them is the direct wire between them,
 // which is exactly the surface this proof pins. Runs under
 // scripts/lib/register-ts-alias.mjs. See package.json "mirror:check".
 import assert from "node:assert/strict";
@@ -59,8 +59,8 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
-import { forwardHandlers, listMirrorServing } from "@host/ipc/modules/forward";
-import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { forwardHandlers } from "@host/ipc/modules/forward";
+import { listMirrorServing, mirrorHandlers } from "@host/ipc/modules/mirror";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
@@ -68,7 +68,14 @@ import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initShigomoriRootAt } from "@host/lib/util/paths";
 import { createMirrorDaemon } from "../main/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/mirror/gateway.ts";
-import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import {
+  cliFailureMessage,
+  createCliRunner,
+  fileEquals,
+  makeProof,
+  makeTracker,
+  scrubbedGitEnv,
+} from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 import { delay, waitFor } from "./lib/hubBoot.mjs";
 
@@ -86,14 +93,15 @@ const smBinary = join(sandbox, "sm");
 const fileSyncBinary = join(sandbox, "file-sync");
 const fileSyncDataDir = join(sandbox, "file-sync-data");
 
-// Scrub inherited GIT_* (a lefthook run exports GIT_DIR and would point
-// fixture git at THIS repo) and pin idents.
+// The kit's scrub (no inherited GIT_*, config pinned) applied to
+// process.env itself rather than a copy: the host modules under test
+// run git in THIS process (host/lib/git/core.ts reads process.env), so
+// a lefthook-exported GIT_DIR would otherwise point them at the real
+// repository. Plus the fixture identity for the commits below.
 for (const key of Object.keys(process.env)) {
   if (key.startsWith("GIT_")) delete process.env[key];
 }
-Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
+Object.assign(process.env, scrubbedGitEnv(), {
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@t",
   GIT_COMMITTER_NAME: "t",
@@ -112,7 +120,7 @@ async function git(cwd, args) {
   try {
     return await execFileP("git", args, { cwd, env: baseEnv });
   } catch (error) {
-    // execFile's message is just "Command failed"; the reason is on
+    // execFile's message is just "Command failed". The reason is on
     // stderr.
     throw new Error(
       `git ${args.join(" ")} in ${cwd} failed: ${error.stderr || error.stdout || error.message}`,
@@ -126,76 +134,10 @@ async function gitOut(cwd, ...args) {
   return stdout.trim();
 }
 
-// The document-run seam the registered projects need (sm projects add),
-// same NDJSON protocol as the Electron runner.
-function runCli(args, onDoc) {
-  return new Promise((resolve, reject) => {
-    const child = spawnStreamChild(smBinary, ["--json", ...args], {
-      env: smEnv,
-    });
-    const docs = [];
-    let buffer = "";
-    child.stream.on("data", (chunk) => {
-      buffer += chunk.toString("utf8");
-      for (
-        let newline = buffer.indexOf("\n");
-        newline >= 0;
-        newline = buffer.indexOf("\n")
-      ) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (!line) continue;
-        try {
-          const doc = JSON.parse(line);
-          docs.push(doc);
-          onDoc?.(doc);
-        } catch {
-          // Non-JSON stdout line; the assertions read docs only.
-        }
-      }
-    });
-    let stderrTail = "";
-    child.stderr?.on("data", (chunk) => {
-      stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
-    });
-    child.stream.on("error", reject);
-    child.onExit((code) => resolve({ code: code ?? -1, docs, stderrTail }));
-  });
-}
-
-function cliFailureMessage(result, fallback) {
-  const errorDoc = result.docs.find(
-    (doc) => doc.ok === false && typeof doc.error === "string",
-  );
-  return errorDoc ? errorDoc.error : `${fallback} (CLI exit ${result.code})`;
-}
-
-async function sm(...args) {
-  const result = await runCli(args);
-  if (result.code !== 0) {
-    throw new Error(
-      `sm ${args.join(" ")} failed: ${cliFailureMessage(result, "no error doc")}\n${result.stderrTail}`,
-    );
-  }
-  return result;
-}
-
-// The shared waitFor tests a predicate's truthiness synchronously, so
-// an async predicate (a Promise, always truthy) would pass at once. The
-// git scenarios poll git, so they await.
-async function waitUntil(predicate, what, timeoutMs = 30_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    if (await predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(50);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
+// The document-run seam the registered projects need (sm projects add).
+const { runCli, sm } = createCliRunner(smBinary, smEnv);
 
 const read = (path) => readFileSync(path, "utf8");
-const fileEquals = (path, want) => existsSync(path) && read(path) === want;
 
 // A serve child spawned by A's handler, observed through the same seam
 // production uses, so "no child spawned" and "child gone" are facts
@@ -311,13 +253,13 @@ async function main() {
       });
     },
   });
-  const forwardOverWire = buildClient(forwardContract, peerA.transport);
+  const mirrorOverWire = buildClient(mirrorContract, peerA.transport);
 
   // B's half: the real gateway over the real peer client, the real
   // daemon on the freshly built binary.
   let changes = 0;
   const gateway = createMirrorGateway({
-    peerApiFor: () => forwardOverWire,
+    peerApiFor: () => mirrorOverWire,
     peerChannelsFor: () => peerA.channels,
     log: () => {},
   });
@@ -358,7 +300,7 @@ async function main() {
       labels: { localWorktreeId: worktreeIdB, localProjectId: projectIdB },
     };
 
-    // (1) Ungranted: the gateway's openMirror is refused on A's wire, so
+    // (1) Ungranted: the gateway's openStream is refused on A's wire, so
     // the daemon's connect fails and create rejects with that reason.
     // No serve child was ever spawned.
     await assert.rejects(
@@ -422,7 +364,7 @@ async function main() {
     assert.ok(processAlive(serveChild.pid), "the serve child is not running");
     ok("A serves exactly one stream, attributed to worktree and caller");
 
-    // (4) Live edits both ways, a delete, a nested create; the hub stays
+    // (4) Live edits both ways, a delete, a nested create. The hub stays
     // flat throughout.
     writeFileSync(join(worktreeA, "src.txt"), "from A, edited\n");
     await waitFor(
@@ -486,7 +428,7 @@ async function main() {
     track(() => follower.stop());
     const gitStatus = () => follower.statusOf(session);
     const waitGit = (status, what) =>
-      waitUntil(() => gitStatus()?.status === status, what, 30_000);
+      waitFor(() => gitStatus()?.status === status, what, 30_000);
     // Clean for the follower's purposes: nothing staged, nothing
     // modified. Untracked files (the mirrored fixture files, node_modules)
     // are expected on both sides.
@@ -512,7 +454,7 @@ async function main() {
     const tipA1 = await gitOut(worktreeA, "rev-parse", "HEAD");
     // What A's git-directory watcher would push in production.
     follower.onPeerProjectChanged("A", projectIdA);
-    await waitUntil(
+    await waitFor(
       async () => (await gitOut(rootB, "rev-parse", "HEAD")) === tipA1,
       "B's tip to follow A's commit",
       30_000,
@@ -521,7 +463,7 @@ async function main() {
       await gitOut(rootB, "symbolic-ref", "HEAD"),
       "refs/heads/feature",
     );
-    await waitUntil(
+    await waitFor(
       () => clean(rootB),
       "B to read clean after the follow",
       30_000,
@@ -535,7 +477,7 @@ async function main() {
     await git(worktreeA, ["add", "src.txt"]);
     // What A's served-index watcher would push in production.
     follower.onPeerWorktreeChanged("A", projectIdA, worktreeIdA);
-    await waitUntil(
+    await waitFor(
       async () =>
         (await gitOut(rootB, "diff", "--cached", "--name-only")) === "src.txt",
       "src.txt to show as staged on B",
@@ -551,15 +493,15 @@ async function main() {
     await git(rootB, ["commit", "-qm", "on B"]);
     const tipB1 = await gitOut(rootB, "rev-parse", "HEAD");
     assert.notEqual(tipB1, tipA1);
-    // B's own index watcher fires on the commit; the project ping is
+    // B's own index watcher fires on the commit. The project ping is
     // what the local git-directory watcher would add.
     follower.onLocalProjectChanged(projectIdB);
-    await waitUntil(
+    await waitFor(
       async () => (await gitOut(worktreeA, "rev-parse", "HEAD")) === tipB1,
       "A's tip to follow B's commit",
       30_000,
     );
-    await waitUntil(
+    await waitFor(
       () => clean(worktreeA),
       "A to read clean after the follow",
       30_000,
@@ -603,7 +545,7 @@ async function main() {
     // The staged b-only.txt is gone from the index but the file stays
     // (the engine mirrors it), which is the ordinary dirty case.
     follower.onLocalProjectChanged(projectIdB);
-    await waitUntil(
+    await waitFor(
       async () => (await gitOut(rootB, "rev-parse", "HEAD")) === tipA2,
       "B to follow A once B's own commit is dropped",
       30_000,
@@ -613,7 +555,7 @@ async function main() {
 
     // (G6) A branch collision: A checks out a branch that another
     // worktree on B already holds. Refused with the path, nothing
-    // moves; checking back on A restores sync.
+    // moves. Checking back on A restores sync.
     const wtB2 = join(sandbox, "wt-b2");
     await git(repoB, ["worktree", "add", "-q", "-b", "other", wtB2]);
     await git(worktreeA, ["checkout", "-q", "-b", "other"]);
@@ -672,9 +614,9 @@ async function main() {
   } catch (error) {
     fail(error);
   } finally {
-    // A serve child A spawned for the stream is tied to a conn the
-    // idle sweep would only reap ten minutes later, and its stdio
-    // would keep this process alive that long after a failure.
+    // A serve child A spawned for a stream dies with its channel. After
+    // a failure mid-scenario the channel may still be up, and the
+    // child's stdio would keep this process alive.
     for (const child of serveChildren) {
       try {
         child.kill("SIGKILL");

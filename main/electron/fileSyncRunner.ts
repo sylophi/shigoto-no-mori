@@ -20,7 +20,7 @@ function candidateBinary(): string {
     : path.join(app.getAppPath(), FILE_SYNC_DIST_DIR, FILE_SYNC_BINARY_NAME);
 }
 
-// Positive result cached (the binary doesn't move); a miss re-probes so
+// Positive result cached (the binary doesn't move). A miss re-probes so
 // a dev binary built after app launch is picked up.
 let cachedBinary: string | null = null;
 

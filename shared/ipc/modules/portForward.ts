@@ -15,7 +15,7 @@ import { PortNumberSchema } from "@shared/schemas";
 // UI additionally gates itself on window.api.isElectron.
 
 // forwardIds are engine-minted (shared/ipc/hexId.ts pins the shape)
-// for the same reason forward.ts pins connIds: a caller can only name
+// for the same reason forward.ts pins channel ids: a caller can only name
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 

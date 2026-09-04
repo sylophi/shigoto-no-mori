@@ -26,7 +26,7 @@ export interface StreamChild {
 
 // Spawns any binary as a stream child. `detached` puts it in its own
 // process group, like the CLI runner, so the quit-time reap
-// (signalTreeBestEffort) reaches anything it spawned in turn; onSpawned
+// (signalTreeBestEffort) reaches anything it spawned in turn. The onSpawned
 // is the registration hook for that reap.
 export function spawnStreamChild(
   binary: string,
@@ -46,7 +46,7 @@ export function spawnStreamChild(
     readable: child.stdout as Readable,
     writable: child.stdin as Writable,
   });
-  // A spawn failure surfaces as 'error' then 'close'; listening keeps
+  // A spawn failure surfaces as 'error' then 'close'. Listening keeps
   // node from treating it as an uncaught exception, and onExit
   // consumers see the close.
   child.on("error", () => {});

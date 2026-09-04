@@ -1,6 +1,6 @@
 // The git half of a mirrored worktree (PRODUCT.md: "both sides are
 // real git worktrees whose branch, commits, and uncommitted changes
-// agree"). The file-sync engine keeps the working tree identical; this
+// agree"). The file-sync engine keeps the working tree identical. This
 // module makes the rest of what `git status` shows agree too. A
 // worktree's git state, for mirroring purposes, is three facts:
 //
@@ -12,8 +12,15 @@
 // the file is full of machine-specific stat data and lock semantics.
 // When that tree differs from HEAD's (something is staged), it is
 // wrapped in a throwaway commit on refs/shigomori/index/<worktreeId>
-// so the existing bundle transfer can carry it; when nothing is
+// so the existing bundle transfer can carry it. When nothing is
 // staged, the ref is removed and the tree is HEAD's own.
+//
+// Reads are made cheap because the follower reads on every signal and
+// on a sweep: one rev-parse answers HEAD, the tip, the tip's tree and
+// the git dir together. The index tree is recomputed only when the
+// index file's size or mtime moved, from a scratch copy so write-tree
+// never touches the real index (it would echo through every index
+// watcher, this module's included).
 //
 // Applying a state is deliberately narrow and guarded: refs move by
 // compare-and-set against the state the caller last saw, branch
@@ -21,15 +28,27 @@
 // working tree is never touched (the engine owns it). read-tree plus
 // an index refresh is what makes the staged view match without
 // rewriting a single file.
-import { copyFile, mkdtemp, rm } from "node:fs/promises";
+import { copyFile, stat } from "node:fs/promises";
 import { watch } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { run, runLenient } from "@host/lib/git/core";
-import { deleteRef, hasCommit, updateRef } from "@host/lib/git/refs";
-import { listWorktreeIdentities } from "@host/lib/git/worktrees";
+import {
+  deleteRef,
+  hasCommit,
+  hasObject,
+  isAncestor,
+  refTip,
+  treeOf,
+  updateRef,
+  ZERO_SHA,
+} from "@host/lib/git/refs";
+import {
+  listWorktreeIdentities,
+  worktreeIdFromPath,
+} from "@host/lib/git/worktrees";
 
 export type GitHead = { kind: "branch"; branch: string } | { kind: "detached" };
 
@@ -59,63 +78,42 @@ const CAPTURE_IDENT: NodeJS.ProcessEnv = {
   GIT_COMMITTER_EMAIL: "shigomori@localhost",
 };
 
-// The ref must not exist, in update-ref's compare-and-set vocabulary.
-const ZERO_SHA = "0".repeat(40);
+// HEAD, the tip, the tip's tree and the git dir in one spawn. An unborn
+// HEAD fails the rev-parse, which is the one state this module refuses.
+type HeadFacts = {
+  head: GitHead;
+  tip: string;
+  headTree: string;
+  gitDir: string;
+};
 
-async function refTip(cwd: string, ref: string): Promise<string | null> {
+async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
+  let out: string;
   try {
-    const out = await run(cwd, [
+    out = await run(worktreePath, [
       "rev-parse",
-      "--verify",
-      "--quiet",
-      "--end-of-options",
-      ref,
+      "HEAD",
+      "HEAD^{tree}",
+      "--symbolic-full-name",
+      "HEAD",
+      "--absolute-git-dir",
     ]);
-    return out.trim();
-  } catch {
-    return null;
-  }
-}
-
-async function treeOf(cwd: string, commit: string): Promise<string> {
-  const out = await run(cwd, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${commit}^{tree}`,
-  ]);
-  return out.trim();
-}
-
-async function hasObject(cwd: string, object: string): Promise<boolean> {
-  try {
-    await run(cwd, ["cat-file", "-e", object]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// merge-base --is-ancestor answers with the exit code: 0 yes, 1 no,
-// anything else a real failure.
-async function isAncestor(
-  cwd: string,
-  ancestor: string,
-  descendant: string,
-): Promise<boolean> {
-  try {
-    await run(cwd, [
-      "merge-base",
-      "--is-ancestor",
-      "--end-of-options",
-      ancestor,
-      descendant,
-    ]);
-    return true;
   } catch (error) {
-    if ((error as { code?: unknown }).code === 1) return false;
-    throw error;
+    throw new Error(
+      `the worktree has no commits yet (${errorMessageOf(error)})`,
+      { cause: error },
+    );
   }
+  const [tip = "", headTree = "", ref = "", gitDir = ""] = out
+    .split("\n")
+    .map((line) => line.trim());
+  if (tip === "" || headTree === "" || gitDir === "") {
+    throw new Error("the worktree has no commits yet");
+  }
+  const head: GitHead = ref.startsWith("refs/heads/")
+    ? { kind: "branch", branch: ref.slice("refs/heads/".length) }
+    : { kind: "detached" };
+  return { head, tip, headTree, gitDir };
 }
 
 export async function gitDirOfWorktree(worktreePath: string): Promise<string> {
@@ -123,63 +121,98 @@ export async function gitDirOfWorktree(worktreePath: string): Promise<string> {
   return out.trim();
 }
 
-// The tree the index would commit right now. Computed against a COPY
-// of the index file: write-tree wants to store its cache-tree back
-// into the index it read, and touching the real one would echo through
-// every index watcher (this module's included).
-async function indexTreeOf(worktreePath: string): Promise<string> {
-  const gitDir = await gitDirOfWorktree(worktreePath);
-  const dir = await mkdtemp(join(tmpdir(), "sm-index-"));
-  try {
-    const copy = join(dir, "index");
-    try {
-      await copyFile(join(gitDir, "index"), copy);
-    } catch {
-      // No index yet (a worktree git has not touched since creation):
-      // the index would commit HEAD's tree.
-      return treeOf(worktreePath, "HEAD");
-    }
-    try {
-      const out = await run(worktreePath, ["write-tree"], {
-        env: { GIT_INDEX_FILE: copy },
-      });
-      return out.trim();
-    } catch (error) {
-      throw new Error(
-        `the index cannot be snapshotted (unresolved conflicts?): ${errorMessageOf(error)}`,
-        { cause: error },
-      );
-    }
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+// The last index tree computed per worktree, keyed on the index file's
+// identity (size and mtime): the steady state of a mirrored worktree
+// is "unchanged since last look", and that costs one stat.
+type IndexSnapshot = { size: number; mtimeMs: number; tree: string };
+const indexSnapshots = new Map<string, IndexSnapshot>();
+
+// A stable scratch index per worktree under the OS temp dir, overwritten
+// on every recompute, so no directory is minted and removed per read.
+// One computation at a time per worktree (below), since two copies
+// racing on the same scratch file would hand write-tree a torn index.
+function scratchIndexPath(worktreePath: string): string {
+  return join(tmpdir(), `sm-index-${worktreeIdFromPath(worktreePath)}`);
 }
 
-async function readHead(worktreePath: string): Promise<GitHead> {
+const indexTreeInFlight = new Map<string, Promise<string>>();
+
+// The tree the index would commit right now. Concurrent readers of one
+// worktree (the follower and a peer's gitState call) share one run.
+function indexTreeOf(
+  worktreePath: string,
+  gitDir: string,
+  headTree: string,
+): Promise<string> {
+  const running = indexTreeInFlight.get(worktreePath);
+  if (running !== undefined) return running;
+  const started = computeIndexTree(worktreePath, gitDir, headTree).finally(
+    () => {
+      indexTreeInFlight.delete(worktreePath);
+    },
+  );
+  indexTreeInFlight.set(worktreePath, started);
+  return started;
+}
+
+async function computeIndexTree(
+  worktreePath: string,
+  gitDir: string,
+  headTree: string,
+): Promise<string> {
+  const indexPath = join(gitDir, "index");
+  let identity: { size: number; mtimeMs: number };
   try {
-    const ref = (
-      await run(worktreePath, ["symbolic-ref", "-q", "HEAD"])
-    ).trim();
-    return ref.startsWith("refs/heads/")
-      ? { kind: "branch", branch: ref.slice("refs/heads/".length) }
-      : { kind: "detached" };
+    const info = await stat(indexPath);
+    identity = { size: info.size, mtimeMs: info.mtimeMs };
   } catch {
-    return { kind: "detached" };
+    // No index yet (a worktree git has not touched since creation):
+    // the index would commit HEAD's tree.
+    indexSnapshots.delete(worktreePath);
+    return headTree;
   }
+  const cached = indexSnapshots.get(worktreePath);
+  if (
+    cached !== undefined &&
+    cached.size === identity.size &&
+    cached.mtimeMs === identity.mtimeMs
+  ) {
+    return cached.tree;
+  }
+  const copy = scratchIndexPath(worktreePath);
+  await copyFile(indexPath, copy);
+  let tree: string;
+  try {
+    tree = (
+      await run(worktreePath, ["write-tree"], { env: { GIT_INDEX_FILE: copy } })
+    ).trim();
+  } catch (error) {
+    throw new Error(
+      `the index cannot be snapshotted (unresolved conflicts?): ${errorMessageOf(error)}`,
+      { cause: error },
+    );
+  }
+  indexSnapshots.set(worktreePath, { ...identity, tree });
+  return tree;
 }
 
 // The three facts, read-only: nothing is written.
 export async function peekGitState(
   worktreePath: string,
 ): Promise<GitStateCore> {
-  const tip = await refTip(worktreePath, "HEAD");
-  if (tip === null) throw new Error("the worktree has no commits yet");
-  const [head, indexTree] = await Promise.all([
-    readHead(worktreePath),
-    indexTreeOf(worktreePath),
-  ]);
-  return { head, tip, indexTree };
+  const facts = await readHeadFacts(worktreePath);
+  const indexTree = await indexTreeOf(
+    worktreePath,
+    facts.gitDir,
+    facts.headTree,
+  );
+  return { head: facts.head, tip: facts.tip, indexTree };
 }
+
+// Worktrees whose carrier ref this process has minted, so the clean
+// path deletes the ref only when one may exist. The first read per
+// worktree deletes unconditionally, in case a previous run left one.
+const carrierKnown = new Set<string>();
 
 // The full state, with the carrier commit for a staged index minted
 // (or an obsolete one removed) so the transfer can name it.
@@ -188,17 +221,26 @@ export async function readGitState(
   worktreePath: string,
   worktreeId: string,
 ): Promise<GitState> {
-  const core = await peekGitState(worktreePath);
+  const facts = await readHeadFacts(worktreePath);
+  const indexTree = await indexTreeOf(
+    worktreePath,
+    facts.gitDir,
+    facts.headTree,
+  );
+  const core: GitStateCore = { head: facts.head, tip: facts.tip, indexTree };
   const ref = indexRefFor(worktreeId);
-  const headTree = await treeOf(worktreePath, core.tip);
-  if (core.indexTree === headTree) {
-    await deleteRef(projectPath, ref).catch(() => {});
+  if (indexTree === facts.headTree) {
+    if (!carrierKnown.has(worktreeId)) {
+      await deleteRef(projectPath, ref).catch(() => {});
+      carrierKnown.add(worktreeId);
+    }
     return { ...core, indexCommit: null };
   }
+  carrierKnown.add(worktreeId);
   const existing = await refTip(projectPath, ref);
   if (
     existing !== null &&
-    (await treeOf(projectPath, existing)) === core.indexTree
+    (await treeOf(projectPath, existing)) === indexTree
   ) {
     return { ...core, indexCommit: existing };
   }
@@ -207,9 +249,9 @@ export async function readGitState(
       projectPath,
       [
         "commit-tree",
-        core.indexTree,
+        indexTree,
         "-p",
-        core.tip,
+        facts.tip,
         "-m",
         "shigomori index snapshot",
       ],
@@ -238,7 +280,7 @@ export type ApplyGitStateResult =
 // Moves this worktree's git state to `state`. Returns a refusal rather
 // than throwing for every case that is a fact about the repository
 // (someone changed it, a branch collision, missing objects), so the
-// follower can show the reason and wait; throws only on git failing
+// follower can show the reason and wait. Throws only on git failing
 // to do what it was asked.
 export async function applyGitState(
   project: Project,
@@ -253,10 +295,10 @@ export async function applyGitState(
     return { applied: false, reason: "changed-locally" };
   }
   const { state } = input;
-  if (!(await hasCommit(project.path, state.tip))) {
-    return { applied: false, reason: "missing-objects" };
-  }
-  if (!(await hasObject(project.path, `${state.indexTree}^{tree}`))) {
+  if (
+    !(await hasCommit(project.path, state.tip)) ||
+    !(await hasObject(project.path, `${state.indexTree}^{tree}`))
+  ) {
     return { applied: false, reason: "missing-objects" };
   }
 
@@ -345,7 +387,7 @@ export async function applyGitState(
 // Fires when the worktree's index file is rewritten (a stage, an
 // unstage, a checkout, also git's own refreshes: the consumer compares
 // trees to tell them apart). Returns the stop function. Resolves the
-// git dir once; a worktree whose git dir moves is a removed worktree.
+// git dir once. A worktree whose git dir moves is a removed worktree.
 export async function watchIndexFile(
   worktreePath: string,
   onChange: () => void,

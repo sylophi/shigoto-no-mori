@@ -26,7 +26,11 @@ import {
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
-import { type ChannelMux, createChannelMux } from "@shared/ipc/socket/channels";
+import {
+  type ChannelMux,
+  createChannelMux,
+  createUnknownChannelFrameWarner,
+} from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 
 // A connect attempt failed before the welcome landed. `code` is the
@@ -74,7 +78,7 @@ export class RemoteDisconnectedError extends Error {
 // (ECONNREFUSED, EHOSTUNREACH, ETIMEDOUT), which is the one fact that
 // tells "wrong network" from "the OS is blocking local network access".
 export type ClientSocket = {
-  // A string is a JSON frame; bytes are a binary channel frame
+  // A string is a JSON frame. Bytes are a binary channel frame
   // (shared/ipc/socket/channels.ts). Both the browser global and the
   // `ws` package send a Uint8Array as a binary message.
   send(data: string | Uint8Array<ArrayBuffer>): void;
@@ -249,7 +253,7 @@ export function openDevice(
       socket.send(frame);
     },
   });
-  let unknownChannelFrames = 0;
+  const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
   // Flips true the instant this socket is unusable (closed or errored),
   // so an invoke after close rejects immediately rather than hanging.
@@ -346,7 +350,7 @@ export function openDevice(
   socket.addEventListener("message", (event) => {
     if (closed) return;
     // A binary frame is a byte-channel frame (channels.ts), routed to
-    // the attached channel; one that names no channel (a late frame
+    // the attached channel. One that names no channel (a late frame
     // after a reset) is dropped. Anything else non-text (a browser
     // Blob, which no owner asks for) is dropped too. Either way the
     // host proved itself alive.
@@ -359,12 +363,7 @@ export function openDevice(
             ? new Uint8Array(event.data)
             : null;
       if (bytes === null || !channels.handleFrame(bytes)) {
-        unknownChannelFrames += 1;
-        if (unknownChannelFrames % 50 === 1) {
-          console.warn(
-            `[socket] dropping a binary frame for no attached channel (dropped ${unknownChannelFrames} so far)`,
-          );
-        }
+        warnUnknownChannelFrame();
       }
       return;
     }

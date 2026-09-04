@@ -1,9 +1,9 @@
 // The loopback gateway this device's `file-sync daemon` reaches peers
 // through (file-sync/engine.go, "Gateway protocol handler"). One listener for
-// the app's life; every accepted socket is one mirror stream. The
+// the app's life. Every accepted socket is one mirror stream. The
 // daemon writes a JSON preface line naming the peer device and the
 // worktree there, the gateway opens the peer's `file-sync serve` on a
-// byte channel of the direct session (forward:openMirror), answers
+// byte channel of the direct session (mirror:openStream), answers
 // "ok" (or "error <why>"), and from then on the socket is bridged onto
 // that channel exactly like a port forward (main/portForward/
 // bridge.ts). Nothing here knows Mutagen's protocol: the preface is
@@ -13,34 +13,37 @@
 // check drives this exact gateway over a real direct wire.
 import { createServer, type Server, type Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
-import type { forwardContract } from "@shared/ipc/modules/forward";
+import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
+import { WorktreeIdSchema } from "@shared/schemas";
+import { MAX_CHANNELS_PER_CONNECTION } from "@shared/ipc/socket/channels";
 import {
   type BridgedConn,
   bridgeSocket,
+  listenLoopback,
   type PeerChannels,
 } from "../portForward/bridge";
 
-export type MirrorPeerApi = Pick<Client<typeof forwardContract>, "openMirror">;
+export type MirrorPeerApi = Pick<Client<typeof mirrorContract>, "openStream">;
 
-// The preface's shape (file-sync/engine.go mirrorPreface). Validated by hand
-// rather than zod: this is a loopback line from our own child, and the
-// only fields the gateway acts on are the three ids.
+// The preface's shape (file-sync/engine.go mirrorPreface), reduced to
+// the fields the gateway acts on. Validated by hand rather than zod:
+// this is a loopback line from our own child.
 type Preface = {
   deviceId: string;
   projectId: string;
   worktreeId: string;
-  session: string;
 };
 
-// A preface is a short JSON line; anything longer is not our daemon.
+// A preface is a short JSON line. Anything longer is not our daemon.
 const PREFACE_LIMIT_BYTES = 8 * 1024;
 // The daemon's own connect timeout is 30s (file-sync/engine.go), so a
 // preface that has not arrived well before that is a dead dial.
 const PREFACE_TIMEOUT_MS = 10_000;
 // Sanity bound, not a quota: one stream per mirror session, and a
-// runaway loop should not exhaust the peer's in-flight budget.
-const MAX_STREAMS = 32;
+// runaway loop should not exhaust the per-connection channel budget
+// it shares with the port forwards to the same device.
+const MAX_STREAMS = MAX_CHANNELS_PER_CONNECTION;
 
 function parsePreface(line: string): Preface {
   let parsed: unknown;
@@ -59,12 +62,11 @@ function parsePreface(line: string): Preface {
     deviceId: field("deviceId"),
     projectId: field("projectId"),
     worktreeId: field("worktreeId"),
-    session: field("session"),
   };
   if (
     preface.deviceId === "" ||
     preface.projectId === "" ||
-    !/^[0-9a-f]{12}$/.test(preface.worktreeId)
+    !WorktreeIdSchema.safeParse(preface.worktreeId).success
   ) {
     throw new Error("bad preface");
   }
@@ -133,7 +135,7 @@ export function createMirrorGateway(deps: {
   const streams = new Set<BridgedConn>();
 
   function handleConnection(socket: Socket): void {
-    // 'close' always follows 'error'; the listener must exist or the
+    // 'close' always follows 'error'. The listener must exist or the
     // error is an uncaught throw.
     socket.on("error", () => {});
     if (streams.size >= MAX_STREAMS) {
@@ -153,14 +155,14 @@ export function createMirrorGateway(deps: {
         const conn = bridgeSocket(socket, {
           channels: deps.peerChannelsFor(preface.deviceId),
           open: (channelId) =>
-            api.openMirror({
+            api.openStream({
               projectId: preface.projectId,
               worktreeId: preface.worktreeId,
               channelId,
             }),
           carried,
           // The bridge resumes the socket itself once the far end is
-          // open; the answer line goes out just before.
+          // open. The answer line goes out just before.
           onOpened: () => {
             socket.write("ok\n");
           },
@@ -194,23 +196,7 @@ export function createMirrorGateway(deps: {
     const listener = createServer({ allowHalfOpen: true });
     listener.on("connection", handleConnection);
     listener.on("error", () => {});
-    const port = await new Promise<number>((resolve, reject) => {
-      const onError = (error: Error) => {
-        listener.close();
-        reject(error);
-      };
-      listener.once("error", onError);
-      listener.listen(0, "127.0.0.1", () => {
-        listener.off("error", onError);
-        const bound = listener.address();
-        if (bound === null || typeof bound === "string") {
-          listener.close();
-          reject(new Error("gateway bound without a TCP address"));
-          return;
-        }
-        resolve(bound.port);
-      });
-    });
+    const port = await listenLoopback(listener, 0);
     server = listener;
     address = `127.0.0.1:${port}`;
     return address;

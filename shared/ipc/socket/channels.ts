@@ -7,8 +7,9 @@
 // (shared/ipc/socket/wsClientTransport.ts) over its socket.
 //
 // A channel is opened by an ordinary invoke (forward:open or
-// forward:openMirror, shared/ipc/modules/forward.ts) that names a
-// CLIENT-minted channel id, and the client attaches its endpoint
+// mirror:openStream, shared/ipc/modules/forward.ts and mirror.ts)
+// that names a CLIENT-minted channel id, and the client attaches its
+// endpoint
 // BEFORE sending that invoke, so the host's first bytes can never
 // arrive at an unattached channel. From then on the channel is
 // symmetric: either side writes data, ends its direction, or resets
@@ -20,7 +21,7 @@
 // spends it, and the receiver hands credit back only once its sink
 // has CONSUMED the bytes (the adapter reports that from the stream's
 // write callback), so backpressure crosses the wire end to end. A
-// sender out of credit queues and asks its source to pause; credit
+// sender out of credit queues and asks its source to pause. Credit
 // arriving flushes the queue and resumes it.
 //
 // Pure: Uint8Array in, Uint8Array out, no node builtins, so the
@@ -45,7 +46,7 @@ export const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
 // frame cap (MAX_INBOUND_FRAME_BYTES, 1 MiB) with the header on top.
 export const CHANNEL_MAX_FRAME_BYTES = 256 * 1024;
 // A receiver counts bytes in flight (sent by the peer, not yet
-// consumed here); a peer that overshoots its credit by more than one
+// consumed here). A peer that overshoots its credit by more than one
 // frame is broken and its channel is reset.
 const CHANNEL_OVERRUN_SLACK_BYTES = CHANNEL_MAX_FRAME_BYTES;
 
@@ -86,6 +87,22 @@ export function encodeChannelFrame(
 }
 
 // null for anything that is not a well-formed channel frame.
+// Per connection, how many channels may be attached at once. Grant-
+// gated already (a trusted peer), so this is a sanity bound against a
+// runaway client loop, not a quota: sized for a real page load through
+// a forward (a browser tab opens ~6 keepalive sockets plus an HMR
+// websocket) beside a few mirror streams. The client-side budgets
+// (main/portForward/engine.ts, main/mirror/gateway.ts) are carved
+// out of this one.
+export const MAX_CHANNELS_PER_CONNECTION = 32;
+
+// The refusal markers a byte-stream open answers with, stable strings
+// rather than prose (Electron IPC and the device wires preserve only
+// the message), so the client side and the UI can match on them.
+export const CHANNEL_OPEN_NO_CHANNELS = "no-byte-channels";
+export const CHANNEL_OPEN_TAKEN = "channel-taken";
+export const CHANNEL_OPEN_TOO_MANY = "too-many-conns";
+
 export function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
   if (bytes.length < CHANNEL_HEADER_BYTES) return null;
   const kind = bytes[0] as number;
@@ -130,7 +147,7 @@ export type ChannelEndpoint = {
   // (a stream's write callback): that is what returns credit to the
   // peer, so calling it early defeats backpressure.
   onData(data: Uint8Array, consumed: () => void): void;
-  // The peer ended its direction. Nothing more arrives; this side may
+  // The peer ended its direction. Nothing more arrives. This side may
   // still write until it ends too.
   onEnd(): void;
   // The peer reset the channel (or the socket died). Both directions
@@ -159,21 +176,29 @@ export type ChannelHandle = {
 
 export type ChannelMux = {
   // Registers a channel under a client-minted id. Throws when the id
-  // is already attached.
+  // is already attached or the socket is gone. An id the peer already
+  // RESET (its end died before this end attached) comes back as a
+  // handle that is closed from the start, with the endpoint's onReset
+  // delivered on the next tick, so the far end is torn down through
+  // the ordinary path instead of leaking.
   attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
   // Routes one inbound binary frame. Returns false for a frame that
   // is malformed or names no attached channel (the caller may log).
   handleFrame(bytes: Uint8Array): boolean;
   has(channelId: string): boolean;
   size(): number;
-  // The socket is gone: every endpoint sees a reset and the registry
-  // empties. No frames are sent.
+  // Resets every channel and refuses every attach from now on: the
+  // socket died.
   closeAll(): void;
+  // Resets every channel but keeps the mux open for new ones: the
+  // peer's right to hold channels was withdrawn (a revoked grant)
+  // while the connection itself lives on.
+  dropAll(): void;
 };
 
 export function createChannelMux(deps: {
   // Sends one binary frame on the socket. Throws when the socket is
-  // gone; the mux swallows that, since the socket's close resets every
+  // gone. The mux swallows that, since the socket's close resets every
   // channel anyway.
   send(frame: Uint8Array<ArrayBuffer>): void;
 }): ChannelMux {
@@ -183,7 +208,6 @@ export function createChannelMux(deps: {
     // Sending side.
     credit: number;
     queue: Uint8Array[];
-    queuedBytes: number;
     paused: boolean;
     ending: boolean;
     sentEnd: boolean;
@@ -193,19 +217,24 @@ export function createChannelMux(deps: {
     gone: boolean;
   };
   const channels = new Map<string, Channel>();
+  // Ids the peer reset before anything attached here, kept for the
+  // one attach that may follow (see ChannelMux.attach). Bounded: a
+  // peer cannot grow this without also opening channels.
+  const resetBeforeAttach = new Set<string>();
+  const MAX_TOMBSTONES = 64;
+  let dead = false;
 
   function send(kind: number, channelId: string, payload?: Uint8Array): void {
     try {
       deps.send(encodeChannelFrame(kind, channelId, payload));
     } catch {
-      // The socket is closing; its close will reset every channel.
+      // The socket is closing. Its close will reset every channel.
     }
   }
 
   function remove(channelId: string, channel: Channel): void {
     channel.gone = true;
     channel.queue = [];
-    channel.queuedBytes = 0;
     if (channels.get(channelId) === channel) channels.delete(channelId);
   }
 
@@ -224,7 +253,6 @@ export function createChannelMux(deps: {
       );
       if (take === head.length) channel.queue.shift();
       else channel.queue[0] = head.subarray(take);
-      channel.queuedBytes -= take;
       channel.credit -= take;
       send(CHANNEL_FRAME_DATA, channelId, head.subarray(0, take));
     }
@@ -241,6 +269,7 @@ export function createChannelMux(deps: {
 
   return {
     attach(channelId, endpoint) {
+      if (dead) throw new Error("the socket is gone");
       if (channels.has(channelId)) {
         throw new Error(`channel ${channelId} is already attached`);
       }
@@ -249,7 +278,6 @@ export function createChannelMux(deps: {
         handle: undefined as unknown as ChannelHandle,
         credit: CHANNEL_WINDOW_BYTES,
         queue: [],
-        queuedBytes: 0,
         paused: false,
         ending: false,
         sentEnd: false,
@@ -264,10 +292,7 @@ export function createChannelMux(deps: {
         },
         write(data) {
           if (channel.gone || channel.ending) return true;
-          if (data.length > 0) {
-            channel.queue.push(data);
-            channel.queuedBytes += data.length;
-          }
+          if (data.length > 0) channel.queue.push(data);
           flush(channelId, channel);
           if (channel.queue.length > 0) {
             channel.paused = true;
@@ -286,6 +311,13 @@ export function createChannelMux(deps: {
           send(CHANNEL_FRAME_RESET, channelId);
         },
       };
+      if (resetBeforeAttach.delete(channelId)) {
+        // Already reset by the peer: hand back a closed handle and let
+        // the endpoint learn it the way it would have live.
+        channel.gone = true;
+        queueMicrotask(() => endpoint.onReset());
+        return channel.handle;
+      }
       channels.set(channelId, channel);
       return channel.handle;
     },
@@ -294,7 +326,18 @@ export function createChannelMux(deps: {
       const frame = decodeChannelFrame(bytes);
       if (frame === null) return false;
       const channel = channels.get(frame.channelId);
-      if (channel === undefined) return false;
+      if (channel === undefined) {
+        if (frame.kind === CHANNEL_FRAME_RESET) {
+          if (resetBeforeAttach.size >= MAX_TOMBSTONES) {
+            resetBeforeAttach.delete(
+              resetBeforeAttach.values().next().value as string,
+            );
+          }
+          resetBeforeAttach.add(frame.channelId);
+          return true;
+        }
+        return false;
+      }
       switch (frame.kind) {
         case CHANNEL_FRAME_DATA: {
           if (channel.receivedEnd) return false;
@@ -351,13 +394,36 @@ export function createChannelMux(deps: {
     size: () => channels.size,
 
     closeAll() {
-      const all = [...channels.entries()];
-      channels.clear();
-      for (const [, channel] of all) {
-        channel.gone = true;
-        channel.queue = [];
-        channel.endpoint.onReset();
-      }
+      dead = true;
+      dropAll();
     },
+
+    dropAll,
+  };
+
+  function dropAll(): void {
+    resetBeforeAttach.clear();
+    const all = [...channels.entries()];
+    channels.clear();
+    for (const [, channel] of all) {
+      channel.gone = true;
+      channel.queue = [];
+      channel.endpoint.onReset();
+    }
+  }
+}
+
+// The throttled complaint both transports make about a binary frame
+// that names no attached channel (a late frame after a reset, or
+// garbage): one line per fifty, never one per frame.
+export function createUnknownChannelFrameWarner(label: string): () => void {
+  let dropped = 0;
+  return () => {
+    dropped += 1;
+    if (dropped % 50 === 1) {
+      console.warn(
+        `[${label}] dropping a binary frame for no attached channel (dropped ${dropped} so far)`,
+      );
+    }
   };
 }

@@ -183,7 +183,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     forward: {
       open: forwardClient.open,
-      openMirror: forwardClient.openMirror,
     },
 
     fs: {

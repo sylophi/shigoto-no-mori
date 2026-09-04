@@ -65,8 +65,14 @@ export const SyncBundleRefSchema = z
   });
 
 // Where an unpacked ref may land (the CLI enforces the same prefix
-// fail-closed): the app-owned namespace, never a branch or a tag.
-const LANDING_REF_RE = /^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/;
+// fail-closed): the app-owned namespace, never a branch or a tag. Also
+// the refs a mirror apply may sweep afterwards.
+export const SyncLandingRefSchema = z
+  .string()
+  .regex(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+  .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
+    message: "Ref outside the app's namespace",
+  });
 
 // One `src:dst` for the push direction's unpack on the receiver.
 export const SyncRefspecSchema = z
@@ -80,9 +86,7 @@ export const SyncRefspecSchema = z
       const dst = spec.slice(colon + 1);
       return (
         SyncBundleRefSchema.safeParse(src).success &&
-        LANDING_REF_RE.test(dst) &&
-        !dst.includes("..") &&
-        !dst.includes("//")
+        SyncLandingRefSchema.safeParse(dst).success
       );
     },
     { message: "Refspec outside the sync allowlist" },

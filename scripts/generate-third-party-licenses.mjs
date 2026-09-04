@@ -47,7 +47,7 @@ const LICENSE_FILE_NAMES = [
 ];
 
 // The SPDX id a license text reads as. Go modules carry no license
-// metadata, only the text, so the id is recognized from it; an
+// metadata, only the text, so the id is recognized from it. An
 // unrecognized text is reported as missing so a new dependency with an
 // unexpected license gets looked at rather than shipped unlabeled.
 function identifyLicense(text) {

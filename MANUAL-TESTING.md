@@ -236,6 +236,9 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 | `window.api.sync.pullWorktree({...})` | Brings a peer's worktree here. See the smoke for the payload. |
 | `window.api.sync.teardownSource({...})` | Second half of a transplant. |
 | `window.api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port. Returns `localPort`. |
+| `window.api.mirror.start({...})` | Brings a peer's worktree here and keeps the two mirrored (files both ways, git state followed). Same payload as `sync.pullWorktree`. Returns the local worktree and the `session`. |
+| `window.api.mirror.list()` | This device's mirror sessions (`status`, `git.status`, conflicts) and the streams it serves for peers. |
+| `window.api.mirror.stop(session)` / `pause` / `resume` | Controls a session this device runs. |
 
 ### Two argument conventions
 
@@ -264,7 +267,7 @@ pnpm test:remote-smoke [--keep]
 `scripts/e2e/remote-smoke.mts` runs the full remote loop with no
 interaction:
 
-1. Builds the dev CLI.
+1. Builds the dev CLI and the file-sync engine.
 2. Creates one repo and clones it into two fresh profiles, `e2e-a`
    and `e2e-b`. Both sides need the same clone because the pull
    matches projects by repo identity.
@@ -281,6 +284,7 @@ interaction:
 | grant gate | With b's switch off, a's `worktrees:create` on b is refused with the typed message. With it on, `feat/e2e` is created and the path exists on disk. |
 | bring here | a pulls `feat/e2e`. The worktree lands under a's root on that branch. |
 | transplant | a tears the source down. It is gone from b's disk and still present on a. |
+| mirror | a mirrors a fresh worktree of b's. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Stopping clears a's session and b's served stream. |
 | port forward | a forwards a loopback echo server on b. Bytes round-trip. |
 | liveness | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect. |
 | sign-out | b revokes itself. a's roster and registry drop it. |
@@ -291,7 +295,7 @@ scenario screenshots both windows first.
 Prerequisites:
 
 - The plain dev app signed in once.
-- The Go toolchain (for the dev CLI build).
+- The Go toolchain (for the dev CLI and file-sync engine builds).
 - No other `pnpm dev` running from the same worktree. The primary
   needs the renderer port.
 

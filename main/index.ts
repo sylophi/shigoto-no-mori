@@ -178,8 +178,8 @@ installHostImpls();
 registerIpcHandlers();
 // The mirror daemon resumes persisted sessions the moment it is up, so
 // it starts with the app rather than with the first mirror the user
-// asks for. Failure to bind the gateway is logged, not fatal: the app
-// works without mirroring.
+// asks for. A gateway that fails to bind is retried inside. Nothing
+// here is fatal, the app works without mirroring.
 void startMirrorEngine().catch((error: unknown) => {
   console.warn("[mirror] engine failed to start:", errorMessageOf(error));
 });

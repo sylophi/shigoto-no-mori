@@ -56,7 +56,10 @@ import {
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { createChannelMux } from "@shared/ipc/socket/channels";
+import {
+  createChannelMux,
+  createUnknownChannelFrameWarner,
+} from "@shared/ipc/socket/channels";
 import { toBytes, toText } from "./rawData";
 
 // Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
@@ -535,7 +538,7 @@ export function createWsServerBinding(
           socket.send(frame);
         },
       });
-      let unknownChannelFrames = 0;
+      const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
       const helloTimer = setTimeout(() => {
         // A hello arriving after this fires must not authenticate.
@@ -595,14 +598,17 @@ export function createWsServerBinding(
         // hello. One naming no attached channel (late, after a reset)
         // is dropped, throttled.
         if (isBinary && ctx !== null) {
-          if (!channels.handleFrame(toBytes(data))) {
-            unknownChannelFrames += 1;
-            if (unknownChannelFrames % 50 === 1) {
-              console.warn(
-                `[socket] dropping a binary frame for no attached channel (dropped ${unknownChannelFrames} so far)`,
-              );
-            }
+          // Bytes never pass through dispatch, so the grant is
+          // re-read here: every open was grant-gated, and a grant
+          // revoked since (the host turning peer commands off) drops
+          // every channel on the connection the moment the peer
+          // sends anything on one. Credit frames flow back during any
+          // transfer, so a live stream notices within a window.
+          if (ctx.isCallerCommandGranted?.() !== true) {
+            channels.dropAll();
+            return;
           }
+          if (!channels.handleFrame(toBytes(data))) warnUnknownChannelFrame();
           return;
         }
         const frame = isBinary
@@ -669,12 +675,7 @@ export function createWsServerBinding(
               auth === undefined ? () => false : () => auth.isCommandGranted(),
             callerDeviceId,
             notifier,
-            channels: {
-              attach: (channelId, endpoint) =>
-                channels.attach(channelId, endpoint),
-              has: (channelId) => channels.has(channelId),
-              size: () => channels.size(),
-            },
+            channels,
           };
           if (callerDeviceId !== undefined) {
             // A device dials at most one direct socket to a given

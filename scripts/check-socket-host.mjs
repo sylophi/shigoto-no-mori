@@ -58,6 +58,7 @@ import { allContractModules } from "@shared/ipc/client";
 // Contract modules referenced by the explicit spot-checks below.
 import { cliContract } from "@shared/ipc/modules/cli";
 import { forwardContract } from "@shared/ipc/modules/forward";
+import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
 import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
@@ -997,21 +998,20 @@ async function main() {
       // are grant-gated commands, but neither moves state a remote
       // viewer caches, so both opt out of the mutation cache ping. The
       // bytes themselves ride binary channel frames, never invokes.
-      for (const key of ["open", "openMirror"]) {
+      for (const [name, call] of [
+        ["forward.open", forwardContract.calls.open],
+        ["mirror.openStream", mirrorContract.calls.openStream],
+      ]) {
+        assert.equal(call.remote, true, `${name} remote`);
         assert.equal(
-          forwardContract.calls[key].remote,
+          call.mutating,
           true,
-          `forward.${key} remote`,
+          `${name} must require the command grant`,
         );
         assert.equal(
-          forwardContract.calls[key].mutating,
-          true,
-          `forward.${key} must require the command grant`,
-        );
-        assert.equal(
-          forwardContract.calls[key].movesHostState,
+          call.movesHostState,
           false,
-          `forward.${key} must opt out of the viewer cache ping`,
+          `${name} must opt out of the viewer cache ping`,
         );
       }
       // The pull orchestrator (v2 step 7, slice C) is LOCAL-only: a

@@ -31,12 +31,14 @@ import {
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { run } from "@host/lib/git/core";
 import { listBranches } from "@host/lib/git/branches";
+import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
   hasCommit,
   localBranchTips,
+  refTip,
+  treeOf,
   updateRef,
 } from "@host/lib/git/refs";
 import {
@@ -193,14 +195,8 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     const tips: { ref: string; commit: string }[] = [];
     for (const ref of refs) {
       // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-      const commit = await run(project.path, [
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "--end-of-options",
-        ref,
-      ]).catch(() => null);
-      if (commit !== null) tips.push({ ref, commit: commit.trim() });
+      const commit = await refTip(project.path, ref);
+      if (commit !== null) tips.push({ ref, commit });
     }
     return { tips };
   },
@@ -346,16 +342,6 @@ async function sourceChangedSince(
   }
 }
 
-async function treeOf(projectPath: string, commit: string): Promise<string> {
-  const out = await run(projectPath, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${commit}^{tree}`,
-  ]);
-  return out.trim();
-}
-
 // The source teardown. It runs ONLY when nothing can be lost: an unapplied
 // capture means the uncommitted work still exists solely on the
 // source, so the source is kept and the caller learns why via
@@ -455,8 +441,15 @@ export async function runPullWorktree(
   // with the state the user can act on.
   const { local } = await listBranches(project.path);
   if (local.includes(branch)) {
+    // Name the worktree holding it when one does: that is the thing
+    // the user has to stop or delete.
+    const holder = (
+      await listWorktreeIdentities(project.id, project.path)
+    ).find((w) => w.branch === branch);
     throw new Error(
-      `${branch} already exists on this device. Delete that branch (or its worktree) first, or open it and pull normally.`,
+      holder === undefined
+        ? `${branch} already exists on this device. Delete that branch first, or open it and pull normally.`
+        : `${branch} is already checked out at ${holder.path} on this device. Stop or delete that worktree first.`,
     );
   }
 

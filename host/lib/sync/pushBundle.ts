@@ -18,7 +18,7 @@ export interface PushBundleInput {
   localProject: Project;
   // The project id on the PEER to unpack into.
   peerProjectId: string;
-  // Allowlisted full refs to ship; they land on the peer under the
+  // Allowlisted full refs to ship. They land on the peer under the
   // same names fetchBundleFromPeer uses (branches under
   // refs/shigomori/incoming/, app refs as they are).
   refs: string[];

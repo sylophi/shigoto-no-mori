@@ -12,7 +12,13 @@ import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
-import { mirrorContract } from "@shared/ipc/modules/mirror";
+import { z } from "zod";
+import {
+  GitStateCoreSchema,
+  MirrorWorktreePayloadSchema,
+  mirrorContract,
+} from "@shared/ipc/modules/mirror";
+import { errorMessageOf } from "@shared/errors";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
@@ -33,11 +39,7 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "@host/ipc/modules/branches";
 import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
-import {
-  forwardHandlers,
-  setMirrorGitChangedListener,
-  setMirrorServingListener,
-} from "@host/ipc/modules/forward";
+import { forwardHandlers } from "@host/ipc/modules/forward";
 import { fsHandlers } from "@host/ipc/modules/fs";
 import { gitHandlers } from "@host/ipc/modules/git";
 import { githubCliHandlers } from "@host/ipc/modules/githubCli";
@@ -45,7 +47,12 @@ import { globalConfigHandlers } from "@host/ipc/modules/globalConfig";
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
-import { mirrorHandlers, setMirrorImpl } from "@host/ipc/modules/mirror";
+import {
+  mirrorHandlers,
+  setMirrorGitChangedListener,
+  setMirrorImpl,
+  setMirrorServingListener,
+} from "@host/ipc/modules/mirror";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -71,7 +78,11 @@ import { createPortForwardEngine } from "../portForward/engine";
 import { createMirrorDaemon } from "../mirror/daemon";
 import { createMirrorGateway } from "../mirror/gateway";
 import { createGitFollower } from "@host/mirror/gitFollow";
-import { MirrorWorktreePayloadSchema } from "@shared/ipc/modules/mirror";
+import {
+  atomicWriteJsonSync,
+  readJsonOrNullSync,
+  withSchemaVersion,
+} from "@host/lib/util/jsonFile";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { shigomoriRoot } from "@host/lib/util/paths";
@@ -106,23 +117,44 @@ const peerTransportFor = (deviceId: string) => ({
 // (main/mirror/*, both electron-free), bound here to the peer sessions
 // and to the renderer's changed signal exactly like the port-forward
 // engine. Started from main/index.ts once the app is ready and stopped
-// on every quit path; a boot without the engine binary (a dev run
+// on every quit path. A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
 const mirrorGateway = createMirrorGateway({
   peerApiFor: (deviceId) =>
-    buildClient(forwardContract, peerTransportFor(deviceId)),
+    buildClient(mirrorContract, peerTransportFor(deviceId)),
   peerChannelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
+});
+// The daemon snapshots on every cycle of every session and the
+// follower reports every verdict. The renderer's ping is coalesced so
+// a busy mirror costs viewers one refetch per beat, not one per cycle.
+const MIRROR_CHANGED_COALESCE_MS = 150;
+let mirrorChangedTimer: ReturnType<typeof setTimeout> | null = null;
+function broadcastMirrorChanged(): void {
+  if (mirrorChangedTimer !== null) return;
+  mirrorChangedTimer = setTimeout(() => {
+    mirrorChangedTimer = null;
+    broadcastAll(mirrorContract, "changed", undefined);
+  }, MIRROR_CHANGED_COALESCE_MS);
+  mirrorChangedTimer.unref?.();
+}
+const fileSyncDir = () => join(shigomoriRoot(), "file-sync");
+// The git follower's agreed states, one file beside the engine's data.
+const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
+const GitFollowStoreSchema = z.object({
+  agreed: z.record(z.string(), GitStateCoreSchema).default({}),
 });
 const mirrorDaemon = createMirrorDaemon({
   spawn: spawnFileSync,
-  dataDir: () => join(shigomoriRoot(), "file-sync"),
+  dataDir: fileSyncDir,
   gatewayAddress: () => {
     const address = mirrorGateway.address();
     if (address === null) throw new Error("mirror gateway is not listening");
     return address;
   },
   onChange: () => {
-    broadcastAll(mirrorContract, "changed", undefined);
+    broadcastMirrorChanged();
+    // The follower compares the session set itself. A snapshot that
+    // only moved a cycle count is a no-op there.
     gitFollower.sessionsChanged();
   },
 });
@@ -138,15 +170,45 @@ const gitFollower = createGitFollower({
     buildClient(syncContract, peerTransportFor(deviceId)),
   peerMirrorApiFor: (deviceId) =>
     buildClient(mirrorContract, peerTransportFor(deviceId)),
-  onChange: () => broadcastAll(mirrorContract, "changed", undefined),
+  // The states both sides last agreed on, beside the engine's own
+  // data so a restart resumes the follow rule rather than falling
+  // back to ancestry.
+  agreedStore: {
+    load: () =>
+      readJsonOrNullSync(gitFollowStorePath(), GitFollowStoreSchema)?.agreed ??
+      {},
+    save: (agreed) =>
+      atomicWriteJsonSync(gitFollowStorePath(), withSchemaVersion({ agreed })),
+  },
+  onChange: broadcastMirrorChanged,
 });
 
 export function notifyLocalProjectChanged(projectId: string): void {
   gitFollower.onLocalProjectChanged(projectId);
 }
 
+// A gateway that fails to bind (a loopback oddity) is retried on a
+// slow timer rather than given up on: the daemon starts regardless
+// and its own restart ladder picks the address up once bound.
+const GATEWAY_RETRY_MS = 30_000;
+async function ensureMirrorGateway(): Promise<void> {
+  try {
+    await mirrorGateway.start();
+  } catch (error) {
+    console.warn(
+      "[mirror] gateway failed to bind, retrying:",
+      errorMessageOf(error),
+    );
+    const timer = setTimeout(
+      () => void ensureMirrorGateway(),
+      GATEWAY_RETRY_MS,
+    );
+    timer.unref?.();
+  }
+}
+
 export async function startMirrorEngine(): Promise<void> {
-  await mirrorGateway.start();
+  await ensureMirrorGateway();
   mirrorDaemon.start();
   gitFollower.start();
 }
@@ -247,9 +309,7 @@ export function registerIpcHandlers(): void {
     resume: (session) => mirrorDaemon.resume(session),
     gitStatus: (session) => gitFollower.statusOf(session),
   });
-  setMirrorServingListener(() =>
-    broadcastAll(mirrorContract, "changed", undefined),
-  );
+  setMirrorServingListener(broadcastMirrorChanged);
   // A served worktree's index moved: tell the device mirroring it
   // (remote:true, so it rides the peer push path to the follower there).
   setMirrorGitChangedListener((change) =>

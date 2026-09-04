@@ -73,6 +73,7 @@ const hubNoChannels: ChannelMux = {
   has: () => false,
   size: () => 0,
   closeAll: () => {},
+  dropAll: () => {},
 };
 
 export type HubSocketAdapter = {

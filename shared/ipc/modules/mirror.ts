@@ -2,18 +2,24 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import {
+  SyncLandingRefSchema,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
 } from "@shared/ipc/modules/sync";
-import { CommitHashSchema, GitRefNameSchema } from "@shared/schemas";
+import {
+  CommitHashSchema,
+  GitRefNameSchema,
+  WorktreeIdSchema,
+} from "@shared/schemas";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,
 // both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
-// Mutagen); the app supervises this device's daemon
-// (main/mirror/daemon.ts), bridges its streams to peers over the byte
-// wire (forward:openMirror plus the shared send/poll/close), and serves
-// `file-sync serve` for peers mirroring FROM here.
+// Mutagen). The app supervises this device's daemon
+// (main/mirror/daemon.ts), bridges its streams to peers as byte
+// channels on the direct socket (openStream below, the channel layer in
+// shared/ipc/socket/channels.ts), and serves `file-sync serve` for
+// peers mirroring FROM here.
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
 // remote viewer sees them (list is a read). The mutations are local
@@ -24,8 +30,7 @@ import { CommitHashSchema, GitRefNameSchema } from "@shared/schemas";
 // first second. Controlling another device's mirrors from afar is not
 // offered yet, so stop/pause/resume are remote:false.
 
-const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
-// Mutagen mints session identifiers ("sync_" plus a base62 body); the
+// Mutagen mints session identifiers ("sync_" plus a base62 body). The
 // daemon echoes them verbatim, so the shape is pinned only loosely.
 export const MirrorSessionIdSchema = z.string().min(1).max(128);
 
@@ -64,7 +69,6 @@ export const MirrorConflictSchema = z.strictObject({
   localChanges: z.array(MirrorChangeSchema),
   remoteChanges: z.array(MirrorChangeSchema),
 });
-export type MirrorConflict = z.infer<typeof MirrorConflictSchema>;
 
 export const MirrorStagingSchema = z.strictObject({
   path: z.string(),
@@ -100,26 +104,17 @@ export const GitStateCoreSchema = z.strictObject({
   tip: CommitHashSchema,
   indexTree: TreeHashSchema,
 });
-export type GitStateCoreDoc = z.infer<typeof GitStateCoreSchema>;
 
 export const GitStateSchema = GitStateCoreSchema.extend({
   // The carrier commit for a staged index (refs/shigomori/index/<id>
   // on the reporting device), or null when nothing is staged.
   indexCommit: CommitHashSchema.nullable(),
 });
-export type GitStateDoc = z.infer<typeof GitStateSchema>;
 
 export const MirrorWorktreePayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
 });
-
-// A landing ref the applier may sweep afterwards: only the app's
-// namespace, same charset discipline as the bundle allowlist.
-const SweepRefSchema = z
-  .string()
-  .regex(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/)
-  .refine((ref) => !ref.includes("..") && !ref.includes("//"));
 
 export const MirrorApplyGitStatePayloadSchema =
   MirrorWorktreePayloadSchema.extend({
@@ -128,16 +123,15 @@ export const MirrorApplyGitStatePayloadSchema =
       indexTree: TreeHashSchema,
     }),
     state: GitStateCoreSchema,
-    sweep: z.array(SweepRefSchema).max(8).optional(),
+    // Landing refs the applier may sweep afterwards: the app's
+    // namespace only.
+    sweep: z.array(SyncLandingRefSchema).max(8).optional(),
   });
 
 export const MirrorApplyGitStateResultSchema = z.strictObject({
   applied: z.boolean(),
   reason: z.string().optional(),
 });
-export type MirrorApplyGitStateResult = z.infer<
-  typeof MirrorApplyGitStateResultSchema
->;
 
 // The git follower's verdict on one session (host/mirror/gitFollow.ts),
 // attached to the session by the host. synced: both sides agree.
@@ -160,7 +154,7 @@ export const MirrorGitStatusSchema = z.strictObject({
 export type MirrorGitStatus = z.infer<typeof MirrorGitStatusSchema>;
 
 // One session this device initiates, as the daemon reports it. The
-// local side is always this device (alpha in Mutagen's terms); the
+// local side is always this device (alpha in Mutagen's terms). The
 // remote side is the peer named by deviceId, at remoteRoot, which is
 // its worktree projectId/worktreeId. localProjectId/localWorktreeId
 // are lifted out of the labels the start orchestration wrote.
@@ -184,17 +178,17 @@ export const MirrorSessionSchema = z.strictObject({
   excludedConflicts: z.number().int().nonnegative(),
   local: MirrorEndpointStateSchema,
   remote: MirrorEndpointStateSchema,
-  // Attached by the host from the git follower; absent when the host
+  // Attached by the host from the git follower. Absent when the host
   // has no follower for it yet.
   git: MirrorGitStatusSchema.optional(),
 });
 export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
 
 // One stream this device SERVES: a peer is mirroring the named worktree
-// from here. Known from the moment forward:openMirror minted the conn
-// until it dropped.
+// from here, on the channel the peer minted with openStream. Known
+// from the open until the channel is gone.
 export const MirrorServingSchema = z.strictObject({
-  connId: HexId32Schema,
+  channelId: HexId32Schema,
   projectId: z.string(),
   worktreeId: WorktreeIdSchema,
   // The calling device, or "" on a wire that stamps no caller.
@@ -224,11 +218,18 @@ export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema;
 export const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
 });
-export type MirrorStartResult = z.infer<typeof MirrorStartResultSchema>;
 
 export const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
+
+// The mirror stream's open: the caller has attached its end of a byte
+// channel under this id on the calling connection (shared/ipc/socket/
+// channels.ts), and the host attaches a fresh `file-sync serve` for
+// the named worktree as the far end before answering.
+export const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend(
+  { channelId: HexId32Schema },
+);
 
 export const mirrorContract = defineContract("host", {
   list: invoke("mirror:list", z.void(), MirrorListResultSchema, {
@@ -256,6 +257,14 @@ export const mirrorContract = defineContract("host", {
     remote: false,
     mutating: true,
   }),
+  // Grant-gated like every byte-stream open. The stream changes nothing
+  // a viewer caches (the serving set fans out on `changed` below).
+  openStream: invoke(
+    "mirror:openStream",
+    MirrorOpenStreamPayloadSchema,
+    z.void(),
+    { remote: true, mutating: true, movesHostState: false },
+  ),
   // The git half, served to the device mirroring FROM here: read a
   // worktree's git state (minting the index carrier ref, hence
   // mutating) and apply one. Both ride the command grant.
@@ -279,7 +288,7 @@ export const mirrorContract = defineContract("host", {
   changed: broadcast("mirror:changed", z.void(), { remote: true }),
   // A served worktree's index was rewritten (something staged or
   // unstaged there). Refs and HEAD already ping through
-  // git:projectChanged; the index is the one git fact that watcher
+  // git:projectChanged. The index is the one git fact that watcher
   // ignores on purpose, so the mirror announces it itself for the
   // follower on the other device.
   gitChanged: broadcast("mirror:gitChanged", MirrorWorktreePayloadSchema, {

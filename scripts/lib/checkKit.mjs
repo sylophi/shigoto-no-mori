@@ -1,8 +1,9 @@
 // Shared plumbing for the repo's check scripts. Scripts collect their
 // own failure strings and hand them to `report` for the one epilogue
 // shape every check prints.
+import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -114,14 +115,16 @@ export function makeTracker() {
 // wait on a predicate whose timeout names what it waited for.
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Polls a predicate, sync or async, until it holds.
 export async function waitFor(predicate, what, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
+  for (;;) {
+    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
+    if (await predicate()) return;
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
     // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
     await delay(25);
   }
-  throw new Error(`timed out waiting for ${what}`);
 }
 
 // process.env with every GIT_* variable removed, for a check that runs
@@ -228,4 +231,77 @@ const jwtSegment = (obj) =>
 
 export function fakeSessionJwt(sub) {
   return `${jwtSegment({ alg: "none", typ: "JWT" })}.${jwtSegment({ sub })}.sig`;
+}
+
+export function fileEquals(path, want) {
+  return existsSync(path) && readFileSync(path, "utf8") === want;
+}
+
+// The document-run seam the checks drive the sm CLI through: the same
+// NDJSON protocol as the Electron runner (main/electron/cliRunner.ts),
+// collecting every doc, the exit code and a stderr tail. `sm` throws
+// on a non-zero exit with the CLI's own error doc as the message.
+export function cliFailureMessage(result, fallback) {
+  const errorDoc = result.docs.find(
+    (doc) => doc.ok === false && typeof doc.error === "string",
+  );
+  return errorDoc ? errorDoc.error : `${fallback} (CLI exit ${result.code})`;
+}
+
+// The kit runs under plain node as well as tsx, so the host's own
+// splitter (host/lib/util/ndjson.ts) is not importable here. This is
+// its plain-JS twin.
+function lineSplitter(onLine) {
+  let buffer = "";
+  return (chunk) => {
+    buffer += chunk.toString("utf8");
+    for (
+      let newline = buffer.indexOf("\n");
+      newline >= 0;
+      newline = buffer.indexOf("\n")
+    ) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (line !== "") onLine(line);
+    }
+  };
+}
+
+export function createCliRunner(binary, env) {
+  function runCli(args, onDoc) {
+    return new Promise((resolve, reject) => {
+      const child = spawn(binary, ["--json", ...args], { env });
+      const docs = [];
+      child.stdout.on(
+        "data",
+        lineSplitter((line) => {
+          try {
+            const doc = JSON.parse(line);
+            docs.push(doc);
+            onDoc?.(doc);
+          } catch {
+            // Non-JSON stdout line. The assertions read docs only.
+          }
+        }),
+      );
+      let stderrTail = "";
+      child.stderr.on("data", (chunk) => {
+        stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
+      });
+      child.on("error", reject);
+      child.on("close", (code) =>
+        resolve({ code: code ?? -1, docs, stderrTail }),
+      );
+    });
+  }
+  async function sm(...args) {
+    const result = await runCli(args);
+    if (result.code !== 0) {
+      throw new Error(
+        `sm ${args.join(" ")} failed: ${cliFailureMessage(result, "no error doc")}\n${result.stderrTail}`,
+      );
+    }
+    return result;
+  }
+  return { runCli, sm };
 }

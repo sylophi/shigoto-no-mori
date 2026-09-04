@@ -9,18 +9,18 @@
 // through the real dialer and bridge cache, and A's handler dials REAL
 // loopback TCP fixture servers. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) before
-//     the handler runs, so the fixture server sees no connection;
+//     the handler runs, so the fixture server sees no connection,
 //   - a granted echo round trip on a channel (attach, open, write,
-//     read, reset);
-//   - server-initiated bytes arrive with no write first;
+//     read, reset),
+//   - server-initiated bytes arrive with no write first,
 //   - a ~1.5 MB transfer crosses in many data frames, byte-identical,
 //     while the stub device hub's forwardedCount stays FLAT (nothing
-//     but the one-time broker frames ever rides the device hub);
+//     but the one-time broker frames ever rides the device hub),
 //   - a server-side close ends the channel's direction after its tail
-//     bytes, and ending this side too completes the channel;
+//     bytes, and ending this side too completes the channel,
 //   - dialing a dead port fails with the coded "connect-failed", a
 //     reused channel id with "channel-taken", and the per-connection
-//     channel cap with "too-many-conns";
+//     channel cap with "too-many-conns",
 //   - the surface still serves a fresh channel after full teardown.
 //
 // Then the CLIENT ENGINE (main/portForward/engine.ts), electron-free
@@ -29,12 +29,12 @@
 // listener -> channel -> host handler -> loopback fixture. Asserts:
 //   - a local dial round-trips an echo through the whole chain, and a
 //     duplicate startForward returns the existing forward, while one
-//     naming a different local port moves the listener;
-//   - a ~1.5 MB local transfer lands byte-identical;
+//     naming a different local port moves the listener,
+//   - a ~1.5 MB local transfer lands byte-identical,
 //   - the fixture server closing its socket ends the local client
-//     socket (end propagation);
+//     socket (end propagation),
 //   - stopForward closes the listener and live conns, and a fresh
-//     forward still round-trips;
+//     forward still round-trips,
 //   - the first concurrent local socket OVER the client-side
 //     per-device cap (MAX_CONNS_PER_DEVICE, derived from the engine's
 //     exported constant) is destroyed while the capped set stands,
@@ -341,6 +341,24 @@ async function main() {
     ok(
       "server close: tail bytes, then the peer's end, and ending here completes the channel",
     );
+
+    // (5b) A large response then a close: a server that writes far more
+    // than one credit window and hangs up must still deliver every
+    // byte. The bytes the channel holds while waiting for credit
+    // outlive the socket's close.
+    const dumper = await startFixtureServer((socket) => {
+      socket.end(big);
+    });
+    const dumped = await openChannel(peerA, forward, dumper.port);
+    const all = await dumped.readBytes(big.length, 30_000);
+    assert.ok(
+      Buffer.compare(big, all) === 0,
+      "a large response followed by a close arrived truncated or altered",
+    );
+    await dumped.waitEnded();
+    dumped.end();
+    await dumper.close();
+    ok("a large response followed by a server close arrives complete");
 
     // (6) A dead port: nothing listens once the fixture closed, so the
     // dial refuses with the coded "connect-failed". A channel id that

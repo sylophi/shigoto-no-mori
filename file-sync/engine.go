@@ -8,11 +8,11 @@ package main
 // against a persisted ancestor, rsync-style deltas, native filesystem
 // watching, staged atomic writes, conflicts reported instead of
 // resolved by guessing). Building that engine in-house would be the
-// clever mechanism; embedding the conventional one is the boring
+// clever mechanism. Embedding the conventional one is the boring
 // choice, so Mutagen it is.
 //
 // This is a separate binary from the sm CLI on purpose. The CLI is the
-// engine the app and a terminal share; nobody types these commands,
+// engine the app and a terminal share. Nobody types these commands,
 // only the app's host process spawns them, so they live here where the
 // server's concerns stay the server's. Two roles, one binary:
 //
@@ -59,6 +59,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -69,6 +70,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/mutagen-io/mutagen/pkg/logging"
 	"github.com/mutagen-io/mutagen/pkg/selection"
@@ -105,7 +107,7 @@ const mirrorGatewayTimeout = 30 * time.Second
 
 // Serves one Mutagen endpoint over the stream until the client ends it.
 // The stream must unblock reads and writes when closed (Mutagen's
-// contract); pipes and sockets do.
+// contract). Pipes and sockets do.
 func serveMirrorEndpoint(stream io.ReadWriteCloser, logOut io.Writer) error {
 	logger := logging.NewLogger(logging.LevelWarn, logOut)
 	return remote.ServeEndpoint(logger, stream)
@@ -166,7 +168,7 @@ func (h mirrorGatewayHandler) Connect(
 	// down (the host closed the pipe or sent SIGTERM) waits for
 	// in-flight connects, and a peer that accepted but never answers
 	// would otherwise hold the exit for the full timeout. Closing the
-	// conn unblocks every read; once the endpoint is established the
+	// conn unblocks every read. Once the endpoint is established the
 	// conn is Mutagen's and this watcher stands down.
 	handshakeDone := make(chan struct{})
 	defer close(handshakeDone)
@@ -239,7 +241,7 @@ func readLineUnbuffered(r io.Reader) (string, error) {
 // Daemon control protocol
 
 // One request line on the daemon's stdin. `id` is echoed on the
-// response so the app can match them; `op` picks the verb.
+// response so the app can match them. `op` picks the verb.
 type mirrorRequest struct {
 	ID string `json:"id"`
 	Op string `json:"op"`
@@ -251,8 +253,7 @@ type mirrorRequest struct {
 	RemoteRoot string            `json:"remoteRoot,omitempty"`
 	Name       string            `json:"name,omitempty"`
 	Labels     map[string]string `json:"labels,omitempty"`
-	Ignores    []string          `json:"ignores,omitempty"`
-	// terminate, pause, resume, flush, reset
+	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
 
@@ -424,10 +425,6 @@ func handleMirrorRequest(ctx context.Context, manager *synchronization.Manager, 
 		return respond(req.Session, manager.Pause(ctx, one(), ""))
 	case "resume":
 		return respond(req.Session, manager.Resume(ctx, one(), ""))
-	case "flush":
-		return respond(req.Session, manager.Flush(ctx, one(), "", false))
-	case "reset":
-		return respond(req.Session, manager.Reset(ctx, one(), ""))
 	default:
 		return respond("", fmt.Errorf("unknown op %q", req.Op))
 	}
@@ -441,6 +438,9 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 		return "", errors.New("create needs deviceId")
 	case req.RemoteRoot == "":
 		return "", errors.New("create needs remoteRoot")
+	}
+	if err := validateMirrorLabels(req.Labels); err != nil {
+		return "", err
 	}
 	alpha := &urlpkg.URL{
 		Kind:     urlpkg.Kind_Synchronization,
@@ -460,29 +460,99 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// Two-way-safe: both sides write, a genuine conflict is reported
 	// and left alone rather than resolved by guessing. The VCS ignore
 	// keeps .git out (a linked worktree's .git is a file pointing at a
-	// machine-specific gitdir, and the repo itself is git's to move);
+	// machine-specific gitdir, and the repo itself is git's to move),
 	// nothing else is excluded by default, because the whole point is
 	// that ignored files cross too.
 	configuration := &synchronization.Configuration{
 		SynchronizationMode: core.SynchronizationMode_SynchronizationModeTwoWaySafe,
 		IgnoreVCSMode:       ignore.IgnoreVCSMode_IgnoreVCSModeIgnore,
-		Ignores:             append([]string{mirrorGitPointerIgnore}, req.Ignores...),
+		Ignores:             []string{mirrorGitPointerIgnore},
 	}
 	return manager.Create(
 		ctx,
 		alpha, beta,
 		configuration, &synchronization.Configuration{}, &synchronization.Configuration{},
-		req.Name,
+		mirrorSessionName(req.Name),
 		req.Labels,
 		false,
 		"",
 	)
 }
 
+// Labels face the same load-time check as names (a Kubernetes-style
+// rule on keys and values), and Mutagen would drop a session whose
+// labels fail it on the next start. Unlike the name, the labels carry
+// identity (the app resolves its local project and worktree from
+// them), so an invalid one is refused here, loudly, rather than
+// rewritten into something the app could no longer resolve.
+func validateMirrorLabels(labels map[string]string) error {
+	for key, value := range labels {
+		if err := selection.EnsureLabelKeyValid(key); err != nil {
+			return fmt.Errorf("label %q: %w", key, err)
+		}
+		if err := selection.EnsureLabelValueValid(value); err != nil {
+			return fmt.Errorf("label %q value %q: %w", key, value, err)
+		}
+	}
+	return nil
+}
+
+// Mutagen session names may hold letters, digits and dashes, must
+// start with a letter and must not be a UUID, and it checks that on
+// LOAD as well as on create, so a name it accepted at creation but
+// rejects at load (a branch name with a slash, say) makes the session
+// vanish on the next daemon start. The app's name is descriptive only
+// (the branch, while the labels carry the real identity), so it is folded
+// into that alphabet here rather than trusted.
+func mirrorSessionName(name string) string {
+	var out []rune
+	lastDash := false
+	for _, r := range name {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsNumber(r):
+			out = append(out, r)
+			lastDash = false
+		case !lastDash && len(out) > 0:
+			out = append(out, '-')
+			lastDash = true
+		}
+	}
+	for len(out) > 0 && out[len(out)-1] == '-' {
+		out = out[:len(out)-1]
+	}
+	if len(out) == 0 {
+		return ""
+	}
+	if !unicode.IsLetter(out[0]) {
+		out = append([]rune("m-"), out...)
+	}
+	if len(out) > 64 {
+		out = out[:64]
+	}
+	// Folding covers the alphabet. Mutagen also refuses a UUID-shaped
+	// name and its reserved words, which a branch can legitimately be.
+	// A prefix takes the name out of both sets.
+	if selection.EnsureNameValid(string(out)) != nil {
+		out = append([]rune("m-"), out...)
+		if len(out) > 64 {
+			out = out[:64]
+		}
+	}
+	return string(out)
+}
+
 // Emits a state doc every time the manager's state index moves, until
 // ctx ends. List blocks on the tracker, so this is push, not polling.
+// The state index moves on every staging-progress update, not just
+// per cycle, so the stream is throttled: at most one doc per
+// mirrorStateMinInterval, and none when nothing the app reads
+// changed (the projected doc is byte-identical to the last one).
+const mirrorStateMinInterval = 200 * time.Millisecond
+
 func streamMirrorState(ctx context.Context, manager *synchronization.Manager, emitter *lineEmitter) {
 	var index uint64
+	var last []byte
+	var lastEmit time.Time
 	for {
 		next, states, err := manager.List(ctx, &selection.Selection{All: true}, index)
 		if err != nil {
@@ -496,7 +566,27 @@ func streamMirrorState(ctx context.Context, manager *synchronization.Manager, em
 		for _, state := range states {
 			doc.Sessions = append(doc.Sessions, mirrorSessionStateOf(state))
 		}
-		emitter.emit(doc)
+		// The index is left out of the comparison: it moves on every
+		// tick and carries nothing the app reads.
+		doc.Index = 0
+		encoded, err := json.Marshal(doc)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
+			continue
+		}
+		if bytes.Equal(encoded, last) {
+			continue
+		}
+		if wait := mirrorStateMinInterval - time.Since(lastEmit); wait > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
+		}
+		last = encoded
+		lastEmit = time.Now()
+		emitter.emitRaw(encoded)
 	}
 }
 
@@ -633,6 +723,10 @@ func (e *lineEmitter) emit(value any) {
 		fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
 		return
 	}
+	e.emitRaw(data)
+}
+
+func (e *lineEmitter) emitRaw(data []byte) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.w.Write(append(data, '\n'))

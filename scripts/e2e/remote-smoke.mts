@@ -5,8 +5,8 @@
 // Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
 // owner's dev account, both signed in by cloning the plain dev
 // instance's sign-in, driven over CDP (cdp.mts) through the real
-// device hub, direct plane and dev CLI. MANUAL-TESTING.md lists the
-// scenarios and the prerequisites.
+// device hub, direct plane, dev CLI and file-sync engine.
+// MANUAL-TESTING.md lists the scenarios and the prerequisites.
 //
 // One repo is cloned into both forests: the pull matches a local
 // project by repo identity (the root commit), so two seeds would not
@@ -31,10 +31,12 @@ import { signalTree } from "../../host/lib/scripts/process.ts";
 import { errorMessageOf } from "../../shared/errors.ts";
 import { isCommandRefusedError } from "../../shared/ipc/socket/frames.ts";
 import {
+  fileEquals,
   freeLoopbackPort,
   repoRoot,
   report,
   scrubbedGitEnv,
+  waitFor,
 } from "../lib/checkKit.mjs";
 import {
   buildDevCli,
@@ -48,6 +50,24 @@ import {
 import { attachWindow, type AppWindow } from "./cdp.mts";
 
 const keep = process.argv.includes("--keep");
+
+// Git against the fixture worktrees, both of which live on this
+// machine: pinned identity, the inherited GIT_* scrubbed (a lefthook
+// run exports GIT_DIR for the real repository).
+const gitEnv = {
+  ...scrubbedGitEnv(),
+  GIT_AUTHOR_NAME: "E2E",
+  GIT_AUTHOR_EMAIL: "e2e@example.com",
+  GIT_COMMITTER_NAME: "E2E",
+  GIT_COMMITTER_EMAIL: "e2e@example.com",
+};
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd, env: gitEnv, stdio: "pipe" });
+const gitOut = (cwd: string, ...args: string[]) =>
+  git(cwd, ...args)
+    .toString()
+    .trim();
+
 const runDir = join(tmpdir(), `sm-e2e-${Date.now()}`);
 mkdirSync(runDir, { recursive: true });
 const log = (line: string) => console.log(`[e2e] ${line}`);
@@ -63,15 +83,6 @@ function prepareFixture(): Fixture {
 
   const origin = join(PROFILES_DIR, "e2e-origin.git");
   rmSync(origin, { recursive: true, force: true });
-  const gitEnv = {
-    ...scrubbedGitEnv(),
-    GIT_AUTHOR_NAME: "E2E",
-    GIT_AUTHOR_EMAIL: "e2e@example.com",
-    GIT_COMMITTER_NAME: "E2E",
-    GIT_COMMITTER_EMAIL: "e2e@example.com",
-  };
-  const git = (cwd: string, ...args: string[]) =>
-    execFileSync("git", args, { cwd, env: gitEnv, stdio: "pipe" });
   const seed = join(runDir, "seed");
   mkdirSync(seed, { recursive: true });
   git(seed, "init", "-q", "-b", "main");
@@ -335,6 +346,108 @@ async function main(): Promise<string[]> {
         .toString()
         .trim();
       assert.equal(head, "feat/e2e", "pulled worktree is on the wrong branch");
+    });
+
+    // Continuous mirroring, end to end through both apps' engines: a
+    // mirrors a fresh worktree of b's (its own worktree, so the
+    // transplant below keeps its source), files cross both ways as
+    // edits happen (a gitignored-style file included), a commit on b
+    // lands on a through the git follower, and stopping the session
+    // clears both sides. Both worktrees sit on this machine, so the
+    // disk is asserted directly.
+    await scenario("mirror", async () => {
+      const project = need(bProject, "the remote read");
+      const source = (
+        (await onPeer(a, idB, "worktrees:create", {
+          projectId: project.id,
+          branchName: "feat/mirror",
+        })) as { worktree: Worktree }
+      ).worktree;
+      const started = await a.evaluate<{
+        worktree: Worktree;
+        session: string;
+      }>(
+        `window.api.mirror.start(${JSON.stringify({
+          sourceDeviceId: idB,
+          sourceProjectId: project.id,
+          sourceWorktreeId: source.id,
+          sourceIdentity: project.identity,
+          branch: source.branch,
+        })})`,
+      );
+      const local = started.worktree;
+      assert.ok(
+        local.path.startsWith(fixture.a.root),
+        `mirrored worktree not under a's root: ${local.path}`,
+      );
+      const session = JSON.stringify(started.session);
+      await a.waitFor(
+        "a's mirror session to be watching with git in sync",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
+        90_000,
+      );
+      await b.waitFor(
+        "b to list the stream it serves",
+        `window.api.mirror.list().then((m) => m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+        30_000,
+      );
+      // Files, both ways, including one git ignores.
+      writeFileSync(join(source.path, "from-b.txt"), "written on b\n");
+      await waitFor(
+        () => fileEquals(join(local.path, "from-b.txt"), "written on b\n"),
+        "b's file to reach a",
+        30_000,
+      );
+      writeFileSync(join(local.path, ".env"), "SECRET=1\n");
+      await waitFor(
+        () => fileEquals(join(source.path, ".env"), "SECRET=1\n"),
+        "a's ignored file to reach b",
+        30_000,
+      );
+      // A commit on b lands on a: same tip, same branch, clean status.
+      git(source.path, "add", "from-b.txt");
+      git(source.path, "commit", "-q", "-m", "on b");
+      const tip = gitOut(source.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(local.path, "rev-parse", "HEAD") === tip,
+        "a's tip to follow b's commit",
+        60_000,
+      );
+      assert.equal(
+        gitOut(local.path, "symbolic-ref", "HEAD"),
+        "refs/heads/feat/mirror",
+      );
+      await waitFor(
+        () =>
+          gitOut(
+            local.path,
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+          ) === "",
+        "a's worktree to read clean after the follow",
+        30_000,
+      );
+      // Stop: the session leaves a's list and the stream leaves b's.
+      await a.evaluate(`window.api.mirror.stop(${session})`);
+      await a.waitFor(
+        "a's mirror session to be gone",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session}))`,
+        30_000,
+      );
+      await b.waitFor(
+        "b's served stream to be gone",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+        30_000,
+      );
+      assert.ok(
+        existsSync(local.path),
+        "the mirrored worktree vanished on stop",
+      );
+      assert.ok(
+        existsSync(source.path),
+        "the source worktree vanished on stop",
+      );
     });
 
     await scenario("transplant", async () => {
