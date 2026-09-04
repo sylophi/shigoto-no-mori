@@ -18,11 +18,8 @@ of removing anything.
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
 
-**Never fast-forward by hand.** If the command reports a skipped
-catch-up, relay its reason to the user and stop there. Do not pull,
-merge, or reset any other checkout, and never add a fallback that
-touches the primary checkout: fed the wrong branch, it moves the
-primary branch itself.
+If the command reports a skipped catch-up, pass the reason on to the
+user.
 
 **Partial failures resume.** If cleanup fails after the merge (a
 teardown script, say), fix the cause and re-run `sm worktrees land`: an
