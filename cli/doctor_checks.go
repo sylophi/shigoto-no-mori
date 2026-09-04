@@ -26,7 +26,7 @@ import (
 func runDoctorChecks(projects []project) *doctorReport {
 	report := &doctorReport{}
 	checkEnvironment(report)
-	checkStateRoot(report, projects)
+	checkDataDirGroup(report, projects)
 	checkProjects(report, projects)
 	return report
 }
@@ -257,11 +257,11 @@ func hookBlockCurrent(kind string, hook hookFile) bool {
 	return got == strings.TrimRight(hookBlock(kind), "\n")
 }
 
-// --- state root ---
+// --- data dir ---
 
-func checkStateRoot(report *doctorReport, projects []project) {
-	if !checkRootDir(report) {
-		return // nothing below can mean anything without a root
+func checkDataDirGroup(report *doctorReport, projects []project) {
+	if !checkDataDir(report) {
+		return // nothing below can mean anything without a data dir
 	}
 	checkGlobalConfig(report)
 	checkRegistryFile(report)
@@ -276,37 +276,64 @@ func checkStateRoot(report *doctorReport, projects []project) {
 // and a bare 0x2 at the call site says nothing.
 const writeOK = 0x2
 
-func checkRootDir(report *doctorReport) bool {
-	root := shigomoriRoot()
-	source := "default for the " + flavor + " flavor"
-	if os.Getenv("SHIGOMORI_ROOT") != "" {
-		source = "from SHIGOMORI_ROOT"
+func checkDataDir(report *doctorReport) bool {
+	root := dataDir()
+	var source string
+	switch cachedDataDirSource {
+	case dataDirFromEnv:
+		source = "from SHIGOMORI_DATA_DIR"
+	case dataDirFromPointer:
+		source = "from the pointer file"
+	case dataDirLegacy:
+		source = "pre-2.0 name"
+	default:
+		source = "default for the " + flavor + " flavor"
 	}
 	info, err := os.Stat(root)
 	switch {
 	case os.IsNotExist(err):
-		report.warn(groupState, "root", "root",
+		report.warn(groupState, "data-dir", "data dir",
 			collapseHome(root)+" doesn't exist yet ("+source+") -- nothing is registered",
 			"Add a project (`"+binaryName+" projects add`) and it will be created.")
 		return false
 	case err != nil:
-		report.fail(groupState, "root", "root",
+		report.fail(groupState, "data-dir", "data dir",
 			collapseHome(root)+" can't be read: "+err.Error(),
 			"Check the permissions on "+collapseHome(root)+".")
 		return false
 	case !info.IsDir():
-		report.fail(groupState, "root", "root",
+		report.fail(groupState, "data-dir", "data dir",
 			collapseHome(root)+" is a file, not a directory ("+source+")",
-			"Move it aside, or point SHIGOMORI_ROOT somewhere else.")
+			"Move it aside, or point SHIGOMORI_DATA_DIR somewhere else.")
 		return false
 	}
 	if syscall.Access(root, writeOK) != nil {
-		report.fail(groupState, "root", "root",
+		report.fail(groupState, "data-dir", "data dir",
 			collapseHome(root)+" isn't writable, so no command that changes state can work",
 			"Fix its ownership or permissions.")
 		return true
 	}
-	report.ok(groupState, "root", "root", collapseHome(root)+" "+dimOut("("+source+")"))
+	switch cachedDataDirSource {
+	case dataDirLegacy:
+		report.warn(groupState, "data-dir", "data dir",
+			collapseHome(root)+" "+dimOut("("+source+")"),
+			"Rename it to ~/"+dataDirName+" from the app's Settings > Data location.")
+		return true
+	case dataDirDefault:
+		// Both names holding state means an upgrade seeded the current
+		// one while the old one was unreachable: the old data is now
+		// ignored, silently, unless someone says so.
+		if home, err := os.UserHomeDir(); err == nil {
+			legacy := filepath.Join(home, legacyDataDirName)
+			if holdsState(legacy) == statePresent {
+				report.warn(groupState, "data-dir", "data dir",
+					collapseHome(root)+" "+dimOut("("+source+")")+"; "+collapseHome(legacy)+" also holds state and is ignored",
+					"Move "+collapseHome(legacy)+" aside, or merge what you need from it by hand.")
+				return true
+			}
+		}
+	}
+	report.ok(groupState, "data-dir", "data dir", collapseHome(root)+" "+dimOut("("+source+")"))
 	return true
 }
 
@@ -314,63 +341,63 @@ func checkGlobalConfig(report *doctorReport) {
 	path := configJSONPath()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		report.ok(groupState, "config", "config.json", "absent -- defaults apply")
+		report.ok(groupState, "config", configFile, "absent -- defaults apply")
 		return
 	}
 	if err != nil {
-		report.fail(groupState, "config", "config.json", "unreadable: "+err.Error(),
+		report.fail(groupState, "config", configFile, "unreadable: "+err.Error(),
 			"Fix the permissions on "+collapseHome(path)+".")
 		return
 	}
 	var probe map[string]json.RawMessage
 	if json.Unmarshal(raw, &probe) != nil {
-		report.fail(groupState, "config", "config.json",
+		report.fail(groupState, "config", configFile,
 			"isn't valid JSON, so every global preference is silently ignored",
 			"Repair the JSON in "+collapseHome(path)+", or delete it to fall back to defaults.")
 		return
 	}
 	var known globalConfig
 	if json.Unmarshal(raw, &known) != nil {
-		report.warn(groupState, "config", "config.json",
+		report.warn(groupState, "config", configFile,
 			"parses, but a field has the wrong type and is being dropped",
 			"Check "+collapseHome(path)+" against the app's Settings.")
 		return
 	}
-	report.ok(groupState, "config", "config.json", fmt.Sprintf("valid, %d key%s", len(probe), plural(len(probe))))
+	report.ok(groupState, "config", configFile, fmt.Sprintf("valid, %d key%s", len(probe), plural(len(probe))))
 }
 
 func checkRegistryFile(report *doctorReport) {
 	// registry.json is the file that matters here: projects and shelf
 	// flags moved out of state.json, which now holds only UI history.
-	// ensureRegistrySplit runs first so a root still in the old shape is
+	// ensureRegistrySplit runs first so a data dir still in the old shape is
 	// drained and judged on what sm will actually read.
 	if err := ensureRegistrySplit(); err != nil {
-		report.fail(groupState, "registry", "registry.json",
+		report.fail(groupState, "registry", registryFile,
 			"can't be split out of state.json: "+err.Error(),
-			"Fix the permissions on "+collapseHome(shigomoriRoot())+".")
+			"Fix the permissions on "+collapseHome(dataDir())+".")
 		return
 	}
 	path := registryPath()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		report.ok(groupState, "registry", "registry.json", "absent -- no projects registered yet")
+		report.ok(groupState, "registry", registryFile, "absent -- no projects registered yet")
 		return
 	}
 	if err != nil {
-		report.fail(groupState, "registry", "registry.json", "unreadable: "+err.Error(),
+		report.fail(groupState, "registry", registryFile, "unreadable: "+err.Error(),
 			"Fix the permissions on "+collapseHome(path)+".")
 		return
 	}
 	var all map[string]json.RawMessage
 	if json.Unmarshal(raw, &all) != nil {
-		report.fail(groupState, "registry", "registry.json",
+		report.fail(groupState, "registry", registryFile,
 			"isn't valid JSON, so every registered project is invisible to sm and the app",
 			"Repair the JSON in "+collapseHome(path)+" (it holds the project registry).")
 		return
 	}
 	var projects []project
 	if entry, ok := all[projectsKey]; ok && json.Unmarshal(entry, &projects) != nil {
-		report.fail(groupState, "registry", "registry.json",
+		report.fail(groupState, "registry", registryFile,
 			"the projects list has the wrong shape, so no project resolves",
 			"Repair the projects array in "+collapseHome(path)+".")
 		return
@@ -382,13 +409,13 @@ func checkRegistryFile(report *doctorReport) {
 		}
 	}
 	if malformed > 0 {
-		report.warn(groupState, "registry", "registry.json",
+		report.warn(groupState, "registry", registryFile,
 			fmt.Sprintf("%d registry %s missing an id or path", malformed,
 				pluralize(malformed, "entry is", "entries are")),
 			"Remove the incomplete entries from "+collapseHome(path)+".")
 		return
 	}
-	report.ok(groupState, "registry", "registry.json",
+	report.ok(groupState, "registry", registryFile,
 		fmt.Sprintf("valid, %d project%s registered", len(projects), plural(len(projects))))
 }
 
@@ -397,7 +424,7 @@ func checkRegistryFile(report *doctorReport) {
 // past lockStale belonged to a process that died holding it, and it
 // costs every writer the full lock timeout until something breaks it.
 func checkStaleLocks(report *doctorReport) {
-	locks := findStaleLocks(shigomoriRoot())
+	locks := findStaleLocks(dataDir())
 	if len(locks) == 0 {
 		report.ok(groupState, "locks", "locks", "no stale lock files")
 		return
@@ -428,8 +455,8 @@ func checkStaleLocks(report *doctorReport) {
 		})
 }
 
-// Only the state root's own tree is walked, and only where locks are
-// ever taken: the root itself, the per-project dirs, and iconCache/
+// Only the data dir's own tree is walked, and only where locks are
+// ever taken: the data dir itself, the per-project dirs, and iconCache/
 // (iconcache.go takes index.json.lock under the same protocol).
 // updates/ holds downloads, never a lock.
 func findStaleLocks(root string) []string {

@@ -4,7 +4,7 @@
 // `electron-forge start -- --remote-debugging-port=...` can't do this
 // -- forge puts app args after Electron's `--` separator, where
 // Chromium stops parsing switches. Env vars survive app.relaunch(), so
-// a driven session keeps its port across restarts (e.g. the moveRoot
+// a driven session keeps its port across restarts (e.g. the moveDataDir
 // relaunch). No-op in packaged builds.
 import { app } from "electron";
 

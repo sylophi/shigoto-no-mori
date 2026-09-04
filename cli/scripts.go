@@ -59,10 +59,10 @@ func resolveShell() (string, []string) {
 // `sm cd` must not be able to retarget the outer wrapper's directive
 // file. Stale SHIGOMORI_* values are dropped first so a script that
 // itself invokes sm (or the app delegating a run through the CLI)
-// can't leak a parent run's identity into this one. SHIGOMORI_ROOT
+// can't leak a parent run's identity into this one. SHIGOMORI_DATA_DIR
 // isn't part of the contract and passes through untouched: when a
-// caller has sandboxed the root, the sandbox should cover the whole
-// tree. Nothing on either side adds one -- see initShigomoriRoot
+// caller has sandboxed the data dir, the sandbox should cover the whole
+// tree. Nothing on either side adds one -- see initDataDir
 // (host/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
 	contract := map[string]string{

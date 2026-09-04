@@ -163,7 +163,7 @@ export function NewWorktree() {
 
 // The worktree base directory on the device the form is scoped to,
 // deduced from a worktree it already keeps there. Remote-only: runtime
-// info is a local module, so a peer's shigomori root can't be asked for,
+// info is a local module, so a peer's data dir can't be asked for,
 // and its own worktrees are the honest source for where the next one
 // lands. Null before any sibling exists.
 function siblingWorktreeRoot(worktrees: Worktree[]): string | null {
@@ -391,10 +391,8 @@ function NewWorktreeForm({
   const errorMessage =
     (prMode ? createFromPr.error : create.error)?.message ?? null;
   const home = runtime?.homedir ?? null;
-  const root = runtime?.shigomoriRoot
-    ? tildify(runtime.shigomoriRoot, home)
-    : "~/shigomori";
-  // Locally the runtime's own root. On a peer, where its existing
+  const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
+  // Locally the runtime's own data dir. On a peer, where its existing
   // worktrees live, since runtime is local-only.
   const destRoot = remote
     ? siblingWorktreeRoot(worktrees)

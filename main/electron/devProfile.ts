@@ -27,7 +27,7 @@ function current(): string | null {
 }
 
 // Null for a packaged build and for the plain dev instance. Throws on
-// a malformed name, and on a profile without SHIGOMORI_ROOT: that
+// a malformed name, and on a profile without SHIGOMORI_DATA_DIR: that
 // would enroll a second device over the same forest, so it is refused
 // at boot rather than discovered on the Devices page. A refused
 // profile leaves the readers seeing no profile at all.
@@ -35,10 +35,10 @@ export function initDevProfile(): string | null {
   if (app.isPackaged) return null;
   profile = null;
   const name = devProfileFromEnv(process.env);
-  if (name !== null && !process.env.SHIGOMORI_ROOT) {
+  if (name !== null && !process.env.SHIGOMORI_DATA_DIR) {
     throw new Error(
-      `${DEV_PROFILE_ENV} needs SHIGOMORI_ROOT set to the profile's own ` +
-        "state root. Use `pnpm start --profile <name>` or " +
+      `${DEV_PROFILE_ENV} needs SHIGOMORI_DATA_DIR set to the profile's own ` +
+        "data dir. Use `pnpm start --profile <name>` or " +
         "`pnpm dev:peer <name>`, which set both.",
     );
   }

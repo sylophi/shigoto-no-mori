@@ -81,7 +81,7 @@ pre-commit:
       glob: "{host/direct/**,shared/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
-    # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_ROOT,
+    # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
     # and moves a >1.5 MB git bundle between two REAL hub connections
     # as chunked grant-gated invokes (real handlers, real CLI, real
     # git), asserting grant refusal for ungranted peers, the

@@ -403,7 +403,7 @@ export function makeAccountHandlers(
             service: createAccountService({ baseUrl: config.hubUrl }),
             store: store(),
             // The hub device identity is tied to registry.json:
-            // getDeviceId mints and persists this root's UUID there, so
+            // getDeviceId mints and persists this data dir's UUID there, so
             // a registry reset re-enrolls this app as a brand new hub
             // device.
             deviceId: getDeviceId(),

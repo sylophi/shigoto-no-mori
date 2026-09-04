@@ -2,7 +2,7 @@ package main
 
 // On-disk state access, ported from host/lib/config/{store,global,
 // project}.ts and host/lib/util/{jsonFile,lockFile}.ts. Layout under
-// the root:
+// the data dir:
 //   registry.json                           projects, shelved worktrees
 //   state.json                              use logs, sort/collapse prefs
 //   config.json                             global prefs
@@ -20,87 +20,158 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
-var cachedRoot string
+var cachedDataDir string
 
-func initRoot() {
-	if envRoot := os.Getenv("SHIGOMORI_ROOT"); envRoot != "" {
-		cachedRoot = toAbsolute(envRoot)
-		return
+// How initDataDir resolved the data dir, for `sm doctor`. Mirrors the
+// app's DataDirSource (host/lib/util/paths.ts).
+type dataDirSource string
+
+const (
+	dataDirFromEnv     dataDirSource = "env"
+	dataDirFromPointer dataDirSource = "pointer"
+	dataDirLegacy      dataDirSource = "legacy"
+	dataDirDefault     dataDirSource = "default"
+)
+
+var cachedDataDirSource dataDirSource
+
+// Resolution order: the SHIGOMORI_DATA_DIR override, the pointer file,
+// then the flavor default under $HOME with a pre-2.0 default adopted in
+// place while it still holds the state. Mirror of
+// host/lib/util/paths.ts initDataDir -- keep in sync.
+func initDataDir() error {
+	if envDir := os.Getenv("SHIGOMORI_DATA_DIR"); envDir != "" {
+		cachedDataDir, cachedDataDirSource = toAbsolute(envDir), dataDirFromEnv
+		return nil
 	}
-	if pointed := readRootPointer(); pointed != "" {
-		cachedRoot = pointed
-		return
+	// The override's pre-2.0 name. Its whole point was sandboxing, so a
+	// leftover export must not fail open onto the real data dir.
+	if os.Getenv("SHIGOMORI_ROOT") != "" {
+		return errf("SHIGOMORI_ROOT is no longer read. Set SHIGOMORI_DATA_DIR instead.")
+	}
+	if pointed := readDataDirPointer(); pointed != "" {
+		cachedDataDir, cachedDataDirSource = pointed, dataDirFromPointer
+		return nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."
 	}
-	cachedRoot = filepath.Join(home, rootDirName)
+	current := filepath.Join(home, dataDirName)
+	legacy := filepath.Join(home, legacyDataDirName)
+	// A pre-2.0 dir that still holds state is adopted where it stands
+	// while the current name holds none, so an upgrade never runs
+	// against an empty data dir beside a full one. A legacy dir that
+	// exists but can't be read counts as holding state: failing on it
+	// beats seeding the current name and orphaning the data. The app's
+	// data-folder move is what renames it.
+	if holdsState(legacy) != stateAbsent && holdsState(current) != statePresent {
+		cachedDataDir, cachedDataDirSource = legacy, dataDirLegacy
+		return nil
+	}
+	cachedDataDir, cachedDataDirSource = current, dataDirDefault
+	return nil
 }
 
-// The root pointer file relocates the state root without an env var:
-// $XDG_CONFIG_HOME/<rootDirName>/root, one line holding an absolute
-// path (~/ allowed). Go mirror of the policy in shared/cliDist.mts
-// (the app reads and writes the same file). SHIGOMORI_ROOT still beats
-// it, and nothing injects that var -- a caller who sets it is
-// sandboxing the whole tree on purpose (scripts.go). Missing,
-// empty, or non-absolute content falls through to the flavor default
-// -- initRoot runs before every command, so a malformed file must not
-// be fatal.
-func readRootPointer() string {
+// The pointer file relocates the data dir without an env var:
+// $XDG_CONFIG_HOME/<configDirName>/<dataDirPointerName>, one line
+// holding an absolute path (~/ allowed). Go mirror of the policy in
+// shared/cliDist.mts (the app reads and writes the same file). The
+// pre-2.0 filename is read only when the current one is absent, so a
+// stale old pointer can't outrank an unusable current one.
+// SHIGOMORI_DATA_DIR still beats it, and nothing injects that var -- a
+// caller who sets it is sandboxing the whole tree on purpose
+// (scripts.go). Missing, empty, or non-absolute content falls through
+// to the flavor default -- initDataDir runs before every command, so a
+// malformed file must not be fatal.
+func readDataDirPointer() string {
 	cfg := configHomeDir()
 	if cfg == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(cfg, rootDirName, "root"))
-	if err != nil {
-		return ""
+	for _, name := range []string{dataDirPointerName, legacyDataDirPointerName} {
+		data, err := os.ReadFile(filepath.Join(cfg, configDirName, name))
+		if err != nil {
+			continue
+		}
+		target := expandHome(strings.TrimSpace(string(data)))
+		if target == "" || !filepath.IsAbs(target) || !looksLikeDataDir(target) {
+			return ""
+		}
+		return target
 	}
-	target := expandHome(strings.TrimSpace(string(data)))
-	if target == "" || !filepath.IsAbs(target) {
-		return ""
-	}
-	if !looksLikeRootTarget(target) {
-		return ""
-	}
-	return target
+	return ""
 }
 
-// Guard on what a hand-edited pointer may aim the root at: a directory
-// that doesn't exist yet, is empty, or already holds shigomori state.
-// A pointer at ~/Documents must fall back to the default rather than
-// adopt a directory full of unrelated files as the state root. Mirror
-// of host/lib/util/paths.ts looksLikeRootTarget -- keep in sync.
-func looksLikeRootTarget(target string) bool {
+// Guard on what a hand-edited pointer may aim the data dir at: a
+// directory that doesn't exist yet, is empty, or already holds
+// shigomori state. A pointer at ~/Documents must fall back to the
+// default rather than adopt a directory full of unrelated files as
+// the data dir. Mirror of host/lib/util/paths.ts looksLikeDataDir --
+// keep in sync.
+func looksLikeDataDir(target string) bool {
 	entries, err := os.ReadDir(target)
 	if err != nil {
 		// Nonexistent is fine (created on first write). A file or an
-		// unreadable path is not a usable root.
+		// unreadable path is not a usable data dir.
 		return errors.Is(err, os.ErrNotExist)
 	}
-	if len(entries) == 0 {
-		return true
-	}
+	return len(entries) == 0 || hasStateFiles(entries)
+}
+
+type stateProbe int
+
+const (
+	stateAbsent stateProbe = iota
+	statePresent
+	stateUnreadable
+)
+
+var stateFiles = []string{registryFile, stateFile, configFile}
+
+func hasStateFiles(entries []os.DirEntry) bool {
 	for _, entry := range entries {
-		if entry.Name() == "registry.json" || entry.Name() == "state.json" ||
-			entry.Name() == "config.json" {
+		if slices.Contains(stateFiles, entry.Name()) {
 			return true
 		}
 	}
 	return false
 }
 
-func shigomoriRoot() string {
-	if cachedRoot == "" {
-		panic("shigomori root not initialized")
+// Whether a directory has been used as a data dir: one of the state
+// files is there, none is (or the directory is missing or not a
+// directory), or the directory exists but can't be read. Stats the
+// three files rather than listing the directory.
+func holdsState(dir string) stateProbe {
+	unreadable := false
+	for _, file := range stateFiles {
+		_, err := os.Stat(filepath.Join(dir, file))
+		if err == nil {
+			return statePresent
+		}
+		if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
+			unreadable = true
+		}
 	}
-	return cachedRoot
+	if unreadable {
+		return stateUnreadable
+	}
+	return stateAbsent
+}
+
+func dataDir() string {
+	if cachedDataDir == "" {
+		panic("shigomori data dir not initialized")
+	}
+	return cachedDataDir
 }
 
 type project struct {
@@ -227,16 +298,22 @@ const (
 // which deviceId postdates.
 var registryKeys = []string{projectsKey, shelvedKey}
 
-// Every path under the state root in one place, so a layout change never
+// Every path under the data dir in one place, so a layout change never
 // has to be chased into the command files.
-func statePath() string { return filepath.Join(shigomoriRoot(), "state.json") }
+const (
+	stateFile    = "state.json"
+	registryFile = "registry.json"
+	configFile   = "config.json"
+)
 
-func registryPath() string { return filepath.Join(shigomoriRoot(), "registry.json") }
+func statePath() string { return filepath.Join(dataDir(), stateFile) }
 
-func configJSONPath() string { return filepath.Join(shigomoriRoot(), "config.json") }
+func registryPath() string { return filepath.Join(dataDir(), registryFile) }
+
+func configJSONPath() string { return filepath.Join(dataDir(), configFile) }
 
 func projectDataDir(projectID string) string {
-	return filepath.Join(shigomoriRoot(), "projects", projectID)
+	return filepath.Join(dataDir(), "projects", projectID)
 }
 
 func projectConfigJSONPath(projectID string) string {
@@ -309,7 +386,7 @@ func readStateFile() (map[string]json.RawMessage, error) {
 	return readJSONObject(statePath())
 }
 
-// Drains an old-format root before the first read, so no caller has to
+// Drains an old-format data dir before the first read, so no caller has to
 // know the split happened.
 func readRegistryFile() (map[string]json.RawMessage, error) {
 	if err := ensureRegistrySplit(); err != nil {
@@ -490,7 +567,7 @@ func updateRegistryKey(key string, fn func(raw json.RawMessage) (any, error)) er
 // are only ever read from registry.json, and state.json is only ever
 // asked for the keys it owns.
 //
-// Two processes starting against the same old root are safe because
+// Two processes starting against the same old data dir are safe because
 // state.json is read again inside its lock. The loser of the race
 // finds nothing left to move and writes nothing. Both locks are taken,
 // state.json's outside registry.json's. Nothing else takes both, so

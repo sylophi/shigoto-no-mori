@@ -5,7 +5,7 @@
 // no UI left to stop it.
 //
 // So every spawn and every settle mirrors the live map into
-// <root>/running-scripts.json, and the next boot sweeps whatever the
+// <dataDir>/running-scripts.json, and the next boot sweeps whatever the
 // previous session left behind. The file is disposable: a missing,
 // stale, or unreadable one degrades to sweeping nothing. It never
 // fails a boot, a spawn, or an exit.
@@ -23,7 +23,7 @@ import { z } from "zod";
 import type { OrphanScriptReport } from "@shared/schemas";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
-import { isENOENT, shigomoriRoot } from "../util/paths";
+import { isENOENT, dataDir } from "../util/paths";
 import { signalTree } from "./process";
 import { errorMessageOf } from "@shared/errors";
 
@@ -56,8 +56,8 @@ const PersistedScriptSchema = z.object({
 });
 
 // ownerPid is the app instance that wrote the file. Two instances
-// pointed at the same root (a dev build launched with SHIGOMORI_ROOT
-// aimed at the packaged root) would otherwise have the second one's
+// pointed at the same data dir (a dev build launched with SHIGOMORI_DATA_DIR
+// aimed at the packaged data dir) would otherwise have the second one's
 // boot sweep kill the first one's live scripts out from under its
 // window.
 const SnapshotSchema = z.object({
@@ -72,7 +72,7 @@ export type PersistedScript = z.infer<typeof PersistedScriptSchema>;
 type Snapshot = z.infer<typeof SnapshotSchema>;
 
 function filePath(): string {
-  return join(shigomoriRoot(), FILE);
+  return join(dataDir(), FILE);
 }
 
 function lockPath(): string {

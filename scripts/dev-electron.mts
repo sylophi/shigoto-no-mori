@@ -41,7 +41,9 @@ try {
     const profile = devProfilePaths(args.profile);
     applyDevProfileFlags(profile, args);
     Object.assign(process.env, devProfileEnv(profile));
-    console.log(`[dev-electron] profile ${profile.name}: root ${profile.root}`);
+    console.log(
+      `[dev-electron] profile ${profile.name}: data dir ${profile.dataDir}`,
+    );
   }
 } catch (error) {
   console.error(`[dev-electron] ${errorMessageOf(error)}`);

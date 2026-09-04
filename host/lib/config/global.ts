@@ -1,8 +1,8 @@
-// Per-device global config at ~/shigomori[-dev]/config.json. Holds
+// Per-device global config at <dataDir>/config.json. Holds
 // preferences that span every project (custom launchers, integrations, …)
 // and is kept separate from registry.json (projects, shelf), state.json
 // (use logs, sort and collapse preferences) and the per-project configs
-// at ~/shigomori[-dev]/projects/<projectId>.json. Appearance is client
+// at <dataDir>/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
@@ -22,11 +22,11 @@ import {
   withSchemaVersion,
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
-import { shigomoriRoot } from "../util/paths";
+import { CONFIG_FILE, dataDir } from "../util/paths";
 import { ttlValueCache } from "../util/ttlCache";
 
 function configPath(): string {
-  return join(shigomoriRoot(), "config.json");
+  return join(dataDir(), CONFIG_FILE);
 }
 
 const cache = ttlValueCache<GlobalConfig>(

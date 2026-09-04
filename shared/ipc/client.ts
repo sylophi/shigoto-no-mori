@@ -334,7 +334,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     runtime: {
       info: runtimeClient.info,
       nuke: runtimeClient.nuke,
-      moveRoot: (parentDir: string) => runtimeClient.moveRoot({ parentDir }),
+      moveDataDir: (parentDir?: string) =>
+        runtimeClient.moveDataDir({ parentDir }),
       onNukeProgress: runtimeClient.nukeProgress,
     },
 

@@ -15,7 +15,7 @@ import {
   terrierListingsSnapshot,
   terrierProjectId,
 } from "../terrier";
-import { shigomoriRoot, toAbsolute } from "../util/paths";
+import { dataDir, toAbsolute } from "../util/paths";
 import { usageFor } from "./usage";
 
 // Registry entries plus a read-only project per terrier repo the
@@ -111,15 +111,15 @@ export async function findProjectByIdentityOrThrow(
   );
 }
 
-// A project repo registered from inside the state root (nothing stops
+// A project repo registered from inside the data dir (nothing stops
 // projects.add from accepting one) would be wiped or dragged along by
-// root-wide operations. Nuke and root-move both refuse up front on
+// data-dir-wide operations. Nuke and the data dir move both refuse up front on
 // this test. Takes the caller's already-loaded list so the guard adds
 // no extra store read.
-export function findProjectInsideRoot(
+export function findProjectInsideDataDir(
   projects: Project[],
 ): Project | undefined {
-  const root = shigomoriRoot();
+  const root = dataDir();
   return projects.find((p) => isSameOrInside(toAbsolute(p.path), root));
 }
 

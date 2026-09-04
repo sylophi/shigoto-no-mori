@@ -57,7 +57,7 @@ export function ConvertExternalWorktrees() {
         {
           layout: config?.worktreeLayout ?? "managed-root",
           projectPath: project.path,
-          shigomoriRoot: runtime.shigomoriRoot,
+          dataDir: runtime.dataDir,
           customPath: config?.customWorktreePath ?? null,
         },
         proposedName(worktree) || "(generated name)",

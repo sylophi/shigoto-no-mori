@@ -26,7 +26,7 @@ export const CarryOverEntrySchema = z.object({
 export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 
 // Where shigomori's managed worktrees for this project live on disk.
-// - managed-root: ~/shigomori[-dev]/worktrees/<projectName>/<worktreeName>
+// - managed-root: <dataDir>/worktrees/<projectName>/<worktreeName>
 //   (default; one place for every project's worktrees, easy to nuke)
 // - in-project: <projectPath>/.shigomori/worktrees/<worktreeName>
 //   (sits inside the primary; lets tools that walk up to a workspace
@@ -41,7 +41,7 @@ export const WorktreeLayoutSchema = z.enum([
 ]);
 export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
 
-// Per-project config. Stored at ~/shigomori[-dev]/projects/<projectId>.json
+// Per-project config. Stored at <dataDir>/projects/<projectId>.json
 // and managed by the app, not committed to the user's repo.
 // Strict on purpose. It doubles as the shigomori:write IPC input, so a
 // key the renderer invents is dropped at the boundary instead of being
@@ -147,7 +147,7 @@ export const ShigomoriWorktreeDataSchema = z.object({
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 
-// Global, per-device config kept in ~/shigomori[-dev]/config.json. Holds
+// Global, per-device config kept in <dataDir>/config.json. Holds
 // preferences that span every project: custom launchers the user wants
 // everywhere (claude, tmux, an editor command, etc.), and room for future
 // settings.

@@ -2,7 +2,7 @@
 // an updater at all (Squirrel is gone): checking shells out to
 // `sm update --stage --json` (cli/updater.go), which queries the feed,
 // downloads, signature-verifies, and parks the new bundle in
-// <root>/updates/staged. Installing spawns a detached
+// <dataDir>/updates/staged. Installing spawns a detached
 // `sm update --finish-install --pid <ours>` and quits. The installer
 // waits for this process to exit, swaps the bundle, and relaunches.
 // The renderer sees the same small state machine as before.
@@ -30,7 +30,7 @@ import {
 import { setUpdaterImpl } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/jsonFile";
-import { pathExists, shigomoriRoot } from "@host/lib/util/paths";
+import { pathExists, dataDir } from "@host/lib/util/paths";
 import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
@@ -80,7 +80,7 @@ export function getUpdaterState(): UpdaterState {
 }
 
 // Mirrors cli/updater.go stagedDir()/stagedManifestPath().
-const stagedDir = () => join(shigomoriRoot(), "updates", "staged");
+const stagedDir = () => join(dataDir(), "updates", "staged");
 
 // null unless a well-formed manifest describes a bundle that is
 // actually on disk.

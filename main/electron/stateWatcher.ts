@@ -1,4 +1,4 @@
-// Watches the shigomori root so state written by the CLI (or any
+// Watches the shigomori data dir so state written by the CLI (or any
 // external process) shows up in the app without waiting for window
 // focus or a TTL to lapse: an agent running `sm create` in a terminal
 // should see the worktree appear in the sidebar within a debounce, not
@@ -9,13 +9,13 @@
 // refetch (git spawns per worktree, gh network calls) that targeted
 // mutation invalidation already covered. Events are dropped while a
 // delegated CLI child runs and within a short window of any app-side
-// root write; a genuinely external write in that window is picked up
+// data dir write; a genuinely external write in that window is picked up
 // by the next focus refetch instead.
 import { type FSWatcher, mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "@host/lib/config/global";
 import { invalidateAllProjectConfigCaches } from "@host/lib/config/project";
-import { shigomoriRoot } from "@host/lib/util/paths";
+import { dataDir } from "@host/lib/util/paths";
 import { selfWroteWithin } from "@host/lib/util/selfWrite";
 import { cliChildCount } from "./cliRunner";
 
@@ -24,8 +24,8 @@ const SELF_ECHO_MS = 1000;
 
 const activeWatchers: FSWatcher[] = [];
 
-// Close every watch on the root. Called before the data-folder move
-// renames the root out from under them; the app relaunches right after
+// Close every watch on the data dir. Called before the data-folder move
+// renames the data dir out from under them; the app relaunches right after
 // the move anyway, so nothing needs re-watching this session.
 export function stopStateWatcher(): void {
   for (const watcher of activeWatchers.splice(0)) watcher.close();
@@ -95,21 +95,21 @@ export function startStateWatcher(poke: () => void): void {
       });
       activeWatchers.push(watcher);
     } catch {
-      // Directory missing (fresh root); bootstrap creates it before
+      // Directory missing (fresh data dir); bootstrap creates it before
       // anything writes, so nothing to observe yet is fine.
     }
   };
-  // registry.json, state.json and config.json live at the root, with
+  // registry.json, state.json and config.json live at the top, with
   // per-project config and worktree data under projects/. worktrees/
   // needs its own recursive
   // watch: an external `sm create` writes no state file at all -- the
   // only observable change is the new checkout directory two levels
-  // down (worktrees/<project>/<name>), which a non-recursive root
+  // down (worktrees/<project>/<name>), which a non-recursive top-level
   // watch never sees. (In-project and custom layouts sit outside the
-  // root and aren't covered; the managed-root default is.)
-  watchDir(shigomoriRoot(), false);
-  watchDir(join(shigomoriRoot(), "projects"), true);
-  const worktreesDir = join(shigomoriRoot(), "worktrees");
+  // data dir and aren't covered; the managed-root default is.)
+  watchDir(dataDir(), false);
+  watchDir(join(dataDir(), "projects"), true);
+  const worktreesDir = join(dataDir(), "worktrees");
   try {
     mkdirSync(worktreesDir, { recursive: true });
   } catch {

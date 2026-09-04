@@ -3,7 +3,7 @@ package main
 // sm doctor -- the "why is sm behaving weirdly" command. It answers two
 // questions the other commands can only fail at: is this installation
 // intact (git, gh, the app bundle behind the binary, PATH, the shell
-// hook), and is the state root internally consistent (config and state
+// hook), and is the data dir internally consistent (config and state
 // parse, no lock a crashed process left behind, no registry entry
 // pointing at a directory that's gone, git's worktree metadata agreeing
 // with what's on disk).
@@ -35,7 +35,7 @@ const (
 // order: broadest blast radius first.
 const (
 	groupEnv      = "Environment"
-	groupState    = "State root"
+	groupState    = "Data dir"
 	groupProjects = "Projects"
 )
 
@@ -128,7 +128,7 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	}
 
 	// doctor is noContext, so run() hands over an empty cliContext and
-	// never touches the registry -- which is the point: a root this
+	// never touches the registry -- which is the point: a data dir this
 	// command exists to diagnose must not fail the load before the
 	// checks get to describe it. Read it here and degrade to none,
 	// because checkRegistryFile reports the parse failure itself.
@@ -181,7 +181,7 @@ func emitDoctorJSON(report *doctorReport, repaired []string) {
 	}
 	emit(map[string]any{
 		"ok":       failCount == 0,
-		"root":     shigomoriRoot(),
+		"dataDir":  dataDir(),
 		"flavor":   flavor,
 		"version":  version,
 		"binary":   binaryName,
@@ -206,7 +206,7 @@ func statusGlyph(status string) string {
 
 func renderDoctorReport(report *doctorReport, repaired []string, fix bool) {
 	header := boldOut(binaryName+" doctor") + " " + dimOut(version+" ("+flavor+")") +
-		"  root " + cyanOut(collapseHome(shigomoriRoot()))
+		"  data dir " + cyanOut(collapseHome(dataDir()))
 	out(header)
 	out("")
 

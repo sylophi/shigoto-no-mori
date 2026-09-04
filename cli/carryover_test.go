@@ -103,7 +103,7 @@ func TestApplyCarryOverFallsThroughSources(t *testing.T) {
 // .worktreeinclude pattern that only exist in a sibling worktree still
 // land in the new one, whether or not that sibling holds the base.
 func TestCreateLifecycleCarriesOverFromSiblingWorktree(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "repo")
 	writeFileT(t, filepath.Join(repo, ".gitignore"), ".env*\n")
 	mustGit(t, repo, "add", ".gitignore")

@@ -95,7 +95,7 @@ function prepareFixture(): Fixture {
 
   for (const profile of [a, b]) {
     mkdirSync(profile.repos, { recursive: true });
-    mkdirSync(profile.root, { recursive: true });
+    mkdirSync(profile.dataDir, { recursive: true });
     git(profile.repos, "clone", "-q", origin, "shared");
     registerProjects(profile, profile.repos);
     cloneDevLogin(profile);
@@ -332,7 +332,7 @@ async function main(): Promise<string[]> {
       );
       pulled = result.worktree;
       assert.ok(
-        pulled.path.startsWith(fixture.a.root),
+        pulled.path.startsWith(fixture.a.dataDir),
         `pulled worktree not under a's root: ${pulled.path}`,
       );
       assert.ok(existsSync(pulled.path), "pulled worktree missing on disk");
@@ -377,7 +377,7 @@ async function main(): Promise<string[]> {
       );
       const local = started.worktree;
       assert.ok(
-        local.path.startsWith(fixture.a.root),
+        local.path.startsWith(fixture.a.dataDir),
         `mirrored worktree not under a's root: ${local.path}`,
       );
       const session = JSON.stringify(started.session);

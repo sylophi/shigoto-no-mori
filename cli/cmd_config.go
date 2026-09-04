@@ -299,7 +299,7 @@ func decodeConfigDoc(raw []byte) (map[string]any, error) {
 	return doc, nil
 }
 
-// Missing reads as empty so list/get work on a fresh root. A file
+// Missing reads as empty so list/get work on a fresh data dir. A file
 // that exists but can't be decoded is an error: printing defaults in
 // place of settings the user actually wrote is how a corrupt file
 // turns an explicit deleteBranchOnRemove opt-out back into "true

@@ -1,8 +1,8 @@
 package main
 
 // Tests for the doctor check logic: every case runs against a
-// hand-seeded temp state root (and, where a repo is needed, a temp
-// git repo), so the real ~/shigomori is never read and never written.
+// hand-seeded temp data dir (and, where a repo is needed, a temp
+// git repo), so the real ~/.sm is never read and never written.
 // The environment checks (git, gh, the app bundle, PATH) are left to
 // their pure helpers -- shelling out to the host's tools would make
 // the suite describe the machine instead of the code.
@@ -81,7 +81,7 @@ func onlyFinding(t *testing.T, report *doctorReport, id, status string) finding 
 	return matched[0]
 }
 
-// --- state root ---
+// --- data dir ---
 
 func TestCheckGlobalConfig(t *testing.T) {
 	cases := []struct {
@@ -98,7 +98,7 @@ func TestCheckGlobalConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			sandboxRoot(t)
+			sandboxDataDir(t)
 			if tc.write {
 				writeFileT(t, configJSONPath(), tc.content)
 			}
@@ -125,7 +125,7 @@ func TestCheckRegistryFile(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			sandboxRoot(t)
+			sandboxDataDir(t)
 			if tc.write {
 				writeFileT(t, registryPath(), tc.content)
 			}
@@ -139,7 +139,7 @@ func TestCheckRegistryFile(t *testing.T) {
 // A malformed registry.json is the one failure that makes sm forget every
 // project silently, so it must never read as a warning.
 func TestMalformedRegistryIsFatalNotAWarning(t *testing.T) {
-	sandboxRoot(t)
+	sandboxDataDir(t)
 	writeFileT(t, registryPath(), "definitely not json")
 	report := &doctorReport{}
 	checkRegistryFile(report)
@@ -150,7 +150,7 @@ func TestMalformedRegistryIsFatalNotAWarning(t *testing.T) {
 }
 
 func TestFindStaleLocksIgnoresFreshOnes(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	fresh := filepath.Join(root, "state.json.lock")
 	writeFileT(t, fresh, "1234")
 	stale := projectConfigJSONPath("AAA") + ".lock"
@@ -169,7 +169,7 @@ func TestFindStaleLocksIgnoresFreshOnes(t *testing.T) {
 }
 
 func TestStaleLockRepairDeletesEveryLock(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	old := time.Now().Add(-time.Hour)
 	var locks []string
 	for _, rel := range []string{"state.json.lock", "projects/AAA/project.json.lock"} {
@@ -201,7 +201,7 @@ func TestStaleLockRepairDeletesEveryLock(t *testing.T) {
 }
 
 func TestCheckStagingLock(t *testing.T) {
-	sandboxRoot(t)
+	sandboxDataDir(t)
 	// Absent: no line at all, the normal case.
 	report := &doctorReport{}
 	checkStagingLock(report)
@@ -235,7 +235,7 @@ func TestCheckStagingLock(t *testing.T) {
 // --- projects ---
 
 func TestProjectPathGoneIsFatalAndRepairable(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	proj := project{ID: "GONE1", Name: "ghost", Path: filepath.Join(root, "repos", "ghost")}
 	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
 	writeFileT(t, registryPath(),
@@ -263,7 +263,7 @@ func TestProjectPathGoneIsFatalAndRepairable(t *testing.T) {
 }
 
 func TestProjectPathThatStoppedBeingARepo(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	path := filepath.Join(root, "repos", "plain")
 	if err := os.MkdirAll(path, 0o755); err != nil {
 		t.Fatal(err)
@@ -279,7 +279,7 @@ func TestProjectPathThatStoppedBeingARepo(t *testing.T) {
 }
 
 func TestHealthyProjectRecordsNothing(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	writeFileT(t, projectConfigJSONPath(proj.ID),
@@ -294,7 +294,7 @@ func TestHealthyProjectRecordsNothing(t *testing.T) {
 }
 
 func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
@@ -329,7 +329,7 @@ func TestWorktreeMetadataOutlivingItsDirectory(t *testing.T) {
 }
 
 func TestStrayDirectoryInManagedLayoutIsReportedNotFixed(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	stray := filepath.Join(root, "worktrees", "alpha", "stray")
@@ -353,7 +353,7 @@ func TestStrayDirectoryInManagedLayoutIsReportedNotFixed(t *testing.T) {
 // as absent by both the app and the CLI -- silently, which is exactly
 // what makes it worth a line.
 func TestProjectConfigPresentButInvalid(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "beta")
 	proj := project{ID: "B1", Name: "beta", Path: repo}
 	writeFileT(t, projectConfigJSONPath(proj.ID),
@@ -366,7 +366,7 @@ func TestProjectConfigPresentButInvalid(t *testing.T) {
 }
 
 func TestCheckProjectDefaultBranch(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	// A bad override still falls back to a real branch, so there is
 	// nothing to say.
 	repo := seedRepo(t, root, "gamma")
@@ -424,7 +424,7 @@ func TestMissingScriptFiles(t *testing.T) {
 }
 
 func TestUnreadableWorktreeIncludeIsReported(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "delta")
 	proj := project{ID: "D1", Name: "delta", Path: repo}
 	include := filepath.Join(repo, worktreeIncludeFile)
@@ -442,7 +442,7 @@ func TestUnreadableWorktreeIncludeIsReported(t *testing.T) {
 // --- shelved marks ---
 
 func TestOrphanedShelvedMarks(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	invalidateAllWorktreeIdentities()
@@ -630,12 +630,12 @@ func TestApplyRepairsReportsFailuresAndKeepsGoing(t *testing.T) {
 // --- what --fix is allowed to touch ---
 
 // iconCache/ takes index.json.lock under the same advisory protocol as
-// the rest of the root, so a crashed icon write leaves exactly the kind
+// the rest of the data dir, so a crashed icon write leaves exactly the kind
 // of lock this check exists to find. updates/ holds staged downloads
 // and never a lock, so a file that merely ends in .lock there is not
 // ours to delete.
 func TestFindStaleLocksScansIconCacheButNotUpdates(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	old := time.Now().Add(-time.Hour)
 	stale := func(path string) string {
 		writeFileT(t, path, "1")
@@ -658,9 +658,9 @@ func TestFindStaleLocksScansIconCacheButNotUpdates(t *testing.T) {
 
 // The file header's promise: a plain `doctor` run reports, and changes
 // nothing. The one sanctioned exception is the state.json -> registry.json
-// migration, which is why this root is seeded already split.
+// migration, which is why this data dir is seeded already split.
 func TestDoctorWithoutFixWritesNothing(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	writeFileT(t, registryPath(),
@@ -681,7 +681,7 @@ func TestDoctorWithoutFixWritesNothing(t *testing.T) {
 		t.Fatalf("this fixture should only warn, got %d failures: %+v", failed, report.findings)
 	}
 	if after := snapshotTree(t, root); !reflect.DeepEqual(before, after) {
-		t.Fatalf("doctor wrote to the state root:\nbefore %v\nafter  %v", before, after)
+		t.Fatalf("doctor wrote to the data dir:\nbefore %v\nafter  %v", before, after)
 	}
 }
 
@@ -711,7 +711,7 @@ func snapshotTree(t *testing.T, dir string) map[string]string {
 // entry on purpose: `projects remove` is answering a name the user
 // typed, doctor's repair is racing the app.
 func TestRemoveProjectRegistrationMissingEntry(t *testing.T) {
-	sandboxRoot(t)
+	sandboxDataDir(t)
 	writeFileT(t, registryPath(), `{"projects":[{"id":"KEEP","name":"keep","path":"/tmp/keep"}]}`)
 
 	if err := removeProjectRegistration("ABSENT", false); err == nil {
@@ -732,7 +732,7 @@ func TestRemoveProjectRegistrationMissingEntry(t *testing.T) {
 // Unregistering drops sm's own state for a project. The repo it points
 // at belongs to the user and must survive, whatever else happens.
 func TestUnregisteringNeverTouchesTheRepo(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	writeFileT(t, filepath.Join(repo, "keep-me.txt"), "user data")
 	writeFileT(t, registryPath(),
@@ -756,9 +756,9 @@ func TestUnregisteringNeverTouchesTheRepo(t *testing.T) {
 	}
 }
 
-// A healthy root offers nothing to repair, so --fix is a no-op on it.
-func TestFixOnAHealthyRootRepairsNothing(t *testing.T) {
-	root := sandboxRoot(t)
+// A healthy data dir offers nothing to repair, so --fix is a no-op on it.
+func TestFixOnAHealthyDataDirRepairsNothing(t *testing.T) {
+	root := sandboxDataDir(t)
 	repo := seedRepo(t, root, "alpha")
 	proj := project{ID: "A1", Name: "alpha", Path: repo}
 	writeFileT(t, registryPath(),
