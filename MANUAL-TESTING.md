@@ -171,8 +171,11 @@ cloning exists.
 ### Rules
 
 - **The peer needs the primary running.** It has no build of its own.
-  When Forge restarts the primary after a main-process change, the
-  peer keeps the code it booted with until it is relaunched.
+- **A main-process change restarts nothing by itself.** Forge rebuilds
+  the main bundle (it prints `target built`) but leaves the primary
+  running on the old code: type `rs` in the `pnpm start` terminal to
+  restart it. The peer keeps the code it booted with until it is
+  relaunched.
 - **Never press Sign out in a cloned window.** A cloned sign-in shares
   one Clerk client with the plain dev app, so signing out ends the
   session for both. End a cloned profile by revoking its device

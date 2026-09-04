@@ -6,7 +6,8 @@
 // in .vite/build, which forge points at the primary's vite server) as
 // the dev profile <name> (scripts/lib/devProfile.mts). It has no
 // build of its own, so it needs the primary running, and it keeps the
-// main-process code it booted with when forge restarts the primary.
+// main-process code it booted with across a primary restart (which
+// forge does only on `rs` typed in its terminal, never on its own).
 // MANUAL-TESTING.md covers the workflow around it.
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
