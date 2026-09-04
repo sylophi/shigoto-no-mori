@@ -1,7 +1,11 @@
 import { app, BrowserWindow, dialog, powerMonitor } from "electron";
 import { platform } from "node:os";
 import path from "node:path";
-import { DEV_NAME_SUFFIX } from "@shared/appName.mts";
+import {
+  DEV_NAME_SUFFIX,
+  DEV_USER_DATA_SUFFIX,
+  devProfileUserData,
+} from "@shared/appName.mts";
 import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
 import { cliRootDirName } from "@shared/cliDist.mts";
@@ -20,6 +24,7 @@ import {
 } from "./electron/clerk";
 import { attachContextMenu } from "./electron/contextMenu";
 import { enableDevCdpPort } from "./electron/devCdp";
+import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import {
   refreshAllProjectGitRefs,
   startBackgroundFetch,
@@ -82,12 +87,34 @@ import {
 
 enableDevCdpPort();
 
+// The dev profile this instance runs as (electron/devProfile.ts), or
+// null. A refused profile is told why (showErrorBox is safe pre-ready)
+// and reads as no profile while the exit lands.
+function devProfile(): string | null {
+  try {
+    return initDevProfile();
+  } catch (error) {
+    dialog.showErrorBox("Shigoto no Mori dev profile", errorMessageOf(error));
+    app.exit(1);
+    return null;
+  }
+}
+
 // Electron scopes the single-instance lock to the userData directory,
 // and dev and packaged builds resolve the same one out of productName.
 // A dev run owns a different data root (~/shigomori-dev), so give it
 // its own userData or an installed copy would lock it out.
 if (!app.isPackaged) {
-  app.setPath("userData", `${app.getPath("userData")} (dev)`);
+  const profile = devProfile();
+  const devUserData = `${app.getPath("userData")}${DEV_USER_DATA_SUFFIX}`;
+  // A dev profile (shared/appName.mts) is a further dev instance on
+  // this machine with its own userData, so its own lock, credential,
+  // grants and tokens: a separate device for testing remote flows
+  // against a real peer (scripts/dev-peer.mts).
+  app.setPath(
+    "userData",
+    profile === null ? devUserData : devProfileUserData(devUserData, profile),
+  );
   // One dev-identity policy, two halves. The rename gives dev its own
   // menu bar label and, on Linux and Windows where safeStorage really
   // talks to libsecret/DPAPI, its own "<name> Safe Storage" item so
@@ -103,7 +130,7 @@ if (!app.isPackaged) {
   // for dev-instance tokens on the owner's machine. Packaged builds
   // keep the real keychain. After the userData suffix above, so the
   // dev data path stays derived from the shared productName.
-  app.setName(`${app.name}${DEV_NAME_SUFFIX}`);
+  app.setName(`${app.name}${DEV_NAME_SUFFIX}${devProfileSuffix()}`);
   if (platform() === "darwin") {
     app.commandLine.appendSwitch("use-mock-keychain");
   }

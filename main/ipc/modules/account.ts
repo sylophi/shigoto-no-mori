@@ -8,6 +8,7 @@
 // the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
 import { readFileSync } from "node:fs";
+import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
@@ -188,8 +189,11 @@ async function defaultDeviceName(): Promise<DefaultDeviceName> {
     defaultNameInFlight = null;
   });
   const resolved = await defaultNameInFlight;
-  if (!resolved.provisional) settledDefaultName = resolved.name;
-  return resolved;
+  // A dev profile is a further device on this machine, so its default
+  // name says which one it is.
+  const name = `${resolved.name}${devProfileSuffix()}`;
+  if (!resolved.provisional) settledDefaultName = name;
+  return { name, provisional: resolved.provisional };
 }
 
 // Starts the resolve at boot so it overlaps window creation instead of
