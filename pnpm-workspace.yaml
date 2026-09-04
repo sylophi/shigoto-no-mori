@@ -32,6 +32,10 @@ allowBuilds:
   # compiles them. Build tooling only: neither is bundled into the app.
   fs-xattr: true
   macos-alias: true
+  # node-pty (script console PTY) is compiled by @electron/rebuild
+  # against Electron's headers when forge starts or packages the app,
+  # so its install-time node-gyp build for the Node ABI is skipped.
+  node-pty: false
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.

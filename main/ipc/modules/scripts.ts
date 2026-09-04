@@ -2,7 +2,12 @@ import type { ScriptName, ShigomoriConfig } from "@shared/schemas";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "../../lib/projects";
-import { cancelScript, startScript } from "../../lib/scripts";
+import {
+  cancelScript,
+  resizeScript,
+  startScript,
+  writeToScript,
+} from "../../lib/scripts";
 import { takeOrphanSweepReport } from "../../lib/scripts/persistence";
 import { shellQuote } from "../../lib/scripts/process";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
@@ -57,6 +62,14 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
       const cancelled = await cancelScript(runId);
       return { cancelled };
     },
+
+    write: async ({ runId, data }) => ({
+      written: writeToScript(runId, data),
+    }),
+
+    resize: async ({ runId, cols, rows }) => ({
+      resized: resizeScript(runId, { cols, rows }),
+    }),
 
     orphanReport: async () => takeOrphanSweepReport(),
   };

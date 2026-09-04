@@ -59,10 +59,24 @@ export const CancelScriptPayloadSchema = z.object({
   runId: z.string().min(1),
 });
 
-// stdout and stderr are merged into one "data" event so xterm renders
-// them in true interleave order (matches how a terminal would show
-// them). "error" covers spawn failures; "exit" is the final code
-// (null if the process died from a signal or we cancelled).
+// Keystrokes the console forwards to the run's PTY, exactly as xterm
+// encodes them (control characters, escape sequences for arrows, ...).
+export const WriteScriptPayloadSchema = z.object({
+  runId: z.string().min(1),
+  data: z.string(),
+});
+
+// The console's viewport in cells; the PTY window size follows it.
+export const ResizeScriptPayloadSchema = z.object({
+  runId: z.string().min(1),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive(),
+});
+
+// "data" is the run's terminal output (stdout and stderr share the
+// PTY, so xterm renders them in true interleave order). "error" covers
+// spawn failures; "exit" is the final code (null if the process died
+// from a signal or we cancelled).
 export const ScriptEventSchema = z.discriminatedUnion("kind", [
   z.object({ runId: z.string(), kind: z.literal("data"), data: z.string() }),
   z.object({

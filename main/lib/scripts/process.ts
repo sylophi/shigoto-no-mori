@@ -1,5 +1,10 @@
-// POSIX script processes: login-shell spawning and process-group
-// signaling.
+// POSIX script processes: login-shell spawning under a pseudo-terminal
+// and process-group signaling.
+//
+// Scripts run in a PTY (node-pty) rather than on pipes, so the console
+// behaves like a terminal: programs see a TTY, get a real window size,
+// emit color without coaxing, and can read keystrokes the renderer
+// forwards (interactive prompts, vite's "r"/"q" shortcuts, TUIs).
 //
 // Kill strategy:
 //   1. SIGTERM the process group (negative pgid) -- covers normal forks.
@@ -7,35 +12,32 @@
 //      double-forked daemons) and SIGTERM those too.
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
-import {
-  type ChildProcess,
-  execFile,
-  spawn,
-  type StdioOptions,
-} from "node:child_process";
+import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
+import { type IPty, spawn as spawnPty } from "node-pty";
 
 const execFileP = promisify(execFile);
+
+export type ScriptPty = IPty;
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
+}
 
 interface SpawnScriptOptions {
   command: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
+  size: TerminalSize;
 }
-
-// stdin is a pipe we never write to or close. Closed stdin (EOF on first
-// read) makes tools like electron-forge and vite that listen for
-// keystrokes ("rs", "q") interpret it as "user closed the terminal" and
-// shut down, dragging the dev server with them.
-const SCRIPT_STDIO: StdioOptions = ["pipe", "pipe", "pipe"];
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
 // GUI launches depending on launchd state. os.userInfo().shell reads the
 // passwd entry directly. We use a *login* shell (no `-i`) so the user's
 // `.zprofile` / `.bash_profile` runs without zsh's interactive-init code
-// (job control, gitstatus, prompt setup) throwing errors at us when
-// there's no controlling TTY.
+// (job control, prompt setup, zle) getting in the way of the command.
 function resolveShell(): { command: string; args: string[] } {
   const userShell = process.env["SHELL"] || userInfo().shell;
   if (userShell) return { command: userShell, args: ["-l", "-c"] };
@@ -48,15 +50,24 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-export function spawnScript(opts: SpawnScriptOptions): ChildProcess {
+// Throws synchronously when no process could be started (missing shell
+// binary, PTY allocation failure); callers report that as a failed run.
+// The PTY child runs in its own session, so its pgid === pid and the
+// whole tree can be signaled via process.kill(-pid, sig).
+export function spawnScript(opts: SpawnScriptOptions): ScriptPty {
   const { command: shellCmd, args: shellArgs } = resolveShell();
-  return spawn(shellCmd, [...shellArgs, opts.command], {
+  // node-pty's env is a plain string map; drop the undefined entries
+  // NodeJS.ProcessEnv allows.
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(opts.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  return spawnPty(shellCmd, [...shellArgs, opts.command], {
+    name: "xterm-256color",
+    cols: opts.size.cols,
+    rows: opts.size.rows,
     cwd: opts.cwd,
-    env: opts.env,
-    stdio: SCRIPT_STDIO,
-    // New session = new process group with pgid === child.pid. Lets us
-    // signal the whole tree via process.kill(-pid, sig).
-    detached: true,
+    env,
   });
 }
 

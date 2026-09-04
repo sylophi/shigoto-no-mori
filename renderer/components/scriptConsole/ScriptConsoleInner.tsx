@@ -17,7 +17,10 @@ interface InnerProps {
 }
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
-  const { key, state, busy, start, stop } = useScriptRunner(worktree, slot);
+  const { key, state, busy, start, stop, send, resize } = useScriptRunner(
+    worktree,
+    slot,
+  );
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 
@@ -25,7 +28,10 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const label = slotLabel(slot);
 
   const clear = () => scriptRuns.clear(key);
-  const canClear = !busy && state.output.length > 0;
+  const canClear = !busy && state.chunkTotal > 0;
+  // Lifecycle scripts the CLI ran for the app stream here too, but
+  // their process lives in the CLI, not behind one of our PTYs.
+  const outputOnly = busy && !state.interactive;
 
   return (
     <div className="flex h-full flex-col">
@@ -44,6 +50,12 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
             <div className="min-h-[1rem]">
               <ScriptStatusBadge state={state} variant="header" />
             </div>
+            {outputOnly && (
+              <p className="text-xs text-muted-foreground">
+                Output only: this run was started by the CLI, so the console
+                can't send it input.
+              </p>
+            )}
           </div>
           <div className="shrink-0">
             {busy ? (
@@ -66,7 +78,12 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
         </div>
       </header>
 
-      <ConsoleBody state={state} onClear={canClear ? clear : null} />
+      <ConsoleBody
+        state={state}
+        onClear={canClear ? clear : null}
+        onInput={send}
+        onResize={resize}
+      />
     </div>
   );
 }

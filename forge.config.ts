@@ -57,9 +57,30 @@ const dmgVolumeName =
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
+// Forge's Vite plugin normally ships only the .vite/ bundles. node-pty
+// (the script console's PTY) is the one dependency Vite can't bundle:
+// its loader requires the native addon by path and posix_spawns the
+// spawn-helper next to it, so the package has to exist as real files
+// -- its manifest, the JS in lib/, and the prebuilt darwin binaries.
+// Everything else in the package (sources, typings, tests' fixtures)
+// stays out, as does every other node_modules entry. Paths always
+// start with "/" and directories are filtered too, so the node_modules
+// parents have to pass for their children to be visited.
+const NODE_PTY_SHIPPED =
+  /^\/node_modules(\/node-pty(\/(package\.json|lib(\/.*)?|prebuilds(\/darwin-.*)?))?)?$/;
+const packagerIgnore = (file: string): boolean => {
+  if (!file) return false;
+  if (file.startsWith("/.vite")) return false;
+  return !NODE_PTY_SHIPPED.test(file);
+};
+
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    // The native addon and spawn-helper are loaded by path at runtime,
+    // which only works from app.asar.unpacked (node-pty rewrites its
+    // own helper path accordingly).
+    asar: { unpack: "**/node_modules/node-pty/**" },
+    ignore: packagerIgnore,
     icon: "assets/icon",
     appBundleId: APP_BUNDLE_ID,
     appCopyright: "© 2026 sylophi",
@@ -83,7 +104,12 @@ const config: ForgeConfig = {
         }
       : {}),
   },
-  rebuildConfig: {},
+  // node-pty ships Node-API prebuilds that work in Electron as-is
+  // (scripts/fix-node-pty-helper.mjs makes the helper executable, since
+  // install scripts are disabled). Skipping the rebuild keeps a compiler
+  // toolchain out of the dev loop and makes dev and packaged builds run
+  // the same binary.
+  rebuildConfig: { ignoreModules: ["node-pty"] },
   hooks: {
     prePackage: async () => {
       execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {

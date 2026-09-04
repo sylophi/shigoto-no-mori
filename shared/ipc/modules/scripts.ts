@@ -4,8 +4,10 @@ import {
   CancelScriptPayloadSchema,
   OrphanScriptReportSchema,
   RemovedWorktreeScriptsSchema,
+  ResizeScriptPayloadSchema,
   RunScriptPayloadSchema,
   ScriptEventSchema,
+  WriteScriptPayloadSchema,
 } from "@shared/schemas";
 
 export const scriptsContract = {
@@ -19,6 +21,20 @@ export const scriptsContract = {
     "scripts:cancel",
     CancelScriptPayloadSchema,
     z.object({ cancelled: z.boolean() }),
+  ),
+  // Console input and viewport size for a run the app spawned. Both
+  // report `false` for a run that has no PTY here (already exited, or
+  // a lifecycle script the CLI ran on the app's behalf), which the
+  // renderer treats as "read-only", not as an error.
+  write: invoke(
+    "scripts:write",
+    WriteScriptPayloadSchema,
+    z.object({ written: z.boolean() }),
+  ),
+  resize: invoke(
+    "scripts:resize",
+    ResizeScriptPayloadSchema,
+    z.object({ resized: z.boolean() }),
   ),
   event: broadcast("scripts:event", ScriptEventSchema),
   // The worktree these scripts ran in was removed outside the app, so

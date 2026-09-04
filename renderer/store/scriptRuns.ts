@@ -56,6 +56,15 @@ export interface ScriptRunState {
   // Raw output chunks (already utf8-decoded). The console writes them
   // straight into xterm; we don't try to interpret ANSI here.
   output: string[];
+  // Chunks appended over the whole run, including ones the cap below
+  // has since dropped from `output`. The console compares it with what
+  // it has written to find the unwritten tail of `output`.
+  chunkTotal: number;
+  // Whether keystrokes reach the process. True for runs the app spawned
+  // (they own a PTY in main); false for lifecycle scripts the CLI ran
+  // on the app's behalf, which stream output through the same events
+  // but have nothing to type into.
+  interactive: boolean;
   exitCode: number | null;
   startedAt: number | null;
   endedAt: number | null;
@@ -91,6 +100,8 @@ const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
   status: "idle" as const,
   output: [],
+  chunkTotal: 0,
+  interactive: false,
   exitCode: null,
   startedAt: null,
   endedAt: null,
@@ -106,7 +117,7 @@ interface StartInput {
 
 type ScriptsApi = Pick<
   RendererApi["scripts"],
-  "cancel" | "onEvent" | "onStoppedForRemovedWorktree"
+  "cancel" | "write" | "resize" | "onEvent" | "onStoppedForRemovedWorktree"
 >;
 
 type WarnFn = (title: string, options?: { description?: string }) => unknown;
@@ -149,6 +160,8 @@ class ScriptRunsStore {
       runId: null,
       status: "starting",
       output: [],
+      chunkTotal: 0,
+      interactive: true,
       exitCode: null,
       startedAt: Date.now(),
       endedAt: null,
@@ -199,6 +212,28 @@ class ScriptRunsStore {
           : s,
       );
     }
+  }
+
+  // Console keystrokes and viewport size for a live run. Both are
+  // fire-and-forget: main answers `false` for a run it has no PTY for,
+  // and the guards here already keep such runs (and finished ones)
+  // from being written to at all.
+  write(key: ScriptKey, data: string): void {
+    const runId = this.liveInteractiveRunId(key);
+    if (!runId) return;
+    void this.api.write(runId, data).catch(() => {});
+  }
+
+  resize(key: ScriptKey, cols: number, rows: number): void {
+    const runId = this.liveInteractiveRunId(key);
+    if (!runId) return;
+    void this.api.resize(runId, cols, rows).catch(() => {});
+  }
+
+  private liveInteractiveRunId(key: ScriptKey): string | null {
+    const state = this.states.get(key);
+    if (!state?.runId || !state.interactive) return null;
+    return state.status === "running" ? state.runId : null;
   }
 
   clear(key: ScriptKey): void {
@@ -406,6 +441,8 @@ class ScriptRunsStore {
       runId: event.runId,
       status: "running",
       output: [],
+      chunkTotal: 0,
+      interactive: false,
       exitCode: null,
       startedAt: Date.now(),
       endedAt: null,
@@ -437,7 +474,7 @@ function appendChunk(state: ScriptRunState, chunk: string): ScriptRunState {
     state.output.length >= MAX_CHUNKS
       ? [...state.output.slice(state.output.length - MAX_CHUNKS + 1), chunk]
       : [...state.output, chunk];
-  return { ...state, output };
+  return { ...state, output, chunkTotal: state.chunkTotal + 1 };
 }
 
 function exitSentinel(code: number | null): string {
