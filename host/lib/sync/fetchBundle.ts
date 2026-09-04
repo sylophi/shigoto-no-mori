@@ -36,7 +36,7 @@ export interface FetchBundleInput {
 // branch refs land under refs/shigomori/incoming/<branch>. Never a
 // local branch -- `sm bundle unpack` enforces the refs/shigomori/
 // destination fail-closed, this mapping just picks the names.
-function landingRefspec(ref: string): string {
+export function landingRefspec(ref: string): string {
   const dst = ref.startsWith("refs/shigomori/")
     ? ref
     : `refs/shigomori/incoming/${ref.slice("refs/heads/".length)}`;

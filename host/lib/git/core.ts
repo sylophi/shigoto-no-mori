@@ -91,7 +91,7 @@ function mutatesRepo(args: string[]): boolean {
 
 async function exec(
   args: string[],
-  options: { cwd: string; maxBuffer?: number },
+  options: { cwd: string; maxBuffer?: number; env?: NodeJS.ProcessEnv },
 ): Promise<{ stdout: string }> {
   const start = performance.now();
   // In flight for the command's whole run, then an echo window after
@@ -103,9 +103,10 @@ async function exec(
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
     // removeWorktreeForce match on stderr text, which gettext would
     // otherwise translate.
+    const { env: overlay, ...rest } = options;
     const result = await execFileP("git", args, {
-      env: { ...process.env, LC_ALL: "C" },
-      ...options,
+      env: { ...process.env, ...overlay, LC_ALL: "C" },
+      ...rest,
     });
     const elapsed = Math.round(performance.now() - start);
     console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
@@ -119,8 +120,18 @@ async function exec(
   }
 }
 
-export async function run(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await exec(args, { cwd, maxBuffer: 10 * 1024 * 1024 });
+// `env` overlays the inherited environment for this one spawn (the
+// mirror's index snapshot points GIT_INDEX_FILE at a copy).
+export async function run(
+  cwd: string,
+  args: string[],
+  opts: { env?: NodeJS.ProcessEnv } = {},
+): Promise<string> {
+  const { stdout } = await exec(args, {
+    cwd,
+    maxBuffer: 10 * 1024 * 1024,
+    env: opts.env,
+  });
   return stdout;
 }
 

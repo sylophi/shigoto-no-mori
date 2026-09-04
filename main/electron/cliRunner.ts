@@ -76,6 +76,20 @@ function cliBusyChildCount(): number {
 // mid-operation still prompts.
 registerInflightContributor(cliBusyChildCount);
 
+// Registers a stream child (spawnStreamChild in host/fileSync/spawn.ts)
+// for the quit-time reap below, as a background child: a mirror
+// daemon or serve process runs for as long as the app does and must
+// never count as a lifecycle operation in flight.
+export function registerBackgroundChild(child: ChildProcess): void {
+  children.add(child);
+  backgroundChildren++;
+  const release = () => {
+    if (children.delete(child)) backgroundChildren--;
+  };
+  child.on("error", release);
+  child.on("close", release);
+}
+
 // Quit-time reap, mirroring killAllScripts for package scripts: a CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
 // child is spawned detached (its own process group), and the SIGTERM

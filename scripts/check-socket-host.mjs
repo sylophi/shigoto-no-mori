@@ -993,12 +993,11 @@ async function main() {
         false,
         "sync.captureDirty writes a ref and must keep the viewer cache ping",
       );
-      // The step-8 port-forward surface (v2 slice A): every verb is a
-      // grant-gated command, but none moves state a remote viewer
-      // caches, so all four opt out of the mutation cache ping. A flip
-      // to pinging would re-invalidate a peer's whole cached view on
-      // every poll and send of an open forward.
-      for (const key of ["open", "send", "poll", "close"]) {
+      // The byte-stream opens (step 8, reworked onto channels): both
+      // are grant-gated commands, but neither moves state a remote
+      // viewer caches, so both opt out of the mutation cache ping. The
+      // bytes themselves ride binary channel frames, never invokes.
+      for (const key of ["open", "openMirror"]) {
         assert.equal(
           forwardContract.calls[key].remote,
           true,

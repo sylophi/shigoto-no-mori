@@ -18,6 +18,10 @@ import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "./shared/cloudflaredDist.mts";
+import {
+  FILE_SYNC_BINARY_NAME,
+  FILE_SYNC_DIST_DIR,
+} from "./shared/fileSyncDist.mts";
 import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/infoPlist.mts";
 import { rendererSchemeName } from "./shared/rendererScheme.mts";
 import {
@@ -88,6 +92,9 @@ const config: ForgeConfig = {
       // the target platform (shared/cloudflaredDist.mts pins it), so
       // remote access needs nothing installed.
       `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
+      // The file-sync engine (continuous worktree mirroring), compiled
+      // by the prePackage hook like the CLI and spawned only by main.
+      `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
     ],
     // The Local Network prompt's sentence (macOS 15+), shared with the
     // dev bundle. See shared/infoPlist.mts.
@@ -116,6 +123,11 @@ const config: ForgeConfig = {
       });
       // Compile the CLI (requires Go on the build machine).
       execFileSync("node", ["scripts/build-cli.mjs"], {
+        cwd: import.meta.dirname,
+        stdio: "inherit",
+      });
+      // And the file-sync engine, the same way.
+      execFileSync("node", ["scripts/build-file-sync.mjs"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });

@@ -22,6 +22,11 @@ pre-commit:
     go-test:
       glob: "{cli/**,shared/fixtures/**}"
       run: go test -C cli ./...
+    # The file-sync engine (continuous worktree mirroring) is its own
+    # Go module, tested on its own.
+    file-sync-test:
+      glob: "file-sync/**"
+      run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
     # Boots the real ws binding on an ephemeral port and asserts the
     # auth/dispatch/broadcast/framing paths plus the hardening (terminate
     # on bad token, oversized-frame and Origin rejection, in-flight cap,
@@ -97,8 +102,21 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub device hub it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run forward:check
+    # End-to-end proof for continuous worktree mirroring: builds the real
+    # file-sync engine (and the sm CLI for the fixture project), then
+    # runs a REAL `file-sync daemon` on device B behind the real
+    # gateway, dialing device A's real forward:openMirror over a real
+    # direct wire, which spawns a real `file-sync serve` for a real
+    # worktree. Asserts grant refusal surfaces as a create error,
+    # two-way convergence of plain and gitignored-style files with the
+    # .git pointer held back, the serving list on A, teardown of the
+    # serve child on terminate, and the device hub staying flat. Gated
+    # to the mirror surface plus the byte wire and CLI it rides.
+    mirror:
+      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,scripts/check-mirror.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      run: pnpm run mirror:check
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed
     # entries), the pool-then-custom merge with its shadowing rule, and

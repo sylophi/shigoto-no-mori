@@ -21,11 +21,19 @@ Shigoto no Mori is a lightweight desktop app, with a matching website, for manag
 - Create, list, switch, merge, and delete worktrees from a single window, on any of your devices.
 - Launch per-worktree commands (editor, shell, agent CLI, anything configured per project) with one click.
 - Show enough git context per worktree (branch, ahead/behind, diff summary, status) to act without leaving the app.
-- Make the machine a worktree lives on stop mattering: see every project and worktree on every device, run a dev command remotely and get the port locally, sync or transplant a worktree between machines, change any device's settings from anywhere.
+- Make the machine a worktree lives on stop mattering: see every project and worktree on every device, reach remote work through port forwarding, continuous syncing, or a one-time transfer (see below), change any device's settings from anywhere.
 
 It deliberately does not own the terminal, the editor, the agent, or the dev server. Those tools already exist and are good. The app's job is the worktree, the launcher, and the at-a-glance status, wherever the worktree lives.
 
 The product succeeds when a developer can run 3 to 10 parallel worktrees, spread across their machines, with agents or experiments and feel calm, not chaotic. For the multi-device half, the bar is not "remote access works". The bar is that you stop noticing which machine a worktree lives on.
+
+### Three ways to reach remote work
+
+There are exactly three ways to work with a worktree that lives on another machine. Each has its own job, and none is a fallback for another.
+
+- **Port forwarding.** Start the dev server over there, open the port here. Enough for web apps and anything else reached through a browser or a socket. The files stay where they are.
+- **Worktree syncing.** The worktree is continuously mirrored between the two machines: every file, not only what git tracks. Work happens on the remote machine and shows up here instantly, and edits made here show up there. Both sides are real git worktrees whose branch, commits, and uncommitted changes agree, so git behaves identically on either machine. This is the default answer to "I want that worktree in front of me": for every practical purpose, the remote worktree is on the local disk.
+- **Worktree transfer.** A special case of syncing: the worktree crosses once, in full, uncommitted changes included, and then lives on the destination. Copy it, or move it and tear the source down. For when the work belongs on the machine with the right hardware, or the source machine is going away.
 
 ## How Decisions Get Made
 

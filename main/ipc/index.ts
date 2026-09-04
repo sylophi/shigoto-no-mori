@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
@@ -11,6 +12,7 @@ import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
+import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
@@ -31,7 +33,11 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "@host/ipc/modules/branches";
 import { clientConfigHandlers } from "./modules/clientConfig";
 import { dialogHandlers } from "./modules/dialog";
-import { forwardHandlers } from "@host/ipc/modules/forward";
+import {
+  forwardHandlers,
+  setMirrorGitChangedListener,
+  setMirrorServingListener,
+} from "@host/ipc/modules/forward";
 import { fsHandlers } from "@host/ipc/modules/fs";
 import { gitHandlers } from "@host/ipc/modules/git";
 import { githubCliHandlers } from "@host/ipc/modules/githubCli";
@@ -39,6 +45,7 @@ import { globalConfigHandlers } from "@host/ipc/modules/globalConfig";
 import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
+import { mirrorHandlers, setMirrorImpl } from "@host/ipc/modules/mirror";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -61,6 +68,13 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "../portForward/engine";
+import { createMirrorDaemon } from "../mirror/daemon";
+import { createMirrorGateway } from "../mirror/gateway";
+import { createGitFollower } from "@host/mirror/gitFollow";
+import { MirrorWorktreePayloadSchema } from "@shared/ipc/modules/mirror";
+import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
+import { spawnFileSync } from "@host/fileSync/spawn";
+import { shigomoriRoot } from "@host/lib/util/paths";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
@@ -68,6 +82,7 @@ import {
   refreshHubConnection,
   registerContract,
   hubHandlers,
+  onPeerPush,
 } from "./register";
 
 // The pull/transplant orchestrations' and the port-forward engine's
@@ -85,6 +100,62 @@ const peerTransportFor = (deviceId: string) => ({
     throw new Error("the peer api is invoke-only");
   },
 });
+
+// Continuous worktree mirroring, this device's half: the loopback
+// gateway the daemon dials peers through and the daemon itself
+// (main/mirror/*, both electron-free), bound here to the peer sessions
+// and to the renderer's changed signal exactly like the port-forward
+// engine. Started from main/index.ts once the app is ready and stopped
+// on every quit path; a boot without the engine binary (a dev run
+// before file-sync:build) reports "unavailable" and keeps retrying.
+const mirrorGateway = createMirrorGateway({
+  peerApiFor: (deviceId) =>
+    buildClient(forwardContract, peerTransportFor(deviceId)),
+  peerChannelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
+});
+const mirrorDaemon = createMirrorDaemon({
+  spawn: spawnFileSync,
+  dataDir: () => join(shigomoriRoot(), "file-sync"),
+  gatewayAddress: () => {
+    const address = mirrorGateway.address();
+    if (address === null) throw new Error("mirror gateway is not listening");
+    return address;
+  },
+  onChange: () => {
+    broadcastAll(mirrorContract, "changed", undefined);
+    gitFollower.sessionsChanged();
+  },
+});
+// The git half of every session this device runs (host/mirror/
+// gitFollow.ts): reads the daemon's sessions, reaches the peer through
+// the same cached direct sessions, and reports through the same
+// changed signal. Its inputs are wired below: the local git watcher
+// (main/index.ts, via notifyLocalProjectChanged), the peers' pushes
+// (onPeerPush) and the daemon's snapshots (above).
+const gitFollower = createGitFollower({
+  sessions: () => mirrorDaemon.sessions(),
+  peerSyncApiFor: (deviceId) =>
+    buildClient(syncContract, peerTransportFor(deviceId)),
+  peerMirrorApiFor: (deviceId) =>
+    buildClient(mirrorContract, peerTransportFor(deviceId)),
+  onChange: () => broadcastAll(mirrorContract, "changed", undefined),
+});
+
+export function notifyLocalProjectChanged(projectId: string): void {
+  gitFollower.onLocalProjectChanged(projectId);
+}
+
+export async function startMirrorEngine(): Promise<void> {
+  await mirrorGateway.start();
+  mirrorDaemon.start();
+  gitFollower.start();
+}
+
+export function stopMirrorEngine(): void {
+  gitFollower.stop();
+  mirrorDaemon.stop();
+  mirrorGateway.stop();
+}
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
@@ -140,6 +211,8 @@ export function registerIpcHandlers(): void {
       buildClient(syncContract, peerTransportFor(deviceId)),
     worktreesApiFor: (deviceId) =>
       buildClient(worktreesContract, peerTransportFor(deviceId)),
+    mirrorApiFor: (deviceId) =>
+      buildClient(mirrorContract, peerTransportFor(deviceId)),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
@@ -151,6 +224,8 @@ export function registerIpcHandlers(): void {
     createPortForwardEngine({
       forwardApiFor: (deviceId) =>
         buildClient(forwardContract, peerTransportFor(deviceId)),
+      // The byte channels of the same cached direct session.
+      channelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
       onChange: () => {
         broadcastAll(portForwardContract, "changed", undefined);
       },
@@ -159,6 +234,47 @@ export function registerIpcHandlers(): void {
   // Client-scoped like dialog: the listeners belong to the machine the
   // window runs on, so the surface never mounts on a remote wire.
   registerContract(portForwardContract, portForwardHandlers);
+  // The mirror surface: host-scoped (a device's mirrors are its facts,
+  // and peers read the list), its daemon injected from above. The
+  // serving set (streams this host serves for peers) fans out on the
+  // same changed signal.
+  setMirrorImpl({
+    status: () => mirrorDaemon.status(),
+    sessions: () => mirrorDaemon.sessions(),
+    create: (input) => mirrorDaemon.create(input),
+    terminate: (session) => mirrorDaemon.terminate(session),
+    pause: (session) => mirrorDaemon.pause(session),
+    resume: (session) => mirrorDaemon.resume(session),
+    gitStatus: (session) => gitFollower.statusOf(session),
+  });
+  setMirrorServingListener(() =>
+    broadcastAll(mirrorContract, "changed", undefined),
+  );
+  // A served worktree's index moved: tell the device mirroring it
+  // (remote:true, so it rides the peer push path to the follower there).
+  setMirrorGitChangedListener((change) =>
+    broadcastAll(mirrorContract, "gitChanged", change),
+  );
+  // The follower's peer-side signals: a peer's git state moved (its
+  // git-directory watcher) or a served worktree's index did.
+  onPeerPush((push) => {
+    if (push.channel === "git:projectChanged") {
+      const parsed = ProjectScopedPayloadSchema.safeParse(push.payload);
+      if (parsed.success) {
+        gitFollower.onPeerProjectChanged(push.deviceId, parsed.data.projectId);
+      }
+    } else if (push.channel === "mirror:gitChanged") {
+      const parsed = MirrorWorktreePayloadSchema.safeParse(push.payload);
+      if (parsed.success) {
+        gitFollower.onPeerWorktreeChanged(
+          push.deviceId,
+          parsed.data.projectId,
+          parsed.data.worktreeId,
+        );
+      }
+    }
+  });
+  registerContract(mirrorContract, mirrorHandlers);
   registerContract(windowContract, windowHandlers);
   // Host-scoped preflight for the remote execution surface: each wire's
   // binding supplies the calling peer's grant verdict on the context.

@@ -24,6 +24,7 @@ import {
 import type { CleanupError, Project, Worktree } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
+import { MirrorPill } from "./MirrorPill";
 import { PortsSection } from "./ports/PortsSection";
 import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
@@ -202,6 +203,7 @@ export function WorktreeDetailInner({
           <DeviceChip />
         </div>
         <BranchHeaderRow worktree={worktree} />
+        <MirrorPill worktree={worktree} />
       </header>
 
       {inLimbo ? (

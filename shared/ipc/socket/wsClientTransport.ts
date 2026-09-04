@@ -26,6 +26,7 @@ import {
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
+import { type ChannelMux, createChannelMux } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 
 // A connect attempt failed before the welcome landed. `code` is the
@@ -73,7 +74,10 @@ export class RemoteDisconnectedError extends Error {
 // (ECONNREFUSED, EHOSTUNREACH, ETIMEDOUT), which is the one fact that
 // tells "wrong network" from "the OS is blocking local network access".
 export type ClientSocket = {
-  send(data: string): void;
+  // A string is a JSON frame; bytes are a binary channel frame
+  // (shared/ipc/socket/channels.ts). Both the browser global and the
+  // `ws` package send a Uint8Array as a binary message.
+  send(data: string | Uint8Array<ArrayBuffer>): void;
   close(): void;
   addEventListener(type: "open", listener: () => void): void;
   addEventListener(
@@ -131,6 +135,10 @@ export type ConnectDeviceOptions = {
 
 export type DeviceConnection = {
   transport: ClientTransport;
+  // Byte channels on this socket (shared/ipc/socket/channels.ts): the
+  // port-forward engine and the mirror gateway attach their local
+  // sockets here, under ids they mint, before opening the far end.
+  channels: ChannelMux;
   close(): void;
   // Ask the host to prove it is still there NOW, with the short probe
   // verdict window instead of the heartbeat cadence: fired on a wake
@@ -233,6 +241,15 @@ export function openDevice(
   // the wire. The shared registry owns the add/remove/fan-out and
   // isolates a throwing subscriber.
   const subscribers = createSubscriberRegistry("socket");
+  // Byte channels, fed by binary frames and sending binary frames,
+  // beside the JSON traffic on the same socket.
+  const channels = createChannelMux({
+    send: (frame) => {
+      if (closed) throw new Error("socket closed");
+      socket.send(frame);
+    },
+  });
+  let unknownChannelFrames = 0;
 
   // Flips true the instant this socket is unusable (closed or errored),
   // so an invoke after close rejects immediately rather than hanging.
@@ -299,6 +316,9 @@ export function openDevice(
     const error = new RemoteDisconnectedError(code);
     for (const entry of pending.values()) entry.reject(error);
     pending.clear();
+    // The byte channels die with the socket too: every attached
+    // endpoint sees a reset.
+    channels.closeAll();
   };
 
   // Liveness (shared/ipc/socket/heartbeat.ts), armed after the welcome.
@@ -325,10 +345,27 @@ export function openDevice(
 
   socket.addEventListener("message", (event) => {
     if (closed) return;
-    // The host only ever sends text frames. A binary frame is not part
-    // of the contract, so drop it rather than treat it as fatal.
+    // A binary frame is a byte-channel frame (channels.ts), routed to
+    // the attached channel; one that names no channel (a late frame
+    // after a reset) is dropped. Anything else non-text (a browser
+    // Blob, which no owner asks for) is dropped too. Either way the
+    // host proved itself alive.
     if (typeof event.data !== "string") {
-      console.warn("[socket] dropping non-text inbound frame");
+      heartbeat.noteInbound();
+      const bytes =
+        event.data instanceof Uint8Array
+          ? event.data
+          : event.data instanceof ArrayBuffer
+            ? new Uint8Array(event.data)
+            : null;
+      if (bytes === null || !channels.handleFrame(bytes)) {
+        unknownChannelFrames += 1;
+        if (unknownChannelFrames % 50 === 1) {
+          console.warn(
+            `[socket] dropping a binary frame for no attached channel (dropped ${unknownChannelFrames} so far)`,
+          );
+        }
+      }
       return;
     }
     const frame = decodeFrame(event.data, ServerFrameSchema);
@@ -381,6 +418,7 @@ export function openDevice(
       heartbeat.start();
       resolve({
         transport,
+        channels,
         close,
         probe: heartbeat.probe,
         remoteDeviceId: welcome.remoteDeviceId,

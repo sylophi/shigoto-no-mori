@@ -1,43 +1,40 @@
-// Durable proof for the port-forward wire (v2 step 8, slice A;
-// direct-only since step 10 slice C): TCP bytes as chunked, grant-gated
-// invoke responses over a REAL DIRECT websocket between the two
-// fixtures, brokered by the stub device hub exactly as production does
-// (scripts/lib/directBoot.mjs). Nothing here is a double on the forward
-// path itself: device A registers the REAL forward contract and
-// handlers on a real ticket-mode listener, B drives them through the
-// real dialer and bridge cache, and the handlers dial REAL loopback TCP
-// fixture servers. Asserts:
+// Durable proof for port forwarding over byte channels (v2 step 8,
+// reworked onto binary channel frames): TCP bytes cross a REAL DIRECT
+// websocket between the two fixtures as channel frames
+// (shared/ipc/socket/channels.ts), brokered by the stub device hub
+// exactly as production does (scripts/lib/directBoot.mjs). Nothing
+// here is a double on the forward path: device A registers the REAL
+// forward contract and handlers on a real ticket-mode listener, B
+// attaches channels on the real client transport and opens them
+// through the real dialer and bridge cache, and A's handler dials REAL
+// loopback TCP fixture servers. Asserts:
 //   - an ungranted peer is refused (typed CommandRefusedError) before
-//     the handler runs, so the fixture server sees no connection.
-//   - a granted echo round trip (open, send, poll, close).
-//   - server-initiated bytes arrive through poll without an uplink
-//     write first (the long-poll downlink).
-//   - a ~1.5 MB transfer crosses chunked, byte-identical, in multiple
-//     send AND poll round trips, while the stub device hub's
-//     forwardedCount stays FLAT (nothing but the one-time broker
-//     frames ever rides the device hub).
-//   - a server-side close drains buffered bytes before eof, refuses a
-//     send with the coded "conn-closed", and a drained conn is gone
-//     ("unknown-conn").
-//   - dialing a dead port fails with the coded "connect-failed".
-//   - close is idempotent, a concurrent second poll is refused
-//     ("poll-in-flight"), and a poll parked across a close resolves
-//     eof.
-//   - the surface still serves a fresh conn after full teardown.
+//     the handler runs, so the fixture server sees no connection;
+//   - a granted echo round trip on a channel (attach, open, write,
+//     read, reset);
+//   - server-initiated bytes arrive with no write first;
+//   - a ~1.5 MB transfer crosses in many data frames, byte-identical,
+//     while the stub device hub's forwardedCount stays FLAT (nothing
+//     but the one-time broker frames ever rides the device hub);
+//   - a server-side close ends the channel's direction after its tail
+//     bytes, and ending this side too completes the channel;
+//   - dialing a dead port fails with the coded "connect-failed", a
+//     reused channel id with "channel-taken", and the per-connection
+//     channel cap with "too-many-conns";
+//   - the surface still serves a fresh channel after full teardown.
 //
-// Slice B adds the CLIENT ENGINE (main/portForward/engine.ts), which is
-// electron-free and driven here over the same peer transport, so every
-// engine scenario exercises the full chain: a plain local TCP client ->
-// engine listener -> hub stub -> host verbs -> loopback fixture.
-// Asserts on top of the slice A set:
+// Then the CLIENT ENGINE (main/portForward/engine.ts), electron-free
+// and driven here over the same session, so every engine scenario
+// exercises the full chain: a plain local TCP client -> engine
+// listener -> channel -> host handler -> loopback fixture. Asserts:
 //   - a local dial round-trips an echo through the whole chain, and a
 //     duplicate startForward returns the existing forward, while one
-//     naming a different local port moves the listener.
-//   - a ~1.5 MB local transfer lands byte-identical.
+//     naming a different local port moves the listener;
+//   - a ~1.5 MB local transfer lands byte-identical;
 //   - the fixture server closing its socket ends the local client
-//     socket (eof propagation).
-//   - stopForward closes the listener and live conns, and the host
-//     registry does not leak (a fresh forward still round-trips).
+//     socket (end propagation);
+//   - stopForward closes the listener and live conns, and a fresh
+//     forward still round-trips;
 //   - the first concurrent local socket OVER the client-side
 //     per-device cap (MAX_CONNS_PER_DEVICE, derived from the engine's
 //     exported constant) is destroyed while the capped set stands,
@@ -50,21 +47,20 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { connect, createServer } from "node:net";
-import {
-  CommandRefusedError,
-  WIRE_CHUNK_BYTES,
-} from "@shared/ipc/socket/frames";
+import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { registerContract } from "@shared/ipc/registerContract";
 import { forwardHandlers } from "@host/ipc/modules/forward";
+import { mintHexId } from "@host/lib/idleRegistry";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
 } from "../main/portForward/engine.ts";
 import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
-import { delay, waitFor } from "./lib/hubBoot.mjs";
+import { waitFor } from "./lib/hubBoot.mjs";
 
 // once() with waitFor's deadline treatment: an event that never fires
 // fails loudly with a descriptive message instead of hanging the check.
@@ -116,28 +112,84 @@ function startFixtureServer(onConnection) {
   });
 }
 
-// Drives poll until `total` raw bytes arrived, then returns them. An
-// empty answer is a long-poll retry, never a failure, but the deadline
-// (same shape as waitFor) keeps bytes that never arrive from spinning
-// this forever: expiry throws a descriptive error instead.
-async function pollBytes(forward, connId, total, timeoutMs = 15_000) {
-  const deadline = Date.now() + timeoutMs;
+// A channel driven by hand from B's side: attached on the session
+// BEFORE the open (the production order), collecting every inbound
+// data frame and counting them, with the peer's end and reset
+// observable. `open` runs the real forward:open for the channel id.
+async function openChannel(peer, forward, port) {
+  const mux = await peer.channels();
+  const channelId = mintHexId();
   const parts = [];
   let size = 0;
-  while (size < total) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        `pollBytes: timed out with ${size} of ${total} bytes after ${timeoutMs}ms`,
-      );
-    }
-    // oxlint-disable-next-line no-await-in-loop -- sequential by design
-    const { dataB64, eof } = await forward.poll({ connId });
-    assert.equal(eof, false, "eof before the expected bytes all arrived");
-    const data = Buffer.from(dataB64, "base64");
-    parts.push(data);
-    size += data.length;
+  let frames = 0;
+  let ended = false;
+  let reset = false;
+  const waiters = new Set();
+  const notify = () => {
+    for (const waiter of waiters) waiter();
+  };
+  const handle = mux.attach(channelId, {
+    onData: (data, consumed) => {
+      parts.push(Buffer.from(data));
+      size += data.length;
+      frames += 1;
+      consumed();
+      notify();
+    },
+    onEnd: () => {
+      ended = true;
+      notify();
+    },
+    onReset: () => {
+      reset = true;
+      notify();
+    },
+    onWritable: () => {},
+  });
+  try {
+    await forward.open({ port, channelId });
+  } catch (error) {
+    handle.reset();
+    throw error;
   }
-  return Buffer.concat(parts, size);
+  const until = (predicate, what, timeoutMs = 15_000) =>
+    new Promise((resolve, reject) => {
+      if (predicate()) {
+        resolve();
+        return;
+      }
+      const timer = setTimeout(() => {
+        waiters.delete(check);
+        reject(
+          new Error(
+            `${what}: timed out with ${size} bytes after ${timeoutMs}ms`,
+          ),
+        );
+      }, timeoutMs);
+      const check = () => {
+        if (!predicate()) return;
+        clearTimeout(timer);
+        waiters.delete(check);
+        resolve();
+      };
+      waiters.add(check);
+    });
+  return {
+    channelId,
+    handle,
+    write: (data) => handle.write(data),
+    end: () => handle.end(),
+    reset: () => handle.reset(),
+    received: () => Buffer.concat(parts, size),
+    frames: () => frames,
+    ended: () => ended,
+    wasReset: () => reset,
+    readBytes: async (total, timeoutMs) => {
+      await until(() => size >= total, `readBytes(${total})`, timeoutMs);
+      return Buffer.concat(parts, size).subarray(0, total);
+    },
+    waitEnded: (timeoutMs) => until(() => ended, "peer end", timeoutMs),
+  };
 }
 
 // Dials a local listener, writes `payload`, and resolves with the first
@@ -190,36 +242,25 @@ async function main() {
   // (bootDirectWire, the shared fixture).
   const { track, teardown } = makeTracker();
   track(() => echo.close());
-  // The registered send handler is wrapped with a counter, so the
-  // chunking assertion in the transfer scenario counts PRODUCTION
-  // dispatches on the serving side (frames that provably crossed the
-  // wire), not the check's own loop iterations.
-  let serverSends = 0;
-  const countedForwardHandlers = {
-    ...forwardHandlers,
-    send: (input, ctx) => {
-      serverSends += 1;
-      return forwardHandlers.send(input, ctx);
-    },
-  };
   const { stub, listener, peerA } = await bootDirectWire(track, {
     registerHandlers: (binding) => {
-      registerContract(forwardContract, countedForwardHandlers, binding, {
+      registerContract(forwardContract, forwardHandlers, binding, {
         validateOutputs: true,
       });
     },
   });
   // Torn down in the finally so an assertion failure mid-scenario does
-  // not leave listeners and parked polls holding the process open.
+  // not leave listeners holding the process open.
   let engine = null;
   try {
     const forward = buildClient(forwardContract, peerA.transport);
 
     // (1) Ungranted: refused typed at the direct listener's dispatch
-    // (the grant gate lives on the direct wire now), before the
-    // handler runs. The echo server never sees a dial.
+    // (the grant gate lives on the direct wire), before the handler
+    // runs. The echo server never sees a dial, and the channel this
+    // side attached is reset by the failed open.
     await assert.rejects(
-      () => forward.open({ port: echo.port }),
+      () => openChannel(peerA, forward, echo.port),
       (error) =>
         error instanceof CommandRefusedError &&
         /not permitted to run commands/.test(error.message),
@@ -235,165 +276,123 @@ async function main() {
 
     listener.setAccepts(true);
 
-    // (2) The basic round trip: open, send, poll the echo, close.
-    const { connId } = await forward.open({ port: echo.port });
+    // (2) The basic round trip on a channel: attach, open, write, read
+    // the echo, reset.
+    const hello = await openChannel(peerA, forward, echo.port);
     assert.equal(echo.connections(), 1);
-    await forward.send({
-      connId,
-      dataB64: Buffer.from("hello").toString("base64"),
-    });
-    const echoed = await pollBytes(forward, connId, 5);
-    assert.equal(echoed.toString("utf8"), "hello");
-    await forward.close({ connId });
-    ok("granted echo round trip: open, send, poll, close");
+    hello.write(Buffer.from("hello"));
+    assert.equal((await hello.readBytes(5)).toString("utf8"), "hello");
+    hello.reset();
+    assert.equal(hello.handle.open, false);
+    ok("granted echo round trip: attach, open, write, read, reset");
 
-    // (3) Server-initiated bytes: the downlink must not require an
-    // uplink write first. The long-poll picks up a greeting the
-    // service pushed on connect.
+    // (3) Server-initiated bytes: a greeting the service pushes on
+    // connect arrives with no write from this side first.
     const greeter = await startFixtureServer((socket) => {
       socket.write("welcome\n");
     });
-    const greeted = await forward.open({ port: greeter.port });
-    const greeting = await pollBytes(forward, greeted.connId, 8);
-    assert.equal(greeting.toString("utf8"), "welcome\n");
-    await forward.close({ connId: greeted.connId });
+    const greeted = await openChannel(peerA, forward, greeter.port);
+    assert.equal((await greeted.readBytes(8)).toString("utf8"), "welcome\n");
+    greeted.reset();
     await greeter.close();
-    ok("server-initiated bytes arrive through poll without an uplink write");
+    ok("server-initiated bytes arrive with no write first");
 
-    // (4) A ~1.5 MB transfer, chunked both ways: sent in
-    // WIRE_CHUNK_BYTES slices, echoed back, polled until complete. The
-    // transfer rides the direct socket, so the stub device hub must
-    // stay COMPLETELY flat (it only ever saw the one-time broker
-    // exchange). Chunking is proven on both halves: the send half
-    // counts the registered handler's dispatches SERVER-SIDE
-    // (production frames that crossed the wire, not this loop's own
-    // iterations), and the poll half counts client round trips through
-    // the peer transport.
+    // (4) A ~1.5 MB transfer, echoed back: it crosses as many data
+    // frames (bounded by CHANNEL_MAX_FRAME_BYTES), byte-identical, and
+    // the stub device hub stays COMPLETELY flat (it only ever saw the
+    // one-time broker exchange).
     const big = randomBytes(1_500_000);
     const hubBaseline = stub.forwardedCount();
-    const sendsBefore = serverSends;
-    const pollsBefore = peerA.invokeCount("forward:poll");
-    const bulk = await forward.open({ port: echo.port });
-    for (let offset = 0; offset < big.length; offset += WIRE_CHUNK_BYTES) {
-      // oxlint-disable-next-line no-await-in-loop -- sequential by design
-      await forward.send({
-        connId: bulk.connId,
-        dataB64: big
-          .subarray(offset, offset + WIRE_CHUNK_BYTES)
-          .toString("base64"),
-      });
-    }
-    const returned = await pollBytes(forward, bulk.connId, big.length);
+    const bulk = await openChannel(peerA, forward, echo.port);
+    bulk.write(big);
+    const returned = await bulk.readBytes(big.length, 30_000);
     assert.ok(
       Buffer.compare(big, returned) === 0,
       "echoed bytes differ byte-for-byte",
     );
-    const sendReqs = serverSends - sendsBefore;
-    const pollReqs = peerA.invokeCount("forward:poll") - pollsBefore;
-    assert.ok(sendReqs >= 3, `expected >= 3 send frames, saw ${sendReqs}`);
-    assert.ok(pollReqs >= 3, `expected >= 3 poll frames, saw ${pollReqs}`);
+    const minFrames = Math.ceil(big.length / CHANNEL_MAX_FRAME_BYTES);
+    assert.ok(
+      bulk.frames() >= minFrames,
+      `expected >= ${minFrames} data frames, saw ${bulk.frames()}`,
+    );
     assert.equal(
       stub.forwardedCount(),
       hubBaseline,
       "the port-forward stream rode the device hub instead of the direct socket",
     );
-    await forward.close({ connId: bulk.connId });
+    bulk.reset();
     ok(
-      "large transfer: ~1.5 MB crosses chunked in >= 3 send and >= 3 poll round trips with the device hub flat, byte-identical",
+      `large transfer: ~1.5 MB crosses in ${bulk.frames()} data frames with the device hub flat, byte-identical`,
     );
 
-    // (5) The server closes: buffered bytes drain first (eof only once
-    // the buffer is empty), a send into the ended stream refuses with
-    // the coded "conn-closed", and the drained conn is dropped.
+    // (5) The server closes: the tail bytes land, then the peer's end,
+    // and ending this side completes the channel.
     const closer = await startFixtureServer((socket) => {
       socket.end("tail");
     });
-    const closing = await forward.open({ port: closer.port });
-    // Let both the bytes and the FIN land host-side before polling, so
-    // the first poll provably sees data AND remoteEnded together.
-    await delay(100);
-    const drained = await forward.poll({ connId: closing.connId });
-    assert.equal(
-      Buffer.from(drained.dataB64, "base64").toString("utf8"),
-      "tail",
-    );
-    assert.equal(drained.eof, false, "eof must wait for a drained buffer");
-    await assert.rejects(
-      () =>
-        forward.send({
-          connId: closing.connId,
-          dataB64: Buffer.from("late").toString("base64"),
-        }),
-      /conn-closed/,
-    );
-    const final = await forward.poll({ connId: closing.connId });
-    assert.equal(final.dataB64, "");
-    assert.equal(final.eof, true);
-    await assert.rejects(
-      () => forward.poll({ connId: closing.connId }),
-      /unknown-conn/,
-    );
-    await assert.rejects(
-      () =>
-        forward.send({
-          connId: closing.connId,
-          dataB64: Buffer.from("gone").toString("base64"),
-        }),
-      /unknown-conn/,
-    );
+    const closing = await openChannel(peerA, forward, closer.port);
+    assert.equal((await closing.readBytes(4)).toString("utf8"), "tail");
+    await closing.waitEnded();
+    assert.equal(closing.wasReset(), false);
+    assert.equal(closing.handle.open, true, "still open for this side");
+    closing.end();
+    assert.equal(closing.handle.open, false, "both ends done: channel gone");
     await closer.close();
     ok(
-      'server close: bytes drain before eof, then "conn-closed" and "unknown-conn" refusals',
+      "server close: tail bytes, then the peer's end, and ending here completes the channel",
     );
 
     // (6) A dead port: nothing listens once the fixture closed, so the
-    // dial refuses with the coded "connect-failed".
+    // dial refuses with the coded "connect-failed". A channel id that
+    // is already attached on the connection refuses "channel-taken".
     const dead = await startFixtureServer(() => {});
     const deadPort = dead.port;
     await dead.close();
     await assert.rejects(
-      () => forward.open({ port: deadPort }),
+      () => openChannel(peerA, forward, deadPort),
       /connect-failed/,
     );
-    ok('a dead port refuses with the coded "connect-failed"');
-
-    // (7) Teardown semantics: close is idempotent, a second concurrent
-    // poll is refused loudly, and a poll parked across the close
-    // resolves eof instead of waiting out its long-poll timer.
-    const idle = await forward.open({ port: echo.port });
-    const parked = forward.poll({ connId: idle.connId });
-    await delay(50);
+    const taken = await openChannel(peerA, forward, echo.port);
     await assert.rejects(
-      () => forward.poll({ connId: idle.connId }),
-      /poll-in-flight/,
+      () => forward.open({ port: echo.port, channelId: taken.channelId }),
+      /channel-taken/,
     );
-    await forward.close({ connId: idle.connId });
-    const released = await parked;
-    assert.equal(released.eof, true);
-    await forward.close({ connId: idle.connId });
+    taken.reset();
     ok(
-      "teardown: double close is a no-op, a second poll is refused, and a parked poll resolves eof on close",
+      'a dead port refuses with "connect-failed", a reused id with "channel-taken"',
     );
+
+    // (7) The per-connection channel cap: the host refuses the 33rd
+    // live channel with "too-many-conns", and the capped set stands.
+    const capped = [];
+    for (let i = 0; i < 32; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential opens by design
+      capped.push(await openChannel(peerA, forward, echo.port));
+    }
+    await assert.rejects(
+      () => openChannel(peerA, forward, echo.port),
+      /too-many-conns/,
+    );
+    for (const channel of capped) channel.reset();
+    ok('the 33rd channel on one connection refuses with "too-many-conns"');
 
     // (8) End state, asserted through behavior: with everything above
-    // torn down, a fresh conn still opens and round-trips, so no stale
-    // registry entry is wedging the surface.
-    const again = await forward.open({ port: echo.port });
-    await forward.send({
-      connId: again.connId,
-      dataB64: Buffer.from("still here").toString("base64"),
-    });
-    const still = await pollBytes(forward, again.connId, 10);
-    assert.equal(still.toString("utf8"), "still here");
-    await forward.close({ connId: again.connId });
-    ok("end state: a fresh conn opens and round-trips after full teardown");
+    // torn down, a fresh channel still opens and round-trips.
+    const again = await openChannel(peerA, forward, echo.port);
+    again.write(Buffer.from("still here"));
+    assert.equal((await again.readBytes(10)).toString("utf8"), "still here");
+    again.reset();
+    ok("end state: a fresh channel opens and round-trips after full teardown");
 
     // ---- Slice B: the client engine over the same wire ----
 
     // The engine on device B, its forward api the SAME peer client the
     // direct scenarios drove, so nothing on the forward path is a
     // double. deviceId is ignored on purpose: this check has one peer.
-    engine = createPortForwardEngine({ forwardApiFor: () => forward });
+    engine = createPortForwardEngine({
+      forwardApiFor: () => forward,
+      channelsFor: () => peerA.channels,
+    });
 
     // (9) Local round trip through the whole chain, and duplicate
     // startForward semantics (one forward per device+port pair).

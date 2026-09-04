@@ -1,5 +1,6 @@
 // Runs before `pnpm dev`: compiles the dev-flavor CLI into dist-cli/
-// so the app can delegate to it. Installing the `smd` PATH link is
+// (and the file-sync engine into dist-file-sync/) so the app can
+// delegate to them. Installing the `smd` PATH link is
 // NOT done here; the app prompts for that on launch, same as the
 // packaged app does for `sm` (main/electron/cliInstall.ts). The CLI is
 // the app's only engine, so a failed build (missing Go toolchain)
@@ -11,6 +12,13 @@ import { fileURLToPath } from "node:url";
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 execFileSync("node", [join(repoRoot, "scripts", "build-cli.mjs"), "--dev"], {
+  cwd: repoRoot,
+  stdio: "inherit",
+});
+// The file-sync engine ships beside the CLI and the app spawns it the
+// same way, so a dev run builds it here too (one flavor, see
+// shared/fileSyncDist.mts).
+execFileSync("node", [join(repoRoot, "scripts", "build-file-sync.mjs")], {
   cwd: repoRoot,
   stdio: "inherit",
 });

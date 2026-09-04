@@ -1,141 +1,112 @@
-// Host side of the port-forward wire (v2 step 8, slice A): a granted
-// peer opens loopback TCP connections here and moves bytes through
-// them as invoke/response calls (see the design note in
-// shared/ipc/modules/forward.ts). The registry rides the shared idle
-// registry (host/lib/idleRegistry.ts). Connections are ephemeral by
-// design, nothing survives a restart and nothing is persisted.
+// Host side of the byte-stream opens (shared/ipc/modules/forward.ts):
+// a granted peer names a channel id it has already attached on its
+// end, and this host attaches the far end under that id on the
+// calling connection: a loopback TCP dial (a port forward) or a fresh
+// `file-sync serve` child's stdio (a worktree mirror stream,
+// file-sync/engine.go). From then on the bytes ride the channel
+// (shared/ipc/socket/channels.ts) with credit-based backpressure, and
+// the far end lives exactly as long as the channel: a peer reset, a
+// clean end from both sides, or the socket dying tears it down. No
+// registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
 import {
-  FORWARD_CONN_CLOSED,
+  FORWARD_CHANNEL_TAKEN,
   FORWARD_CONNECT_FAILED,
-  FORWARD_POLL_IN_FLIGHT,
+  FORWARD_NO_CHANNELS,
   FORWARD_TOO_MANY_CONNS,
-  FORWARD_UNKNOWN_CONN,
   forwardContract,
 } from "@shared/ipc/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
-import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { dialLoopback, waitForDrainOrClose } from "@host/lib/net";
+import type { MirrorServing } from "@shared/ipc/modules/mirror";
+import { dialLoopback } from "@host/lib/net";
+import { spawnFileSync } from "@host/fileSync/spawn";
+import { watchIndexFile } from "@host/mirror/gitState";
+import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
+import { findProjectOrThrow } from "@host/lib/projects";
+import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
 
-// How long a poll with nothing to report holds before answering empty.
-// The wire has no per-call timeout, so the long-poll is what keeps a
-// downlink invoke from hanging forever on a quiet socket: the client
-// just re-polls on an empty answer.
-const POLL_WAIT_MS = 10_000;
-const CONN_IDLE_MS = 10 * 60_000;
 // Grant-gated already (a trusted peer), so the cap is a sanity bound
-// against a runaway client loop, not a quota. Sized for a real page
-// load: a single browser tab opens ~6 keepalive sockets plus an HMR
-// websocket, so the old cap of 8 saturated on one load and the next
-// socket died silently. It must still sit well under
-// MAX_IN_FLIGHT_PER_PEER = 64 (shared/ipc/socket/frames.ts, raised
-// 32 -> 64 in the paired hub change): each conn parks a long-poll in
-// one of the peer's shared in-flight slots, so a cap near that starves
-// the peer's ordinary UI invokes.
-const MAX_CONNS = 16;
+// against a runaway client loop, not a quota. Per connection: sized
+// for a real page load through a forward (a browser tab opens ~6
+// keepalive sockets plus an HMR websocket) beside a few mirror
+// streams.
+const MAX_CHANNELS_PER_PEER = 32;
 // How long a dial may sit unanswered before the open refuses.
 const DIAL_TIMEOUT_MS = 5_000;
-// Inbound bytes buffered before the socket is paused. TCP flow control
-// then pushes back on the loopback service until a poll drains us
-// below the mark.
-const BUFFER_HIGH_WATER = 4 * 1024 * 1024;
 
-type Conn = {
-  socket: Socket;
-  // Inbound from the loopback service, waiting for a poll.
-  chunks: Buffer[];
-  buffered: number;
-  // The stream is over (end, error or close). An error just ends the
-  // stream, there is no separate error channel on the wire. eof is
-  // reported only once the buffer is fully drained.
-  remoteEnded: boolean;
-  // The single pending poll's waker. Exactly one poll may wait per
-  // conn. A second concurrent poll is a client bug and fails loudly.
-  waker: (() => void) | null;
-};
+// The mirror streams this host currently serves, keyed by channel id:
+// what mirror:list reports as `serving`, so a worktree shows "mirrored
+// to <device>" on the machine it lives on. Entries live exactly as
+// long as their channel.
+const serving = new Map<string, MirrorServing>();
+// The served worktree's index watcher, alive exactly as long as the
+// stream: a stage or unstage there is the one git change the peer's
+// follower cannot learn from the git-directory watcher.
+const servingIndexWatch = new Map<string, () => void>();
+let onServingChange: (() => void) | null = null;
+let onServingGitChange:
+  | ((change: { projectId: string; worktreeId: string }) => void)
+  | null = null;
 
-function wake(conn: Conn): void {
-  conn.waker?.();
+// The mirror handler module installs the changed-broadcast hooks here
+// at boot; before that (and in checks that never mount them) changes
+// are simply unannounced.
+export function setMirrorServingListener(listener: (() => void) | null): void {
+  onServingChange = listener;
 }
 
-// The idle sweep is the entire lifecycle bookkeeping (see the
-// idleRegistry header), same shape as the sync transfers: a client
-// that vanished mid-stream leaks at most one loopback socket for
-// CONN_IDLE_MS. Teardown is idempotent, and the drop callback marks
-// the stream ended and wakes any pending poll BEFORE the registry
-// check it re-runs (the delete already happened), so a poll parked on
-// a dropped conn resolves eof instead of waiting out its timer.
-const conns = createIdleRegistry<Conn>({
-  idleMs: CONN_IDLE_MS,
-  onDrop: (conn) => {
-    conn.remoteEnded = true;
-    conn.socket.destroy();
-    wake(conn);
-  },
-});
-
-// Parks the caller until data arrives, the stream ends, the conn is
-// closed, or POLL_WAIT_MS passes. The waker slot doubles as the
-// poll-in-flight latch: it is occupied for exactly the parked span.
-function waitForActivity(conn: Conn): Promise<void> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      conn.waker = null;
-      resolve();
-    }, POLL_WAIT_MS);
-    timer.unref?.();
-    conn.waker = () => {
-      clearTimeout(timer);
-      conn.waker = null;
-      resolve();
-    };
-  });
+export function setMirrorGitChangedListener(
+  listener:
+    | ((change: { projectId: string; worktreeId: string }) => void)
+    | null,
+): void {
+  onServingGitChange = listener;
 }
 
-// Splices up to `limit` raw bytes off the front of the inbound buffer.
-function takeBuffered(conn: Conn, limit: number): Buffer {
-  const taken: Buffer[] = [];
-  let size = 0;
-  while (conn.chunks.length > 0 && size < limit) {
-    const head = conn.chunks[0] as Buffer;
-    const room = limit - size;
-    if (head.length <= room) {
-      taken.push(head);
-      size += head.length;
-      conn.chunks.shift();
-    } else {
-      taken.push(head.subarray(0, room));
-      conn.chunks[0] = head.subarray(room);
-      size += room;
-    }
+export function listMirrorServing(): MirrorServing[] {
+  return [...serving.values()];
+}
+
+function forgetServing(channelId: string): void {
+  servingIndexWatch.get(channelId)?.();
+  servingIndexWatch.delete(channelId);
+  if (serving.delete(channelId)) onServingChange?.();
+}
+
+// The connection's channel capability, or the coded refusal for a wire
+// without one (a loopback, the Electron bridge). The id must be free
+// on that connection and the cap must hold.
+function channelsOf(ctx: HandlerContext, channelId: string) {
+  const channels = ctx.channels;
+  if (channels === undefined) throw new Error(FORWARD_NO_CHANNELS);
+  if (channels.has(channelId)) throw new Error(FORWARD_CHANNEL_TAKEN);
+  if (channels.size() >= MAX_CHANNELS_PER_PEER) {
+    throw new Error(FORWARD_TOO_MANY_CONNS);
   }
-  conn.buffered -= size;
-  return Buffer.concat(taken, size);
+  return channels;
 }
 
 // Error messages below are stable markers, not prose (the FORWARD_*
 // constants beside the contract): Electron IPC and the device wires
-// both preserve only the message string, so the slice B client and the
+// both preserve only the message string, so the client side and the
 // UI match these exact texts.
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
   {
-    open: async ({ port }) => {
+    open: async ({ port, channelId }, ctx) => {
       // The schema already pinned the range. Re-check so this handler
       // stays fail-closed even if it is ever reached off-contract.
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
         throw new Error(`${FORWARD_CONNECT_FAILED}: port out of range`);
       }
-      if (conns.size() >= MAX_CONNS) throw new Error(FORWARD_TOO_MANY_CONNS);
+      const channels = channelsOf(ctx, channelId);
       // Loopback only, always: the feature is reaching the host's OWN
       // dev server, never using the host as a hop to its network. The
       // shared dial (host/lib/net.ts) tries 127.0.0.1 then ::1 and
-      // carries its own deadline: this socket is not in the registry
-      // yet so no sweep could reach a hung dial, and without one the
-      // invoke would burn one of the peer's in-flight slots forever.
+      // carries its own deadline, so a hung dial cannot burn one of
+      // the peer's in-flight slots forever.
       let socket: Socket;
       try {
         socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
@@ -144,83 +115,74 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
           cause: error,
         });
       }
-      // Nagle batches small writes against the poll-based downlink's
-      // round trips, so keystrokes and small frames must not wait on it.
+      // The dial spanned an await: the connection may have died or the
+      // id may have been claimed meanwhile.
+      if (channels.has(channelId) || ctx.signal.aborted) {
+        socket.destroy();
+        throw new Error(FORWARD_CHANNEL_TAKEN);
+      }
+      // Nagle batches small writes against the wire's round trips, so
+      // keystrokes and small frames must not wait on it.
       socket.setNoDelay(true);
-      const conn: Conn = {
-        socket,
-        chunks: [],
-        buffered: 0,
-        remoteEnded: false,
-        waker: null,
-      };
-      socket.on("data", (chunk: Buffer) => {
-        conn.chunks.push(chunk);
-        conn.buffered += chunk.length;
-        if (conn.buffered > BUFFER_HIGH_WATER) socket.pause();
-        wake(conn);
+      bridgeDuplexToChannel(socket, (endpoint) =>
+        channels.attach(channelId, endpoint),
+      );
+    },
+
+    // A mirror stream: the far end is a fresh `file-sync serve` for the
+    // named worktree, spoken to over its stdio. The worktree must exist
+    // in this host's registry (a peer can only mirror what this device
+    // lists), and the child dies with the channel: a peer reset, an
+    // end from both sides or the socket dying all kill it, and a child
+    // that exits on its own ends the channel the ordinary way. The
+    // root path the peer's Mutagen side names travels inside the
+    // protocol, which this handler does not read: the grant is the
+    // wall, as everywhere on this surface.
+    openMirror: async ({ projectId, worktreeId, channelId }, ctx) => {
+      const project = findProjectOrThrow(projectId);
+      const identity = await findWorktreeIdentityOrThrow(
+        projectId,
+        project.path,
+        worktreeId,
+      );
+      const channels = channelsOf(ctx, channelId);
+      const child = spawnFileSync(["serve"]);
+      if (child === null) {
+        throw new Error(
+          "mirroring is unavailable on this device (no file-sync engine)",
+        );
+      }
+      child.stderr?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf8").trim();
+        if (text !== "") console.warn(`[mirror] serve ${worktreeId}: ${text}`);
       });
-      const ended = () => {
-        conn.remoteEnded = true;
-        wake(conn);
-      };
-      socket.on("end", ended);
-      // 'close' always follows 'error', but the error listener must
-      // exist or node treats the socket error as an uncaught throw.
-      socket.on("error", ended);
-      socket.on("close", ended);
-      return { connId: conns.mint(conn) };
-    },
-
-    send: async ({ connId, dataB64 }) => {
-      const conn = conns.get(connId);
-      if (conn === undefined) throw new Error(FORWARD_UNKNOWN_CONN);
-      conns.touch(connId);
-      if (conn.remoteEnded) throw new Error(FORWARD_CONN_CLOSED);
-      const data = Buffer.from(dataB64, "base64");
-      if (!conn.socket.write(data)) {
-        // Awaiting drain paces the sender to what the loopback service
-        // actually consumes.
-        await waitForDrainOrClose(conn.socket);
-      }
-      // A resolved send promises the bytes reached the local service. A
-      // conn dropped or ended while the write was parked kept that
-      // promise for none of them, so it must refuse, not resolve.
-      if (conns.get(connId) !== conn || conn.remoteEnded) {
-        throw new Error(FORWARD_CONN_CLOSED);
-      }
-    },
-
-    poll: async ({ connId }) => {
-      const conn = conns.get(connId);
-      if (conn === undefined) throw new Error(FORWARD_UNKNOWN_CONN);
-      conns.touch(connId);
-      // The slice B client keeps exactly one poll in flight per conn.
-      // A second is a bug, and serving it would race the two responses
-      // over one byte stream.
-      if (conn.waker !== null) throw new Error(FORWARD_POLL_IN_FLIGHT);
-      if (conn.buffered === 0 && !conn.remoteEnded) {
-        await waitForActivity(conn);
-      }
-      // Closed out from under the parked poll: the registry entry is
-      // gone, so answer the teardown, not the buffer.
-      if (conns.get(connId) !== conn) return { dataB64: "", eof: true };
-      if (conn.buffered > 0) {
-        const data = takeBuffered(conn, WIRE_CHUNK_BYTES);
-        // eof only after the buffer is fully drained: bytes that raced
-        // the stream's end still reach the client, on earlier polls.
-        if (conn.buffered <= BUFFER_HIGH_WATER) conn.socket.resume();
-        return { dataB64: data.toString("base64"), eof: false };
-      }
-      if (conn.remoteEnded) {
-        await conns.drop(connId);
-        return { dataB64: "", eof: true };
-      }
-      // Timed out empty. The client just re-polls.
-      return { dataB64: "", eof: false };
-    },
-
-    close: async ({ connId }) => {
-      await conns.drop(connId);
+      bridgeDuplexToChannel(
+        child.stream,
+        (endpoint) => channels.attach(channelId, endpoint),
+        {
+          onClosed: () => {
+            child.kill();
+            child.stream.destroy();
+            forgetServing(channelId);
+          },
+        },
+      );
+      serving.set(channelId, {
+        connId: channelId,
+        projectId,
+        worktreeId,
+        peerDeviceId: ctx.callerDeviceId ?? "",
+        since: Date.now(),
+      });
+      void watchIndexFile(identity.path, () =>
+        onServingGitChange?.({ projectId, worktreeId }),
+      ).then(
+        (stop) => {
+          if (serving.has(channelId)) servingIndexWatch.set(channelId, stop);
+          else stop();
+        },
+        () => {},
+      );
+      onServingChange?.();
     },
   };

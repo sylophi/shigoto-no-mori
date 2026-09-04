@@ -49,6 +49,7 @@ export type HostApi = Pick<
   | "globalConfig"
   | "hygiene"
   | "launchers"
+  | "mirror"
   | "packageScripts"
   | "portPool"
   | "ports"

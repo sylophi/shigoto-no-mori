@@ -11,6 +11,7 @@
 // everything platform specific lives in the injected adapter, and
 // everything account flavored (deviceId, appVersion, accountId, the
 // credential-backed ticket mint) arrives through HubConnectOpts.
+import type { ChannelMux } from "@shared/ipc/socket/channels";
 import { errorMessageOf } from "@shared/errors";
 import {
   HELLO_TIMEOUT_MS,
@@ -61,6 +62,19 @@ const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,
 // the core owns everything above it.
+// The device hub carries JSON frames only, so the DeviceConnection
+// shape's byte channels (shared/ipc/socket/channels.ts) are a refusal
+// here: attaching one is a caller bug, not a wire condition.
+const hubNoChannels: ChannelMux = {
+  attach: () => {
+    throw new Error("the device hub carries no byte channels");
+  },
+  handleFrame: () => false,
+  has: () => false,
+  size: () => 0,
+  closeAll: () => {},
+};
+
 export type HubSocketAdapter = {
   // Writes one text message. Throws when the socket is unusable (the
   // adapters throw HubLinkDownError before the socket is open), and
@@ -312,6 +326,9 @@ export function createHubConnectionCore(
               link = nextLink;
               heartbeat.start();
               resolve({
+                // No binary lane on the device hub either: byte
+                // channels exist only on direct sockets.
+                channels: hubNoChannels,
                 transport: {
                   // The hub socket carries no direct sm transport
                   // of its own. Peer brokering goes through

@@ -3,7 +3,7 @@
 // invoke responses. The transfer registry rides the shared idle
 // registry (host/lib/idleRegistry.ts) -- transfers are ephemeral by
 // design, so nothing survives a restart and nothing is persisted.
-import { mkdtemp, open, rm } from "node:fs/promises";
+import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { z } from "zod";
@@ -23,6 +23,7 @@ import { errorMessageOf } from "@shared/errors";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import {
   bundleCreateViaCli,
+  bundleUnpackViaCli,
   createViaCli,
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
@@ -103,7 +104,90 @@ const transfers = createIdleRegistry<Transfer>({
     rm(transfer.dir, { recursive: true, force: true }).catch(() => {}),
 });
 
+// An incoming push (the peer's git follower shipping commits here):
+// the bundle is written into its own temp dir as chunks arrive, then
+// unpacked by the CLI on finish. Same idle sweep as the outbound
+// transfers, so a sender that vanished mid-push leaks one temp file
+// for the idle window.
+type IncomingPush = {
+  projectId: string;
+  dir: string;
+  path: string;
+  handle: FileHandle;
+  bytes: number;
+  received: number;
+};
+
+const pushes = createIdleRegistry<IncomingPush>({
+  idleMs: TRANSFER_IDLE_MS,
+  onDrop: async (push) => {
+    await push.handle.close().catch(() => {});
+    await rm(push.dir, { recursive: true, force: true }).catch(() => {});
+  },
+});
+
 export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
+  pushStart: async ({ projectId, bytes }) => {
+    findProjectOrThrow(projectId);
+    const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
+    const path = join(dir, "push.bundle");
+    const handle = await open(path, "w");
+    const transferId = pushes.mint({
+      projectId,
+      dir,
+      path,
+      handle,
+      bytes,
+      received: 0,
+    });
+    return { transferId };
+  },
+
+  // Chunks arrive in order (the sender awaits each), so an offset that
+  // is not the next byte is a broken sender, not a retry to honor.
+  pushChunk: async ({ transferId, offset, dataB64 }) => {
+    const push = pushes.get(transferId);
+    if (push === undefined) throw new Error("unknown-transfer");
+    pushes.touch(transferId);
+    const data = Buffer.from(dataB64, "base64");
+    if (offset !== push.received) throw new Error("push chunk out of order");
+    if (push.received + data.length > push.bytes) {
+      throw new Error("push overran the announced size");
+    }
+    await push.handle.write(data, 0, data.length, offset);
+    push.received += data.length;
+  },
+
+  pushFinish: async ({ transferId, refspecs }) => {
+    const push = pushes.get(transferId);
+    if (push === undefined) throw new Error("unknown-transfer");
+    try {
+      if (push.received !== push.bytes) {
+        throw new Error(
+          `push incomplete: got ${push.received} of ${push.bytes} bytes`,
+        );
+      }
+      await push.handle.close();
+      const project = findProjectOrThrow(push.projectId);
+      // The CLI re-validates every dst under refs/shigomori/ before any
+      // git spawn (cli/cmd_bundle.go), the same wall the pull's unpack
+      // stands behind.
+      return await bundleUnpackViaCli(project, push.path, refspecs);
+    } finally {
+      await pushes.drop(transferId);
+    }
+  },
+
+  hasCommits: async ({ projectId, commits }) => {
+    const project = findProjectOrThrow(projectId);
+    const present: string[] = [];
+    for (const commit of commits) {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
+      if (await hasCommit(project.path, commit)) present.push(commit);
+    }
+    return { present };
+  },
+
   refTips: async ({ projectId, refs }) => {
     const project = findProjectOrThrow(projectId);
     const tips: { ref: string; commit: string }[] = [];
@@ -347,7 +431,7 @@ async function tearDownSource(
 // After the create, an apply failure resolves with dirtyApplied:false
 // rather than throwing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
-async function runPullWorktree(
+export async function runPullWorktree(
   {
     sourceDeviceId,
     sourceProjectId,
