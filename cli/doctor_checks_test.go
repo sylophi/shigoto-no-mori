@@ -43,6 +43,11 @@ func seedRepo(t *testing.T, parent, name string) string {
 	return path
 }
 
+func commitEmpty(t *testing.T, dir, msg string) {
+	t.Helper()
+	mustGit(t, dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", msg)
+}
+
 // Runs git in dir, failing the test with the command that broke.
 func mustGit(t *testing.T, dir string, args ...string) {
 	t.Helper()

@@ -1,14 +1,15 @@
 package main
 
 // sm land: the finish line as one command -- merge the worktree's PR
-// (the sm merge flow), fast-forward the primary checkout so it sees
-// the merge, and clean up: the sm rm pipeline for a managed or
-// external worktree, or the sm done switch-and-delete when landing
-// the primary checkout itself. A PR that's already merged skips
+// (the sm merge flow), fast-forward the checkout holding the PR's
+// base branch so it sees the merge, and clean up: the sm rm pipeline
+// for a managed or external worktree, or the sm done switch-and-delete
+// when landing the primary checkout itself. A PR that's already merged skips
 // straight to cleanup, so re-running after a partial failure (say a
 // teardown script) resumes where it left off.
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"strings"
@@ -92,18 +93,25 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return 1, err
 		}
-		reportDone(w, id.Branch, deleted, map[string]any{"merged": mergedDoc})
+		extra := map[string]any{"merged": mergedDoc}
+		// execDone already pulled the primary branch. A PR into another
+		// line still leaves that line's checkout behind.
+		if pr.BaseRefName != "" && pr.BaseRefName != pt.localPrimary {
+			cu := catchUpBase(proj, pt, pr.BaseRefName)
+			cu.report()
+			cu.addTo(extra)
+		}
+		reportDone(w, id.Branch, deleted, extra)
 		return 0, nil
 	}
 
-	caughtUp, catchUpDetail := catchUpPrimary(proj, pr.BaseRefName)
-	if !jsonMode {
-		if caughtUp {
-			note(dimErr(fmt.Sprintf("primary checkout caught up (%s)", catchUpDetail)))
-		} else if catchUpDetail != "" {
-			note(dimErr("skipped primary catch-up: " + catchUpDetail))
-		}
+	var cu catchUpResult
+	if pt, err := resolvePrimaryTarget(proj); err != nil {
+		cu.skip = err.Error()
+	} else {
+		cu = catchUpBase(proj, pt, pr.BaseRefName)
 	}
+	cu.report()
 
 	hint, err := execRemove(proj, id, opts)
 	if err != nil {
@@ -111,6 +119,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		// it would read as "nothing changed" to the app or an agent.
 		if jsonMode {
 			doc := map[string]any{"ok": false, "merged": mergedDoc}
+			cu.addTo(doc)
 			var ce *cleanupError
 			if errors.As(err, &ce) {
 				doc["cleanupError"] = cleanupErrorDoc(ce)
@@ -126,59 +135,83 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		return exitCodeOf(err), err
 	}
 
-	extra := map[string]any{"merged": mergedDoc, "primaryCaughtUp": caughtUp}
-	if !caughtUp && catchUpDetail != "" {
-		extra["primaryCatchUpSkipped"] = catchUpDetail
-	}
+	extra := map[string]any{"merged": mergedDoc}
+	cu.addTo(extra)
 	reportRemoved(proj, id, hint, extra)
 	return 0, nil
 }
 
-// Whether a PR merged into prBase puts anything on localPrimary, and
-// the skip reason when it does not. A PR based on a release line or a
-// long-lived feature branch leaves the primary branch untouched, so
-// pulling it would advance the primary checkout by unrelated commits
-// and then report a catch-up that never happened.
-//
-// An empty prBase means the base could not be read, which is the one
-// case that keeps the old unconditional behavior: the default base is
-// overwhelmingly the common one, so guessing it beats skipping.
-func catchUpApplies(prBase, localPrimary string) (applies bool, skip string) {
-	if prBase == "" || prBase == localPrimary {
-		return true, ""
-	}
-	return false, fmt.Sprintf("PR merged into %s, not the primary branch %s", prBase, localPrimary)
+// Outcome of the post-merge catch-up: the checkout pulled and the
+// ref it was pulled from, or why nothing was.
+type catchUpResult struct {
+	checkout worktreeIdentity
+	ref      string // empty when skipped
+	skip     string
 }
 
-// Best-effort fast-forward of the primary checkout after the merge,
-// so the local primary branch sees what just landed. Skipped when the
-// PR merged somewhere other than the primary branch, when the primary
-// checkout isn't sitting on the primary branch, or when the primary
-// ref has no remote; failures never abort the command -- the merge
-// and the cleanup are the substance of land. detail is the pulled ref
-// on success and the skip reason otherwise; the caller renders it per
-// surface.
-func catchUpPrimary(proj project, prBase string) (caughtUp bool, detail string) {
-	pt, err := resolvePrimaryTarget(proj)
+func (cu catchUpResult) report() {
+	if jsonMode {
+		return
+	}
+	switch {
+	case cu.ref != "":
+		label := "worktree " + cu.checkout.Name
+		if cu.checkout.IsPrimary {
+			label = "primary checkout"
+		}
+		note(dimErr(fmt.Sprintf("%s caught up (%s)", label, cu.ref)))
+	case cu.skip != "":
+		note(dimErr("skipped catch-up: " + cu.skip))
+	}
+}
+
+// JSON fields for the land document: caughtUp names the pulled
+// checkout on success, catchUpSkipped carries the reason otherwise.
+func (cu catchUpResult) addTo(doc map[string]any) {
+	switch {
+	case cu.ref != "":
+		doc["caughtUp"] = map[string]any{
+			"ref": cu.ref, "name": cu.checkout.Name,
+			"path": cu.checkout.Path, "isPrimary": cu.checkout.IsPrimary,
+		}
+	case cu.skip != "":
+		doc["catchUpSkipped"] = cu.skip
+	}
+}
+
+// Best-effort fast-forward of the checkout holding the PR's base
+// branch after the merge, so the local branch sees what just landed.
+// A PR based on a release line or a long-lived feature branch leaves
+// the primary branch untouched, so pulling the primary checkout would
+// advance it by unrelated commits and report a catch-up that never
+// happened -- and leave the line that did move behind, inviting a
+// by-hand fast-forward that can land in the wrong checkout. Only the
+// base branch's own checkout is touched, and ffPull refuses unless
+// that checkout really is on the base branch, so nothing else can
+// move.
+//
+// An empty prBase means the base could not be read, which keeps the
+// old behavior of pulling the primary branch: the default base is
+// overwhelmingly the common one, so guessing it beats skipping.
+//
+// Skipped when the primary ref has no remote or no checkout has the
+// base branch out. Failures never abort the command -- the merge and
+// the cleanup are the substance of land.
+func catchUpBase(proj project, pt primaryTarget, prBase string) catchUpResult {
+	base := cmp.Or(prBase, pt.localPrimary)
+	if pt.remote == "" {
+		return catchUpResult{skip: "primary ref " + pt.primaryRef + " has no remote"}
+	}
+	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
-		return false, err.Error()
+		return catchUpResult{skip: err.Error()}
 	}
-	if applies, skip := catchUpApplies(prBase, pt.localPrimary); !applies {
-		return false, skip
+	checkout, ok := checkoutOn(identities, base)
+	if !ok {
+		return catchUpResult{skip: "no checkout is on " + base}
 	}
-	loc, err := primaryOf(proj)
-	if err != nil {
-		return false, err.Error()
+	if err := ffPull(checkout.Path, pt.remote, base); err != nil {
+		return catchUpResult{skip: err.Error()}
 	}
-	if loc.worktree.Branch != pt.localPrimary {
-		return false, fmt.Sprintf("primary checkout is on %s, not %s", loc.worktree.Branch, pt.localPrimary)
-	}
-	pulled, err := ffPullPrimary(loc.worktree.Path, pt.primaryRef, pt.remotes)
-	if err != nil {
-		return false, err.Error()
-	}
-	if !pulled {
-		return false, "primary ref " + pt.primaryRef + " has no remote"
-	}
-	return true, pt.primaryRef
+	return catchUpResult{checkout: checkout, ref: pt.remote + "/" + base}
 }

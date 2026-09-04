@@ -64,7 +64,7 @@ var worktreeItems = []helpItem{
 	{"worktrees merge [<name>] [-m <method>]", "Merge the worktree's PR via gh",
 		"Method follows the repo's settings unless -m overrides."},
 	{"worktrees land [<name>] [-m <method>] [-f] [--keep-branch]", "Merge the PR, then clean up",
-		"merge + rm in one step (done when landing the primary checkout), fast-forwarding the primary branch in between. An already-merged PR skips straight to cleanup."},
+		"merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup."},
 	{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",
 		"Moves it into the layout and runs the lifecycle. Refuses dirty worktrees without -f."},
 	{"worktrees setup [<name>]", "Re-run the setup script",
