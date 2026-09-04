@@ -16,16 +16,19 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // The project's primary branch in every form the flows below need:
-// the resolved ref (possibly remote-qualified), the bare local branch
-// name, and the remotes list that fed the resolution -- one `git
-// remote` spawn serves the ref resolution, the local-name split, and
-// the checkout inside switchToPrimaryBranch.
+// the resolved ref (possibly remote-qualified), its remote (empty for
+// a local-only ref), the bare local branch name, and the remotes list
+// that fed the resolution -- one `git remote` spawn serves the ref
+// resolution, the split, and the checkout inside
+// switchToPrimaryBranch.
 type primaryTarget struct {
 	remotes      []string
 	primaryRef   string
+	remote       string
 	localPrimary string
 }
 
@@ -36,11 +39,11 @@ func resolvePrimaryTarget(proj project) (primaryTarget, error) {
 	if primaryRef == "" {
 		return primaryTarget{}, errf("No local branches found in %s", proj.Path)
 	}
-	localPrimary := primaryRef
-	if _, branch := splitRemoteRef(primaryRef, remotes); branch != "" {
-		localPrimary = branch
+	pt := primaryTarget{remotes: remotes, primaryRef: primaryRef, localPrimary: primaryRef}
+	if remote, branch := splitRemoteRef(primaryRef, remotes); remote != "" {
+		pt.remote, pt.localPrimary = remote, branch
 	}
-	return primaryTarget{remotes: remotes, primaryRef: primaryRef, localPrimary: localPrimary}, nil
+	return pt, nil
 }
 
 // execDone lands the checkout back on the primary branch and (when
@@ -49,7 +52,7 @@ func resolvePrimaryTarget(proj project) (primaryTarget, error) {
 // merged branch (git refuses to delete a checked-out branch). The
 // branch just landed on is never deleted.
 func execDone(proj project, pt primaryTarget, id worktreeIdentity, deleteBranch bool) (bool, error) {
-	if err := switchToPrimaryBranch(id.Path, pt.primaryRef, pt.remotes); err != nil {
+	if err := switchToPrimaryBranch(id.Path, pt); err != nil {
 		return false, err
 	}
 	if deleteBranch && id.Branch != pt.localPrimary {
@@ -186,23 +189,32 @@ func deletedBranchField(branch string, deleted bool) any {
 // switchToPrimaryBranch: checkout the primary ref (via the
 // checkoutBranch precedence rules), then --ff-only pull when it
 // resolved to a remote-tracking ref.
-func switchToPrimaryBranch(worktreePath, primaryRef string, remotes []string) error {
-	if err := checkoutBranch(worktreePath, primaryRef, remotes); err != nil {
+func switchToPrimaryBranch(worktreePath string, pt primaryTarget) error {
+	if err := checkoutBranch(worktreePath, pt.primaryRef, pt.remotes); err != nil {
 		return err
 	}
-	_, err := ffPullPrimary(worktreePath, primaryRef, remotes)
-	return err
+	if pt.remote == "" {
+		return nil
+	}
+	return ffPull(worktreePath, pt.remote, pt.localPrimary)
 }
 
-// Fast-forward worktreePath from the remote side of primaryRef; a
-// local-only ref is a no-op. Reports whether a pull actually ran.
-func ffPullPrimary(worktreePath, primaryRef string, remotes []string) (bool, error) {
-	remote, branch := splitRemoteRef(primaryRef, remotes)
-	if remote == "" {
-		return false, nil
+// Fast-forward branch, checked out at worktreePath, from
+// remote/branch. The HEAD check is the safety: `git pull --ff-only
+// remote branch` advances whatever branch is checked out, so run in a
+// checkout sitting on main it would move main onto branch whenever
+// main is an ancestor -- --ff-only only forbids merge commits. Refuse
+// instead, so a stale worktree listing cannot pick the wrong checkout.
+func ffPull(worktreePath, remote, branch string) error {
+	head, err := runGit(worktreePath, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return err
 	}
-	_, err := runGit(worktreePath, "pull", "--ff-only", remote, branch)
-	return err == nil, err
+	if head = strings.TrimSpace(head); head != branch {
+		return errf("%s is on %s, not %s", worktreePath, head, branch)
+	}
+	_, err = runGit(worktreePath, "pull", "--ff-only", remote, branch)
+	return err
 }
 
 // Switches the worktree to a branch, creating a tracking branch when

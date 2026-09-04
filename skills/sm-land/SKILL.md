@@ -9,13 +9,20 @@ and push if there is a PR.
 **Run `sm worktrees land`.** One command does the whole finish line: it merges the
 branch's PR (the merge method follows the repo's settings; pass
 `--method merge|squash|rebase` only when asked for a specific one),
-fast-forwards the local primary checkout so it sees the merge, and
-removes the worktree. When run from the primary checkout sitting on the
+fast-forwards the checkout that has the PR's base branch out (the
+primary checkout for `main`, or a worktree holding a line like `v2`),
+and removes the worktree. When run from the primary checkout sitting on the
 merged branch, it lands the checkout back on the primary branch instead
 of removing anything.
 
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
+
+**Never fast-forward by hand.** If the command reports a skipped
+catch-up, relay its reason to the user and stop there. Do not pull,
+merge, or reset any other checkout, and never add a fallback that
+touches the primary checkout: fed the wrong branch, it moves the
+primary branch itself.
 
 **Partial failures resume.** If cleanup fails after the merge (a
 teardown script, say), fix the cause and re-run `sm worktrees land`: an
