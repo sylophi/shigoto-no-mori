@@ -200,6 +200,17 @@ func primaryOf(proj project) (located, error) {
 	return located{}, errf("%s has no primary checkout.", proj.Name)
 }
 
+// The checkout sitting on branch, if any. git allows a branch in at
+// most one worktree, so the first match is the only one.
+func checkoutOn(identities []worktreeIdentity, branch string) (worktreeIdentity, bool) {
+	for _, id := range identities {
+		if !id.Detached && id.Branch == branch {
+			return id, true
+		}
+	}
+	return worktreeIdentity{}, false
+}
+
 // nil/nil when ref isn't an existing directory (caller falls back to
 // name resolution); an error when it is one but no registered project
 // owns a worktree there.
