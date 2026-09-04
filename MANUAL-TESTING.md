@@ -29,7 +29,7 @@ then connected. The device names end in `[a]` and `[b]`.
 To run every remote flow unattended instead:
 
 ```sh
-pnpm e2e:remote
+pnpm test:remote-smoke
 ```
 
 The sections below explain each piece.
@@ -76,23 +76,20 @@ A device is made of two folders:
 
 ### Filling a root with test repos
 
-Write the repos your test needs. A few `git init` and `git commit`
-calls tailored to the case are quicker to read and to trust than a
-shared fixture, and nothing else in the repo depends on their shape.
-Then register them:
+There is no shared fixture. Create the repos a test needs with
+`git init` and `git commit`, then register every repo under a
+directory in one call:
 
 ```sh
-smd projects add <dir> --all --yes     # every repo under <dir> (set SHIGOMORI_ROOT if sandboxed)
+smd projects add <dir> --all --yes     # set SHIGOMORI_ROOT if the root is sandboxed
 ```
 
-Two things to keep in mind:
-
-- Pin the git identity with `GIT_AUTHOR_*` and `GIT_COMMITTER_*` so
-  commits do not depend on the machine's config.
+- Set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` so commits do not depend on
+  the machine's git config.
 - A worktree can only be pulled between devices that hold the same
-  repo, matched by identity (the root commit). Clone one repo into
-  both forests rather than creating it twice. `prepareFixture` in
-  `scripts/e2e/remote-smoke.mts` is a worked example.
+  repo, matched by root commit. Clone one repo into both profiles
+  instead of creating it twice. `prepareFixture` in
+  `scripts/e2e/remote-smoke.mts` shows the pattern.
 
 ## Running the dev app
 
@@ -136,7 +133,7 @@ each other over the LAN.
 
 ```
 ~/shigomori-dev-profiles/<name>/root    state root
-~/shigomori-dev-profiles/<name>/repos   the repos you create for it
+~/shigomori-dev-profiles/<name>/repos   test repos for the profile
 <dev userData>/profiles/<name>          userData
 ```
 
@@ -261,7 +258,7 @@ page, with `.cl-*` classes.
 ## Unattended remote smoke
 
 ```sh
-pnpm e2e:remote [--keep]
+pnpm test:remote-smoke [--keep]
 ```
 
 `scripts/e2e/remote-smoke.mts` runs the full remote loop with no
@@ -330,8 +327,8 @@ and assert through the bridge and the disk.
   profile's window instead.
 - **A revoked device still shows on the Devices page.** `--fresh` does
   not revoke. Revoke it from another device's Devices page.
-- **`smd` in a fresh terminal works on the plain dev root.** To drive
-  a profile's forest from a shell, export its root first:
+- **`smd` in a new terminal acts on the plain dev root.** To target a
+  profile from the shell, set its root first:
   `SHIGOMORI_ROOT=~/shigomori-dev-profiles/<name>/root smd ...`.
 - **Dev tokens on macOS.** They sit under Chromium's mock keychain,
   obfuscated but not protected. This is what makes `--clone-login`

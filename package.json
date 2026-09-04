@@ -19,7 +19,7 @@
     "start": "node scripts/dev-cli.mjs && node scripts/fetch-cloudflared.mjs --best-effort && port-pool ensure . && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-electron.mts",
     "dev": "pnpm run start",
     "dev:peer": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-peer.mts",
-    "e2e:remote": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/e2e/remote-smoke.mts",
+    "test:remote-smoke": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/e2e/remote-smoke.mts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",

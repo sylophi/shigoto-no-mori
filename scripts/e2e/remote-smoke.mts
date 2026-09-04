@@ -1,6 +1,6 @@
 // The remote flows, end to end, on one machine:
 //
-//   pnpm e2e:remote [--keep]
+//   pnpm test:remote-smoke [--keep]
 //
 // Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
 // owner's dev account, both signed in by cloning the plain dev
