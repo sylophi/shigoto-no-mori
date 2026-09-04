@@ -17,6 +17,7 @@ import { signalTreeBestEffort } from "@host/lib/scripts/process";
 // The injection seam in the CLI delegate owns the document shapes;
 // this runner is the Electron-side implementation wired in at boot.
 import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
+import { lineSplitter } from "@host/lib/util/ndjson";
 
 function candidateBinary(): string {
   return app.isPackaged
@@ -53,28 +54,43 @@ export function requireCliBinary(): string {
 const children = new Set<ChildProcess>();
 
 // Children doing invisible housekeeping (the updater's staging
-// download): still reaped at quit like every other child, but excluded
-// from the busy aggregate -- a background download must not trigger
-// the "tasks are running" quit prompt.
+// download, the file-sync daemon and its serve children): still reaped
+// at quit like every other child, but excluded from the busy aggregate
+// (a background download must not trigger the "tasks are running"
+// quit prompt) and from the echo suppression above.
 let backgroundChildren = 0;
 
-// Every live child, background or not. stateWatcher.ts reads this to
-// suppress the fs echo of a CLI child's own writes into the state
-// root -- background children churn the root too, so they must count
-// here even though they are exempt from the busy aggregate below.
+// The CLI children in flight. stateWatcher.ts and the git watcher read
+// this to suppress the fs echo of a CLI child's own writes into the
+// state root and the git directories. Background children are NOT
+// counted: the file-sync daemon lives as long as the app, and counting
+// it would mute both watchers for the whole run (its own writes land
+// under its data directory, which neither watcher reads).
 export function cliChildCount(): number {
-  return children.size;
-}
-
-function cliBusyChildCount(): number {
   return children.size - backgroundChildren;
 }
+
+const cliBusyChildCount = cliChildCount;
 
 // CLI children are lifecycle operations in flight (create/delete via
 // the CLI engine); registering them with the busy aggregate means
 // every getBusyOperations consumer counts them, so quitting
 // mid-operation still prompts.
 registerInflightContributor(cliBusyChildCount);
+
+// Registers a stream child (spawnStreamChild in host/fileSync/spawn.ts)
+// for the quit-time reap below, as a background child: a mirror
+// daemon or serve process runs for as long as the app does and must
+// never count as a lifecycle operation in flight.
+export function registerBackgroundChild(child: ChildProcess): void {
+  children.add(child);
+  backgroundChildren++;
+  const release = () => {
+    if (children.delete(child)) backgroundChildren--;
+  };
+  child.on("error", release);
+  child.on("close", release);
+}
 
 // Quit-time reap, mirroring killAllScripts for package scripts: a CLI
 // child mid-create/delete must not outlive the app unnoticed. Each CLI
@@ -165,17 +181,9 @@ export async function runCli(
     };
 
     const docs: CliDoc[] = [];
-    let buffer = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      buffer += chunk.toString("utf8");
-      for (
-        let newline = buffer.indexOf("\n");
-        newline >= 0;
-        newline = buffer.indexOf("\n")
-      ) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (!line) continue;
+    child.stdout.on(
+      "data",
+      lineSplitter((line) => {
         try {
           const doc = JSON.parse(line) as CliDoc;
           docs.push(doc);
@@ -183,8 +191,8 @@ export async function runCli(
         } catch {
           console.warn("[cli] unparseable output line:", line.slice(0, 200));
         }
-      }
-    });
+      }),
+    );
 
     // Human diagnostics land on stderr; keep a tail for error surfaces.
     let stderrTail = "";

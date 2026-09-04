@@ -34,6 +34,7 @@
     "hublink:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-hub-link.mjs",
     "direct:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-direct-plane.mjs",
     "sync:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-sync-transfer.mjs",
+    "mirror:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-mirror.mjs",
     "forward:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-port-forward.mjs",
     "ports:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-worktree-ports.mjs",
     "web:hub:check": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./scripts/lib/register-ts-alias.mjs scripts/check-web-hub.mjs",
@@ -51,6 +52,7 @@
     "dmg:check": "node scripts/check-dmg-art.mjs",
     "cli": "go run -C cli .",
     "cli:build": "node scripts/build-cli.mjs",
+    "file-sync:build": "node scripts/build-file-sync.mjs",
     "cli:install": "node scripts/install-cli.mjs",
     "postinstall": "node scripts/copy-material-icons.mjs"
   },

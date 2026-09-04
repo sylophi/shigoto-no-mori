@@ -13,6 +13,7 @@ import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
+import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { navContract } from "@shared/ipc/modules/nav";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
@@ -67,6 +68,7 @@ export const allContractModules: readonly ContractModule[] = [
   hygieneContract,
   launchersContract,
   menuContract,
+  mirrorContract,
   navContract,
   packageScriptsContract,
   portForwardContract,
@@ -109,6 +111,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const hygieneClient = c(hygieneContract);
   const launchersClient = c(launchersContract);
   const menuClient = c(menuContract);
+  const mirrorClient = c(mirrorContract);
   const navClient = c(navContract);
   const packageScriptsClient = c(packageScriptsContract);
   const portForwardClient = c(portForwardContract);
@@ -180,9 +183,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     forward: {
       open: forwardClient.open,
-      send: forwardClient.send,
-      poll: forwardClient.poll,
-      close: forwardClient.close,
     },
 
     fs: {
@@ -350,6 +350,15 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       openExternal: (url: string) => shellClient.openExternal({ url }),
       showItemInFolder: (path: string) =>
         shellClient.showItemInFolder({ path }),
+    },
+
+    mirror: {
+      list: mirrorClient.list,
+      start: mirrorClient.start,
+      stop: (session: string) => mirrorClient.stop({ session }),
+      pause: (session: string) => mirrorClient.pause({ session }),
+      resume: (session: string) => mirrorClient.resume({ session }),
+      onChanged: mirrorClient.changed,
     },
 
     shigomori: {

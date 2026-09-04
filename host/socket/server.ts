@@ -56,7 +56,11 @@ import {
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { toText } from "./rawData";
+import {
+  createChannelMux,
+  createUnknownChannelFrameWarner,
+} from "@shared/ipc/socket/channels";
+import { toBytes, toText } from "./rawData";
 
 // Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
 // SECOND binding instance serves device-to-device data over direct
@@ -523,6 +527,18 @@ export function createWsServerBinding(
       let ctx: HandlerContext | null = null;
       let inFlight = 0;
       const controller = new AbortController();
+      // Byte channels on THIS socket (shared/ipc/socket/channels.ts):
+      // binary frames route here, handlers attach far ends through the
+      // context, and every endpoint is reset when the socket dies.
+      const channels = createChannelMux({
+        send: (frame) => {
+          if (socket.readyState !== WebSocket.OPEN) {
+            throw new Error("socket not open");
+          }
+          socket.send(frame);
+        },
+      });
+      const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
       const helloTimer = setTimeout(() => {
         // A hello arriving after this fires must not authenticate.
@@ -543,6 +559,7 @@ export function createWsServerBinding(
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
+        channels.closeAll();
         const id = ctx?.callerDeviceId;
         if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
           authedByDevice.delete(id);
@@ -555,6 +572,7 @@ export function createWsServerBinding(
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
+        channels.closeAll();
         // A superseded socket must not evict its replacement, so the
         // per-device entry is dropped only while it still names THIS
         // socket, mirroring the DO. The authed identity lives on the
@@ -573,11 +591,29 @@ export function createWsServerBinding(
       });
       socket.on("message", (data, isBinary) => {
         if (dead) return;
+        const alive = authed.get(socket);
+        if (alive !== undefined) alive.lastInboundAt = Date.now();
+        // Binary frames are byte-channel frames, and only an authed
+        // peer has channels: pre-hello, a binary frame is a malformed
+        // hello. One naming no attached channel (late, after a reset)
+        // is dropped, throttled.
+        if (isBinary && ctx !== null) {
+          // Bytes never pass through dispatch, so the grant is
+          // re-read here: every open was grant-gated, and a grant
+          // revoked since (the host turning peer commands off) drops
+          // every channel on the connection the moment the peer
+          // sends anything on one. Credit frames flow back during any
+          // transfer, so a live stream notices within a window.
+          if (ctx.isCallerCommandGranted?.() !== true) {
+            channels.dropAll();
+            return;
+          }
+          if (!channels.handleFrame(toBytes(data))) warnUnknownChannelFrame();
+          return;
+        }
         const frame = isBinary
           ? null
           : decodeFrame(toText(data), ClientFrameSchema);
-        const alive = authed.get(socket);
-        if (alive !== undefined) alive.lastInboundAt = Date.now();
         if (ctx === null) {
           if (frame === null || frame.t !== "hello") {
             dead = true;
@@ -639,6 +675,7 @@ export function createWsServerBinding(
               auth === undefined ? () => false : () => auth.isCommandGranted(),
             callerDeviceId,
             notifier,
+            channels,
           };
           if (callerDeviceId !== undefined) {
             // A device dials at most one direct socket to a given

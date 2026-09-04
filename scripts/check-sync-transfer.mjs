@@ -33,7 +33,7 @@
 // surface this proof pins. Runs under
 // scripts/lib/register-ts-alias.mjs. See package.json "sync:check".
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
@@ -68,7 +68,12 @@ import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initShigomoriRootAt } from "@host/lib/util/paths";
-import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import {
+  cliFailureMessage,
+  createCliRunner,
+  makeProof,
+  makeTracker,
+} from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
 const execFileP = promisify(execFile);
@@ -137,60 +142,10 @@ async function refSnapshot(repo) {
   return new Set(out ? out.split("\n") : []);
 }
 
-// The real CLI runner seam: same NDJSON-per-line protocol as the
-// Electron implementation (main/electron/cliRunner.ts), minus the
+// The real CLI runner seam (scripts/lib/checkKit.mjs): the same
+// NDJSON-per-line protocol as the Electron implementation, minus the
 // child bookkeeping the app needs.
-function runCli(args, onDoc) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(smBinary, ["--json", ...args], { env: smEnv });
-    const docs = [];
-    let buffer = "";
-    child.stdout.on("data", (chunk) => {
-      buffer += chunk.toString("utf8");
-      for (
-        let newline = buffer.indexOf("\n");
-        newline >= 0;
-        newline = buffer.indexOf("\n")
-      ) {
-        const line = buffer.slice(0, newline).trim();
-        buffer = buffer.slice(newline + 1);
-        if (!line) continue;
-        try {
-          const doc = JSON.parse(line);
-          docs.push(doc);
-          onDoc?.(doc);
-        } catch {
-          // Non-JSON stdout line; the assertions read docs only.
-        }
-      }
-    });
-    let stderrTail = "";
-    child.stderr.on("data", (chunk) => {
-      stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
-    });
-    child.on("error", reject);
-    child.on("close", (code) =>
-      resolve({ code: code ?? -1, docs, stderrTail }),
-    );
-  });
-}
-
-function cliFailureMessage(result, fallback) {
-  const errorDoc = result.docs.find(
-    (doc) => doc.ok === false && typeof doc.error === "string",
-  );
-  return errorDoc ? errorDoc.error : `${fallback} (CLI exit ${result.code})`;
-}
-
-async function sm(...args) {
-  const result = await runCli(args);
-  if (result.code !== 0) {
-    throw new Error(
-      `sm ${args.join(" ")} failed: ${cliFailureMessage(result, "no error doc")}\n${result.stderrTail}`,
-    );
-  }
-  return result;
-}
+const { runCli, sm } = createCliRunner(smBinary, smEnv);
 
 const { ok, done, fail } = makeProof("sync-transfer proof");
 
@@ -618,7 +573,7 @@ async function main() {
           },
           pullCtx,
         ),
-      /already exists on this device/,
+      /is already checked out at .* on this device/,
     );
     // And an identity nothing local matches is refused before anything
     // else runs.

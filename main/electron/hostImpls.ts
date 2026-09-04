@@ -23,6 +23,7 @@ import {
   uninstallCliEverything,
 } from "./cliInstall";
 import { cliFailureMessage, requireCliBinary, runCli } from "./cliRunner";
+import { installFileSyncSpawner } from "./fileSyncRunner";
 import {
   installShellIntegration,
   shellIntegrationStatus,
@@ -64,4 +65,5 @@ export function installHostImpls(): void {
       broadcastAll(runtimeContract, "nukeProgress", progress),
   });
   setCliRunnerImpl({ runCli, requireCliBinary, cliFailureMessage });
+  installFileSyncSpawner();
 }

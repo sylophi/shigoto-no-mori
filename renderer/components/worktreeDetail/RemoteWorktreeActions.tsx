@@ -1,14 +1,15 @@
 // The remote worktree detail's cross-device actions: pull a copy here
-// ("Bring here") or move it here and tear down the source
-// ("Transplant"). Text buttons, since the footer has room to say what
-// they do. Renders nothing unless the caller holds command access, the
+// ("Bring here"), keep a live mirror of it here ("Mirror here"), or
+// move it here and tear down the source ("Transplant"). Text buttons,
+// since the footer has room to say what they do. Renders nothing unless the caller holds command access, the
 // branch is real, and a local project shares the repo identity (the
 // handler re-verifies that last one).
 import { useState } from "react";
-import { ArrowDownToLine, Loader2, Shovel } from "lucide-react";
+import { ArrowDownToLine, Loader2, RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { useBringWorktreeHere } from "@/hooks/remote/useBringWorktreeHere";
+import { useStartMirror } from "@/hooks/remote/useMirrors";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
@@ -38,6 +39,12 @@ export function RemoteWorktreeActions({
   return (
     <div className="flex items-center gap-1">
       <BringButton
+        worktree={worktree}
+        sourceProjectId={project.id}
+        sourceIdentity={project.identity}
+        localProjectId={localProject.id}
+      />
+      <MirrorButton
         worktree={worktree}
         sourceProjectId={project.id}
         sourceIdentity={project.identity}
@@ -120,6 +127,34 @@ function BringButton(props: {
         <ArrowDownToLine />
       )}
       {bring.isPending ? "Bringing here…" : "Bring here"}
+    </Button>
+  );
+}
+
+// Mirror is a bring-here followed by a live two-way mirror between the
+// new local worktree and the remote one, so it shares the bring
+// button's gate and shape. It only exists in the app: the daemon and
+// the gateway live in main, and the web loopback refuses the mutation.
+function MirrorButton(props: {
+  worktree: Worktree;
+  sourceProjectId: string;
+  sourceIdentity: string;
+  localProjectId: string;
+}) {
+  const mirror = useStartMirror(props);
+  if (!window.api.isElectron) return null;
+  return (
+    <Button
+      type="button"
+      size="xs"
+      variant="ghost"
+      className="shrink-0 text-muted-foreground hover:text-foreground"
+      disabled={mirror.isPending}
+      title="Create this worktree on this machine and keep the two in sync, every file, both ways"
+      onClick={() => mirror.mutate()}
+    >
+      {mirror.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+      {mirror.isPending ? "Mirroring here…" : "Mirror here"}
     </Button>
   );
 }

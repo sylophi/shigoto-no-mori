@@ -11,6 +11,7 @@
   "hygiene:list",
   "launchers:detect",
   "launchers:forProject",
+  "mirror:list",
   "packageScripts:getSort",
   "packageScripts:list",
   "portPool:isActive",

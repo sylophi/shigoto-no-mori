@@ -31,6 +31,7 @@
 // keeper's last failure so the renderer surfaces the honest cause
 // rather than a bare "not connected".
 import type { hubContract, HubStatus } from "@shared/ipc/modules/hub";
+import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 
@@ -85,6 +86,12 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // tick. In-flight dials are left alone: their handshake deadline is
   // already their verdict.
   probeDirectPeers(): void;
+  // The peer's direct session's byte channels (shared/ipc/socket/
+  // channels.ts), for a caller that attaches its end under a minted id
+  // BEFORE opening the far end with forward:open / mirror:openStream. Same
+  // session rules as invokePeer: joins an in-flight keeper dial,
+  // rejects at once with the keeper's reason when there is none.
+  peerChannels(deviceId: string): Promise<Pick<ChannelMux, "attach" | "has">>;
   // Close and drop every cached direct session, for the quit path:
   // without it the remote host keeps a dead socket in its per-device
   // slot and relaunch lands on the supersede path instead of a clean
@@ -217,6 +224,8 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
       // renderer unchanged.
       return peer.transport.invoke(channel, input);
     },
+
+    peerChannels: async (deviceId) => (await requirePeer(deviceId)).channels,
 
     directPeerVersions: () => {
       const versions: Record<string, string> = {};

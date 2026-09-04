@@ -174,5 +174,8 @@ export function bridgePeerTransport(bridge, deviceId) {
       },
     },
     invokeCount: (channel) => counts.get(channel) ?? 0,
+    // The session's byte channels (shared/ipc/socket/channels.ts),
+    // resolving like invokePeer does.
+    channels: () => bridge.peerChannels(deviceId),
   };
 }

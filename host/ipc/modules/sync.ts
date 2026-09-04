@@ -3,7 +3,7 @@
 // invoke responses. The transfer registry rides the shared idle
 // registry (host/lib/idleRegistry.ts) -- transfers are ephemeral by
 // design, so nothing survives a restart and nothing is persisted.
-import { mkdtemp, open, rm } from "node:fs/promises";
+import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { z } from "zod";
@@ -23,6 +23,7 @@ import { errorMessageOf } from "@shared/errors";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import {
   bundleCreateViaCli,
+  bundleUnpackViaCli,
   createViaCli,
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
@@ -30,12 +31,14 @@ import {
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { run } from "@host/lib/git/core";
 import { listBranches } from "@host/lib/git/branches";
+import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
   hasCommit,
   localBranchTips,
+  refTip,
+  treeOf,
   updateRef,
 } from "@host/lib/git/refs";
 import {
@@ -103,20 +106,97 @@ const transfers = createIdleRegistry<Transfer>({
     rm(transfer.dir, { recursive: true, force: true }).catch(() => {}),
 });
 
+// An incoming push (the peer's git follower shipping commits here):
+// the bundle is written into its own temp dir as chunks arrive, then
+// unpacked by the CLI on finish. Same idle sweep as the outbound
+// transfers, so a sender that vanished mid-push leaks one temp file
+// for the idle window.
+type IncomingPush = {
+  projectId: string;
+  dir: string;
+  path: string;
+  handle: FileHandle;
+  bytes: number;
+  received: number;
+};
+
+const pushes = createIdleRegistry<IncomingPush>({
+  idleMs: TRANSFER_IDLE_MS,
+  onDrop: async (push) => {
+    await push.handle.close().catch(() => {});
+    await rm(push.dir, { recursive: true, force: true }).catch(() => {});
+  },
+});
+
 export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
+  pushStart: async ({ projectId, bytes }) => {
+    findProjectOrThrow(projectId);
+    const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
+    const path = join(dir, "push.bundle");
+    const handle = await open(path, "w");
+    const transferId = pushes.mint({
+      projectId,
+      dir,
+      path,
+      handle,
+      bytes,
+      received: 0,
+    });
+    return { transferId };
+  },
+
+  // Chunks arrive in order (the sender awaits each), so an offset that
+  // is not the next byte is a broken sender, not a retry to honor.
+  pushChunk: async ({ transferId, offset, dataB64 }) => {
+    const push = pushes.get(transferId);
+    if (push === undefined) throw new Error("unknown-transfer");
+    pushes.touch(transferId);
+    const data = Buffer.from(dataB64, "base64");
+    if (offset !== push.received) throw new Error("push chunk out of order");
+    if (push.received + data.length > push.bytes) {
+      throw new Error("push overran the announced size");
+    }
+    await push.handle.write(data, 0, data.length, offset);
+    push.received += data.length;
+  },
+
+  pushFinish: async ({ transferId, refspecs }) => {
+    const push = pushes.get(transferId);
+    if (push === undefined) throw new Error("unknown-transfer");
+    try {
+      if (push.received !== push.bytes) {
+        throw new Error(
+          `push incomplete: got ${push.received} of ${push.bytes} bytes`,
+        );
+      }
+      await push.handle.close();
+      const project = findProjectOrThrow(push.projectId);
+      // The CLI re-validates every dst under refs/shigomori/ before any
+      // git spawn (cli/cmd_bundle.go), the same wall the pull's unpack
+      // stands behind.
+      return await bundleUnpackViaCli(project, push.path, refspecs);
+    } finally {
+      await pushes.drop(transferId);
+    }
+  },
+
+  hasCommits: async ({ projectId, commits }) => {
+    const project = findProjectOrThrow(projectId);
+    const present: string[] = [];
+    for (const commit of commits) {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
+      if (await hasCommit(project.path, commit)) present.push(commit);
+    }
+    return { present };
+  },
+
   refTips: async ({ projectId, refs }) => {
     const project = findProjectOrThrow(projectId);
     const tips: { ref: string; commit: string }[] = [];
     for (const ref of refs) {
       // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-      const commit = await run(project.path, [
-        "rev-parse",
-        "--verify",
-        "--quiet",
-        "--end-of-options",
-        ref,
-      ]).catch(() => null);
-      if (commit !== null) tips.push({ ref, commit: commit.trim() });
+      const commit = await refTip(project.path, ref);
+      if (commit !== null) tips.push({ ref, commit });
     }
     return { tips };
   },
@@ -262,16 +342,6 @@ async function sourceChangedSince(
   }
 }
 
-async function treeOf(projectPath: string, commit: string): Promise<string> {
-  const out = await run(projectPath, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${commit}^{tree}`,
-  ]);
-  return out.trim();
-}
-
 // The source teardown. It runs ONLY when nothing can be lost: an unapplied
 // capture means the uncommitted work still exists solely on the
 // source, so the source is kept and the caller learns why via
@@ -347,7 +417,7 @@ async function tearDownSource(
 // After the create, an apply failure resolves with dirtyApplied:false
 // rather than throwing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
-async function runPullWorktree(
+export async function runPullWorktree(
   {
     sourceDeviceId,
     sourceProjectId,
@@ -371,8 +441,15 @@ async function runPullWorktree(
   // with the state the user can act on.
   const { local } = await listBranches(project.path);
   if (local.includes(branch)) {
+    // Name the worktree holding it when one does: that is the thing
+    // the user has to stop or delete.
+    const holder = (
+      await listWorktreeIdentities(project.id, project.path)
+    ).find((w) => w.branch === branch);
     throw new Error(
-      `${branch} already exists on this device. Delete that branch (or its worktree) first, or open it and pull normally.`,
+      holder === undefined
+        ? `${branch} already exists on this device. Delete that branch first, or open it and pull normally.`
+        : `${branch} is already checked out at ${holder.path} on this device. Stop or delete that worktree first.`,
     );
   }
 

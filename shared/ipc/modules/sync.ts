@@ -43,8 +43,10 @@ import {
 // that invoked it (local-only, like the orchestrators themselves).
 
 // The refs a peer may request into a bundle, fail-closed: a branch
-// (refs/heads/<name>) or a dirty-state capture
-// (refs/shigomori/dirty/<worktreeId>, see cli/cmd_dirty.go). The
+// (refs/heads/<name>), a dirty-state capture
+// (refs/shigomori/dirty/<worktreeId>, see cli/cmd_dirty.go) or a
+// mirror's index snapshot (refs/shigomori/index/<worktreeId>, see
+// host/mirror/gitState.ts). The
 // charset is deliberately conservative -- these strings cross the
 // device boundary into git argv on the host. This gate and the CLI's
 // (bundleRefRe in cli/cmd_bundle.go) are deliberately DIFFERENT, not a
@@ -53,7 +55,7 @@ import {
 // those tails. Two complementary sieves, defense in depth -- their
 // intersection is fail-closed, so nothing that clears both is exotic.
 const BUNDLE_REF_RE =
-  /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/dirty\/[0-9a-f]{12})$/;
+  /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 
 export const SyncBundleRefSchema = z
   .string()
@@ -61,6 +63,34 @@ export const SyncBundleRefSchema = z
   .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
     message: "Ref outside the sync allowlist",
   });
+
+// Where an unpacked ref may land (the CLI enforces the same prefix
+// fail-closed): the app-owned namespace, never a branch or a tag. Also
+// the refs a mirror apply may sweep afterwards.
+export const SyncLandingRefSchema = z
+  .string()
+  .regex(/^refs\/shigomori\/[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+  .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
+    message: "Ref outside the app's namespace",
+  });
+
+// One `src:dst` for the push direction's unpack on the receiver.
+export const SyncRefspecSchema = z
+  .string()
+  .max(512)
+  .refine(
+    (spec) => {
+      const colon = spec.indexOf(":");
+      if (colon <= 0) return false;
+      const src = spec.slice(0, colon);
+      const dst = spec.slice(colon + 1);
+      return (
+        SyncBundleRefSchema.safeParse(src).success &&
+        SyncLandingRefSchema.safeParse(dst).success
+      );
+    },
+    { message: "Refspec outside the sync allowlist" },
+  );
 
 // transferIds are host-minted (shared/ipc/hexId.ts pins the shape), so
 // a peer can only replay an id it was given, never probe with crafted
@@ -202,6 +232,48 @@ export type SyncTeardownSourceResult = z.infer<
 // captured and applied is NOT on the wire: the host records its own
 // pull's outcome and reads it back here, so the data-loss rule runs
 // on facts the host produced, never on a caller's say-so.
+// The push direction of the transfer (the mirror's git follower,
+// host/mirror/gitFollow.ts, ships local commits to the peer): the
+// sender announces a bundle's size, streams it in the same chunks the
+// pull direction uses, and names the landing refspecs for the
+// receiver's unpack. Same fail-closed namespaces, same host-minted
+// transfer ids.
+export const SyncPushStartPayloadSchema = z.strictObject({
+  projectId: z.string().min(1),
+  bytes: z.number().int().nonnegative(),
+});
+
+export const SyncPushStartResultSchema = z.strictObject({
+  transferId: TransferIdSchema,
+});
+
+export const SyncPushChunkPayloadSchema = z.strictObject({
+  transferId: TransferIdSchema,
+  offset: z.number().int().nonnegative(),
+  dataB64: ChunkB64Schema,
+});
+
+export const SyncPushFinishPayloadSchema = z.strictObject({
+  transferId: TransferIdSchema,
+  refspecs: z.array(SyncRefspecSchema).min(1).max(64),
+});
+
+export const SyncPushFinishResultSchema = z.strictObject({
+  fetched: z.array(SyncRefTipSchema.extend({ ref: z.string() })),
+});
+
+// Which of the named commits the host already holds, so a sender can
+// thin a bundle (and skip a ref whose tip the receiver has, which
+// `git bundle create` would otherwise drop silently).
+export const SyncHasCommitsPayloadSchema = z.strictObject({
+  projectId: z.string().min(1),
+  commits: z.array(CommitHashSchema).min(1).max(64),
+});
+
+export const SyncHasCommitsResultSchema = z.strictObject({
+  present: z.array(CommitHashSchema),
+});
+
 export const SyncTeardownSourcePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
@@ -243,6 +315,31 @@ export const syncContract = defineContract("host", {
     "sync:bundleAbort",
     SyncBundleAbortPayloadSchema,
     z.void(),
+    { remote: true, mutating: true, movesHostState: false },
+  ),
+  pushStart: invoke(
+    "sync:pushStart",
+    SyncPushStartPayloadSchema,
+    SyncPushStartResultSchema,
+    { remote: true, mutating: true, movesHostState: false },
+  ),
+  pushChunk: invoke("sync:pushChunk", SyncPushChunkPayloadSchema, z.void(), {
+    remote: true,
+    mutating: true,
+    movesHostState: false,
+  }),
+  // Lands refs, so it keeps the viewer cache ping.
+  pushFinish: invoke(
+    "sync:pushFinish",
+    SyncPushFinishPayloadSchema,
+    SyncPushFinishResultSchema,
+    { remote: true, mutating: true },
+  ),
+  hasCommits: invoke(
+    "sync:hasCommits",
+    SyncHasCommitsPayloadSchema,
+    SyncHasCommitsResultSchema,
+    // A read that discloses repo state, like refTips.
     { remote: true, mutating: true, movesHostState: false },
   ),
   // The local orchestrator (see the header note): remote:false keeps

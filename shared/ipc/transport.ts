@@ -1,4 +1,5 @@
 import type { ContractModule } from "./contract";
+import type { ChannelEndpoint, ChannelHandle } from "./socket/channels";
 import type { BroadcastKeys, BroadcastProducerPayload } from "./types";
 
 // The client's one seam onto the wire. A transport carries invokes and
@@ -48,6 +49,17 @@ export type HandlerContext = {
   // broker slot carries its own minimal context (shared/hub/link.ts)
   // and never mints a HandlerContext at all.
   callerDeviceId?: string;
+  // Byte channels on the calling connection (shared/ipc/socket/
+  // channels.ts), supplied only by the websocket binding: a handler
+  // that opens a byte stream for its caller (forward:open) attaches
+  // the far end here under the client-minted channel id. Absent on
+  // wires without a binary lane (Electron, loopbacks), where such a
+  // handler refuses.
+  channels?: {
+    attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
+    has(channelId: string): boolean;
+    size(): number;
+  };
 };
 
 // Whether the calling peer is another device rather than this

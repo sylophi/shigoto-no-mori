@@ -31,23 +31,21 @@ export const DEFAULT_SOCKET_PORT = 42017;
 // still denies a pre-auth peer an unbounded buffering budget.
 export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 
-// One raw chunk of bulk app data per frame, for callers that move byte
-// streams as base64 inside a JSON frame (the port-forward wire and the
-// sync bundle transfer). Chunking is what keeps an uplink req under
+// One raw chunk of bulk app data per frame, for callers that move a
+// bundle as base64 inside JSON invokes (the sync transfer, both
+// directions). Chunking is what keeps an uplink req under
 // MAX_INBOUND_FRAME_BYTES and what gives both directions flow control
 // (each chunk is one awaited invoke round trip). The base64 form
 // (853_336 chars) leaves headroom under the 1 MiB inbound cap for the
-// frame fields around it. Raising the chunk size now that the device
-// hub's envelope cap no longer applies is a deliberately deferred
-// follow-up.
+// frame fields around it. Byte STREAMS no longer ride this path: they
+// are binary channel frames (channels.ts).
 export const WIRE_CHUNK_BYTES = 640_000;
 export const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
 
 // The base64 form of one raw chunk, bounded by the cap above and
 // pinned to the base64 charset so a non-base64 payload fails at the
 // schema instead of silently decoding to garbage bytes. The ONE schema
-// for every bulk-data field on both chunked wires (forward's send
-// payload and poll result, sync's bundleChunk result), so an uplink
+// for every bulk-data field on both chunked wires (sync's bundleChunk result and pushChunk payload), so an uplink
 // write can never exceed what a downlink chunk may carry and vice
 // versa.
 export const ChunkB64Schema = z
@@ -93,10 +91,9 @@ export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 // Concurrent dispatched requests per connection, shared by the LAN
 // binding (per socket) and the hub link (per peer). Over the cap a
 // request is refused rather than spawning yet another git or CLI
-// subprocess. 64, raised from 32: each forwarded TCP connection parks a
-// long-poll in this budget (host/ipc/modules/forward.ts), so 32 starved
-// a peer's ordinary invokes once a forwarded browser tab and the
-// sidebar's merged tree were active together.
+// subprocess. 64: byte streams no longer park anything here (they are
+// binary channel frames, channels.ts), but the headroom stays for a
+// busy peer's ordinary invokes.
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Skip a push once the outbound socket buffer passes this, shared by

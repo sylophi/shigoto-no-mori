@@ -13,6 +13,7 @@ import type { ContractModule } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
+import type { HubPeerPush } from "@shared/ipc/modules/hub";
 import {
   broadcastAll as broadcastAllCore,
   registerContract as registerContractCore,
@@ -183,6 +184,19 @@ const tunnelRunner = createCloudflaredRunner({
   onChange: () => directPlane.notifyStatusChanged(),
 });
 
+// Main-side consumers of peer pushes (the mirror's git follower reacts
+// to a peer's git:projectChanged and mirror:gitChanged), beside the
+// renderer fan-out. Returns the unsubscribe.
+type PeerPushListener = (push: HubPeerPush) => void;
+const peerPushListeners = new Set<PeerPushListener>();
+
+export function onPeerPush(listener: PeerPushListener): () => void {
+  peerPushListeners.add(listener);
+  return () => {
+    peerPushListeners.delete(listener);
+  };
+}
+
 // The direct plane's shared composition (shared/hub/directPlane.ts):
 // the dialer, the renderer-facing bridge handlers, the status snapshot
 // and the presence reconcile, assembled identically for the web bridge.
@@ -194,7 +208,10 @@ const directPlane = createDirectPlane({
   localAppVersion: () => app.getVersion(),
   broadcastStatus: (status) =>
     broadcastAll(hubContract, "statusChanged", status),
-  broadcastPeerPush: (push) => broadcastAll(hubContract, "peerPush", push),
+  broadcastPeerPush: (push) => {
+    broadcastAll(hubContract, "peerPush", push);
+    for (const listener of peerPushListeners) listener(push);
+  },
   // The candidate sockets ride the `ws` package so a failed dial names
   // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
   // nor Node's global sends an Origin header, so the peer's upgrade

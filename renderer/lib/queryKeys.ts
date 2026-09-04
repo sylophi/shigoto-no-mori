@@ -189,6 +189,11 @@ function buildQueryKeys(deviceId: string) {
     // broadcast, which a remote scope receives over its direct session.
     updaterState: () => host("updater"),
 
+    // Host-scoped: the mirrors a device initiates and the streams it
+    // serves are facts about that device, read through its api and
+    // driven by its own mirror:changed broadcast.
+    mirrors: () => host("mirrors"),
+
     // Client-scoped: the port-forward engine (its listeners and conns)
     // lives in this app instance's main process, whichever device a
     // forward targets, so no host sentinel and no device id. One key
@@ -256,6 +261,8 @@ const externalChangeExempt = new Set([
   "commandAccess",
   "fs",
   "githubCli",
+  // Driven by its own changed broadcast, like portForwards and updater.
+  "mirrors",
   "portForwards",
   "runtime",
   "updater",

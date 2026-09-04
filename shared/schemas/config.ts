@@ -355,7 +355,10 @@ export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
 // worktree list first). Constrain it to the exact 12-hex shape that
 // `worktreeIdFromPath` produces so a malformed id can't escape the
 // projects/<id>/worktrees/ directory.
-const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
+// The derived worktree id (host/lib/git/worktrees.ts worktreeIdFromPath):
+// the first 12 hex chars of the path's sha256. One schema for every
+// payload that names one.
+export const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 
 export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadSchema.extend({
   worktreeId: WorktreeIdSchema,

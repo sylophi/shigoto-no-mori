@@ -34,7 +34,12 @@ import {
   readClientConfigSync,
 } from "./electron/clientConfig";
 import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
-import { registerIpcHandlers } from "./ipc";
+import {
+  notifyLocalProjectChanged,
+  registerIpcHandlers,
+  startMirrorEngine,
+  stopMirrorEngine,
+} from "./ipc";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
@@ -171,6 +176,13 @@ installMenuImpl();
 installUpdaterImpl();
 installHostImpls();
 registerIpcHandlers();
+// The mirror daemon resumes persisted sessions the moment it is up, so
+// it starts with the app rather than with the first mirror the user
+// asks for. A gateway that fails to bind is retried inside. Nothing
+// here is fatal, the app works without mirroring.
+void startMirrorEngine().catch((error: unknown) => {
+  console.warn("[mirror] engine failed to start:", errorMessageOf(error));
+});
 
 let mainWindow: BrowserWindow | null = null;
 // Set once the ready handler's own createWindow() call has run, so
@@ -470,8 +482,12 @@ app.on("ready", async () => {
   // project-scoped ping on every wire: this window and every device
   // viewing this host refetch that project's rows.
   startGitWatcher({
-    onChange: (projectId) =>
-      broadcastAll(gitContract, "projectChanged", { projectId }),
+    onChange: (projectId) => {
+      broadcastAll(gitContract, "projectChanged", { projectId });
+      // The mirror's git follower re-looks at every session in that
+      // project (a commit or checkout here must reach the peer).
+      notifyLocalProjectChanged(projectId);
+    },
     // The app's own git commands move refs the same way an agent's
     // do, and their callers already invalidate their targets, so the
     // watcher skips a running sm CLI child and any app-run mutating
@@ -524,6 +540,7 @@ app.on("before-quit", (event) => {
     // hub teardown gives the best-effort host-side conn closes a
     // socket to ride out on.
     stopAllPortForwards();
+    stopMirrorEngine();
     // Fire and forget: the hub close frame either flushes in the
     // handoff window or the DO notices the dead socket on its own. The
     // direct listener goes down the same way so connected peers see a
@@ -553,8 +570,11 @@ app.on("before-quit", (event) => {
   markShuttingDown();
   event.preventDefault();
   // Same rationale as the install branch: forward teardown first, so
-  // its close frames ride the hub socket while it is still up.
+  // its close frames ride the hub socket while it is still up. The
+  // mirror daemon gets its stdin closed here and is reaped with the
+  // CLI children below if it lingers.
   stopAllPortForwards();
+  stopMirrorEngine();
   // Close the hub socket alongside the script reaping so the DO sees
   // a clean departure, and the direct listener with it so peers see a
   // clean going-away. Fire and forget for the same reason as above.
