@@ -1,4 +1,4 @@
-// Per-project on-disk state lives under ~/shigomori[-dev]/projects/<projectId>/:
+// Per-project on-disk state lives under <dataDir>/projects/<projectId>/:
 //   project.json                       -- project-wide settings (scripts, layout, ...)
 //   worktrees/<worktreeId>.json        -- per-worktree state (notes, ...)
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
@@ -17,7 +17,7 @@ import {
   unlinkIfExists,
   withSchemaVersion,
 } from "../util/jsonFile";
-import { shigomoriRoot } from "../util/paths";
+import { dataDir } from "../util/paths";
 import { ttlMapCache } from "../util/ttlCache";
 
 function projectDir(projectId: string): string {
@@ -26,7 +26,7 @@ function projectDir(projectId: string): string {
   if (/[\\/]/.test(projectId) || projectId.includes("..")) {
     throw new Error(`Invalid project id: ${projectId}`);
   }
-  return join(shigomoriRoot(), "projects", projectId);
+  return join(dataDir(), "projects", projectId);
 }
 
 function projectConfigPath(projectId: string): string {
@@ -107,7 +107,7 @@ export function invalidateProjectConfigCache(projectId: string): void {
 }
 
 // External processes (the CLI) write these files too; the state
-// watcher calls this on any change under the root so the 5s TTL can't
+// watcher calls this on any change under the data dir so the 5s TTL can't
 // serve stale config after a CLI write.
 export function invalidateAllProjectConfigCaches(): void {
   configCache.clear();

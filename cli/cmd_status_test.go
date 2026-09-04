@@ -3,7 +3,7 @@ package main
 // Tests for the status card's pure pieces: porcelain classification,
 // the port-pool env reverse lookup, the gh check rollup, and the age /
 // truncation formatting. Everything here is string in, string out --
-// no repo, no state root, no gh.
+// no repo, no data dir, no gh.
 
 import (
 	"reflect"

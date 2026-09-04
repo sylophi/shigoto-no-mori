@@ -287,7 +287,7 @@ async function labSyncPull(
     projectId: project.id,
     name,
     branch: input.branch,
-    path: `/Users/rin/shigomori/worktrees/${project.name}/${name}`,
+    path: `/Users/rin/.sm/worktrees/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,
     hasUpstream: sourceWorktree?.hasUpstream ?? true,

@@ -54,8 +54,8 @@ type updaterStatus struct {
 	} `json:"state"`
 }
 
-func updaterStatusPath() string { return filepath.Join(shigomoriRoot(), "updater.json") }
-func updateRequestPath() string { return filepath.Join(shigomoriRoot(), "updater-request.json") }
+func updaterStatusPath() string { return filepath.Join(dataDir(), "updater.json") }
+func updateRequestPath() string { return filepath.Join(dataDir(), "updater-request.json") }
 
 // nil when the file is absent or malformed -- every caller treats
 // those the same way ("no reachable app").

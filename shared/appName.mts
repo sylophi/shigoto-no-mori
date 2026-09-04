@@ -30,7 +30,7 @@ export const CLERK_TOKEN_STORE = "clerk-tokens";
 // a separate device (its own userData, so its own single-instance
 // lock, hub credential, grants and Clerk tokens). Dev only. The env
 // var names the profile. The launcher that sets it also sets
-// SHIGOMORI_ROOT to the profile's own state root, and main refuses a
+// SHIGOMORI_DATA_DIR to the profile's own data dir, and main refuses a
 // profile without one: two devices over the same forest would be a
 // lie the hub cannot see through. The profile's userData nests under
 // the plain dev userData so Application Support stays one folder per

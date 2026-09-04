@@ -19,7 +19,7 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 
 // Containment test: true when `path` IS `ancestor` or sits anywhere
 // beneath it. Prefix matching by intent -- callers guarding destructive
-// flows (nuke, root move) want the whole subtree. Contrast
+// flows (nuke, data dir move) want the whole subtree. Contrast
 // isManagedPath (host/lib/worktrees/paths.ts), which deliberately uses
 // parent equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
@@ -42,7 +42,7 @@ function joinPath(base: string, ...segments: string[]): string {
 interface LayoutInputs {
   layout: WorktreeLayout;
   projectPath: string;
-  shigomoriRoot: string;
+  dataDir: string;
   customPath: string | null;
 }
 
@@ -50,7 +50,7 @@ interface LayoutInputs {
 // without a path falls back to the managed root rather than producing an
 // invalid path; the UI prevents saving an empty custom path.
 export function worktreeBaseFor(inputs: LayoutInputs): string {
-  const { layout, projectPath, shigomoriRoot, customPath } = inputs;
+  const { layout, projectPath, dataDir, customPath } = inputs;
   if (layout === "in-project") {
     return joinPath(projectPath, IN_PROJECT_SUBDIR);
   }
@@ -67,7 +67,7 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
   }
   const segments = projectPath.split("/");
   const projectName = segments.findLast((s) => s.length > 0) ?? "";
-  return joinPath(shigomoriRoot, "worktrees", projectName);
+  return joinPath(dataDir, "worktrees", projectName);
 }
 
 // Full destination path for a single worktree under the given layout.

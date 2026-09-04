@@ -40,8 +40,8 @@ The app has two builds. Each keeps its own state.
 
 | | Packaged app | Dev app (`pnpm dev`) |
 |---|---|---|
-| State root | `~/shigomori` | `~/shigomori-dev` |
-| Root pointer file | `~/.config/shigomori/root` | `~/.config/shigomori-dev/root` |
+| Data dir | `~/.sm` | `~/.smd` |
+| Data dir pointer file | `~/.config/shigomori/data-dir` | `~/.config/shigomori-dev/data-dir` |
 | userData (macOS) | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)` |
 | CLI | `sm` (bundled) | `smd` (`dist-cli/smd`, built by `pnpm dev`) |
 | Renderer scheme | `shigomori://app` | `shigomori-dev://app` |
@@ -49,39 +49,41 @@ The app has two builds. Each keeps its own state.
 
 A device is made of two folders:
 
-- **State root.** Projects and worktrees: `registry.json` (projects
+- **Data dir.** Projects and worktrees: `registry.json` (projects
   and the device id), `state.json`, `config.json`, `projects/`,
-  `worktrees/`. The device id is created per root, so one root is one
-  device.
+  `worktrees/`. The device id is created per data dir, so one data dir
+  is one device. A pre-2.0 `~/shigomori` (`~/shigomori-dev`) that still
+  holds state is adopted in place until `~/.sm` (`~/.smd`) holds state;
+  Settings > Data location offers to rename it, and `sm doctor` warns.
 - **userData.** The app instance: `account.json` (hub credential),
   `grants.json` (accept-commands switch), `clientConfig.json` (theme,
   keep reachable), `clerk-tokens.json` (Clerk session),
-  `cloudflared.pid`. Sign-in state lives here, not in the root. It
+  `cloudflared.pid`. Sign-in state lives here, not in the data dir. It
   also holds the single-instance lock, so only one app can run per
   userData.
 
 ### Changing where the data lives
 
-- `SHIGOMORI_ROOT=<dir> pnpm dev` uses `<dir>` as the state root for
+- `SHIGOMORI_DATA_DIR=<dir> pnpm dev` uses `<dir>` as the data dir for
   that session only. The app and every CLI child it spawns use it.
-  Moving the root from Settings is disabled in such a session.
-- The **root pointer file** holds one absolute path and relocates the
-  build's root permanently. The app writes it when the data folder is
+  Moving the data dir from Settings is disabled in such a session.
+- The **data dir pointer file** holds one absolute path and relocates
+  the build's data dir permanently. The app writes it when the data folder is
   moved from Settings. It can also be edited by hand. The target must
   be missing, empty, or already contain shigomori state, or it is
   ignored.
 - Neither option changes userData. Two devices on one machine need
-  different roots *and* different userData. Dev profiles (below)
+  different data dirs *and* different userData. Dev profiles (below)
   provide both.
 
-### Filling a root with test repos
+### Filling a data dir with test repos
 
 There is no shared fixture. Create the repos a test needs with
 `git init` and `git commit`, then register every repo under a
 directory in one call:
 
 ```sh
-smd projects add <dir> --all --yes     # set SHIGOMORI_ROOT if the root is sandboxed
+smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir is sandboxed
 ```
 
 - Set `GIT_AUTHOR_*` and `GIT_COMMITTER_*` so commits do not depend on
@@ -107,8 +109,8 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_ROOT if the root is sandb
 
 | Variable | Effect |
 |---|---|
-| `SHIGOMORI_ROOT` | State root for this session. See above. |
-| `SHIGOMORI_PROFILE` | Dev profile name. The launchers set it, and it requires `SHIGOMORI_ROOT`. |
+| `SHIGOMORI_DATA_DIR` | Data dir for this session. See above. |
+| `SHIGOMORI_PROFILE` | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT` | Opens Chromium's remote-debugging port on that window. Dev builds only. |
 | `PORT` | Renderer dev server port. `.env.local` holds the per-worktree value. |
 | `SM_DEVICE_HUB_URL` | Device hub URL. Normally from `.env.local`; a real env var overrides it. |
@@ -125,17 +127,21 @@ and are not saved.
 ## Dev profiles: two devices on one machine
 
 Every remote flow needs a second device. A **dev profile** is an extra
-dev instance on this machine with its own root, userData, device id
+dev instance on this machine with its own data dir, userData, device id
 and sign-in. Two profiles are two devices on the hub. They connect to
 each other over the LAN.
 
 ### Layout
 
 ```
-~/shigomori-dev-profiles/<name>/root    state root
-~/shigomori-dev-profiles/<name>/repos   test repos for the profile
+~/.smd-profiles/<name>/data    data dir
+~/.smd-profiles/<name>/repos   test repos for the profile
 <dev userData>/profiles/<name>          userData
 ```
+
+Profiles made before 2.0 lived under `~/shigomori-dev-profiles/<name>/`
+and are not migrated: revoke their devices, delete that folder, and
+start them again with `--fresh`.
 
 Profile names are lowercase letters, digits and dashes, up to 32
 characters. `scripts/lib/devProfile.mts` owns the layout.
@@ -282,7 +288,7 @@ interaction:
 | presence | Each roster holds the other. a's registry shows b online. |
 | remote read | a lists b's projects and the main worktree of `shared`. |
 | grant gate | With b's switch off, a's `worktrees:create` on b is refused with the typed message. With it on, `feat/e2e` is created and the path exists on disk. |
-| bring here | a pulls `feat/e2e`. The worktree lands under a's root on that branch. |
+| bring here | a pulls `feat/e2e`. The worktree lands under a's data dir on that branch. |
 | transplant | a tears the source down. It is gone from b's disk and still present on a. |
 | mirror | a mirrors a fresh worktree of b's. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Stopping clears a's session and b's served stream. |
 | port forward | a forwards a loopback echo server on b. Bytes round-trip. |
@@ -331,9 +337,9 @@ and assert through the bridge and the disk.
   profile's window instead.
 - **A revoked device still shows on the Devices page.** `--fresh` does
   not revoke. Revoke it from another device's Devices page.
-- **`smd` in a new terminal acts on the plain dev root.** To target a
-  profile from the shell, set its root first:
-  `SHIGOMORI_ROOT=~/shigomori-dev-profiles/<name>/root smd ...`.
+- **`smd` in a new terminal acts on the plain dev data dir.** To
+  target a profile from the shell, set its data dir first:
+  `SHIGOMORI_DATA_DIR=~/.smd-profiles/<name>/data smd ...`.
 - **Dev tokens on macOS.** They sit under Chromium's mock keychain,
   obfuscated but not protected. This is what makes `--clone-login`
   possible and is fine on the owner's machine.

@@ -25,9 +25,7 @@ export function DangerZone() {
   useEffect(() => window.api.runtime.onNukeProgress(setProgress), []);
 
   const home = runtime?.homedir ?? null;
-  const root = runtime?.shigomoriRoot
-    ? tildify(runtime.shigomoriRoot, home)
-    : "~/shigomori";
+  const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
 
   const handleNuke = () => {
     trigger(async () => {
@@ -35,7 +33,7 @@ export function DangerZone() {
       setProgress(null);
       try {
         await window.api.runtime.nuke();
-        // One rule decides what a nuke covers: this host's data root
+        // One rule decides what a nuke covers: this host's data dir
         // goes, and so does this machine's shigomori install (the CLI
         // and its shell hooks), while preferences survive because they
         // are preferences, not data. Appearance therefore stays put:
@@ -43,7 +41,7 @@ export function DangerZone() {
         // localStorage boot hints stay valid.
         // Every cached query now describes deleted state. A blanket
         // invalidateQueries() would refetch them all against the wiped
-        // root and raise a burst of "Unknown project/worktree" toasts,
+        // data dir and raise a burst of "Unknown project/worktree" toasts,
         // with retries landing even after the navigation below. Cancel
         // in-flight fetches and drop the cache BEFORE navigating: the
         // "/" route redirects to the first worktree it finds in cache
@@ -51,6 +49,13 @@ export function DangerZone() {
         // still cached bounces straight back to a dead worktree view.
         await queryClient.cancelQueries();
         queryClient.clear();
+        // A data dir that boot adopted under its pre-2.0 name is gone
+        // for good: the fresh install was seeded at the default
+        // location, which only a relaunch can pick up.
+        if (runtime?.dataDirSource === "legacy") {
+          void window.api.window.relaunch();
+          return;
+        }
         await navigate({ to: "/" });
       } catch (err) {
         notifyError("Couldn't nuke shigomori data", err);

@@ -71,7 +71,7 @@ export function createMirrorDaemon(deps: {
   // the daemon on the restart ladder until it is).
   gatewayAddress: () => string;
   // Where the engine persists sessions (a directory under the host's
-  // state root), read at each spawn.
+  // data dir), read at each spawn.
   dataDir: () => string;
   // Fires on every state snapshot and every status transition.
   onChange?: () => void;

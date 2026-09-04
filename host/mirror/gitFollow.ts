@@ -133,7 +133,7 @@ export function createGitFollower(deps: {
   const log = deps.log ?? ((message: string) => console.warn(message));
   let sweepTimer: ReturnType<typeof setInterval> | null = null;
   // The agreed states by session id, loaded on the first start (the
-  // follower is built at module load, before the state root exists)
+  // follower is built at module load, before the data dir exists)
   // and written back only when an entry actually changes.
   let stored: Record<string, GitStateCore> = {};
   let loaded = false;

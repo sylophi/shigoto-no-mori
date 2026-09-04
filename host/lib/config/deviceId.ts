@@ -1,5 +1,5 @@
-// The deviceId is a UUID naming this shigomori root, minted here on
-// the root's first use and durable for its lifetime. That is why it
+// The deviceId is a UUID naming this shigomori data dir, minted here on
+// the data dir's first use and durable for its lifetime. That is why it
 // lives in registry.json with the other setup the user can't rebuild,
 // and why it is never derived from the machine.
 import { randomUUID } from "node:crypto";
@@ -16,7 +16,7 @@ function isValidDeviceId(value: unknown): value is string {
   return typeof value === "string" && UUID_SHAPE.test(value);
 }
 
-// The id is a boot-time constant of the root (like the root path
+// The id is a boot-time constant of the data dir (like its path
 // itself), so repeat reads never have to touch the file. "" means not
 // read yet.
 let cached = "";
@@ -31,7 +31,7 @@ export function getDeviceId(): string {
     return cached;
   }
   // Mint inside updateKey, so the re-read happens under the registry
-  // lock: two processes racing on a fresh root settle on one id
+  // lock: two processes racing on a fresh data dir settle on one id
   // instead of the loser overwriting the winner's.
   registryStore.updateKey<unknown>(DEVICE_ID_KEY, "", (current) => {
     if (isValidDeviceId(current)) {

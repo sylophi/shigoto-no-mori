@@ -75,7 +75,7 @@ func TestHookPathHonorsEnvOverrides(t *testing.T) {
 	}
 	cfg := filepath.Join(home, "xdg")
 	t.Setenv("XDG_CONFIG_HOME", cfg)
-	want := filepath.Join(cfg, "fish", "conf.d", rootDirName+".fish")
+	want := filepath.Join(cfg, "fish", "conf.d", aliasName+".fish")
 	if got := hookPath("fish"); got != want {
 		t.Fatalf("fish path with XDG_CONFIG_HOME %q, want %q", got, want)
 	}

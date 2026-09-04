@@ -298,9 +298,9 @@ export function startScript(args: RunArgs): string {
   const runId = randomUUID();
 
   // Inherits the app's environment plus the SHIGOMORI_* contract vars,
-  // and deliberately adds no state-root pin: a script's whole process
-  // tree inherits this, so naming a root here would follow the user's
-  // command into anything it starts (see initShigomoriRoot).
+  // and deliberately adds no data dir pin: a script's whole process
+  // tree inherits this, so naming a data dir here would follow the user's
+  // command into anything it starts (see initDataDir).
   const env = {
     ...process.env,
     // Convince modern tools (npm, pnpm, bun, vite, vitest, tsc, eslint

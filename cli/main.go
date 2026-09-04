@@ -2,10 +2,10 @@ package main
 
 // sm -- the Shigoto no Mori CLI, a Go port of the app's worktree
 // engine (host/lib/) with the same on-disk state, ids, lock protocol,
-// and JSON output shapes. The state root follows the compiled-in
-// flavor (sm -> ~/shigomori, smd -> ~/shigomori-dev, see flavor.go);
-// a ~/.config/<flavor-name>/root pointer file relocates it (state.go),
-// and SHIGOMORI_ROOT overrides both (tests, sandboxes).
+// and JSON output shapes. The data dir follows the compiled-in
+// flavor (sm -> ~/.sm, smd -> ~/.smd, see flavor.go). A
+// ~/.config/<flavor-name>/data-dir pointer file relocates it
+// (state.go), and SHIGOMORI_DATA_DIR overrides both (tests, sandboxes).
 //
 // Known deltas vs the app: project-usage stats aren't bumped,
 // .worktreeinclude reconciliation doesn't rewrite project.json, the
@@ -39,8 +39,8 @@ var generalItems = []helpItem{
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
 		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
-	{"doctor [--fix] [--yes]", "Check the installation and state root",
-		"A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook) and the state root (config and registry parse, stale locks, registry entries whose repo is gone, git's worktree metadata vs the disk, port-pool leases, the terrier registry), then each project. Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched."},
+	{"doctor [--fix] [--yes]", "Check the installation and data dir",
+		"A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook) and the data dir (config and registry parse, stale locks, registry entries whose repo is gone, git's worktree metadata vs the disk, port-pool leases, the terrier registry), then each project. Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched."},
 	{"help [<command>] [--all]", "Show help",
 		"help <command> documents one command, --all prints every command at once."},
 }
@@ -133,8 +133,8 @@ var flagItems = []helpItem{
 }
 
 var envItems = []helpItem{
-	{"SHIGOMORI_ROOT", "Override the state root directory entirely",
-		"Without it, the root comes from ~/.config/" + rootDirName + "/root when that file exists (one line holding an absolute path, honoring $XDG_CONFIG_HOME), else ~/" + rootDirName + "."},
+	{"SHIGOMORI_DATA_DIR", "Override the data dir entirely",
+		"Without it, the data dir comes from ~/.config/" + configDirName + "/" + dataDirPointerName + " when that file exists (one line holding an absolute path, honoring $XDG_CONFIG_HOME), else ~/" + dataDirName + " (or a pre-2.0 ~/" + legacyDataDirName + " that still holds state)."},
 }
 
 // One row per namespace: the items its subcommands resolve against,
@@ -159,7 +159,7 @@ var helpNamespaces = []struct {
 			"by its path when the name isn't unique.",
 		projectItems, canonicalProjectsSub},
 	{"config", "Global settings", "",
-		"Global settings, stored in config.json in the state root. Keys " +
+		"Global settings, stored in config.json in the data dir. Keys " +
 			"and current values: `" + binaryName + " config list`. Per-project " +
 			"settings live under `" + binaryName + " projects config`.",
 		configItems, nil},
@@ -215,7 +215,7 @@ func inlineCol(groups []helpGroup) int {
 func helpText(full bool) string {
 	devNote := ""
 	if flavor != "prod" {
-		devNote = " (dev: targets ~/shigomori-dev)"
+		devNote = " (dev: targets ~/" + dataDirName + ")"
 	}
 	width := helpWidth()
 	var b strings.Builder
@@ -670,14 +670,17 @@ func run() int {
 		return 2
 	}
 
-	initRoot()
+	if err := initDataDir(); err != nil {
+		reportError(err)
+		return 2
+	}
 	var ctx cliContext
 	if !cmd.noContext {
 		// An unreadable or malformed registry.json fails here rather
 		// than running the command against an empty project list: every
 		// command that writes the registry would otherwise rebuild the
 		// file from that empty picture. This is also where an
-		// old-format root gets its registry drained out of state.json.
+		// old-format data dir gets its registry drained out of state.json.
 		projects, err := loadProjects()
 		if err != nil {
 			reportError(err)

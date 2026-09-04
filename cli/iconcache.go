@@ -1,7 +1,7 @@
 package main
 
 // The icon cache shared with the app: iconCache/index.json under the
-// state root, keyed by project path. Both surfaces read AND write it,
+// data dir, keyed by project path. Both surfaces read AND write it,
 // so a project resolved by either never pays the git scan again, and
 // the accent hue rides along with the icon entry. Every
 // read-modify-write holds index.json.lock (the state.json protocol).
@@ -68,7 +68,7 @@ func mimeForPath(path string) string {
 }
 
 func iconCachePath() string {
-	return filepath.Join(shigomoriRoot(), "iconCache", "index.json")
+	return filepath.Join(dataDir(), "iconCache", "index.json")
 }
 
 func readIconCache() map[string]iconCacheEntry {

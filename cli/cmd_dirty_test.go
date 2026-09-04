@@ -383,7 +383,7 @@ func TestDirtyApplyWithoutCapture(t *testing.T) {
 // rm's cleanup consumes the capture ref along with the worktree's
 // other state.
 func TestRmDeletesDirtyCaptureRef(t *testing.T) {
-	sandboxRoot(t)
+	sandboxDataDir(t)
 	projPath, wtPath, wtID := seedDirtyFixture(t)
 	writeFileT(t, filepath.Join(wtPath, "a.txt"), "changed\n")
 	mustCapture(t, projPath, wtPath, wtID)

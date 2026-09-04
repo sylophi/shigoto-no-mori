@@ -11,7 +11,7 @@ import type { ProjectIcon } from "@shared/schemas";
 import { listProjectFiles } from "../git/files";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
-import { isENOENT, shigomoriRoot } from "../util/paths";
+import { isENOENT, dataDir } from "../util/paths";
 
 // Icon candidates per location bucket. Bucket priority roughly tracks
 // how canonical each location is for "the project's primary icon":
@@ -335,8 +335,7 @@ interface IconCacheEntry {
 // existing project from ever seeing it without a manual cache reset.
 // (The CLI does write negative markers with its own TTL. They are
 // skipped on read here and preserved on write by the dirty-key merge.)
-const indexPath = (): string =>
-  join(shigomoriRoot(), "iconCache", "index.json");
+const indexPath = (): string => join(dataDir(), "iconCache", "index.json");
 
 let memoryCache: Map<string, IconCacheEntry> | null = null;
 let loadPromise: Promise<Map<string, IconCacheEntry>> | null = null;

@@ -54,7 +54,7 @@ export function WorktreeLocation() {
             <LocationForm
               projectId={projectId}
               projectPath={project.path}
-              shigomoriRoot={runtime.shigomoriRoot}
+              dataDir={runtime.dataDir}
               home={runtime.homedir}
               worktrees={worktrees}
               config={config ?? null}

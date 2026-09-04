@@ -22,7 +22,7 @@ package main
 //     ours are reported and left alone, mirroring cliInstall.ts's
 //     foreign-link policy.
 //
-// Markers and the fish filename derive from rootDirName, so the prod
+// Markers and the fish filename derive from aliasName, so the prod
 // and dev flavors can be installed side by side without collisions.
 
 import (
@@ -93,7 +93,7 @@ func loginShellKind() string {
 // Helper-function name, flavored so prod and dev wrappers coexist:
 // __shigomori_wrap / __shigomori_dev_wrap.
 func wrapHelperName() string {
-	return "__" + strings.ReplaceAll(rootDirName, "-", "_") + "_wrap"
+	return "__" + strings.ReplaceAll(aliasName, "-", "_") + "_wrap"
 }
 
 func wrapperSnippet(kind string) (string, error) {
@@ -186,8 +186,8 @@ func cmdShellInit(args []string) (int, error) {
 
 // --- rc-file hook management (install / uninstall / status) ---
 
-func hookBeginMarker() string { return "# >>> " + rootDirName + " shell integration >>>" }
-func hookEndMarker() string   { return "# <<< " + rootDirName + " shell integration <<<" }
+func hookBeginMarker() string { return "# >>> " + aliasName + " shell integration >>>" }
+func hookEndMarker() string   { return "# <<< " + aliasName + " shell integration <<<" }
 
 // The one guarded line between the markers. The guard keeps shell
 // startup silent when the binary is gone (app trashed, link removed),
@@ -237,7 +237,7 @@ func hookPath(kind string) string {
 	default: // fish
 		// configHomeDir is "" only when the home dir is unresolvable,
 		// in which case `home` above is too -- no fallback can help.
-		return filepath.Join(configHomeDir(), "fish", "conf.d", rootDirName+".fish")
+		return filepath.Join(configHomeDir(), "fish", "conf.d", aliasName+".fish")
 	}
 }
 
@@ -358,7 +358,7 @@ func installHook(kind string) error {
 		if kind == "fish" {
 			return errf("%s exists but wasn't written by `%s shell install`. Remove it first.", collapseHome(path), binaryName)
 		}
-		return errf("The %s block in %s was edited. Restore or remove it, then install again.", rootDirName, collapseHome(path))
+		return errf("The %s block in %s was edited. Restore or remove it, then install again.", aliasName, collapseHome(path))
 	}
 	if kind == "fish" {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -389,7 +389,7 @@ func uninstallHook(kind string) (removed bool, err error) {
 	case "missing":
 		return false, nil
 	case "modified":
-		return false, errf("Left %s alone: its %s block was edited. Remove it by hand.", collapseHome(path), rootDirName)
+		return false, errf("Left %s alone: its %s block was edited. Remove it by hand.", collapseHome(path), aliasName)
 	}
 	if kind == "fish" {
 		if err := os.Remove(path); err != nil {

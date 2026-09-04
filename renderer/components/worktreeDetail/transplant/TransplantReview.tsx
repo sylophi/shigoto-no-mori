@@ -403,7 +403,7 @@ function DestinationFolder({
         worktreeBaseFor({
           layout: config?.worktreeLayout ?? "managed-root",
           projectPath: localProject.path,
-          shigomoriRoot: runtime.shigomoriRoot,
+          dataDir: runtime.dataDir,
           customPath: config?.customWorktreePath ?? null,
         }),
         runtime.homedir,
