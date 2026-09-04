@@ -2,7 +2,7 @@
 // spelling must agree across the runtime protocol handler and Clerk
 // bridge (main/electron/clerk.ts), the packaged Info.plist registration
 // (forge.config.ts protocols), the dev per-worktree bundle
-// registration (scripts/dev-electron.mts), the socket host's Origin
+// registration (scripts/lib/devBundle.mts), the socket host's Origin
 // gate (host/socket/server.ts, the renderer's WebSocket dials carry
 // this origin), and the Clerk instance's allowed_origins
 // (hub/README.md).

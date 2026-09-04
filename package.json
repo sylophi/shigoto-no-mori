@@ -16,8 +16,10 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "start": "node scripts/dev-cli.mjs && node scripts/fetch-cloudflared.mjs --best-effort && port-pool ensure . && node scripts/dev-electron.mts",
+    "start": "node scripts/dev-cli.mjs && node scripts/fetch-cloudflared.mjs --best-effort && port-pool ensure . && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-electron.mts",
     "dev": "pnpm run start",
+    "dev:peer": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/dev-peer.mts",
+    "test:remote-smoke": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/e2e/remote-smoke.mts",
     "package": "electron-forge package",
     "make": "electron-forge make",
     "publish": "electron-forge publish",
@@ -47,7 +49,6 @@
     "extract-icon": "scripts/extract-app-icon.sh",
     "dmg:background": "electron scripts/build-dmg-background.cjs",
     "dmg:check": "node scripts/check-dmg-art.mjs",
-    "seed": "node scripts/seed-test-data.mts",
     "cli": "go run -C cli .",
     "cli:build": "node scripts/build-cli.mjs",
     "cli:install": "node scripts/install-cli.mjs",

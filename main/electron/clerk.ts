@@ -18,6 +18,7 @@ import { app, net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import { storage } from "@clerk/electron/storage";
 import type { TokenStorage } from "@clerk/electron";
+import { CLERK_TOKEN_STORE } from "@shared/appName.mts";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
@@ -41,7 +42,9 @@ export function rendererSchemeUrl(): string {
 function lazyMemoizedTokenStorage(): TokenStorage {
   let backing: TokenStorage | null = null;
   const cache = new Map<string, string | null>();
-  const store = () => (backing ??= storage());
+  // Named explicitly (the SDK's own default) so the dev launchers can
+  // find the file when cloning a sign-in (scripts/lib/devProfile.mts).
+  const store = () => (backing ??= storage({ name: CLERK_TOKEN_STORE }));
   return {
     getItem: async (key) => {
       const cached = cache.get(key);
