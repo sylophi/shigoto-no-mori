@@ -17,10 +17,7 @@ interface InnerProps {
 }
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
-  const { key, state, busy, start, stop, send, resize } = useScriptRunner(
-    worktree,
-    slot,
-  );
+  const { key, state, busy, start, stop } = useScriptRunner(worktree, slot);
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 
@@ -79,10 +76,9 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
       </header>
 
       <ConsoleBody
+        runKey={key}
         state={state}
         onClear={canClear ? clear : null}
-        onInput={send}
-        onResize={resize}
       />
     </div>
   );

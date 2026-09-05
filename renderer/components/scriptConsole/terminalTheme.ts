@@ -6,43 +6,19 @@ import type { ITheme } from "@xterm/xterm";
 // child of the console host yields whatever the active theme (light,
 // dark, doubutsu) assigns, in a form xterm's color parser accepts.
 // Callers re-read on every <html> class change (see ConsoleBody).
-type AnsiKey =
-  | "black"
-  | "red"
-  | "green"
-  | "yellow"
-  | "blue"
-  | "magenta"
-  | "cyan"
-  | "white"
-  | "brightBlack"
-  | "brightRed"
-  | "brightGreen"
-  | "brightYellow"
-  | "brightBlue"
-  | "brightMagenta"
-  | "brightCyan"
-  | "brightWhite";
-
-// xterm theme key -> the --ansi-* custom property that feeds it.
-const ANSI_COLORS: ReadonlyArray<[AnsiKey, string]> = [
-  ["black", "black"],
-  ["red", "red"],
-  ["green", "green"],
-  ["yellow", "yellow"],
-  ["blue", "blue"],
-  ["magenta", "magenta"],
-  ["cyan", "cyan"],
-  ["white", "white"],
-  ["brightBlack", "bright-black"],
-  ["brightRed", "bright-red"],
-  ["brightGreen", "bright-green"],
-  ["brightYellow", "bright-yellow"],
-  ["brightBlue", "bright-blue"],
-  ["brightMagenta", "bright-magenta"],
-  ["brightCyan", "bright-cyan"],
-  ["brightWhite", "bright-white"],
-];
+// The eight ANSI base colors; each also has a --ansi-bright-* twin
+// feeding xterm's bright* key.
+const ANSI_BASES = [
+  "black",
+  "red",
+  "green",
+  "yellow",
+  "blue",
+  "magenta",
+  "cyan",
+  "white",
+] as const;
+type AnsiBase = (typeof ANSI_BASES)[number];
 
 export function readTerminalTheme(host: HTMLElement): ITheme {
   const probe = document.createElement("span");
@@ -61,8 +37,11 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
       "color-mix(in oklab, var(--foreground) 22%, transparent)",
     ),
   };
-  for (const [key, name] of ANSI_COLORS) {
-    theme[key] = read(`var(--ansi-${name})`);
+  for (const base of ANSI_BASES) {
+    theme[base] = read(`var(--ansi-${base})`);
+    const bright =
+      `bright${base[0]!.toUpperCase()}${base.slice(1)}` as `bright${Capitalize<AnsiBase>}`;
+    theme[bright] = read(`var(--ansi-bright-${base})`);
   }
   probe.remove();
   return theme;

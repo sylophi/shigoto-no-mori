@@ -27,15 +27,11 @@ export interface ScriptRunner {
   busy: boolean;
   start: () => void;
   stop: () => void;
-  // Console keystrokes and viewport size; no-ops unless the run is
-  // live and owns a PTY (see ScriptRunState.interactive).
-  send: (data: string) => void;
-  resize: (cols: number, rows: number) => void;
 }
 
 // Bundles the per-script run state with the start/stop dispatch tied
-// to the correct IPC (lifecycle vs package), plus the console's input
-// channel. Lets row/console UIs stay one-liners.
+// to the correct IPC (lifecycle vs package). Lets row/console UIs
+// stay one-liners.
 export function useScriptRunner(
   worktree: Worktree,
   slot: ScriptSlot,
@@ -74,9 +70,5 @@ export function useScriptRunner(
     void scriptRuns.cancel(key);
   };
 
-  const send = (data: string) => scriptRuns.write(key, data);
-  const resize = (cols: number, rows: number) =>
-    scriptRuns.resize(key, cols, rows);
-
-  return { key, state, busy, start, stop, send, resize };
+  return { key, state, busy, start, stop };
 }

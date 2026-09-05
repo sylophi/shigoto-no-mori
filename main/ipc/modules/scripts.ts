@@ -63,13 +63,9 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
       return { cancelled };
     },
 
-    write: async ({ runId, data }) => ({
-      written: writeToScript(runId, data),
-    }),
+    write: async ({ runId, data }) => writeToScript(runId, data),
 
-    resize: async ({ runId, cols, rows }) => ({
-      resized: resizeScript(runId, { cols, rows }),
-    }),
+    resize: async ({ runId, cols, rows }) => resizeScript(runId, cols, rows),
 
     orphanReport: async () => takeOrphanSweepReport(),
   };

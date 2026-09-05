@@ -21,16 +21,12 @@ const execFileP = promisify(execFile);
 
 export type ScriptPty = IPty;
 
-export interface TerminalSize {
-  cols: number;
-  rows: number;
-}
-
 interface SpawnScriptOptions {
   command: string;
   cwd: string;
   env: NodeJS.ProcessEnv;
-  size: TerminalSize;
+  cols: number;
+  rows: number;
 }
 
 // $SHELL is reliable when launched from a terminal, but can be empty in
@@ -64,8 +60,8 @@ export function spawnScript(opts: SpawnScriptOptions): ScriptPty {
   }
   return spawnPty(shellCmd, [...shellArgs, opts.command], {
     name: "xterm-256color",
-    cols: opts.size.cols,
-    rows: opts.size.rows,
+    cols: opts.cols,
+    rows: opts.rows,
     cwd: opts.cwd,
     env,
   });

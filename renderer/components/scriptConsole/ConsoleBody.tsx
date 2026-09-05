@@ -5,7 +5,11 @@ import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { Trash2 } from "lucide-react";
 import { notifyError } from "@/lib/toast";
-import { type ScriptRunState } from "@/store/scriptRuns";
+import {
+  type ScriptKey,
+  type ScriptRunState,
+  scriptRuns,
+} from "@/store/scriptRuns";
 import { readTerminalTheme } from "./terminalTheme";
 
 // DECTCEM: terminal cursor visibility.
@@ -13,20 +17,14 @@ const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
 
 interface ConsoleBodyProps {
+  // Where keystrokes and viewport size go; the store ignores both
+  // unless the run is live and interactive.
+  runKey: ScriptKey;
   state: ScriptRunState;
   onClear: (() => void) | null;
-  // Keystrokes and viewport size for the run's PTY; the store ignores
-  // both unless the run is live and interactive.
-  onInput: (data: string) => void;
-  onResize: (cols: number, rows: number) => void;
 }
 
-export function ConsoleBody({
-  state,
-  onClear,
-  onInput,
-  onResize,
-}: ConsoleBodyProps) {
+export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
   if (state.status === "idle" && state.chunkTotal === 0) {
     return (
       <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
@@ -37,7 +35,7 @@ export function ConsoleBody({
 
   return (
     <div className="relative min-h-0 flex-1 bg-background">
-      <ConsoleTerminal state={state} onInput={onInput} onResize={onResize} />
+      <ConsoleTerminal key={runKey} runKey={runKey} state={state} />
       {state.status === "starting" && state.chunkTotal === 0 && (
         <div className="pointer-events-none absolute top-3 left-4 font-mono text-xs text-muted-foreground">
           Starting…
@@ -60,29 +58,18 @@ export function ConsoleBody({
   );
 }
 
-// One xterm instance for the life of the console. It is a real
-// terminal, not a log view: output is replayed into it byte for byte
-// (so cursor movement, progress bars and full-screen programs render
-// as they would in Terminal.app), keystrokes go back to the PTY while
-// the run is live, and the PTY is told the viewport size so programs
-// lay out for the space they have.
-function ConsoleTerminal({
-  state,
-  onInput,
-  onResize,
-}: Omit<ConsoleBodyProps, "onClear">) {
+// One xterm instance per console (keyed on the run key by the parent,
+// so switching scripts mounts a fresh one). It is a real terminal, not
+// a log view: output is replayed into it byte for byte (so cursor
+// movement, progress bars and full-screen programs render as they
+// would in Terminal.app), keystrokes go back to the PTY while the run
+// is live, and the PTY is told the viewport size so programs lay out
+// for the space they have.
+function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   // How many of the run's chunks (state.chunkTotal) are in the terminal.
   const writtenRef = useRef(0);
-  // The xterm listeners are registered once; route them through refs
-  // so a parent re-render with fresh closures needs no re-subscription.
-  const onInputRef = useRef(onInput);
-  const onResizeRef = useRef(onResize);
-  useEffect(() => {
-    onInputRef.current = onInput;
-    onResizeRef.current = onResize;
-  }, [onInput, onResize]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -107,21 +94,19 @@ function ConsoleTerminal({
       }),
     );
     term.open(host);
-    const dataSub = term.onData((data) => onInputRef.current(data));
+    const dataSub = term.onData((data) => scriptRuns.write(runKey, data));
     const resizeSub = term.onResize(({ cols, rows }) =>
-      onResizeRef.current(cols, rows),
+      scriptRuns.resize(runKey, cols, rows),
     );
     termRef.current = term;
     writtenRef.current = 0;
 
+    // fit() throws while the host has no layout yet (route transition);
+    // the observer fires again once it does.
     const refit = () => {
-      // Throws while the host has no layout yet (route transition);
-      // the observer fires again once it does.
       try {
         fit.fit();
-      } catch {
-        // See above.
-      }
+      } catch {}
     };
     const observer = new ResizeObserver(refit);
     observer.observe(host);
@@ -148,7 +133,7 @@ function ConsoleTerminal({
       term.dispose();
       termRef.current = null;
     };
-  }, []);
+  }, [runKey]);
 
   // Write whatever the store holds that the terminal hasn't seen. A
   // total below what was written means the run was cleared or
@@ -184,9 +169,9 @@ function ConsoleTerminal({
     term.write(live ? SHOW_CURSOR : HIDE_CURSOR);
     if (live) {
       term.focus();
-      onResizeRef.current(term.cols, term.rows);
+      scriptRuns.resize(runKey, term.cols, term.rows);
     }
-  }, [state.status, state.interactive]);
+  }, [runKey, state.status, state.interactive]);
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box width, so padding on the host itself would be counted as

@@ -19,7 +19,6 @@ import {
   signalTree,
   signalTreeBestEffort,
   spawnScript,
-  type TerminalSize,
 } from "./process";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
@@ -36,7 +35,8 @@ const UNKILLABLE_WAIT_MS = 5_000;
 // viewport as soon as it is on screen, but scripts launched from a
 // worktree row (or by a lifecycle) may run a while before -- or without
 // -- anyone opening the console, so the default should suit a log.
-const DEFAULT_SIZE: TerminalSize = { cols: 120, rows: 40 };
+const DEFAULT_COLS = 120;
+const DEFAULT_ROWS = 40;
 
 interface ScriptWorktree {
   id: string;
@@ -317,7 +317,8 @@ export function startScript(args: RunArgs): string {
       command: args.command,
       cwd: args.worktree.path,
       env,
-      size: DEFAULT_SIZE,
+      cols: DEFAULT_COLS,
+      rows: DEFAULT_ROWS,
     });
   } catch (error) {
     // No process exists (missing shell binary, PTY allocation failure).
@@ -388,29 +389,22 @@ export function startScript(args: RunArgs): string {
   return runId;
 }
 
-// Keystrokes from the console. False when the run isn't one of ours
+// Keystrokes from the console. A no-op when the run isn't one of ours
 // (already exited, or a lifecycle script the CLI ran on the app's behalf
 // -- those stream output through the same events but have no PTY here).
-export function writeToScript(runId: string, data: string): boolean {
-  const record = runningScripts.get(runId);
-  if (!record || record.exited) return false;
-  record.pty.write(data);
-  return true;
+export function writeToScript(runId: string, data: string): void {
+  runningScripts.get(runId)?.pty.write(data);
 }
 
 // The console's viewport size, so full-width output and TUIs lay out
 // for the space they actually have.
-export function resizeScript(runId: string, size: TerminalSize): boolean {
-  const record = runningScripts.get(runId);
-  if (!record || record.exited) return false;
+export function resizeScript(runId: string, cols: number, rows: number): void {
   try {
-    record.pty.resize(size.cols, size.rows);
+    runningScripts.get(runId)?.pty.resize(cols, rows);
   } catch {
     // The ioctl fails once the PTY is torn down; the exit event is
     // already on its way.
-    return false;
   }
-  return true;
 }
 
 export async function cancelScript(runId: string): Promise<boolean> {

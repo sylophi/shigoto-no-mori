@@ -15,27 +15,13 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PREBUILDS = join(ROOT, "node_modules", "node-pty", "prebuilds");
 
-async function listPrebuildDirs() {
-  try {
-    return await readdir(PREBUILDS);
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
-  }
-}
-
 async function makeExecutable(dir) {
   const helper = join(PREBUILDS, dir, "spawn-helper");
-  let info;
-  try {
-    info = await stat(helper);
-  } catch (err) {
-    if (err.code === "ENOENT") return;
-    throw err;
-  }
-  if (info.mode & 0o111) return;
+  const info = await stat(helper).catch(() => null);
+  if (!info || info.mode & 0o111) return;
   await chmod(helper, info.mode | 0o755);
   console.log(`[fix-node-pty-helper] made ${dir}/spawn-helper executable`);
 }
 
-await Promise.all((await listPrebuildDirs()).map(makeExecutable));
+const dirs = await readdir(PREBUILDS).catch(() => []);
+await Promise.all(dirs.map(makeExecutable));
