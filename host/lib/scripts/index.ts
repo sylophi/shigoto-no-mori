@@ -1,19 +1,27 @@
-// Spawn per-project scripts and stream their merged stdout+stderr to
-// the renderer. Each script runs in its own session so we can kill the
-// entire tree of children (dev servers, watchers, compilers the user's
-// command spawns), not just the wrapping shell.
+// Spawn per-project scripts under a PTY and stream their terminal
+// output to the renderer, which feeds keystrokes and window-size changes
+// back through writeToScript / resizeScript. Each script runs in its
+// own session so we can kill the entire tree of children (dev servers,
+// watchers, compilers the user's command spawns), not just the wrapping
+// shell.
 //
 // The spawn/signal mechanics live in ./process.ts -- this file only
 // runs the SIGTERM -> grace -> SIGKILL escalation over them.
 //
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
-import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { errorMessageOf } from "@shared/errors";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
-import { signalTree, signalTreeBestEffort, spawnScript } from "./process";
+import {
+  type ScriptPty,
+  signalTree,
+  signalTreeBestEffort,
+  spawnScript,
+} from "./process";
 
 // Renderer-facing emit callback supplied by the IPC handler. Lets the
 // scripts layer stay Electron-free while still streaming events to the
@@ -25,6 +33,19 @@ const DEFAULT_GRACE_MS = 3_000;
 // before giving up. Callers (worktree delete, app quit) must not hang
 // forever behind it.
 const UNKILLABLE_WAIT_MS = 5_000;
+// PTY size a script starts with. The console resizes it to the real
+// viewport as soon as it is on screen, but scripts launched from a
+// worktree row (or by a lifecycle) may run a while before -- or without
+// -- anyone opening the console, so the default should suit a log.
+const DEFAULT_COLS = 120;
+const DEFAULT_ROWS = 40;
+// PTYs hand output over in many small reads (a TUI redraw is several, a
+// keystroke echo is one byte) and each event costs an IPC hop, a schema
+// parse and a render, so reads that land within a frame go out as one
+// chunk. The byte ceiling keeps a firehose from pooling for the whole
+// frame.
+const OUTPUT_FLUSH_MS = 16;
+const OUTPUT_FLUSH_BYTES = 64 * 1024;
 
 interface ScriptWorktree {
   id: string;
@@ -46,7 +67,7 @@ interface RunArgs {
 interface RunRecord {
   runId: string;
   pid: number;
-  child: ChildProcess;
+  pty: ScriptPty;
   projectId: string;
   worktreeId: string;
   // Kept alongside the id so a worktree that has vanished from disk can
@@ -63,6 +84,10 @@ interface RunRecord {
   cancelling: boolean;
   done: Promise<void>;
   notify: NotifyScriptEvent;
+  // Sends whatever PTY output is pooled for the next frame (see
+  // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
+  // must call it first so it lands after the output that preceded it.
+  flushOutput: () => void;
 }
 
 const runningScripts = new Map<string, RunRecord>();
@@ -227,16 +252,6 @@ interface KillOptions {
   reason?: string;
 }
 
-// The OS frees the child's pid at its "exit" event, but record.exited
-// only flips once stdio flushes ("close", or "exit" + 500ms when a
-// grandchild inherited the pipes). Killing by pid inside that gap can
-// hit a recycled pid. A dead root is also useless as a kill target (the
-// tree walks need it alive), so every kill path treats it as already
-// exited.
-function rootPidDead(record: RunRecord): boolean {
-  return record.child.exitCode !== null || record.child.signalCode !== null;
-}
-
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
@@ -245,17 +260,10 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
     await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
     return;
   }
-  if (rootPidDead(record)) {
-    // Root already exited; only the stdio flush is outstanding (the
-    // "exit" handler armed the fallback timer, so `done` resolves within
-    // 500ms). Waiting preserves the caller's "nothing running after
-    // this" guarantee without ever signaling a possibly-recycled pid.
-    await record.done;
-    return;
-  }
   record.cancelling = true;
 
   if (opts.reason) {
+    record.flushOutput();
     record.notify({
       runId: record.runId,
       kind: "data",
@@ -295,22 +303,31 @@ export function startScript(args: RunArgs): string {
     throw new Error("This project is being removed.");
   }
 
+  // node-pty's helper does the chdir itself and exits 1 without a word
+  // when it fails, which the console would show as a bare "exit 1".
+  // Name the cause here instead.
+  if (!existsSync(args.worktree.path)) {
+    throw new Error(`Worktree directory is missing: ${args.worktree.path}`);
+  }
+
   const runId = randomUUID();
 
   // Inherits the app's environment plus the SHIGOMORI_* contract vars,
   // and deliberately adds no data dir pin: a script's whole process
   // tree inherits this, so naming a data dir here would follow the user's
-  // command into anything it starts (see initDataDir).
+  // command into anything it starts (see initDataDir). TERM and
+  // COLORTERM advertise what xterm in the renderer renders. FORCE_COLOR
+  // is for the tools a runner (turbo, concurrently, a `| tee`) drives
+  // through pipes, which can't see the PTY and would go monochrome.
+  // Pagers are off: stdout being a TTY would otherwise make git, gh and
+  // friends wait in `less`, and a lifecycle script runs unattended.
   const env = {
     ...process.env,
-    // Convince modern tools (npm, pnpm, bun, vite, vitest, tsc, eslint
-    // …) to emit ANSI even though stdout isn't a TTY. xterm in the
-    // renderer interprets the codes.
-    FORCE_COLOR: "1",
     TERM: "xterm-256color",
-    // Give programs that auto-format to terminal width a reasonable
-    // default rather than the conventional 80-col fallback.
-    COLUMNS: "120",
+    COLORTERM: "truecolor",
+    FORCE_COLOR: "1",
+    PAGER: "cat",
+    GIT_PAGER: "cat",
     [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
     [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
     [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
@@ -322,29 +339,32 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
-  const child: ChildProcess = spawnScript({
+  // Throws when no process could be started. The caller's IPC rejection
+  // carries the message into the console.
+  const pty: ScriptPty = spawnScript({
     command: args.command,
     cwd: args.worktree.path,
     env,
+    cols: DEFAULT_COLS,
+    rows: DEFAULT_ROWS,
   });
 
-  if (!child.pid) {
-    // spawn failed before a process existed (missing shell binary,
-    // deleted cwd). Node reports the cause via an async "error" event;
-    // with no listener attached that emit rethrows as an uncaught
-    // exception and crashes the main process. The microtask fallback
-    // covers any path where the event never fires.
-    let reported = false;
-    const reportSpawnFailure = (message: string) => {
-      if (reported) return;
-      reported = true;
-      args.notify({ runId, kind: "error", data: message });
-      args.notify({ runId, kind: "exit", code: null });
-    };
-    child.once("error", (error) => reportSpawnFailure(error.message));
-    queueMicrotask(() => reportSpawnFailure("Failed to start script process"));
-    return runId;
-  }
+  // The PTY is one ordered byte stream (stdout and stderr share the
+  // terminal), so the renderer's xterm sees exactly what a real
+  // terminal would, and concatenating reads before sending changes
+  // nothing it renders.
+  let pendingOutput = "";
+  let flushTimer: NodeJS.Timeout | null = null;
+  const flushOutput = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (!pendingOutput) return;
+    const data = pendingOutput;
+    pendingOutput = "";
+    args.notify({ runId, kind: "data", data });
+  };
 
   let resolveDone: () => void;
   const done = new Promise<void>((resolve) => {
@@ -353,8 +373,8 @@ export function startScript(args: RunArgs): string {
 
   const record: RunRecord = {
     runId,
-    pid: child.pid,
-    child,
+    pid: pty.pid,
+    pty,
     projectId: args.project.id,
     worktreeId: args.worktree.id,
     worktreeName: args.worktree.name,
@@ -366,77 +386,75 @@ export function startScript(args: RunArgs): string {
     cancelling: false,
     done,
     notify: args.notify,
+    flushOutput,
   };
   runningScripts.set(runId, record);
   persistSnapshot();
 
-  // Shared end-of-run bookkeeping. The renderer-facing event differs per
-  // path ("error" vs "exit"), so callers emit that first, then settle.
-  // Idempotent: a child "error" followed by "close" settles twice, and
-  // the second call finds everything already done.
-  const settle = () => {
-    record.exited = true;
-    resolveDone();
-    runningScripts.delete(runId);
-    persistSnapshot();
-  };
-
-  // Both streams flow into a single "data" event so xterm sees one
-  // ordered byte stream (matches how a real terminal would render it).
-  child.stdout?.on("data", (chunk: Buffer) => {
-    args.notify({
-      runId,
-      kind: "data",
-      data: chunk.toString("utf8"),
-    });
+  pty.onData((data) => {
+    pendingOutput += data;
+    if (pendingOutput.length >= OUTPUT_FLUSH_BYTES) flushOutput();
+    else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
   });
 
-  child.stderr?.on("data", (chunk: Buffer) => {
-    args.notify({
-      runId,
-      kind: "data",
-      data: chunk.toString("utf8"),
-    });
-  });
+  // A read error on the PTY master is rethrown by node-pty unless
+  // someone else listens for it, and an uncaught throw here takes the
+  // whole main process down. This listener sits on the same socket as
+  // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
+  // as part of a normal PTY lifecycle and must skip it too. node-pty
+  // closes the PTY first, so the exit event follows a real error.
+  (pty as unknown as NodeJS.EventEmitter).on(
+    "error",
+    (error: NodeJS.ErrnoException) => {
+      const code = error.code ?? "";
+      if (code.includes("EAGAIN") || code.includes("EIO")) return;
+      flushOutput();
+      args.notify({ runId, kind: "error", data: errorMessageOf(error) });
+    },
+  );
 
-  child.on("error", (error) => {
-    args.notify({ runId, kind: "error", data: error.message });
-    settle();
-  });
-
-  let exitNotified = false;
-  let flushTimer: NodeJS.Timeout | null = null;
-  const finalizeExit = (code: number | null, signal: string | null) => {
-    if (exitNotified) return;
-    exitNotified = true;
-    if (flushTimer) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
+  // node-pty reports exit only after the terminal stream has drained
+  // (or a short grace period when a backgrounded grandchild still holds
+  // the PTY open), so the run's last output never races the exit event
+  // that makes the renderer unbind the runId. That grace is also the
+  // only window in which a kill could target an already-reaped pid.
+  // It is a couple hundred milliseconds, and the target would have to
+  // be recycled as a group leader to be hit at all.
+  pty.onExit(({ exitCode, signal }) => {
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)
     // because the shell wrapping the user's command translated the
     // signal into an exit code. If we initiated the cancel, report
     // null code so the UI shows "stopped" not "failed".
-    const wasSignal = signal !== null;
-    const reported = record.cancelling || wasSignal ? null : code;
+    const wasSignal = signal !== undefined && signal !== 0;
+    const reported = record.cancelling || wasSignal ? null : exitCode;
+    flushOutput();
     args.notify({ runId, kind: "exit", code: reported });
-    settle();
-  };
-
-  // Notify exit on "close" (process ended AND stdio flushed), not "exit":
-  // the pipes routinely still hold the run's last chunks at "exit", and
-  // the renderer unbinds the runId once it sees the exit event -- a
-  // fast-failing script would lose its final error output. The timer
-  // fallback keeps a backgrounded grandchild that inherited the pipes
-  // from wedging the run (and the kill/lifecycle chains awaiting `done`).
-  child.on("exit", (code, signal) => {
-    flushTimer = setTimeout(() => finalizeExit(code, signal), 500);
-  });
-  child.on("close", (code, signal) => {
-    finalizeExit(code, signal);
+    record.exited = true;
+    resolveDone();
+    runningScripts.delete(runId);
+    persistSnapshot();
   });
 
   return runId;
+}
+
+// Keystrokes from the console. A no-op when the run isn't one of ours
+// (already exited, or a lifecycle script the CLI ran on the app's behalf
+// -- those stream output through the same events but have no PTY here).
+// Both calls can also fail on a PTY that is being torn down (the exit
+// event is already on its way), which is not worth reporting.
+export function writeToScript(runId: string, data: string): void {
+  try {
+    runningScripts.get(runId)?.pty.write(data);
+  } catch {}
+}
+
+// The console's viewport size, so full-width output and TUIs lay out
+// for the space they actually have.
+export function resizeScript(runId: string, cols: number, rows: number): void {
+  try {
+    runningScripts.get(runId)?.pty.resize(cols, rows);
+  } catch {}
 }
 
 export async function cancelScript(runId: string): Promise<boolean> {
@@ -481,7 +499,7 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 // Electron tears the main process down.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
-    if (record.exited || rootPidDead(record)) continue;
+    if (record.exited) continue;
     signalTreeBestEffort(record.pid, signal);
   }
 }

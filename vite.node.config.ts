@@ -1,8 +1,9 @@
-// Shared by both node-side builds (main and preload): they need the
-// same @shared alias, and one file means a future node-side option
-// can't be added to just one of them. The account define below is only
-// referenced by main (main/ipc/modules/account.ts). In preload nothing
-// names the constant, so nothing is inlined there.
+// Shared by both node-side builds (main and preload): the @shared alias,
+// the account define, and the one runtime dependency Vite must not
+// bundle. One file means a future node-side option can't be added to
+// just one of them. The account define is only referenced by main
+// (main/ipc/modules/account.ts). In preload nothing names the constant,
+// so nothing is inlined there.
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
@@ -38,5 +39,13 @@ export default defineConfig({
   },
   define: {
     __SM_ACCOUNT_BAKED_ENV__: JSON.stringify(bakedAccountEnv()),
+  },
+  build: {
+    rollupOptions: {
+      // node-pty loads its native addon and spawn helper by path
+      // relative to its own package, so it has to stay a real
+      // node_modules require (forge.config.ts ships that directory).
+      external: ["node-pty"],
+    },
   },
 });

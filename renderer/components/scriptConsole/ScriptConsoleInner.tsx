@@ -25,7 +25,10 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const label = slotLabel(slot);
 
   const clear = () => scriptRuns.clear(key);
-  const canClear = !busy && state.output.length > 0;
+  const canClear = !busy && state.hasOutput;
+  // Lifecycle scripts the CLI ran for the app stream here too, but
+  // their process lives in the CLI, not behind one of our PTYs.
+  const outputOnly = busy && !state.interactive;
 
   return (
     <div className="flex h-full flex-col">
@@ -44,6 +47,12 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
             <div className="min-h-[1rem]">
               <ScriptStatusBadge state={state} variant="header" />
             </div>
+            {outputOnly && (
+              <p className="text-xs text-muted-foreground">
+                Output only: this run was started by the CLI, so the console
+                can't send it input.
+              </p>
+            )}
           </div>
           <div className="shrink-0">
             {busy ? (
@@ -66,7 +75,11 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
         </div>
       </header>
 
-      <ConsoleBody state={state} onClear={canClear ? clear : null} />
+      <ConsoleBody
+        runKey={key}
+        state={state}
+        onClear={canClear ? clear : null}
+      />
     </div>
   );
 }

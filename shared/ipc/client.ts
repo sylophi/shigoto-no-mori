@@ -342,6 +342,10 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     scripts: {
       run: scriptsClient.run,
       cancel: (runId: string) => scriptsClient.cancel({ runId }),
+      write: (runId: string, data: string) =>
+        scriptsClient.write({ runId, data }),
+      resize: (runId: string, cols: number, rows: number) =>
+        scriptsClient.resize({ runId, cols, rows }),
       orphanReport: scriptsClient.orphanReport,
       onEvent: scriptsClient.event,
       onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,

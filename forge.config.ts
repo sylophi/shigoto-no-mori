@@ -6,6 +6,8 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
+import { accessSync, constants as fsConstants } from "node:fs";
+import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import {
   APP_BUNDLE_ID,
@@ -24,6 +26,11 @@ import {
 } from "./shared/fileSyncDist.mts";
 import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/infoPlist.mts";
 import { rendererSchemeName } from "./shared/rendererScheme.mts";
+import {
+  NODE_PTY_ADDON,
+  NODE_PTY_SPAWN_HELPER,
+  nodePtyPrebuildDir,
+} from "./shared/nodePty.mts";
 import {
   DMG_APP_ICON,
   DMG_APPS_ICON,
@@ -67,9 +74,32 @@ const dmgVolumeName =
     (name) => name.length <= DMG_VOLUME_NAME_MAX,
   ) ?? `v${version}`.slice(0, DMG_VOLUME_NAME_MAX);
 
+// Forge's Vite plugin normally ships only the .vite/ bundles. node-pty
+// (the script console's PTY) is the one dependency Vite can't bundle:
+// its loader requires the native addon by path and posix_spawns the
+// spawn-helper next to it, so the package has to exist as real files
+// -- its manifest, the JS in lib/, and the prebuilt darwin binaries.
+// Everything else in the package (sources, typings, tests' fixtures)
+// stays out, as do the files of every other node_modules entry (the
+// packager's pruner still creates an empty directory per production
+// dependency, which is harmless). Paths always start with "/" and
+// directories are filtered too, so the node_modules parents have to
+// pass for their children to be visited.
+const NODE_PTY_SHIPPED =
+  /^\/node_modules(\/node-pty(\/(package\.json|lib(\/.*)?|prebuilds(\/darwin-.*)?))?)?$/;
+const packagerIgnore = (file: string): boolean => {
+  if (!file) return false;
+  if (file.startsWith("/.vite")) return false;
+  return !NODE_PTY_SHIPPED.test(file);
+};
+
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    // The native addon and spawn-helper are loaded by path at runtime,
+    // which only works from app.asar.unpacked (node-pty rewrites its
+    // own helper path accordingly).
+    asar: { unpack: "**/node_modules/node-pty/**" },
+    ignore: packagerIgnore,
     icon: "assets/icon",
     appBundleId: APP_BUNDLE_ID,
     appCopyright: "© 2026 sylophi",
@@ -114,7 +144,12 @@ const config: ForgeConfig = {
         }
       : {}),
   },
-  rebuildConfig: {},
+  // node-pty ships Node-API prebuilds that work in Electron as-is
+  // (scripts/fix-node-pty-helper.mjs makes the helper executable, since
+  // install scripts are disabled). Skipping the rebuild keeps a compiler
+  // toolchain out of the dev loop and makes dev and packaged builds run
+  // the same binary.
+  rebuildConfig: { ignoreModules: ["node-pty"] },
   hooks: {
     prePackage: async (_config, platform, arch) => {
       execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {
@@ -145,6 +180,21 @@ const config: ForgeConfig = {
         ],
         { cwd: import.meta.dirname, stdio: "inherit" },
       );
+    },
+    // The ignore above spells out node-pty's layout. If a release moves
+    // it, fail the build here, not the first script run of a shipped app.
+    packageAfterCopy: async (_config, buildPath, _electron, platform, arch) => {
+      const prebuild = path.join(buildPath, nodePtyPrebuildDir(platform, arch));
+      for (const file of [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER]) {
+        const full = path.join(prebuild, file);
+        const mode =
+          file === NODE_PTY_SPAWN_HELPER ? fsConstants.X_OK : fsConstants.R_OK;
+        try {
+          accessSync(full, mode);
+        } catch {
+          throw new Error(`node-pty is not packaged correctly: ${full}`);
+        }
+      }
     },
   },
   // The dmg is what humans download: it opens the familiar

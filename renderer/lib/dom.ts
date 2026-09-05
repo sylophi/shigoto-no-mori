@@ -10,6 +10,20 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
+// True when a keydown originated in a surface that consumes raw keys
+// itself: the script console's terminal, where Ctrl+D is EOF and Ctrl+C
+// an interrupt for the running program. Such surfaces are text fields
+// too (isEditableTarget covers them, so bare-key shortcuts stay inert),
+// but a hotkey whose key would otherwise be passed through as a control
+// byte can check this to claim it instead. Surfaces opt in with
+// data-keyboard-surface="raw".
+export function isRawKeySurface(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest('[data-keyboard-surface="raw"]') !== null
+  );
+}
+
 // True while something is layered over the page and owns the keyboard:
 // the launcher, a modal shell, a sheet, an open menu or combobox popup,
 // or the blocking veil. None of them trap focus (they mount as siblings

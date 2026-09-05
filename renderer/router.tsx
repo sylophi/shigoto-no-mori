@@ -6,6 +6,7 @@ import {
   createRouter,
   Outlet,
   useRouter,
+  lazyRouteComponent,
 } from "@tanstack/react-router";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { Sidebar } from "@/components/sidebar/Sidebar";
@@ -15,7 +16,6 @@ import { WorktreeLocation } from "@/components/worktreeLocation/WorktreeLocation
 import { EmptyState } from "@/components/EmptyState";
 import { ManageBranches } from "@/components/manageBranches/ManageBranches";
 import { NewWorktree } from "@/components/newWorktree/NewWorktree";
-import { ScriptConsole } from "@/components/scriptConsole/ScriptConsole";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
@@ -209,7 +209,12 @@ const worktreeRoute = createRoute({
 const scriptConsoleRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-  component: ScriptConsole,
+  // The console brings xterm along (a few hundred KB), which a session
+  // that never opens a console has no use for at window open.
+  component: lazyRouteComponent(
+    () => import("@/components/scriptConsole/ScriptConsole"),
+    "ScriptConsole",
+  ),
 });
 
 const worktreeDiffRoute = createRoute({
