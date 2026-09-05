@@ -319,11 +319,15 @@ export function startScript(args: RunArgs): string {
   // COLORTERM advertise what xterm in the renderer renders. FORCE_COLOR
   // is for the tools a runner (turbo, concurrently, a `| tee`) drives
   // through pipes, which can't see the PTY and would go monochrome.
+  // Pagers are off: stdout being a TTY would otherwise make git, gh and
+  // friends wait in `less`, and a lifecycle script runs unattended.
   const env = {
     ...process.env,
     TERM: "xterm-256color",
     COLORTERM: "truecolor",
     FORCE_COLOR: "1",
+    PAGER: "cat",
+    GIT_PAGER: "cat",
     [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
     [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
     [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
@@ -393,14 +397,21 @@ export function startScript(args: RunArgs): string {
     else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
   });
 
-  // A read error on the PTY master (anything but the EIO that means the
-  // child hung up) is rethrown by node-pty unless someone else listens
-  // for it, and an uncaught throw here takes the whole main process
-  // down. node-pty closes the PTY first, so the exit event follows.
-  (pty as unknown as NodeJS.EventEmitter).on("error", (error: unknown) => {
-    flushOutput();
-    args.notify({ runId, kind: "error", data: errorMessageOf(error) });
-  });
+  // A read error on the PTY master is rethrown by node-pty unless
+  // someone else listens for it, and an uncaught throw here takes the
+  // whole main process down. This listener sits on the same socket as
+  // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
+  // as part of a normal PTY lifecycle and must skip it too. node-pty
+  // closes the PTY first, so the exit event follows a real error.
+  (pty as unknown as NodeJS.EventEmitter).on(
+    "error",
+    (error: NodeJS.ErrnoException) => {
+      const code = error.code ?? "";
+      if (code.includes("EAGAIN") || code.includes("EIO")) return;
+      flushOutput();
+      args.notify({ runId, kind: "error", data: errorMessageOf(error) });
+    },
+  );
 
   // node-pty reports exit only after the terminal stream has drained
   // (or a short grace period when a backgrounded grandchild still holds

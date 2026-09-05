@@ -174,14 +174,16 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     };
   }, [runKey]);
 
-  // Typing only makes sense into a live PTY. Off the run, xterm stops
-  // emitting onData (so no stray keystrokes hit the next run) and the
-  // cursor is hidden, since there is nothing to type into. On it, take
-  // focus so the user can type straight away, and tell the PTY the
-  // viewport size once the grid is fitted -- xterm's onResize only
-  // fires when the grid changes, which it doesn't for a run started
-  // into an already-open console. The cursor writes queue behind the
-  // replay above, so they land after it.
+  // Typing only makes sense into a live PTY. On the run, take focus so
+  // the user can type straight away, and tell the PTY the viewport size
+  // once the grid is fitted (xterm's onResize only fires when the grid
+  // changes, which it doesn't for a run started into an already-open
+  // console). Off it, xterm stops emitting onData (so no stray
+  // keystrokes hit the next run), the cursor is hidden since there is
+  // nothing to type into, and focus is handed back: a terminal holding
+  // it would keep swallowing Tab and keep the app's bare-key shortcuts
+  // inert. The cursor writes queue behind the replay above, so they
+  // land after it.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -191,6 +193,8 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     if (live) {
       term.focus();
       if (fittedRef.current) scriptRuns.resize(runKey, term.cols, term.rows);
+    } else if (hostRef.current?.contains(document.activeElement)) {
+      term.blur();
     }
   }, [runKey, state.status, state.interactive]);
 

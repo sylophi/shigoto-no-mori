@@ -30,10 +30,11 @@ export {
   type ScriptSlot,
 } from "./scriptSlot";
 
-// Output kept per run for replay when a console mounts, in bytes: well
-// past what the terminal's own scrollback can show, and well under the
-// 50 MB xterm refuses to queue in one write.
-const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
+// Output kept per run for replay when a console mounts, in bytes: more
+// than the terminal's own scrollback can show, small enough that the
+// replay parses in a moment and that a window's worth of finished runs
+// stays cheap to keep around.
+const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 // Cap per-runId pre-bind buffers. The legitimate buffering window is one
 // IPC round-trip (events arriving before `scripts.run` resolves), so a

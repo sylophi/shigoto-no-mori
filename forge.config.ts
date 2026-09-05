@@ -70,9 +70,11 @@ const dmgVolumeName =
 // spawn-helper next to it, so the package has to exist as real files
 // -- its manifest, the JS in lib/, and the prebuilt darwin binaries.
 // Everything else in the package (sources, typings, tests' fixtures)
-// stays out, as does every other node_modules entry. Paths always
-// start with "/" and directories are filtered too, so the node_modules
-// parents have to pass for their children to be visited.
+// stays out, as do the files of every other node_modules entry (the
+// packager's pruner still creates an empty directory per production
+// dependency, which is harmless). Paths always start with "/" and
+// directories are filtered too, so the node_modules parents have to
+// pass for their children to be visited.
 const NODE_PTY_SHIPPED =
   /^\/node_modules(\/node-pty(\/(package\.json|lib(\/.*)?|prebuilds(\/darwin-.*)?))?)?$/;
 const packagerIgnore = (file: string): boolean => {
