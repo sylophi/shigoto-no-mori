@@ -5,6 +5,10 @@
 @import "@fontsource/zen-maru-gothic/900.css";
 @import "tailwindcss";
 @import "tw-animate-css";
+/* xterm's stylesheet (the script console) goes under the base layer so
+   any utility on the console's own elements outranks it without
+   fighting its specificity. */
+@import "@xterm/xterm/css/xterm.css" layer(base);
 /* Default-on Animal Crossing overlay (opt-out in Settings). Self-
    contained; see the CONTRACT
    header in the file for the hooks it depends on (token blocks in it

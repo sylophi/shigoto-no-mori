@@ -6,6 +6,8 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 import { execFileSync } from "node:child_process";
+import { accessSync, constants as fsConstants } from "node:fs";
+import path from "node:path";
 import { config as loadEnv } from "dotenv";
 import {
   APP_BUNDLE_ID,
@@ -121,6 +123,31 @@ const config: ForgeConfig = {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
+    },
+    // The ignore above spells out node-pty's layout. If a release moves
+    // it, fail the build here, not the first script run of a shipped app.
+    packageAfterCopy: async (
+      _config,
+      buildPath,
+      _electron,
+      _platform,
+      arch,
+    ) => {
+      const prebuild = path.join(
+        buildPath,
+        "node_modules/node-pty/prebuilds",
+        `darwin-${arch}`,
+      );
+      for (const file of ["pty.node", "spawn-helper"]) {
+        const full = path.join(prebuild, file);
+        const mode =
+          file === "spawn-helper" ? fsConstants.X_OK : fsConstants.R_OK;
+        try {
+          accessSync(full, mode);
+        } catch {
+          throw new Error(`node-pty is not packaged correctly: ${full}`);
+        }
+      }
     },
   },
   // The dmg is what humans download: it opens the familiar

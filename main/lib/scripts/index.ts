@@ -11,6 +11,7 @@
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
+import { errorMessageOf } from "@shared/errors";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
@@ -37,6 +38,13 @@ const UNKILLABLE_WAIT_MS = 5_000;
 // -- anyone opening the console, so the default should suit a log.
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 40;
+// PTYs hand output over in many small reads (a TUI redraw is several, a
+// keystroke echo is one byte) and each event costs an IPC hop, a schema
+// parse and a render, so reads that land within a frame go out as one
+// chunk. The byte ceiling keeps a firehose from pooling for the whole
+// frame.
+const OUTPUT_FLUSH_MS = 16;
+const OUTPUT_FLUSH_BYTES = 64 * 1024;
 
 interface ScriptWorktree {
   id: string;
@@ -325,8 +333,7 @@ export function startScript(args: RunArgs): string {
     // Report it as a failed run rather than throwing: the renderer has
     // already opened the console for this runId by the time it hears
     // back, so the failure belongs in that console.
-    const message =
-      error instanceof Error ? error.message : "Failed to start script process";
+    const message = errorMessageOf(error) || "Failed to start script process";
     queueMicrotask(() => {
       args.notify({ runId, kind: "error", data: message });
       args.notify({ runId, kind: "exit", code: null });
@@ -360,9 +367,24 @@ export function startScript(args: RunArgs): string {
 
   // The PTY is one ordered byte stream (stdout and stderr share the
   // terminal), so the renderer's xterm sees exactly what a real
-  // terminal would.
-  pty.onData((data) => {
+  // terminal would; concatenating reads before sending changes nothing
+  // it renders.
+  let pendingOutput = "";
+  let flushTimer: NodeJS.Timeout | null = null;
+  const flushOutput = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (!pendingOutput) return;
+    const data = pendingOutput;
+    pendingOutput = "";
     args.notify({ runId, kind: "data", data });
+  };
+  pty.onData((data) => {
+    pendingOutput += data;
+    if (pendingOutput.length >= OUTPUT_FLUSH_BYTES) flushOutput();
+    else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
   });
 
   // node-pty reports exit only after the terminal stream has drained
@@ -379,6 +401,7 @@ export function startScript(args: RunArgs): string {
     // null code so the UI shows "stopped" not "failed".
     const wasSignal = signal !== undefined && signal !== 0;
     const reported = record.cancelling || wasSignal ? null : exitCode;
+    flushOutput();
     args.notify({ runId, kind: "exit", code: reported });
     record.exited = true;
     resolveDone();

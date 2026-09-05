@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
-import "@xterm/xterm/css/xterm.css";
 import { Trash2 } from "lucide-react";
 import { notifyError } from "@/lib/toast";
 import {
@@ -25,7 +24,7 @@ interface ConsoleBodyProps {
 }
 
 export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
-  if (state.status === "idle" && state.chunkTotal === 0) {
+  if (state.status === "idle") {
     return (
       <div className="flex flex-1 items-center justify-center px-6 text-sm text-muted-foreground">
         No runs yet. Press Run to start.
@@ -36,7 +35,7 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
   return (
     <div className="relative min-h-0 flex-1 bg-background">
       <ConsoleTerminal key={runKey} runKey={runKey} state={state} />
-      {state.status === "starting" && state.chunkTotal === 0 && (
+      {state.status === "starting" && !state.hasOutput && (
         <div className="pointer-events-none absolute top-3 left-4 font-mono text-xs text-muted-foreground">
           Starting…
         </div>
@@ -47,9 +46,10 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
           onClick={onClear}
           aria-label="Clear log"
           title="Clear log"
-          // Above xterm's hover-revealed scrollbar (z-index 11), which
-          // occupies the same corner once the output overflows.
-          className="absolute top-2 right-3 z-20 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          // Above the terminal, whose hover-revealed scrollbar shares
+          // this corner once the output overflows (the terminal wrapper
+          // isolates xterm's own z-indexes, so any positive value wins).
+          className="absolute top-2 right-3 z-10 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           <Trash2 className="size-3.5" />
         </button>
@@ -68,8 +68,6 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
 function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  // How many of the run's chunks (state.chunkTotal) are in the terminal.
-  const writtenRef = useRef(0);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -98,8 +96,12 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     const resizeSub = term.onResize(({ cols, rows }) =>
       scriptRuns.resize(runKey, cols, rows),
     );
+    // Output arrives straight from the store's log; the replay effect
+    // below fills in what came before this subscription.
+    const unsubscribeOutput = scriptRuns.subscribeOutput(runKey, (chunk) =>
+      term.write(chunk),
+    );
     termRef.current = term;
-    writtenRef.current = 0;
 
     // fit() throws while the host has no layout yet (route transition);
     // the observer fires again once it does.
@@ -108,11 +110,11 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
         fit.fit();
       } catch {}
     };
+    // Observing delivers the current size straight away, which is the
+    // initial fit. A fit measured before the monospace face has loaded
+    // gets the cell width wrong; measure again once fonts settle.
     const observer = new ResizeObserver(refit);
     observer.observe(host);
-    refit();
-    // A fit measured before the monospace face has loaded gets the cell
-    // width wrong; measure again once fonts settle.
     void document.fonts.ready.then(refit);
 
     // Theme classes live on <html> and flip after this component's
@@ -126,6 +128,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     });
 
     return () => {
+      unsubscribeOutput();
       themeObserver.disconnect();
       observer.disconnect();
       dataSub.dispose();
@@ -135,22 +138,15 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     };
   }, [runKey]);
 
-  // Write whatever the store holds that the terminal hasn't seen. A
-  // total below what was written means the run was cleared or
-  // restarted: start the terminal over rather than append.
+  // Start the terminal over with the run's logged output: on mount, and
+  // again whenever a new run begins (a fresh startedAt) so the previous
+  // run's screen doesn't linger under it.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
-    if (state.chunkTotal < writtenRef.current) {
-      term.reset();
-      writtenRef.current = 0;
-    }
-    const fresh = state.chunkTotal - writtenRef.current;
-    if (fresh <= 0) return;
-    const from = Math.max(0, state.output.length - fresh);
-    for (const chunk of state.output.slice(from)) term.write(chunk);
-    writtenRef.current = state.chunkTotal;
-  }, [state.output, state.chunkTotal]);
+    term.reset();
+    for (const chunk of scriptRuns.readOutput(runKey)) term.write(chunk);
+  }, [runKey, state.startedAt]);
 
   // Typing only makes sense into a live PTY. Off the run, xterm stops
   // emitting onData (so no stray keystrokes hit the next run) and the
@@ -175,19 +171,19 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box width, so padding on the host itself would be counted as
-  // usable columns. xterm's stylesheet paints its viewport black and the
-  // theme background only reaches the scroll element inside it, so the
-  // strip below the last full row would show black; the important
-  // override (xterm.css is unlayered, so it would otherwise win) lets
-  // the console's background through instead.
+  // usable columns. `isolate` keeps xterm's internal z-indexes from
+  // competing with the console's own controls. xterm's stylesheet paints
+  // its viewport black and the theme background only reaches the scroll
+  // element inside it, so the strip below the last full row would show
+  // black; letting the console's background through fixes that.
   return (
     <div
-      data-slot="script-console"
-      className="h-full w-full px-4 py-3 font-mono text-xs"
+      data-keyboard-surface="raw"
+      className="isolate h-full w-full px-4 py-3 font-mono text-xs"
     >
       <div
         ref={hostRef}
-        className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"
+        className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent"
       />
     </div>
   );

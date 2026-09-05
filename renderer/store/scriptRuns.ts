@@ -30,9 +30,10 @@ export {
   type ScriptSlot,
 } from "./scriptSlot";
 
-// Max number of output chunks kept for replay. Chunks vary in size (one
-// "data" event may carry a single byte or a 4 KB burst), so this is a
-// rough ceiling. The console replays the buffer on mount.
+// Output chunks kept per run for replay when a console mounts. Chunks
+// vary in size (one "data" event may carry a single byte or a 4 KB
+// burst), so this is a rough ceiling; a saturated buffer is trimmed in
+// batches, so it holds between this many and twice this many.
 const MAX_CHUNKS = 5_000;
 
 // Cap per-runId pre-bind buffers. The legitimate buffering window is one
@@ -53,13 +54,11 @@ export type RunStatus = "idle" | "starting" | "running" | "exited" | "errored";
 export interface ScriptRunState {
   runId: string | null;
   status: RunStatus;
-  // Raw output chunks (already utf8-decoded). The console writes them
-  // straight into xterm; we don't try to interpret ANSI here.
-  output: string[];
-  // Chunks appended over the whole run, including ones the cap below
-  // has since dropped from `output`. The console compares it with what
-  // it has written to find the unwritten tail of `output`.
-  chunkTotal: number;
+  // Whether any output has arrived. The output itself is a log beside
+  // the snapshot (readOutput / subscribeOutput): a render per PTY read
+  // would be the hot path, and status UI only needs to know there is
+  // something to show or clear.
+  hasOutput: boolean;
   // Whether keystrokes reach the process. True for runs the app spawned
   // (they own a PTY in main); false for lifecycle scripts the CLI ran
   // on the app's behalf, which stream output through the same events
@@ -99,8 +98,7 @@ export type ScriptActivityKind = "setup" | "teardown" | "package";
 const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
   status: "idle" as const,
-  output: [],
-  chunkTotal: 0,
+  hasOutput: false,
   interactive: false,
   exitCode: null,
   startedAt: null,
@@ -124,6 +122,10 @@ type WarnFn = (title: string, options?: { description?: string }) => unknown;
 
 class ScriptRunsStore {
   private states = new Map<ScriptKey, ScriptRunState>();
+  // Per-run output log, keyed like states, mutated in place; consoles
+  // catch up from it on mount and follow it through outputSubs.
+  private buffers = new Map<ScriptKey, string[]>();
+  private outputSubs = new KeyedSubscribers<ScriptKey, string>();
   private meta = new Map<ScriptKey, RunMeta>();
   private runIdToKey = new Map<string, ScriptKey>();
   // Events that arrived before the `scripts.run` invoke resolved and let
@@ -155,12 +157,12 @@ class ScriptRunsStore {
 
   async run(input: StartInput): Promise<void> {
     this.setMetaWithDeferred(input.key, input.worktreeId, input.slot);
+    this.buffers.delete(input.key);
 
     this.setStateWithActivity(input.key, () => ({
       runId: null,
       status: "starting",
-      output: [],
-      chunkTotal: 0,
+      hasOutput: false,
       interactive: true,
       exitCode: null,
       startedAt: Date.now(),
@@ -174,11 +176,10 @@ class ScriptRunsStore {
       runId = result.runId;
     } catch (err) {
       const message = errorMessageOf(err);
-      this.setStateWithActivity(input.key, (s) => ({
-        ...appendChunk(s, `\r\n\x1b[31m${message}\x1b[0m\r\n`),
+      this.appendChunk(input.key, `\r\n\x1b[31m${message}\x1b[0m\r\n`, {
         status: "errored",
         endedAt: Date.now(),
-      }));
+      });
       const m = this.meta.get(input.key);
       m?.exitDeferred?.resolve(null);
       if (m) this.meta.set(input.key, { ...m, exitDeferred: null });
@@ -215,9 +216,8 @@ class ScriptRunsStore {
   }
 
   // Console keystrokes and viewport size for a live run. Both are
-  // fire-and-forget: main answers `false` for a run it has no PTY for,
-  // and the guards here already keep such runs (and finished ones)
-  // from being written to at all.
+  // fire-and-forget; the guards here keep runs without a PTY (and
+  // finished ones) from being written to at all.
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
     if (!runId) return;
@@ -242,8 +242,21 @@ class ScriptRunsStore {
     if (state.status === "running" || state.status === "starting") return;
     if (state.runId) this.runIdToKey.delete(state.runId);
     this.states.delete(key);
+    this.buffers.delete(key);
     this.meta.delete(key);
     this.notify(key);
+  }
+
+  // The run's output so far (capped; see MAX_CHUNKS), for a console
+  // that has just mounted and needs to catch up before it follows
+  // subscribeOutput. Read both in the same tick and nothing is missed
+  // or doubled.
+  readOutput(key: ScriptKey): readonly string[] {
+    return this.buffers.get(key) ?? [];
+  }
+
+  subscribeOutput(key: ScriptKey, cb: (chunk: string) => void): () => void {
+    return this.outputSubs.subscribe(key, cb);
   }
 
   // Called when a worktree is removed (delete / relocate / convert);
@@ -256,6 +269,7 @@ class ScriptRunsStore {
       const s = this.states.get(key);
       if (s?.runId) this.runIdToKey.delete(s.runId);
       this.states.delete(key);
+      this.buffers.delete(key);
       this.meta.delete(key);
       this.notify(key);
       touched = true;
@@ -349,29 +363,51 @@ class ScriptRunsStore {
     }
   }
 
+  // Log one chunk and hand it to any mounted console. The snapshot only
+  // changes for the first chunk, or when `patch` carries a status
+  // change that should land with its message.
+  private appendChunk(
+    key: ScriptKey,
+    chunk: string,
+    patch: Partial<ScriptRunState> = {},
+  ): void {
+    let buffer = this.buffers.get(key);
+    if (!buffer) {
+      buffer = [];
+      this.buffers.set(key, buffer);
+    }
+    buffer.push(chunk);
+    if (buffer.length >= MAX_CHUNKS * 2) {
+      buffer.splice(0, buffer.length - MAX_CHUNKS);
+    }
+    this.outputSubs.notify(key, chunk);
+    const patched = Object.keys(patch).length > 0;
+    this.setStateWithActivity(key, (s) =>
+      s.hasOutput && !patched ? s : { ...s, ...patch, hasOutput: true },
+    );
+  }
+
   private applyEvent(key: ScriptKey, event: PostStartEvent): void {
     switch (event.kind) {
       case "data":
-        this.setStateWithActivity(key, (s) => appendChunk(s, event.data));
+        this.appendChunk(key, event.data);
         return;
       case "error":
-        this.setStateWithActivity(key, (s) => ({
-          ...appendChunk(s, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`),
+        this.appendChunk(key, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`, {
           status: "errored",
-        }));
+        });
         return;
       case "exit": {
         const m = this.meta.get(key);
         m?.exitDeferred?.resolve(event.code);
         if (m) this.meta.set(key, { ...m, exitDeferred: null });
         this.runIdToKey.delete(event.runId);
-        this.setStateWithActivity(key, (s) => ({
-          ...appendChunk(s, exitSentinel(event.code)),
+        this.appendChunk(key, exitSentinel(event.code), {
           exitCode: event.code,
           status: "exited",
           endedAt: Date.now(),
           cancelling: false,
-        }));
+        });
         if (event.code !== 0 && m) {
           this.toastLifecycleFailure(m.slotKind, event.code);
         }
@@ -436,12 +472,12 @@ class ScriptRunsStore {
   private bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
     const key = scriptKey(event.projectId, event.worktreeId, event.slot);
     this.setMetaWithDeferred(key, event.worktreeId, event.slot);
+    this.buffers.delete(key);
 
     this.setStateWithActivity(key, () => ({
       runId: event.runId,
       status: "running",
-      output: [],
-      chunkTotal: 0,
+      hasOutput: false,
       interactive: false,
       exitCode: null,
       startedAt: Date.now(),
@@ -467,14 +503,6 @@ class ScriptRunsStore {
     bucket.push(event);
     this.pendingByRunId.set(event.runId, bucket);
   }
-}
-
-function appendChunk(state: ScriptRunState, chunk: string): ScriptRunState {
-  const output =
-    state.output.length >= MAX_CHUNKS
-      ? [...state.output.slice(state.output.length - MAX_CHUNKS + 1), chunk]
-      : [...state.output, chunk];
-  return { ...state, output, chunkTotal: state.chunkTotal + 1 };
 }
 
 function exitSentinel(code: number | null): string {

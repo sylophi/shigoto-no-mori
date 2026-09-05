@@ -25,7 +25,7 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
   const label = slotLabel(slot);
 
   const clear = () => scriptRuns.clear(key);
-  const canClear = !busy && state.chunkTotal > 0;
+  const canClear = !busy && state.hasOutput;
   // Lifecycle scripts the CLI ran for the app stream here too, but
   // their process lives in the CLI, not behind one of our PTYs.
   const outputOnly = busy && !state.interactive;
