@@ -1,7 +1,7 @@
-// Tracks when the app itself last wrote inside the shigomori root, so
+// Tracks when the app itself last wrote inside the shigomori data dir, so
 // the state watcher can tell its own filesystem echo apart from a
 // genuinely external change (a CLI run in a terminal). Every app-side
-// writer that touches the root funnels through the chokepoints that
+// writer that touches the data dir funnels through the chokepoints that
 // call noteSelfWrite (store.ts, jsonFile.ts, the CLI runner); the
 // watcher skips events landing within the echo window.
 let lastSelfWrite = 0;
@@ -26,8 +26,8 @@ export function selfWroteWithin(ms: number): boolean {
 // invalidated by its caller, while a ref an agent moved must still
 // ping, which is why the scope is the repository and not the process:
 // a slow fetch in one project must not swallow a commit in another.
-// Kept apart from the root marker so an app git command cannot
-// swallow an external root write or the reverse.
+// Kept apart from the data dir marker so an app git command cannot
+// swallow an external data dir write or the reverse.
 const inFlightGitWrites = new Map<string, number>();
 const completedGitWrites = new Map<string, number>();
 

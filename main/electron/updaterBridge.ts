@@ -1,5 +1,5 @@
 // The updater's on-disk bridge to the CLI. `sm update` has no IPC
-// channel into the app, so the two talk through the state root like
+// channel into the app, so the two talk through the data dir like
 // every other app<->CLI feature: the app publishes its updater state to
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
@@ -22,12 +22,12 @@ import {
   readJsonOrNull,
   unlinkIfExists,
 } from "@host/lib/util/jsonFile";
-import { shigomoriRoot } from "@host/lib/util/paths";
+import { dataDir } from "@host/lib/util/paths";
 
 const REQUEST_STALE_MS = 2 * 60_000;
 
-const updaterStatePath = () => join(shigomoriRoot(), "updater.json");
-const updateRequestPath = () => join(shigomoriRoot(), "updater-request.json");
+const updaterStatePath = () => join(dataDir(), "updater.json");
+const updateRequestPath = () => join(dataDir(), "updater-request.json");
 
 // Publishes are serialized through a chain: setState can fire twice in
 // one tick (a synchronous throw right after entering "checking"), and
@@ -106,24 +106,24 @@ export function startUpdaterBridge(
   void consume();
   try {
     bridgeWatcher = watch(
-      shigomoriRoot(),
+      dataDir(),
       { persistent: false },
       (_eventType, file) => {
         if (file === "updater-request.json") void consume();
       },
     );
     bridgeWatcher.on("error", () => {
-      // Root vanished (nuke). The next launch starts a fresh watch.
+      // Data dir vanished (nuke). The next launch starts a fresh watch.
     });
   } catch {
-    // Root missing entirely. Boot creates it, the next launch watches.
+    // Data dir missing entirely. Boot creates it, the next launch watches.
   }
 }
 
 let bridgeWatcher: ReturnType<typeof watch> | null = null;
 
 // Same contract as stopStateWatcher: released before the data-folder
-// move renames the root. The post-move relaunch starts a fresh bridge.
+// move renames the data dir. The post-move relaunch starts a fresh bridge.
 export function stopUpdaterBridge(): void {
   bridgeWatcher?.close();
   bridgeWatcher = null;

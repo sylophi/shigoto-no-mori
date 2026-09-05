@@ -6,7 +6,7 @@ package main
 //   query    GET the update.electronjs.org feed for this repo/arch/
 //            version. The server does the version comparison (204 =
 //            up to date, 200 = JSON pointing at the release zip).
-//   stage    download the zip under <root>/updates, extract it, verify
+//   stage    download the zip under <dataDir>/updates, extract it, verify
 //            the code signature, and park the new bundle in
 //            updates/staged with a manifest describing it.
 //   swap     replace the installed bundle with the staged one. The
@@ -43,7 +43,7 @@ const feedTimeout = 30 * time.Second
 // thing that unsticks a blackholed connection.
 const downloadTimeout = 20 * time.Minute
 
-func updatesDir() string { return filepath.Join(shigomoriRoot(), "updates") }
+func updatesDir() string { return filepath.Join(dataDir(), "updates") }
 func stagedDir() string  { return filepath.Join(updatesDir(), "staged") }
 func stagedManifestPath() string {
 	return filepath.Join(stagedDir(), "manifest.json")
@@ -467,8 +467,8 @@ func swapBundle(stagedApp, targetBundle string) error {
 	incoming := filepath.Join(dir, fmt.Sprintf(".%s.new-%d", base, os.Getpid()))
 	_ = os.RemoveAll(incoming)
 	if err := os.Rename(stagedApp, incoming); err != nil {
-		// Different volume (state root and /Applications usually share
-		// one, but SHIGOMORI_ROOT can point anywhere): fall back to a
+		// Different volume (the data dir and /Applications usually share
+		// one, but SHIGOMORI_DATA_DIR can point anywhere): fall back to a
 		// metadata-preserving copy.
 		if out, dittoErr := exec.Command("ditto", stagedApp, incoming).CombinedOutput(); dittoErr != nil {
 			_ = os.RemoveAll(incoming)

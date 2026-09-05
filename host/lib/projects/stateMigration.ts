@@ -1,5 +1,5 @@
 // One-shot migration from the flat-file project config layout
-// (~/shigomori[-dev]/projects/<id>.json) to the per-project directory layout
+// (<dataDir>/projects/<id>.json) to the per-project directory layout
 // (projects/<id>/project.json + projects/<id>/worktrees/<wId>.json).
 //
 // Runs on every app start. Idempotent: a project that's already been
@@ -14,7 +14,7 @@ import {
   unlinkIfExists,
   withSchemaVersion,
 } from "../util/jsonFile";
-import { isENOENT, shigomoriRoot } from "../util/paths";
+import { isENOENT, dataDir } from "../util/paths";
 
 // A loose mirror of the legacy ShigomoriConfig: we only need to recognize
 // the fields we're moving. Anything else is preserved by pass-through.
@@ -26,7 +26,7 @@ interface LegacyConfig {
 const LEGACY_EXT = ".json";
 
 function projectsDir(): string {
-  return join(shigomoriRoot(), "projects");
+  return join(dataDir(), "projects");
 }
 
 async function migrateOne(projectId: string): Promise<void> {

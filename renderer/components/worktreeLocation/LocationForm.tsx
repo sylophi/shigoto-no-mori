@@ -20,8 +20,8 @@ import { RelocateRow } from "./RelocateRow";
 const LAYOUT_OPTIONS: LayoutOption[] = [
   {
     value: "managed-root",
-    label: "Managed root",
-    description: "Worktrees live under Shigomori's shared root.",
+    label: "Managed",
+    description: "Worktrees live in Shigomori's data folder.",
     recommended: true,
   },
   {
@@ -38,7 +38,7 @@ const LAYOUT_OPTIONS: LayoutOption[] = [
 interface LocationFormProps {
   projectId: string;
   projectPath: string;
-  shigomoriRoot: string;
+  dataDir: string;
   home: string;
   worktrees: Worktree[];
   config: ShigomoriConfig | null;
@@ -48,7 +48,7 @@ interface LocationFormProps {
 export function LocationForm({
   projectId,
   projectPath,
-  shigomoriRoot,
+  dataDir,
   home,
   worktrees,
   config,
@@ -91,7 +91,7 @@ export function LocationForm({
   const layoutInputs = {
     layout,
     projectPath,
-    shigomoriRoot,
+    dataDir,
     customPath: customPath.trim() || null,
   };
 
@@ -192,7 +192,7 @@ export function LocationForm({
             option={opt}
             checked={layout === opt.value}
             projectPath={projectPath}
-            shigomoriRoot={shigomoriRoot}
+            dataDir={dataDir}
             home={home}
             customPath={customPath}
             customPathError={customPathError}

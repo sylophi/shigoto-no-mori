@@ -7,10 +7,19 @@ package main
 var (
 	version     = "dev"
 	flavor      = "dev" // "prod" | "dev"; mirrors app.isPackaged
-	rootDirName = "shigomori-dev"
-	binaryName  = "smd"
-	aliasName   = "shigomori-dev"
-	appBundleID = "com.sylophi.shigomori"
+	dataDirName = ".smd"
+	// The data dir's name before 2.0 (shared/cliDist.mts
+	// legacyDataDirName explains the adoption rule).
+	legacyDataDirName = "shigomori-dev"
+	// The flavor's directory under $XDG_CONFIG_HOME, holding the
+	// pointer file (state.go). Frozen, like the pointer's names: the
+	// current one and the one from before 2.0.
+	configDirName            = "shigomori-dev"
+	dataDirPointerName       = "data-dir"
+	legacyDataDirPointerName = "root"
+	binaryName               = "smd"
+	aliasName                = "shigomori-dev"
+	appBundleID              = "com.sylophi.shigomori"
 	// GitHub repo behind the update feed (shared/cliDist.mts
 	// UPDATE_FEED_REPO). Only `sm update` reads it, and the dev CLI
 	// refuses that command, but the default keeps `go run ./cli`

@@ -16,7 +16,7 @@ interface LayoutOptionItemProps {
   option: LayoutOption;
   checked: boolean;
   projectPath: string;
-  shigomoriRoot: string;
+  dataDir: string;
   home: string;
   customPath: string;
   customPathError: string | null;
@@ -28,7 +28,7 @@ export function LayoutOptionItem({
   option,
   checked,
   projectPath,
-  shigomoriRoot,
+  dataDir,
   home,
   customPath,
   customPathError,
@@ -46,7 +46,7 @@ export function LayoutOptionItem({
           worktreeBaseFor({
             layout: option.value,
             projectPath,
-            shigomoriRoot,
+            dataDir,
             customPath:
               option.value === "custom" ? customPath.trim() || null : null,
           }),

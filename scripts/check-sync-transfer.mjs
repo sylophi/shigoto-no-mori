@@ -27,7 +27,7 @@
 // wire and the same real CLI.
 //
 // Both "devices" share one node process and one sandboxed
-// SHIGOMORI_ROOT holding two projects (source and target repos); what
+// SHIGOMORI_DATA_DIR holding two projects (source and target repos); what
 // separates them is the direct wire between them, which is exactly the
 // surface this proof pins. Runs under
 // scripts/lib/register-ts-alias.mjs. See package.json "sync:check".
@@ -66,7 +66,7 @@ import {
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { initShigomoriRootAt } from "@host/lib/util/paths";
+import { initDataDirAt } from "@host/lib/util/paths";
 import {
   cliFailureMessage,
   createCliRunner,
@@ -78,11 +78,11 @@ import { bootDirectWire } from "./lib/directBoot.mjs";
 const execFileP = promisify(execFile);
 const cliDir = join(import.meta.dirname, "..", "cli");
 
-// Sandbox: everything (state root, repos, the built binary) under one
+// Sandbox: everything (data dir, repos, the built binary) under one
 // temp tree. realpath because worktree ids derive from git's resolved
 // paths (/var/folders is a symlink on macOS).
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-sync-check-")));
-const stateRoot = join(sandbox, "root");
+const dataDir = join(sandbox, "data");
 const smBinary = join(sandbox, "sm");
 
 // Scrub inherited GIT_* (a lefthook run exports GIT_DIR and would point
@@ -104,7 +104,7 @@ Object.assign(process.env, {
   GIT_COMMITTER_EMAIL: "t@t",
 });
 const baseEnv = { ...process.env };
-const smEnv = { ...baseEnv, SHIGOMORI_ROOT: stateRoot };
+const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir };
 
 async function git(cwd, args, opts = {}) {
   return execFileP("git", args, {
@@ -221,7 +221,7 @@ async function main() {
   // must land at refs/shigomori/dirty/<this id>, asserted below.
   const worktreeId = worktreeIdFromPath(worktreePath);
 
-  initShigomoriRootAt(stateRoot);
+  initDataDirAt(dataDir);
   setCliRunnerImpl({
     runCli,
     requireCliBinary: () => smBinary,
@@ -624,7 +624,7 @@ async function main() {
     // Seed the app-written per-worktree data file (the CLI only ever
     // deletes it), so the teardown's state sweep is observable.
     const wt3DataPath = join(
-      stateRoot,
+      dataDir,
       "projects",
       sourceProjectId,
       "worktrees",

@@ -79,7 +79,7 @@ func headOf(t *testing.T, dir, rev string) string {
 // onto v2 in the primary checkout. The catch-up has to pull v2 in the
 // worktree that has it out, and leave main exactly where it was.
 func TestCatchUpBasePullsTheBaseBranchCheckout(t *testing.T) {
-	root := sandboxRoot(t)
+	root := sandboxDataDir(t)
 	upstream := seedRepo(t, root, "upstream")
 	mustGit(t, upstream, "branch", "v2")
 	repo := filepath.Join(root, "repo")

@@ -25,7 +25,7 @@ func worktreeIDFromPath(path string) string {
 
 // XDG config directory: $XDG_CONFIG_HOME, default ~/.config. Empty
 // string when the home directory can't be resolved. Shared by the fish
-// shell hook (cmd_shell.go) and the root pointer file (state.go).
+// shell hook (cmd_shell.go) and the data dir pointer file (state.go).
 func configHomeDir() string {
 	if cfg := os.Getenv("XDG_CONFIG_HOME"); cfg != "" {
 		return cfg
@@ -93,7 +93,7 @@ func cwdInside(dir string) bool {
 // managedBasesFor in host/lib/worktrees/paths.ts).
 func managedBasesFor(projectPath string, config *projectConfig) []string {
 	bases := []string{
-		filepath.Join(shigomoriRoot(), "worktrees", filepath.Base(projectPath)),
+		filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath)),
 		filepath.Join(projectPath, ".shigomori", "worktrees"),
 	}
 	if config != nil {
@@ -141,14 +141,14 @@ func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 			}
 		}
 	}
-	return filepath.Join(shigomoriRoot(), "worktrees", filepath.Base(projectPath))
+	return filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath))
 }
 
 // Best-effort cleanup of the empty parent a worktree vacated; only
 // touches directories shigomori owns (pruneEmptyManagedParents).
 func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 	parent := filepath.Dir(oldWorktreePath)
-	managedRootBase := filepath.Join(shigomoriRoot(), "worktrees", filepath.Base(projectPath))
+	managedRootBase := filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath))
 	if parent == managedRootBase {
 		_ = removeIfEmptyDir(parent)
 		return

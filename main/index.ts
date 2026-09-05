@@ -8,13 +8,12 @@ import {
 } from "@shared/appName.mts";
 import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
-import { cliRootDirName } from "@shared/cliDist.mts";
 import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
 import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
-import { ensureShigomoriRoot } from "@host/lib/bootstrap";
+import { ensureDataDir } from "@host/lib/bootstrap";
 import { dropLegacyRemoteDevices } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
@@ -64,7 +63,7 @@ import {
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
 import { refreshTerrierListings } from "@host/lib/terrier";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
-import { initShigomoriRoot, shigomoriRoot } from "@host/lib/util/paths";
+import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
 import { applyUserShellPath } from "./electron/shellPath";
@@ -107,7 +106,7 @@ function devProfile(): string | null {
 
 // Electron scopes the single-instance lock to the userData directory,
 // and dev and packaged builds resolve the same one out of productName.
-// A dev run owns a different data root (~/shigomori-dev), so give it
+// A dev run owns a different data dir (~/.smd), so give it
 // its own userData or an installed copy would lock it out.
 if (!app.isPackaged) {
   const profile = devProfile();
@@ -147,13 +146,13 @@ if (!app.isPackaged) {
 // binary instead of its own.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 
-// One live instance per data root. A second copy (typically a fresh
+// One live instance per data dir. A second copy (typically a fresh
 // download in ~/Downloads beside the installed app) would run its own
 // state watcher, background fetcher, updater and script registry over
 // the same files. `app.exit` skips before-quit, so the losing process
 // never reaches the quit sequence at the bottom of this file: it can't
 // prompt about busy work, and it can't reap scripts that belong to the
-// instance owning the root. It tells the user nothing, because raising
+// instance owning the data dir. It tells the user nothing, because raising
 // the running window is what launching the app asked for.
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
@@ -168,7 +167,7 @@ if (!app.requestSingleInstanceLock()) {
 // reclaims the bridge's IPC handlers wholesale anyway.
 createDesktopClerkBridge();
 
-initShigomoriRoot(app.isPackaged);
+initDataDir(app.isPackaged);
 
 // Electron-layer impls must be wired before registerIpcHandlers runs so
 // the first renderer call never lands on the throwing default.
@@ -189,7 +188,7 @@ let mainWindow: BrowserWindow | null = null;
 // second-instance can tell "boot is still in flight" (nothing to do
 // yet, that call is on its way) apart from "the window was closed
 // after boot" (recreate it). Without this, a launch that lands during
-// the ready handler's await (ensureShigomoriRoot on a slow or
+// the ready handler's await (ensureDataDir on a slow or
 // unreachable data folder) would see mainWindow still null, create a
 // window itself, and then get a second one from the ready handler
 // finishing right after.
@@ -376,20 +375,23 @@ app.on("ready", async () => {
   // from the user's terminal and already have the right one.
   if (app.isPackaged) await applyUserShellPath();
   try {
-    await ensureShigomoriRoot();
+    await ensureDataDir();
     deviceId = getDeviceId();
   } catch (err) {
-    // A pointer file can aim the root somewhere that isn't reachable
+    // A pointer file can aim the data dir somewhere that isn't reachable
     // right now (external drive unplugged, permissions changed). A
     // silent unhandled rejection here would leave the app running with
     // no window. Say what's wrong and how to recover instead.
+    const pointer = dataDirPointerRead();
+    const recovery =
+      pointer !== null
+        ? "If you moved the data folder to an external drive, reconnect " +
+          "it and relaunch. To fall back to the default location, delete " +
+          `the pointer file at ${pointer}.`
+        : "Check the folder's permissions, or move it aside to start fresh.";
     dialog.showErrorBox(
       "Shigoto no Mori can't access its data folder",
-      `${shigomoriRoot()} could not be created or accessed.\n\n` +
-        "If you moved the data folder to an external drive, reconnect " +
-        "it and relaunch. To fall back to the default location, delete " +
-        "the pointer file at ~/.config/" +
-        `${cliRootDirName(app.isPackaged ? "prod" : "dev")}/root.\n\n` +
+      `${dataDir()} could not be created or accessed.\n\n${recovery}\n\n` +
         `${errorMessageOf(err)}`,
     );
     app.exit(1);
@@ -494,7 +496,7 @@ app.on("ready", async () => {
     // git command in flight or just done IN THAT REPOSITORY (a
     // command's cwd is the project path or one of its worktrees, both
     // of which resolve to the same git directory), exactly as the
-    // state watcher skips the app's own root writes.
+    // state watcher skips the app's own data dir writes.
     suppressed: (gitDir) =>
       cliChildCount() > 0 ||
       gitSelfWroteWithin(SELF_ECHO_MS, (cwd) => gitDirOf(cwd) === gitDir),

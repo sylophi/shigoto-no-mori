@@ -7,7 +7,7 @@ import { rmdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ShigomoriConfig } from "@shared/schemas";
 import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
-import { shigomoriRoot } from "../util/paths";
+import { dataDir } from "../util/paths";
 
 // Every base directory whose direct children count as "managed" for
 // this project. All known layouts are included unconditionally so
@@ -24,7 +24,7 @@ export function managedBasesFor(
       worktreeBaseFor({
         layout,
         projectPath,
-        shigomoriRoot: shigomoriRoot(),
+        dataDir: dataDir(),
         customPath,
       }),
     ];
@@ -50,7 +50,7 @@ export function isManagedPath(
 // Best-effort cleanup of the empty parent directory a worktree just
 // vacated (after a relocate or removal). Only touches paths shigomori
 // owns:
-//   - managed-root: `<shigomoriRoot>/worktrees/<projectName>/`
+//   - managed-root: `<dataDir>/worktrees/<projectName>/`
 //   - in-project:   `<project>/.shigomori/worktrees/`, then `.shigomori/`
 // The custom layout is intentionally left alone since that directory is
 // user-chosen and could sit next to unrelated files. `rmdir` errors with
@@ -65,7 +65,7 @@ export async function pruneEmptyManagedParents(
     worktreeBaseFor({
       layout,
       projectPath,
-      shigomoriRoot: shigomoriRoot(),
+      dataDir: dataDir(),
       customPath: null,
     });
 

@@ -15,8 +15,8 @@ export const windowContract = defineContract("client", {
     PreviewThemePayloadSchema,
     z.void(),
   ),
-  // Renderer-acknowledged restart after a successful moveRoot: firing
-  // this only after the moveRoot reply resolves guarantees the reply
+  // Renderer-acknowledged restart after a successful moveDataDir: firing
+  // this only after the moveDataDir reply resolves guarantees the reply
   // was delivered before the app quits. No timing guesses.
   relaunch: invoke("window:relaunch", z.void(), z.void()),
 });

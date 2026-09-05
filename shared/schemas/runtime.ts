@@ -1,26 +1,32 @@
 import { z } from "zod";
 
 export const RuntimeInfoSchema = z.object({
-  shigomoriRoot: z.string().min(1),
-  // The root's folder basename ("shigomori-dev", or whatever a
-  // hand-edited pointer file named it) so renderer copy never has to
-  // parse the path.
-  rootDirName: z.string().min(1),
+  // The data dir: where worktrees, configs and state live.
+  dataDir: z.string().min(1),
+  // How boot resolved it (host/lib/util/paths.ts DataDirSource).
+  // "legacy" is a pre-2.0 folder adopted in place, which Settings
+  // offers to rename.
+  dataDirSource: z.enum(["env", "pointer", "legacy", "default"]),
+  // The flavor's own folder name (".sm" / ".smd"): what a move renames
+  // the folder to.
+  canonicalDataDirName: z.string().min(1),
   homedir: z.string().min(1),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
-// Move the state root: the picked directory becomes the new parent of
-// the root folder (which keeps its name). The app relaunches right
-// after a successful move -- the root is a boot-time constant -- so
-// the invoke returns nothing the renderer could outlive.
-export const MoveRootPayloadSchema = z.object({
-  parentDir: z.string().min(1),
+// Move the data dir: the picked directory becomes the new parent of
+// the data folder (which takes its canonical name). With no parent the
+// folder is renamed where it stands. The app relaunches right after a
+// successful move -- the data dir is a boot-time constant -- so the
+// invoke returns nothing the renderer could outlive.
+export const MoveDataDirPayloadSchema = z.object({
+  parentDir: z.string().min(1).optional(),
 });
+export type MoveDataDirPayload = z.infer<typeof MoveDataDirPayloadSchema>;
 
 // Progress broadcast while `runtime:nuke` runs, driving the renderer's
 // blocking overlay: reap scripts → remove worktrees (with a counter) →
-// wipe the root.
+// wipe the data dir.
 export const NukeProgressSchema = z.discriminatedUnion("phase", [
   z.object({ phase: z.literal("scripts") }),
   z.object({
@@ -55,7 +61,7 @@ export const UpdaterStateSchema = z.discriminatedUnion("kind", [
 ]);
 export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
 
-// The app<->CLI bridge over the state root (the CLI has no IPC channel
+// The app<->CLI bridge over the data dir (the CLI has no IPC channel
 // into the app): the app publishes updater.json (UpdaterStatus, written
 // on boot and on every state change) so `sm update` can tell whether a
 // live instance must be restarted around the bundle swap, and consumes
@@ -85,7 +91,7 @@ export const UpdateRequestSchema = z.object({
 export type UpdateRequest = z.infer<typeof UpdateRequestSchema>;
 
 // Manifest the CLI writes beside a verified staged update
-// (<root>/updates/staged/manifest.json). Mirrors cli/updater.go
+// (<dataDir>/updates/staged/manifest.json). Mirrors cli/updater.go
 // stagedManifest. The app reads it to seed "ready" at boot and to know
 // whether "restart to update" has anything to restart into.
 export const StagedManifestSchema = z.object({

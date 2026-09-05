@@ -86,7 +86,7 @@ import {
 } from "@host/lib/util/jsonFile";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
-import { shigomoriRoot } from "@host/lib/util/paths";
+import { dataDir } from "@host/lib/util/paths";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
@@ -132,7 +132,7 @@ const broadcastMirrorChanged = coalesce(
   () => broadcastAll(mirrorContract, "changed", undefined),
   150,
 );
-const fileSyncDir = () => join(shigomoriRoot(), "file-sync");
+const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
 const GitFollowStoreSchema = z.object({

@@ -1,12 +1,12 @@
 // "Nuke everything" implementation: removes every worktree shigomori created
-// (via `git worktree remove --force`) and wipes the shigomori root so state,
+// (via `git worktree remove --force`) and wipes the shigomori data dir so state,
 // global config, and any orphan worktree directories all go away.
 //
 // The original project repos on disk are untouched -- we only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
 import type { NukeProgress } from "@shared/schemas";
-import { ensureShigomoriRoot } from "./bootstrap";
+import { ensureDataDir } from "./bootstrap";
 import { invalidateGlobalConfigCache, readGlobalConfig } from "./config/global";
 import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
 import {
@@ -14,26 +14,26 @@ import {
   pruneStaleWorktrees,
   removeWorktreeForce,
 } from "./git/worktrees";
-import { findProjectInsideRoot, loadProjects } from "./projects";
+import { findProjectInsideDataDir, loadProjects } from "./projects";
 import {
   clearDeleteInflight,
   killAllScripts,
   markDeleteInflight,
 } from "./scripts";
-import { shigomoriRoot } from "./util/paths";
+import { dataDir, dataDirSource, defaultDataDir } from "./util/paths";
 
 export async function nukeEverything(
   onProgress: (progress: NukeProgress) => void = () => {},
 ): Promise<void> {
   const projects = loadProjects();
-  // The final step rm -rf's the shigomori root. A trapped project repo
+  // The final step rm -rf's the shigomori data dir. A trapped project repo
   // would be wiped with it -- .git, uncommitted work, everything.
   // Refuse up front, before any script kill or worktree removal.
-  const trapped = findProjectInsideRoot(projects);
+  const trapped = findProjectInsideDataDir(projects);
   if (trapped) {
     throw new Error(
       `Refusing to nuke: project "${trapped.name}" lives inside ` +
-        `${shigomoriRoot()}, which would be deleted with it. ` +
+        `${dataDir()}, which would be deleted with it. ` +
         "Move the repository out first.",
     );
   }
@@ -68,14 +68,14 @@ export async function nukeEverything(
         };
       } catch {
         // Project repo might have moved or been deleted; nothing to clean
-        // via git for this one. The shigomori root wipe below still happens.
+        // via git for this one. The data dir wipe below still happens.
         return { project, targets: [] };
       }
     }),
   );
   // Same inflight marking as the per-worktree delete: blocks a renderer
   // script run from landing in a directory mid-removal and keeps the
-  // busy-quit prompt honest during the wipe. Held through the root rm
+  // busy-quit prompt honest during the wipe. Held through the data dir rm
   // below -- clearing each id right after its `git worktree remove`
   // would leave a window where a script could spawn into a directory
   // the rm is about to take out.
@@ -85,7 +85,7 @@ export async function nukeEverything(
     const deleteBranches = await deleteBranchesPromise;
     let removed = 0;
     onProgress({ phase: "worktrees", done: 0, total: marked.length });
-    // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm shigomoriRoot → prune is sequential by design
+    // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm dataDir → prune is sequential by design
     await Promise.all(
       perProject.map(async ({ project, targets }) => {
         await Promise.all(
@@ -109,18 +109,24 @@ export async function nukeEverything(
       }),
     );
     onProgress({ phase: "wipe" });
-    await rm(shigomoriRoot(), { recursive: true, force: true });
+    await rm(dataDir(), { recursive: true, force: true });
   } finally {
     for (const id of marked) clearDeleteInflight(id);
   }
   // config.json is gone but the TTL cache would keep serving the old
   // preferences; drop it so post-nuke reads see a clean slate.
   invalidateGlobalConfigCache();
-  // Reseed an empty root right away (launch-time bootstrap won't run
+  // Reseed an empty data dir right away (launch-time bootstrap won't run
   // again this session): renderer refetches read a fresh valid layout,
-  // and a stray state write can't resurrect a half-empty root.
-  await ensureShigomoriRoot();
-  // The root rm wipes any managed-root worktree dirs whose
+  // and a stray state write can't resurrect a half-empty data dir.
+  // A data dir adopted under its pre-2.0 name is the exception: the
+  // fresh install is seeded at the default location instead, so the
+  // next boot lands there rather than adopting the old name again.
+  // The renderer relaunches right after a nuke in that case.
+  await ensureDataDir(
+    dataDirSource() === "legacy" ? defaultDataDir() : dataDir(),
+  );
+  // The data dir rm wipes any managed-root worktree dirs whose
   // `git worktree remove` failed silently above, leaving stale admin
   // entries behind. Sweep them per project now that the dirs are gone.
   await Promise.all(

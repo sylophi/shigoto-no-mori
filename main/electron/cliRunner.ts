@@ -46,7 +46,7 @@ let backgroundChildren = 0;
 
 // The CLI children in flight. stateWatcher.ts and the git watcher read
 // this to suppress the fs echo of a CLI child's own writes into the
-// state root and the git directories. Background children are NOT
+// data dir and the git directories. Background children are NOT
 // counted: the file-sync daemon lives as long as the app, and counting
 // it would mute both watchers for the whole run (its own writes land
 // under its data directory, which neither watcher reads).
@@ -190,7 +190,7 @@ export async function runCli(
     });
     child.on("close", (code) => {
       release();
-      // The CLI's writes into the root are the app's own doing; mark
+      // The CLI's writes into the data dir are the app's own doing; mark
       // them so the state watcher doesn't refetch-storm on the echo.
       // (While the child runs, the watcher checks cliChildCount().)
       noteSelfWrite();

@@ -2,14 +2,14 @@
 // machine that is a separate device (shared/appName.mts explains the
 // app side). Each profile owns one folder under PROFILES_DIR:
 //
-//   <name>/root    the profile's state root (SHIGOMORI_ROOT)
+//   <name>/data    the profile's data dir (SHIGOMORI_DATA_DIR)
 //   <name>/repos   the tester's own repos for that forest
 //
 // and its userData nests under the plain dev userData, where main
 // puts it (devProfileUserData). The launchers set both env vars, so
-// the app AND every CLI child it spawns land on the profile's root
+// the app AND every CLI child it spawns land on the profile's data dir
 // (children inherit the launcher's environment, the app itself never
-// injects SHIGOMORI_ROOT, see host/lib/util/paths.ts).
+// injects SHIGOMORI_DATA_DIR, see host/lib/util/paths.ts).
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { homedir, platform } from "node:os";
@@ -24,20 +24,20 @@ import {
 import {
   CLI_DIST_DIR,
   cliBinaryName,
-  cliRootDirName,
+  cliDataDirName,
 } from "../../shared/cliDist.mts";
 import { repoRoot } from "./checkKit.mjs";
 import { productName } from "./devBundle.mts";
 
 export const PROFILES_DIR = join(
   homedir(),
-  `${cliRootDirName("dev")}-profiles`,
+  `${cliDataDirName("dev")}-profiles`,
 );
 
 export type DevProfile = {
   name: string;
   dir: string;
-  root: string;
+  dataDir: string;
   repos: string;
   userData: string;
 };
@@ -48,7 +48,7 @@ export function devProfilePaths(name: string): DevProfile {
   return {
     name,
     dir,
-    root: join(dir, "root"),
+    dataDir: join(dir, "data"),
     repos: join(dir, "repos"),
     userData: devProfileUserData(devUserDataDir(), name),
   };
@@ -70,7 +70,10 @@ function devUserDataDir(): string {
 
 // The two env vars that make a launched app run as the profile.
 export function devProfileEnv(profile: DevProfile): Record<string, string> {
-  return { [DEV_PROFILE_ENV]: profile.name, SHIGOMORI_ROOT: profile.root };
+  return {
+    [DEV_PROFILE_ENV]: profile.name,
+    SHIGOMORI_DATA_DIR: profile.dataDir,
+  };
 }
 
 export type DevProfileArgs = {
@@ -131,7 +134,7 @@ export function buildDevCli(): void {
 }
 
 // Registers every repo under `dir` as a project of the profile's
-// root, through the dev CLI so the registry is written the one way.
+// data dir, through the dev CLI so the registry is written the one way.
 export function registerProjects(profile: DevProfile, dir: string): void {
   execFileSync(devCliPath(), ["projects", "add", dir, "--all", "--yes"], {
     cwd: repoRoot,

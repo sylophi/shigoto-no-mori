@@ -1,4 +1,4 @@
-// Tiny JSON-file persistence in the shigomori root. Atomic via tmp+rename.
+// Tiny JSON-file persistence in the shigomori data dir. Atomic via tmp+rename.
 // Writes are read-modify-write of the whole file, and both the app and
 // the CLI go through this module -- so every write cycle holds the
 // cross-process lock. Reads stay lock-free: the rename keeps the file
@@ -19,28 +19,25 @@ import {
   withSchemaVersion,
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
-import { isENOENT, shigomoriRoot } from "../util/paths";
-
-const STATE_FILE = "state.json";
-const REGISTRY_FILE = "registry.json";
+import { dataDir, isENOENT, REGISTRY_FILE, STATE_FILE } from "../util/paths";
 
 // The registry's keys live here rather than in their feature modules
 // so the accessors and the split below can't drift apart. cli/state.go
 // names the same set.
 export const PROJECTS_KEY = "projects";
 export const SHELVED_KEY = "shelvedWorktrees";
-// UUID naming this state root, not this machine: a dev root and a
-// prod root on one laptop are two devices. Generated on first read by
+// UUID naming this data dir, not this machine: a dev data dir and a
+// prod data dir on one laptop are two devices. Generated on first read by
 // host/lib/config/deviceId.ts. The CLI only preserves it.
 export const DEVICE_ID_KEY = "deviceId";
 
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format
-// root holds one.
+// data dir holds one.
 const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
 
 function filePath(file: string): string {
-  return join(shigomoriRoot(), file);
+  return join(dataDir(), file);
 }
 
 // Every write is a read-modify-write of the whole file, so "I couldn't
@@ -163,7 +160,7 @@ interface JsonStore {
 }
 
 // The two stores say exactly two things: which file they own, and
-// whether an old-format root has to be drained before the first touch.
+// whether an old-format data dir has to be drained before the first touch.
 // Generated from those two rather than written out twice, so a method
 // can't gain a rule on one store and miss it on the other.
 function makeStore(file: string, beforeAccess?: () => void): JsonStore {
@@ -201,7 +198,7 @@ function makeStore(file: string, beforeAccess?: () => void): JsonStore {
 export const stateStore = makeStore(STATE_FILE);
 
 // Project list and worktree shelf. Every entry point drains an
-// old-format root first, so no caller has to know the split happened.
+// old-format data dir first, so no caller has to know the split happened.
 export const registryStore = makeStore(REGISTRY_FILE, ensureRegistrySplit);
 
 // --- one-time move of the registry keys out of state.json ---
@@ -225,7 +222,7 @@ export const registryStore = makeStore(REGISTRY_FILE, ensureRegistrySplit);
 // registry keys are only ever read from registry.json, and state.json
 // is only ever asked for the keys it owns.
 //
-// Two processes starting against the same old root are safe because
+// Two processes starting against the same old data dir are safe because
 // state.json is read again inside its lock. The loser of the race
 // finds nothing left to move and writes nothing. Both locks are taken,
 // state.json's outside registry.json's. Nothing else takes both, so

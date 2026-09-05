@@ -34,7 +34,7 @@
 //     refused with the path, and checking back restores sync.
 //
 // Both "devices" share one node process and one sandboxed
-// SHIGOMORI_ROOT. What separates them is the direct wire between them,
+// SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
 // which is exactly the surface this proof pins. Runs under
 // scripts/lib/register-ts-alias.mjs. See package.json "mirror:check".
 import assert from "node:assert/strict";
@@ -65,7 +65,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { initShigomoriRootAt } from "@host/lib/util/paths";
+import { initDataDirAt } from "@host/lib/util/paths";
 import { createMirrorDaemon } from "../main/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/mirror/gateway.ts";
 import {
@@ -83,12 +83,12 @@ const execFileP = promisify(execFile);
 const cliDir = join(import.meta.dirname, "..", "cli");
 const fileSyncDir = join(import.meta.dirname, "..", "file-sync");
 
-// Sandbox: everything (state root, repos, the built binary, the
+// Sandbox: everything (data dir, repos, the built binary, the
 // daemon's data) under one temp tree. realpath because worktree ids
 // derive from git's resolved paths (/var/folders is a symlink on
 // macOS).
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-mirror-check-")));
-const stateRoot = join(sandbox, "root");
+const dataDir = join(sandbox, "data");
 const smBinary = join(sandbox, "sm");
 const fileSyncBinary = join(sandbox, "file-sync");
 const fileSyncDataDir = join(sandbox, "file-sync-data");
@@ -110,7 +110,7 @@ Object.assign(process.env, scrubbedGitEnv(), {
 const baseEnv = { ...process.env };
 const smEnv = {
   ...baseEnv,
-  SHIGOMORI_ROOT: stateRoot,
+  SHIGOMORI_DATA_DIR: dataDir,
   // The fsevents binding's deprecation warning would otherwise land in
   // the build output on macOS 13+ (see scripts/build-cli.mjs).
   CGO_CFLAGS: "-Wno-deprecated-declarations",
@@ -208,7 +208,7 @@ async function main() {
   writeFileSync(join(rootB, "from-b.txt"), "from B\n");
   const worktreeIdB = worktreeIdFromPath(rootB);
 
-  initShigomoriRootAt(stateRoot);
+  initDataDirAt(dataDir);
   setCliRunnerImpl({
     runCli,
     requireCliBinary: () => smBinary,

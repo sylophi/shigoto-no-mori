@@ -160,7 +160,7 @@ export const ErrorBodySchema = z.object({ error: z.string() });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 
 // POST /devices/enroll request, under a Clerk session token. deviceId
-// is the app's per-root UUID, so re-enrolling the same root rotates
+// is the app's per-data-dir UUID, so re-enrolling the same data dir rotates
 // the credential instead of growing the device list. The bounds are
 // load-bearing, not cosmetic. deviceId becomes a Durable Object
 // websocket accept tag, which workerd hard-caps at 256 characters and

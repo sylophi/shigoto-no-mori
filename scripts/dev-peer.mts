@@ -87,7 +87,7 @@ try {
   delete env.ELECTRON_RUN_AS_NODE;
 
   console.log(
-    `[dev-peer] profile ${profile.name}: root ${profile.root}, userData ${profile.userData}`,
+    `[dev-peer] profile ${profile.name}: data dir ${profile.dataDir}, userData ${profile.userData}`,
   );
   const child = spawn(
     devBundleExecutable() ?? stockElectronExecutable(),
