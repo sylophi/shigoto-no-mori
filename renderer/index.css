@@ -5,6 +5,10 @@
 @import "@fontsource/zen-maru-gothic/900.css";
 @import "tailwindcss";
 @import "tw-animate-css";
+/* xterm's stylesheet (the script console) goes under the base layer so
+   any utility on the console's own elements outranks it without
+   fighting its specificity. */
+@import "@xterm/xterm/css/xterm.css" layer(base);
 /* Default-on Animal Crossing overlay (opt-out in Settings). Self-
    contained; see the CONTRACT
    header in the file for the hooks it depends on (token blocks in it
@@ -160,112 +164,30 @@
 }
 
 /*
- * ANSI 16-color palette for script consoles. Class names match what
- * `anser` emits with `use_classes: true`. OKLCH values are tuned for
- * legibility against both light and dark backgrounds without a
- * theme-specific override; the dim 8 colors match what tools normally
- * use for severity (red = error, yellow = warn, etc.) and the bright
- * 8 are punchier for emphasis. 256-color / truecolor still works
- * through anser's inline-style fallback.
+ * ANSI 16-color palette for the script console. xterm reads these (and
+ * the --background / --foreground tokens) through
+ * scriptConsole/terminalTheme.ts whenever <html>'s theme classes
+ * change, so a theme can restyle the console by overriding them. OKLCH
+ * values are tuned for legibility against both light and dark
+ * backgrounds without a theme-specific override. The dim 8 colors
+ * match what tools normally use for severity (red = error, yellow =
+ * warn, etc.) and the bright 8 are punchier for emphasis.
  */
-@layer utilities {
-  .ansi-black-fg {
-    color: oklch(0.55 0.005 270);
-  }
-  .ansi-red-fg {
-    color: oklch(0.6 0.18 25);
-  }
-  .ansi-green-fg {
-    color: oklch(0.62 0.17 145);
-  }
-  .ansi-yellow-fg {
-    color: oklch(0.72 0.15 85);
-  }
-  .ansi-blue-fg {
-    color: oklch(0.62 0.17 250);
-  }
-  .ansi-magenta-fg {
-    color: oklch(0.62 0.2 320);
-  }
-  .ansi-cyan-fg {
-    color: oklch(0.68 0.13 200);
-  }
-  .ansi-white-fg {
-    color: oklch(0.85 0.005 270);
-  }
-
-  .ansi-bright-black-fg {
-    color: oklch(0.65 0.005 270);
-  }
-  .ansi-bright-red-fg {
-    color: oklch(0.72 0.2 25);
-  }
-  .ansi-bright-green-fg {
-    color: oklch(0.78 0.2 145);
-  }
-  .ansi-bright-yellow-fg {
-    color: oklch(0.85 0.16 85);
-  }
-  .ansi-bright-blue-fg {
-    color: oklch(0.75 0.2 250);
-  }
-  .ansi-bright-magenta-fg {
-    color: oklch(0.74 0.22 320);
-  }
-  .ansi-bright-cyan-fg {
-    color: oklch(0.8 0.15 200);
-  }
-  .ansi-bright-white-fg {
-    color: oklch(0.97 0.005 270);
-  }
-
-  .ansi-black-bg {
-    background-color: oklch(0.55 0.005 270 / 0.18);
-  }
-  .ansi-red-bg {
-    background-color: oklch(0.6 0.18 25 / 0.22);
-  }
-  .ansi-green-bg {
-    background-color: oklch(0.62 0.17 145 / 0.22);
-  }
-  .ansi-yellow-bg {
-    background-color: oklch(0.72 0.15 85 / 0.22);
-  }
-  .ansi-blue-bg {
-    background-color: oklch(0.62 0.17 250 / 0.22);
-  }
-  .ansi-magenta-bg {
-    background-color: oklch(0.62 0.2 320 / 0.22);
-  }
-  .ansi-cyan-bg {
-    background-color: oklch(0.68 0.13 200 / 0.22);
-  }
-  .ansi-white-bg {
-    background-color: oklch(0.85 0.005 270 / 0.18);
-  }
-
-  .ansi-bright-black-bg {
-    background-color: oklch(0.65 0.005 270 / 0.2);
-  }
-  .ansi-bright-red-bg {
-    background-color: oklch(0.72 0.2 25 / 0.24);
-  }
-  .ansi-bright-green-bg {
-    background-color: oklch(0.78 0.2 145 / 0.24);
-  }
-  .ansi-bright-yellow-bg {
-    background-color: oklch(0.85 0.16 85 / 0.24);
-  }
-  .ansi-bright-blue-bg {
-    background-color: oklch(0.75 0.2 250 / 0.24);
-  }
-  .ansi-bright-magenta-bg {
-    background-color: oklch(0.74 0.22 320 / 0.24);
-  }
-  .ansi-bright-cyan-bg {
-    background-color: oklch(0.8 0.15 200 / 0.24);
-  }
-  .ansi-bright-white-bg {
-    background-color: oklch(0.97 0.005 270 / 0.2);
-  }
+:root {
+  --ansi-black: oklch(0.55 0.005 270);
+  --ansi-red: oklch(0.6 0.18 25);
+  --ansi-green: oklch(0.62 0.17 145);
+  --ansi-yellow: oklch(0.72 0.15 85);
+  --ansi-blue: oklch(0.62 0.17 250);
+  --ansi-magenta: oklch(0.62 0.2 320);
+  --ansi-cyan: oklch(0.68 0.13 200);
+  --ansi-white: oklch(0.85 0.005 270);
+  --ansi-bright-black: oklch(0.65 0.005 270);
+  --ansi-bright-red: oklch(0.72 0.2 25);
+  --ansi-bright-green: oklch(0.78 0.2 145);
+  --ansi-bright-yellow: oklch(0.85 0.16 85);
+  --ansi-bright-blue: oklch(0.75 0.2 250);
+  --ansi-bright-magenta: oklch(0.74 0.22 320);
+  --ansi-bright-cyan: oklch(0.8 0.15 200);
+  --ansi-bright-white: oklch(0.97 0.005 270);
 }

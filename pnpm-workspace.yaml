@@ -32,6 +32,12 @@ allowBuilds:
   # compiles them. Build tooling only: neither is bundled into the app.
   fs-xattr: true
   macos-alias: true
+  # node-pty (script console PTY) ships Node-API prebuilds that Electron
+  # loads as-is, and forge.config.ts's rebuildConfig skips rebuilding it,
+  # so its install-time node-gyp build is skipped too. The one thing the
+  # skipped scripts would have done -- making the bundled spawn-helper
+  # executable -- is scripts/fix-node-pty-helper.mjs's job.
+  node-pty: false
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively
 # through @electron/rebuild -> @electron/node-gyp. No 6.x backport exists.
