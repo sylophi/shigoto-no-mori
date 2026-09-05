@@ -23,7 +23,7 @@ export function CheckEntry({ check }: { check: PullRequestCheck }) {
       {check.url && (
         <ExternalLink
           aria-hidden
-          className="size-3 shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover/check:opacity-100"
+          className="size-3 shrink-0 text-muted-foreground/60 opacity-0 transition-opacity group-hover/check:opacity-100 phone:opacity-100"
         />
       )}
     </>

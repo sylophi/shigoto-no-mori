@@ -27,7 +27,9 @@ export function CopyButton({
       aria-label={label}
       title={label}
       className={cn(
-        "shrink-0 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/copy:opacity-100",
+        // Always shown in the phone layout: nothing hovers on a touch
+        // screen, so a control that waits for the cursor never appears.
+        "shrink-0 rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/copy:opacity-100 phone:opacity-100",
         className,
       )}
     >

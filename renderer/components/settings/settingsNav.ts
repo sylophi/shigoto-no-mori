@@ -1,6 +1,9 @@
 import { createExternalStore } from "@/store/externalStore";
 import { useSyncExternalStore } from "react";
+import { Palette, Rocket, type LucideIcon } from "lucide-react";
+import type { StatusTone } from "@/components/ui/status-dot";
 import type { RemoteDevice } from "@/lib/remote/devices";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 
@@ -34,8 +37,7 @@ export function selectSettingsTab(tab: string): void {
   selectedTab.publish(tab);
 }
 
-// The raw selection, for the shell that reacts to a pick (the narrow
-// layout's sheet closes on one). The resolved tab is the hook below.
+// The raw selection. The resolved tab is the hook below.
 export function useSelectedSettingsTab(): string {
   return useSyncExternalStore(
     selectedTab.subscribe,
@@ -91,4 +93,55 @@ export function landOnStagedUpdate(version: string): void {
   if (noticedUpdateVersion === version) return;
   noticedUpdateVersion = version;
   selectSettingsTab(LOCAL_DEVICE_TAB);
+}
+
+// One section of the page as a list draws it: its tab id, its label,
+// and either an icon (the visual sections) or a presence tone (the
+// device sections, absent for a lone device, which has no roster to
+// be present in).
+export interface SettingsSection {
+  id: string;
+  label: string;
+  icon?: LucideIcon;
+  tone?: StatusTone;
+  title?: string;
+}
+
+// The page's sections in order, for whichever surface lists them: the
+// sidebar's nav on a wide viewport (SettingsSidebarNav), the chip row
+// under the header in the phone layout (SettingsSectionChips). Two
+// groups, since the split is the page's whole point: "visual" is what
+// this window shows, "devices" is one section per machine, this one
+// first. A hostless client has no machine behind the window, so its
+// visual group is Appearance alone and its devices are all peers.
+export function settingsSections(
+  devices: readonly RemoteDevice[],
+  localName: string,
+): { visual: SettingsSection[]; devices: SettingsSection[] } {
+  const solo = isSolo(devices);
+  const visual: SettingsSection[] = [
+    { id: APPEARANCE_TAB, label: "Appearance", icon: Palette },
+  ];
+  if (hasLocalHost) {
+    visual.push({ id: LAUNCH_TAB, label: "Launch tools", icon: Rocket });
+  }
+  const deviceRows: SettingsSection[] = [];
+  if (hasLocalHost) {
+    deviceRows.push({
+      id: LOCAL_DEVICE_TAB,
+      label: localName,
+      tone: solo ? undefined : "emerald",
+      title: "This device: the machine this window runs on",
+    });
+  }
+  for (const device of devices) {
+    const { tone, label } = deviceStatusView(device.status);
+    deviceRows.push({
+      id: deviceTab(device.deviceId),
+      label: device.label,
+      tone,
+      title: `${device.label}: ${label}`,
+    });
+  }
+  return { visual, devices: deviceRows };
 }

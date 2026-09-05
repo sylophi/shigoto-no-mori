@@ -52,8 +52,10 @@ import { withToggled } from "@/lib/toggleSet";
 // the local project tree with every peer's forest merged in. On a
 // hostless client (the web shell) it is the peers' forests alone,
 // through the very same row builder and list, so a peer's worktree
-// row looks the same wherever it is drawn.
-export function Sidebar() {
+// row looks the same wherever it is drawn. The phone layout draws it
+// as a page (ForestPage) and drops the footer, whose cluster the tab
+// bar carries there.
+export function Sidebar({ footer = true }: { footer?: boolean }) {
   const [arrangeMode, setArrangeMode] = useState(false);
   // While Settings is open the sidebar is its section list: the tree
   // steps aside (header and footer stay) and comes back on the next
@@ -83,13 +85,15 @@ export function Sidebar() {
       ) : (
         <PeerForest settingsOpen={onSettings} />
       )}
-      <SidebarFooter
-        // Arranging is a tree mode. While Settings holds the sidebar the
-        // footer shows its normal actions, and the mode resumes with the
-        // tree.
-        arrangeMode={arrangeMode && !onSettings}
-        onToggleArrange={() => setArrangeMode((v) => !v)}
-      />
+      {footer && (
+        <SidebarFooter
+          // Arranging is a tree mode. While Settings holds the sidebar the
+          // footer shows its normal actions, and the mode resumes with the
+          // tree.
+          arrangeMode={arrangeMode && !onSettings}
+          onToggleArrange={() => setArrangeMode((v) => !v)}
+        />
+      )}
     </aside>
   );
 }

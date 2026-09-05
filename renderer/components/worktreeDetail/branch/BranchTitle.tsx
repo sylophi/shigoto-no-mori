@@ -109,7 +109,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           onClick={begin}
           aria-label="Rename branch"
           title="Rename branch"
-          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100"
+          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
         >
           <Pencil className="size-3.5" />
         </button>

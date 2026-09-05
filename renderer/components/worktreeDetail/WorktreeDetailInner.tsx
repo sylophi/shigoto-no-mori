@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { DeviceChip } from "@/components/remote/DeviceChip";
+import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
@@ -172,7 +173,13 @@ export function WorktreeDetailInner({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-col gap-2 border-b border-border px-6 pt-7 pb-5">
+      <header
+        className={cn(
+          "flex flex-col gap-2 border-b border-border",
+          PAGE_HEADER_PADDING,
+          "pb-5 phone:pb-4",
+        )}
+      >
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           {remote ? (
             // Configure is a local page, so remotely the name is just the
@@ -193,17 +200,22 @@ export function WorktreeDetailInner({
               {project.name}
             </button>
           )}
-          <span aria-hidden className="text-muted-foreground/40">
+          {/* A phone has no room for the path (it shortens to noise
+              at that width), so the breadcrumb stops at the project
+              and the trailing marks push themselves to the edge. */}
+          <span aria-hidden className="text-muted-foreground/40 phone:hidden">
             /
           </span>
           <PathSpan
             path={worktree.path}
             home={home}
-            className="min-w-0 flex-1 font-mono"
+            className="min-w-0 flex-1 font-mono phone:hidden"
             copyable
           />
-          <WorktreeKindIcon worktree={worktree} />
-          <DeviceChip />
+          <span className="flex shrink-0 items-center gap-1.5 phone:ml-auto">
+            <WorktreeKindIcon worktree={worktree} />
+            <DeviceChip />
+          </span>
         </div>
         <BranchHeaderRow worktree={worktree} />
         <MirrorPill worktree={worktree} />
@@ -217,12 +229,12 @@ export function WorktreeDetailInner({
 
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-6 py-6",
+          "min-h-0 flex-1 overflow-y-auto px-6 py-6 phone:px-4 phone:py-5",
           locked && "pointer-events-none opacity-50",
         )}
         aria-disabled={locked}
       >
-        <div className="flex max-w-4xl flex-col gap-10">
+        <div className="flex max-w-4xl flex-col gap-10 phone:gap-8">
           {!remote && (
             // Launching opens editors and shells on the machine showing
             // this window. On another device's worktree there is nothing

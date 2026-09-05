@@ -52,7 +52,7 @@ export function WorktreeDetailFooter({
   canMutate = true,
 }: WorktreeDetailFooterProps) {
   return (
-    <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
+    <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6 phone:h-12 phone:px-4">
       {state.kind === "normal" && leading}
       {canMutate ? (
         renderFooterContent(worktree, state, actions)

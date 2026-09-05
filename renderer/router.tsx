@@ -18,6 +18,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { ErrorFallback } from "@/components/ErrorFallback";
 import { EmptyState } from "@/components/EmptyState";
+import { ForestPage } from "@/components/ForestPage";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
@@ -26,6 +27,7 @@ import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
+import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
@@ -37,16 +39,31 @@ const rootRoute = createRootRoute({
 // "/" is where a fresh window opens and where leaving a worktree's
 // pages lands. With projects of its own the app resolves it to the
 // first worktree (or the first-run state). A hostless client has no
-// local forest, so its home is the account's devices, redirected at
-// load time (no frame rendered) and replaced in history so Back never
-// lands on the dispatcher again.
+// local forest, so its home is the account's devices (on a phone, the
+// forest page the tab bar opens on), redirected at load time (no frame
+// rendered) and replaced in history so Back never lands on the
+// dispatcher again.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
-    if (!hasLocalHost) throw redirect({ to: "/devices", replace: true });
+    if (!hasLocalHost) {
+      throw redirect({
+        to: isPhoneLayout() ? "/forest" : "/devices",
+        replace: true,
+      });
+    }
   },
   component: EmptyState,
+});
+
+// The phone layout's home tab: the forest as a page of its own (see
+// ForestPage). Off the root like settings. A wide viewport has the
+// forest in its sidebar, so the page only points at it.
+const forestRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/forest",
+  component: ForestPage,
 });
 
 const settingsRoute = createRoute({
@@ -212,6 +229,7 @@ const commitDiffRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  forestRoute,
   settingsRoute,
   tidyRoute,
   devicesIndexRoute,
