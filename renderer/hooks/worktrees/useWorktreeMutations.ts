@@ -10,7 +10,7 @@ import type {
 } from "@shared/schemas";
 import { hostKeyDeviceId } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { scriptRuns } from "@/store/scriptRuns";
+import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -88,6 +88,7 @@ interface ConvertExternalWorktreeInput {
 export function useConvertExternalWorktree() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
+  const scriptRuns = useScriptRuns();
   return useMutation<CreateWorktreeResult, Error, ConvertExternalWorktreeInput>(
     {
       mutationFn: (input) => api.worktrees.convertExternal(input),
@@ -114,6 +115,7 @@ interface RelocateWorktreeInput {
 export function useRelocateWorktree() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
+  const scriptRuns = useScriptRuns();
   return useMutation<Worktree, Error, RelocateWorktreeInput>({
     mutationFn: (input) => api.worktrees.relocate(input),
     onSuccess: (_data, vars) => {
@@ -147,6 +149,7 @@ const deleteWorktreeMutationKey = (deviceId: string) =>
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
   const { api, deviceId, keys } = useHostScope();
+  const scriptRuns = useScriptRuns();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
     mutationFn: (input) => api.worktrees.delete(input),

@@ -8,17 +8,20 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 
 // The worktree pages' params, read non-strictly because each page
 // serves both its local route and the /devices/$deviceId twin (the
 // router can only type params against ONE route). `hash` exists only
-// under the commit pair. Keeping the one unavoidable cast here gives
-// the twin pattern a single seam instead of a copy per page.
+// under the commit pair and `scriptKey` only under the console pair.
+// Keeping the one unavoidable cast here gives the twin pattern a single
+// seam instead of a copy per page.
 export function useScopedWorktreeParams() {
   return useParams({ strict: false }) as {
     projectId: string;
     worktreeId: string;
     hash: string;
+    scriptKey: string;
   };
 }
 
@@ -35,7 +38,12 @@ export function useWorktreeNav() {
   // doesn't serve still can't slip through.
   const go = (
     page: keyof typeof WORKTREE_ROUTE_PATHS,
-    params: { projectId: string; worktreeId: string; hash?: string },
+    params: {
+      projectId: string;
+      worktreeId: string;
+      hash?: string;
+      scriptKey?: string;
+    },
     replace = false,
   ) => {
     const paths = WORKTREE_ROUTE_PATHS[page];
@@ -48,8 +56,8 @@ export function useWorktreeNav() {
 
   return {
     // True under a /devices/$deviceId twin route: local-only
-    // affordances (configure, settings links, script consoles) gate on
-    // this instead of re-deriving the scope comparison.
+    // affordances (configure and settings links) gate on this instead
+    // of re-deriving the scope comparison.
     remote,
 
     toWorktree(projectId: string, worktreeId: string, replace = false) {
@@ -66,6 +74,13 @@ export function useWorktreeNav() {
 
     toPrDiff(projectId: string, worktreeId: string) {
       go("prDiff", { projectId, worktreeId });
+    },
+
+    // The script's console, in whichever tree this page lives in: a
+    // run on a peer streams back over its direct session, so its
+    // console is a page under the device twin like the diffs are.
+    toScript(projectId: string, worktreeId: string, slot: ScriptSlot) {
+      go("script", { projectId, worktreeId, scriptKey: slotToParam(slot) });
     },
 
     // Explicitly the LOCAL tree, whatever the surrounding scope: a

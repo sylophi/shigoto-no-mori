@@ -24,7 +24,7 @@ import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { router } from "@/router";
+import { useNavigate } from "@tanstack/react-router";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import { ScanningPanel } from "./ScanningPanel";
@@ -83,11 +83,10 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   // somewhere useful instead of wherever the app happened to be.
   // ensureQueryData reuses a warm cache entry (e.g. the always-mounted
   // sidebar already listed this project mid-bulk-add) over re-listing.
-  // Best-effort: if listing fails, the project is added either way. Uses
-  // the module-level router because this view is rendered as a sibling of
-  // RouterProvider, where `useNavigate` has no context (see ProjectLauncher).
-  // Route choice built outside the try below: React Compiler can't lower
-  // a conditional inside one, and bails out the whole component.
+  // Best-effort: if listing fails, the project is added either way.
+  // Route choice built outside the try below: React Compiler can't
+  // lower a conditional inside one, and bails out the whole component.
+  const navigate = useNavigate();
   const selectPrimary = async (projectId: string) => {
     try {
       const worktrees = await queryClient.ensureQueryData(
@@ -96,7 +95,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
       // A bare repo registers fine but has no primary checkout, so
       // offer worktree creation instead (same fallback as ProjectLauncher).
       const primary = worktrees.find((w) => w.isPrimary);
-      await router.navigate(buildOpenTarget(projectId, primary));
+      await navigate(buildOpenTarget(projectId, primary));
     } catch {
       // Stay wherever we are. The add itself already succeeded.
     }

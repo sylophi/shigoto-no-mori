@@ -16,8 +16,8 @@ import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
-import { invokeIndexFor } from "../web/bridge/loopback";
-import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/bridge/stubDefaults";
+import { invokeIndexFor } from "../web/ipc/loopback";
+import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults";
 import {
   type DeviceForest,
   LAB_ACCOUNT_ID,

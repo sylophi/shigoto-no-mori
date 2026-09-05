@@ -41,6 +41,20 @@ export class HubRequestError extends Error {
   }
 }
 
+// True when the device hub refused the call outright: 401 for a
+// credential it no longer honors (revoked, rotated away), 403 for a
+// request it will not serve. Keyed on the status rather than the
+// message text: the refusal is terminal until the account changes
+// whatever the worker's wording, and retrying cannot turn it into a
+// success. A response the platform cannot read at all (an opaque fetch
+// TypeError) is NOT a refusal and keeps the honest backoff.
+export function isHubRefusal(error: unknown): boolean {
+  return (
+    error instanceof HubRequestError &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
 // The Worker answered the typed "tunnel provisioning is not
 // configured" status. A deployment fact, not a failure: the caller
 // (the cloudflared runner) reads it as "tunnels off, do not retry"

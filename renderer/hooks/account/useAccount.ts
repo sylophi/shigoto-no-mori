@@ -12,10 +12,9 @@ import { queryKeys } from "@/lib/queryKeys";
 // Account status: configured/signedIn plus this device's stored name.
 // staleTime Infinity: `configured` is launch env and cannot change
 // in-process, and signedIn/deviceName only change through flows that
-// emit account:changed, which useWatchAccountChanges (always mounted,
-// SidebarFooter on desktop and WebShell on web) turns into an
-// invalidation. Without the opt-out, an observer in an always-mounted
-// component would re-run the read (a main-process credential-file read
+// emit account:changed, which useWatchAccountChanges (always mounted
+// in AppShell) turns into an invalidation. Without the opt-out, an
+// observer in an always-mounted component would re-run the read (a main-process credential-file read
 // plus keychain decrypt) on every window focus.
 export function useAccountStatus() {
   return useQuery<AccountStatus>({
@@ -42,7 +41,9 @@ export function useAccountDevices() {
   return useQuery<DeviceInfo[]>({
     queryKey: queryKeys.accountDevices(),
     queryFn: () => window.api.account.listDevices(),
-    meta: { errorTitle: "Couldn't load account devices" },
+    // The registry renders the failure inline (DeviceRegistry), so no
+    // toast on top.
+    meta: { silentError: true },
   });
 }
 

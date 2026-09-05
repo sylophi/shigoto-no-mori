@@ -1,39 +1,8 @@
-// Lab stand-in for web/bridge/install.ts, swapped in by the lab vite
-// config's resolver for imports coming from web/ modules: the web app
-// boots on the fixture window.api instead of the real hub-backed
-// bridge, and the singleton the web pages reach for answers with
-// harmless lab shims (access ok, refresh a no-op).
-import { createWebAccessStore } from "../web/account/webAccess";
+// Lab stand-in for web/preload.ts (lab/web-main.tsx calls this in its
+// place): the web page boots on the fixture window.api instead of the
+// real hub-backed bridge.
 import { installLabBridge } from "./bridge";
 
-type LabWebBridge = {
-  api: unknown;
-  webAccess: ReturnType<typeof createWebAccessStore>;
-  notifyAccountChanged(): void;
-  refreshHub(): Promise<void>;
-  stop(): Promise<void>;
-};
-
-let installed: LabWebBridge | null = null;
-
-export function installWebBridge(): LabWebBridge {
-  if (installed !== null) return installed;
+export function installWebBridge(): void {
   installLabBridge({ webShell: true });
-  installed = {
-    api: (window as { api?: unknown }).api,
-    webAccess: createWebAccessStore(),
-    notifyAccountChanged: () => {},
-    refreshHub: async () => {},
-    stop: async () => {},
-  };
-  return installed;
-}
-
-export function webBridge(): LabWebBridge {
-  if (installed === null) {
-    throw new Error(
-      "lab web bridge not installed, call installWebBridge first",
-    );
-  }
-  return installed;
 }

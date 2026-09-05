@@ -17,6 +17,7 @@ import {
   useCollapsedProjects,
   useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
@@ -29,6 +30,7 @@ import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
+import { hasLocalHost } from "@/lib/localHost";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import { buildSidebarRows } from "./buildSidebarRows";
 import { buildInboxRows } from "./inbox/buildInboxRows";
@@ -41,10 +43,80 @@ import { SidebarToolbar } from "./SidebarToolbar";
 import { TidyButton } from "./TidyButton";
 import { sortProjects } from "./sortProjects";
 import { SidebarList } from "./SidebarList";
+import type { RowHandlers } from "./VirtualRow";
 import { withToggled } from "@/lib/toggleSet";
 
-// react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
+// The app sidebar, one for both shells: the brand header, the forest
+// (or, while Settings is open, the page's section list), and the
+// footer. With a machine of its own behind the window the forest is
+// the local project tree with every peer's forest merged in. On a
+// hostless client (the web shell) it is the peers' forests alone,
+// through the very same row builder and list, so a peer's worktree
+// row looks the same wherever it is drawn.
 export function Sidebar() {
+  const [arrangeMode, setArrangeMode] = useState(false);
+  // While Settings is open the sidebar is its section list: the tree
+  // steps aside (header and footer stay) and comes back on the next
+  // route. The tree's queries never unmount, so the swap costs nothing.
+  const onSettings = useLocation({
+    select: (location) => location.pathname === "/settings",
+  });
+
+  return (
+    // Both themes are fully transparent so the BrowserWindow vibrancy
+    // material shows through. A heavy white wash in light mode washes
+    // out the chroma, so we let the "sidebar" material do its job on
+    // its own. The `data-sidebar` attribute scopes the token overrides
+    // in index.css to this surface only.
+    <aside
+      data-sidebar
+      data-doubutsu-zone="sidebar"
+      className="flex h-full flex-col"
+    >
+      <SidebarHeader />
+      {hasLocalHost ? (
+        <ProjectTree
+          settingsOpen={onSettings}
+          arrangeMode={arrangeMode}
+          onArrange={() => setArrangeMode(true)}
+        />
+      ) : (
+        <PeerForest settingsOpen={onSettings} />
+      )}
+      <SidebarFooter
+        // Arranging is a tree mode. While Settings holds the sidebar the
+        // footer shows its normal actions, and the mode resumes with the
+        // tree.
+        arrangeMode={arrangeMode && !onSettings}
+        onToggleArrange={() => setArrangeMode((v) => !v)}
+      />
+    </aside>
+  );
+}
+
+// The section list Settings puts in the tree's place. Rendered by the
+// forest components rather than the frame so their hooks (and the
+// queries behind them) stay mounted across the swap.
+function SettingsPane() {
+  return (
+    <div className="min-h-0 flex-1">
+      <ScrollArea className="size-full">
+        <SettingsSidebarNav />
+      </ScrollArea>
+    </div>
+  );
+}
+
+// react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
+function ProjectTree({
+  settingsOpen,
+  arrangeMode,
+  onArrange,
+}: {
+  settingsOpen: boolean;
+  arrangeMode: boolean;
+  onArrange: () => void;
+}) {
   const { data: projects = [], isLoading } = useProjects();
   const { data: sortMode = "manual" } = useProjectSort();
   const inbox = useSidebarView() === "inbox";
@@ -66,14 +138,7 @@ export function Sidebar() {
     () => new Set(),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [arrangeMode, setArrangeMode] = useState(false);
-  // While Settings is open the sidebar is its section list: the tree
-  // steps aside (header and footer stay) and comes back on the next
-  // route. The tree's queries never unmount, so the swap costs nothing.
-  const onSettings = useLocation({
-    select: (location) => location.pathname === "/settings",
-  });
-  useSidebarViewHotkey(!arrangeMode && !onSettings);
+  useSidebarViewHotkey(!arrangeMode && !settingsOpen);
 
   const toggleExpanded = (projectId: string) => {
     toggleCollapsed.mutate(projectId);
@@ -170,6 +235,8 @@ export function Sidebar() {
         ? "No projects yet."
         : view.emptyMessage;
 
+  if (settingsOpen) return <SettingsPane />;
+
   const list = (
     <SidebarList
       rows={rows}
@@ -185,91 +252,122 @@ export function Sidebar() {
   );
 
   return (
-    // Both themes are fully transparent so the BrowserWindow vibrancy
-    // material shows through. A heavy white wash in light mode washes
-    // out the chroma, so we let the "sidebar" material do its job on
-    // its own. The `data-sidebar` attribute scopes the token overrides
-    // in index.css to this surface only.
-    <aside
-      data-sidebar
-      data-doubutsu-zone="sidebar"
-      className="flex h-full flex-col"
-    >
-      <SidebarHeader />
-      {onSettings ? (
-        <div className="min-h-0 flex-1">
-          <ScrollArea className="size-full">
-            <SettingsSidebarNav />
-          </ScrollArea>
-        </div>
-      ) : (
-        <>
-          {/* Each view puts what it actually needs above its list. The inbox
+    <>
+      {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
           the tree instead gets the controls that only apply to it.
           Arranging takes over the whole sidebar, so neither shows. */}
-          {arrangeMode ? null : inbox ? (
-            // px-2 like the rows below it, which is where v1 wants it.
-            // doubutsu pulls it in to its banner card, hence the slot.
-            <div
-              data-slot="sidebar-inbox-create"
-              className="flex items-center gap-1 px-2 pb-1.5"
-            >
-              <div className="min-w-0 flex-1">
-                <NewWorktreeButton projects={orderedProjects} />
-              </div>
-              {/* The tidy page has no other way in, so it can't live only in
-              the tree's toolbar. */}
-              <TidyButton />
-            </div>
-          ) : (
-            <SidebarToolbar onArrange={() => setArrangeMode(true)} />
-          )}
-          <div className="min-h-0 flex-1">
-            <ScrollArea className="size-full" viewportRef={viewportRef}>
-              {/* Dragging reorders projects, which the inbox doesn't show --
-              so it doesn't mount the DnD context at all. */}
-              {inbox ? (
-                list
-              ) : (
-                <DndContext
-                  sensors={sensors}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragCancel={() => setActiveId(null)}
-                >
-                  <SortableContext
-                    items={orderedProjects.map((p) => p.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {list}
-                  </SortableContext>
-                  <DragOverlay>
-                    {activeProject ? (
-                      <ProjectDragPreview project={activeProject} />
-                    ) : null}
-                  </DragOverlay>
-                </DndContext>
-              )}
-              <SidebarEmptyState message={emptyMessage} />
-            </ScrollArea>
+      {arrangeMode ? null : inbox ? (
+        // px-2 like the rows below it, which is where v1 wants it.
+        // doubutsu pulls it in to its banner card, hence the slot.
+        <div
+          data-slot="sidebar-inbox-create"
+          className="flex items-center gap-1 px-2 pb-1.5"
+        >
+          <div className="min-w-0 flex-1">
+            <NewWorktreeButton projects={orderedProjects} />
           </div>
-        </>
+          {/* The tidy page has no other way in, so it can't live only in
+              the tree's toolbar. */}
+          <TidyButton />
+        </div>
+      ) : (
+        <SidebarToolbar onArrange={onArrange} />
       )}
-      <SidebarFooter
-        // Arranging is a tree mode. While Settings holds the sidebar the
-        // footer shows its normal actions, and the mode resumes with the
-        // tree.
-        arrangeMode={arrangeMode && !onSettings}
-        onToggleArrange={() => setArrangeMode((v) => !v)}
-      />
-    </aside>
+      <div className="min-h-0 flex-1">
+        <ScrollArea className="size-full" viewportRef={viewportRef}>
+          {/* Dragging reorders projects, which the inbox doesn't show --
+              so it doesn't mount the DnD context at all. */}
+          {inbox ? (
+            list
+          ) : (
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveId(null)}
+            >
+              <SortableContext
+                items={orderedProjects.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {list}
+              </SortableContext>
+              <DragOverlay>
+                {activeProject ? (
+                  <ProjectDragPreview project={activeProject} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          )}
+          <SidebarEmptyState message={emptyMessage} />
+        </ScrollArea>
+      </div>
+    </>
   );
 }
 
-// Exported for the web sidebar, which renders the same message style
-// for its own signed-out and empty-forest states.
-export function SidebarEmptyState({ message }: { message: string | null }) {
+// The tree has no local half here, so none of the local-row handlers
+// can ever be called, and stable no-ops keep SidebarList's props inert.
+const NO_LOCAL_HANDLERS: RowHandlers = {
+  onToggle: () => {},
+  onToggleShelved: () => {},
+  onToggleShelf: () => {},
+  arrangeMode: false,
+};
+const NO_COLLAPSED = new Set<string>();
+
+// The hostless forest: every worktree is a peer's, so every row carries
+// its device marker. Signed out there is nothing to list, since a peer
+// is only reachable through the account. Like ProjectTree, every hook
+// runs above the settings swap so the fan-out stays mounted across it.
+function PeerForest({ settingsOpen }: { settingsOpen: boolean }) {
+  const { data: status } = useAccountStatus();
+  const signedIn = status?.signedIn === true;
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const { items, loading } = useRemoteForests({ refetchOnMount: true });
+  const view = buildSidebarRows({
+    projects: [],
+    worktreeQueries: [],
+    collapsed: NO_COLLAPSED,
+    shelvedExpanded: NO_COLLAPSED,
+    arrangeMode: false,
+    remote: items,
+  });
+  // Failed remote listings surface here exactly as in the local tree --
+  // without it a peer's project would silently vanish from the tree.
+  useFanOutErrorToast(view.failedCount);
+
+  if (settingsOpen) return <SettingsPane />;
+
+  // Loading and empty are different answers: a slow device hub must
+  // not read as "no projects".
+  const emptyMessage = !signedIn
+    ? "Sign in to reach this account's devices."
+    : view.rows.length > 0
+      ? null
+      : loading
+        ? "Loading forests…"
+        : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
+
+  return (
+    <div className="min-h-0 flex-1">
+      <ScrollArea className="size-full" viewportRef={viewportRef}>
+        {signedIn && (
+          <SidebarList
+            rows={view.rows}
+            revealKey={view.revealKey}
+            viewportRef={viewportRef}
+            handlers={NO_LOCAL_HANDLERS}
+          />
+        )}
+        <SidebarEmptyState message={emptyMessage} />
+      </ScrollArea>
+    </div>
+  );
+}
+
+function SidebarEmptyState({ message }: { message: string | null }) {
   if (!message) return null;
   return (
     <div className="px-3 py-6 text-center text-xs text-muted-foreground">

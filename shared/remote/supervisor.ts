@@ -223,7 +223,10 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     // (hello timeout, host restart, network blip) is retryable, and a
     // failed attempt never counts as a stable connection.
     if (error instanceof RemoteConnectError && error.blocked) {
-      block(classifyClose(error.code)?.message ?? AUTH_FAILED_MESSAGE);
+      // A blocking close names itself through the classifier. A
+      // blocking failure with no close code (a refused ticket mint)
+      // names itself in the error.
+      block(classifyClose(error.code)?.message ?? error.message);
       return;
     }
     scheduleBackoff(false);

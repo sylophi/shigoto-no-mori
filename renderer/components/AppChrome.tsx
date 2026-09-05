@@ -1,6 +1,6 @@
-// The two pieces both boots (renderer/index.tsx, web/app/boot.tsx)
-// mount around the app: the top-level error boundary's fallback and the
-// toast host, written once so their look cannot drift between shells.
+// The two pieces the boot (renderer/boot.tsx) mounts around the app:
+// the top-level error boundary's fallback and the toast host, written
+// once so their look cannot drift between shells.
 import type { FallbackProps } from "react-error-boundary";
 import { Toaster } from "sonner";
 import { ErrorFallback } from "@/components/ErrorFallback";

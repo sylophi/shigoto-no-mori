@@ -5,7 +5,10 @@ import { SettingsForm } from "./SettingsForm";
 import { SettingsSkeleton } from "./SettingsSkeleton";
 
 // The page picks its sections from the app sidebar: while this route is
-// open, Sidebar renders SettingsSidebarNav in place of the project tree.
+// open, the sidebar (desktop and web alike) renders SettingsSidebarNav
+// in place of the project tree. A hostless client has no local device
+// config (useGlobalConfig never reads one there), so the form seeds the
+// local sections from defaults it never shows.
 export function Settings() {
   const { data: config, isLoading } = useGlobalConfig();
   const { data: clientConfig, isLoading: isClientLoading } = useClientConfig();

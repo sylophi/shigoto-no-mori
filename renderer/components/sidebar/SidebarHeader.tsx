@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { hasLocalHost } from "@/lib/localHost";
 import { cn, dragRegion } from "@/lib/utils";
 
 // Dev builds mark the title so a stray window is never mistaken for the
@@ -9,23 +10,16 @@ type DevAffordance = {
   onRevealProd: () => void;
 };
 
-interface SidebarHeaderProps {
-  // False for the web shell: a browser tab has no title-bar drag region
-  // and no traffic lights to clear.
-  windowChrome?: boolean;
-  // A static build marker ("web") sharing the corner slot with the dev
-  // sticker. A dev web build carries both: they answer different
-  // questions ("which shell" vs "which build").
-  badge?: string;
-}
+// The desktop window has a title-bar drag region and traffic lights to
+// clear. A browser tab has neither, and wears a static "web" marker in
+// the corner slot beside the dev sticker (a dev web build carries both:
+// they answer different questions, "which shell" vs "which build").
+const badge = hasLocalHost ? undefined : "web";
 
 // Both headers always render; `doubutsu-only` / `v1-only` pick which
 // shows. A JS branch on the theme would fork this component per theme
 // and be invisible to `pnpm theme:check`.
-export function SidebarHeader({
-  windowChrome = true,
-  badge,
-}: SidebarHeaderProps) {
+export function SidebarHeader() {
   // A client fact off the preload bridge, not runtime.info: the badge
   // marks this build, never the host it talks to.
   const isDev = window.api.isDev;
@@ -37,20 +31,13 @@ export function SidebarHeader({
   };
   return (
     <>
-      <DoubutsuBrandHeader {...dev} windowChrome={windowChrome} badge={badge} />
-      <DefaultSidebarHeader
-        {...dev}
-        windowChrome={windowChrome}
-        badge={badge}
-      />
+      <DoubutsuBrandHeader {...dev} />
+      <DefaultSidebarHeader {...dev} />
     </>
   );
 }
 
-type ThemeHeaderProps = DevAffordance & {
-  windowChrome: boolean;
-  badge: string | undefined;
-};
+type ThemeHeaderProps = DevAffordance;
 
 // Both doubutsu corner stickers are the same fat little pill, slapped
 // on at the same angle. The fill is what tells them apart.
@@ -61,17 +48,12 @@ const STICKER =
 // sidebar, with 仕事の森 as the hero and a giant 森 watermark bleeding
 // off the corner. Cream-on-mint gives the pill a calm-card-on-shelf
 // feel against the leaf-patterned sidebar.
-function DoubutsuBrandHeader({
-  showDevStyle,
-  onRevealProd,
-  windowChrome,
-  badge,
-}: ThemeHeaderProps) {
+function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
   return (
     <>
       {/* Draggable spacer reserves the macOS traffic-light area so the
           pill below doesn't get overlapped by the window controls. */}
-      {windowChrome && (
+      {hasLocalHost && (
         <div
           className="doubutsu-only h-10 shrink-0"
           style={dragRegion("drag")}
@@ -80,7 +62,7 @@ function DoubutsuBrandHeader({
       <div
         className={cn(
           "doubutsu-only relative mx-3 mb-2 overflow-hidden rounded-2xl bg-card px-5 pt-4 pb-5",
-          !windowChrome && "mt-3",
+          !hasLocalHost && "mt-3",
         )}
       >
         {/* Dev swaps the hero's near-black ink for leaf green -- loud
@@ -153,8 +135,6 @@ const HEADER_CHIP =
 function DefaultSidebarHeader({
   showDevStyle,
   onRevealProd,
-  windowChrome,
-  badge,
 }: ThemeHeaderProps) {
   return (
     <div
@@ -163,9 +143,9 @@ function DefaultSidebarHeader({
       // drops both.
       className={cn(
         "v1-only flex h-[52px] items-center gap-2",
-        windowChrome ? "px-3 pl-[92px]" : "px-4",
+        hasLocalHost ? "px-3 pl-[92px]" : "px-4",
       )}
-      style={windowChrome ? dragRegion("drag") : undefined}
+      style={hasLocalHost ? dragRegion("drag") : undefined}
     >
       <div className="min-w-0 flex-1 truncate text-[13px] font-semibold tracking-tight">
         Shigoto no Mori

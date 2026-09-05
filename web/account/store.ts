@@ -19,7 +19,7 @@ import {
   type KeyValueStorage,
 } from "../lib/kvStorage";
 
-// Exported for the cross-tab storage listener (web/bridge/install.ts).
+// Exported for the cross-tab storage listener (web/preload.ts).
 export const ACCOUNT_KEY = "sm.web.account";
 
 // available:false means the core never calls encrypt or decrypt on the

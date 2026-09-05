@@ -1,4 +1,4 @@
-// Durable proof for the web client's window.api bridge (web/bridge/).
+// Durable proof for the web client's window.api bridge (web/ipc/).
 // The factory takes every platform fact through injected deps, which is
 // what lets this run headlessly under node 22: an in-memory
 // localStorage shim, a recording fetch, and no DOM.
@@ -17,20 +17,18 @@
 // globalConfig.writeDeviceSettings) keep rejecting as mutating-rejects,
 // the preflight grant read answers the structural granted:false rather
 // than a fabricated grant, shell.openExternal reaches
-// the injected opener, and the unconfigured/origin-blocked access
-// states are typed and terminal rather than a supervisor retry loop.
+// the injected opener, an unconfigured build keeps the socket stopped,
+// and a device hub refusal blocks the supervisor (terminal, no retry
+// loop) the way it does on the desktop.
 //
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "web:bridge:check".
 import assert from "node:assert/strict";
 import { buildApi } from "@shared/ipc/client";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { createWebBridge } from "../web/bridge/createWebBridge.ts";
+import { createWebBridge } from "../web/ipc/register.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
-import {
-  NO_STRUCTURAL_STUB,
-  stubValueFor,
-} from "../web/bridge/stubDefaults.ts";
+import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
 import { delay, fakeSessionJwt, makeProof, waitFor } from "./lib/checkKit.mjs";
 
 // ---- shims and fixtures ----
@@ -436,7 +434,7 @@ async function main() {
   );
 
   await check(
-    "unconfigured: status reports configured false, enroll rejects, and the hub refresh yields the typed state with a stopped socket",
+    "unconfigured: status reports configured false, enroll rejects, and the hub refresh leaves the socket stopped",
     async (track) => {
       const bridge = createWebBridge(makeDeps({ env: {} }));
       track(() => bridge.stop());
@@ -448,7 +446,6 @@ async function main() {
         /not configured/,
       );
       await bridge.refreshHub();
-      assert.deepEqual(bridge.webAccess.get(), { kind: "unconfigured" });
       const hub = await bridge.api.hub.status();
       assert.notEqual(hub.socket.phase, "connecting");
       assert.notEqual(hub.socket.phase, "backoff");
@@ -457,7 +454,7 @@ async function main() {
   );
 
   await check(
-    "refused: a hub 403 on the ticket mint yields the typed blocked state and stops the supervisor after one mint, no retry loop",
+    "refused: a hub 401 on the ticket mint (a credential it no longer honors) blocks the supervisor after one mint with the hub's message, no retry loop",
     async (track) => {
       const localStorage = memoryStorage();
       localStorage.setItem("sm.web.account", STORED_ENVELOPE);
@@ -466,24 +463,24 @@ async function main() {
         const url = String(input);
         if (url === `${HUB_URL}/tickets`) {
           mints += 1;
-          return jsonResponse(403, { error: "malformed ticket" });
+          return jsonResponse(401, { error: "invalid device credential" });
         }
         throw new Error(`unexpected fetch in blocked check: ${url}`);
       };
       const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
       track(() => bridge.stop());
       await bridge.refreshHub();
+      const socket = async () => (await bridge.api.hub.status()).socket;
       await waitFor(
-        () => bridge.webAccess.get().kind === "blocked",
-        "the blocked access state",
+        async () => (await socket()).phase === "blocked",
+        "the blocked socket phase",
       );
-      assert.match(bridge.webAccess.get().message, /malformed ticket/);
+      assert.match((await socket()).message, /invalid device credential/);
       // Longer than the supervisor's first backoff rung: a retry loop
       // would have minted again by now.
       await delay(1_300);
       assert.equal(mints, 1, "the blocked deployment was redialed");
-      const hub = await bridge.api.hub.status();
-      assert.equal(hub.socket.phase, "stopped");
+      assert.equal((await socket()).phase, "blocked");
     },
   );
 

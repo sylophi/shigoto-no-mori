@@ -12,7 +12,7 @@ Two flavors:
   (port 5191). Mounts the desktop renderer (`renderer/App.tsx`), with
   the lab page posing as "Studio Mac" over a local forest.
 - **Web shell**: `pnpm exec vite --config vite.weblab.config.ts`
-  (port 5192). Mounts the real web tree (`web/app/boot`). The page
+  (port 5192). Mounts the real web boot (`web/boot`). The page
   poses as an enrolled browser device, and every machine forest
   (Studio Mac included) is a peer.
 

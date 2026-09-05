@@ -47,7 +47,7 @@ const COMMAND_ACCESS_CHANGED = remoteAccessContract.calls.commandAccessChanged;
 
 // Boot wiring: subscribe once for the life of the window, never
 // unsubscribed on purpose, exactly like the other boot-scope
-// subscriptions. Both boots (renderer/index.tsx, web/app/boot.tsx)
+// subscriptions. Both boots (renderer/boot.tsx, one for both shells)
 // pass their own query client.
 export function startRemoteHostWatch(queryClient: QueryClient): void {
   window.api.hub.onPeerPush(({ deviceId, channel, payload }) => {

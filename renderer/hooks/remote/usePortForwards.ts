@@ -22,11 +22,12 @@ import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { hasLocalHost } from "@/lib/localHost";
 
 // Forwarding binds a real local TCP listener, which only the app can do
 // -- the capability gate for every surface that offers a forward, kept
 // here so the mechanism and its precondition travel together.
-export const canForwardPorts = window.api.isElectron;
+export const canForwardPorts = hasLocalHost;
 
 // The engine broadcasts on every forward/conn change, so conn counts and
 // engine-side teardowns (peer offline) render live. It also fires for

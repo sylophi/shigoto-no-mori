@@ -4,6 +4,7 @@
 // since the footer has room to say what they do. Renders nothing unless the caller holds command access, the
 // branch is real, and a local project shares the repo identity (the
 // handler re-verifies that last one).
+import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { type ReactNode, useState } from "react";
 import { ArrowDownToLine, Loader2, RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
@@ -128,7 +129,7 @@ function BringButton(props: LandingProps) {
 // the gateway live in main, and the web loopback refuses the mutation.
 function MirrorButton(props: LandingProps) {
   const mirror = useStartMirror(props);
-  if (!window.api.isElectron) return null;
+  if (!canForwardPorts) return null;
   return (
     <ActionButton
       icon={<RefreshCw />}

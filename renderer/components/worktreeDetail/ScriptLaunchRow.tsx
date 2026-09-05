@@ -1,12 +1,11 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePackageScriptSort } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
-import { slotToParam } from "@/store/scriptRuns";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
 import { sortEntries } from "./scripts/sortPackageScripts";
 
@@ -149,25 +148,19 @@ function ScriptLaunchButton({
   name: string;
   command: string;
 }) {
-  const navigate = useNavigate();
-  const { state, busy, start, stop } = useScriptRunner(worktree, {
-    kind: "package",
-    name,
-  });
+  const { toScript } = useWorktreeNav();
+  const slot = { kind: "package", name } as const;
+  const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
+    worktree,
+    slot,
+  );
   const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
 
   // Cmd-click detours to the script's console instead of toggling the
   // run -- the modifier the tooltip advertises.
   const handleClick = (e: React.MouseEvent) => {
     if (e.metaKey) {
-      void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-        params: {
-          projectId: worktree.projectId,
-          worktreeId: worktree.id,
-          scriptKey: slotToParam({ kind: "package", name }),
-        },
-      });
+      toScript(worktree.projectId, worktree.id, slot);
       return;
     }
     (busy ? stop : start)();
@@ -177,10 +170,12 @@ function ScriptLaunchButton({
     <ScriptPill
       name={name}
       busy={busy}
-      disabled={state.cancelling}
+      disabled={state.cancelling || !canRun}
       onClick={handleClick}
       aria-label={actionLabel}
-      title={`${actionLabel}\n${command}\n⌘click to view output`}
+      title={
+        disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`
+      }
     />
   );
 }

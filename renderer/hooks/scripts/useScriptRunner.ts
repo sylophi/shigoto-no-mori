@@ -1,13 +1,14 @@
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import {
   scriptKey,
-  scriptRuns,
   type ScriptKey,
   type ScriptRunState,
   type ScriptSlot,
-  useScriptRunState,
 } from "@/store/scriptRuns";
 import type { ScriptName, Worktree } from "@shared/schemas";
+import { useScriptRuns, useScriptRunState } from "./useScriptRuns";
 
 type NonPackageSlot =
   | { kind: "setup" }
@@ -26,47 +27,49 @@ export interface ScriptRunner {
   key: ScriptKey;
   state: ScriptRunState;
   busy: boolean;
-  // False under a remote scope: the run IPC and the output stream are
-  // this machine's, so a run there cannot be dispatched or watched yet.
+  // Whether a run can be dispatched from here. A run is a command, so
+  // on a peer it waits for that device's grant. Locally always true.
   // `disabledReason` is the title the UI shows on the dead affordance.
   canRun: boolean;
   disabledReason: string | undefined;
   start: () => void;
   stop: () => void;
+  // Drops a finished run's log and state (a no-op while it runs).
+  clear: () => void;
 }
 
-const REMOTE_RUNS_REASON = "Remote script runs stream back in a later update";
-
 // Bundles the per-script run state with the start/stop dispatch tied
-// to the correct IPC (lifecycle vs package). Lets row/console UIs
-// stay one-liners.
+// to the correct IPC (lifecycle vs package), on whichever device the
+// host scope names: the run is dispatched over that device's api and
+// its output streams back into that device's store. Lets row/console
+// UIs stay one-liners.
 export function useScriptRunner(
   worktree: Worktree,
   slot: ScriptSlot,
 ): ScriptRunner {
-  // The scope defaults to the local device with no provider mounted, so
-  // every local caller keeps running exactly as before.
-  const { remote } = useHostScope();
+  const { api } = useHostScope();
+  const store = useScriptRuns();
+  const { canCommand: canRun } = useCommandAccess();
   const key = scriptKey(worktree.projectId, worktree.id, slot);
   const state = useScriptRunState(key);
   const busy = state.status === "starting" || state.status === "running";
 
   const start = () => {
-    if (remote) return;
-    void scriptRuns
+    if (!canRun) return;
+    void store
       .run({
         key,
         worktreeId: worktree.id,
         slot,
         runner: () => {
           if (slot.kind === "package") {
-            return window.api.packageScripts.run({
+            return api.packageScripts.run({
               projectId: worktree.projectId,
               worktreeId: worktree.id,
               scriptName: slot.name,
             });
           }
-          return window.api.scripts.run({
+          return api.scripts.run({
             projectId: worktree.projectId,
             worktreeId: worktree.id,
             script: slotToScriptName(slot),
@@ -79,16 +82,19 @@ export function useScriptRunner(
   };
 
   const stop = () => {
-    void scriptRuns.cancel(key);
+    void store.cancel(key);
   };
+
+  const clear = () => store.clear(key);
 
   return {
     key,
     state,
     busy,
-    canRun: !remote,
-    disabledReason: remote ? REMOTE_RUNS_REASON : undefined,
+    canRun,
+    disabledReason: canRun ? undefined : peerReadOnlyNote(),
     start,
     stop,
+    clear,
   };
 }

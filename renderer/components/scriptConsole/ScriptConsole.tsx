@@ -1,17 +1,23 @@
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { DiffNotFound } from "@/components/diff/DiffNotFound";
 import { WorktreeMissing } from "@/components/diff/WorktreeMissing";
+import {
+  useScopedWorktreeParams,
+  useWorktreeNav,
+} from "@/hooks/worktrees/useWorktreeNav";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { paramToSlot } from "@/store/scriptRuns";
 import { ScriptConsoleInner } from "./ScriptConsoleInner";
 
-const route = getRouteApi(
-  "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-);
-
+// A script's console. Serves both the local route and its
+// /devices/$deviceId twin: the worktree list, the run store behind the
+// terminal and the run's PTY all come from the surrounding host scope.
 export function ScriptConsole() {
-  const { projectId, worktreeId, scriptKey: rawKey } = route.useParams();
-  const navigate = useNavigate();
+  const {
+    projectId,
+    worktreeId,
+    scriptKey: rawKey,
+  } = useScopedWorktreeParams();
+  const { toWorktree } = useWorktreeNav();
   const {
     data: worktrees = [],
     isPending,
@@ -21,11 +27,7 @@ export function ScriptConsole() {
   const worktree = worktrees.find((w) => w.id === worktreeId);
   const slot = paramToSlot(rawKey);
 
-  const goBack = () =>
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId",
-      params: { projectId, worktreeId },
-    });
+  const goBack = () => toWorktree(projectId, worktreeId);
 
   if (!worktree) {
     return (

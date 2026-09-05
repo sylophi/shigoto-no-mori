@@ -1,6 +1,7 @@
 import { createExternalStore } from "@/store/externalStore";
 import { useSyncExternalStore } from "react";
 import type { RemoteDevice } from "@/lib/remote/devices";
+import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 
 // The Settings page's navigation lives in the app sidebar (the project
@@ -33,6 +34,30 @@ export function selectSettingsTab(tab: string): void {
   selectedTab.publish(tab);
 }
 
+// The raw selection, for the shell that reacts to a pick (the narrow
+// layout's sheet closes on one). The resolved tab is the hook below.
+export function useSelectedSettingsTab(): string {
+  return useSyncExternalStore(
+    selectedTab.subscribe,
+    selectedTab.get,
+    selectedTab.get,
+  );
+}
+
+// Launch tools and this device describe the machine the window runs
+// on. A hostless client (the web shell) has no such machine, so it
+// offers neither and falls back to Appearance where the desktop falls
+// back to this device.
+const FALLBACK_TAB = hasLocalHost ? LOCAL_DEVICE_TAB : APPEARANCE_TAB;
+
+// One machine on the account means no roster to place it in: the
+// Devices group reads as this device's settings rather than a list of
+// one, and the presence dot (a fact about peers) stays off. Never true
+// on a hostless client, whose roster is peers only.
+export function isSolo(devices: readonly RemoteDevice[]): boolean {
+  return hasLocalHost && devices.length === 0;
+}
+
 // The selection resolved against the live device list, for the
 // sidebar's highlight and the form's panel alike. A remembered peer
 // that has left the registry (revoked, or the account signed out)
@@ -44,20 +69,16 @@ export function useActiveSettingsTab(devices: readonly RemoteDevice[]): {
   // The peer the active tab names, undefined for every other tab.
   peer: RemoteDevice | undefined;
 } {
-  const selected = useSyncExternalStore(
-    selectedTab.subscribe,
-    selectedTab.get,
-    selectedTab.get,
-  );
+  const selected = useSelectedSettingsTab();
   const peer = devices.find(
     (device) => deviceTab(device.deviceId) === selected,
   );
   const known =
     selected === APPEARANCE_TAB ||
-    selected === LAUNCH_TAB ||
-    selected === LOCAL_DEVICE_TAB ||
+    (hasLocalHost &&
+      (selected === LAUNCH_TAB || selected === LOCAL_DEVICE_TAB)) ||
     peer !== undefined;
-  return { activeTab: known ? selected : LOCAL_DEVICE_TAB, peer };
+  return { activeTab: known ? selected : FALLBACK_TAB, peer };
 }
 
 // The sidebar's "update available" dot leads here, and the button it

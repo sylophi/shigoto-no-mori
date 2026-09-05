@@ -1,13 +1,15 @@
-// Browser-side singleton install of the web bridge. This is the one
-// module that reads the real browser globals and Vite build facts; the
-// factory itself stays injectable for the headless check. The
-// window.api assignment doubles as the compile-time proof that the web
-// bridge satisfies the preload's RendererApi surface, since window.api
-// is declared with that exact type (renderer/window.d.ts).
-import { viteEnv } from "../account/config";
-import { browserHintsOf } from "../account/deviceName";
-import { ACCOUNT_KEY } from "../account/store";
-import { createWebBridge, type WebBridge } from "./createWebBridge";
+// The browser's preload: the twin of main/preload.ts. Installs the web
+// bridge as window.api once, reading the real browser globals and Vite
+// build facts (the factory itself stays injectable for the headless
+// check), and wires the page-level events the bridge cannot see from
+// inside (other tabs, the network coming back). The window.api
+// assignment doubles as the compile-time proof that the web bridge
+// satisfies the preload's RendererApi surface, since window.api is
+// declared with that exact type (renderer/window.d.ts).
+import { viteEnv } from "./account/config";
+import { browserHintsOf } from "./account/deviceName";
+import { ACCOUNT_KEY } from "./account/store";
+import { createWebBridge, type WebBridge } from "./ipc/register";
 
 let installed: WebBridge | null = null;
 
@@ -53,15 +55,4 @@ export function installWebBridge(): WebBridge {
   });
   window.addEventListener("online", () => bridge.probe());
   return bridge;
-}
-
-// The installed bridge for view code (the devices page's revoke and
-// access state). Throws rather than lazily installing so a missed
-// install order (bridge after app modules) fails loudly at the first
-// use instead of silently double-building.
-export function webBridge(): WebBridge {
-  if (installed === null) {
-    throw new Error("web bridge not installed, call installWebBridge first");
-  }
-  return installed;
 }

@@ -1,8 +1,8 @@
-import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Play, Square } from "lucide-react";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
-import { slotToParam, type ScriptSlot } from "@/store/scriptRuns";
+import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
 
@@ -14,9 +14,9 @@ interface ScriptRowProps {
 }
 
 export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
-  const navigate = useNavigate();
-  // The runner also says whether a run can happen at all here (it
-  // can't under a remote scope) and why.
+  const { toScript } = useWorktreeNav();
+  // The runner also says whether a run can be dispatched from here (a
+  // peer that has not granted control refuses commands) and why.
   const { state, busy, canRun, disabledReason, start, stop } = useScriptRunner(
     worktree,
     slot,
@@ -25,15 +25,7 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
   // right-side "view output" affordance only appears once a run lands.
   const hasHistory = state.status !== "idle";
 
-  const openConsole = () =>
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-      params: {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        scriptKey: slotToParam(slot),
-      },
-    });
+  const openConsole = () => toScript(worktree.projectId, worktree.id, slot);
 
   const actionLabel = busy ? `Stop ${label}` : `Run ${label}`;
 

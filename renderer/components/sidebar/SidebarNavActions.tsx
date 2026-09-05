@@ -1,24 +1,20 @@
-// The footer's page-nav cluster (Devices, Settings), shared by the
-// desktop footer and the web sidebar's so the two shells' right edges
-// cannot drift. Everything shell-specific arrives as props: the web
-// has no updater, and each shell states its own Devices policy.
+// The footer's page-nav cluster (Devices, Settings). Devices is always
+// reachable: unconfigured or signed out, the page itself explains the
+// state (AccountSection) instead of the button hiding. A hostless
+// client has no updater to flag.
 import { MonitorSmartphone, Settings as SettingsIcon } from "lucide-react";
 import { NavIconButton } from "./NavIconButton";
 
 export function SidebarNavActions({
-  devicesEnabled,
   updateReady = false,
 }: {
-  devicesEnabled: boolean;
   updateReady?: boolean;
 }) {
   return (
     <>
-      {devicesEnabled && (
-        <NavIconButton to="/devices" tip="Devices" label="Devices">
-          <MonitorSmartphone className="size-3.5" />
-        </NavIconButton>
-      )}
+      <NavIconButton to="/devices" tip="Devices" label="Devices">
+        <MonitorSmartphone className="size-3.5" />
+      </NavIconButton>
       <NavIconButton
         to="/settings"
         tip={updateReady ? "Settings — update available" : "Settings"}

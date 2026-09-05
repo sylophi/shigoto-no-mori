@@ -12,7 +12,7 @@ import type { ClerkProviderProps } from "@clerk/react";
 import { clerkAppearance } from "@/lib/clerkAppearance";
 import { ClerkAccountSync } from "./ClerkAccountSync";
 
-type ProviderComponent = ComponentType<{
+export type ClerkProviderComponent = ComponentType<{
   publishableKey: string;
   appearance: ClerkProviderProps["appearance"];
   children: ReactNode;
@@ -22,7 +22,7 @@ export function ClerkGate({
   Provider,
   children,
 }: {
-  Provider: ProviderComponent;
+  Provider: ClerkProviderComponent;
   children: ReactNode;
 }) {
   const publishableKey = window.api.clerkPublishableKey;

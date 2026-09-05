@@ -9,6 +9,18 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { UpdaterStatusLine } from "./UpdaterStatusLine";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
+// This build's version and commit, the way every version line here
+// spells it: the local device's section on the desktop, the client
+// line on a hostless shell.
+export function BuildVersionLine() {
+  return (
+    <>
+      {__APP_VERSION__}{" "}
+      <span className="text-muted-foreground">({__APP_COMMIT__})</span>
+    </>
+  );
+}
+
 // The Version section of a device: the build it runs and the update
 // action. One shape and one set of words on every device section. Only
 // the updater it talks to differs, through the surrounding host scope
@@ -25,10 +37,8 @@ export function VersionSection({
 }) {
   const { remote } = useHostScope();
   // Checking and installing are commands, so on a peer both wait for
-  // its grant. Locally always granted, and while the verdict is still
-  // in flight assume granted rather than flash a disabled button.
-  const { granted, isLoading } = useCommandAccess();
-  const canCommand = granted || isLoading;
+  // its grant.
+  const { canCommand } = useCommandAccess();
   const { state, check, install, isError, refetch } = useUpdater();
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   const kind = state?.kind ?? "idle";
