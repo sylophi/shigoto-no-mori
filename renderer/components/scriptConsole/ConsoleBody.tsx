@@ -49,7 +49,9 @@ export function ConsoleBody({
           onClick={onClear}
           aria-label="Clear log"
           title="Clear log"
-          className="absolute top-2 right-3 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          // Above xterm's hover-revealed scrollbar (z-index 11), which
+          // occupies the same corner once the output overflows.
+          className="absolute top-2 right-3 z-20 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           <Trash2 className="size-3.5" />
         </button>
@@ -194,7 +196,10 @@ function ConsoleTerminal({
   // override (xterm.css is unlayered, so it would otherwise win) lets
   // the console's background through instead.
   return (
-    <div className="h-full w-full px-4 py-3 font-mono text-xs">
+    <div
+      data-slot="script-console"
+      className="h-full w-full px-4 py-3 font-mono text-xs"
+    >
       <div
         ref={hostRef}
         className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"

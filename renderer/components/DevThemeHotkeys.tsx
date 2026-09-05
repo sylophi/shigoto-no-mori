@@ -13,6 +13,19 @@ import { useTheme } from "@/hooks/ui/useTheme";
 // so nothing is written to config.json; a window reload also resets.
 // Bare Ctrl (not Cmd) keeps clear of the real menu accelerators.
 // e.code keeps the physical key stable across keyboard layouts.
+//
+// The listener runs in the capture phase so it can claim a key before
+// the script console's terminal does: there Ctrl+D is EOF, which dev
+// servers (vite, electron-forge) read as "terminal closed" and exit on,
+// so a theme toggle typed into a focused console would silently take
+// the run down.
+
+function isScriptConsoleInput(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest('[data-slot="script-console"]') !== null
+  );
+}
 export function DevThemeHotkeys() {
   const { data: runtime } = useRuntimeInfo();
   const isDev = runtime?.isDev ?? false;
@@ -26,22 +39,29 @@ export function DevThemeHotkeys() {
         return;
       }
       // Ctrl+T/D/R are Emacs-style edit bindings inside macOS text
-      // fields (transpose, delete-forward, ...) — let those win.
-      if (isEditableTarget(e.target)) return;
-      if (e.code === "KeyT") {
-        e.preventDefault();
-        setTheme(resolved === "dark" ? "light" : "dark");
-      } else if (e.code === "KeyD") {
-        e.preventDefault();
-        setDoubutsu(!doubutsuApplied);
-      } else if (e.code === "KeyR") {
-        e.preventDefault();
-        setTheme(null);
-        setDoubutsu(null);
+      // fields (transpose, delete-forward, ...) — let those win. The
+      // console's terminal is the exception (see above).
+      if (isEditableTarget(e.target) && !isScriptConsoleInput(e.target)) {
+        return;
       }
+      let action: (() => void) | null = null;
+      if (e.code === "KeyT") {
+        action = () => setTheme(resolved === "dark" ? "light" : "dark");
+      } else if (e.code === "KeyD") {
+        action = () => setDoubutsu(!doubutsuApplied);
+      } else if (e.code === "KeyR") {
+        action = () => {
+          setTheme(null);
+          setDoubutsu(null);
+        };
+      }
+      if (!action) return;
+      e.preventDefault();
+      e.stopPropagation();
+      action();
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [isDev, resolved, doubutsuApplied, setTheme, setDoubutsu]);
 
   return null;
