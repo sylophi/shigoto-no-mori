@@ -1,7 +1,7 @@
 # sm device hub
 
 Cloudflare Worker that relays frames between a Clerk account's sm
-devices when they are not on the same LAN (v2 step 4). Every device
+devices when they are not on the same LAN. Every device
 holds one outbound websocket to its account's `DeviceHub` Durable
 Object, which forwards opaque envelopes between them. No sm logic runs
 here: the Worker verifies Clerk tokens, keeps a device registry in D1,
@@ -132,7 +132,7 @@ anything here.
 ### Per-device tunnels (needed for devices off the LAN)
 
 With the tunnel env configured, `POST /tunnel` provisions one named
-Cloudflare Tunnel per device (v2 step 10, slice B): the Worker creates
+Cloudflare Tunnel per device: the Worker creates
 or reuses the tunnel, points its remotely managed ingress at the
 device's loopback direct listener, writes a proxied CNAME under
 `TUNNEL_DOMAIN`, and returns the connector run token the app hands to

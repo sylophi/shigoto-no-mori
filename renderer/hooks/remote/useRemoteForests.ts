@@ -77,13 +77,14 @@ export interface RemoteForests {
   loading: boolean;
 }
 
-const CALM_REFETCH = { staleTime: 30_000 };
+// Calm by default: the always-mounted sidebar keeps the forests fresh,
+// so a page that mounts a second observer must not re-list every peer.
+const CALM_REFETCH = { staleTime: 30_000, refetchOnMount: false };
 
 export interface RemoteForestsOptions {
-  // False for a consumer whose copy is decorative (the new-worktree
-  // device picker): mounting a fresh observer on a stale key would
-  // otherwise kick a full re-listing of every peer's forest on page
-  // open, for data the always-mounted sidebar keeps fresh anyway.
+  // True for the sidebar itself, the one observer that keeps the
+  // forests fresh: on a shell where it can unmount (the web sheet at
+  // phone width) its remount must re-list.
   refetchOnMount?: boolean;
 }
 

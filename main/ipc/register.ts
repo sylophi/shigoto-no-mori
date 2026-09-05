@@ -5,6 +5,8 @@
 // main/. Anything else that needs to push to the renderer should go
 // through `broadcast` / `broadcastAll` below so the payload runs
 // through the contract's payload schema before it crosses the bridge.
+import { bundledBinaryPath } from "../electron/bundledBinary";
+import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
@@ -132,7 +134,7 @@ const electronServer: ServerTransport = {
 // listener. Listening itself is gated in refreshSocketHost below.
 const wsServer = createWsServerBinding();
 
-// The direct data plane (v2 step 10, slice A): a SECOND ws listener
+// The direct data plane: a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
 // minted by direct:connectInfo over the device hub, and dispatch gates
 // mutating channels on the host's live command-access switch
@@ -147,7 +149,7 @@ const directWsServer = createWsServerBinding({
   isCommandGranted: acceptsPeerCommands,
 });
 
-// The tunnel endpoint (v2 step 10, slice B): a supervised cloudflared
+// The tunnel endpoint: a supervised cloudflared
 // child fronting the direct listener's loopback port through this
 // device's named Cloudflare tunnel. Reconciled from refreshDirectHost
 // so it follows the listener exactly (a new ephemeral port
@@ -165,14 +167,12 @@ const tunnelRunner = createCloudflaredRunner({
   // dead for the PATH case.
   resolveBinary: async () => {
     const config = await readGlobalConfig();
-    // The connector the app ships (shared/cloudflaredDist.mts):
-    // Resources/ when packaged, dist-cloudflared/ in dev (fetched by
-    // `pnpm start`), the same two homes the sm CLI has
-    // (main/electron/cliRunner.ts).
-    const bundled = app.isPackaged
-      ? join(process.resourcesPath, CLOUDFLARED_BINARY_NAME)
-      : join(app.getAppPath(), CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME);
-    return resolveCloudflaredBinary(config.cloudflaredPath, bundled);
+    // The connector the app ships (shared/cloudflaredDist.mts,
+    // fetched by `pnpm start` in dev).
+    return resolveCloudflaredBinary(
+      config.cloudflaredPath,
+      bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
+    );
   },
   provision: (port) => provisionDeviceTunnel(port),
   // Orphan-reap bookkeeping: the live child's pid, recorded so a
@@ -244,7 +244,7 @@ const hubServer = createHubConnection({
 
 // The remote wires (LAN socket, direct listener), looped wherever a
 // channel or broadcast must reach them all so a new wire lands in one
-// place. The device hub is deliberately NOT here (v2 step 10, slice C):
+// place. The device hub is deliberately NOT here:
 // it is orchestration only, its wire serves nothing but the broker
 // surface registered below, and host broadcasts and viewer pings reach
 // remote peers over their direct sessions alone.
@@ -306,7 +306,6 @@ const serverFor = (module: ContractModule): ServerTransport =>
 // watcher fires for the same change anyway, viewer-side invalidation
 // is idempotent, so the overlap is harmless.
 const MUTATION_PING_MS = 300;
-let mutationPingTimer: NodeJS.Timeout | null = null;
 let mutationPingLocal = false;
 // Followers of "a host mutation settled", on the same coalesced
 // cadence as the ping: the git-directory watcher tracks the project
@@ -317,26 +316,25 @@ const mutationSettledListeners = new Set<() => void>();
 export function onHostMutationSettled(listener: () => void): void {
   mutationSettledListeners.add(listener);
 }
+const flushMutationPing = coalesce(() => {
+  const pingLocal = mutationPingLocal;
+  mutationPingLocal = false;
+  // resolveBroadcast runs the (void) payload through the contract
+  // schema, exactly like the composite broadcastAll path.
+  // externalChange is remote:true by contract, and must stay that
+  // way: this path pushes to the remote wires unconditionally.
+  const { channel, parsed } = resolveBroadcast(
+    gitContract,
+    "externalChange",
+    undefined,
+  );
+  for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
+  if (pingLocal) electronServer.broadcastAll(channel, parsed);
+  for (const listener of mutationSettledListeners) listener();
+}, MUTATION_PING_MS);
 function pingViewers(ctx: HandlerContext): void {
   if (isRemoteCaller(ctx)) mutationPingLocal = true;
-  if (mutationPingTimer !== null) return;
-  mutationPingTimer = setTimeout(() => {
-    mutationPingTimer = null;
-    const pingLocal = mutationPingLocal;
-    mutationPingLocal = false;
-    // resolveBroadcast runs the (void) payload through the contract
-    // schema, exactly like the composite broadcastAll path.
-    // externalChange is remote:true by contract, and must stay that
-    // way: this path pushes to the remote wires unconditionally.
-    const { channel, parsed } = resolveBroadcast(
-      gitContract,
-      "externalChange",
-      undefined,
-    );
-    for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
-    if (pingLocal) electronServer.broadcastAll(channel, parsed);
-    for (const listener of mutationSettledListeners) listener();
-  }, MUTATION_PING_MS);
+  flushMutationPing();
 }
 
 export function registerContract<M extends ContractModule>(
@@ -523,8 +521,7 @@ export async function refreshDirectHost(): Promise<void> {
         deviceId: getDeviceId(),
         appVersion: app.getVersion(),
         accountId: inputs.accountId,
-        // Admit the configured web client origin (v2 step 10, slice
-        // B) so a browser can dial the wss tunnel candidate.
+        // Admit the configured web client origin so a browser can dial the wss tunnel candidate.
         // Undefined means no extra origin, the slice A behavior.
         allowedOrigin: allowedWebOrigin(),
       };
@@ -532,7 +529,7 @@ export async function refreshDirectHost(): Promise<void> {
   } catch (error) {
     console.warn(`[direct] listener refresh failed: ${errorMessageOf(error)}`);
   }
-  // The tunnel follows the listener (v2 step 10, slice B): a running
+  // The tunnel follows the listener: a running
   // listener wants a tunnel fronting its CURRENT ephemeral port (the
   // runner no-ops when nothing changed and re-provisions when the port
   // did), and every condition that stopped the listener stops the
@@ -567,7 +564,7 @@ export const directHandlers = makeDirectHandlers({
   mintTickets: (peerDeviceId, count) => directTickets.mint(peerDeviceId, count),
   isPeerOnline: (peerDeviceId) =>
     hubServer.status().onlineDeviceIds.includes(peerDeviceId),
-  // The tunnel candidate (v2 step 10, slice B), advertised only while
+  // The tunnel candidate, advertised only while
   // the cloudflared child is currently healthy (probed routable).
   tunnelUrl: () => tunnelRunner.tunnelUrl(),
 });

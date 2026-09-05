@@ -7,7 +7,7 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // - missing: nothing at the link path
 // - foreign: something we didn't create; only replaced when an install
 //   passes force (the Settings "Replace and install" consent)
-export const CliStatusSchema = z.object({
+const CliStatusSchema = z.object({
   name: z.string(),
   aliasName: z.string(),
   binDir: z.string(),
@@ -34,7 +34,7 @@ export const ShellHookStateSchema = z.object({
 });
 export type ShellHookState = z.infer<typeof ShellHookStateSchema>;
 
-export const ShellIntegrationStatusSchema = z.object({
+const ShellIntegrationStatusSchema = z.object({
   // The user's login shell when integration supports it, else null
   // (installs target this shell, resolved app-side since a
   // Finder-launched app may not have $SHELL).

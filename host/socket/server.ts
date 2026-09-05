@@ -1,5 +1,5 @@
 // Websocket binding of the shared ServerTransport: the host side of
-// remote hosting (v2 step 3, slice A). Registration and listening are
+// remote hosting. Registration and listening are
 // decoupled on purpose: main/ipc/register.ts records every REMOTE host
 // handler here at boot whether or not the device config ever enables
 // the listener, so flipping the setting later only starts the socket.
@@ -10,14 +10,14 @@
 // caps, failed-auth lockout, backpressure on pushes, and hard
 // termination (not advisory close) on every rejection and shutdown.
 //
-// READ-ONLY WIRE (v2 step 6, slice B): the LAN token has no grant
+// READ-ONLY WIRE: the LAN token has no grant
 // model, so this binding enforces read-only at dispatch, fail-closed:
 // only channels explicitly registered mutating:false are served, and
 // anything else (a mutation, or an untagged channel) is refused with
 // the shared command-refused code before its handler can run. Commands
 // for a remote peer ride the host's command-access switch instead.
 //
-// DIRECT DATA PLANE (v2 step 10, slice A): the same binding, created
+// DIRECT DATA PLANE: the same binding, created
 // with a WsServerTicketAuth, serves a SECOND instance for direct
 // device-to-device data. It differs from the legacy LAN instance in
 // auth (single-use connect tickets bound to the hello deviceId instead
@@ -62,7 +62,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import { toBytes, toText } from "./rawData";
 
-// Ticket-mode auth for the direct data plane (v2 step 10, slice A): a
+// Ticket-mode auth for the direct data plane: a
 // SECOND binding instance serves device-to-device data over direct
 // sockets, brokered by short-lived single-use connect tickets minted
 // over the device hub. Injected at binding creation so this module
@@ -108,8 +108,7 @@ export type WsServerStartOpts = {
   // instead of leaving them live under the new one. The legacy LAN
   // listener has no account and leaves it unset.
   accountId?: string;
-  // Extra exact-match Origin the upgrade gate admits (v2 step 10,
-  // slice B): the configured web client's origin, so a browser dial
+  // Extra exact-match Origin the upgrade gate admits: the configured web client's origin, so a browser dial
   // arriving through the wss tunnel passes. Unset keeps the slice A
   // behavior (origin-less and app-local origins only).
   allowedOrigin?: string;
@@ -144,7 +143,7 @@ export type WsServerBinding = ServerTransport & {
   refresh(resolve: () => Promise<WsServerStartOpts | null>): Promise<void>;
   status(): WsServerStatus;
   // Ticket mode: kill the authed sockets whose peer deviceId is not in
-  // the given roster. Presence scopes the data plane (v2 step 10): the
+  // the given roster. Presence scopes the data plane: the
   // hub brokers membership, so a peer absent from a live roster (a
   // revoked device, an account switch on its side) loses its direct
   // socket within one presence broadcast. The caller must only pass a
@@ -229,7 +228,7 @@ function tokenMatches(given: string, expected: string): boolean {
 // over it, see main/electron/clerk.ts), or a loopback http origin from
 // a locally served web client. Anything else is a drive-by browser
 // page, refused before it can even attempt a hello. The direct
-// listener (v2 step 10, slice B) may additionally admit ONE configured
+// listener may additionally admit ONE configured
 // web-client origin, so the web client can dial wss tunnel URLs: the
 // exact-match `allowedOrigin` arrives through start opts from the same
 // SM_ACCOUNT_WEB_ORIGIN env the app's account layer reads, never

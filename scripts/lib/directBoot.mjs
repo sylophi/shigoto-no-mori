@@ -13,7 +13,8 @@ import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub } from "./hubStub.mjs";
-import { bootDevice, waitFor } from "./hubBoot.mjs";
+import { bootDevice } from "./hubBoot.mjs";
+import { waitFor } from "./checkKit.mjs";
 
 // A REAL ticket-mode listener on an ephemeral loopback port, with its
 // ticket store and a toggleable command-access switch (the host-wide

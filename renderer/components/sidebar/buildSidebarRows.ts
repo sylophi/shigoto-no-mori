@@ -194,8 +194,15 @@ export function buildSidebarRows({
     // Every project renders a header, so "no rows" here only ever means
     // "no projects" -- which the shell already has its own answer for.
     emptyMessage: null,
-    revealKey: (projectId, worktreeId) =>
-      rows.some((r) => r.key === `w:${worktreeId}`)
+    revealKey: (projectId, worktreeId, deviceId) => {
+      // A peer's row is device-qualified (pushRemoteWorktreeRows). It
+      // is absent while its listing is in flight or while the local
+      // group it merged into is folded, and neither reveals anything.
+      if (deviceId !== undefined) {
+        const key = remoteWorktreeKey(deviceId, worktreeId);
+        return rows.some((r) => r.key === key) ? key : null;
+      }
+      return rows.some((r) => r.key === `w:${worktreeId}`)
         ? `w:${worktreeId}`
         : // Only a folded project stands in for its worktree. A missing
           // row in an open project means the listing hasn't landed yet,
@@ -203,7 +210,8 @@ export function buildSidebarRows({
           // and never scroll to the row once it appears.
           collapsed.has(projectId)
           ? headerKeyIfPresent(rows, projectId)
-          : null,
+          : null;
+    },
   };
 }
 
@@ -214,6 +222,11 @@ function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
   return rows.some((r) => r.key === key) ? key : null;
 }
 
+// Device-qualified: the same repo pulled to two machines can carry
+// the same worktree id on both.
+const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
+  `rw:${deviceId}:${worktreeId}`;
+
 function pushRemoteWorktreeRows(
   rows: SidebarRow[],
   item: RemoteForestItem,
@@ -222,9 +235,7 @@ function pushRemoteWorktreeRows(
   for (const worktree of item.worktrees) {
     rows.push({
       kind: "remote-worktree",
-      // Device-qualified: the same repo pulled to two machines can
-      // carry the same worktree id on both.
-      key: `rw:${item.deviceId}:${worktree.id}`,
+      key: remoteWorktreeKey(item.deviceId, worktree.id),
       worktree,
       deviceId: item.deviceId,
       deviceLabel: item.deviceLabel,

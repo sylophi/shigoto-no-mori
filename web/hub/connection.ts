@@ -1,4 +1,4 @@
-// The browser hub connection (v2 step 5a): the shared lifecycle core
+// The browser hub connection: the shared lifecycle core
 // in shared/hub/connection.ts bound to the browser WebSocket global
 // (no node ws), so it runs in a plain browser and, under node 22 (which
 // ships a global WebSocket client), in the headless web:hub:check.

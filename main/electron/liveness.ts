@@ -1,4 +1,4 @@
-// Host liveness (v2 step 4, slice E). One opt-in, `keepReachable` in
+// Host liveness. One opt-in, `keepReachable` in
 // client config, drives two capabilities so a machine the user hosts
 // stays online for the device hub:
 //   1. Launch-at-login, via setLoginItemSettings, so the app starts when
@@ -24,10 +24,7 @@ import {
 import { readClientConfigSync } from "./clientConfig";
 import { accountServiceConfigured } from "../ipc/modules/account";
 import { markRelaunching } from "./relaunch";
-import {
-  shouldRecreateWindow,
-  shouldRelaunchAfterFatal,
-} from "../liveness/rateLimit";
+import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a
@@ -120,9 +117,10 @@ export function attachRenderProcessRecovery(
       );
       return;
     }
-    const { recreate, recent } = shouldRecreateWindow(
+    const { allow: recreate, recent } = decide(
       recentRendererCrashes,
       Date.now(),
+      CRASH_LOOP,
     );
     recentRendererCrashes = recent;
     if (recreate) {
@@ -183,7 +181,7 @@ function consumeRelaunchBudget(now: number): boolean {
     // Missing, unreadable, or corrupt marker: no known recent relaunches.
     // The next successful write re-accumulates from empty.
   }
-  const { relaunch, recent: next } = shouldRelaunchAfterFatal(recent, now);
+  const { allow: relaunch, recent: next } = decide(recent, now, FATAL_RELAUNCH);
   if (!relaunch) return false;
   try {
     // 0o600: the marker lives in userData beside other per-user state and

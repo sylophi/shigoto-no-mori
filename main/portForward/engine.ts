@@ -1,5 +1,5 @@
-// The client half of port forwarding (v2 step 8, slice B, reworked
-// onto byte channels): binds loopback listeners on this machine and
+// The client half of port forwarding (byte
+// channels): binds loopback listeners on this machine and
 // bridges each accepted socket onto a channel of the peer's direct
 // session, opened with forward:open (the host side in
 // host/ipc/modules/forward.ts, the wire rules in

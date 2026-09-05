@@ -1,5 +1,4 @@
-// The on-disk home of this host's command-access grant (v2 step 4,
-// slice D). One switch: whether this machine serves MUTATING calls
+// The on-disk home of this host's command-access grant. One switch: whether this machine serves MUTATING calls
 // from the account's OTHER devices over the direct data plane, scoped
 // to the CURRENT account so signing into a different account never
 // inherits the old account's answer. The account is the trust

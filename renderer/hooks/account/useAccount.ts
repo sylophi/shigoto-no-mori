@@ -1,4 +1,4 @@
-// The renderer's view of the hub account layer (v2 step 4, slice B):
+// The renderer's view of the hub account layer:
 // status, the account's device registry, and the sign-in / sign-out /
 // rename mutations. All client-scoped, so the queries key off the plain
 // "account" prefix (no host sentinel, see queryKeys.ts) and the changed

@@ -7,10 +7,11 @@ import {
   CommitHashSchema,
   CreatePhaseSchema,
   GitRefNameSchema,
+  WorktreeIdSchema,
   WorktreeSchema,
 } from "@shared/schemas";
 
-// Device-sync transfer plumbing (v2 step 7, slice B): git bundles move
+// Device-sync transfer plumbing: git bundles move
 // between devices as chunked, grant-gated invoke responses over the
 // existing device connection. No new wire protocol, no sidecar port:
 // start registers a bundle on the host, chunk streams it out in
@@ -57,7 +58,7 @@ import {
 const BUNDLE_REF_RE =
   /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 
-export const SyncBundleRefSchema = z
+const SyncBundleRefSchema = z
   .string()
   .regex(BUNDLE_REF_RE, { message: "Ref outside the sync allowlist" })
   .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
@@ -75,7 +76,7 @@ export const SyncLandingRefSchema = z
   });
 
 // One `src:dst` for the push direction's unpack on the receiver.
-export const SyncRefspecSchema = z
+const SyncRefspecSchema = z
   .string()
   .max(512)
   .refine(
@@ -97,15 +98,14 @@ export const SyncRefspecSchema = z
 // ones.
 const TransferIdSchema = HexId32Schema;
 
-export const SyncRefTipSchema = z.strictObject({
+const SyncRefTipSchema = z.strictObject({
   ref: SyncBundleRefSchema,
   commit: CommitHashSchema,
 });
-export type SyncRefTip = z.infer<typeof SyncRefTipSchema>;
 
-export const SyncCaptureDirtyPayloadSchema = z.strictObject({
+const SyncCaptureDirtyPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+  worktreeId: WorktreeIdSchema,
 });
 
 // Tip negotiation for the pull orchestration. Load bearing for
@@ -113,7 +113,7 @@ export const SyncCaptureDirtyPayloadSchema = z.strictObject({
 // requested ref whose tip is already covered by a have (and refuses an
 // all-covered bundle outright), so the receiver must learn the tip
 // first and only request the branch when it lacks that commit.
-export const SyncRefTipsPayloadSchema = z.strictObject({
+const SyncRefTipsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   refs: z.array(SyncBundleRefSchema).min(1).max(64),
 });
@@ -125,7 +125,7 @@ export const SyncRefTipsResultSchema = z.strictObject({
   tips: z.array(SyncRefTipSchema),
 });
 
-export const SyncBundleStartPayloadSchema = z.strictObject({
+const SyncBundleStartPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   refs: z.array(SyncBundleRefSchema).min(1).max(64),
   // Tips the receiver already holds, thinning the bundle. Hex-pinned
@@ -133,12 +133,12 @@ export const SyncBundleStartPayloadSchema = z.strictObject({
   haves: z.array(CommitHashSchema).max(256),
 });
 
-export const SyncBundleChunkPayloadSchema = z.strictObject({
+const SyncBundleChunkPayloadSchema = z.strictObject({
   transferId: TransferIdSchema,
   offset: z.number().int().nonnegative(),
 });
 
-export const SyncBundleAbortPayloadSchema = z.strictObject({
+const SyncBundleAbortPayloadSchema = z.strictObject({
   transferId: TransferIdSchema,
 });
 
@@ -146,17 +146,13 @@ export const SyncCaptureDirtyResultSchema = z.strictObject({
   captured: z.boolean(),
   commit: CommitHashSchema.optional(),
 });
-export type SyncCaptureDirtyResult = z.infer<
-  typeof SyncCaptureDirtyResultSchema
->;
 
 export const SyncBundleStartResultSchema = z.strictObject({
   transferId: TransferIdSchema,
   bytes: z.number().int().nonnegative(),
 });
-export type SyncBundleStartResult = z.infer<typeof SyncBundleStartResultSchema>;
 
-export const SyncBundleChunkResultSchema = z.strictObject({
+const SyncBundleChunkResultSchema = z.strictObject({
   dataB64: ChunkB64Schema,
   eof: z.boolean(),
 });
@@ -172,7 +168,7 @@ export const SyncBundleChunkResultSchema = z.strictObject({
 export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
-  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+  sourceWorktreeId: WorktreeIdSchema,
   sourceIdentity: z.string().min(1),
   branch: GitRefNameSchema.refine(
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
@@ -193,8 +189,8 @@ export const SyncPullStepSchema = z.enum([
 ]);
 export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
 
-export const SyncPullProgressSchema = z.strictObject({
-  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+const SyncPullProgressSchema = z.strictObject({
+  sourceWorktreeId: WorktreeIdSchema,
   step: SyncPullStepSchema,
   bytes: z.number().int().nonnegative().optional(),
   totalBytes: z.number().int().nonnegative().optional(),
@@ -220,7 +216,7 @@ export type SyncPullWorktreeResult = z.infer<
 // sides, so the caller learns via sourceRemoved:false with sourceError
 // carrying the stable marker or message ("scripts-running", a
 // cleanup-script failure, a dirty state that did not land here).
-export const SyncTeardownSourceResultSchema = z.strictObject({
+const SyncTeardownSourceResultSchema = z.strictObject({
   sourceRemoved: z.boolean(),
   sourceError: z.string().optional(),
 });
@@ -238,34 +234,34 @@ export type SyncTeardownSourceResult = z.infer<
 // pull direction uses, and names the landing refspecs for the
 // receiver's unpack. Same fail-closed namespaces, same host-minted
 // transfer ids.
-export const SyncPushStartPayloadSchema = z.strictObject({
+const SyncPushStartPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   bytes: z.number().int().nonnegative(),
 });
 
-export const SyncPushStartResultSchema = z.strictObject({
+const SyncPushStartResultSchema = z.strictObject({
   transferId: TransferIdSchema,
 });
 
-export const SyncPushChunkPayloadSchema = z.strictObject({
+const SyncPushChunkPayloadSchema = z.strictObject({
   transferId: TransferIdSchema,
   offset: z.number().int().nonnegative(),
   dataB64: ChunkB64Schema,
 });
 
-export const SyncPushFinishPayloadSchema = z.strictObject({
+const SyncPushFinishPayloadSchema = z.strictObject({
   transferId: TransferIdSchema,
   refspecs: z.array(SyncRefspecSchema).min(1).max(64),
 });
 
-export const SyncPushFinishResultSchema = z.strictObject({
+const SyncPushFinishResultSchema = z.strictObject({
   fetched: z.array(SyncRefTipSchema.extend({ ref: z.string() })),
 });
 
 // Which of the named commits the host already holds, so a sender can
 // thin a bundle (and skip a ref whose tip the receiver has, which
 // `git bundle create` would otherwise drop silently).
-export const SyncHasCommitsPayloadSchema = z.strictObject({
+const SyncHasCommitsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
   commits: z.array(CommitHashSchema).min(1).max(64),
 });
@@ -277,7 +273,7 @@ export const SyncHasCommitsResultSchema = z.strictObject({
 export const SyncTeardownSourcePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
-  sourceWorktreeId: z.string().regex(/^[0-9a-f]{12}$/),
+  sourceWorktreeId: WorktreeIdSchema,
 });
 
 export const syncContract = defineContract("host", {

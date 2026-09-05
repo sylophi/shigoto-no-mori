@@ -1,5 +1,4 @@
-// Reconnect supervisor for one remote connection (v2 step 3, slice B,
-// moved to shared/ in step 4 so the main-process hub socket reuses
+// Reconnect supervisor for one remote connection (in shared/ so the main-process hub socket reuses
 // it). It is the SINGLE owner of retry for a connection: nothing else
 // drives the connect function for it, so there is exactly one backoff
 // ladder and one timer per connection, never a fan of overlapping
@@ -66,7 +65,7 @@ export const defaultSupervisorClock: SupervisorClock = {
 
 // The hello facts and target for one device, minus the callbacks the
 // supervisor owns.
-export type SupervisorParams = {
+type SupervisorParams = {
   url: string;
   token: string;
   appVersion: string;
@@ -104,7 +103,7 @@ const AUTH_FAILED_MESSAGE = "authentication failed";
 const lanCloseClassifier: CloseClassifier = (code) =>
   code === CLOSE_AUTH_FAILED ? { message: AUTH_FAILED_MESSAGE } : null;
 
-export type SupervisorOptions = {
+type SupervisorOptions = {
   params: SupervisorParams;
   connect?: ConnectFn;
   clock?: SupervisorClock;

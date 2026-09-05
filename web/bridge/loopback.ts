@@ -1,4 +1,4 @@
-// The web bridge's in-page wire (v2 step 5, slice B): one ServerTransport
+// The web bridge's in-page wire: one ServerTransport
 // and one ClientTransport joined back to back, so the shared registrar
 // (shared/ipc/registerContract.ts) mounts real browser-backed handlers
 // exactly the way the Electron and socket bindings mount theirs, and

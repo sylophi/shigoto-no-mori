@@ -61,7 +61,11 @@ export function WorktreeDetailInner({
   const { remote } = useHostScope();
   // Always true locally (the local device is granted by contract), so
   // this alone carries the read-only mirror.
-  const { granted } = useCommandAccess();
+  // While the verdict is still in flight, assume granted rather than
+  // flashing a read-only page that turns editable a moment later (the
+  // same rule PeerDeviceSettings and VersionSection follow).
+  const access = useCommandAccess();
+  const granted = access.granted || access.isLoading;
   const { data: runtime } = useRuntimeInfo();
   const {
     deleteMutation,
@@ -103,7 +107,10 @@ export function WorktreeDetailInner({
   // or kicking off launches. Carry-over moves real files into the new
   // worktree, so we lock the page until it finishes. inLimbo wins -- a
   // delete-during-setup race shows the destructive banner instead.
-  const createPhase = useWorktreeCreatePhase(worktree.id);
+  // Scoped to this machine: the lifecycle broadcast is local, and a
+  // pull can mint a local worktree with the SAME id as the peer's (ids
+  // hash the managed path), so a peer's page must not lock for it.
+  const createPhase = useWorktreeCreatePhase(remote ? null : worktree.id);
   const createLabel =
     !inLimbo && createPhase ? CREATE_PHASE_LABEL[createPhase] : null;
   const locked = inLimbo || createPhase === "carryOver";

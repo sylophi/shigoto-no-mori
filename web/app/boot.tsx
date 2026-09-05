@@ -7,14 +7,14 @@
 // the provider tree around the router.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AppToaster } from "@/components/AppChrome";
 import { ClerkProvider } from "@clerk/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
-import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
-import { Toaster } from "sonner";
+import { ErrorBoundary } from "react-error-boundary";
+import { AppErrorFallback } from "@/components/AppChrome";
 import { ClerkGate } from "@/components/account/ClerkGate";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
-import { ErrorFallback } from "@/components/ErrorFallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
@@ -35,20 +35,6 @@ startRemoteDeviceSync(queryClient);
 // Every device is remote here, so the peer push watch is the ONLY
 // thing that keeps the forest live between focus refetches.
 startRemoteHostWatch(queryClient);
-
-function AppErrorFallback({ error }: FallbackProps) {
-  const err = error instanceof Error ? error : new Error(String(error));
-  return (
-    <ErrorFallback
-      error={err}
-      scope="app"
-      action={{
-        label: "Reload page",
-        onClick: () => window.location.reload(),
-      }}
-    />
-  );
-}
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -72,22 +58,7 @@ createRoot(rootElement).render(
           </ErrorBoundary>
         </DoubutsuProvider>
       </ThemeProvider>
-      <Toaster
-        position="bottom-right"
-        offset={{ bottom: 16, right: 16 }}
-        closeButton
-        toastOptions={{
-          classNames: {
-            toast:
-              "!bg-popover !text-popover-foreground !border !border-border !shadow-md",
-            title: "!select-text",
-            description: "!text-muted-foreground !select-text",
-            error: "!text-destructive",
-            closeButton:
-              "!left-auto !right-0 ![transform:translate(35%,-35%)] !bg-popover !text-muted-foreground !border-border hover:!bg-accent hover:!text-foreground",
-          },
-        }}
-      />
+      <AppToaster />
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -12,7 +12,7 @@ import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
 // "Account": sign in to the device hub so this device can reach the
-// account's other devices (v2 step 4, slice B). Three states. Not
+// account's other devices. Three states. Not
 // configured (no account service in this build's launch env) is one
 // panel that says so and how to fix it. Signed out is one panel with
 // one button. Signed in, the whole page is the device registry, which

@@ -137,7 +137,11 @@ export function buildInboxRows({
       total === 0 && loadingCount === 0 && failedCount === 0
         ? "No worktrees yet."
         : null,
-    revealKey: (_projectId, worktreeId) => {
+    revealKey: (_projectId, worktreeId, deviceId) => {
+      // The inbox lists this machine's worktrees only, and a peer's
+      // worktree can share an id with a local one (ids hash paths), so
+      // a device-scoped reveal has no row here.
+      if (deviceId !== undefined) return null;
       const shelf = shelfOf.get(worktreeId);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
       return rows.some((r) => r.key === `w:${worktreeId}`)

@@ -10,7 +10,7 @@
 // the contract invariant that every host invoke is explicitly tagged
 // remote true or false.
 //
-// v2 step 6, slice B adds the LAN read-only gate: the LAN wire serves
+// The LAN read-only gate: the LAN wire serves
 // ONLY channels explicitly registered mutating:false, refusing a
 // mutating or untagged channel with the shared command-refused code
 // BEFORE its handler runs. The client transport maps that code to the
@@ -1014,13 +1014,13 @@ async function main() {
           `${name} must opt out of the viewer cache ping`,
         );
       }
-      // The pull orchestrator (v2 step 7, slice C) is LOCAL-only: a
+      // The pull orchestrator is LOCAL-only: a
       // device's own renderer drives it, and it must never be servable
       // to a peer -- a remote:false host invoke is simply not
       // registered on either remote wire.
       assert.equal(syncContract.calls.pullWorktree.remote, false);
       assert.equal(syncContract.calls.pullWorktree.mutating, true);
-      // The source teardown after a pull (v2 step 9) is the same
+      // The source teardown after a pull is the same
       // local-only shape: its remote half is the peer's ordinary
       // worktrees:delete.
       assert.equal(syncContract.calls.teardownSource.remote, false);

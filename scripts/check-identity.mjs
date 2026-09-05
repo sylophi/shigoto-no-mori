@@ -15,7 +15,7 @@ import {
   computeRepoIdentity,
   normalizeRemoteUrl,
 } from "../shared/repoIdentity.mts";
-import { report } from "./lib/checkKit.mjs";
+import { report, scrubbedGitEnv } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,19 +28,15 @@ const fixtures = (name) =>
 // The shared default-branch resolver takes this same runner, so its
 // probes are scrubbed too (the app binds it to core.ts instead, which
 // inherits process env).
-const gitEnv = Object.fromEntries(
-  Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
-);
-Object.assign(gitEnv, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
+const gitEnv = {
+  ...scrubbedGitEnv(),
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@t",
   GIT_COMMITTER_NAME: "t",
   GIT_COMMITTER_EMAIL: "t@t",
   GIT_AUTHOR_DATE: "2005-04-07T22:13:13+0000",
   GIT_COMMITTER_DATE: "2005-04-07T22:13:13+0000",
-});
+};
 
 async function run(cwd, args) {
   const { stdout } = await execFileP("git", args, { cwd, env: gitEnv });

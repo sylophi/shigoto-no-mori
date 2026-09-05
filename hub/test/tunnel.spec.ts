@@ -1,4 +1,4 @@
-// Tunnel provisioning (v2 step 10, slice B): POST /tunnel and the
+// Tunnel provisioning: POST /tunnel and the
 // revoke-time teardown, driven through a worker whose Cloudflare API
 // fetch is the in-memory stub below (the createWorker(deps) seam, like
 // the Clerk stub), so everything runs inside workerd with no network.
@@ -221,7 +221,10 @@ describe("POST /tunnel", () => {
     expect(second.status).toBe(200);
     const secondBody = TunnelProvisionResponseSchema.parse(await second.json());
     // Same tunnel, same hostname, same DNS record: nothing duplicated.
+    // Only the first provision created the record.
     expect(secondBody.hostname).toBe(firstBody.hostname);
+    expect(firstBody.dnsCreated).toBe(true);
+    expect(secondBody.dnsCreated).toBe(false);
     expect(stub.liveTunnels()).toHaveLength(1);
     expect(stub.dnsRecords).toHaveLength(1);
     // The ingress now names the new port.

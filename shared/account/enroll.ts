@@ -6,6 +6,7 @@
 // shared/account/ (every dependency is an injected seam:
 // AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
+import { errorMessageOf } from "../errors";
 import type { AccountService } from "./service";
 import type { AccountStore } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
@@ -17,7 +18,7 @@ import { deriveAccountId } from "./token";
 // this so a typo cannot silently turn a browser into a desktop row.
 export const WEB_PLATFORM = "web";
 
-export type EnrollDeviceDeps = {
+type EnrollDeviceDeps = {
   config: AccountServiceConfig;
   service: AccountService;
   store: AccountStore;
@@ -71,4 +72,30 @@ export async function signOutDevice(deps: {
     }
   }
   deps.store.clear();
+}
+
+// A rename, both halves: the local store write (the name every status
+// read reports), then the hub push, best-effort like the sign-out
+// revoke, so the registry every other device lists carries the new
+// name at once. Signed out there is nothing to rename: the name is
+// the default until the next sign-in. The push is fire-and-forget on
+// purpose: an unreachable hub must not hold the caller, and a peer
+// that misses it sees the stored name at this device's next
+// enrollment anyway. Resolves true when a name was written.
+export function renameDevice(
+  deps: Pick<EnrollDeviceDeps, "config" | "service" | "store" | "deviceId">,
+  name: string,
+): boolean {
+  const record = deps.store.read();
+  if (record === null) return false;
+  deps.store.write({ ...record, deviceName: name });
+  if (!isConfigured(deps.config)) return true;
+  void deps.service
+    .rename(record.credential, deps.deviceId, name)
+    .catch((error: unknown) => {
+      console.warn(
+        `[account] could not push the rename to the device hub: ${errorMessageOf(error)}`,
+      );
+    });
+  return true;
 }

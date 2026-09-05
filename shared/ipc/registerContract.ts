@@ -6,7 +6,7 @@ import type {
   Handlers,
 } from "./types";
 
-export type RegisterContractOpts<Ctx = HandlerContext> = {
+type RegisterContractOpts<Ctx = HandlerContext> = {
   // Gates OUTPUT validation only, never input parsing. Bindings pass a
   // dev-build flag here so handler drift (or schemas whose z.input and
   // z.output diverge) surfaces at the registrar instead of as a

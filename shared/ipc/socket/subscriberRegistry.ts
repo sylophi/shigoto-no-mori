@@ -12,7 +12,7 @@
 // link paths or a composite deviceId plus channel on the renderer path.
 import { errorMessageOf } from "@shared/errors";
 
-export type SubscriberRegistry = {
+type SubscriberRegistry = {
   // Register a handler under a key. The returned function removes it and
   // drops the key's set once it is empty.
   subscribe(key: string, handler: (payload: unknown) => void): () => void;

@@ -15,7 +15,7 @@
 
 import type { GitRunner } from "./defaultBranch.mts";
 
-export interface RepoIdentityDeps {
+interface RepoIdentityDeps {
   run: GitRunner;
   // Fully qualified (`refs/heads/...` / `refs/remotes/...`) so a tag
   // sharing the branch's name can't hijack the rev-list below. null is

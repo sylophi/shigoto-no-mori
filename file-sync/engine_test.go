@@ -324,7 +324,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 		t.Fatal("gateway saw no preface")
 	}
 	if seen[0].DeviceID != "peer-1" || seen[0].ProjectID != "proj-a" ||
-		seen[0].WorktreeID != "0123456789ab" || seen[0].Session != session {
+		seen[0].WorktreeID != "0123456789ab" {
 		t.Errorf("preface = %+v", seen[0])
 	}
 

@@ -13,6 +13,7 @@ import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { accountContract } from "@shared/ipc/modules/account";
+import type { TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { Handlers } from "@shared/ipc/types";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -28,7 +29,11 @@ import {
   type DefaultDeviceName,
 } from "../../account/defaultDeviceName";
 import { createGrantStore, type GrantStore } from "../../account/grantStore";
-import { enrollDevice, signOutDevice } from "@shared/account/enroll";
+import {
+  enrollDevice,
+  renameDevice,
+  signOutDevice,
+} from "@shared/account/enroll";
 import {
   createAccountService,
   type AccountService,
@@ -256,7 +261,7 @@ function signedInService(): {
 }
 
 // The configured web client origin (SM_ACCOUNT_WEB_ORIGIN), for the
-// direct listener's Origin gate (v2 step 10, slice B): a browser dial
+// direct listener's Origin gate: a browser dial
 // arriving over the wss tunnel carries the web client's Origin, and
 // this is the one extra origin the listener admits. Undefined means
 // none is configured.
@@ -265,8 +270,7 @@ export function allowedWebOrigin(): string | undefined {
   return origin === "" ? undefined : origin;
 }
 
-// The tunnel provision call for the cloudflared runner (v2 step 10,
-// slice B): asks the Worker to point this device's named tunnel at the
+// The tunnel provision call for the cloudflared runner: asks the Worker to point this device's named tunnel at the
 // direct listener's current loopback port. Re-reads the stored
 // credential per call like mintTicket, so a rotated credential is
 // picked up without refresh plumbing. The returned connectorToken is a
@@ -276,7 +280,7 @@ export function allowedWebOrigin(): string | undefined {
 // "unconfigured", never a retry loop.
 export function provisionDeviceTunnel(
   port: number,
-): Promise<{ hostname: string; connectorToken: string }> {
+): Promise<TunnelProvisionResponse> {
   const signedIn = signedInService();
   if (signedIn === null) {
     return Promise.reject(
@@ -344,9 +348,8 @@ export function makeAccountHandlers(
   // forward, once per process, the first time status is read while
   // signed in with a SETTLED default (a provisional one would bake the
   // hostname stand-in in for good) -- through the same fan-out a rename
-  // takes, so every window sees the new name. The device hub keeps the
-  // name a device enrolled under (there is no rename call), so peers
-  // see it after the next enrollment, like any rename. A name the user
+  // takes, so every window sees the new name, and through the same
+  // hub push, so the other devices list it too. A name the user
   // typed cannot match the raw hostname unless they typed exactly that,
   // in which case the default is what they asked for. Returns the
   // record status should report. A write that fails leaves the old
@@ -369,7 +372,16 @@ export function makeAccountHandlers(
     }
     const renamed = { ...record, deviceName: defaultName.name };
     try {
-      store().write(renamed);
+      const config = serviceConfig();
+      renameDevice(
+        {
+          config,
+          service: createAccountService({ baseUrl: config.hubUrl }),
+          store: store(),
+          deviceId: getDeviceId(),
+        },
+        defaultName.name,
+      );
     } catch (error) {
       console.warn(
         "[account] could not rename the device to its default",
@@ -496,13 +508,17 @@ export function makeAccountHandlers(
     },
 
     setDeviceName: (name) => {
-      const record = store().read();
-      // Renaming only means something once a credential is stored. Signed
-      // out, the name is the hostname default until the next sign-in.
-      if (record) {
-        store().write({ ...record, deviceName: name });
-        accountChanged();
-      }
+      const config = serviceConfig();
+      const renamed = renameDevice(
+        {
+          config,
+          service: createAccountService({ baseUrl: config.hubUrl }),
+          store: store(),
+          deviceId: getDeviceId(),
+        },
+        name,
+      );
+      if (renamed) accountChanged();
       return readStatus();
     },
 

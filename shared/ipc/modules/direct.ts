@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
-// Brokering surface for the direct data plane (v2 step 10, slice A): a
+// Brokering surface for the direct data plane: a
 // peer asks this host, over the device hub, how to dial it directly.
 // The answer is a list of fully dialable CANDIDATES, each carrying its
-// kind (a LAN interface address or the wss tunnel endpoint, v2 step 10
-// slice B), the complete dial URL, and ONE short-lived single-use
+// kind (a LAN interface address or the wss tunnel endpoint), the
+// complete dial URL, and ONE short-lived single-use
 // connect ticket of its own, each bound to the CALLING peer's
 // authenticated deviceId (HandlerContext.callerDeviceId, populated by
 // the hub link and the direct listener, absent on every other wire, so
@@ -104,7 +104,7 @@ export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
 // ticket per interface address on every broker call. Optional both
 // ways for version skew: an old caller sends nothing and an old host
 // ignores the field, and absence means all kinds.
-export const DirectConnectInfoInputSchema = z
+const DirectConnectInfoInputSchema = z
   .object({
     dialableKinds: z.array(DirectCandidateSchema.shape.kind).optional(),
   })

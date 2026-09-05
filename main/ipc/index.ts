@@ -13,6 +13,7 @@ import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
 import { z } from "zod";
+import { coalesce } from "@host/lib/util/coalesce";
 import {
   GitStateCoreSchema,
   MirrorWorktreePayloadSchema,
@@ -127,16 +128,10 @@ const mirrorGateway = createMirrorGateway({
 // The daemon snapshots on every cycle of every session and the
 // follower reports every verdict. The renderer's ping is coalesced so
 // a busy mirror costs viewers one refetch per beat, not one per cycle.
-const MIRROR_CHANGED_COALESCE_MS = 150;
-let mirrorChangedTimer: ReturnType<typeof setTimeout> | null = null;
-function broadcastMirrorChanged(): void {
-  if (mirrorChangedTimer !== null) return;
-  mirrorChangedTimer = setTimeout(() => {
-    mirrorChangedTimer = null;
-    broadcastAll(mirrorContract, "changed", undefined);
-  }, MIRROR_CHANGED_COALESCE_MS);
-  mirrorChangedTimer.unref?.();
-}
+const broadcastMirrorChanged = coalesce(
+  () => broadcastAll(mirrorContract, "changed", undefined),
+  150,
+);
 const fileSyncDir = () => join(shigomoriRoot(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
@@ -239,15 +234,18 @@ export function registerIpcHandlers(): void {
         // invalidates the ["account"] prefix but not
         // ["accountCommandAccess"].
         broadcastAll(accountContract, "commandAccessChanged", undefined);
+        broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
         // Also reconciles the direct listener from its tail, which
         // follows the same enrollment condition.
         void refreshHubConnection();
       },
       // The switch flipping fans out on its own channel so the toggle
       // does not thrash the account status and device queries. No hub
-      // reconnect: the listener reads the predicate live.
+      // reconnect: the listener reads the predicate live. The peers
+      // hear it too (remote:true), so their verdict refreshes at once.
       () => {
         broadcastAll(accountContract, "commandAccessChanged", undefined);
+        broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
       },
     ),
   );
@@ -273,8 +271,6 @@ export function registerIpcHandlers(): void {
       buildClient(syncContract, peerTransportFor(deviceId)),
     worktreesApiFor: (deviceId) =>
       buildClient(worktreesContract, peerTransportFor(deviceId)),
-    mirrorApiFor: (deviceId) =>
-      buildClient(mirrorContract, peerTransportFor(deviceId)),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
@@ -304,7 +300,12 @@ export function registerIpcHandlers(): void {
     status: () => mirrorDaemon.status(),
     sessions: () => mirrorDaemon.sessions(),
     create: (input) => mirrorDaemon.create(input),
-    terminate: (session) => mirrorDaemon.terminate(session),
+    terminate: async (session) => {
+      await mirrorDaemon.terminate(session);
+      // An explicit stop ends the agreement too, or the git follower's
+      // store keeps one entry per session ever created.
+      gitFollower.forget(session);
+    },
     pause: (session) => mirrorDaemon.pause(session),
     resume: (session) => mirrorDaemon.resume(session),
     gitStatus: (session) => gitFollower.statusOf(session),

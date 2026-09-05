@@ -27,7 +27,8 @@ import { directContract } from "@shared/ipc/modules/direct";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
 import { makeProof } from "./lib/checkKit.mjs";
-import { bootDevice as bootHost, delay, waitFor } from "./lib/hubBoot.mjs";
+import { bootDevice as bootHost } from "./lib/hubBoot.mjs";
+import { delay, waitFor } from "./lib/checkKit.mjs";
 import { startStubHub } from "./lib/hubStub.mjs";
 
 // The broker slot is the only thing the hub wire serves, so the host

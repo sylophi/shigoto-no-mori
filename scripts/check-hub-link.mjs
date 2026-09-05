@@ -5,7 +5,7 @@
 // and too-large nacks, supersede on a duplicate deviceId) and drives
 // TWO real hub connections against it as devices A and B.
 //
-// The device hub is ORCHESTRATION ONLY (v2 step 10, slice C): its host
+// The device hub is ORCHESTRATION ONLY: its host
 // role serves exactly the broker surface (direct:connectInfo) plus the
 // intrinsic frames (hello/welcome, bye, presence), and refuses every
 // other channel with the no-handler shape. There is nothing else to
@@ -49,7 +49,8 @@ import {
   HubPeerOfflineError,
 } from "@shared/hub/link";
 import { makeProof } from "./lib/checkKit.mjs";
-import { bootDevice as bootHubDevice, delay, waitFor } from "./lib/hubBoot.mjs";
+import { bootDevice as bootHubDevice } from "./lib/hubBoot.mjs";
+import { delay, waitFor } from "./lib/checkKit.mjs";
 import { startStubHub } from "./lib/hubStub.mjs";
 
 // The one channel the hub wire serves, from the contract so the

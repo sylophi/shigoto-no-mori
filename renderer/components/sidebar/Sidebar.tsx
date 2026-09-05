@@ -100,7 +100,9 @@ export function Sidebar() {
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged into the tree beside the local rows. The
   // inbox stays local: it triages this machine's work.
-  const { items: remoteItems, loading: remoteLoading } = useRemoteForests();
+  const { items: remoteItems, loading: remoteLoading } = useRemoteForests({
+    refetchOnMount: true,
+  });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   const view: SidebarViewModel = inbox
     ? buildInboxRows({

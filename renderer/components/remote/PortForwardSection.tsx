@@ -1,4 +1,4 @@
-// Forward any port from a peer to this machine (v2 step 8, slice B).
+// Forward any port from a peer to this machine.
 // The worktree detail's port row covers the port a worktree already
 // has. This is the arbitrary-port arm, and the two share the list and
 // the start/stop pair in usePortForwards.

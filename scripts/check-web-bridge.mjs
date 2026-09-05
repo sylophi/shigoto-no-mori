@@ -31,19 +31,7 @@ import {
   NO_STRUCTURAL_STUB,
   stubValueFor,
 } from "../web/bridge/stubDefaults.ts";
-import { fakeSessionJwt, makeProof } from "./lib/checkKit.mjs";
-
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function waitFor(predicate, what, timeoutMs = 5_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (predicate()) return;
-    // oxlint-disable-next-line no-await-in-loop -- a poll is sequential by nature
-    await delay(25);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
+import { delay, fakeSessionJwt, makeProof, waitFor } from "./lib/checkKit.mjs";
 
 // ---- shims and fixtures ----
 

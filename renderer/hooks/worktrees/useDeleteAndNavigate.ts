@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shared/schemas";
@@ -55,7 +56,11 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
             setCleanupError(data.cleanupError);
           }
         },
-        onError: () => setNeedsForce(true),
+        onError: (error) => {
+          // A peer's command refusal is toasted centrally, and a force
+          // delete for it would only be refused again.
+          if (!isCommandRefusedError(error)) setNeedsForce(true);
+        },
       },
     );
   };

@@ -1,17 +1,12 @@
 // The two-device boot helper shared by the hub-transport e2e checks
 // (check-hub-link.mjs, check-sync-transfer.mjs,
 // check-port-forward.mjs): a REAL hub connection against the stub
-// Durable Object (hubStub.mjs, extracted for the same reason), plus
-// the delay/waitFor polling pair every one of them carries. Runs under
+// Durable Object (hubStub.mjs, extracted for the same reason). Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
 import { directContract } from "@shared/ipc/modules/direct";
 import { createHubConnection } from "@host/hub/connection";
 
-// The polling pair lives in checkKit.mjs (dependency-free, so the
-// non-hub checks reach it too). Re-exported for the hub checks that
-// always took it from here.
-import { delay, waitFor } from "./checkKit.mjs";
-export { delay, waitFor };
+import { waitFor } from "./checkKit.mjs";
 
 // Boots one device on the stub device hub and waits until it connects.
 // Returns the connection plus the ticket-mint counter the redial

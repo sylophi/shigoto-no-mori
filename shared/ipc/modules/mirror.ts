@@ -32,10 +32,10 @@ import {
 
 // Mutagen mints session identifiers ("sync_" plus a base62 body). The
 // daemon echoes them verbatim, so the shape is pinned only loosely.
-export const MirrorSessionIdSchema = z.string().min(1).max(128);
+const MirrorSessionIdSchema = z.string().min(1).max(128);
 
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
-export const MirrorStatusSchema = z.enum([
+const MirrorStatusSchema = z.enum([
   "disconnected",
   "halted-on-root-emptied",
   "halted-on-root-deletion",
@@ -54,23 +54,23 @@ export const MirrorStatusSchema = z.enum([
 ]);
 export type MirrorStatus = z.infer<typeof MirrorStatusSchema>;
 
-export const MirrorProblemSchema = z.strictObject({
+const MirrorProblemSchema = z.strictObject({
   path: z.string(),
   error: z.string(),
 });
 
-export const MirrorChangeSchema = z.strictObject({
+const MirrorChangeSchema = z.strictObject({
   path: z.string(),
   kind: z.enum(["created", "deleted", "modified"]),
 });
 
-export const MirrorConflictSchema = z.strictObject({
+const MirrorConflictSchema = z.strictObject({
   root: z.string(),
   localChanges: z.array(MirrorChangeSchema),
   remoteChanges: z.array(MirrorChangeSchema),
 });
 
-export const MirrorStagingSchema = z.strictObject({
+const MirrorStagingSchema = z.strictObject({
   path: z.string(),
   receivedFiles: z.number().int().nonnegative(),
   expectedFiles: z.number().int().nonnegative(),
@@ -78,7 +78,7 @@ export const MirrorStagingSchema = z.strictObject({
   expectedSize: z.number().int().nonnegative(),
 });
 
-export const MirrorEndpointStateSchema = z.strictObject({
+const MirrorEndpointStateSchema = z.strictObject({
   connected: z.boolean(),
   scanned: z.boolean(),
   directories: z.number().int().nonnegative(),
@@ -92,7 +92,7 @@ export const MirrorEndpointStateSchema = z.strictObject({
 
 // The git half of a mirror (host/mirror/gitState.ts): HEAD, the tip and
 // the staged tree, as one document either side can produce and apply.
-export const GitHeadSchema = z.discriminatedUnion("kind", [
+const GitHeadSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("branch"), branch: GitRefNameSchema }),
   z.strictObject({ kind: z.literal("detached") }),
 ]);
@@ -116,17 +116,16 @@ export const MirrorWorktreePayloadSchema = z.strictObject({
   worktreeId: WorktreeIdSchema,
 });
 
-export const MirrorApplyGitStatePayloadSchema =
-  MirrorWorktreePayloadSchema.extend({
-    expect: z.strictObject({
-      tip: CommitHashSchema,
-      indexTree: TreeHashSchema,
-    }),
-    state: GitStateCoreSchema,
-    // Landing refs the applier may sweep afterwards: the app's
-    // namespace only.
-    sweep: z.array(SyncLandingRefSchema).max(8).optional(),
-  });
+const MirrorApplyGitStatePayloadSchema = MirrorWorktreePayloadSchema.extend({
+  expect: z.strictObject({
+    tip: CommitHashSchema,
+    indexTree: TreeHashSchema,
+  }),
+  state: GitStateCoreSchema,
+  // Landing refs the applier may sweep afterwards: the app's
+  // namespace only.
+  sweep: z.array(SyncLandingRefSchema).max(8).optional(),
+});
 
 export const MirrorApplyGitStateResultSchema = z.strictObject({
   applied: z.boolean(),
@@ -140,7 +139,7 @@ export const MirrorApplyGitStateResultSchema = z.strictObject({
 // other side's state cannot land here (a branch collision, an unborn
 // worktree), with the reason. error: the last attempt failed. off: not
 // followed (paused, or the daemon has not reported the session yet).
-export const MirrorGitStatusSchema = z.strictObject({
+const MirrorGitStatusSchema = z.strictObject({
   status: z.enum([
     "synced",
     "following",
@@ -187,7 +186,7 @@ export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
 // One stream this device SERVES: a peer is mirroring the named worktree
 // from here, on the channel the peer minted with openStream. Known
 // from the open until the channel is gone.
-export const MirrorServingSchema = z.strictObject({
+const MirrorServingSchema = z.strictObject({
   channelId: HexId32Schema,
   projectId: z.string(),
   worktreeId: WorktreeIdSchema,
@@ -197,14 +196,14 @@ export const MirrorServingSchema = z.strictObject({
 });
 export type MirrorServing = z.infer<typeof MirrorServingSchema>;
 
-export const MirrorDaemonStatusSchema = z.enum([
+const MirrorDaemonStatusSchema = z.enum([
   "stopped",
   "starting",
   "running",
   "unavailable",
 ]);
 
-export const MirrorListResultSchema = z.strictObject({
+const MirrorListResultSchema = z.strictObject({
   daemon: MirrorDaemonStatusSchema,
   sessions: z.array(MirrorSessionSchema),
   serving: z.array(MirrorServingSchema),
@@ -215,11 +214,11 @@ export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
 // project/worktree ids, the repo identity to land in, the branch.
 export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema;
 
-export const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
+const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
 });
 
-export const MirrorSessionPayloadSchema = z.strictObject({
+const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
@@ -227,9 +226,9 @@ export const MirrorSessionPayloadSchema = z.strictObject({
 // channel under this id on the calling connection (shared/ipc/socket/
 // channels.ts), and the host attaches a fresh `file-sync serve` for
 // the named worktree as the far end before answering.
-export const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend(
-  { channelId: HexId32Schema },
-);
+const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
+  channelId: HexId32Schema,
+});
 
 export const mirrorContract = defineContract("host", {
   list: invoke("mirror:list", z.void(), MirrorListResultSchema, {

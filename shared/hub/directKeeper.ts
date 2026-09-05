@@ -1,4 +1,4 @@
-// The direct data plane's supervisor (v2 step 11): direct peer
+// The direct data plane's supervisor: direct peer
 // sessions are DESIRED STATE, and the live presence roster is the
 // desired-state input. A session exists because its device is present,
 // never because the UI asked for one, so no user action is ever what
@@ -56,7 +56,7 @@ import {
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shared/errors";
 
-export type DirectKeeperDeps = {
+type DirectKeeperDeps = {
   // One dial attempt for one peer: the bridge's dialPeer. Resolving
   // means an established session (or one already cached), rejecting
   // means the attempt failed with the dialer's typed error.

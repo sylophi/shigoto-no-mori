@@ -1,6 +1,6 @@
 // "Allow control from other devices": whether THIS machine runs the
-// commands the account's other devices send it (create and remove
-// worktrees, run scripts, change settings). The decision sits on the
+// commands the account's other devices send it (create, remove and
+// move worktrees, forward ports, change settings). The decision sits on the
 // machine being driven, in its own registry row, because that is the
 // machine whose owner is exposing something. There is nothing to
 // configure per peer: every device on the account is the same
@@ -34,7 +34,7 @@ export function AcceptCommandsToggle() {
         (enabled === undefined && !isError) || setAcceptsCommands.isPending
       }
       label="Allow control from other devices"
-      description="Your other devices can create and remove worktrees, run scripts and change settings on this machine. Off keeps it read-only to them."
+      description="Your other devices can create, remove and move worktrees, forward ports and change settings on this machine. Off keeps it read-only to them."
     />
   );
 }

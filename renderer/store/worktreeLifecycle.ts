@@ -156,10 +156,17 @@ export const worktreeLifecycle = new WorktreeLifecycleStore(
   (title, options) => toast.info(title, options),
 );
 
-export function useWorktreeCreatePhase(worktreeId: string): CreatePhase | null {
+// Null asks for nothing: a page whose worktree lives on a peer has no
+// local lifecycle to follow.
+export function useWorktreeCreatePhase(
+  worktreeId: string | null,
+): CreatePhase | null {
   return useSyncExternalStore(
-    (cb) => worktreeLifecycle.subscribe(worktreeId, cb),
-    () => worktreeLifecycle.snapshot(worktreeId),
+    (cb) =>
+      worktreeId === null
+        ? () => {}
+        : worktreeLifecycle.subscribe(worktreeId, cb),
+    () => (worktreeId === null ? null : worktreeLifecycle.snapshot(worktreeId)),
     () => null,
   );
 }

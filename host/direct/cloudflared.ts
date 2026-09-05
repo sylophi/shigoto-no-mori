@@ -1,4 +1,4 @@
-// The cloudflared runtime for tunnel endpoints (v2 step 10, slice B):
+// The cloudflared runtime for tunnel endpoints:
 // discover the binary, ask the hub Worker to provision this device's
 // named tunnel against the direct listener's current loopback port,
 // and supervise `cloudflared tunnel run` as a child process. The
@@ -64,17 +64,40 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // its hostname actually ROUTES from the edge to the local listener
 // (edge registration plus, for a first-ever tunnel, CNAME
 // propagation). Attempts are spaced on this ladder (capped at the last
-// rung) until the deadline, after which the child is treated exactly
-// like one that died: killed and rescheduled on the backoff ladder. A
-// child that merely survives a spawn says nothing about routability,
-// and a web client whose ONLY candidate is the tunnel would burn its
-// keeper's backoff rungs against a not-yet-routable advertisement (a
-// transient failure, so it retries forever -- but each wasted rung
-// pushes the next attempt further out).
-export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [
-  1_000, 2_000, 4_000, 8_000,
-];
+// rung) for as long as the child lives: a live connector that is not
+// routable yet is waiting on DNS, not broken, and the child exiting is
+// the one failure signal (a dead token makes cloudflared exit). The
+// first attempt waits out CNAME propagation on purpose. Probing a
+// brand-new hostname within a second of provisioning it earns an
+// NXDOMAIN that the OS resolver then caches for the zone's negative
+// TTL (30 minutes on Cloudflare), during which no probe from this
+// machine can succeed and every restart would re-provision for
+// nothing. A child that merely survives a spawn says nothing about
+// routability, and a web client whose ONLY candidate is the tunnel
+// would burn its keeper's backoff rungs against a not-yet-routable
+// advertisement (a transient failure, so it retries forever -- but
+// each wasted rung pushes the next attempt further out).
+export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [5_000, 8_000];
+// Past this, one warning names the hostname that is still not
+// routable, so a stuck tunnel is visible in the log without the
+// runner giving up on a healthy child, and the probe slows to the
+// rung below: a hostname that stays unroutable (a negative DNS answer
+// cached for the zone's TTL, a deleted record) costs one edge request
+// a minute, not one every eight seconds, for as long as the child
+// lives.
+export const TUNNEL_PROBE_WARN_MS = 60_000;
+export const TUNNEL_PROBE_SLOW_MS = 60_000;
+// Past the deadline, the child is treated exactly like one that died:
+// killed and rescheduled on the backoff ladder, and since it never
+// reached readiness the restart re-provisions rather than reusing its
+// possibly-dead token. Two deadlines, chosen by what the Worker said:
+// a tunnel it just CREATED (dnsCreated) has a brand-new DNS record
+// that may take a while to resolve, so it gets one long enough to
+// outlast a cached negative answer. A reused tunnel resolved before,
+// so a probe that keeps failing means a deleted record or a stale
+// ingress, and the re-provision is what repairs those.
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
+export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 
 // One probe attempt's own fetch bound, so a black-holed edge cannot
 // wedge the probe chain.
@@ -149,7 +172,9 @@ const PROBE_TIMEOUT_MS = 10_000;
 
 // ---- the supervised runner ----
 
-// The state vocabulary is the wire's (HubStatusSchema.tunnel in
+// The renderer-safe status snapshot: never the connector token.
+// Operator detail for a failure goes to the log, not here. The state
+// vocabulary is the wire's (HubStatusSchema.tunnel in
 // shared/ipc/modules/hub.ts), imported rather than redeclared so the
 // runner and the status surface cannot drift. off: not wanted
 // (listener down, opted out, signed out). no-binary: wanted, but no
@@ -159,10 +184,6 @@ const PROBE_TIMEOUT_MS = 10_000;
 // probed-routable and the tunnel is advertised. error: the last
 // attempt failed, with either a backoff restart scheduled or (for a
 // denied provision) nothing until the next reconcile trigger.
-export type { TunnelState };
-
-// The renderer-safe status snapshot: never the connector token.
-// Operator detail for a failure goes to the log, not here.
 export type TunnelStatus = {
   state: TunnelState;
   hostname: string | null;
@@ -184,9 +205,12 @@ export type CloudflaredRunnerDeps = {
   // The hub Worker's provision call for the given listener port.
   // Throws TunnelUnconfiguredError when the Worker has no tunnel env,
   // TunnelProvisionDeniedError on any other 4xx refusal.
-  provision(
-    port: number,
-  ): Promise<{ hostname: string; connectorToken: string }>;
+  provision(port: number): Promise<{
+    hostname: string;
+    connectorToken: string;
+    // Absent from an older Worker: read as a reused tunnel.
+    dnsCreated?: boolean;
+  }>;
   // Test seam. The default spawns the real cloudflared with the token
   // in env only.
   spawnTunnel?: (binaryPath: string, connectorToken: string) => TunnelChild;
@@ -362,6 +386,7 @@ export function createCloudflaredRunner(
     port: number;
     hostname: string;
     connectorToken: string;
+    dnsCreated: boolean;
   } | null = null;
   // Whether the most recently spawned child passed the readiness
   // probe. Reset on every spawn, so it always describes the child
@@ -440,31 +465,46 @@ export function createCloudflaredRunner(
   }
 
   // The readiness probe chain for a freshly spawned child: attempts on
-  // the probe ladder until routable or the deadline, then either
-  // advertise or treat the child as failed. Deliberately NOT re-run
-  // after "up": the child process exiting is the down signal, and a
-  // liveness poll against the edge would spend a request per interval
-  // to learn what the exit handler already tells us.
-  function beginProbe(next: TunnelChild, port: number, hostname: string): void {
+  // the probe ladder until routable, then advertise. A child that is
+  // merely not routable yet is kept and probed on (the ladder's note),
+  // up to the deadline. Deliberately NOT re-run after "up": the child
+  // process exiting is the down signal, and a liveness poll against
+  // the edge would spend a request per interval to learn what the
+  // exit handler already tells us.
+  function beginProbe(
+    next: TunnelChild,
+    port: number,
+    hostname: string,
+    deadlineMs: number,
+  ): void {
     const startedAt = clock.now();
     let probeAttempt = 0;
+    let warned = false;
     const live = (): boolean =>
       !stopped && child === next && wantedPort === port;
     const finish = (routable: boolean): void => {
       if (!live()) return;
       if (routable) {
         lastChildReady = true;
+        // The hostname resolves now, so a later child of the same
+        // provision is held to the short deadline.
+        if (lastProvision !== null) lastProvision.dnsCreated = false;
         setStatus({ state: "up", hostname });
         console.info(`[tunnel] up at ${hostname}`);
         return;
       }
-      if (clock.now() - startedAt >= TUNNEL_PROBE_DEADLINE_MS) {
-        // Never became routable: the same failure path as a child
-        // that died, and since it never reached readiness the restart
-        // re-provisions rather than reusing its possibly-dead token.
+      if (clock.now() - startedAt >= deadlineMs) {
         killChild();
         scheduleRestart(`tunnel at ${hostname} never became routable`);
         return;
+      }
+      if (!warned && clock.now() - startedAt >= TUNNEL_PROBE_WARN_MS) {
+        warned = true;
+        console.warn(
+          `[tunnel] ${hostname} is still not routable after ` +
+            `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
+            "(a fresh hostname resolves once DNS catches up)",
+        );
       }
       scheduleNext();
     };
@@ -475,7 +515,9 @@ export function createCloudflaredRunner(
           if (!live()) return;
           probeTunnel(hostname).then(finish, () => finish(false));
         },
-        backoffDelayMs(TUNNEL_PROBE_DELAYS_MS, probeAttempt),
+        warned
+          ? TUNNEL_PROBE_SLOW_MS
+          : backoffDelayMs(TUNNEL_PROBE_DELAYS_MS, probeAttempt),
       );
       probeAttempt += 1;
     };
@@ -517,9 +559,14 @@ export function createCloudflaredRunner(
     if (!reusable) {
       const provisioned = await deps.provision(port);
       if (stopped || wantedPort !== port) return;
-      lastProvision = { port, ...provisioned };
+      lastProvision = {
+        port,
+        hostname: provisioned.hostname,
+        connectorToken: provisioned.connectorToken,
+        dnsCreated: provisioned.dnsCreated === true,
+      };
     }
-    const { hostname, connectorToken } = lastProvision!;
+    const { hostname, connectorToken, dnsCreated } = lastProvision!;
     const next = spawnTunnel(binaryPath, connectorToken);
     child = next;
     spawnedAt = clock.now();
@@ -544,7 +591,12 @@ export function createCloudflaredRunner(
       if (clock.now() - spawnedAt >= TUNNEL_STABLE_MS) attempt = 0;
       scheduleRestart(detail);
     });
-    beginProbe(next, port, hostname);
+    beginProbe(
+      next,
+      port,
+      hostname,
+      dnsCreated ? TUNNEL_PROBE_DEADLINE_FRESH_MS : TUNNEL_PROBE_DEADLINE_MS,
+    );
   }
 
   // One start attempt for the given port. Runs inside the lifecycle

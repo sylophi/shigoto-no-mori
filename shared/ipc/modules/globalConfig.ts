@@ -52,7 +52,7 @@ export const globalConfigContract = defineContract("host", {
       mutating: true,
     },
   ),
-  // The remote-writable subset (v2 step 6, slice B): a patch-style
+  // The remote-writable subset: a patch-style
   // write of exactly the device-scoped settings the Settings form
   // manages. remote:true, mutating:true, so it only ever runs for a
   // peer this host granted command access. The STRICT patch schema

@@ -1,5 +1,4 @@
-// Host side of the direct data plane's brokering surface (v2 step 10,
-// slice A). A factory rather than a plain handler object because the
+// Host side of the direct data plane's brokering surface. A factory rather than a plain handler object because the
 // deps are owned by whoever assembled the direct listener: main wires
 // the real listener status, ticket store and hub roster in, and the
 // direct-plane check drives the same factory with its own instances.
@@ -42,7 +41,7 @@ export type DirectHandlerDeps = {
   // wire.
   isPeerOnline(peerDeviceId: string): boolean;
   // The wss URL of this host's tunnel endpoint while the cloudflared
-  // child is currently healthy, else null (v2 step 10, slice B). When
+  // child is currently healthy, else null. When
   // present it is advertised as one more candidate with its own
   // ticket. Absent means no tunnel support, so slice A callers change
   // nothing.

@@ -19,20 +19,21 @@ import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry"
 import { invokeIndexFor } from "../web/bridge/loopback";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/bridge/stubDefaults";
 import {
+  type DeviceForest,
+  LAB_ACCOUNT_ID,
+  LAB_APP_VERSION,
+  LOCAL_DEVICE_ID,
+  MINI_ID,
+  THINKPAD_ID,
+  WORKPC_ID,
   accountDevices,
   forests,
   labCustomPorts,
   labGlobalConfig,
   labListeningPorts,
   labPoolPorts,
-  LAB_ACCOUNT_ID,
-  LAB_APP_VERSION,
-  LOCAL_DEVICE_ID,
-  MINI_ID,
   projectIconFor,
-  THINKPAD_ID,
-  WORKPC_ID,
-  type DeviceForest,
+  worktree as worktreeFixture,
 } from "./fixtures";
 
 type FixtureHandler = (input: any) => unknown;
@@ -128,26 +129,14 @@ function hostHandlersFor(
     "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
-      const created = {
+      const created = worktreeFixture({
         id: `c0ffee${String(Date.now()).slice(-6)}`,
         projectId,
         name,
         branch: branchName ?? name,
         path: `${forest.projects.find((p) => p.id === projectId)?.path ?? "/tmp"}/../worktrees/${name}`,
-        ahead: 0,
-        behind: 0,
         hasUpstream: false,
-        hasRemote: true,
-        divergedClean: false,
-        behindPrimary: 0,
-        mergedIntoPrimary: false,
-        changedCount: 0,
-        recentCommits: [],
-        isPrimary: false,
-        isExternal: false,
-        detached: false,
-        shelved: false,
-      };
+      });
       (forest.worktrees[projectId] ??= []).push(created);
       return { worktree: created };
     },
@@ -281,7 +270,7 @@ async function labSyncPull(
     (entry) => entry.id === input.sourceWorktreeId,
   );
   const name = sourceWorktree?.name ?? "tender-tanuki";
-  const landed = {
+  const landed = worktreeFixture({
     ...sourceWorktree,
     id: "fedcba987654",
     projectId: project.id,
@@ -290,19 +279,19 @@ async function labSyncPull(
     path: `/Users/rin/shigomori/worktrees/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,
-    hasUpstream: sourceWorktree?.hasUpstream ?? true,
+    changedCount: sourceWorktree?.changedCount ?? 0,
+    recentCommits: sourceWorktree?.recentCommits ?? [],
+    // A fresh local checkout, whatever the source's flags said.
     hasRemote: true,
     divergedClean: false,
     behindPrimary: 0,
     mergedIntoPrimary: false,
-    changedCount: sourceWorktree?.changedCount ?? 0,
-    recentCommits: sourceWorktree?.recentCommits ?? [],
     isPrimary: false,
     isExternal: false,
     detached: false,
     shelved: false,
-  };
-  (local.worktrees[project.id] ??= []).push(landed as any);
+  });
+  (local.worktrees[project.id] ??= []).push(landed);
   return {
     worktree: landed,
     captured: (sourceWorktree?.changedCount ?? 0) > 0,

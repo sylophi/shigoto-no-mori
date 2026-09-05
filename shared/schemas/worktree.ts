@@ -116,7 +116,7 @@ export type Worktree = z.infer<typeof WorktreeSchema>;
 // the backend just reports facts so it stays dumb. "publish" covers
 // both "no upstream / remote exists" and "no upstream / no remote",
 // distinguished by `canPublish` so the UI can disable the button.
-export type RemoteSyncState =
+type RemoteSyncState =
   | { kind: "detached" }
   | { kind: "synced" }
   | { kind: "publish"; canPublish: boolean }

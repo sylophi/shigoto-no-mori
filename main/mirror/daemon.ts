@@ -58,8 +58,6 @@ const STABLE_RUN_MS = STABLE_CONNECTION_MS;
 // process and Mutagen handshakes), so requests get a generous ceiling.
 const REQUEST_TIMEOUT_MS = 120_000;
 
-export type MirrorDaemon = ReturnType<typeof createMirrorDaemon>;
-
 export function createMirrorDaemon(deps: {
   // Spawns `file-sync daemon ...` with the given args, or returns null
   // when no engine binary is available (a dev run before
@@ -137,12 +135,24 @@ export function createMirrorDaemon(deps: {
 
   function spawnNow(): void {
     if (stopping) return;
+    // The gateway binds on its own retry schedule. Until it has, the
+    // daemon has nothing to dial and waits, which is not the engine
+    // being missing.
+    let gateway: string;
+    try {
+      gateway = deps.gatewayAddress();
+    } catch (error) {
+      log(`[mirror] daemon waiting for the gateway: ${errorMessageOf(error)}`);
+      setStatus("starting");
+      scheduleRestart();
+      return;
+    }
     let spawned: StreamChild | null;
     try {
       spawned = deps.spawn([
         "daemon",
         "--gateway",
-        deps.gatewayAddress(),
+        gateway,
         "--data-dir",
         deps.dataDir(),
       ]);

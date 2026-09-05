@@ -49,7 +49,7 @@ export function DeviceRegistry({
   const hubById = new Map(
     hubDevices.map((device) => [device.deviceId, device] as const),
   );
-  // THIS device's tunnel endpoint state (v2 step 10, slice B), as the
+  // THIS device's tunnel endpoint state, as the
   // derived primitive off the shared hub status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
   const tunnel = useTunnelState();

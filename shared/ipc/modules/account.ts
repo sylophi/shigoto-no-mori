@@ -62,8 +62,9 @@ export const accountContract = defineContract("client", {
     z.void(),
     z.array(DeviceInfoSchema),
   ),
-  // Renames this device locally (the stored metadata). A future slice may
-  // push the rename to the device hub. Resolves to the updated status.
+  // Renames this device: the stored metadata, then (best-effort) the
+  // device hub's registry, so the other devices list the new name at
+  // once. Resolves to the updated status.
   setDeviceName: invoke(
     "account:setDeviceName",
     // Bounded to match EnrollRequestSchema.name so a stored name can

@@ -4,7 +4,7 @@
 // since the footer has room to say what they do. Renders nothing unless the caller holds command access, the
 // branch is real, and a local project shares the repo identity (the
 // handler re-verifies that last one).
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import { ArrowDownToLine, Loader2, RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
@@ -79,17 +79,14 @@ function TransplantButton({
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   return (
     <>
-      <Button
-        type="button"
-        size="xs"
-        variant="ghost"
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+      <ActionButton
+        icon={<Shovel />}
+        label="Transplant here"
+        pendingLabel="Transplant here"
         title="Move this worktree to this machine and tear down the copy over there"
+        pending={false}
         onClick={() => setOpen(true)}
-      >
-        <Shovel />
-        Transplant here
-      </Button>
+      />
       {open && (
         <TransplantDialog
           worktree={worktree}
@@ -104,30 +101,24 @@ function TransplantButton({
   );
 }
 
-function BringButton(props: {
+type LandingProps = {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
   localProjectId: string;
-}) {
+};
+
+function BringButton(props: LandingProps) {
   const bring = useBringWorktreeHere(props);
   return (
-    <Button
-      type="button"
-      size="xs"
-      variant="ghost"
-      className="shrink-0 text-muted-foreground hover:text-foreground"
-      disabled={bring.isPending}
+    <ActionButton
+      icon={<ArrowDownToLine />}
+      label="Bring here"
+      pendingLabel="Bringing here…"
       title="Create this worktree on this machine, uncommitted changes included"
+      pending={bring.isPending}
       onClick={() => bring.mutate()}
-    >
-      {bring.isPending ? (
-        <Loader2 className="animate-spin" />
-      ) : (
-        <ArrowDownToLine />
-      )}
-      {bring.isPending ? "Bringing here…" : "Bring here"}
-    </Button>
+    />
   );
 }
 
@@ -135,26 +126,50 @@ function BringButton(props: {
 // new local worktree and the remote one, so it shares the bring
 // button's gate and shape. It only exists in the app: the daemon and
 // the gateway live in main, and the web loopback refuses the mutation.
-function MirrorButton(props: {
-  worktree: Worktree;
-  sourceProjectId: string;
-  sourceIdentity: string;
-  localProjectId: string;
-}) {
+function MirrorButton(props: LandingProps) {
   const mirror = useStartMirror(props);
   if (!window.api.isElectron) return null;
+  return (
+    <ActionButton
+      icon={<RefreshCw />}
+      label="Mirror here"
+      pendingLabel="Mirroring here…"
+      title="Create this worktree on this machine and keep the two in sync, every file, both ways"
+      pending={mirror.isPending}
+      onClick={() => mirror.mutate()}
+    />
+  );
+}
+
+// The footer's landing buttons share one shape: ghost text button, a
+// spinner standing in for the icon while the mutation runs.
+function ActionButton({
+  icon,
+  label,
+  pendingLabel,
+  title,
+  pending,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  pendingLabel: string;
+  title: string;
+  pending: boolean;
+  onClick: () => void;
+}) {
   return (
     <Button
       type="button"
       size="xs"
       variant="ghost"
       className="shrink-0 text-muted-foreground hover:text-foreground"
-      disabled={mirror.isPending}
-      title="Create this worktree on this machine and keep the two in sync, every file, both ways"
-      onClick={() => mirror.mutate()}
+      disabled={pending}
+      title={title}
+      onClick={onClick}
     >
-      {mirror.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-      {mirror.isPending ? "Mirroring here…" : "Mirror here"}
+      {pending ? <Loader2 className="animate-spin" /> : icon}
+      {pending ? pendingLabel : label}
     </Button>
   );
 }

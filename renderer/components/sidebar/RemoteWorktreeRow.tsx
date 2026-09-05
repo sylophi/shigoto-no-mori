@@ -5,13 +5,13 @@
 // place. Opens the worktree's own detail page under the device-scoped
 // twin route, exactly like clicking a local row. An unreachable
 // device's rows fade back: last known state, not an error.
-import { useNavigate } from "@tanstack/react-router";
 import type { Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { DeviceBadge } from "./DeviceBadge";
 import { StatusIndicator } from "./StatusIndicator";
+import { useWorktreeRowState } from "./useWorktreeRowState";
 import { WORKTREE_ROW_BUTTON, WorktreeRowLabel } from "./WorktreeRow";
 
 interface RemoteWorktreeRowProps {
@@ -29,23 +29,20 @@ export function RemoteWorktreeRow({
   reachable,
   tone,
 }: RemoteWorktreeRowProps) {
-  const navigate = useNavigate();
+  // The local row's own rule, scoped to the device: the open remote
+  // worktree reads as selected like a local one.
+  const { isSelected, open } = useWorktreeRowState(worktree, deviceId);
   return (
     <button
       type="button"
-      onClick={() =>
-        void navigate({
-          to: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
-          params: {
-            deviceId,
-            projectId: worktree.projectId,
-            worktreeId: worktree.id,
-          },
-        })
-      }
-      className={cn(WORKTREE_ROW_BUTTON, !reachable && "opacity-60")}
+      onClick={open}
+      className={cn(
+        WORKTREE_ROW_BUTTON,
+        isSelected && "bg-accent text-accent-foreground",
+        !reachable && "opacity-60",
+      )}
     >
-      <WorktreeRowLabel worktree={worktree} />
+      <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <StatusIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
       {/* Rightmost, where the local row keeps its own trailing cluster:

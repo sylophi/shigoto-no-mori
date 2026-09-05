@@ -1,5 +1,5 @@
-// Durable proof for port forwarding over byte channels (v2 step 8,
-// reworked onto binary channel frames): TCP bytes cross a REAL DIRECT
+// Durable proof for port forwarding over byte channels (binary
+// channel frames): TCP bytes cross a REAL DIRECT
 // websocket between the two fixtures as channel frames
 // (shared/ipc/socket/channels.ts), brokered by the stub device hub
 // exactly as production does (scripts/lib/directBoot.mjs). Nothing
@@ -60,7 +60,7 @@ import {
 } from "../main/portForward/engine.ts";
 import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
-import { waitFor } from "./lib/hubBoot.mjs";
+import { waitFor } from "./lib/checkKit.mjs";
 
 // once() with waitFor's deadline treatment: an event that never fires
 // fails loudly with a descriptive message instead of hanging the check.

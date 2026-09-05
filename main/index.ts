@@ -280,7 +280,7 @@ const createWindow = () => {
   mainWindow.on("focus", sendFocus);
   mainWindow.on("blur", sendBlur);
 
-  // Recover the UI from a renderer crash (v2 step 4, slice E). Attached
+  // Recover the UI from a renderer crash. Attached
   // per window, including the ones recreated below, so a second crash
   // still lands on a live handler. The recreate budget lives in the
   // liveness module, so re-attaching does not reset the loop guard.
@@ -412,7 +412,7 @@ app.on("ready", async () => {
     console.warn("[config] legacy remoteDevices drain failed:", error);
   }
   buildAppMenu();
-  // Host liveness (v2 step 4, slice E). Install the crash guards before
+  // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
   // reconcile the login item to the saved keepReachable opt-in. The same
   // reconcile reruns after every clientConfig write (the write handler),
@@ -429,17 +429,17 @@ app.on("ready", async () => {
   await refreshTerrierListings();
   startBackgroundFetch();
   startUpdater();
-  // Remote hosting (v2 step 3, slice A): serve host-scoped calls over
+  // Remote hosting: serve host-scoped calls over
   // the LAN when the device config enables it. After getDeviceId so
   // the welcome frame's identity is final. The same reconcile reruns
   // after every globalConfig write (hostImpls wiring), making this the
   // boot-time pass only.
   void refreshSocketHost();
-  // The hub socket (v2 step 4, slice C): connect to the account's
+  // The hub socket: connect to the account's
   // Durable Object when a credential is stored. The same reconcile
   // reruns after every account change (the emitChanged path in
   // main/ipc/index.ts), making this the boot-time pass only. The
-  // direct data-plane listener (v2 step 10, slice A) follows the same
+  // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();
   // Sleep is the one event that reliably kills every remote socket

@@ -1,4 +1,4 @@
-// Immediate writer for the keepReachable opt-in (v2 step 4, slice E).
+// Immediate writer for the keepReachable opt-in.
 // Unlike appearance, which stages in the settings form and persists on
 // Save, this toggle takes effect at once: flipping it should register or
 // clear the OS login item right away, which the main-side write handler

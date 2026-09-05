@@ -1,5 +1,5 @@
 // The one rule scoping direct data-plane sessions to control-plane
-// presence (v2 step 10, slice A): the device hub brokers account
+// presence: the device hub brokers account
 // membership, so a peer absent from a LIVE roster loses its direct
 // sessions on both sides within seconds. This is what gives
 // revocation teeth (a revoked device drops off the roster and its
@@ -12,7 +12,7 @@
 // connections during an device-hub outage. Extracted here (pure,
 // electron-free) so main's presence wiring and the direct-plane check
 // drive the identical rule.
-export type DirectPresenceDeps = {
+type DirectPresenceDeps = {
   // Kill the host-side authed direct sockets whose peer deviceId is
   // not in the roster (the ticket-mode listener's targeted close).
   // Optional because a platform with no direct listener (the web

@@ -1,7 +1,7 @@
-// The node hub connection (v2 step 4, slice C): the shared lifecycle
+// The node hub connection: the shared lifecycle
 // core in shared/hub/connection.ts bound to the node `ws` client,
 // owned by the main process and shared by both roles through the hub
-// link. Deliberately NOT a ServerTransport (v2 step 10, slice C): the
+// link. Deliberately NOT a ServerTransport: the
 // wire serves exactly one channel, so the binding exposes a single
 // broker slot instead of handle/broadcastAll, and re-adding the hub
 // to a wire loop that expects a ServerTransport is a type error rather

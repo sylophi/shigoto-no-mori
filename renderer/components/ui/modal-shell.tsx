@@ -1,4 +1,5 @@
 import type { KeyboardEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 interface ModalShellProps {
@@ -29,7 +30,12 @@ export function ModalShell({
         }
       }
     : undefined;
-  return (
+  // Portaled to <body>: the shell is fixed and z-50, but under doubutsu
+  // the main canvas is its own stacking context (isolation: isolate in
+  // doubutsu.css), which would trap the shell beneath the sidebar
+  // header's positioned title. Mounting at the body root puts it in
+  // the root context, above everything, in all four theme modes.
+  return createPortal(
     <div
       role="presentation"
       onMouseDown={(e) => {
@@ -47,6 +53,7 @@ export function ModalShell({
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
