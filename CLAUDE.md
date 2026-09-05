@@ -37,4 +37,5 @@ Rules that keep both themes cheap to maintain:
   all four modes. In dev builds: Ctrl+T toggles light/dark, Ctrl+D
   toggles doubutsu, Ctrl+R resets to saved — non-persisted previews
   (components/DevThemeHotkeys.tsx), inactive while a text field has
-  focus. Settings → Appearance does the same with a save option.
+  focus, except the script console's terminal, where they still win
+  (there Ctrl+D would be EOF and end the running program). Settings → Appearance does the same with a save option.

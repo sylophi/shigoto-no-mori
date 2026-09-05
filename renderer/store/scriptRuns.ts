@@ -30,11 +30,10 @@ export {
   type ScriptSlot,
 } from "./scriptSlot";
 
-// Output chunks kept per run for replay when a console mounts. Chunks
-// vary in size (one "data" event may carry a single byte or a 4 KB
-// burst), so this is a rough ceiling; a saturated buffer is trimmed in
-// batches, so it holds between this many and twice this many.
-const MAX_CHUNKS = 5_000;
+// Output kept per run for replay when a console mounts, in bytes: well
+// past what the terminal's own scrollback can show, and well under the
+// 50 MB xterm refuses to queue in one write.
+const MAX_OUTPUT_BYTES = 4 * 1024 * 1024;
 
 // Cap per-runId pre-bind buffers. The legitimate buffering window is one
 // IPC round-trip (events arriving before `scripts.run` resolves), so a
@@ -84,6 +83,12 @@ function deriveSlotKind(slot: ScriptSlot): SlotKind {
   return slot.kind;
 }
 
+interface OutputLog {
+  chunks: string[];
+  // Sum of chunk lengths, so trimming needn't re-measure the log.
+  bytes: number;
+}
+
 interface RunMeta {
   worktreeId: string;
   slotKind: SlotKind;
@@ -124,7 +129,7 @@ class ScriptRunsStore {
   private states = new Map<ScriptKey, ScriptRunState>();
   // Per-run output log, keyed like states, mutated in place; consoles
   // catch up from it on mount and follow it through outputSubs.
-  private buffers = new Map<ScriptKey, string[]>();
+  private buffers = new Map<ScriptKey, OutputLog>();
   private outputSubs = new KeyedSubscribers<ScriptKey, string>();
   private meta = new Map<ScriptKey, RunMeta>();
   private runIdToKey = new Map<string, ScriptKey>();
@@ -176,10 +181,12 @@ class ScriptRunsStore {
       runId = result.runId;
     } catch (err) {
       const message = errorMessageOf(err);
-      this.appendChunk(input.key, `\r\n\x1b[31m${message}\x1b[0m\r\n`, {
+      this.appendChunk(input.key, `\r\n\x1b[31m${message}\x1b[0m\r\n`);
+      this.setStateWithActivity(input.key, (s) => ({
+        ...s,
         status: "errored",
         endedAt: Date.now(),
-      });
+      }));
       const m = this.meta.get(input.key);
       m?.exitDeferred?.resolve(null);
       if (m) this.meta.set(input.key, { ...m, exitDeferred: null });
@@ -247,12 +254,12 @@ class ScriptRunsStore {
     this.notify(key);
   }
 
-  // The run's output so far (capped; see MAX_CHUNKS), for a console
-  // that has just mounted and needs to catch up before it follows
-  // subscribeOutput. Read both in the same tick and nothing is missed
-  // or doubled.
+  // The run's output so far (capped; see MAX_OUTPUT_BYTES), for a
+  // console that has just mounted and needs to catch up before it
+  // follows subscribeOutput. Read both in the same tick and nothing is
+  // missed or doubled.
   readOutput(key: ScriptKey): readonly string[] {
-    return this.buffers.get(key) ?? [];
+    return this.buffers.get(key)?.chunks ?? [];
   }
 
   subscribeOutput(key: ScriptKey, cb: (chunk: string) => void): () => void {
@@ -364,26 +371,26 @@ class ScriptRunsStore {
   }
 
   // Log one chunk and hand it to any mounted console. The snapshot only
-  // changes for the first chunk, or when `patch` carries a status
-  // change that should land with its message.
-  private appendChunk(
-    key: ScriptKey,
-    chunk: string,
-    patch: Partial<ScriptRunState> = {},
-  ): void {
-    let buffer = this.buffers.get(key);
-    if (!buffer) {
-      buffer = [];
-      this.buffers.set(key, buffer);
+  // changes for the run's first chunk.
+  private appendChunk(key: ScriptKey, chunk: string): void {
+    let log = this.buffers.get(key);
+    if (!log) {
+      log = { chunks: [], bytes: 0 };
+      this.buffers.set(key, log);
     }
-    buffer.push(chunk);
-    if (buffer.length >= MAX_CHUNKS * 2) {
-      buffer.splice(0, buffer.length - MAX_CHUNKS);
+    log.chunks.push(chunk);
+    log.bytes += chunk.length;
+    if (log.bytes > MAX_OUTPUT_BYTES) {
+      let drop = 0;
+      while (log.bytes > MAX_OUTPUT_BYTES && drop < log.chunks.length - 1) {
+        log.bytes -= log.chunks[drop]!.length;
+        drop++;
+      }
+      log.chunks.splice(0, drop);
     }
     this.outputSubs.notify(key, chunk);
-    const patched = Object.keys(patch).length > 0;
     this.setStateWithActivity(key, (s) =>
-      s.hasOutput && !patched ? s : { ...s, ...patch, hasOutput: true },
+      s.hasOutput ? s : { ...s, hasOutput: true },
     );
   }
 
@@ -393,21 +400,22 @@ class ScriptRunsStore {
         this.appendChunk(key, event.data);
         return;
       case "error":
-        this.appendChunk(key, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`, {
-          status: "errored",
-        });
+        this.appendChunk(key, `\r\n\x1b[31m${event.data}\x1b[0m\r\n`);
+        this.setStateWithActivity(key, (s) => ({ ...s, status: "errored" }));
         return;
       case "exit": {
         const m = this.meta.get(key);
         m?.exitDeferred?.resolve(event.code);
         if (m) this.meta.set(key, { ...m, exitDeferred: null });
         this.runIdToKey.delete(event.runId);
-        this.appendChunk(key, exitSentinel(event.code), {
+        this.appendChunk(key, exitSentinel(event.code));
+        this.setStateWithActivity(key, (s) => ({
+          ...s,
           exitCode: event.code,
           status: "exited",
           endedAt: Date.now(),
           cancelling: false,
-        });
+        }));
         if (event.code !== 0 && m) {
           this.toastLifecycleFailure(m.slotKind, event.code);
         }

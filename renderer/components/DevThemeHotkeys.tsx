@@ -36,23 +36,19 @@ export function DevThemeHotkeys() {
       // surfaces are the exception (see above).
       const rawSurface = isRawKeySurface(e.target);
       if (isEditableTarget(e.target) && !rawSurface) return;
-      let action: (() => void) | null = null;
-      if (e.code === "KeyT") {
-        action = () => setTheme(resolved === "dark" ? "light" : "dark");
-      } else if (e.code === "KeyD") {
-        action = () => setDoubutsu(!doubutsuApplied);
-      } else if (e.code === "KeyR") {
-        action = () => {
-          setTheme(null);
-          setDoubutsu(null);
-        };
-      }
-      if (!action) return;
+      if (e.code !== "KeyT" && e.code !== "KeyD" && e.code !== "KeyR") return;
       e.preventDefault();
       // Only a raw-key surface would otherwise pass the key on to a
       // program; everywhere else the event may keep bubbling.
       if (rawSurface) e.stopPropagation();
-      action();
+      if (e.code === "KeyT") {
+        setTheme(resolved === "dark" ? "light" : "dark");
+      } else if (e.code === "KeyD") {
+        setDoubutsu(!doubutsuApplied);
+      } else {
+        setTheme(null);
+        setDoubutsu(null);
+      }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);

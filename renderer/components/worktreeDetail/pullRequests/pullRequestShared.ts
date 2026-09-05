@@ -5,7 +5,7 @@ import {
   Loader2,
   MinusCircle,
 } from "lucide-react";
-import { notifyError } from "@/lib/toast";
+import { openExternalUrl } from "@/lib/openExternal";
 import type { PullRequestTone } from "@/lib/pullRequest";
 import type {
   PullRequestCheckBucket,
@@ -13,9 +13,7 @@ import type {
 } from "@shared/schemas";
 
 export function openPullRequest(url: string): void {
-  window.api.shell
-    .openExternal(url)
-    .catch((err) => notifyError("Couldn't open pull request", err));
+  openExternalUrl(url, "Couldn't open pull request");
 }
 
 export const STATE_LABEL: Record<PullRequestDetail["state"], string> = {

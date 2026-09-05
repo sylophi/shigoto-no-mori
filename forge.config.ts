@@ -17,6 +17,11 @@ import {
 } from "./shared/cliDist.mts";
 import { productName, version } from "./package.json";
 import {
+  NODE_PTY_ADDON,
+  NODE_PTY_SPAWN_HELPER,
+  nodePtyPrebuildDir,
+} from "./shared/nodePty.mts";
+import {
   DMG_APP_ICON,
   DMG_APPS_ICON,
   DMG_ICON_SIZE,
@@ -126,22 +131,12 @@ const config: ForgeConfig = {
     },
     // The ignore above spells out node-pty's layout. If a release moves
     // it, fail the build here, not the first script run of a shipped app.
-    packageAfterCopy: async (
-      _config,
-      buildPath,
-      _electron,
-      _platform,
-      arch,
-    ) => {
-      const prebuild = path.join(
-        buildPath,
-        "node_modules/node-pty/prebuilds",
-        `darwin-${arch}`,
-      );
-      for (const file of ["pty.node", "spawn-helper"]) {
+    packageAfterCopy: async (_config, buildPath, _electron, platform, arch) => {
+      const prebuild = path.join(buildPath, nodePtyPrebuildDir(platform, arch));
+      for (const file of [NODE_PTY_ADDON, NODE_PTY_SPAWN_HELPER]) {
         const full = path.join(prebuild, file);
         const mode =
-          file === "spawn-helper" ? fsConstants.X_OK : fsConstants.R_OK;
+          file === NODE_PTY_SPAWN_HELPER ? fsConstants.X_OK : fsConstants.R_OK;
         try {
           accessSync(full, mode);
         } catch {

@@ -22,6 +22,27 @@ type AnsiBase = (typeof ANSI_BASES)[number];
 
 type ThemeColorKey = Exclude<keyof ITheme, "extendedAnsi">;
 
+// xterm parses hex and rgb() directly and hands anything else to a
+// canvas, which it only accepts when fully opaque, so the computed
+// colors (oklch, and the translucent selection) go through a canvas
+// here and come out as #rrggbb[aa].
+let scratch: CanvasRenderingContext2D | null = null;
+function toHex(color: string): string {
+  if (!scratch) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    scratch = canvas.getContext("2d", { willReadFrequently: true });
+    if (!scratch) return color;
+  }
+  scratch.clearRect(0, 0, 1, 1);
+  scratch.fillStyle = color;
+  scratch.fillRect(0, 0, 1, 1);
+  const [r, g, b, a] = scratch.getImageData(0, 0, 1, 1).data;
+  const parts = a === 255 ? [r, g, b] : [r, g, b, a];
+  return `#${parts.map((v) => v!.toString(16).padStart(2, "0")).join("")}`;
+}
+
 export function readTerminalTheme(host: HTMLElement): ITheme {
   const entries: Array<[ThemeColorKey, string]> = [
     ["background", "var(--background)"],
@@ -52,8 +73,17 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   host.append(fragment);
   const theme: ITheme = {};
   entries.forEach(([key], i) => {
-    theme[key] = getComputedStyle(probes[i]!).color;
+    theme[key] = toHex(getComputedStyle(probes[i]!).color);
   });
   for (const probe of probes) probe.remove();
   return theme;
+}
+
+// Two reads of the same theme give equal (not identical) objects, and
+// xterm repaints everything for any new theme object.
+export function sameTheme(a: ITheme, b: ITheme): boolean {
+  const keys = Object.keys(a) as ThemeColorKey[];
+  return (
+    keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
+  );
 }

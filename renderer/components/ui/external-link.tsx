@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { notifyError } from "@/lib/toast";
+import { openExternalUrl } from "@/lib/openExternal";
 
 // Inline text button that opens a web URL in the system browser via the
 // scheme-validated shell IPC (renderer windows never navigate).
@@ -20,9 +20,7 @@ export function ExternalLink({
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.api.shell
-          .openExternal(href)
-          .catch((err) => notifyError(errorTitle, err));
+        openExternalUrl(href, errorTitle);
       }}
       className={cn(
         "underline underline-offset-2 hover:text-foreground",

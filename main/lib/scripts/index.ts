@@ -11,6 +11,7 @@
 // On app quit (see index.ts) we kill every running script the same way
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { errorMessageOf } from "@shared/errors";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
@@ -83,6 +84,10 @@ interface RunRecord {
   cancelling: boolean;
   done: Promise<void>;
   notify: NotifyScriptEvent;
+  // Sends whatever PTY output is pooled for the next frame (see
+  // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
+  // must call it first so it lands after the output that preceded it.
+  flushOutput: () => void;
 }
 
 const runningScripts = new Map<string, RunRecord>();
@@ -258,6 +263,7 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   record.cancelling = true;
 
   if (opts.reason) {
+    record.flushOutput();
     record.notify({
       runId: record.runId,
       kind: "data",
@@ -297,17 +303,27 @@ export function startScript(args: RunArgs): string {
     throw new Error("This project is being removed.");
   }
 
+  // node-pty's helper does the chdir itself and exits 1 without a word
+  // when it fails, which the console would show as a bare "exit 1".
+  // Name the cause here instead.
+  if (!existsSync(args.worktree.path)) {
+    throw new Error(`Worktree directory is missing: ${args.worktree.path}`);
+  }
+
   const runId = randomUUID();
 
   // Inherits the app's environment plus the SHIGOMORI_* contract vars,
   // and deliberately adds no state-root pin: a script's whole process
   // tree inherits this, so naming a root here would follow the user's
-  // command into anything it starts (see initShigomoriRoot). Color and
-  // width need no coaxing: the PTY makes stdout a real TTY with a real
-  // window size, and TERM advertises what xterm in the renderer speaks.
+  // command into anything it starts (see initShigomoriRoot). TERM and
+  // COLORTERM advertise what xterm in the renderer renders; FORCE_COLOR
+  // is for the tools a runner (turbo, concurrently, a `| tee`) drives
+  // through pipes, which can't see the PTY and would go monochrome.
   const env = {
     ...process.env,
     TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+    FORCE_COLOR: "1",
     [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
     [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
     [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
@@ -319,27 +335,32 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
-  let pty: ScriptPty;
-  try {
-    pty = spawnScript({
-      command: args.command,
-      cwd: args.worktree.path,
-      env,
-      cols: DEFAULT_COLS,
-      rows: DEFAULT_ROWS,
-    });
-  } catch (error) {
-    // No process exists (missing shell binary, PTY allocation failure).
-    // Report it as a failed run rather than throwing: the renderer has
-    // already opened the console for this runId by the time it hears
-    // back, so the failure belongs in that console.
-    const message = errorMessageOf(error) || "Failed to start script process";
-    queueMicrotask(() => {
-      args.notify({ runId, kind: "error", data: message });
-      args.notify({ runId, kind: "exit", code: null });
-    });
-    return runId;
-  }
+  // Throws when no process could be started; the caller's IPC rejection
+  // carries the message into the console.
+  const pty: ScriptPty = spawnScript({
+    command: args.command,
+    cwd: args.worktree.path,
+    env,
+    cols: DEFAULT_COLS,
+    rows: DEFAULT_ROWS,
+  });
+
+  // The PTY is one ordered byte stream (stdout and stderr share the
+  // terminal), so the renderer's xterm sees exactly what a real
+  // terminal would; concatenating reads before sending changes nothing
+  // it renders.
+  let pendingOutput = "";
+  let flushTimer: NodeJS.Timeout | null = null;
+  const flushOutput = () => {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+    if (!pendingOutput) return;
+    const data = pendingOutput;
+    pendingOutput = "";
+    args.notify({ runId, kind: "data", data });
+  };
 
   let resolveDone: () => void;
   const done = new Promise<void>((resolve) => {
@@ -361,30 +382,24 @@ export function startScript(args: RunArgs): string {
     cancelling: false,
     done,
     notify: args.notify,
+    flushOutput,
   };
   runningScripts.set(runId, record);
   persistSnapshot();
 
-  // The PTY is one ordered byte stream (stdout and stderr share the
-  // terminal), so the renderer's xterm sees exactly what a real
-  // terminal would; concatenating reads before sending changes nothing
-  // it renders.
-  let pendingOutput = "";
-  let flushTimer: NodeJS.Timeout | null = null;
-  const flushOutput = () => {
-    if (flushTimer) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
-    if (!pendingOutput) return;
-    const data = pendingOutput;
-    pendingOutput = "";
-    args.notify({ runId, kind: "data", data });
-  };
   pty.onData((data) => {
     pendingOutput += data;
     if (pendingOutput.length >= OUTPUT_FLUSH_BYTES) flushOutput();
     else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
+  });
+
+  // A read error on the PTY master (anything but the EIO that means the
+  // child hung up) is rethrown by node-pty unless someone else listens
+  // for it, and an uncaught throw here takes the whole main process
+  // down. node-pty closes the PTY first, so the exit event follows.
+  (pty as unknown as NodeJS.EventEmitter).on("error", (error: unknown) => {
+    flushOutput();
+    args.notify({ runId, kind: "error", data: errorMessageOf(error) });
   });
 
   // node-pty reports exit only after the terminal stream has drained
@@ -415,8 +430,12 @@ export function startScript(args: RunArgs): string {
 // Keystrokes from the console. A no-op when the run isn't one of ours
 // (already exited, or a lifecycle script the CLI ran on the app's behalf
 // -- those stream output through the same events but have no PTY here).
+// Both calls can also fail on a PTY that is being torn down (the exit
+// event is already on its way), which is not worth reporting.
 export function writeToScript(runId: string, data: string): void {
-  runningScripts.get(runId)?.pty.write(data);
+  try {
+    runningScripts.get(runId)?.pty.write(data);
+  } catch {}
 }
 
 // The console's viewport size, so full-width output and TUIs lay out
@@ -424,10 +443,7 @@ export function writeToScript(runId: string, data: string): void {
 export function resizeScript(runId: string, cols: number, rows: number): void {
   try {
     runningScripts.get(runId)?.pty.resize(cols, rows);
-  } catch {
-    // The ioctl fails once the PTY is torn down; the exit event is
-    // already on its way.
-  }
+  } catch {}
 }
 
 export async function cancelScript(runId: string): Promise<boolean> {

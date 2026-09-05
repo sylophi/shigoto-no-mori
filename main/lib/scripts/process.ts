@@ -13,6 +13,7 @@
 //   3. The caller escalates to SIGKILL through the same path after its
 //      grace period.
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
 import { type IPty, spawn as spawnPty } from "node-pty";
@@ -46,17 +47,40 @@ export function shellQuote(s: string): string {
   return `'${s.replace(/'/g, `'\\''`)}'`;
 }
 
-// Throws synchronously when no process could be started (missing shell
-// binary, PTY allocation failure); callers report that as a failed run.
-// The PTY child runs in its own session, so its pgid === pid and the
-// whole tree can be signaled via process.kill(-pid, sig).
+// Inherited terminal state that would mislead a program in the new
+// PTY: the app may itself have been launched from a tmux pane or a
+// shell exporting its own size. node-pty strips the same set, but only
+// when handed process.env itself, not a copy with additions.
+const STALE_TERMINAL_ENV = new Set([
+  "COLUMNS",
+  "LINES",
+  "TERMCAP",
+  "WINDOWID",
+  "TMUX",
+  "TMUX_PANE",
+  "STY",
+  "WINDOW",
+]);
+
+// Throws synchronously when no process could be started (a missing
+// shell, PTY allocation failure); callers report that as a failed run.
+// The check for the shell is deliberate: node-pty's helper execs it in
+// the child and exits 1 without a word if that fails, which would show
+// as a bare "exit 1". The PTY child runs in its own session, so its
+// pgid === pid and the whole tree can be signaled via
+// process.kill(-pid, sig).
 export function spawnScript(opts: SpawnScriptOptions): ScriptPty {
   const { command: shellCmd, args: shellArgs } = resolveShell();
+  if (!existsSync(shellCmd)) {
+    throw new Error(`Login shell not found: ${shellCmd}`);
+  }
   // node-pty's env is a plain string map; drop the undefined entries
   // NodeJS.ProcessEnv allows.
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(opts.env)) {
-    if (value !== undefined) env[key] = value;
+    if (value !== undefined && !STALE_TERMINAL_ENV.has(key)) {
+      env[key] = value;
+    }
   }
   return spawnPty(shellCmd, [...shellArgs, opts.command], {
     name: "xterm-256color",

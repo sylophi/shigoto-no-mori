@@ -3,13 +3,17 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { Trash2 } from "lucide-react";
-import { notifyError } from "@/lib/toast";
+import { openExternalUrl } from "@/lib/openExternal";
 import {
   type ScriptKey,
   type ScriptRunState,
   scriptRuns,
 } from "@/store/scriptRuns";
-import { readTerminalTheme } from "./terminalTheme";
+import { readTerminalTheme, sameTheme } from "./terminalTheme";
+
+// Refits during a window drag are coalesced to this; the first fit of
+// a terminal runs at once so it never paints at xterm's default grid.
+const REFIT_DEBOUNCE_MS = 50;
 
 // DECTCEM: terminal cursor visibility.
 const SHOW_CURSOR = "\x1b[?25h";
@@ -34,7 +38,11 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
 
   return (
     <div className="relative min-h-0 flex-1 bg-background">
-      <ConsoleTerminal key={runKey} runKey={runKey} state={state} />
+      <ConsoleTerminal
+        key={`${runKey}:${state.startedAt ?? 0}`}
+        runKey={runKey}
+        state={state}
+      />
       {state.status === "starting" && !state.hasOutput && (
         <div className="pointer-events-none absolute top-3 left-4 font-mono text-xs text-muted-foreground">
           Starting…
@@ -58,20 +66,26 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
   );
 }
 
-// One xterm instance per console (keyed on the run key by the parent,
-// so switching scripts mounts a fresh one). It is a real terminal, not
-// a log view: output is replayed into it byte for byte (so cursor
-// movement, progress bars and full-screen programs render as they
-// would in Terminal.app), keystrokes go back to the PTY while the run
-// is live, and the PTY is told the viewport size so programs lay out
-// for the space they have.
+// One xterm instance per run (keyed on the run key and start time by
+// the parent, so a rerun or another script mounts a fresh one -- xterm
+// applies writes asynchronously, so reusing a terminal across runs
+// would let the old run's queued tail paint over the new one). It is
+// a real terminal, not a log view: the run's output is replayed into
+// it byte for byte (so cursor movement, progress bars and full-screen
+// programs render as they would in Terminal.app), keystrokes go back
+// to the PTY while the run is live, and the PTY is told the viewport
+// size so programs lay out for the space they have.
 function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
+  // Whether the grid has been fitted to the host yet; until then
+  // term.cols/rows are xterm's defaults and not worth telling the PTY.
+  const fittedRef = useRef(false);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    let theme = readTerminalTheme(host);
     const term = new Terminal({
       // Matches the host's `font-mono text-xs`; xterm sizes its cell
       // grid from these, so they can't come from CSS.
@@ -80,35 +94,51 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
       lineHeight: 1.25,
       cursorBlink: true,
       scrollback: 5_000,
-      theme: readTerminalTheme(host),
+      theme,
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        window.api.shell
-          .openExternal(uri)
-          .catch((err) => notifyError("Couldn't open link", err));
-      }),
-    );
+    term.loadAddon(new WebLinksAddon((_event, uri) => openExternalUrl(uri)));
     term.open(host);
     const dataSub = term.onData((data) => scriptRuns.write(runKey, data));
     const resizeSub = term.onResize(({ cols, rows }) =>
       scriptRuns.resize(runKey, cols, rows),
     );
-    // Output arrives straight from the store's log; the replay effect
-    // below fills in what came before this subscription.
+    // Catch up on the run so far in one write, then follow the log; the
+    // two happen in the same tick, so nothing is missed or doubled.
+    term.write(scriptRuns.readOutput(runKey).join(""));
     const unsubscribeOutput = scriptRuns.subscribeOutput(runKey, (chunk) =>
       term.write(chunk),
     );
     termRef.current = term;
+    fittedRef.current = false;
 
     // fit() throws while the host has no layout yet (route transition);
-    // the observer fires again once it does.
-    const refit = () => {
+    // the observer fires again once it does. The first successful fit
+    // also tells the PTY the size, since xterm only reports resizes
+    // that change the grid and the real size may equal its default.
+    const fitNow = () => {
       try {
         fit.fit();
-      } catch {}
+      } catch {
+        return;
+      }
+      if (!fittedRef.current) {
+        fittedRef.current = true;
+        scriptRuns.resize(runKey, term.cols, term.rows);
+      }
+    };
+    let refitTimer: ReturnType<typeof setTimeout> | null = null;
+    const refit = () => {
+      if (!fittedRef.current) {
+        fitNow();
+        return;
+      }
+      if (refitTimer) clearTimeout(refitTimer);
+      refitTimer = setTimeout(() => {
+        refitTimer = null;
+        fitNow();
+      }, REFIT_DEBOUNCE_MS);
     };
     // Observing delivers the current size straight away, which is the
     // initial fit. A fit measured before the monospace face has loaded
@@ -119,8 +149,13 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
 
     // Theme classes live on <html> and flip after this component's
     // own effects run, so watch the DOM rather than the theme hooks.
+    // Only a changed palette is handed to xterm: it repaints everything
+    // for any new theme object.
     const themeObserver = new MutationObserver(() => {
-      term.options.theme = readTerminalTheme(host);
+      const next = readTerminalTheme(host);
+      if (sameTheme(theme, next)) return;
+      theme = next;
+      term.options.theme = next;
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
@@ -128,6 +163,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     });
 
     return () => {
+      if (refitTimer) clearTimeout(refitTimer);
       unsubscribeOutput();
       themeObserver.disconnect();
       observer.disconnect();
@@ -138,25 +174,14 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     };
   }, [runKey]);
 
-  // Start the terminal over with the run's logged output: on mount, and
-  // again whenever a new run begins (a fresh startedAt) so the previous
-  // run's screen doesn't linger under it.
-  useEffect(() => {
-    const term = termRef.current;
-    if (!term) return;
-    term.reset();
-    for (const chunk of scriptRuns.readOutput(runKey)) term.write(chunk);
-  }, [runKey, state.startedAt]);
-
   // Typing only makes sense into a live PTY. Off the run, xterm stops
   // emitting onData (so no stray keystrokes hit the next run) and the
   // cursor is hidden, since there is nothing to type into; on it, take
-  // focus so the user can type straight away, and tell the new PTY the
-  // viewport size -- xterm's onResize only fires when the grid
-  // changes, which it doesn't for a run started into an already-open
-  // console. The cursor writes queue behind the output writes above,
-  // so they land after the replay (and after the reset a new run
-  // starts with, which makes the cursor visible again).
+  // focus so the user can type straight away, and tell the PTY the
+  // viewport size once the grid is fitted -- xterm's onResize only
+  // fires when the grid changes, which it doesn't for a run started
+  // into an already-open console. The cursor writes queue behind the
+  // replay above, so they land after it.
   useEffect(() => {
     const term = termRef.current;
     if (!term) return;
@@ -165,7 +190,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     term.write(live ? SHOW_CURSOR : HIDE_CURSOR);
     if (live) {
       term.focus();
-      scriptRuns.resize(runKey, term.cols, term.rows);
+      if (fittedRef.current) scriptRuns.resize(runKey, term.cols, term.rows);
     }
   }, [runKey, state.status, state.interactive]);
 
@@ -178,6 +203,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   // black; letting the console's background through fixes that.
   return (
     <div
+      data-slot="script-console"
       data-keyboard-surface="raw"
       className="isolate h-full w-full px-4 py-3 font-mono text-xs"
     >
