@@ -4,8 +4,7 @@ import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { PortNumberSchema } from "@shared/schemas";
 
-// Client-scoped control surface for the port-forward engine (v2 step 8,
-// slice B). The engine binds real TCP listeners on THIS machine's
+// Client-scoped control surface for the port-forward engine. The engine binds real TCP listeners on THIS machine's
 // loopback (main/portForward/engine.ts) and drives a peer's host-scoped
 // forward verbs (forward.ts) underneath, so these calls belong to the
 // window's own device exactly like dialog and updater: they never mount
@@ -19,23 +18,23 @@ import { PortNumberSchema } from "@shared/schemas";
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
-export const PortForwardStartPayloadSchema = z.strictObject({
+const PortForwardStartPayloadSchema = z.strictObject({
   deviceId: DeviceIdSchema,
   remotePort: PortNumberSchema,
   // Omitted means an ephemeral local port, the common case.
   localPort: PortNumberSchema.optional(),
 });
 
-export const PortForwardStartResultSchema = z.strictObject({
+const PortForwardStartResultSchema = z.strictObject({
   forwardId: ForwardIdSchema,
   localPort: PortNumberSchema,
 });
 
-export const PortForwardStopPayloadSchema = z.strictObject({
+const PortForwardStopPayloadSchema = z.strictObject({
   forwardId: ForwardIdSchema,
 });
 
-export const PortForwardSummarySchema = z.strictObject({
+const PortForwardSummarySchema = z.strictObject({
   forwardId: ForwardIdSchema,
   deviceId: DeviceIdSchema,
   remotePort: PortNumberSchema,
@@ -43,7 +42,7 @@ export const PortForwardSummarySchema = z.strictObject({
   connCount: z.number().int().min(0),
 });
 
-export const PortForwardListResultSchema = z.strictObject({
+const PortForwardListResultSchema = z.strictObject({
   forwards: z.array(PortForwardSummarySchema),
 });
 

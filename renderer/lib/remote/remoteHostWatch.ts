@@ -4,8 +4,9 @@
 // (main/ipc/register.ts) and for truly external writes via its fs
 // watcher, git:projectChanged when one project's git state moves under
 // any tool (its git-directory watcher), and git:refsRefreshed narrows
-// a background fetch to one project's branch state. All ride the
-// peer's direct session and
+// a background fetch to one project's branch state, and
+// remoteAccess:commandAccessChanged says the host's command-access
+// switch flipped. All ride the peer's direct session and
 // arrive here as the bridge's peerPush fan-out, tagged with the
 // sending device, so one subscription serves every device and every
 // surface: the always-mounted sidebar rows for a peer's forest refresh
@@ -22,7 +23,7 @@
 // while a session was down, so this subscription never needs to know a
 // session's lifecycle.
 //
-// Deliberately NOT mirrored, so this stays three channels:
+// Deliberately NOT mirrored, so this stays four channels:
 // - projects:usageBumped drives the local sidebar's usage sorts, which
 //   a peer's rows don't drive.
 // - git:fetchActive feeds the device-blind fetch-spinner store, which
@@ -31,6 +32,7 @@
 //   external-change invalidation and not rendered remotely.
 import type { QueryClient } from "@tanstack/react-query";
 import { gitContract } from "@shared/ipc/modules/git";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
 import {
   invalidateHostDevice,
@@ -41,6 +43,7 @@ import {
 const EXTERNAL_CHANGE = gitContract.calls.externalChange;
 const PROJECT_CHANGED = gitContract.calls.projectChanged;
 const REFS_REFRESHED = gitContract.calls.refsRefreshed;
+const COMMAND_ACCESS_CHANGED = remoteAccessContract.calls.commandAccessChanged;
 
 // Boot wiring: subscribe once for the life of the window, never
 // unsubscribed on purpose, exactly like the other boot-scope
@@ -58,6 +61,14 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
       const parsed = PROJECT_CHANGED.payload.safeParse(payload);
       if (!parsed.success) return;
       invalidateHostProject(queryClient, deviceId, parsed.data.projectId);
+      return;
+    }
+    // The peer's command-access switch moved: re-ask its preflight so
+    // read-only notes and mutation controls follow without a focus.
+    if (channel === COMMAND_ACCESS_CHANGED.channel) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeysFor(deviceId).commandAccess(),
+      });
       return;
     }
     if (channel === REFS_REFRESHED.channel) {

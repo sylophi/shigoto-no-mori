@@ -11,7 +11,10 @@
 // and a same-named unrelated repo never does.
 import type { Project } from "@shared/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import { usePeerCommandAccess } from "@/hooks/remote/useCommandAccess";
+import {
+  commandAccessOf,
+  usePeerCommandAccess,
+} from "@/hooks/remote/useCommandAccess";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
@@ -54,7 +57,7 @@ export function useDeviceTargets(
   // Only an identity match per device is read out of this, and the
   // sidebar's always-mounted fan-out keeps it current, so opening the
   // page must not kick a fresh re-listing of every peer's forest.
-  const forests = useRemoteForests({ refetchOnMount: false });
+  const forests = useRemoteForests();
   const access = usePeerCommandAccess(devices);
   const localName = useLocalDeviceName();
 
@@ -99,7 +102,7 @@ export function useDeviceTargets(
             ? "offline"
             : match === undefined
               ? "no-project"
-              : access.get(device.deviceId)?.granted === true
+              : commandAccessOf(access, device.deviceId).granted
                 ? undefined
                 : "no-grant",
       };

@@ -57,7 +57,7 @@ export class RemoteConnectError extends Error {
 // a disconnect distinctly from a handler error. Message text stays
 // generic: the shared/errors.ts matchers key on host handler messages,
 // which this is not.
-export class RemoteDisconnectedError extends Error {
+class RemoteDisconnectedError extends Error {
   readonly code: number | null;
   constructor(code: number | null) {
     super("remote device disconnected");
@@ -115,7 +115,7 @@ export type ConnectDeviceOptions = {
   // A pre-welcome close rejects the connect promise instead, so this
   // fires at most once and never for a failed attempt.
   onClose: (code: number | null) => void;
-  // Identity pin for the direct data plane (v2 step 10, slice A): when
+  // Identity pin for the direct data plane: when
   // set and the welcome's self-asserted deviceId differs, the
   // handshake fails and the socket closes, so a dial that landed on
   // the wrong machine can never be cached under the intended peer.
@@ -155,8 +155,8 @@ export type DeviceConnection = {
   remoteAppVersion: string;
 };
 
-// The two-phase handle the direct dialer's serialized-hello race needs
-// (v2 step 10, slice B): open the socket now, present the credential
+// The two-phase handle the direct dialer's serialized-hello race
+// needs: open the socket now, present the credential
 // later. A hello consumes a single-use connect ticket AND, on the
 // host, supersedes any previous authed socket from the same device, so
 // a race that hellos on every candidate at once would have the slower

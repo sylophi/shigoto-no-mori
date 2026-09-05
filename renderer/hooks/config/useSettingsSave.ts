@@ -93,7 +93,7 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
   );
 }
 
-// The remote encoding (v2 step 6): the globalConfig.writeDeviceSettings
+// The remote encoding: the globalConfig.writeDeviceSettings
 // patch, carrying ONLY the keys a peer's Settings section edits. The
 // host applies the patch as absent-means-keep, which is what keeps the
 // launch catalog (launchers, hiddenLaunchers, launchScripts) out of it:

@@ -1,14 +1,10 @@
-import {
-  CHANNEL_OPEN_NO_CHANNELS,
-  CHANNEL_OPEN_TAKEN,
-  CHANNEL_OPEN_TOO_MANY,
-} from "@shared/ipc/socket/channels";
+import { CHANNEL_OPEN_TOO_MANY } from "@shared/ipc/socket/channels";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { PortNumberSchema } from "@shared/schemas";
 
-// Port forwarding over byte channels (v2 step 8, reworked): a
+// Port forwarding over byte channels: a
 // forwarded TCP connection crosses the direct websocket as raw binary
 // channel frames (shared/ipc/socket/channels.ts), multiplexed beside
 // the JSON invokes. This contract is only the OPEN: the caller mints a
@@ -43,10 +39,8 @@ export const FORWARD_CONNECT_FAILED = "connect-failed";
 // The channel layer's own refusals, under the names the forward UI
 // matches (renderer/hooks/remote/usePortForwards.ts).
 export const FORWARD_TOO_MANY_CONNS = CHANNEL_OPEN_TOO_MANY;
-export const FORWARD_NO_CHANNELS = CHANNEL_OPEN_NO_CHANNELS;
-export const FORWARD_CHANNEL_TAKEN = CHANNEL_OPEN_TAKEN;
 
-export const ForwardOpenPayloadSchema = z.strictObject({
+const ForwardOpenPayloadSchema = z.strictObject({
   port: PortNumberSchema,
   channelId: ChannelIdSchema,
 });

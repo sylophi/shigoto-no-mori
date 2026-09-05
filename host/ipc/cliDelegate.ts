@@ -422,7 +422,7 @@ export async function shigomoriWriteViaCli(
   finalOkDoc(result, "sm projects config write failed", { projectId });
 }
 
-// The device-sync verbs (v2 step 7, slice B). Each shells the CLI and
+// The device-sync verbs. Each shells the CLI and
 // re-validates the crossing document with a zod schema, like every
 // other Go/TS boundary in this file. The paths handed to bundle
 // create/unpack are ALWAYS app-chosen temp paths (the sync host module

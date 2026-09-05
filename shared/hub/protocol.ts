@@ -1,5 +1,4 @@
-// Wire contract between the app and the hub Worker (v2 step 4,
-// slice A): the HTTP route table, HTTP body schemas for the
+// Wire contract between the app and the hub Worker: the HTTP route table, HTTP body schemas for the
 // device/ticket endpoints, the hub socket envelopes, and the
 // constants both sides must agree on. Imported by the app (a later
 // slice) and by hub/, so the same rules as
@@ -10,7 +9,7 @@
 // envelope is opaque to the Worker. It carries only the broker-surface
 // sm frames (hello/welcome, the direct:connectInfo req/res, bye), but
 // nothing here may depend on that shape. Contract data never rides this
-// wire (v2 step 10, slice C): the device hub is orchestration only, and
+// wire: the device hub is orchestration only, and
 // data flows over the direct sockets it brokers.
 //
 // TRUST MODEL: the device hub is our own managed service, not an
@@ -34,8 +33,8 @@
 import { z } from "zod";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
-// JSON. The device hub carries orchestration only (v2 step 10, slice
-// C): hello/welcome, the direct:connectInfo broker exchange, bye and
+// JSON. The device hub carries orchestration only:
+// hello/welcome, the direct:connectInfo broker exchange, bye and
 // presence, all small control frames, so this is a control-frame budget
 // rather than a data budget. Contract data rides the direct sockets and
 // never this wire. An oversize forward is answered with a `too-large`
@@ -120,9 +119,17 @@ export const HUB_ROUTES = {
     method: "DELETE",
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
   },
+  // Renames a device of the caller's account (the app renames itself
+  // through it after the local write), so the registry every other
+  // device lists carries the new name at once rather than at the
+  // device's next enrollment.
+  renameDevice: {
+    method: "PATCH",
+    path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
+  },
   mintTicket: { method: "POST", path: "/tickets" },
   connect: { method: "GET", path: "/connect" },
-  // Tunnel provisioning (v2 step 10, slice B): the Worker creates or
+  // Tunnel provisioning: the Worker creates or
   // reuses this device's named Cloudflare tunnel, points its ingress
   // at the given loopback port and answers with the public hostname
   // plus the connector run token. Device-credential authed. Answers
@@ -164,6 +171,10 @@ export const EnrollRequestSchema = z.object({
   deviceId: z.string().min(1).max(200),
   name: z.string().min(1).max(256),
   platform: z.string().min(1).max(64),
+});
+
+export const RenameDeviceRequestSchema = z.object({
+  name: EnrollRequestSchema.shape.name,
 });
 
 // One device as the HTTP API reports it. Timestamps are epoch
@@ -218,6 +229,11 @@ export const TunnelProvisionRequestSchema = z.object({
 export const TunnelProvisionResponseSchema = z.object({
   hostname: z.string().min(1),
   connectorToken: z.string().min(1),
+  // True when this call created the tunnel and wrote its DNS record,
+  // so the hostname may take a while to resolve (the runner probes it
+  // patiently). A reused tunnel resolved before and is repaired by
+  // re-provisioning instead. Additive: an older Worker omits it.
+  dnsCreated: z.boolean().optional(),
 });
 export type TunnelProvisionResponse = z.infer<
   typeof TunnelProvisionResponseSchema
@@ -237,7 +253,7 @@ export const TUNNEL_UNCONFIGURED_STATUS = 501;
 // the consumed ticket already binds the connection to a deviceId. `to`
 // is bounded to match a deviceId, since it is fed straight to
 // getWebSockets on the device hub hot path.
-export const HubSendEnvelopeSchema = z.object({
+const HubSendEnvelopeSchema = z.object({
   t: z.literal("relay"),
   to: DeviceIdSchema,
   frame: z.unknown(),
@@ -253,7 +269,7 @@ export type DeviceEnvelope = z.infer<typeof DeviceEnvelopeSchema>;
 
 // DO to device: a frame forwarded from another device. The device hub
 // copies `frame` verbatim, it never parses or rewrites it.
-export const HubDeliverEnvelopeSchema = z.object({
+const HubDeliverEnvelopeSchema = z.object({
   t: z.literal("relay"),
   // Bounded like HubSendEnvelopeSchema.to: a hostile DO can forge this,
   // and it is fed straight into per-peer routing and log lines, so it is
@@ -266,7 +282,7 @@ export const HubDeliverEnvelopeSchema = z.object({
 // (including the receiver). Sent to a socket right after it is
 // accepted and rebroadcast to everyone on every join and leave, so a
 // client only ever replaces its copy, never merges deltas.
-export const PresenceEnvelopeSchema = z.object({
+const PresenceEnvelopeSchema = z.object({
   t: z.literal("presence"),
   // Each entry is a deviceId, bounded like HubSendEnvelopeSchema.to,
   // and the roster length is capped so a hostile DO cannot force an
@@ -279,7 +295,7 @@ export const PresenceEnvelopeSchema = z.object({
 // DO to device: a send could not be delivered. `offline` means no
 // socket is connected for `to`. `too-large` means the serialized
 // forward exceeded MAX_HUB_MESSAGE_BYTES.
-export const NackEnvelopeSchema = z.object({
+const NackEnvelopeSchema = z.object({
   t: z.literal("nack"),
   // Echoes the `to` the sender used, already bounded on send, so the
   // same bound applies coming back.

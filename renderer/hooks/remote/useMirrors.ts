@@ -15,8 +15,8 @@ import type {
 } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { queryKeys } from "@/lib/queryKeys";
-import { notifyError, toast } from "@/lib/toast";
+import { reportLanded } from "@/hooks/remote/useBringWorktreeHere";
+import { notifyError } from "@/lib/toast";
 
 const EMPTY: MirrorListResult = {
   daemon: "stopped",
@@ -85,22 +85,13 @@ export function useStartMirror({
         sourceIdentity,
         branch: worktree.branch,
       }),
-    onSuccess: (result) => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(localProjectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(localProjectId),
-      });
-      if (result.dirtyApplied || !result.captured) {
-        toast.success(`Mirroring ${worktree.branch} here`);
-      } else {
-        notifyError(
-          `Mirroring ${worktree.branch} here, without its uncommitted changes`,
-          "They could not be applied and are still on the other device.",
-        );
-      }
-    },
+    onSuccess: (result) =>
+      reportLanded(
+        queryClient,
+        localProjectId,
+        result,
+        `Mirroring ${worktree.branch} here`,
+      ),
     onError: (err) => {
       if (!isCommandRefusedError(err)) {
         notifyError("Couldn't mirror worktree here", err);

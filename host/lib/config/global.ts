@@ -4,6 +4,7 @@
 // (use logs, sort and collapse preferences) and the per-project configs
 // at <dataDir>/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
+import { z } from "zod";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { errorMessageOf } from "@shared/errors";
@@ -145,7 +146,7 @@ export function resolveSocketHostConfig(
 // withGlobalConfigWriteLock (the INVARIANT above: every host-side
 // read-modify-write serializes on it, or a queued app-side write based
 // on a pre-mint read could clobber the fresh token) and, inside that,
-// the CLI's sibling .lock (the takeLegacyAppearance precedent) so app
+// the CLI's sibling .lock (the dropLegacyAppearance precedent) so app
 // and CLI writes exclude each other. Async only for the write lock,
 // which is why the caller (refreshSocketHost's resolver) awaits it.
 // Resolves true when it wrote, so the caller can re-read. The token is
@@ -153,12 +154,16 @@ export function resolveSocketHostConfig(
 // to the client device. Invalidates the module cache directly rather
 // than through the subscriber-firing helper, since the caller is
 // already inside a reconcile.
-export function ensureSocketHostToken(): Promise<boolean> {
-  const path = configPath();
-  return withGlobalConfigWriteLock(async () =>
-    withFileLock(`${path}.lock`, () => {
-      const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
-      if (doc === null) return false;
+export async function ensureSocketHostToken(): Promise<boolean> {
+  // A plain fresh read answers the common case (hosting off, or a
+  // token already minted) without the cross-process lock below, which
+  // spins the main thread while a CLI write holds it. Fresh rather
+  // than cached: the decision must see the file as it is now.
+  const current = (await readGlobalConfigFresh()).socketHost;
+  if (current?.enabled !== true) return false;
+  if (typeof current.token === "string" && current.token !== "") return false;
+  return withGlobalConfigWriteLock(async () => {
+    const minted = updateConfigDocSync((doc) => {
       const socketHost = doc.socketHost;
       if (socketHost?.enabled !== true) return false;
       const token =
@@ -168,14 +173,36 @@ export function ensureSocketHostToken(): Promise<boolean> {
         ...socketHost,
         token: randomBytes(32).toString("base64url"),
       };
-      atomicWriteJsonSync(path, withSchemaVersion(doc));
-      cache.invalidate();
+      return true;
+    });
+    if (minted) {
       console.info(
         "[socket] generated a hosting token. Copy it to the client device with `sm config get socketHost.token`.",
       );
-      return true;
-    }),
-  );
+    }
+    return minted;
+  });
+}
+
+// One locked read-mutate-write of config.json for the drains and the
+// token mint: `mutate` edits the parsed doc in place and says whether
+// it changed anything, and only a change is written back (schemaVersion
+// restamped) and invalidates the cache. Runs under the same sibling
+// .lock the CLI's updateConfigDoc takes (cli/cmd_config.go,
+// host/lib/util/lockFile.ts), so app and CLI writes exclude each
+// other. Sync because two callers sit on the boot path before the
+// first window. Returns false when config.json is missing.
+function updateConfigDocSync(
+  mutate: (doc: z.infer<typeof StoredGlobalConfigSchema>) => boolean,
+): boolean {
+  const path = configPath();
+  return withFileLock(`${path}.lock`, () => {
+    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
+    if (doc === null || !mutate(doc)) return false;
+    atomicWriteJsonSync(path, withSchemaVersion(doc));
+    cache.invalidate();
+    return true;
+  });
 }
 
 // Read-boundary redaction: a secret never crosses any wire. socketHost
@@ -209,53 +236,44 @@ export function redactGlobalConfigForRead(
 // clears registered keys, the app's write parses through a schema that
 // no longer models this one), so an explicit delete is the only thing
 // that ever removes them. Runs every boot, and reads without writing
-// when the key is absent. Same lock and atomic-write discipline as
-// takeLegacyAppearance.
+// when the key is absent.
 export function dropLegacyRemoteDevices(): void {
-  const path = configPath();
-  withFileLock(`${path}.lock`, () => {
-    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
-    if (doc === null || !("remoteDevices" in doc)) return;
+  updateConfigDocSync((doc) => {
+    if (!("remoteDevices" in doc)) return false;
     delete doc["remoteDevices"];
-    atomicWriteJsonSync(path, withSchemaVersion(doc));
-    cache.invalidate();
+    return true;
   });
 }
 
-// One-shot drain of the pre-split appearance keys out of config.json,
-// for the client config migration (main/electron/clientConfigMigration.ts).
-// Extracts theme and doubutsu, deletes them from the doc, writes it
-// back with every other key intact and schemaVersion restamped, and
-// returns what it found. Runs under the same sibling .lock the CLI's
-// updateConfigDoc takes (cli/cmd_config.go, host/lib/util/lockFile.ts),
-// so app and CLI writes exclude each other. Sync because the caller
-// sits on the boot path before the first window. Throws when
-// config.json is unreadable, and the caller skips the drain for that
-// boot.
-export function takeLegacyAppearance(): ClientConfig {
-  const path = configPath();
-  return withFileLock(`${path}.lock`, () => {
-    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
-    if (doc === null) return {};
-    const taken: ClientConfig = {};
-    // Field by field so one bad value can't void the other. An invalid
-    // value is still drained below: the store's defaults are the right
-    // replacement for a value no build could read.
-    const theme = ClientConfigSchema.shape.theme.safeParse(doc["theme"]);
-    if (theme.success && theme.data !== undefined) taken.theme = theme.data;
-    const doubutsu = ClientConfigSchema.shape.doubutsu.safeParse(
-      doc["doubutsu"],
-    );
-    if (doubutsu.success && doubutsu.data !== undefined) {
-      taken.doubutsu = doubutsu.data;
-    }
-    // Nothing to delete means nothing to write: a fresh install's
-    // config.json passes through untouched.
-    if (!("theme" in doc) && !("doubutsu" in doc)) return taken;
+// The pre-split appearance keys in config.json, for the client config
+// migration (main/electron/clientConfigMigration.ts): read first, so a
+// failed store write loses nothing, then dropped once the store holds
+// them. Throws when config.json is unreadable, and the caller skips
+// the migration for that boot.
+export function readLegacyAppearance(): ClientConfig {
+  const doc = readJsonOrNullSync(configPath(), StoredGlobalConfigSchema);
+  const found: ClientConfig = {};
+  if (doc === null) return found;
+  // Field by field so one bad value can't void the other. An invalid
+  // value is still drained by dropLegacyAppearance: the store's
+  // defaults are the right replacement for a value no build could read.
+  const theme = ClientConfigSchema.shape.theme.safeParse(doc["theme"]);
+  if (theme.success && theme.data !== undefined) found.theme = theme.data;
+  const doubutsu = ClientConfigSchema.shape.doubutsu.safeParse(doc["doubutsu"]);
+  if (doubutsu.success && doubutsu.data !== undefined) {
+    found.doubutsu = doubutsu.data;
+  }
+  return found;
+}
+
+// The drain half, run once the values are safely in the client store.
+// Nothing to delete means nothing to write: a fresh install's
+// config.json passes through untouched.
+export function dropLegacyAppearance(): void {
+  updateConfigDocSync((doc) => {
+    if (!("theme" in doc) && !("doubutsu" in doc)) return false;
     delete doc["theme"];
     delete doc["doubutsu"];
-    atomicWriteJsonSync(path, withSchemaVersion(doc));
-    cache.invalidate();
-    return taken;
+    return true;
   });
 }

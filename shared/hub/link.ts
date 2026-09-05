@@ -1,6 +1,5 @@
-// The hub link: the multiplexing core of the hub transport (v2 step 4,
-// slice C). One device holds ONE socket to its account's Durable
-// Object, and both roles share it. Since v2 step 10 slice C the device
+// The hub link: the multiplexing core of the hub transport. One device holds ONE socket to its account's Durable
+// Object, and both roles share it. The device
 // hub is ORCHESTRATION ONLY: the HOST role serves exactly the broker
 // surface (sm hello/req for direct:connectInfo, bye) and refuses every
 // other channel, and the CLIENT role opens the short-lived sm-level
@@ -182,7 +181,7 @@ export type HubBroker = {
   handler?: (ctx: HubBrokerContext, raw: unknown) => Promise<unknown>;
 };
 
-export type HubLinkDeps = {
+type HubLinkDeps = {
   localDeviceId: string;
   localAppVersion: string;
   // Writes one text message to the raw hub socket. May throw when the

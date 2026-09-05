@@ -1,3 +1,4 @@
+import { createExternalStore } from "@/store/externalStore";
 import { useSyncExternalStore } from "react";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -25,24 +26,11 @@ export function settingsPanelId(tab: string): string {
   return `settings-panel-${tab.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
 }
 
-let selectedTab: string = APPEARANCE_TAB;
-const listeners = new Set<() => void>();
+const selectedTab = createExternalStore<string>(APPEARANCE_TAB);
 
 export function selectSettingsTab(tab: string): void {
-  if (selectedTab === tab) return;
-  selectedTab = tab;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
-
-function getSnapshot(): string {
-  return selectedTab;
+  if (selectedTab.get() === tab) return;
+  selectedTab.publish(tab);
 }
 
 // The selection resolved against the live device list, for the
@@ -56,7 +44,11 @@ export function useActiveSettingsTab(devices: readonly RemoteDevice[]): {
   // The peer the active tab names, undefined for every other tab.
   peer: RemoteDevice | undefined;
 } {
-  const selected = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const selected = useSyncExternalStore(
+    selectedTab.subscribe,
+    selectedTab.get,
+    selectedTab.get,
+  );
   const peer = devices.find(
     (device) => deviceTab(device.deviceId) === selected,
   );

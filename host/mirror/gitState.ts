@@ -209,10 +209,11 @@ export async function peekGitState(
   return { head: facts.head, tip: facts.tip, indexTree };
 }
 
-// Worktrees whose carrier ref this process has minted, so the clean
-// path deletes the ref only when one may exist. The first read per
-// worktree deletes unconditionally, in case a previous run left one.
-const carrierKnown = new Set<string>();
+// Worktrees this process knows to carry NO index ref, so the clean
+// path deletes the ref only when one may exist: the first read per
+// worktree (a previous run may have left one) and every clean read
+// after a mint. A mint takes the worktree back out of the set.
+const carrierClean = new Set<string>();
 
 // The full state, with the carrier commit for a staged index minted
 // (or an obsolete one removed) so the transfer can name it.
@@ -230,13 +231,13 @@ export async function readGitState(
   const core: GitStateCore = { head: facts.head, tip: facts.tip, indexTree };
   const ref = indexRefFor(worktreeId);
   if (indexTree === facts.headTree) {
-    if (!carrierKnown.has(worktreeId)) {
+    if (!carrierClean.has(worktreeId)) {
       await deleteRef(projectPath, ref).catch(() => {});
-      carrierKnown.add(worktreeId);
+      carrierClean.add(worktreeId);
     }
     return { ...core, indexCommit: null };
   }
-  carrierKnown.add(worktreeId);
+  carrierClean.delete(worktreeId);
   const existing = await refTip(projectPath, ref);
   if (
     existing !== null &&
@@ -282,7 +283,27 @@ export type ApplyGitStateResult =
 // (someone changed it, a branch collision, missing objects), so the
 // follower can show the reason and wait. Throws only on git failing
 // to do what it was asked.
+// The landing refs the caller names in `sweep` are carriers the fetch
+// or push created for this apply. They go whatever the outcome, so a
+// refused apply cannot leave one behind to block a later branch nested
+// under its name (refs/shigomori/incoming/feat blocks .../feat/x).
 export async function applyGitState(
+  project: Project,
+  worktree: { id: string; path: string },
+  input: ApplyGitStateInput,
+): Promise<ApplyGitStateResult> {
+  try {
+    return await applyGitStateUnswept(project, worktree, input);
+  } finally {
+    await Promise.all(
+      (input.sweep ?? [])
+        .filter((ref) => ref.startsWith("refs/shigomori/"))
+        .map((ref) => deleteRef(project.path, ref).catch(() => {})),
+    );
+  }
+}
+
+async function applyGitStateUnswept(
   project: Project,
   worktree: { id: string; path: string },
   input: ApplyGitStateInput,
@@ -295,10 +316,11 @@ export async function applyGitState(
     return { applied: false, reason: "changed-locally" };
   }
   const { state } = input;
-  if (
-    !(await hasCommit(project.path, state.tip)) ||
-    !(await hasObject(project.path, `${state.indexTree}^{tree}`))
-  ) {
+  const [tipHere, indexTreeHere] = await Promise.all([
+    hasCommit(project.path, state.tip),
+    hasObject(project.path, `${state.indexTree}^{tree}`),
+  ]);
+  if (!tipHere || !indexTreeHere) {
     return { applied: false, reason: "missing-objects" };
   }
 
@@ -375,12 +397,6 @@ export async function applyGitState(
   // when files differ from the index, which is the ordinary dirty case.
   await run(worktree.path, ["read-tree", state.indexTree]);
   await runLenient(worktree.path, ["update-index", "-q", "--refresh"]);
-
-  await Promise.all(
-    (input.sweep ?? [])
-      .filter((ref) => ref.startsWith("refs/shigomori/"))
-      .map((ref) => deleteRef(project.path, ref).catch(() => {})),
-  );
   return { applied: true };
 }
 

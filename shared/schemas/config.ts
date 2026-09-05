@@ -4,7 +4,7 @@ import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
 
-export const ThemeSchema = z.enum(["light", "dark", "system"]);
+const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
 
 export const LauncherCommandSchema = z.object({
@@ -34,11 +34,7 @@ export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 // - custom: <customWorktreePath>/<worktreeName>
 //   (escape hatch; not recommended -- can collide with other repos and
 //   complicates external-vs-managed detection)
-export const WorktreeLayoutSchema = z.enum([
-  "managed-root",
-  "in-project",
-  "custom",
-]);
+const WorktreeLayoutSchema = z.enum(["managed-root", "in-project", "custom"]);
 export type WorktreeLayout = z.infer<typeof WorktreeLayoutSchema>;
 
 // Per-project config. Stored at <dataDir>/projects/<projectId>.json
@@ -106,9 +102,6 @@ export const CarryOverListingPayloadSchema = ProjectScopedPayloadSchema.extend({
   // Folder being browsed, root-relative, with "" for the root.
   relative: z.union([z.literal(""), CarryOverEntrySchema.shape.path]),
 });
-export type CarryOverListingPayload = z.infer<
-  typeof CarryOverListingPayloadSchema
->;
 
 // One name in the browsed folder, across checkouts. `ignored` is judged
 // by the gitignore of a checkout that has it. `worktrees` names the
@@ -125,7 +118,6 @@ export type CarryOverCandidate = z.infer<typeof CarryOverCandidateSchema>;
 export const CarryOverStatsPayloadSchema = ProjectScopedPayloadSchema.extend({
   paths: z.array(CarryOverEntrySchema.shape.path),
 });
-export type CarryOverStatsPayload = z.infer<typeof CarryOverStatsPayloadSchema>;
 
 // Where a configured entry currently exists. Missing everywhere when
 // neither `inPrimary` nor any `worktrees`.
@@ -201,7 +193,7 @@ export const GlobalConfigSchema = z.object({
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
   githubCli: z.boolean().optional(),
-  // Remote hosting (v2 step 3, slice A): when enabled with a nonempty
+  // Remote hosting: when enabled with a nonempty
   // token, the app serves the REMOTE-tagged host IPC to clients over a
   // websocket (host/socket/server.ts). Off by default, and gated on the
   // token so a bare `enabled: true` can never open an unauthenticated
@@ -211,7 +203,7 @@ export const GlobalConfigSchema = z.object({
   // over a read (the read contract redacts it, see RedactedSocketHost
   // below). Step 4 replaces this shared-token auth wholesale with
   // pairing, so nothing else should grow to depend on the token's
-  // shape. Direct data plane (v2 step 10, slice A): when false, this
+  // shape. Direct data plane: when false, this
   // device neither runs the direct listener nor is advertised to peers,
   // so all its remote traffic stays on the device hub. ON by default
   // (absent = enrolled, explicit `false` is the opt-out), matching the
@@ -219,7 +211,7 @@ export const GlobalConfigSchema = z.object({
   // capability. Config-only for now (no Settings UI, like socketHost
   // below): toggle by editing config.json or `sm config edit`.
   directConnections: z.boolean().optional(),
-  // Tunnel endpoints (v2 step 10, slice B): absolute path to the
+  // Tunnel endpoints: absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
   // discovery. A missing binary reads as tunnels off with a typed
   // status, never an error loop. Config-only, like directConnections.
@@ -250,13 +242,12 @@ export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
 // handler (host/lib/config/global.ts), since packaged builds skip
 // output re-parsing, so this schema documents and validates the shape
 // rather than being the thing that strips the secret.
-export const RedactedSocketHostSchema = z.object({
+const RedactedSocketHostSchema = z.object({
   enabled: z.boolean().optional(),
   port: z.number().int().min(1).max(65535).optional(),
   lan: z.boolean().optional(),
   tokenSet: z.boolean().optional(),
 });
-export type RedactedSocketHost = z.infer<typeof RedactedSocketHostSchema>;
 
 // Output schema for globalConfig:read. Loose like the stored variant so
 // legacy and newer keys pass through, but with socketHost forced to the

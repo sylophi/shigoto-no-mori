@@ -119,6 +119,23 @@ export async function deleteDevice(
   return result.meta.changes > 0;
 }
 
+// Renames the device row, scoped to the account the worker authorized
+// like deleteDevice. Returns true when a row was actually renamed.
+export async function renameDevice(
+  db: D1Database,
+  deviceId: string,
+  accountId: string,
+  name: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "UPDATE devices SET name = ? WHERE device_id = ? AND account_id = ?",
+    )
+    .bind(name, deviceId, accountId)
+    .run();
+  return result.meta.changes > 0;
+}
+
 export async function touchLastSeen(
   db: D1Database,
   deviceId: string,

@@ -71,7 +71,7 @@ export function DeviceRegistryRow({
   chipsLoading: boolean;
   onRevokeDevice: () => void;
   revokePending: boolean;
-  // THIS device's tunnel endpoint state (v2 step 10, slice B), set on
+  // THIS device's tunnel endpoint state, set on
   // the this-device row only. "up" joins the status phrase. The phases
   // that mean "peers off this network cannot reach me" get one quiet
   // line under it (tunnelNote), because that fact is what decides

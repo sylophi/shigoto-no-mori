@@ -3,8 +3,7 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
 
-// The renderer's bridge onto the main-process hub socket (v2 step 4,
-// slice C). The single hub socket lives in main, because the Durable
+// The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
 // Object supersedes a duplicate socket per deviceId, so the renderer
 // reaches remote peers by forwarding through main. Client-scoped on
 // purpose: these calls are about THIS instance's hub socket, and the
@@ -16,7 +15,7 @@ import type { SupervisorStatus } from "@shared/remote/supervisor";
 // the bridge validates what crosses the Electron wire. On "connected"
 // the remote identity fields are empty strings: the hub socket has
 // no sm welcome of its own.
-export const HubSocketStatusSchema = z.discriminatedUnion("phase", [
+const HubSocketStatusSchema = z.discriminatedUnion("phase", [
   z.object({ phase: z.literal("idle") }),
   z.object({ phase: z.literal("connecting") }),
   z.object({
@@ -46,11 +45,10 @@ type SocketStatusMatchesSupervisor =
       : never
     : never;
 
-// THIS device's tunnel endpoint state vocabulary (v2 step 10, slice
-// B). The wire schema is the single owner: the cloudflared runner
+// THIS device's tunnel endpoint state vocabulary. The wire schema is the single owner: the cloudflared runner
 // (host/direct/cloudflared.ts) types its state off this so the two
 // sides cannot drift.
-export const TunnelStateSchema = z.enum([
+const TunnelStateSchema = z.enum([
   "off",
   "no-binary",
   "unconfigured",
@@ -63,7 +61,7 @@ export type TunnelState = z.infer<typeof TunnelStateSchema>;
 // Despite the module name, HubStatus is the REMOTE-PLANE snapshot: the
 // hub control plane's socket and roster plus the direct data plane it
 // brokers (sessions, versions, the tunnel endpoint). The device hub
-// itself carries orchestration only (v2 step 10, slice C), so every
+// itself carries orchestration only, so every
 // per-peer data fact below is about direct sessions.
 export const HubStatusSchema = z.object({
   socket: HubSocketStatusSchema,
@@ -74,7 +72,7 @@ export const HubStatusSchema = z.object({
   // The appVersion each ESTABLISHED direct session's welcome
   // confirmed, keyed by deviceId. Absent key means no direct session,
   // so membership here is the whole "direct-connected" surface (the
-  // only kind of data session there is, v2 step 10 slice C) and the
+  // only kind of data session there is) and the
   // renderer reads it instead of polling peerInfo per device.
   peerAppVersions: z.record(z.string(), z.string()),
   // The tunnel endpoint state, for the devices page. Optional because
@@ -90,7 +88,7 @@ export type HubStatus = z.infer<typeof HubStatusSchema> &
 // A push frame received from a peer, fanned out to every window. The
 // renderer filters by deviceId and channel, so main forwards every
 // push wholesale and needs no per-channel subscription bookkeeping.
-export const HubPeerPushSchema = z.object({
+const HubPeerPushSchema = z.object({
   deviceId: z.string(),
   channel: z.string(),
   payload: z.unknown().optional(),

@@ -122,21 +122,23 @@ export class DeviceHub implements DurableObject {
     const body = (await request.json()) as MintTicketRequest;
     // Unconsumed tickets are garbage after their minute of validity.
     // Minting is the natural low-frequency moment to sweep them.
+    // Unconsumed tickets are garbage after their minute of validity.
+    // Minting is the natural low-frequency moment to sweep them, and
+    // the same scan bounds the live set: if minting would exceed the
+    // cap, the oldest by expiresAt go too, so storage stays bounded
+    // even under a device that mints in a loop.
     const now = Date.now();
-    await this.deleteTicketsWhere((record) => record.expiresAt <= now);
-    // Bound the live set. If minting would exceed the cap, evict the
-    // oldest tickets by expiresAt first so storage stays bounded even
-    // under a device that mints in a loop.
-    const live = await this.ctx.storage.list<TicketRecord>({
-      prefix: TICKET_KEY_PREFIX,
-    });
-    if (live.size >= MAX_UNCONSUMED_TICKETS) {
-      const overflow = live.size - MAX_UNCONSUMED_TICKETS + 1;
-      const oldest = [...live]
-        .toSorted(([, a], [, b]) => a.expiresAt - b.expiresAt)
-        .slice(0, overflow)
-        .map(([key]) => key);
-      await this.deleteKeys(oldest);
+    const live = await this.deleteTicketsWhere(
+      (record) => record.expiresAt <= now,
+    );
+    if (live.length >= MAX_UNCONSUMED_TICKETS) {
+      const overflow = live.length - MAX_UNCONSUMED_TICKETS + 1;
+      await this.deleteKeys(
+        live
+          .toSorted(([, a], [, b]) => a.expiresAt - b.expiresAt)
+          .slice(0, overflow)
+          .map(([key]) => key),
+      );
     }
     const random = randomBase64url(16);
     const record: TicketRecord = {
@@ -161,20 +163,23 @@ export class DeviceHub implements DurableObject {
   }
 
   // Lists the account's tickets once, deletes every record the match
-  // selects (chunked by deleteKeys) and returns the count removed. Both
-  // the mint-time expiry sweep and the revoke purge go through here, so
+  // selects (chunked by deleteKeys) and returns the survivors. Both the
+  // mint-time expiry sweep and the revoke purge go through here, so
   // the list-filter-chunk logic lives in exactly one place.
   private async deleteTicketsWhere(
     match: (record: TicketRecord) => boolean,
-  ): Promise<number> {
+  ): Promise<[string, TicketRecord][]> {
     const stored = await this.ctx.storage.list<TicketRecord>({
       prefix: TICKET_KEY_PREFIX,
     });
-    const keys = [...stored]
-      .filter(([, record]) => match(record))
-      .map(([key]) => key);
-    await this.deleteKeys(keys);
-    return keys.length;
+    const doomed: string[] = [];
+    const kept: [string, TicketRecord][] = [];
+    for (const entry of stored) {
+      if (match(entry[1])) doomed.push(entry[0]);
+      else kept.push(entry);
+    }
+    await this.deleteKeys(doomed);
+    return kept;
   }
 
   // Revocation is one operation owned by this object: the D1 row, the
@@ -221,8 +226,17 @@ export class DeviceHub implements DurableObject {
       const record = await this.ctx.storage.get<TicketRecord>(key);
       // Single use: the ticket is burned before any validity verdict,
       // so a replay races nothing.
-      if (record) await this.ctx.storage.delete(key);
-      if (!record || record.expiresAt <= Date.now()) return this.rejectSocket();
+      if (!record) return this.rejectSocket();
+      if (record.expiresAt <= Date.now()) {
+        await this.ctx.storage.delete(key);
+        return this.rejectSocket();
+      }
+      // The burn and the D1 re-check below are independent: the delete
+      // is issued before any accept either way.
+      const [, device] = await Promise.all([
+        this.ctx.storage.delete(key),
+        getDeviceById(this.env.DB, record.deviceId),
+      ]);
       // Re-verify the device still exists in D1 before accepting the
       // socket. This closes the race where a mint runs concurrently
       // with a revoke. mintTicket authorizes the device with a D1 read
@@ -234,7 +248,6 @@ export class DeviceHub implements DurableObject {
       // revoke's socket-close. This read is once per connection, not a
       // hot path, so the cost is fine. A missing row is treated exactly
       // like an invalid ticket.
-      const device = await getDeviceById(this.env.DB, record.deviceId);
       if (device === null) return this.rejectSocket();
       // There is deliberately NO hard admission cap against
       // MAX_ONLINE_DEVICES here: getWebSockets can still list sockets

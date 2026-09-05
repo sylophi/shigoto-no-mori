@@ -43,6 +43,9 @@ export function ForwardControl({
   );
   // The field's uncommitted text, null while not editing.
   const [draft, setDraft] = useState<string | null>(null);
+  // A live forward being relocated to another local port, so the
+  // state word says so instead of reading the old forward as a stop.
+  const [pendingMove, setPendingMove] = useState(false);
   // Escape blurs the field to leave it, and that blur fires commit
   // synchronously, before the state reset lands: the flag is what
   // tells that blur to drop the draft rather than apply it.
@@ -63,9 +66,13 @@ export function ForwardControl({
       // Remembered only once the listener has actually moved: a number
       // that cannot bind must not become the default every later
       // switch-on retries.
+      setPendingMove(true);
       apply(
         { on: true, localPort: next },
-        { onSuccess: () => setLocalPort(next) },
+        {
+          onSuccess: () => setLocalPort(next),
+          onSettled: () => setPendingMove(false),
+        },
       );
     } else {
       setLocalPort(next);
@@ -84,7 +91,10 @@ export function ForwardControl({
       ? `Forward ${deviceLabel}:${remotePort} to localhost:${localPort}`
       : peerReadOnlyNote();
 
-  const state = describeState(isPending, forward);
+  const state = describeState(
+    !isPending ? null : !live ? "start" : pendingMove ? "move" : "stop",
+    forward,
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border bg-muted/40 px-3 py-1.5">
@@ -163,10 +173,12 @@ export function ForwardControl({
 
 // The word beside the switch.
 function describeState(
-  pending: boolean,
+  pending: "start" | "stop" | "move" | null,
   forward: { connCount: number } | undefined,
 ): string {
-  if (pending) return forward === undefined ? "Starting" : "Stopping";
+  if (pending === "start") return "Starting";
+  if (pending === "stop") return "Stopping";
+  if (pending === "move") return "Moving";
   if (forward === undefined) return "Off";
   if (forward.connCount > 0) return `Forwarding, ${forward.connCount} open`;
   return "Forwarding";

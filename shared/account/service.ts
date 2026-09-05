@@ -13,6 +13,7 @@
 import {
   DeviceListResponseSchema,
   EnrollRequestSchema,
+  RenameDeviceRequestSchema,
   EnrollResponseSchema,
   ErrorBodySchema,
   HUB_ROUTES,
@@ -65,13 +66,13 @@ export class TunnelProvisionDeniedError extends Error {
   }
 }
 
-export type AccountServiceDeps = {
+type AccountServiceDeps = {
   baseUrl: string;
   // Injected so tests avoid the network. Defaults to the global fetch.
   fetchImpl?: typeof fetch;
 };
 
-export type EnrollFields = {
+type EnrollFields = {
   deviceId: string;
   name: string;
   platform: string;
@@ -81,11 +82,14 @@ export type AccountService = {
   enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
   listDevices(credential: string): Promise<DeviceInfo[]>;
   revoke(credential: string, deviceId: string): Promise<void>;
+  // Renames a device of the account on the hub, so the registry the
+  // other devices list carries the new name at once.
+  rename(credential: string, deviceId: string, name: string): Promise<void>;
   // signal aborts the mint fetch on stop or on the caller's mint
   // timeout, so a black-holed route cannot hang the connect (C6).
   mintTicket(credential: string, signal?: AbortSignal): Promise<TicketResponse>;
   // Provision (or re-point) this device's named tunnel to front the
-  // given loopback port (v2 step 10, slice B). Throws
+  // given loopback port. Throws
   // TunnelUnconfiguredError when the Worker has no tunnel env and
   // TunnelProvisionDeniedError on any other 4xx (both terminal for the
   // runner, in different ways). The returned connectorToken is a
@@ -182,6 +186,17 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         HUB_ROUTES.revokeDevice,
         HUB_ROUTES.revokeDevice.path(deviceId),
         credential,
+      );
+    },
+
+    async rename(credential, deviceId, name) {
+      const body = RenameDeviceRequestSchema.parse({ name });
+      // 204 No Content on success, like revoke.
+      await credentialed(
+        HUB_ROUTES.renameDevice,
+        HUB_ROUTES.renameDevice.path(deviceId),
+        credential,
+        { body },
       );
     },
 

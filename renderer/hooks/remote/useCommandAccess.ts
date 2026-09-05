@@ -24,10 +24,11 @@ function commandAccessQueryOptions(deviceId: string, api: HostApi | undefined) {
       api ? api.remoteAccess.commandAccess() : { granted: false },
     enabled: api !== undefined && deviceId !== localDeviceId,
     // A permission verdict only moves when the host grants or revokes,
-    // which no channel pushes to this side, so the honest refreshes are
-    // the session-landed sweep (invalidateDeviceSession) and a window
-    // focus past this window -- not a hub round-trip per mount, which
-    // is what the client's staleTime 0 would buy.
+    // which it pushes (remoteAccess:commandAccessChanged, handled in
+    // remoteHostWatch), so the honest refreshes are that push, the
+    // session-landed sweep (invalidateDeviceSession) and a window
+    // focus -- not a hub round-trip per mount, which is what the
+    // client's staleTime 0 would buy.
     staleTime: 30_000,
     meta: { silentError: true },
   });
@@ -54,7 +55,7 @@ function verdictOf(
 }
 
 // Does the CALLING device hold command access on the scoped host? Drives
-// whether a scoped page renders mutation controls (v2 step 6). The
+// whether a scoped page renders mutation controls. The
 // local device is always granted by contract, so it short-circuits with
 // no IPC. A remote device answers via the per-caller remoteAccess
 // preflight, cached under its own host key. A refused verdict is a

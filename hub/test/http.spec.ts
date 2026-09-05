@@ -21,6 +21,7 @@ import {
   enrollAndConnect,
   enrollRequest,
   mintTicket,
+  renameRequest,
   revoke,
   ticketRequest,
 } from "./helpers.ts";
@@ -215,6 +216,43 @@ describe("DELETE /devices/:deviceId", () => {
     );
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: expect.any(String) });
+  });
+});
+
+describe("PATCH /devices/:deviceId", () => {
+  it("renames a device of the account and lists the new name", async () => {
+    const self = await enroll("acct-ren", "dev-ren-self");
+    const other = await enroll("acct-ren", "dev-ren-other");
+    const response = await call(
+      renameRequest(self.credential, "dev-ren-self", { name: "Studio Mac" }),
+    );
+    expect(response.status).toBe(204);
+    const listed = (await (
+      await call(listRequest(other.credential))
+    ).json()) as { devices: { deviceId: string; name: string }[] };
+    expect(
+      listed.devices.find((d) => d.deviceId === "dev-ren-self")?.name,
+    ).toBe("Studio Mac");
+  });
+
+  it("rejects a blank name and hides other accounts' devices behind 404", async () => {
+    const self = await enroll("acct-ren-2", "dev-ren-2");
+    const outsider = await enroll("acct-ren-outsider", "dev-ren-outsider");
+    expect(
+      (await call(renameRequest(self.credential, "dev-ren-2", { name: "" })))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          renameRequest(outsider.credential, "dev-ren-2", { name: "Taken" }),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (await call(renameRequest("bogus", "dev-ren-2", { name: "Nope" })))
+        .status,
+    ).toBe(401);
   });
 });
 

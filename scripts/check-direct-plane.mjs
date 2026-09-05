@@ -1,5 +1,5 @@
-// Durable proof for the direct data plane (v2 step 10 slice A, made the
-// ONLY data plane by slice C): the device hub is orchestration and data
+// Durable proof for the direct data plane (the ONLY data
+// plane): the device hub is orchestration and data
 // flows over DIRECT websockets between devices, brokered by short-lived
 // single-use connect tickets, with no hub fallback behind a failed
 // dial.
@@ -96,7 +96,7 @@
 //     remoteAccess:commandAccess preflight flips live with the grant
 //     on one direct session.
 //
-// SUPERVISION (v2 step 11) makes sessions desired state, the presence
+// SUPERVISION makes sessions desired state, the presence
 // roster the input, and the keeper (shared/hub/directKeeper.ts) the
 // ONLY dial trigger:
 //
@@ -173,7 +173,10 @@ import {
   createCloudflaredRunner,
   resolveCloudflaredBinary,
   TUNNEL_BACKOFF_LADDER_MS,
+  TUNNEL_PROBE_DEADLINE_FRESH_MS,
   TUNNEL_PROBE_DEADLINE_MS,
+  TUNNEL_PROBE_SLOW_MS,
+  TUNNEL_PROBE_WARN_MS,
   TUNNEL_PROBE_DELAYS_MS,
   TUNNEL_STABLE_MS,
 } from "@host/direct/cloudflared";
@@ -193,7 +196,8 @@ import {
   makeDirectBridge,
   startDirectListener as startListenerFixture,
 } from "./lib/directBoot.mjs";
-import { bootDevice, delay, waitFor } from "./lib/hubBoot.mjs";
+import { bootDevice } from "./lib/hubBoot.mjs";
+import { delay, waitFor } from "./lib/checkKit.mjs";
 import { startStubHub } from "./lib/hubStub.mjs";
 
 // A blackholed candidate (TEST-NET-3, never routed): a dial to it
@@ -2374,7 +2378,7 @@ async function main() {
   );
 
   await check(
-    "cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a never-routable child fails at the probe deadline",
+    "cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child of a FRESH record is kept and probed on until the long deadline, while a reused tunnel that never routes is killed and re-provisioned at the short one",
     async () => {
       const clock = fakeClock();
       const spawned = [];
@@ -2440,17 +2444,88 @@ async function main() {
       );
       await runner.reconcile(null);
 
-      // A child that never becomes routable: the probe chain walks its
-      // ladder until the deadline, then kills the child and takes the
-      // failure path, and the NEXT attempt re-provisions (never
-      // ready).
-      const deadlineClock = fakeClock();
-      const deadlineSpawns = [];
-      let deadlineProvisions = 0;
+      // A child that is not routable for a long time (a fresh hostname
+      // waiting on DNS): the probe chain keeps walking its capped rung
+      // for as long as the child lives. It is never killed, nothing is
+      // re-provisioned, the status stays "starting", and the moment a
+      // probe passes the tunnel is advertised on the same child.
+      const lateClock = fakeClock();
+      const lateSpawns = [];
+      let lateProvisions = 0;
+      let lateRoutable = false;
+      const notYetRoutable = createCloudflaredRunner({
+        resolveBinary: async () => "/stub/cloudflared",
+        provision: async () => {
+          lateProvisions += 1;
+          return {
+            hostname: "h.example.test",
+            connectorToken: "t",
+            dnsCreated: true,
+          };
+        },
+        spawnTunnel: () => {
+          const child = {
+            killed: false,
+            onExit() {},
+            kill() {
+              this.killed = true;
+            },
+          };
+          lateSpawns.push(child);
+          return child;
+        },
+        probeTunnel: async () => lateRoutable,
+        clock: lateClock,
+      });
+      await notYetRoutable.reconcile({ port: 40100 });
+      assert.equal(lateSpawns.length, 1);
+      // Walk well past the warning threshold: the capped rung up to it,
+      // the slow rung after, where the child is still alive and probed.
+      const step = TUNNEL_PROBE_DELAYS_MS.at(-1);
+      for (let walked = 0; walked <= TUNNEL_PROBE_WARN_MS; walked += step) {
+        // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially by design
+        await lateClock.advance(step);
+      }
+      for (let i = 0; i < 3; i += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- see above
+        await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+      }
+      assert.equal(notYetRoutable.status().state, "starting");
+      assert.equal(notYetRoutable.tunnelUrl(), null);
+      assert.equal(
+        lateSpawns[0].killed,
+        false,
+        "a not-yet-routable child was killed",
+      );
+      assert.equal(
+        lateSpawns.length,
+        1,
+        "a not-yet-routable child was respawned",
+      );
+      assert.equal(
+        lateProvisions,
+        1,
+        "a not-yet-routable child was re-provisioned",
+      );
+      // DNS catches up: the next (slow-rung) probe advertises the same
+      // child.
+      lateRoutable = true;
+      await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+      assert.equal(notYetRoutable.status().state, "up");
+      assert.equal(notYetRoutable.tunnelUrl(), "wss://h.example.test");
+      assert.equal(lateSpawns.length, 1);
+      await notYetRoutable.stop();
+
+      // A reused tunnel that NEVER becomes routable (a deleted record,
+      // a stale ingress): past the short deadline it is killed and the
+      // restart re-provisions, since it never reached readiness.
+      const deadClock = fakeClock();
+      const deadSpawns = [];
+      let deadProvisions = 0;
       const neverRoutable = createCloudflaredRunner({
         resolveBinary: async () => "/stub/cloudflared",
         provision: async () => {
-          deadlineProvisions += 1;
+          deadProvisions += 1;
           return { hostname: "h.example.test", connectorToken: "t" };
         },
         spawnTunnel: () => {
@@ -2461,38 +2536,35 @@ async function main() {
               this.killed = true;
             },
           };
-          deadlineSpawns.push(child);
+          deadSpawns.push(child);
           return child;
         },
         probeTunnel: async () => false,
-        clock: deadlineClock,
+        clock: deadClock,
       });
       await neverRoutable.reconcile({ port: 40100 });
-      assert.equal(deadlineSpawns.length, 1);
-      // Walk the probe chain past its deadline (each step covers the
-      // capped rung, so the walk is bounded by the deadline itself).
-      const step = TUNNEL_PROBE_DELAYS_MS.at(-1);
       for (
         let walked = 0;
         walked <= TUNNEL_PROBE_DEADLINE_MS + step &&
         neverRoutable.status().state === "starting";
         walked += step
       ) {
-        // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially by design
-        await deadlineClock.advance(step);
+        // oxlint-disable-next-line no-await-in-loop -- see above
+        await deadClock.advance(step);
       }
-      assert.equal(neverRoutable.status().state, "error");
-      assert.equal(
-        deadlineSpawns[0].killed,
-        true,
-        "the never-routable child was not killed at the probe deadline",
+      assert.ok(
+        TUNNEL_PROBE_DEADLINE_FRESH_MS > TUNNEL_PROBE_DEADLINE_MS,
+        "a fresh record must get the longer deadline",
       );
-      assert.equal(neverRoutable.tunnelUrl(), null);
-      // The scheduled restart re-provisions: the child never reached
-      // readiness.
-      await deadlineClock.advance(TUNNEL_BACKOFF_LADDER_MS.at(-1));
-      assert.equal(deadlineSpawns.length, 2, "no respawn after the deadline");
-      assert.equal(deadlineProvisions, 2);
+      assert.equal(neverRoutable.status().state, "error");
+      assert.equal(deadSpawns[0].killed, true, "not killed at the deadline");
+      await deadClock.advance(TUNNEL_BACKOFF_LADDER_MS.at(-1));
+      assert.equal(deadSpawns.length, 2, "no respawn after the deadline");
+      assert.equal(
+        deadProvisions,
+        2,
+        "the deadline restart reused the provision",
+      );
       await neverRoutable.stop();
     },
   );

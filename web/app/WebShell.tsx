@@ -18,19 +18,18 @@ import { WebSidebar } from "./WebSidebar";
 // `hidden`: the static sidebar runs the full remote-forest query
 // fan-out, and a phone-width session must not pay for a permanently
 // invisible copy of it (nor run two copies while the sheet is open).
-const WIDE_QUERY = "(min-width: 48rem)";
+// One MediaQueryList for both the subscription and the snapshot,
+// created on first use so importing this module needs no window.
+let wideMedia: MediaQueryList | null = null;
+const wideQuery = () => (wideMedia ??= window.matchMedia("(min-width: 48rem)"));
 
 function subscribeToWide(onChange: () => void): () => void {
-  const media = window.matchMedia(WIDE_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
+  wideQuery().addEventListener("change", onChange);
+  return () => wideQuery().removeEventListener("change", onChange);
 }
 
 function useIsWideViewport(): boolean {
-  return useSyncExternalStore(
-    subscribeToWide,
-    () => window.matchMedia(WIDE_QUERY).matches,
-  );
+  return useSyncExternalStore(subscribeToWide, () => wideQuery().matches);
 }
 
 export function WebShell() {

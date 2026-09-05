@@ -69,7 +69,7 @@ export function useWorktreePullRequest(
   options: { enabled?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
+  const { api, keys, remote } = useHostScope();
   return useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
@@ -87,7 +87,10 @@ export function useWorktreePullRequest(
       return pr;
     },
     enabled: options.enabled ?? true,
-    refetchOnWindowFocus: false,
+    // Locally the focus path belongs to useWatchWorktreePullRequests,
+    // which invalidates this machine's PR keys. A peer's key has no
+    // watcher, so it refetches on focus itself.
+    refetchOnWindowFocus: remote,
     // gh failures here are stable (not in a github repo, gh not authed,
     // network down) -- the default 3-retry exponential backoff just
     // turns a fast error into a 7s wait. The focus + refs-changed

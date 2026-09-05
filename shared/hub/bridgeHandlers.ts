@@ -1,4 +1,4 @@
-// Handlers for the renderer-facing hub bridge (v2 step 4, slice C).
+// Handlers for the renderer-facing hub bridge.
 // Thin by design: status reads the connection's snapshot, invokePeer
 // forwards over the cached peer session, and the session cache lives
 // here so the view layer never owns a connection the remote host's
@@ -7,7 +7,7 @@
 // the Electron main process serves it over IPC (main/ipc/index.ts) and
 // the web bridge serves it in-page (web/bridge/createWebBridge.ts).
 //
-// DIRECT OR NOTHING (v2 step 10, slice C): the session cache here is
+// DIRECT OR NOTHING: the session cache here is
 // the single peer-session chokepoint every consumer shares (renderer
 // invokes and subscriptions, sync, port-forward), and every session in
 // it is a DIRECT websocket from the injected dialer. There is no hub
@@ -17,10 +17,10 @@
 // and the entry drops. The device hub rides underneath only as the
 // dialer's broker transport (direct:connectInfo), never as a data path.
 // The web bridge injects the same dialer with a wss-only candidate
-// filter (v2 step 10, slice B): a browser page cannot dial ws:// from
+// filter: a browser page cannot dial ws:// from
 // https (mixed content), but wss tunnel URLs dial fine.
 //
-// SUPERVISED, NOT LAZY (v2 step 11): dialPeer is the ONLY entry that
+// SUPERVISED, NOT LAZY: dialPeer is the ONLY entry that
 // starts a dial, and its only caller is the presence-driven keeper
 // (shared/hub/directKeeper.ts, wired in directPlane.ts). The
 // contract surface (invokePeer, the one channel left that touches a
@@ -35,7 +35,7 @@ import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 
-export type HubHandlerDeps = {
+type HubHandlerDeps = {
   status(): HubStatus;
   // The direct dial (shared/hub/directDial.ts), the ONLY way a peer
   // session comes to exist. The hub connection is not a dep here on

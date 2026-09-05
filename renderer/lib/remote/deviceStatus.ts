@@ -1,5 +1,5 @@
-// Presentation mapping for a remote device's status (v2 step 3, slice
-// C). One place turns the phase into a tone and a label so the settings
+// Presentation mapping for a remote device's status. One place turns
+// the phase into a tone and a label so the settings
 // chip, the sidebar badge and the devices page read the same. Tones stay
 // within the four raw families the theme remaps (emerald, rose, amber,
 // sky) plus slate for off, per the doubutsu contract.
@@ -31,7 +31,7 @@ function presentationOf(status: RemoteDeviceStatus): {
     case "connected":
       return { tone: "emerald", label: "Connected" };
     // The peer is in the hub roster but no direct session is
-    // established (v2 step 10, slice C: data is direct or nothing).
+    // established (data is direct or nothing).
     // Honest on both axes: the roster fact shows ("Online"), and
     // nothing claims a data connection, because the keeper's eager
     // dial has not landed yet (it dials on presence and redials

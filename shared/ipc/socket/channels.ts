@@ -31,17 +31,17 @@
 // Frame layout: 1 byte kind, 16 bytes channel id, then the payload.
 // The id is the 32-hex client-minted id (shared/ipc/hexId.ts) as raw
 // bytes, so a channel frame is 17 bytes of header, whatever it says.
-export const CHANNEL_ID_BYTES = 16;
-export const CHANNEL_HEADER_BYTES = 1 + CHANNEL_ID_BYTES;
+const CHANNEL_ID_BYTES = 16;
+const CHANNEL_HEADER_BYTES = 1 + CHANNEL_ID_BYTES;
 
-export const CHANNEL_FRAME_DATA = 1;
-export const CHANNEL_FRAME_END = 2;
-export const CHANNEL_FRAME_RESET = 3;
-export const CHANNEL_FRAME_CREDIT = 4;
+const CHANNEL_FRAME_DATA = 1;
+const CHANNEL_FRAME_END = 2;
+const CHANNEL_FRAME_RESET = 3;
+const CHANNEL_FRAME_CREDIT = 4;
 
 // Credit each direction starts with. Sized like the byte-conn buffers
 // it replaces (4 MiB high-water marks on both ends).
-export const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
+const CHANNEL_WINDOW_BYTES = 4 * 1024 * 1024;
 // Largest data payload per frame. Comfortably under the host's inbound
 // frame cap (MAX_INBOUND_FRAME_BYTES, 1 MiB) with the header on top.
 export const CHANNEL_MAX_FRAME_BYTES = 256 * 1024;
@@ -50,7 +50,7 @@ export const CHANNEL_MAX_FRAME_BYTES = 256 * 1024;
 // frame is broken and its channel is reset.
 const CHANNEL_OVERRUN_SLACK_BYTES = CHANNEL_MAX_FRAME_BYTES;
 
-export type ChannelFrame = {
+type ChannelFrame = {
   kind: number;
   channelId: string;
   payload: Uint8Array;
@@ -74,7 +74,7 @@ function bytesToId(bytes: Uint8Array, offset: number): string {
   return id;
 }
 
-export function encodeChannelFrame(
+function encodeChannelFrame(
   kind: number,
   channelId: string,
   payload: Uint8Array = new Uint8Array(0),
@@ -91,9 +91,10 @@ export function encodeChannelFrame(
 // gated already (a trusted peer), so this is a sanity bound against a
 // runaway client loop, not a quota: sized for a real page load through
 // a forward (a browser tab opens ~6 keepalive sockets plus an HMR
-// websocket) beside a few mirror streams. The client-side budgets
-// (main/portForward/engine.ts, main/mirror/gateway.ts) are carved
-// out of this one.
+// websocket) beside a few mirror streams. The client-side budgets are
+// carved out of this one: the forwards take MAX_CONNS_PER_DEVICE
+// (main/portForward/engine.ts) and the mirror streams the rest
+// (main/mirror/gateway.ts).
 export const MAX_CHANNELS_PER_CONNECTION = 32;
 
 // The refusal markers a byte-stream open answers with, stable strings
@@ -103,7 +104,7 @@ export const CHANNEL_OPEN_NO_CHANNELS = "no-byte-channels";
 export const CHANNEL_OPEN_TAKEN = "channel-taken";
 export const CHANNEL_OPEN_TOO_MANY = "too-many-conns";
 
-export function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
+function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
   if (bytes.length < CHANNEL_HEADER_BYTES) return null;
   const kind = bytes[0] as number;
   if (
@@ -395,20 +396,32 @@ export function createChannelMux(deps: {
 
     closeAll() {
       dead = true;
-      dropAll();
+      // The socket is gone: nothing to tell the peer.
+      dropAll(false);
     },
 
-    dropAll,
+    dropAll: () => dropAll(true),
   };
 
-  function dropAll(): void {
+  // `tellPeer`: the connection lives on, so each channel's far end is
+  // told with a RESET and closes at once, rather than sitting attached
+  // to a channel this side no longer has and waiting out its own
+  // timeout.
+  function dropAll(tellPeer: boolean): void {
     resetBeforeAttach.clear();
     const all = [...channels.entries()];
     channels.clear();
-    for (const [, channel] of all) {
+    for (const [channelId, channel] of all) {
       channel.gone = true;
       channel.queue = [];
       channel.endpoint.onReset();
+      if (tellPeer) {
+        try {
+          send(CHANNEL_FRAME_RESET, channelId);
+        } catch {
+          // The socket died under the drop, and closeAll follows.
+        }
+      }
     }
   }
 }

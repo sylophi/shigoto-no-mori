@@ -1,5 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLocation } from "@tanstack/react-router";
+import { matchRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   ROW_SIZE_HINTS,
@@ -19,6 +20,26 @@ interface SidebarListProps {
 // its enclosing component out of React Compiler memoization and
 // re-renders it on every scroll offset. Isolating it here keeps
 // Sidebar's row-model build memoized.
+// The worktree an open detail page shows, local or on a peer.
+function matchWorktreeDetail(pathname: string): {
+  deviceId?: string;
+  projectId: string;
+  worktreeId: string;
+} | null {
+  const remote = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.remote, pathname);
+  if (remote) {
+    return {
+      deviceId: remote.deviceId!,
+      projectId: remote.projectId!,
+      worktreeId: remote.worktreeId!,
+    };
+  }
+  const local = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.local, pathname);
+  return local
+    ? { projectId: local.projectId!, worktreeId: local.worktreeId! }
+    : null;
+}
+
 export function SidebarList({
   rows,
   revealKey,
@@ -44,23 +65,24 @@ export function SidebarList({
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so
   // the user can still scroll away freely.
+  // Both detail routes: the local one and its device-scoped twin, so a
+  // peer's worktree is revealed too.
   const { pathname } = useLocation();
-  const selectedMatch = pathname.match(
-    /^\/projects\/([^/]+)\/worktrees\/([^/]+)$/,
-  );
+  const open = matchWorktreeDetail(pathname);
   const lastRevealedRef = useRef<string | null>(null);
   useEffect(() => {
-    const [, projectId, worktreeId] = selectedMatch ?? [];
+    const { deviceId, projectId, worktreeId } = open ?? {};
     if (!projectId || !worktreeId) {
       lastRevealedRef.current = null;
       return;
     }
-    if (lastRevealedRef.current === worktreeId) return;
-    const key = revealKey(projectId, worktreeId);
+    const revealed = `${deviceId ?? ""}:${worktreeId}`;
+    if (lastRevealedRef.current === revealed) return;
+    const key = revealKey(projectId, worktreeId, deviceId);
     if (!key) return;
     const index = rows.findIndex((r) => r.key === key);
     if (index < 0) return;
-    lastRevealedRef.current = worktreeId;
+    lastRevealedRef.current = revealed;
     virtualizer.scrollToIndex(index, { align: "auto" });
   });
 

@@ -1,7 +1,7 @@
-// The direct data plane's shared composition (v2 step 10): one hub
+// The direct data plane's shared composition: one hub
 // connection serving as the dialer's broker transport, the direct
 // dialer, the renderer-facing bridge handlers, the keeper that
-// supervises a direct session per rostered peer (v2 step 11: eager,
+// supervises a direct session per rostered peer (eager,
 // forever-retry, presence as desired state -- directKeeper.ts), the
 // status snapshot that folds the direct-session surface into the
 // connection's own, and the presence reconcile that both scopes direct
@@ -37,12 +37,12 @@ import type { SupervisorClock } from "@shared/remote/supervisor";
 // (web/hub/connection.ts). connectBroker resolves the NARROWED
 // broker session (one typed invoke plus close) and is consumed by the
 // dialer's broker leg ONLY (see createDirectPlane below).
-export type DirectPlaneConnection = {
+type DirectPlaneConnection = {
   status(): HubConnectionStatus;
   connectBroker(deviceId: string): Promise<HubBrokerSession>;
 };
 
-export type DirectPlaneDeps = {
+type DirectPlaneDeps = {
   // The hub connection, as a getter because the owner wires the
   // connection's own callbacks to the plane it creates first, so the
   // binding must resolve lazily.
@@ -81,7 +81,7 @@ export type DirectPlaneDeps = {
   };
 };
 
-export type DirectPlane = {
+type DirectPlane = {
   // The renderer-facing hub bridge, for the contract registration.
   // Teardown is stop() below, not a call in here.
   handlers: HubHandlers;
@@ -153,7 +153,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // derives connectedness from the keys).
       peerAppVersions: handlers.directPeerVersions(),
     };
-    // THIS device's tunnel endpoint state (v2 step 10, slice B). The
+    // THIS device's tunnel endpoint state. The
     // state only, never the hostname or token. Absent without a host
     // half (the web bridge runs no cloudflared). HubStatus is the
     // remote-plane snapshot (hub control plane plus the direct data
@@ -171,7 +171,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
     deps.broadcastStatus(status());
   }
 
-  // openPeer is direct or nothing (v2 step 10, slice C): the bridge
+  // openPeer is direct or nothing: the bridge
   // gets the dialer and nothing else, and a direct session opening or
   // closing fires the same statusChanged fan-out a device hub
   // transition does so the snapshot stays live.
@@ -188,7 +188,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
     peerUnavailableReason: (deviceId) => keeper.unavailableReason(deviceId),
   });
 
-  // The supervisor of the data plane (v2 step 11): the ONLY caller of
+  // The supervisor of the data plane: the ONLY caller of
   // dialPeer, so every direct session exists because presence said the
   // device does, never because a renderer asked.
   const keeper: DirectKeeper = createDirectKeeper({

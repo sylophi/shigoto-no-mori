@@ -1,4 +1,4 @@
-// Read-modify-write for the local global config (v2 step 3, slice C).
+// Read-modify-write for the local global config.
 // The config can carry a key the redacted read cannot round-trip:
 // socketHost.token, engine-level and CLI-writable even though no UI
 // edits it. The CLI write is whole document for its registered keys, so

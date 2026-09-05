@@ -1,9 +1,9 @@
-// Client half of the direct data plane (v2 step 10, slice A): dial a
+// Client half of the direct data plane: dial a
 // peer's direct listener, brokered over the device hub. The dialer asks
 // the peer for connect info (direct:connectInfo, a read served
 // pre-grant) over a short-lived hub peer session, then dials the
 // returned candidates, each a complete URL (ws:// interface candidates,
-// the wss:// tunnel endpoint, v2 step 10 slice B) with its own
+// the wss:// tunnel endpoint) with its own
 // single-use ticket. The result is the SAME DeviceConnection shape the
 // LAN client resolves, so everything downstream (the bridge cache,
 // sync, port-forward) stays transport agnostic.
@@ -74,8 +74,7 @@
 // memo. Retry lives in exactly one place, the presence-driven keeper
 // (shared/hub/directKeeper.ts), which paces redials on the shared
 // backoff ladder and parks on the terminal verdicts
-// (isTerminalDialError below). Data is direct or nothing (v2 step 10,
-// slice C): there is no hub fallback behind these failures, the
+// (isTerminalDialError below). Data is direct or nothing: there is no hub fallback behind these failures, the
 // typed rejection IS the outcome the caller surfaces. A second retry
 // owner here (the old per-peer failure memo) would fight the keeper's
 // ladder, so this file deliberately carries none.
@@ -167,9 +166,9 @@ export function isTerminalDialError(error: unknown): boolean {
   );
 }
 
-export type DirectDialerDeps = {
+type DirectDialerDeps = {
   // Opens the hub broker session for the connectInfo exchange. The
-  // NARROWED session type is the point (v2 step 10, slice C): it
+  // NARROWED session type is the point: it
   // exposes one typed broker invoke plus close, so this dep cannot be
   // used to move contract traffic over the device hub even by accident.
   // The dialer runs only on a bridge cache miss, so no cached session
@@ -184,7 +183,7 @@ export type DirectDialerDeps = {
   // deviceId, so the owner can feed the same peerPush path the device
   // hub feeds.
   onAnyPush?: (deviceId: string, channel: string, payload: unknown) => void;
-  // The candidate kinds THIS platform can dial (v2 step 10, slice B),
+  // The candidate kinds THIS platform can dial,
   // declared to the host in the connectInfo input so it only mints
   // tickets this caller can spend, and applied again at candidate
   // selection for hosts that predate the input field: a candidate of

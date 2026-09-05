@@ -109,13 +109,19 @@ export function bridgeDuplexToChannel(
 // process for the far end need only kill it on a throw. A channel the
 // peer already reset comes back closed (see ChannelMux.attach), and
 // the adapter tears the far end down through its ordinary close path.
-export function requireChannels(ctx: HandlerContext, channelId: string): void {
+export function requireChannels(
+  ctx: HandlerContext,
+  channelId: string,
+): NonNullable<HandlerContext["channels"]> {
   const channels = ctx.channels;
   if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
-  if (channels.has(channelId)) throw new Error(CHANNEL_OPEN_TAKEN);
+  if (channels.has(channelId) || ctx.signal.aborted) {
+    throw new Error(CHANNEL_OPEN_TAKEN);
+  }
   if (channels.size() >= MAX_CHANNELS_PER_CONNECTION) {
     throw new Error(CHANNEL_OPEN_TOO_MANY);
   }
+  return channels;
 }
 
 export function attachFarEnd(
@@ -124,18 +130,11 @@ export function attachFarEnd(
   duplex: Duplex,
   opts: DuplexChannelOpts = {},
 ): ChannelHandle {
-  const channels = ctx.channels;
   // A refused far end is destroyed below, before the adapter installed
   // its own error listener. A stream child's stdio raises on destroy.
   duplex.on("error", () => {});
   try {
-    if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
-    if (channels.has(channelId) || ctx.signal.aborted) {
-      throw new Error(CHANNEL_OPEN_TAKEN);
-    }
-    if (channels.size() >= MAX_CHANNELS_PER_CONNECTION) {
-      throw new Error(CHANNEL_OPEN_TOO_MANY);
-    }
+    const channels = requireChannels(ctx, channelId);
     return bridgeDuplexToChannel(
       duplex,
       (endpoint) => channels.attach(channelId, endpoint),

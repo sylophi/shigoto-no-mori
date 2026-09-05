@@ -1,5 +1,4 @@
-// The tunnel connector the app ships (v2 step 10, slice B follow-up:
-// zero-install remote). Cloudflare Tunnel needs a connector process on
+// The tunnel connector the app ships (zero-install remote). Cloudflare Tunnel needs a connector process on
 // the machine and the only one Cloudflare supports is cloudflared, but
 // "needs cloudflared" must never mean "the user installs cloudflared":
 // the app carries the binary exactly as it carries the sm CLI
@@ -25,7 +24,7 @@ export const CLOUDFLARED_LICENSE = "Apache-2.0";
 export const CLOUDFLARED_REPOSITORY =
   "https://github.com/cloudflare/cloudflared";
 
-export type CloudflaredAsset = { name: string; sha256: string };
+type CloudflaredAsset = { name: string; sha256: string };
 
 // Keyed by node's `${process.platform}-${process.arch}`, the vocabulary
 // forge's prePackage hook passes too.

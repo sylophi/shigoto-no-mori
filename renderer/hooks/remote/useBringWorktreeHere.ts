@@ -1,5 +1,4 @@
-// The one bring-a-peer's-worktree-here mutation (pull: v2 step 7 slice
-// C), shared by the remote worktree detail's footer and its transplant
+// The one bring-a-peer's-worktree-here mutation (the pull), shared by the remote worktree detail's footer and its transplant
 // dialog: capture, transfer, create, and dirty apply ride a single
 // pending state -- the pull's running commentary streams separately
 // (usePullProgress). The handler re-verifies the identity match, so
@@ -7,7 +6,11 @@
 // centrally, everything else toasts here: the result lands on another
 // page (the local worktree), so the toast is usually the only visible
 // conclusion -- a caller that shows the outcome itself passes `quiet`.
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
 import type { Worktree } from "@shared/schemas";
@@ -25,6 +28,33 @@ export function keptSourceReason(
   return sourceError !== undefined && sourceError.includes("scripts-running")
     ? "scripts are still running there."
     : sourceError;
+}
+
+// What every pull-shaped landing does once the worktree is here: the
+// local forest's registry keys refresh, and the toast says whether the
+// uncommitted changes made it (null skips the toast). Shared with the
+// mirror start, which lands the same way.
+export function reportLanded(
+  queryClient: QueryClient,
+  localProjectId: string,
+  result: Pick<SyncPullWorktreeResult, "captured" | "dirtyApplied">,
+  headline: string | null,
+): void {
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.worktrees(localProjectId),
+  });
+  void queryClient.invalidateQueries({
+    queryKey: queryKeys.branches(localProjectId),
+  });
+  if (headline === null) return;
+  if (result.dirtyApplied || !result.captured) {
+    toast.success(headline);
+  } else {
+    notifyError(
+      `${headline}, without its uncommitted changes`,
+      "They could not be applied and are still on the other device.",
+    );
+  }
 }
 
 export function useBringWorktreeHere({
@@ -55,28 +85,13 @@ export function useBringWorktreeHere({
         sourceIdentity,
         branch: worktree.branch,
       }),
-    onSuccess: (result) => {
-      // The new worktree and branch are LOCAL, so this invalidates the
-      // local device's registry (module-level queryKeys), never the
-      // surrounding remote scope's.
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.worktrees(localProjectId),
-      });
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.branches(localProjectId),
-      });
-      if (quiet) return;
-      // An unapplied capture is a partial success, the worktree is real
-      // and the uncommitted changes stayed safe on the source.
-      if (result.dirtyApplied || !result.captured) {
-        toast.success(`Brought ${worktree.branch} here`);
-      } else {
-        notifyError(
-          `Brought ${worktree.branch} here, without its uncommitted changes`,
-          "They could not be applied and are still on the other device.",
-        );
-      }
-    },
+    onSuccess: (result) =>
+      reportLanded(
+        queryClient,
+        localProjectId,
+        result,
+        quiet ? null : `Brought ${worktree.branch} here`,
+      ),
     onError: (err) => {
       if (!quiet && !isCommandRefusedError(err)) {
         notifyError("Couldn't bring worktree here", err);

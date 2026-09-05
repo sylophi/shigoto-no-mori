@@ -20,7 +20,7 @@
 // - TICKET_TTL_MS: override of the 60s connection ticket TTL. Mostly a
 //   test seam, production should leave it unset.
 //
-// Tunnel provisioning (v2 step 10, slice B) reads four more wrangler
+// Tunnel provisioning reads four more wrangler
 // secrets, CLOUDFLARE_API_TOKEN, CF_ACCOUNT_ID, TUNNEL_ZONE_ID and
 // TUNNEL_DOMAIN, all optional: with any unset, POST /tunnel answers
 // the typed "not configured" and the rest of the Worker works as

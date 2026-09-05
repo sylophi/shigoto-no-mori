@@ -7,8 +7,6 @@
 // reads the same pointer file the app does, so it lands on the app's
 // root without being told.
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
@@ -18,26 +16,12 @@ import { signalTreeBestEffort } from "@host/lib/scripts/process";
 // this runner is the Electron-side implementation wired in at boot.
 import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
 import { lineSplitter } from "@host/lib/util/ndjson";
+import { bundledBinaryResolver } from "./bundledBinary";
 
-function candidateBinary(): string {
-  return app.isPackaged
-    ? path.join(process.resourcesPath, cliBinaryName("prod"))
-    : path.join(app.getAppPath(), CLI_DIST_DIR, cliBinaryName("dev"));
-}
-
-// Positive result cached (the binary doesn't move); a miss re-probes so
-// a dev binary built after app launch is picked up.
-let cachedBinary: string | null = null;
-
-export function cliBinaryPath(): string | null {
-  if (cachedBinary !== null) return cachedBinary;
-  const candidate = candidateBinary();
-  if (existsSync(candidate)) {
-    cachedBinary = candidate;
-    return candidate;
-  }
-  return null;
-}
+export const cliBinaryPath = bundledBinaryResolver(
+  CLI_DIST_DIR,
+  cliBinaryName(app.isPackaged ? "prod" : "dev"),
+);
 
 // The CLI is the app's only engine. A missing binary (a dev run before
 // `pnpm cli:build --dev`) is a hard, actionable error.

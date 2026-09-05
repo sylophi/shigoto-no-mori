@@ -1,8 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { AppToaster } from "@/components/AppChrome";
 import { ClerkProvider } from "@clerk/electron/react";
 import { focusManager, QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "sonner";
 import { App } from "./App";
 import { ClerkGate } from "./components/account/ClerkGate";
 import { createAppQueryClient } from "./lib/queryClientOptions";
@@ -80,7 +80,7 @@ void queryClient.prefetchQuery({
   queryFn: () => window.api.globalConfig.read(),
 });
 
-// Remote devices (v2 step 4, slice C): the remote device registry,
+// Remote devices: the remote device registry,
 // rebuilt from the account's device list plus the hub bridge status,
 // on boot and on every account or hub change.
 startRemoteDeviceSync(queryClient);
@@ -131,22 +131,7 @@ createRoot(rootElement).render(
       <ClerkGate Provider={ClerkProvider}>
         <App />
       </ClerkGate>
-      <Toaster
-        position="bottom-right"
-        offset={{ bottom: 16, right: 16 }}
-        closeButton
-        toastOptions={{
-          classNames: {
-            toast:
-              "!bg-popover !text-popover-foreground !border !border-border !shadow-md",
-            title: "!select-text",
-            description: "!text-muted-foreground !select-text",
-            error: "!text-destructive",
-            closeButton:
-              "!left-auto !right-0 ![transform:translate(35%,-35%)] !bg-popover !text-muted-foreground !border-border hover:!bg-accent hover:!text-foreground",
-          },
-        }}
-      />
+      <AppToaster />
     </QueryClientProvider>
   </StrictMode>,
 );

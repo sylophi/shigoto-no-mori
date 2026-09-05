@@ -10,6 +10,7 @@
 // facts. It is NOT the transport machinery (that is the hub bridge in
 // main); it is the renderer's wiring around it, so it stays out of the
 // headless proof.
+import { createExternalStore } from "@/store/externalStore";
 import type { buildApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
@@ -22,8 +23,8 @@ export type RemoteDeviceApi = ReturnType<typeof buildApi>;
 // hub socket reports, plus the one renderer-local phase the direct
 // data plane needs. "online" means the peer is in the hub roster but
 // no direct session is established (not dialed yet, or the dial
-// failed), so it is NOT rendered as connected (v2 step 10, slice C:
-// data is direct or nothing, and a roster fact must not claim a data
+// failed), so it is NOT rendered as connected (data is
+// direct or nothing, and a roster fact must not claim a data
 // wire).
 export type RemoteDeviceStatus = SupervisorStatus | { phase: "online" };
 
@@ -74,10 +75,9 @@ export const rejectingClientTransport: ClientTransport = {
   },
 };
 
-const listeners = new Set<() => void>();
-// Cached immutable snapshot for useSyncExternalStore: it must return a
-// stable reference between changes, and a NEW reference on every change.
-let snapshot: readonly RemoteDevice[] = [];
+// The snapshot store: a stable reference between changes, a NEW
+// reference on every change, as useSyncExternalStore requires.
+const store = createExternalStore<readonly RemoteDevice[]>([]);
 
 // Field equality for the status union, so a rebuild that lands on the
 // same phase (and the same per-phase detail) is recognized as no
@@ -119,6 +119,7 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
 // every row behind the shifted one. A pure reorder still notifies
 // (positions changed) while keeping each row's identity.
 export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
+  const snapshot = store.get();
   const previous = new Map(snapshot.map((device) => [device.deviceId, device]));
   let changed = devices.length !== snapshot.length;
   const next = devices.map((device, index) => {
@@ -127,20 +128,11 @@ export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
     if (kept !== snapshot[index]) changed = true;
     return kept;
   });
-  if (!changed) return;
-  snapshot = next;
-  for (const listener of listeners) listener();
+  if (changed) store.publish(next);
 }
 
 // External store surface for useSyncExternalStore.
 export const remoteDeviceStore = {
-  subscribe(listener: () => void): () => void {
-    listeners.add(listener);
-    return () => {
-      listeners.delete(listener);
-    };
-  },
-  getSnapshot(): readonly RemoteDevice[] {
-    return snapshot;
-  },
+  subscribe: store.subscribe,
+  getSnapshot: store.get,
 };

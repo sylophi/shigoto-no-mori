@@ -85,6 +85,18 @@ export function revokeRequest(credential: string, deviceId: string): Request {
   });
 }
 
+export function renameRequest(
+  credential: string,
+  deviceId: string,
+  body: unknown,
+): Request {
+  return new Request(`${BASE}${HUB_ROUTES.renameDevice.path(deviceId)}`, {
+    method: HUB_ROUTES.renameDevice.method,
+    headers: { Authorization: `Bearer ${credential}` },
+    body: JSON.stringify(body),
+  });
+}
+
 export function provisionRequest(credential: string, port: number): Request {
   return new Request(`${BASE}${HUB_ROUTES.provisionTunnel.path}`, {
     method: HUB_ROUTES.provisionTunnel.method,

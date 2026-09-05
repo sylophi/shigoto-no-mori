@@ -1,4 +1,4 @@
-// Producer for the remote device registry (v2 step 4, slice C).
+// Producer for the remote device registry.
 // Rebuilds the store from the account's device registry plus the hub
 // bridge's live status, on boot, on account changes and on every hub
 // statusChanged broadcast. There is no per-device

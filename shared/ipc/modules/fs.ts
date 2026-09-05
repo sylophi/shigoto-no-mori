@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DirectoryListingSchema, PathPayloadSchema } from "@shared/schemas";
 
-// Every fs call is remote:true, mutating:true (v2 step 6, slice B).
+// Every fs call is remote:true, mutating:true.
 // They are reads, but the `mutating` axis is enforced as "requires the
 // command grant", and these handlers disclose ARBITRARY absolute paths,
 // which exceeds the read-only mirror's charter. So instead of waiting

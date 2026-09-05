@@ -67,7 +67,7 @@ function WebForest({
 }: {
   viewportRef: RefObject<HTMLDivElement | null>;
 }) {
-  const { items, loading } = useRemoteForests();
+  const { items, loading } = useRemoteForests({ refetchOnMount: true });
   const view = buildSidebarRows({
     projects: [],
     worktreeQueries: [],

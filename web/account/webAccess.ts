@@ -17,6 +17,7 @@
 // reads it through useSyncExternalStore, and the bridge factory owns
 // one instance per bridge so the headless check drives it in isolation.
 
+import { createExternalStore } from "@/store/externalStore";
 import { HubRequestError } from "@shared/account/service";
 
 export type WebAccessState =
@@ -31,20 +32,14 @@ export type WebAccessStore = {
 };
 
 export function createWebAccessStore(): WebAccessStore {
-  let state: WebAccessState = { kind: "ok" };
-  const listeners = new Set<() => void>();
+  const store = createExternalStore<WebAccessState>({ kind: "ok" });
   return {
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    get: () => state,
+    subscribe: store.subscribe,
+    get: store.get,
     set(next) {
+      const state = store.get();
       if (state.kind === next.kind && state.kind !== "blocked") return;
-      state = next;
-      for (const listener of listeners) listener();
+      store.publish(next);
     },
   };
 }

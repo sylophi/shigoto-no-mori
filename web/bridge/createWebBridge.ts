@@ -1,4 +1,4 @@
-// The web client's window.api factory (v2 step 5, slice B). It builds
+// The web client's window.api factory. It builds
 // the SAME surface the Electron preload exposes, by the same means: the
 // scalar facts (deviceId, appVersion, isDev, isElectron) plus buildApi over
 // one ClientTransport per scope. The transports are in-page loopback
@@ -30,6 +30,7 @@ import { isConfigured } from "@shared/account/serviceConfig";
 import { StoredClientConfigSchema } from "@shared/schemas";
 import {
   enrollDevice,
+  renameDevice,
   signOutDevice,
   WEB_PLATFORM,
 } from "@shared/account/enroll";
@@ -300,11 +301,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     },
 
     setDeviceName: (name) => {
-      const record = store.read();
-      // Renaming only means something once a credential is stored, the
-      // same rule as the desktop handler.
-      if (record !== null) {
-        store.write({ ...record, deviceName: name });
+      if (renameDevice({ config, service, store, deviceId }, name)) {
         accountChanged();
       }
       return readStatus();

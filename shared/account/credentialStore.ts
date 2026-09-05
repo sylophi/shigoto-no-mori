@@ -53,7 +53,7 @@ export type AccountStore = {
 // persists the document text. removeRaw drops it. The core keeps all
 // document-shape and cipher logic and leaves only these three seams to
 // the backing.
-export type AccountStorage = {
+type AccountStorage = {
   readRaw(): string | null;
   writeRaw(text: string): void;
   removeRaw(): void;

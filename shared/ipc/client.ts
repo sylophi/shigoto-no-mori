@@ -174,7 +174,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         dialogClient.pickFolder(options),
     },
 
-    // The direct contract (v2 step 10, slice A) is deliberately absent
+    // The direct contract is deliberately absent
     // here: its one read is the peer-to-peer brokering call the direct
     // dialer invokes over the raw peer transport, and no renderer or
     // local caller has a use for it (locally it answers

@@ -1,4 +1,4 @@
-// React binding over the remote device registry (v2 step 3, slice B).
+// React binding over the remote device registry.
 // useSyncExternalStore subscribes a component to the registry's live
 // snapshot, so device status (connecting, connected, backoff, blocked)
 // renders without any polling or prop threading. Read side only: no

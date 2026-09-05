@@ -45,7 +45,6 @@ export type PeerWorktreesApi = Pick<
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
-  mirrorApiFor: (deviceId: string) => PeerMirrorApi;
 };
 
 let impl: PeerSyncImpl | null = null;
@@ -67,8 +66,4 @@ export function peerSyncApiFor(deviceId: string): PeerSyncApi {
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return requireImpl().worktreesApiFor(deviceId);
-}
-
-export function peerMirrorApiFor(deviceId: string): PeerMirrorApi {
-  return requireImpl().mirrorApiFor(deviceId);
 }

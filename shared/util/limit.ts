@@ -8,7 +8,7 @@
 // directory walks would otherwise start as one burst of hundreds of
 // processes and syscalls. Queueing them behind a small window makes the
 // first results land sooner and leaves the rest of the app some IO.
-export type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
+type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
 
 export function createLimiter(limit: number): Limiter {
   let active = 0;

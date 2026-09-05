@@ -12,18 +12,21 @@
 // (see clientConfig.ts) and must not be silently reseeded over.
 import { existsSync } from "node:fs";
 import type { ClientConfig } from "@shared/schemas";
-import { takeLegacyAppearance } from "@host/lib/config/global";
+import {
+  dropLegacyAppearance,
+  readLegacyAppearance,
+} from "@host/lib/config/global";
 import { clientConfigPath, writeClientConfig } from "./clientConfig";
 
 export async function seedClientConfigFromLegacy(): Promise<void> {
   if (existsSync(clientConfigPath())) return;
   let seeded: ClientConfig;
   try {
-    seeded = takeLegacyAppearance();
+    seeded = readLegacyAppearance();
   } catch (error) {
     // An unreadable config.json must never block boot. The store stays
-    // absent, so the drain retries next boot.
-    console.warn("[clientConfig] legacy appearance drain failed:", error);
+    // absent, so the migration retries next boot.
+    console.warn("[clientConfig] legacy appearance read failed:", error);
     return;
   }
   try {
@@ -31,7 +34,16 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
     // theme read that follows sees the seeded values without a reread.
     await writeClientConfig(seeded);
   } catch (error) {
-    // The store is still absent, so seeding retries next boot.
+    // The store is still absent and config.json untouched, so seeding
+    // retries next boot with nothing lost.
     console.warn("[clientConfig] seeding the appearance store failed:", error);
+    return;
+  }
+  try {
+    dropLegacyAppearance();
+  } catch (error) {
+    // The values are in the store. A leftover key in config.json is
+    // harmless and drains on a later boot.
+    console.warn("[clientConfig] legacy appearance drain failed:", error);
   }
 }

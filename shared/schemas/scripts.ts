@@ -4,7 +4,7 @@ import {
   WorktreeScopedPayloadSchema,
 } from "./payloads";
 
-export const ScriptNameSchema = z.enum([
+const ScriptNameSchema = z.enum([
   "setup",
   "teardown",
   "port-pool-provision",
@@ -16,10 +16,10 @@ export const RunScriptPayloadSchema = WorktreeScopedPayloadSchema.extend({
   script: ScriptNameSchema,
 });
 
-export const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
+const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
 export type PackageManager = z.infer<typeof PackageManagerSchema>;
 
-export const PackageScriptUsageSchema = z.object({
+const PackageScriptUsageSchema = z.object({
   // Epoch ms of the most recent run; 0 when the script has never been run.
   lastUsed: z.number().int().nonnegative(),
   // Number of runs within the rolling-frequency window (matches the

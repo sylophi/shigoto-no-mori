@@ -1,4 +1,4 @@
-// Per-device Cloudflare named tunnels (v2 step 10, slice B). The
+// Per-device Cloudflare named tunnels. The
 // Worker PROVISIONS tunnels through the Cloudflare API but never
 // carries their traffic: data rides Cloudflare's tunnel edge directly
 // between the dialing client and the host's cloudflared connector,
@@ -145,12 +145,14 @@ function findDnsRecord(
 // Ensures the proxied CNAME `<hostname>` points at the tunnel edge:
 // created when absent, corrected in place when stale (a re-created
 // tunnel has a new id that would otherwise be shadowed).
+// Resolves true when the record was created (absent before), so the
+// caller can tell a brand-new hostname from one that resolved before.
 async function ensureDnsRecord(
   cf: TunnelEnv,
   cfFetch: typeof fetch,
   hostname: string,
   tunnelId: string,
-): Promise<void> {
+): Promise<boolean> {
   const target = `${tunnelId}.cfargotunnel.com`;
   const body = {
     type: "CNAME",
@@ -161,7 +163,9 @@ async function ensureDnsRecord(
   const record = await findDnsRecord(cf, cfFetch, hostname);
   if (record === null) {
     await cfCall(cf, cfFetch, "POST", `/zones/${cf.zoneId}/dns_records`, body);
-  } else if (record.content !== target || record.proxied !== true) {
+    return true;
+  }
+  if (record.content !== target || record.proxied !== true) {
     await cfCall(
       cf,
       cfFetch,
@@ -170,17 +174,17 @@ async function ensureDnsRecord(
       body,
     );
   }
+  return false;
 }
 
 // Create-or-reuse provisioning, idempotent by the deterministic name:
 //   1. reuse the named tunnel or create it (remotely managed config),
 //   2. PUT the ingress config routing the hostname to the device's
 //      loopback listener port (plus the catch-all 404),
-//   3. on the CREATE branch only, ensure the proxied CNAME
-//      `<name>.<domain>` to `<tunnelId>.cfargotunnel.com` (the reuse
-//      branch found a tunnel whose creating provision already awaited
-//      the record into place, so re-checking it per re-provision would
-//      only spend CF round trips re-learning a fact),
+//   3. ensure the proxied CNAME `<name>.<domain>` to
+//      `<tunnelId>.cfargotunnel.com`, on every provision: a device
+//      re-provisions when its tunnel stopped routing, and a deleted or
+//      stale record is exactly what that repairs,
 //   4. fetch and return the connector run token.
 // Steps 2 to 4 need only the tunnel id and are independent of each
 // other, so they run concurrently. The loopback-only shape is pinned
@@ -193,12 +197,11 @@ export async function provisionTunnel(
   accountId: string,
   deviceId: string,
   port: number,
-): Promise<{ hostname: string; connectorToken: string }> {
+): Promise<{ hostname: string; connectorToken: string; dnsCreated: boolean }> {
   const name = await tunnelNameFor(accountId, deviceId);
   const hostname = `${name}.${cf.domain}`;
 
   let tunnel = await findTunnel(cf, cfFetch, name);
-  let created = false;
   if (tunnel === null) {
     tunnel = await cfCall<CfTunnel>(
       cf,
@@ -210,10 +213,9 @@ export async function provisionTunnel(
       // only the run token, no local config file.
       { name, config_src: "cloudflare" },
     );
-    created = true;
   }
 
-  const [, , connectorToken] = await Promise.all([
+  const [, dnsCreated, connectorToken] = await Promise.all([
     cfCall(
       cf,
       cfFetch,
@@ -228,9 +230,7 @@ export async function provisionTunnel(
         },
       },
     ),
-    created
-      ? ensureDnsRecord(cf, cfFetch, hostname, tunnel.id)
-      : Promise.resolve(),
+    ensureDnsRecord(cf, cfFetch, hostname, tunnel.id),
     cfCall<string>(
       cf,
       cfFetch,
@@ -238,7 +238,7 @@ export async function provisionTunnel(
       `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}/token`,
     ),
   ]);
-  return { hostname, connectorToken };
+  return { hostname, connectorToken, dnsCreated };
 }
 
 // Best-effort teardown for device revoke: delete the tunnel (cascade

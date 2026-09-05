@@ -1,5 +1,5 @@
-// Candidate addresses for the direct data plane's connectInfo answer
-// (v2 step 10, slice A): every address a peer might reach this host's
+// Candidate addresses for the direct data plane's connectInfo
+// answer: every address a peer might reach this host's
 // direct listener on. Deliberately dumb: all non-internal interface
 // addresses, minus link-local (never routable to a peer that needs
 // them), IPv4 first because it dials successfully more often on mixed

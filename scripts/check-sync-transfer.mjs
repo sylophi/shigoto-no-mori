@@ -1,5 +1,4 @@
-// Durable proof for the device-sync transfer plumbing (v2 step 7 slice
-// B, direct-only since step 10 slice C): git bundles as chunked,
+// Durable proof for the device-sync transfer plumbing (direct-only): git bundles as chunked,
 // grant-gated invoke responses over a REAL DIRECT websocket between the
 // two fixtures, brokered by the stub device hub exactly as production
 // does (scripts/lib/directBoot.mjs). Nothing here is a double on the
@@ -98,6 +97,7 @@ for (const key of Object.keys(process.env)) {
 Object.assign(process.env, {
   GIT_CONFIG_GLOBAL: "/dev/null",
   GIT_CONFIG_SYSTEM: "/dev/null",
+  LC_ALL: "C",
   GIT_AUTHOR_NAME: "t",
   GIT_AUTHOR_EMAIL: "t@t",
   GIT_COMMITTER_NAME: "t",

@@ -9,7 +9,7 @@ export interface Env {
   // Ticket TTL override in milliseconds, a test seam. Production
   // leaves it unset and gets TICKET_TTL_MS from hub/src/ticket.ts.
   TICKET_TTL_MS?: string;
-  // Per-device tunnel provisioning (v2 step 10, slice B). All four
+  // Per-device tunnel provisioning. All four
   // must be set for POST /tunnel to work. Any unset means the tunnel
   // routes answer the typed "not configured" and everything else works
   // as before. All four are wrangler secrets (dashboard-set plain

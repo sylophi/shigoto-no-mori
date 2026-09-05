@@ -77,7 +77,7 @@ import {
   scrubbedGitEnv,
 } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
-import { delay, waitFor } from "./lib/hubBoot.mjs";
+import { delay, waitFor } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
 const cliDir = join(import.meta.dirname, "..", "cli");

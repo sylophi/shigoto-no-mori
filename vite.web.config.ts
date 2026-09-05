@@ -1,4 +1,4 @@
-// Vite config for the browsable web client (v2 step 5, slice B),
+// Vite config for the browsable web client,
 // mirroring vite.renderer.config.ts so the reused renderer tree builds
 // identically: same plugins (tailwind, react with the compiler preset),
 // same aliases, same build-info defines. Differences are the web root,

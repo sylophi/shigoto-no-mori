@@ -23,13 +23,12 @@ export type CustomPort = z.infer<typeof CustomPortSchema>;
 // Where a listed port came from: port-pool's allocation for the
 // worktree directory (named after the entry in the project's
 // port-pool.config.json), or the worktree data file.
-export const WorktreePortSourceSchema = z.enum(["pool", "custom"]);
-export type WorktreePortSource = z.infer<typeof WorktreePortSourceSchema>;
+const WorktreePortSourceSchema = z.enum(["pool", "custom"]);
 
 // One row of a worktree's port list as the host reports it: the merged
 // pool + custom set, each probed once on the host's own loopback so the
 // UI can show which ones have a server behind them right now.
-export const WorktreePortSchema = z.object({
+const WorktreePortSchema = z.object({
   port: PortNumberSchema,
   label: z.string().optional(),
   source: WorktreePortSourceSchema,

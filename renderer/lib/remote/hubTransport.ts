@@ -1,12 +1,12 @@
-// Renderer-side ClientTransport onto a hub peer (v2 step 4, slice
-// C). The single hub socket lives in the main process, so invoke
+// Renderer-side ClientTransport onto a hub peer. The single hub socket
+// lives in the main process, so invoke
 // forwards through the client-scoped hub bridge and pushes come back
 // as one peerPush broadcast the renderer filters by device and
 // channel. One underlying bridge subscription serves every device and
 // every channel, with local handler sets doing the fan-out, so adding
 // a subscriber never adds an IPC listener.
 //
-// Deliberately passive about sessions (v2 step 11): direct peer
+// Deliberately passive about sessions: direct peer
 // sessions are supervised desired state owned by main's keeper
 // (shared/hub/directKeeper.ts), which dials every rostered peer
 // eagerly and redials forever. Subscribing here therefore only

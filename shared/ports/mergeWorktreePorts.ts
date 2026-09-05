@@ -7,7 +7,7 @@
 import type { CustomPort, WorktreePort } from "@shared/schemas";
 
 export type PoolPort = { name: string; port: number };
-export type UnprobedWorktreePort = Omit<WorktreePort, "listening">;
+type UnprobedWorktreePort = Omit<WorktreePort, "listening">;
 
 export function mergeWorktreePorts(
   pool: readonly PoolPort[],

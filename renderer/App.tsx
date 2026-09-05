@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { RouterProvider } from "@tanstack/react-router";
-import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
+import { ErrorBoundary } from "react-error-boundary";
+import { AppErrorFallback } from "@/components/AppChrome";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ErrorFallback } from "@/components/ErrorFallback";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
@@ -15,20 +15,6 @@ import { useWatchPortForwards } from "@/hooks/remote/usePortForwards";
 import { useWatchProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useWatchWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
 import { router } from "./router";
-
-function AppErrorFallback({ error }: FallbackProps) {
-  const err = error instanceof Error ? error : new Error(String(error));
-  return (
-    <ErrorFallback
-      error={err}
-      scope="app"
-      action={{
-        label: "Reload window",
-        onClick: () => window.location.reload(),
-      }}
-    />
-  );
-}
 
 // Convention: IPC broadcasts that drive query invalidations live in
 // useWatch* hooks next to the queries they affect. App.tsx is the single

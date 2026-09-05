@@ -170,6 +170,34 @@ async function main() {
   );
 
   await check(
+    "service: rename PATCHes the per-device route with the name and tolerates a 204",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      const service = createAccountService({
+        baseUrl: "https://hub.test",
+        fetchImpl,
+      });
+      await service.rename("device-credential", "this device/id", "Studio");
+      assert.equal(
+        calls[0].url,
+        "https://hub.test" + HUB_ROUTES.renameDevice.path("this device/id"),
+      );
+      assert.equal(calls[0].init.method, "PATCH");
+      assert.deepEqual(JSON.parse(calls[0].init.body), { name: "Studio" });
+      assert.equal(
+        calls[0].init.headers.authorization,
+        "Bearer device-credential",
+      );
+      await assert.rejects(
+        () => service.rename("device-credential", "id", ""),
+        "a blank name was sent to the hub",
+      );
+    },
+  );
+
+  await check(
     "service: revoke DELETEs the per-device route and tolerates a 204",
     async () => {
       const { fetchImpl, calls } = recordingFetch(

@@ -70,7 +70,7 @@ export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
 // reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
 // to pin the published shape -- cli/cmd_update.go mirrors the subset
 // it needs (pid, appVersion, and the state's error kind).
-export const UpdaterStatusSchema = z.object({
+const UpdaterStatusSchema = z.object({
   pid: z.number().int().positive(),
   appVersion: z.string(),
   state: UpdaterStateSchema,
@@ -119,4 +119,3 @@ export const UpdateStageResultSchema = z.discriminatedUnion("status", [
     releaseDate: z.string().optional(),
   }),
 ]);
-export type UpdateStageResult = z.infer<typeof UpdateStageResultSchema>;

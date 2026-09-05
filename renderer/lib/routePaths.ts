@@ -30,3 +30,30 @@ export const WORKTREE_ROUTE_PATHS = {
       "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
   },
 } as const;
+
+type RouteParams = Record<string, string>;
+
+// Fills a route template's `$param` segments with values, for the
+// places that compare against location.pathname rather than navigate
+// (the sidebar's selected-row rule). The pathname is already decoded,
+// so the values go in as they are.
+export function fillRoutePath(template: string, params: RouteParams): string {
+  return template.replace(/\$([A-Za-z]+)/g, (_, name: string) => {
+    const value = params[name];
+    if (value === undefined) throw new Error(`route param ${name} missing`);
+    return value;
+  });
+}
+
+// Matches a pathname against a route template, the `$param` segments
+// coming back keyed by name, so a caller never depends on their order.
+export function matchRoutePath(
+  template: string,
+  pathname: string,
+): Record<string, string> | null {
+  const pattern = new RegExp(
+    `^${template.replace(/\$([A-Za-z]+)/g, "(?<$1>[^/]+)")}$`,
+  );
+  const groups = pathname.match(pattern)?.groups;
+  return groups ? { ...groups } : null;
+}

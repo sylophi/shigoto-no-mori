@@ -95,7 +95,7 @@ export function isRemoteCaller(
 // explicitly registered mutating:false and refuses everything else
 // (fail-closed read-only). The Electron binding ignores it: a local
 // window commands its own machine.
-export type TransportCallOpts = { remote?: boolean; mutating?: boolean };
+type TransportCallOpts = { remote?: boolean; mutating?: boolean };
 
 export type ServerTransport = {
   handle(

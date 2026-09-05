@@ -64,8 +64,7 @@ pre-commit:
     hublink:
       glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-hub-link.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run hublink:check
-    # Durable proof for the direct data plane (v2 step 10, supervised in
-    # step 11): boots the stub Durable Object plus a REAL ticket-mode
+    # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL ticket-mode
     # listener on an ephemeral loopback port, brokers connect tickets
     # over the device hub via direct:connectInfo, and asserts the whole
     # plane: fail-closed brokering without a caller identity, ticket

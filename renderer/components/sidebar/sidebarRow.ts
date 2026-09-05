@@ -95,7 +95,13 @@ export interface SidebarViewModel {
   // the inbox -- and null when the view can't place it at all. Neither
   // view unfolds anything on the way: the empty-state redirect runs on
   // every launch, and auto-expanding would undo the user's folding.
-  revealKey: (projectId: string, worktreeId: string) => string | null;
+  // A deviceId names a peer's worktree (the device-scoped twin route);
+  // absent, the worktree is this machine's.
+  revealKey: (
+    projectId: string,
+    worktreeId: string,
+    deviceId?: string,
+  ) => string | null;
 }
 
 export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {

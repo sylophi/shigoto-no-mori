@@ -48,6 +48,11 @@ import {
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { notifierFor } from "./worktrees";
 
+// The ref the CLI's dirty capture lands a worktree's uncommitted state
+// under (cli/cmd_dirty.go owns the name on that side).
+const dirtyRefFor = (worktreeId: string) =>
+  `refs/shigomori/dirty/${worktreeId}`;
+
 type SourceRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
 
 // What each pull captured and applied, by source worktree, for the
@@ -269,7 +274,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   pullWorktree: runPullWorktree,
 
-  // The source teardown (v2 step 9), after a pull landed here. The
+  // The source teardown, after a pull landed here. The
   // pull's own receipt decides whether it may run at all. Without one
   // (no pull, or a restart in between) the call refuses outright
   // rather than guess. The receipt is kept until a teardown actually
@@ -327,7 +332,7 @@ async function sourceChangedSince(
     return "the source worktree has uncommitted changes that were never brought here.";
   }
   const project = findProjectOrThrow(receipt.targetProjectId);
-  const dirtyRef = `refs/shigomori/dirty/${source.sourceWorktreeId}`;
+  const dirtyRef = dirtyRefFor(source.sourceWorktreeId);
   try {
     await fetchBundleFromPeer(peer, {
       sourceProjectId: source.sourceProjectId,
@@ -399,7 +404,7 @@ async function tearDownSource(
   }
 }
 
-// The pull orchestration (v2 step 7, slice C), shared with the
+// The pull orchestration, shared with the
 // transplant orchestrator above: bring a peer device's worktree here.
 // Local-only by contract (remote:false). The peer's half is the
 // grant-gated transfer surface above, driven through the injected peer
@@ -484,7 +489,7 @@ export async function runPullWorktree(
   // 4. Fetch what's missing. Tip already here + clean worktree means
   // nothing crosses at all.
   const tipIsLocal = await hasCommit(project.path, branchTip);
-  const sourceDirtyRef = `refs/shigomori/dirty/${sourceWorktreeId}`;
+  const sourceDirtyRef = dirtyRefFor(sourceWorktreeId);
   const wantRefs = [
     ...(tipIsLocal ? [] : [branchRef]),
     ...(capture.captured ? [sourceDirtyRef] : []),
@@ -554,7 +559,7 @@ export async function runPullWorktree(
     let dirtyApplied = false;
     if (capture.captured && capture.commit !== undefined) {
       progress({ step: "apply" });
-      const localDirtyRef = `refs/shigomori/dirty/${worktree.id}`;
+      const localDirtyRef = dirtyRefFor(worktree.id);
       await updateRef(project.path, localDirtyRef, capture.commit);
       if (localDirtyRef !== sourceDirtyRef) {
         await deleteRef(project.path, sourceDirtyRef);

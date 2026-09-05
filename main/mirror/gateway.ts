@@ -16,6 +16,7 @@ import { errorMessageOf } from "@shared/errors";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
 import { WorktreeIdSchema } from "@shared/schemas";
+import { MAX_CONNS_PER_DEVICE } from "../portForward/engine";
 import { MAX_CHANNELS_PER_CONNECTION } from "@shared/ipc/socket/channels";
 import {
   type BridgedConn,
@@ -42,8 +43,9 @@ const PREFACE_LIMIT_BYTES = 8 * 1024;
 const PREFACE_TIMEOUT_MS = 10_000;
 // Sanity bound, not a quota: one stream per mirror session, and a
 // runaway loop should not exhaust the per-connection channel budget
-// it shares with the port forwards to the same device.
-const MAX_STREAMS = MAX_CHANNELS_PER_CONNECTION;
+// it shares with the port forwards to the same device, so it takes
+// what the forwards leave.
+const MAX_STREAMS = MAX_CHANNELS_PER_CONNECTION - MAX_CONNS_PER_DEVICE;
 
 function parsePreface(line: string): Preface {
   let parsed: unknown;
@@ -121,12 +123,9 @@ function readPreface(
   });
 }
 
-export type MirrorGateway = ReturnType<typeof createMirrorGateway>;
-
 export function createMirrorGateway(deps: {
   peerApiFor: (deviceId: string) => MirrorPeerApi;
   peerChannelsFor: (deviceId: string) => PeerChannels;
-  onChange?: () => void;
   log?: (message: string) => void;
 }) {
   const log = deps.log ?? ((message: string) => console.warn(message));
@@ -176,11 +175,9 @@ export function createMirrorGateway(deps: {
           },
           onClosed: () => {
             streams.delete(conn);
-            deps.onChange?.();
           },
         });
         streams.add(conn);
-        deps.onChange?.();
       },
       (error: unknown) => {
         log(`[mirror] gateway: ${errorMessageOf(error)}`);

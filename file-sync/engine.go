@@ -140,7 +140,6 @@ type mirrorPreface struct {
 	DeviceID   string `json:"deviceId"`
 	ProjectID  string `json:"projectId"`
 	WorktreeID string `json:"worktreeId"`
-	Session    string `json:"session"`
 }
 
 type mirrorGatewayHandler struct {
@@ -183,7 +182,6 @@ func (h mirrorGatewayHandler) Connect(
 		DeviceID:   u.Host,
 		ProjectID:  u.Parameters[mirrorParamProjectID],
 		WorktreeID: u.Parameters[mirrorParamWorktreeID],
-		Session:    session,
 	}
 	if err := conn.SetDeadline(time.Now().Add(mirrorGatewayTimeout)); err != nil {
 		conn.Close()
@@ -267,7 +265,6 @@ type mirrorResponse struct {
 // The state snapshot the daemon streams whenever any session moves.
 type mirrorStateDoc struct {
 	Event    string               `json:"event"`
-	Index    uint64               `json:"index"`
 	Sessions []mirrorSessionState `json:"sessions"`
 }
 
@@ -552,8 +549,20 @@ const mirrorStateMinInterval = 200 * time.Millisecond
 func streamMirrorState(ctx context.Context, manager *synchronization.Manager, emitter *lineEmitter) {
 	var index uint64
 	var last []byte
-	var lastEmit time.Time
+	var lastPoll time.Time
 	for {
+		// The rate limit bounds polls, not emits: it sits ahead of the
+		// List so a state index that moves on every staged file
+		// (Mutagen's own tick rate) costs at most one projection and
+		// marshal per interval, and the dedup below keeps a poll that
+		// changed nothing off the wire.
+		if wait := mirrorStateMinInterval - time.Since(lastPoll); wait > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(wait):
+			}
+		}
 		next, states, err := manager.List(ctx, &selection.Selection{All: true}, index)
 		if err != nil {
 			if ctx.Err() == nil {
@@ -562,30 +571,20 @@ func streamMirrorState(ctx context.Context, manager *synchronization.Manager, em
 			return
 		}
 		index = next
-		doc := mirrorStateDoc{Event: "state", Index: index, Sessions: make([]mirrorSessionState, 0, len(states))}
+		doc := mirrorStateDoc{Event: "state", Sessions: make([]mirrorSessionState, 0, len(states))}
 		for _, state := range states {
 			doc.Sessions = append(doc.Sessions, mirrorSessionStateOf(state))
 		}
-		// The index is left out of the comparison: it moves on every
-		// tick and carries nothing the app reads.
-		doc.Index = 0
 		encoded, err := json.Marshal(doc)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "file-sync: json encode: %v\n", err)
 			continue
 		}
+		lastPoll = time.Now()
 		if bytes.Equal(encoded, last) {
 			continue
 		}
-		if wait := mirrorStateMinInterval - time.Since(lastEmit); wait > 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(wait):
-			}
-		}
 		last = encoded
-		lastEmit = time.Now()
 		emitter.emitRaw(encoded)
 	}
 }

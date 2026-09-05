@@ -1,6 +1,6 @@
 // Wire frames for the websocket host transport: the same contract
 // modules the Electron bridge serves, carried over a LAN socket to a
-// remote client (v2 step 3, slice A). One JSON object per text frame.
+// remote client. One JSON object per text frame.
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
@@ -40,7 +40,7 @@ export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 // frame fields around it. Byte STREAMS no longer ride this path: they
 // are binary channel frames (channels.ts).
 export const WIRE_CHUNK_BYTES = 640_000;
-export const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
+const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
 
 // The base64 form of one raw chunk, bounded by the cap above and
 // pinned to the base64 charset so a non-base64 payload fails at the
@@ -143,15 +143,14 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // nothing else should grow to depend on its shape. deviceId and
 // appVersion identify the CLIENT, carried so the server can log or
 // gate version skew later without a protocol change.
-export const HelloFrameSchema = z.object({
+const HelloFrameSchema = z.object({
   t: z.literal("hello"),
   token: z.string(),
   deviceId: z.string(),
   appVersion: z.string(),
 });
-export type HelloFrame = z.infer<typeof HelloFrameSchema>;
 
-export const ReqFrameSchema = z.object({
+const ReqFrameSchema = z.object({
   t: z.literal("req"),
   // Client-assigned correlation id, echoed on the matching res.
   id: z.number().int(),
@@ -161,15 +160,14 @@ export const ReqFrameSchema = z.object({
 });
 export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 
-// Sent by a client peer when it closes its side on purpose (v2 step 10,
-// slice A). The device hub carries no per-peer socket close, so without
+// Sent by a client peer when it closes its side on purpose. The device hub carries no per-peer socket close, so without
 // this a host would keep a hostSession for a departed peer until the
 // next presence drop and fan every broadcast at it through the Durable
 // Object. Additive per the version-skew policy: an old host fails to
 // parse the frame and drops it, so the session then dies on presence
 // exactly as before. The direct and LAN sockets have a real socket
 // close, so they never need it and ignore it.
-export const ByeFrameSchema = z.object({
+const ByeFrameSchema = z.object({
   t: z.literal("bye"),
 });
 
@@ -182,8 +180,8 @@ export const ByeFrameSchema = z.object({
 // ping), while a new client against an old host sees no pongs and
 // redials it once a minute until that host updates, the soft
 // degradation the owner's own rollout accepts elsewhere.
-export const PingFrameSchema = z.object({ t: z.literal("ping") });
-export const PongFrameSchema = z.object({ t: z.literal("pong") });
+const PingFrameSchema = z.object({ t: z.literal("ping") });
+const PongFrameSchema = z.object({ t: z.literal("pong") });
 
 export const ClientFrameSchema = z.discriminatedUnion("t", [
   HelloFrameSchema,
@@ -196,13 +194,13 @@ export type ClientFrame = z.infer<typeof ClientFrameSchema>;
 // Sent once in response to a valid hello. Here deviceId names the
 // HOST's shigomori root (what a client keys its caches on) and
 // appVersion is the host app's version.
-export const WelcomeFrameSchema = z.object({
+const WelcomeFrameSchema = z.object({
   t: z.literal("welcome"),
   deviceId: z.string(),
   appVersion: z.string(),
 });
 
-export const ResOkFrameSchema = z.object({
+const ResOkFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(true),
@@ -212,7 +210,7 @@ export const ResOkFrameSchema = z.object({
 
 // The one refusal code either remote gate stamps on a res error today:
 // the device hub's per-peer command-grant gate and the LAN wire's
-// read-only gate (v2 step 6, slice B). One shared constant so both
+// read-only gate. One shared constant so both
 // client roles mint one typed error for "that machine will not run
 // commands from here", distinct from a real handler failure.
 export const COMMAND_REFUSED_CODE = "command-refused";
@@ -254,7 +252,7 @@ export function isCommandRefusedError(error: unknown): boolean {
 // classification, ADDITIVE per the version-skew policy: an old peer
 // sends no code, and a reader treats absence as an unclassified
 // failure, falling back to the message text.
-export const ResErrFrameSchema = z.object({
+const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(false),
@@ -262,20 +260,19 @@ export const ResErrFrameSchema = z.object({
   code: z.string().optional(),
 });
 
-export const PushFrameSchema = z.object({
+const PushFrameSchema = z.object({
   t: z.literal("push"),
   channel: z.string(),
   // The broadcast payload wire shape. Absent when the payload is void.
   payload: z.unknown().optional(),
 });
-export type PushFrame = z.infer<typeof PushFrameSchema>;
 
-// Not a discriminated union: the two res forms share `t` and split on
-// `ok`.
-export const ServerFrameSchema = z.union([
+// Discriminated on `t` so a push (the hot arm) never pays a failed
+// welcome parse first. The two res forms share `t` and split on `ok`
+// in a nested discriminated union.
+export const ServerFrameSchema = z.discriminatedUnion("t", [
   WelcomeFrameSchema,
-  ResOkFrameSchema,
-  ResErrFrameSchema,
+  z.discriminatedUnion("ok", [ResOkFrameSchema, ResErrFrameSchema]),
   PushFrameSchema,
   PongFrameSchema,
 ]);

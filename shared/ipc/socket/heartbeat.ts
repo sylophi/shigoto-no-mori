@@ -32,7 +32,7 @@ export type HeartbeatOptions = {
   probeTimeoutMs?: number;
 };
 
-export type Heartbeat = {
+type Heartbeat = {
   // Arm the interval (once the socket is established).
   start(): void;
   // Cancel every timer. Idempotent, safe before start.

@@ -97,7 +97,7 @@ function commit(
 
 // Every field WorktreeSchema requires, with quiet defaults. Overrides
 // pose the interesting states.
-function worktree(
+export function worktree(
   base: Pick<Worktree, "id" | "projectId" | "name" | "branch" | "path"> &
     Partial<Worktree>,
 ): Worktree {

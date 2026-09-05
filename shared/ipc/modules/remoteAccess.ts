@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { defineContract, invoke } from "@shared/ipc/contract";
+import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 
-// The remote execution surface's preflight (v2 step 6, slice B): "does
+// The remote execution surface's preflight: "does
 // the CALLING peer hold command access on this host?", answered per
 // caller so a client can decide whether to render mutation UI before
 // firing a command that would be refused. remote:true, mutating:false,
@@ -21,5 +21,15 @@ export const remoteAccessContract = defineContract("host", {
     z.void(),
     z.object({ granted: z.boolean() }),
     { remote: true, mutating: false },
+  ),
+  // Fan-out to every connected peer when this host's command-access
+  // switch flips, so a peer's read-only notes and mutation controls
+  // follow the switch at once instead of at its next window focus.
+  // Carries nothing: each peer re-asks the preflight above for its own
+  // verdict.
+  commandAccessChanged: broadcast(
+    "remoteAccess:commandAccessChanged",
+    z.void(),
+    { remote: true },
   ),
 });

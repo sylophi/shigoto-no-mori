@@ -97,7 +97,7 @@ export type HubSocketAdapter = {
   onClose(handler: (code: number) => void): void;
 };
 
-export type HubConnectionCoreDeps = {
+type HubConnectionCoreDeps = {
   openSocket(url: string): HubSocketAdapter;
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its views.
@@ -117,7 +117,7 @@ export type HubConnectionCoreDeps = {
 };
 
 // The lifecycle surface both platform bindings re-expose unchanged.
-export type HubConnectionCore = {
+type HubConnectionCore = {
   connectBroker(deviceId: string): Promise<HubBrokerSession>;
   refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
@@ -319,6 +319,12 @@ export function createHubConnectionCore(
           // widen the wire.
           broker: deps.broker,
           onPresence: () => {
+            // The teardown's empty roster on a dead socket is not a
+            // live roster: it must not reach the direct plane while the
+            // supervisor still reads the socket as connected (that
+            // would close every direct session on a hub blip). The
+            // drop itself notifies, once, after the supervisor knows.
+            if (dead) return;
             if (!settled) {
               settled = true;
               established = true;

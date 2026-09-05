@@ -115,8 +115,6 @@ function core(state: GitState): GitStateCore {
 
 type Outcome = { applied: true } | { applied: false; reason: string };
 
-export type GitFollower = ReturnType<typeof createGitFollower>;
-
 export function createGitFollower(deps: {
   sessions: () => FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
@@ -340,7 +338,12 @@ export function createGitFollower(deps: {
   ): Promise<Outcome> {
     const wantRefs: string[] = [];
     const sweep: string[] = [];
-    const tipIsLocal = await hasCommit(project.path, peer.tip);
+    const [tipIsLocal, indexCommitIsLocal] = await Promise.all([
+      hasCommit(project.path, peer.tip),
+      peer.indexCommit === null
+        ? true
+        : hasCommit(project.path, peer.indexCommit),
+    ]);
     if (!tipIsLocal) {
       if (peer.head.kind !== "branch") {
         return {
@@ -352,10 +355,7 @@ export function createGitFollower(deps: {
       wantRefs.push(`refs/heads/${peer.head.branch}`);
       sweep.push(`refs/shigomori/incoming/${peer.head.branch}`);
     }
-    if (
-      peer.indexCommit !== null &&
-      !(await hasCommit(project.path, peer.indexCommit))
-    ) {
+    if (!indexCommitIsLocal) {
       wantRefs.push(indexRefFor(session.worktreeId));
       sweep.push(indexRefFor(session.worktreeId));
     }

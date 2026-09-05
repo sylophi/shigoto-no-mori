@@ -5,6 +5,7 @@ import {
   type ScriptActivityKind,
 } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
+import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 export interface WorktreeRowState {
   isSelected: boolean;
@@ -21,24 +22,33 @@ export interface WorktreeRowState {
 // one", "what's running here", "where does a click go" and "what do I
 // say on hover" have the same answers in both, and answering them twice
 // is how the two silently drift.
-export function useWorktreeRowState(worktree: Worktree): WorktreeRowState {
+// `deviceId` names the peer a remote row belongs to. Absent, the row
+// is this machine's. The two twin routes differ in nothing else.
+export function useWorktreeRowState(
+  worktree: Worktree,
+  deviceId?: string,
+): WorktreeRowState {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const activity = useWorktreeScriptActivity(worktree.id);
   const isDeleting = useIsDeletingWorktree(worktree.id);
+  const params = {
+    deviceId: deviceId ?? "",
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+  };
+  const route =
+    deviceId === undefined
+      ? WORKTREE_ROUTE_PATHS.detail.local
+      : WORKTREE_ROUTE_PATHS.detail.remote;
   // Not useMatchRoute: its stable function return reads from a hidden
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.
-  const isSelected =
-    pathname === `/projects/${worktree.projectId}/worktrees/${worktree.id}`;
+  const isSelected = pathname === fillRoutePath(route, params);
 
   return {
     isSelected,
-    open: () =>
-      void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId",
-        params: { projectId: worktree.projectId, worktreeId: worktree.id },
-      }),
+    open: () => void navigate({ to: route, params }),
     activity,
     isDeleting,
     title: describeRow(activity, isDeleting, worktree.shelved),

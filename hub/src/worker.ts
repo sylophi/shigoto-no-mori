@@ -17,6 +17,7 @@ import {
   type DeviceListResponse,
   type EnrollResponse,
   EnrollRequestSchema,
+  RenameDeviceRequestSchema,
   type ErrorBody,
   HUB_ROUTES,
   type TicketResponse,
@@ -36,6 +37,7 @@ import {
   type DeviceRow,
   getDeviceByCredentialHash,
   getDeviceById,
+  renameDevice,
   listDevicesByCredentialHash,
   upsertDevice,
 } from "./db.ts";
@@ -56,8 +58,7 @@ export interface HubDeps {
   // account, or null when it does not verify. Injected so the test
   // suite never talks to real Clerk.
   verifyLogin(token: string, env: Env): Promise<{ accountId: string } | null>;
-  // The fetch the Cloudflare tunnel API is called through (v2 step 10,
-  // slice B). Injected like verifyLogin so the vitest suite stubs the
+  // The fetch the Cloudflare tunnel API is called through. Injected like verifyLogin so the vitest suite stubs the
   // CF API inside workerd with no network. Defaults to the global
   // fetch in production (index.ts passes nothing).
   cfFetch?: typeof fetch;
@@ -144,30 +145,22 @@ async function authDevice(
   return await getDeviceByCredentialHash(env.DB, await sha256Hex(token));
 }
 
-async function accountPresence(
-  env: Env,
-  accountId: string,
-): Promise<Set<string>> {
-  const body = await callObject<PresenceResponse>(
-    accountStub(env, accountId),
-    INTERNAL_PRESENCE_PATH,
-  );
-  return new Set(body.online);
-}
-
 // Presence is advisory at enroll and at the device list, so a hub
-// object hiccup must never block enrollment or the device list. This
-// wraps accountPresence and defaults to an empty online set on any DO
-// failure, reporting every device offline rather than throwing. The
-// enroll case matters most: the upsert has already committed the new
-// credential, so a throw here would strand the client without the raw
-// credential that now guards its row.
+// object hiccup must never block enrollment or the device list: any
+// DO failure reads as an empty online set (every device offline)
+// rather than throwing. The enroll case matters most: the upsert has
+// already committed the new credential, so a throw would strand the
+// client without the raw credential that now guards its row.
 async function accountPresenceSafe(
   env: Env,
   accountId: string,
 ): Promise<Set<string>> {
   try {
-    return await accountPresence(env, accountId);
+    const body = await callObject<PresenceResponse>(
+      accountStub(env, accountId),
+      INTERNAL_PRESENCE_PATH,
+    );
+    return new Set(body.online);
   } catch {
     return new Set<string>();
   }
@@ -219,7 +212,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         response.headers.set("Access-Control-Allow-Origin", "*");
         response.headers.set(
           "Access-Control-Allow-Methods",
-          "GET,POST,DELETE,OPTIONS",
+          "GET,POST,PATCH,DELETE,OPTIONS",
         );
         response.headers.set(
           "Access-Control-Allow-Headers",
@@ -260,11 +253,12 @@ export function createWorker(deps: HubDeps): HubWorker {
     ) {
       return await listAccountDevices(request, env);
     }
-    const deviceMatch = DEVICE_PATH.exec(url.pathname);
-    if (
-      request.method === HUB_ROUTES.revokeDevice.method &&
-      deviceMatch !== null
-    ) {
+    const deviceMatch =
+      request.method === HUB_ROUTES.revokeDevice.method ||
+      request.method === HUB_ROUTES.renameDevice.method
+        ? DEVICE_PATH.exec(url.pathname)
+        : null;
+    if (deviceMatch !== null) {
       let targetId: string;
       try {
         targetId = decodeURIComponent(deviceMatch[1]);
@@ -274,7 +268,12 @@ export function createWorker(deps: HubDeps): HubWorker {
         // { error } shape and a 400, never a 500.
         return jsonError(400, { error: "malformed device id" });
       }
-      return await revokeDevice(request, env, targetId, ctx);
+      if (request.method === HUB_ROUTES.revokeDevice.method) {
+        return await revokeDevice(request, env, targetId, ctx);
+      }
+      if (request.method === HUB_ROUTES.renameDevice.method) {
+        return await renameAccountDevice(request, env, targetId);
+      }
     }
     if (
       request.method === HUB_ROUTES.mintTicket.method &&
@@ -416,7 +415,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     } catch {
       return jsonError(502, { error: "revocation failed" });
     }
-    // Best-effort tunnel teardown (v2 step 10, slice B): the revoked
+    // Best-effort tunnel teardown: the revoked
     // device's named tunnel and DNS record die with it when the tunnel
     // env is configured. teardownTunnel swallows every CF failure
     // itself, so it can never fail a revoke the DO already committed,
@@ -429,7 +428,31 @@ export function createWorker(deps: HubDeps): HubWorker {
     return new Response(null, { status: 204 });
   }
 
-  // Tunnel provisioning (v2 step 10, slice B): create-or-reuse this
+  // Renames a device of the caller's account. Scoped like revoke: the
+  // D1 update carries the account guard, so a device outside the
+  // account (or gone meanwhile) matches no row and reads as unknown.
+  async function renameAccountDevice(
+    request: Request,
+    env: Env,
+    targetId: string,
+  ) {
+    const device = await authDevice(request, env);
+    if (device === null)
+      return jsonError(401, { error: "invalid device credential" });
+    const parsed = RenameDeviceRequestSchema.safeParse(await readJson(request));
+    if (!parsed.success)
+      return jsonError(400, { error: "invalid rename request" });
+    const renamed = await renameDevice(
+      env.DB,
+      targetId,
+      device.account_id,
+      parsed.data.name,
+    );
+    if (!renamed) return jsonError(404, { error: "unknown device" });
+    return new Response(null, { status: 204 });
+  }
+
+  // Tunnel provisioning: create-or-reuse this
   // device's named tunnel, point its ingress at the presented loopback
   // port, ensure the DNS CNAME and answer the hostname plus the
   // connector run token. Device-credential authed like mintTicket.
