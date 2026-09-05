@@ -169,7 +169,7 @@
  * scriptConsole/terminalTheme.ts whenever <html>'s theme classes
  * change, so a theme can restyle the console by overriding them. OKLCH
  * values are tuned for legibility against both light and dark
- * backgrounds without a theme-specific override; the dim 8 colors
+ * backgrounds without a theme-specific override. The dim 8 colors
  * match what tools normally use for severity (red = error, yellow =
  * warn, etc.) and the bright 8 are punchier for emphasis.
  */

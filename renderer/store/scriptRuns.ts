@@ -59,7 +59,7 @@ export interface ScriptRunState {
   // something to show or clear.
   hasOutput: boolean;
   // Whether keystrokes reach the process. True for runs the app spawned
-  // (they own a PTY in main); false for lifecycle scripts the CLI ran
+  // (they own a PTY in main), false for lifecycle scripts the CLI ran
   // on the app's behalf, which stream output through the same events
   // but have nothing to type into.
   interactive: boolean;
@@ -127,7 +127,7 @@ type WarnFn = (title: string, options?: { description?: string }) => unknown;
 
 class ScriptRunsStore {
   private states = new Map<ScriptKey, ScriptRunState>();
-  // Per-run output log, keyed like states, mutated in place; consoles
+  // Per-run output log, keyed like states, mutated in place. Consoles
   // catch up from it on mount and follow it through outputSubs.
   private buffers = new Map<ScriptKey, OutputLog>();
   private outputSubs = new KeyedSubscribers<ScriptKey, string>();
@@ -223,7 +223,7 @@ class ScriptRunsStore {
   }
 
   // Console keystrokes and viewport size for a live run. Both are
-  // fire-and-forget; the guards here keep runs without a PTY (and
+  // fire-and-forget, and the guards here keep runs without a PTY (and
   // finished ones) from being written to at all.
   write(key: ScriptKey, data: string): void {
     const runId = this.liveInteractiveRunId(key);
@@ -254,7 +254,7 @@ class ScriptRunsStore {
     this.notify(key);
   }
 
-  // The run's output so far (capped; see MAX_OUTPUT_BYTES), for a
+  // The run's output so far (capped, see MAX_OUTPUT_BYTES), for a
   // console that has just mounted and needs to catch up before it
   // follows subscribeOutput. Read both in the same tick and nothing is
   // missed or doubled.

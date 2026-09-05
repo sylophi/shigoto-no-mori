@@ -24,7 +24,7 @@ export const scriptsContract = {
   ),
   // Console input and viewport size for a run the app spawned. Both are
   // no-ops for a run with no PTY here (already exited, or a lifecycle
-  // script the CLI ran on the app's behalf); the renderer already
+  // script the CLI ran on the app's behalf). The renderer already
   // treats those runs as output-only.
   write: invoke("scripts:write", WriteScriptPayloadSchema, z.void()),
   resize: invoke("scripts:resize", ResizeScriptPayloadSchema, z.void()),

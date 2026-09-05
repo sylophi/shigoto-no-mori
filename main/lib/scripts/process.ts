@@ -63,7 +63,7 @@ const STALE_TERMINAL_ENV = new Set([
 ]);
 
 // Throws synchronously when no process could be started (a missing
-// shell, PTY allocation failure); callers report that as a failed run.
+// shell, PTY allocation failure), which callers report as a failed run.
 // The check for the shell is deliberate: node-pty's helper execs it in
 // the child and exits 1 without a word if that fails, which would show
 // as a bare "exit 1". The PTY child runs in its own session, so its
@@ -74,8 +74,8 @@ export function spawnScript(opts: SpawnScriptOptions): ScriptPty {
   if (!existsSync(shellCmd)) {
     throw new Error(`Login shell not found: ${shellCmd}`);
   }
-  // node-pty's env is a plain string map; drop the undefined entries
-  // NodeJS.ProcessEnv allows.
+  // node-pty's env is a plain string map, so the undefined entries
+  // NodeJS.ProcessEnv allows are dropped.
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(opts.env)) {
     if (value !== undefined && !STALE_TERMINAL_ENV.has(key)) {

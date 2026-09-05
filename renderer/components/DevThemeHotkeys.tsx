@@ -32,14 +32,14 @@ export function DevThemeHotkeys() {
         return;
       }
       // Ctrl+T/D/R are Emacs-style edit bindings inside macOS text
-      // fields (transpose, delete-forward, ...) — let those win. Raw-key
+      // fields (transpose, delete-forward, ...), so those win. Raw-key
       // surfaces are the exception (see above).
       const rawSurface = isRawKeySurface(e.target);
       if (isEditableTarget(e.target) && !rawSurface) return;
       if (e.code !== "KeyT" && e.code !== "KeyD" && e.code !== "KeyR") return;
       e.preventDefault();
       // Only a raw-key surface would otherwise pass the key on to a
-      // program; everywhere else the event may keep bubbling.
+      // program. Everywhere else the event may keep bubbling.
       if (rawSurface) e.stopPropagation();
       if (e.code === "KeyT") {
         setTheme(resolved === "dark" ? "light" : "dark");

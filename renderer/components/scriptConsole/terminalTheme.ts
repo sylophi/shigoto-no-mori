@@ -6,7 +6,7 @@ import type { ITheme } from "@xterm/xterm";
 // child of the console host yields whatever the active theme (light,
 // dark, doubutsu) assigns, in a form xterm's color parser accepts.
 // Callers re-read on every <html> class change (see ConsoleBody).
-// The eight ANSI base colors; each also has a --ansi-bright-* twin
+// The eight ANSI base colors. Each also has a --ansi-bright-* twin
 // feeding xterm's bright* key.
 const ANSI_BASES = [
   "black",

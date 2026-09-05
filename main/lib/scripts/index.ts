@@ -316,7 +316,7 @@ export function startScript(args: RunArgs): string {
   // and deliberately adds no state-root pin: a script's whole process
   // tree inherits this, so naming a root here would follow the user's
   // command into anything it starts (see initShigomoriRoot). TERM and
-  // COLORTERM advertise what xterm in the renderer renders; FORCE_COLOR
+  // COLORTERM advertise what xterm in the renderer renders. FORCE_COLOR
   // is for the tools a runner (turbo, concurrently, a `| tee`) drives
   // through pipes, which can't see the PTY and would go monochrome.
   const env = {
@@ -335,7 +335,7 @@ export function startScript(args: RunArgs): string {
     [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
   };
 
-  // Throws when no process could be started; the caller's IPC rejection
+  // Throws when no process could be started. The caller's IPC rejection
   // carries the message into the console.
   const pty: ScriptPty = spawnScript({
     command: args.command,
@@ -347,8 +347,8 @@ export function startScript(args: RunArgs): string {
 
   // The PTY is one ordered byte stream (stdout and stderr share the
   // terminal), so the renderer's xterm sees exactly what a real
-  // terminal would; concatenating reads before sending changes nothing
-  // it renders.
+  // terminal would, and concatenating reads before sending changes
+  // nothing it renders.
   let pendingOutput = "";
   let flushTimer: NodeJS.Timeout | null = null;
   const flushOutput = () => {
@@ -406,8 +406,8 @@ export function startScript(args: RunArgs): string {
   // (or a short grace period when a backgrounded grandchild still holds
   // the PTY open), so the run's last output never races the exit event
   // that makes the renderer unbind the runId. That grace is also the
-  // only window in which a kill could target an already-reaped pid;
-  // it is a couple hundred milliseconds, and the target would have to
+  // only window in which a kill could target an already-reaped pid.
+  // It is a couple hundred milliseconds, and the target would have to
   // be recycled as a group leader to be hit at all.
   pty.onExit(({ exitCode, signal }) => {
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)

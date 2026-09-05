@@ -11,7 +11,7 @@ import {
 } from "@/store/scriptRuns";
 import { readTerminalTheme, sameTheme } from "./terminalTheme";
 
-// Refits during a window drag are coalesced to this; the first fit of
+// Refits during a window drag are coalesced to this. The first fit of
 // a terminal runs at once so it never paints at xterm's default grid.
 const REFIT_DEBOUNCE_MS = 50;
 
@@ -20,7 +20,7 @@ const SHOW_CURSOR = "\x1b[?25h";
 const HIDE_CURSOR = "\x1b[?25l";
 
 interface ConsoleBodyProps {
-  // Where keystrokes and viewport size go; the store ignores both
+  // Where keystrokes and viewport size go. The store ignores both
   // unless the run is live and interactive.
   runKey: ScriptKey;
   state: ScriptRunState;
@@ -78,7 +78,7 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
 function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  // Whether the grid has been fitted to the host yet; until then
+  // Whether the grid has been fitted to the host yet. Until then
   // term.cols/rows are xterm's defaults and not worth telling the PTY.
   const fittedRef = useRef(false);
 
@@ -87,7 +87,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     if (!host) return;
     let theme = readTerminalTheme(host);
     const term = new Terminal({
-      // Matches the host's `font-mono text-xs`; xterm sizes its cell
+      // Matches the host's `font-mono text-xs`. xterm sizes its cell
       // grid from these, so they can't come from CSS.
       fontFamily: getComputedStyle(host).fontFamily,
       fontSize: 12,
@@ -104,7 +104,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     const resizeSub = term.onResize(({ cols, rows }) =>
       scriptRuns.resize(runKey, cols, rows),
     );
-    // Catch up on the run so far in one write, then follow the log; the
+    // Catch up on the run so far in one write, then follow the log. The
     // two happen in the same tick, so nothing is missed or doubled.
     term.write(scriptRuns.readOutput(runKey).join(""));
     const unsubscribeOutput = scriptRuns.subscribeOutput(runKey, (chunk) =>
@@ -113,8 +113,8 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     termRef.current = term;
     fittedRef.current = false;
 
-    // fit() throws while the host has no layout yet (route transition);
-    // the observer fires again once it does. The first successful fit
+    // fit() throws while the host has no layout yet (route transition),
+    // and the observer fires again once it does. The first successful fit
     // also tells the PTY the size, since xterm only reports resizes
     // that change the grid and the real size may equal its default.
     const fitNow = () => {
@@ -142,7 +142,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     };
     // Observing delivers the current size straight away, which is the
     // initial fit. A fit measured before the monospace face has loaded
-    // gets the cell width wrong; measure again once fonts settle.
+    // gets the cell width wrong, so measure again once fonts settle.
     const observer = new ResizeObserver(refit);
     observer.observe(host);
     void document.fonts.ready.then(refit);
@@ -176,7 +176,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
 
   // Typing only makes sense into a live PTY. Off the run, xterm stops
   // emitting onData (so no stray keystrokes hit the next run) and the
-  // cursor is hidden, since there is nothing to type into; on it, take
+  // cursor is hidden, since there is nothing to type into. On it, take
   // focus so the user can type straight away, and tell the PTY the
   // viewport size once the grid is fitted -- xterm's onResize only
   // fires when the grid changes, which it doesn't for a run started
@@ -200,7 +200,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
   // competing with the console's own controls. xterm's stylesheet paints
   // its viewport black and the theme background only reaches the scroll
   // element inside it, so the strip below the last full row would show
-  // black; letting the console's background through fixes that.
+  // black. Letting the console's background through fixes that.
   return (
     <div
       data-slot="script-console"
