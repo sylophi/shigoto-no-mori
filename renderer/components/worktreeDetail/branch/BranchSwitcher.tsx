@@ -82,7 +82,7 @@ export function BranchSwitcher({
       <Combobox.Trigger
         aria-label="Switch branch"
         title="Switch branch"
-        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100"
+        className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 data-[popup-open]:bg-accent data-[popup-open]:text-foreground data-[popup-open]:opacity-100 phone:opacity-100"
       >
         <ChevronsUpDown aria-hidden className="size-3.5" />
       </Combobox.Trigger>

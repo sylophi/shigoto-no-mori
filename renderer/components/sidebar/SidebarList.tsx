@@ -59,6 +59,18 @@ export function SidebarList({
     getItemKey: (index) => rows[index]?.key ?? index,
   });
 
+  // The virtualizer reads its scroll element on every render, but the
+  // ref belongs to the ScrollArea viewport, an ancestor, and React
+  // attaches an ancestor's ref after this component's layout effects:
+  // on the mount pass the virtualizer sees null and lays out no rows.
+  // A second render heals it, and on a cold cache the queries landing
+  // provide one. With a warm cache (the phone layout's forest page
+  // remounting on every tab switch) nothing would, and the forest
+  // stays blank. One passive effect after the commit re-renders once
+  // with the element in hand.
+  const [, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   // Reveal the selection when navigation comes from outside the sidebar
   // (launcher jump, empty-state redirect) by scrolling the virtualized
   // list to whichever row the active view says stands for it. The row can

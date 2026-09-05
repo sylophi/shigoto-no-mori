@@ -83,8 +83,8 @@ const CALM_REFETCH = { staleTime: 30_000, refetchOnMount: false };
 
 export interface RemoteForestsOptions {
   // True for the sidebar itself, the one observer that keeps the
-  // forests fresh: on a shell where it can unmount (the web sheet at
-  // phone width) its remount must re-list.
+  // forests fresh: on a shell where it can unmount (the phone layout's
+  // forest page) its remount must re-list.
   refetchOnMount?: boolean;
 }
 

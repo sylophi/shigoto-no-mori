@@ -37,6 +37,12 @@ window.addEventListener("unhandledrejection", (event) =>
 // applied after mount.
 applyPose();
 
+// The shared boot script (web/public/boot-theme.js, loaded here for
+// its theme half) also stamps the web shell's phone layout by width.
+// This entry poses as the desktop, which never takes that layout, so
+// the stamp comes off before the app reads it.
+delete document.documentElement.dataset["layout"];
+
 installLabBridge();
 
 void import("./boot");

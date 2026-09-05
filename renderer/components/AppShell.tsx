@@ -2,21 +2,22 @@
 // routed page in a doubutsu "main" zone. The desktop window and the
 // browser tab draw the same frame. What differs is read off the
 // platform, never forked per shell. The sidebar edge resizes on both
-// (a browser has a mouse too), the title-bar drag regions are inert
-// outside Electron, and on a narrow viewport the sidebar folds into a
-// slide-over sheet behind a slim top bar (the desktop window's minimum
-// width keeps it wide, so this is the browser's case in practice).
-// Built in v1 vocabulary (theme tokens only), per the theming contract.
-import { useEffect, useState, useSyncExternalStore } from "react";
+// (a browser has a mouse too), the title-bar drag strip only exists in
+// Electron, and a phone-width browser tab gets the phone layout: a
+// bottom tab bar (forest, devices, settings), the forest as a page of
+// its own (ForestPage), and the worktree pages stacked over it behind
+// a slim back bar. Built in v1 vocabulary (theme tokens only), per the
+// theming contract.
+import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
-import { PanelLeft } from "lucide-react";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
-import { useSelectedSettingsTab } from "@/components/settings/settingsNav";
+import { isTabRoute, PhoneTabBar } from "@/components/PhoneTabBar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
-import { SIDEBAR_ICON_BUTTON } from "@/components/sidebar/sidebarChrome";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { cn, dragRegion } from "@/lib/utils";
@@ -33,38 +34,23 @@ function readStoredWidth(): number {
   return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
 }
 
-// Tailwind's md breakpoint, as a real render gate rather than a CSS
-// `hidden`: the static sidebar runs the full forest query fan-out, and
-// a phone-width session must not pay for a permanently invisible copy
-// of it (nor run two copies while the sheet is open). One
-// MediaQueryList for both the subscription and the snapshot, created
-// on first use so importing this module needs no window.
-let wideMedia: MediaQueryList | null = null;
-const wideQuery = () => (wideMedia ??= window.matchMedia("(min-width: 48rem)"));
-
-function subscribeToWide(onChange: () => void): () => void {
-  wideQuery().addEventListener("change", onChange);
-  return () => wideQuery().removeEventListener("change", onChange);
-}
-
-function useIsWideViewport(): boolean {
-  return useSyncExternalStore(subscribeToWide, () => wideQuery().matches);
-}
-
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
   // account read fresh across sign-in, sign-out and renames.
   useWatchAccountChanges();
-  // The desktop window never folds: its minimum width sits below the
-  // breakpoint, and a folded sidebar would put its toggle under the
-  // traffic lights. The sheet is the browser tab's layout.
-  const viewportWide = useIsWideViewport();
-  const wide = hasLocalHost || viewportWide;
-  const [sheetOpen, setSheetOpen] = useState(false);
+  const phone = usePhoneLayout();
   const { pathname } = useLocation();
-  const settingsTab = useSelectedSettingsTab();
   const navigate = useNavigate();
   const [sidebarWidth, setSidebarWidth] = useState<number>(readStoredWidth);
+
+  // The layout rides <html> as a data attribute, like the theme
+  // classes, so the `phone:` variant (index.css) reaches every element
+  // -- portaled overlays and the toaster included. The web boot script
+  // stamps it pre-paint. This keeps it in step with resizes.
+  useEffect(() => {
+    if (phone) document.documentElement.dataset["layout"] = "phone";
+    else delete document.documentElement.dataset["layout"];
+  }, [phone]);
 
   // The app menu's Settings item (a client-scoped broadcast that only
   // the desktop's menu ever sends).
@@ -75,11 +61,6 @@ export function AppShell() {
       }),
     [navigate],
   );
-
-  // Navigating from a sheet row lands on the new page, and picking a
-  // Settings section swaps the panel beside it. Either way the sheet's
-  // job is done, so it follows the choice closed.
-  useEffect(() => setSheetOpen(false), [pathname, settingsTab]);
 
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -113,9 +94,12 @@ export function AppShell() {
         // material shows through, and the main pane paints its own
         // background. A browser tab has no material, so the root paints.
         !hasLocalHost && "bg-background",
+        // A notched phone draws under its status bar (viewport-fit=cover
+        // in the page's meta), so the frame steps down past it.
+        phone && "pt-[env(safe-area-inset-top)]",
       )}
     >
-      {wide ? (
+      {!phone && (
         <>
           <div style={{ width: sidebarWidth }} className="shrink-0">
             <Sidebar />
@@ -131,41 +115,40 @@ export function AppShell() {
             <div className="absolute inset-y-0 -left-1 w-2" />
           </div>
         </>
-      ) : null}
+      )}
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
-        {!wide && (
-          /* Narrow viewports: a slim bar carrying the brand and the
-             sidebar toggle. */
-          <header className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
-            <button
-              type="button"
-              aria-label="Open sidebar"
-              aria-expanded={sheetOpen}
-              onClick={() => setSheetOpen(true)}
-              className={SIDEBAR_ICON_BUTTON}
-            >
-              <PanelLeft className="size-4" />
-            </button>
-            <span className="truncate text-[13px] font-semibold tracking-tight">
-              Shigoto no Mori
-            </span>
+        {phone && !isTabRoute(pathname) && (
+          /* A page stacked over the forest: the way back to it, where a
+             wide viewport keeps the sidebar. Thumb-height on purpose. */
+          <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-1">
+            <BackButton
+              label="Forest"
+              onClick={() => void navigate({ to: "/forest" })}
+              className="min-h-10 text-sm"
+            />
           </header>
         )}
         <main
           data-doubutsu-zone="main"
           className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
         >
-          {/* The window's title-bar drag strip over the page. Inert
-              outside Electron. */}
-          <div
-            aria-hidden
-            className="absolute inset-x-0 top-0 z-30 h-7"
-            style={dragRegion("drag")}
-          />
+          {/* The window's title-bar drag strip over the page. Only
+              where there is a title bar: in a browser the strip would
+              be an invisible layer swallowing taps along the top. */}
+          {hasLocalHost && (
+            <div
+              aria-hidden
+              className="absolute inset-x-0 top-0 z-30 h-7"
+              style={dragRegion("drag")}
+            />
+          )}
           <Outlet />
         </main>
+        {phone && <PhoneTabBar />}
       </div>
+
+      {phone && <ForestKeepalive />}
 
       {/* The two overlays that act on local projects (the ⌘K launcher,
           add project). They live here, under the router, so their
@@ -177,21 +160,16 @@ export function AppShell() {
           <AddProjectModal />
         </>
       )}
-
-      {!wide && (
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          {/* No close X: it would float over the brand header, and the
-              backdrop tap, Esc, and any navigation already close it. */}
-          <SheetContent
-            side="left"
-            showCloseButton={false}
-            className="w-72 gap-0 p-0"
-          >
-            <SheetTitle className="sr-only">Sidebar</SheetTitle>
-            <Sidebar />
-          </SheetContent>
-        </Sheet>
-      )}
     </div>
   );
+}
+
+// The wide layout's sidebar is always mounted and keeps every peer's
+// listing fresh. The phone layout's forest is a page that unmounts on
+// every tab switch. One calm observer here keeps the cache warm, so
+// coming back to the forest paints from it instead of from "Loading
+// forests…" while every peer is re-listed.
+function ForestKeepalive() {
+  useRemoteForests();
+  return null;
 }

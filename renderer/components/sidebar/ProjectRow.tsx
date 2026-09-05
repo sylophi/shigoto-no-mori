@@ -79,7 +79,7 @@ export function ProjectRow({
           type="button"
           aria-label={`More actions for ${project.name}`}
           className={cn(
-            "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100",
+            "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100 phone:opacity-100",
             isHovered ? "opacity-100" : "opacity-0",
           )}
         >
@@ -124,7 +124,7 @@ export function ProjectRow({
                 aria-label={`Quick-create worktree in ${project.name}`}
                 title={`Quick-create worktree in ${project.name}`}
                 className={cn(
-                  "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",
+                  "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100 phone:opacity-100",
                   isHovered ? "opacity-100" : "opacity-0",
                 )}
                 aria-busy={creating}

@@ -26,6 +26,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* The phone layout (AppShell marks <html> with data-layout="phone" on
+   a phone-width browser tab): `phone:` utilities restyle for a thumb
+   instead of a cursor, the way `dark:` follows the theme class. */
+@custom-variant phone (&:is([data-layout="phone"] *));
+
 /* Disabled controls keep pointer events so the not-allowed cursor and
    title tooltips work (see the base-layer cursor rule below). In turn,
    `hover:` must never style a disabled element, or dead controls light
@@ -169,6 +174,18 @@
        the vibrancy instead of stamping a solid neutral-800 rectangle. */
     --accent: oklch(1 0 0 / 0.1);
   }
+}
+
+/* Phone-layout base rules, unlayered so they outrank the size
+   utilities on the fields themselves: iOS Safari zooms the page into a
+   focused field set under 16px, which on an app shell reads as a
+   broken layout, and the rubber-band bounce at the top of a fixed
+   shell reads the same way. */
+[data-layout="phone"] :is(input, textarea, select) {
+  font-size: 16px;
+}
+[data-layout="phone"] body {
+  overscroll-behavior-y: none;
 }
 
 /*

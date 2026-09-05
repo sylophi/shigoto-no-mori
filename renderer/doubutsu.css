@@ -40,11 +40,13 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
+ *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices"
- *    picking the canvas wallpaper (settings/Settings, tidy/TidyForest,
- *    remote/DevicesPage), the `doubutsu-only` / `v1-only` classes
+ *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
+ *    forest" picking the canvas wallpaper (settings/Settings,
+ *    tidy/TidyForest, remote/DevicesPage, ForestPage), the
+ *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]
  *    (configure/PickerRow.tsx).
  *
@@ -533,6 +535,30 @@
   padding-inline: calc(var(--spacing) * 3);
 }
 
+/* The phone layout's tab bar: a cream tray along the bottom edge, its
+   top a hard sticker line rather than the border v1 draws, with the
+   current tab a leaf-green sticker slapped on at a tilt like the brand
+   header's corner pills. The tray is a card, not the rail's mint, so
+   it stays its own surface on the mint forest page too. */
+.doubutsu [data-slot="phone-tab-bar"] {
+  background-color: var(--card);
+  box-shadow: 0 -1px 0 0 var(--doubutsu-edge-line);
+}
+.doubutsu [data-slot="phone-tab"] {
+  color: var(--muted-foreground);
+}
+.doubutsu [data-slot="phone-tab"][aria-current="page"] {
+  color: var(--foreground);
+}
+.doubutsu
+  [data-slot="phone-tab"][aria-current="page"]
+  [data-slot="phone-tab-pill"] {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: var(--doubutsu-sticker-shadow);
+  transform: rotate(-4deg);
+}
+
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
    leaving a transparent slit that lets the window material show
    through as a hairline "border" between the rails. Paint it as an
@@ -631,6 +657,16 @@
   --doubutsu-drift-x: 120px;
   --doubutsu-drift-y: 120px;
   --doubutsu-drift-time: 36s;
+}
+
+/* The forest as a page (the phone layout's home, ForestPage): the
+   same cream canvas and falling leaves as the worktree pages, so the
+   home tab is one more room rather than the rail stretched to fill
+   the screen. The sidebar zone inside goes clear, so the rows sit on
+   the wallpaper rather than on a mint panel covering it. Its token
+   remaps (accent, muted) still apply, and read fine on cream. */
+.doubutsu [data-doubutsu-page="forest"] [data-doubutsu-zone="sidebar"] {
+  background-color: transparent;
 }
 
 /* The launcher is its own place, so it gets its own wallpaper on a

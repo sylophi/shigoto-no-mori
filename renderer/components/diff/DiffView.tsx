@@ -5,11 +5,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
-import { ChevronDown, Loader2, PanelLeft } from "lucide-react";
+import { ChevronDown, Files, Loader2, PanelLeft } from "lucide-react";
 import { useElementWidth } from "@/hooks/ui/useElementWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
+import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { isBareKeyEvent } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import { DiffFileIndex } from "./DiffFileIndex";
@@ -142,6 +145,11 @@ export function DiffView({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
+  // A phone has no width to spare beside the diff, so the rail is
+  // never offered there (indexAvailable). The same list opens as a
+  // bottom sheet instead.
+  const phone = usePhoneLayout();
+  const [fileSheetOpen, setFileSheetOpen] = useState(false);
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
@@ -163,7 +171,10 @@ export function DiffView({
 
   // Unmeasured (null) counts as too narrow, so the rail can't flash in
   // and back out on the first frame of a diff opened in a narrow pane.
+  // The phone gate comes first: a landscape phone can clear the pane
+  // minimum, and the sheet is the phone's one path to the list.
   const indexAvailable =
+    !phone &&
     allFiles.length >= INDEX_MIN_FILES &&
     paneWidth !== null &&
     paneWidth >= INDEX_MIN_PANE;
@@ -171,6 +182,8 @@ export function DiffView({
     indexAvailable && (indexPref ?? paneWidth >= INDEX_AMPLE_PANE);
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
+  const toggleAll = () =>
+    setCollapsedKeys(allCollapsed ? new Set() : new Set(allFiles.map(fileKey)));
 
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
@@ -224,11 +237,18 @@ export function DiffView({
     // know whether the rail is currently on screen to toggle the right
     // way. (Why the pane and not the window: see useElementWidth.)
     <div ref={paneRef} className="flex h-full flex-col">
-      <header className="flex flex-col gap-3 border-b border-border px-6 pt-7 pb-4">
+      <header
+        className={cn(
+          "flex flex-col gap-3 border-b border-border",
+          PAGE_HEADER_PADDING,
+        )}
+      >
         <BackButton onClick={onBack} label={backLabel} />
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
-            <h1 className="truncate text-xl font-medium tracking-tight select-text">
+            {/* A phone's header row is shared with the chips, so the
+                title wraps there instead of losing its tail. */}
+            <h1 className="truncate text-xl font-medium tracking-tight select-text phone:text-lg phone:whitespace-normal">
               {title}
             </h1>
             <p className="truncate text-xs text-muted-foreground select-text">
@@ -236,6 +256,17 @@ export function DiffView({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
+            {phone && allFiles.length >= INDEX_MIN_FILES && (
+              <ChipButton
+                onClick={() => setFileSheetOpen(true)}
+                title="Files in this patch"
+                aria-label={`Files in this patch (${allFiles.length})`}
+                className="py-1.5"
+              >
+                <Files aria-hidden className="size-3.5" />
+                <span className="tabular">{allFiles.length}</span>
+              </ChipButton>
+            )}
             {indexAvailable && (
               <ChipButton
                 onClick={toggleIndex}
@@ -264,11 +295,8 @@ export function DiffView({
             collapsedKeys={collapsedKeys}
             allCollapsed={allCollapsed}
             onSelect={jumpTo}
-            onToggleAll={() =>
-              setCollapsedKeys(
-                allCollapsed ? new Set() : new Set(allFiles.map(fileKey)),
-              )
-            }
+            onToggleAll={toggleAll}
+            className="w-72 shrink-0 border-r border-border"
           />
         )}
 
@@ -313,6 +341,33 @@ export function DiffView({
           )}
         </div>
       </div>
+
+      {phone && (
+        <Sheet open={fileSheetOpen} onOpenChange={setFileSheetOpen}>
+          {/* The rail as a bottom sheet: a patch is still easier to
+              read with its map to hand. Picking a file closes the
+              sheet and jumps, so the tap lands on the file itself. */}
+          <SheetContent
+            side="bottom"
+            showCloseButton={false}
+            className="gap-0 p-0"
+          >
+            <SheetTitle className="sr-only">Files in this patch</SheetTitle>
+            <DiffFileIndex
+              files={allFiles}
+              activeKey={activeKey}
+              collapsedKeys={collapsedKeys}
+              allCollapsed={allCollapsed}
+              onSelect={(key) => {
+                setFileSheetOpen(false);
+                jumpTo(key);
+              }}
+              onToggleAll={toggleAll}
+              className="h-[70dvh] w-full"
+            />
+          </SheetContent>
+        </Sheet>
+      )}
     </div>
   );
 }

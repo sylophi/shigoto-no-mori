@@ -4,6 +4,7 @@
 import type { FallbackProps } from "react-error-boundary";
 import { Toaster } from "sonner";
 import { ErrorFallback } from "@/components/ErrorFallback";
+import { usePhoneLayout } from "@/hooks/ui/useViewport";
 
 export function AppErrorFallback({ error }: FallbackProps) {
   const err = error instanceof Error ? error : new Error(String(error));
@@ -20,10 +21,18 @@ export function AppErrorFallback({ error }: FallbackProps) {
 }
 
 export function AppToaster() {
+  // The tab bar owns the bottom edge on a phone, so toasts drop in
+  // from the top there, below the status bar (the page draws under it:
+  // viewport-fit=cover).
+  const phone = usePhoneLayout();
   return (
     <Toaster
-      position="bottom-right"
-      offset={{ bottom: 16, right: 16 }}
+      position={phone ? "top-center" : "bottom-right"}
+      offset={
+        phone
+          ? { top: "calc(env(safe-area-inset-top) + 12px)" }
+          : { bottom: 16, right: 16 }
+      }
       closeButton
       toastOptions={{
         classNames: {

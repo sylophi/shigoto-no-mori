@@ -8,8 +8,13 @@ import type React from "react";
 // chrome, and since the web shell became a sidebar layout its pages
 // have the same open canvas above them (the former slim-top-bar shell
 // carried a pt-5 variant that no longer has a caller).
-const HEADER_CLASS =
-  "relative flex items-center gap-3 overflow-hidden border-b border-border px-6 pt-7 pb-4";
+// The header's padding on its own, for the pages that draw a header of
+// their own shape (the diff pages, the worktree detail) and still want
+// to sit at the same inset, phone layout included.
+export const PAGE_HEADER_PADDING =
+  "px-6 pt-7 pb-4 phone:px-4 phone:pt-4 phone:pb-3";
+
+const HEADER_CLASS = `relative flex items-center gap-3 overflow-hidden border-b border-border ${PAGE_HEADER_PADDING}`;
 
 export function PageHeader({
   eyebrow,

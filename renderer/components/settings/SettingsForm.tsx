@@ -24,6 +24,7 @@ import { DeviceStatusPill } from "@/components/remote/DeviceStatusPill";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
+import { SettingsSectionChips } from "./SettingsSectionChips";
 import {
   APPEARANCE_TAB,
   deviceTab,
@@ -166,6 +167,7 @@ export function SettingsForm({
         title={heading.title}
         watermark="設定"
       />
+      <SettingsSectionChips devices={devices} activeTab={activeTab} />
 
       <SettingsEditorRegistryProvider registry={registry}>
         <div className="flex min-h-0 flex-1 flex-col">
