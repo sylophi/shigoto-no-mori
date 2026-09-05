@@ -188,10 +188,17 @@ function ConsoleTerminal({
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box width, so padding on the host itself would be counted as
-  // usable columns.
+  // usable columns. xterm's stylesheet paints its viewport black and the
+  // theme background only reaches the scroll element inside it, so the
+  // strip below the last full row would show black; the important
+  // override (xterm.css is unlayered, so it would otherwise win) lets
+  // the console's background through instead.
   return (
     <div className="h-full w-full px-4 py-3 font-mono text-xs">
-      <div ref={hostRef} className="h-full w-full [&_.xterm]:h-full" />
+      <div
+        ref={hostRef}
+        className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:bg-transparent!"
+      />
     </div>
   );
 }
