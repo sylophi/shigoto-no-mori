@@ -320,7 +320,12 @@ and assert through the bridge and the disk.
   connects through the tunnel only, so it is the way to test the
   tunnel data path on one machine. Launch the desktop with
   `SM_ACCOUNT_WEB_ORIGIN=http://localhost:5190` so it admits the web
-  client. The dev hub needs the tunnel secrets configured.
+  client. The dev hub needs the tunnel secrets configured. The web
+  client is a hostless controller: it is the desktop with no local
+  projects, so anything a desktop can do to a peer (browse its
+  worktrees, run and watch its scripts, change its settings) works
+  from a browser tab the same way, and anything local by nature
+  (launch tools, this device's section, port forwarding) is absent.
 - **Local hub** (`pnpm -C hub dev`). Set `SM_DEVICE_HUB_URL` to
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in `hub/.dev.vars`.

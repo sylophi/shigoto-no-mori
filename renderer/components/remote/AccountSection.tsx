@@ -8,6 +8,7 @@ import {
 import { ACCOUNT_ENV } from "@shared/account/serviceConfig";
 import { Button } from "@/components/ui/button";
 import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
+import { hasLocalHost } from "@/lib/localHost";
 import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
@@ -38,8 +39,10 @@ export function AccountSection() {
       >
         <p className="max-w-sm text-xs">
           Sign in and every device on the account shows up in your sidebar,
-          worktrees and all. Enrollment stores a device credential in your OS
-          keychain.
+          worktrees and all.{" "}
+          {hasLocalHost
+            ? "Enrollment stores a device credential in your OS keychain."
+            : "This browser enrolls as a device of its own."}
         </p>
       </StatePanel>
     );
@@ -96,8 +99,8 @@ function NotConfiguredPanel() {
         <p className="max-w-sm text-xs">
           Dev builds read them from a{" "}
           <code className="font-mono">.env.local</code> in the checkout the app
-          was started from (or the launch environment). Add the file and restart
-          the app.
+          was started from (or the launch environment). Add the file and restart{" "}
+          {hasLocalHost ? "the app" : "the dev server"}.
         </p>
       )}
     </StatePanel>
@@ -128,7 +131,17 @@ function ClerkSignInButton() {
     );
   }
   return (
-    <Button size="sm" onClick={() => clerk.openSignIn()}>
+    <Button
+      size="sm"
+      // A browser round trip (OAuth) must land back on a path this tree
+      // serves, so the tab returns to where it left. The desktop's flow
+      // runs in the system browser and deep-links back on its own.
+      onClick={() =>
+        clerk.openSignIn(
+          hasLocalHost ? undefined : { forceRedirectUrl: location.href },
+        )
+      }
+    >
       <LogIn />
       Sign in
     </Button>

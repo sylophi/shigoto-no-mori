@@ -69,9 +69,9 @@ export interface HostScope {
   // The device whose data the subtree reads and mutates.
   deviceId: string;
   // True when that device is another machine. Computed once here so the
-  // affordances that are local by nature (launching, configure links,
-  // script runs) gate on the scope instead of each re-deriving the
-  // comparison against localDeviceId.
+  // affordances that are local by nature (launching, configure links)
+  // gate on the scope instead of each re-deriving the comparison
+  // against localDeviceId.
   remote: boolean;
   // The api those calls go through: window.api locally, a connected
   // remote device's socket- or hub-backed api under a provider.

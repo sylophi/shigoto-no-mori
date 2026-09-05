@@ -5,7 +5,7 @@ import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { assertNever } from "@/lib/utils";
-import { scriptRuns, slotLabel, type ScriptSlot } from "@/store/scriptRuns";
+import { slotLabel, type ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ConsoleBody } from "./ConsoleBody";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
@@ -17,14 +17,13 @@ interface InnerProps {
 }
 
 export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
-  const { key, state, busy, start, stop } = useScriptRunner(worktree, slot);
+  const { key, state, busy, canRun, disabledReason, start, stop, clear } =
+    useScriptRunner(worktree, slot);
   const { data: config } = useShigomoriConfig(worktree.projectId);
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
 
   const command = resolveCommand(slot, config, pkg);
   const label = slotLabel(slot);
-
-  const clear = () => scriptRuns.clear(key);
   const canClear = !busy && state.hasOutput;
   // Lifecycle scripts the CLI ran for the app stream here too, but
   // their process lives in the CLI, not behind one of our PTYs.
@@ -66,7 +65,12 @@ export function ScriptConsoleInner({ worktree, slot, onBack }: InnerProps) {
                 {state.cancelling ? "Stopping…" : "Stop"}
               </Button>
             ) : (
-              <Button size="sm" onClick={start}>
+              <Button
+                size="sm"
+                onClick={start}
+                disabled={!canRun}
+                title={disabledReason}
+              >
                 <Play />
                 {state.status === "idle" ? "Run" : "Run again"}
               </Button>

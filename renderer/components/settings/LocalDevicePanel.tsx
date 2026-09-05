@@ -4,7 +4,7 @@ import { CliSection } from "./CliSection";
 import { DangerZone } from "./DangerZone";
 import { DataLocationSection } from "./DataLocationSection";
 import { DeviceToggleSections } from "./DeviceSettingsSections";
-import { VersionSection } from "./VersionSection";
+import { BuildVersionLine, VersionSection } from "./VersionSection";
 
 // This machine's section. The same version and toggle sections every
 // peer section renders, plus the three that only exist for the
@@ -19,14 +19,7 @@ export function LocalDevicePanel({
 }) {
   return (
     <>
-      <VersionSection
-        version={
-          <>
-            {__APP_VERSION__}{" "}
-            <span className="text-muted-foreground">({__APP_COMMIT__})</span>
-          </>
-        }
-      />
+      <VersionSection version={<BuildVersionLine />} />
 
       <DeviceToggleSections form={form} setForm={setForm} />
 

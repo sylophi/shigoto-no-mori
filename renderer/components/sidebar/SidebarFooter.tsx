@@ -5,8 +5,8 @@ import {
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useOverlays } from "@/hooks/ui/useOverlays";
+import { hasLocalHost } from "@/lib/localHost";
 import {
   useSetSidebarView,
   useSidebarView,
@@ -36,20 +36,28 @@ const VIEW_OPTIONS = [
 
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
-// SidebarToolbar, above the tree.
-export function SidebarFooter({
-  arrangeMode,
-  onToggleArrange,
-}: SidebarFooterProps) {
+// SidebarToolbar, above the tree. A hostless client has no local tree
+// to lay out, arrange or add to, and no updater of its own, so its bar
+// carries the page-nav cluster alone.
+export function SidebarFooter(props: SidebarFooterProps) {
+  return hasLocalHost ? <LocalFooter {...props} /> : <PeerFooter />;
+}
+
+function PeerFooter() {
+  return (
+    <div className={SIDEBAR_FOOTER_BAR}>
+      <div className="flex-1" />
+      <SidebarNavActions />
+    </div>
+  );
+}
+
+function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
   const { openAddProject } = useOverlays();
   const view = useSidebarView();
   const { mutate: setView } = useSetSidebarView();
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
-  // The account-status query is staleTime-Infinity, so this always-
-  // mounted watch is what keeps it (and every other account read) fresh
-  // across sign-in, sign-out and renames, wherever they happen.
-  useWatchAccountChanges();
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
@@ -89,9 +97,7 @@ export function SidebarFooter({
           <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
-      {/* Devices is always reachable here: unconfigured, the page itself
-          explains the state (AccountSection) instead of the button hiding. */}
-      <SidebarNavActions devicesEnabled updateReady={updateReady} />
+      <SidebarNavActions updateReady={updateReady} />
     </div>
   );
 }

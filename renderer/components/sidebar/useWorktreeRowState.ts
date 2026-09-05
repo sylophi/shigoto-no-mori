@@ -1,9 +1,7 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
-import {
-  useWorktreeScriptActivity,
-  type ScriptActivityKind,
-} from "@/store/scriptRuns";
+import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
@@ -30,7 +28,7 @@ export function useWorktreeRowState(
 ): WorktreeRowState {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const activity = useWorktreeScriptActivity(worktree.id);
+  const activity = useWorktreeScriptActivity(worktree.id, deviceId);
   const isDeleting = useIsDeletingWorktree(worktree.id);
   const params = {
     deviceId: deviceId ?? "",

@@ -1,11 +1,9 @@
-// The worktree pages' route paths, spelled once. Each of the four
+// The worktree pages' route paths, spelled once. Each of the five
 // exists twice -- under /projects on this machine, and under
 // /devices/$deviceId as the twin serving a peer's worktree -- and the
-// same strings are needed in three places that must agree byte for
-// byte: the desktop route tree (renderer/router.tsx), the web one
-// (web/app/router.tsx, which reads renderer modules through the same
-// "@" alias) and the scope-aware navigation helpers
-// (hooks/worktrees/useWorktreeNav.ts).
+// same strings are needed in two places that must agree byte for
+// byte: the route tree (renderer/router.tsx) and the scope-aware
+// navigation helpers (hooks/worktrees/useWorktreeNav.ts).
 //
 // `as const` is load-bearing: createRoute and navigate both infer a
 // route's params from the path's literal type, so these must never
@@ -28,6 +26,11 @@ export const WORKTREE_ROUTE_PATHS = {
     local: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
     remote:
       "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  },
+  script: {
+    local: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
+    remote:
+      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
   },
 } as const;
 

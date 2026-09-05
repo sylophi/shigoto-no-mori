@@ -1,5 +1,5 @@
 // Account identity from the Clerk session token both enroll handlers
-// present (main/ipc/modules/account.ts, web/bridge/createWebBridge.ts).
+// present (main/ipc/modules/account.ts, web/ipc/register.ts).
 // A session token is always a JWT whose `sub` claim is the Clerk user
 // id, the same value the device hub's verifier keys D1 rows and Durable
 // Objects on. The token is never verified here, it is only read so the

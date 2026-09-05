@@ -3,12 +3,9 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { Trash2 } from "lucide-react";
+import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { openExternalUrl } from "@/lib/openExternal";
-import {
-  type ScriptKey,
-  type ScriptRunState,
-  scriptRuns,
-} from "@/store/scriptRuns";
+import type { ScriptKey, ScriptRunState } from "@/store/scriptRuns";
 import { readTerminalTheme, sameTheme } from "./terminalTheme";
 
 // Refits during a window drag are coalesced to this. The first fit of
@@ -76,6 +73,11 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
 // to the PTY while the run is live, and the PTY is told the viewport
 // size so programs lay out for the space they have.
 function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
+  // The scoped device's store: the log the terminal replays and the
+  // PTY its keystrokes reach both live on whichever device this
+  // console is scoped to. One per device for the window's lifetime, so
+  // it is a stable effect dependency.
+  const scriptRuns = useScriptRuns();
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   // Whether the grid has been fitted to the host yet. Until then
@@ -172,7 +174,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
       term.dispose();
       termRef.current = null;
     };
-  }, [runKey]);
+  }, [runKey, scriptRuns]);
 
   // Typing only makes sense into a live PTY. On the run, take focus so
   // the user can type straight away, and tell the PTY the viewport size
@@ -196,7 +198,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     } else if (hostRef.current?.contains(document.activeElement)) {
       term.blur();
     }
-  }, [runKey, state.status, state.interactive]);
+  }, [runKey, scriptRuns, state.status, state.interactive]);
 
   // Padding lives on the wrapper: the fit addon sizes the grid from the
   // host's box width, so padding on the host itself would be counted as

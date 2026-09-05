@@ -9,6 +9,8 @@
 // hub store rather than the account:listDevices HTTP snapshot (which
 // only invalidates on account:changed), so a device coming online or
 // going away updates without a refetch.
+import { errorMessageOf } from "@shared/errors";
+import { isHubRefusal } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -30,17 +32,7 @@ import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "./deviceRegistryStatus";
 
-export function DeviceRegistry({
-  accountId,
-  describeError,
-}: {
-  accountId: string;
-  // A sentence for a device list that would not load, shown in place
-  // of the list. The desktop leaves the failure to the query's toast.
-  // The web page, which cannot tell a refusing hub from an unreachable
-  // one, says which it might be.
-  describeError?: (error: unknown) => string;
-}) {
+export function DeviceRegistry({ accountId }: { accountId: string }) {
   useWatchCommandAccessChanges();
   const localDeviceName = useLocalDeviceName();
   const devicesQuery = useAccountDevices();
@@ -115,9 +107,7 @@ export function DeviceRegistry({
       ) : devicesQuery.isError ? (
         // A failed list is unknown, not empty, so no "No devices yet"
         // under it.
-        describeError && (
-          <ErrorBanner>{describeError(devicesQuery.error)}</ErrorBanner>
-        )
+        <ErrorBanner>{describeListError(devicesQuery.error)}</ErrorBanner>
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (
@@ -156,6 +146,24 @@ export function DeviceRegistry({
       )}
     </section>
   );
+}
+
+// One honest sentence per failure shape for a device list that would
+// not load. A client cannot always tell a refusing device hub from an
+// unreachable one (a browser sees no CORS headers on a failed
+// response), so the fetch-failure branch names both possibilities
+// instead of guessing.
+function describeListError(error: unknown): string {
+  if (isHubRefusal(error)) {
+    return "The device hub refused this request, so the device list is unavailable.";
+  }
+  if (error instanceof TypeError) {
+    return (
+      "Couldn't reach the device hub. Either you are offline, or this " +
+      "build's hub URL does not point at a reachable Worker."
+    );
+  }
+  return `Couldn't load the device list: ${errorMessageOf(error)}`;
 }
 
 // The person, not the account's key: the hub keys on the Clerk user

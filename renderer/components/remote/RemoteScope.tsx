@@ -57,9 +57,12 @@ function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
 
 // Wraps a page component for mounting under a /devices/$deviceId twin
 // route. The page reads its own params non-strictly, so the same
-// component serves both the local route and this one.
-export function withRemoteScope(Page: ComponentType): () => ReactElement {
-  return function RemoteScoped() {
-    return <RemoteScopeGate Page={Page} />;
-  };
+// component serves both the local route and this one. A lazy route
+// component's preload rides along, so the router fetches its chunk
+// ahead of the navigation instead of suspending the whole tree on it.
+export function withRemoteScope(
+  Page: ComponentType & { preload?: () => Promise<unknown> },
+): () => ReactElement {
+  const RemoteScoped = () => <RemoteScopeGate Page={Page} />;
+  return Object.assign(RemoteScoped, { preload: Page.preload });
 }

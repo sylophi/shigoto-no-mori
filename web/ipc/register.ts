@@ -1,12 +1,16 @@
-// The web client's window.api factory. It builds
-// the SAME surface the Electron preload exposes, by the same means: the
-// scalar facts (deviceId, appVersion, isDev, isElectron) plus buildApi over
-// one ClientTransport per scope. The transports are in-page loopback
-// wires instead of the IPC bridge, with the browser-servable client
-// modules (clientConfig, account, hub, shell) registered through the
-// shared registrar and every OS-bound channel answered by a typed stub
-// default. Renderer components therefore mount unmodified: they cannot
-// tell this bridge from the preload's.
+// The browser binding's composition root: the twin of main/ipc/register.ts
+// (which registers the handlers on the Electron and remote wires and
+// assembles the direct plane) and main/preload.ts (which builds
+// window.api) in one, since a browser has no process boundary to split
+// them across. It builds the SAME window.api surface the preload
+// exposes, by the same means: the scalar facts (deviceId, appVersion,
+// isDev, isElectron) plus buildApi over one ClientTransport per scope.
+// The transports are in-page loopback wires (loopback.ts, the twin of
+// main/preloadTransport.ts) instead of the IPC bridge, with the
+// browser-servable client modules (clientConfig, account, hub, shell)
+// registered through the shared registrar and every OS-bound channel
+// answered by a typed stub default. Renderer components therefore
+// mount unmodified: they cannot tell this bridge from the preload's.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
 // browser global read at module scope, so the headless bridge check
@@ -39,11 +43,6 @@ import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { createWebAccountStore } from "../account/store";
-import {
-  createWebAccessStore,
-  isHubRefusedError,
-  type WebAccessStore,
-} from "../account/webAccess";
 import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLoopbackWire } from "./loopback";
 
@@ -75,9 +74,6 @@ export type WebBridge = {
     isDev: boolean;
     isElectron: boolean;
   } & ReturnType<typeof buildApi>;
-  // The deployment-level access state the shell surfaces when the
-  // build is unconfigured or the device hub refuses this origin.
-  webAccess: WebAccessStore;
   // Cross-tab correction: another tab changed the persisted account
   // (a storage event); re-read and fan out exactly like a local
   // transition. The storage event itself only fires in OTHER tabs, so
@@ -107,8 +103,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     baseUrl: config.hubUrl,
     fetchImpl: deps.fetchImpl,
   });
-  const webAccess = createWebAccessStore();
-
   const clientWire = createLoopbackWire("client");
   const hostWire = createLoopbackWire("host");
   const registrarOpts = { validateOutputs: deps.isDev };
@@ -146,19 +140,16 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // Mirrors main/ipc/register.ts refreshHubConnection: reconcile the
   // socket with the account state, resolving inside the serialized
-  // lifecycle, and degrade any failure to a log line. The two web-only
-  // additions are the typed access states: an unconfigured build stops
-  // the socket instead of dialing nowhere, and an exact origin refusal
-  // on the ticket mint stops it instead of a retry loop that can never
-  // succeed (see webAccess.ts).
+  // lifecycle, and degrade any failure to a log line. An unconfigured
+  // build stops the socket instead of dialing nowhere (the account
+  // status says so to the UI), and a device hub refusing the ticket
+  // mint blocks the supervisor like it would the desktop's (a
+  // deterministic refusal must not loop), which the device pages show
+  // as the socket's blocked phase.
   async function refreshHub(): Promise<void> {
     try {
       await connection.refresh(async () => {
-        if (!isConfigured(config)) {
-          webAccess.set({ kind: "unconfigured" });
-          return null;
-        }
-        webAccess.set({ kind: "ok" });
+        if (!isConfigured(config)) return null;
         const record = store.read();
         if (record === null) return null;
         return {
@@ -171,22 +162,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
             if (fresh === null) {
               throw new Error("signed out, no hub credential");
             }
-            try {
-              return (await service.mintTicket(fresh.credential, signal))
-                .ticket;
-            } catch (error) {
-              if (isHubRefusedError(error)) {
-                webAccess.set({
-                  kind: "blocked",
-                  message: errorMessageOf(error),
-                });
-                // The refusal is deterministic for this deployment, so
-                // retrying cannot succeed. stop() is serialized by the
-                // connection's lifecycle and safe to fire from here.
-                void connection.stop();
-              }
-              throw error;
-            }
+            return (await service.mintTicket(fresh.credential, signal)).ticket;
           },
         };
       });
@@ -371,7 +347,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     deviceId,
     appVersion: deps.appVersion,
     // The same mount decision the desktop preload delivers over argv:
-    // empty means no ClerkProvider (web/app/boot.tsx).
+    // empty means no ClerkProvider (ClerkGate).
     clerkPublishableKey: config.publishableKey,
     isDev: deps.isDev,
     // App-only UI (the port-forward controls) gates its mount on this:
@@ -383,8 +359,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   return {
     api,
-
-    webAccess,
 
     notifyAccountChanged: accountChanged,
 

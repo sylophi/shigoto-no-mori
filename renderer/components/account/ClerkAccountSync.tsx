@@ -9,7 +9,7 @@
 //   automatic attempt per Clerk user per session (armedFor), re-armed
 //   by a sign-out. A failure (hub down, mint failed) surfaces as the
 //   mutation's error toast, and the account UI offers a manual retry
-//   (the enroll-retry buttons in AccountSection / LoginPage). Main's
+//   (the enroll-retry button in AccountSection). Main's
 //   in-flight guard is the authoritative dedupe for re-fired effects.
 // - Clerk signed in as a DIFFERENT user than the stored credential:
 //   sign the account layer out first (the device hub refuses a

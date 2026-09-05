@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { SectionHeading } from "@/components/ui/section-heading";
 import {
   fromConfig,
   type SettingsFormState,
@@ -14,6 +15,7 @@ import { useUpdater } from "@/hooks/system/useUpdater";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
+import { hasLocalHost } from "@/lib/localHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -25,6 +27,7 @@ import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import {
   APPEARANCE_TAB,
   deviceTab,
+  isSolo,
   LAUNCH_TAB,
   landOnStagedUpdate,
   LOCAL_DEVICE_TAB,
@@ -35,6 +38,7 @@ import {
   SettingsEditorRegistryProvider,
   useSettingsEditorRegistry,
 } from "./useSettingsEditors";
+import { BuildVersionLine } from "./VersionSection";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -53,6 +57,12 @@ import {
 // Sections mount on first visit and stay mounted (SettingsPanel), so
 // switching never drops an edit, and the one footer saves and discards
 // every form at once.
+//
+// A hostless client (the web shell) has no machine behind the window:
+// Launch tools and this device's section are not offered, so its local
+// form only ever carries appearance, and every device section is a
+// peer's, edited over that peer's direct session exactly as from
+// another desktop.
 export function SettingsForm({
   initialConfig,
   initialClientConfig,
@@ -66,18 +76,6 @@ export function SettingsForm({
   const devices = useRemoteDevices();
   const localName = useLocalDeviceName();
   const { activeTab, peer } = useActiveSettingsTab(devices);
-
-  // No provider above this component, so this is the local updater:
-  // the sidebar's update dot brought the visitor here for its button.
-  // Only on arrival, though. A check that finishes while the page is
-  // open must not yank the visitor out of the section they are editing.
-  const { state: localUpdate } = useUpdater();
-  const [stagedOnArrival] = useState(() =>
-    localUpdate?.kind === "ready" ? localUpdate.version : null,
-  );
-  useEffect(() => {
-    if (stagedOnArrival !== null) landOnStagedUpdate(stagedOnArrival);
-  }, [stagedOnArrival]);
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
     useDirtyForm<SettingsFormState>(
@@ -156,10 +154,13 @@ export function SettingsForm({
     discardAll();
   };
 
-  const heading = headingFor(activeTab, peer, localName, devices.length === 0);
+  const heading = headingFor(activeTab, peer, localName, isSolo(devices));
 
   return (
-    <>
+    // The page marker picks the settings wallpaper (doubutsu.css), the
+    // same one the loading skeleton in Settings.tsx wears.
+    <div data-doubutsu-page="settings" className="flex h-full flex-col">
+      {hasLocalHost && <StagedUpdateLanding />}
       <PageHeader
         eyebrow={heading.eyebrow}
         title={heading.title}
@@ -179,18 +180,27 @@ export function SettingsForm({
               doubutsu={form.doubutsu}
               onDoubutsuChange={setDoubutsu}
             />
+            {/* The desktop states its build in this device's section.
+                A hostless client has no such section, and its build is
+                still worth a line, so it goes with the other setting
+                that is about this window. */}
+            {!hasLocalHost && <ClientVersionSection />}
           </SettingsPanel>
 
-          <SettingsPanel id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
-            <LaunchToolsPanel form={form} setForm={setForm} />
-          </SettingsPanel>
+          {hasLocalHost && (
+            <SettingsPanel id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
+              <LaunchToolsPanel form={form} setForm={setForm} />
+            </SettingsPanel>
+          )}
 
-          <SettingsPanel
-            id={LOCAL_DEVICE_TAB}
-            active={activeTab === LOCAL_DEVICE_TAB}
-          >
-            <LocalDevicePanel form={form} setForm={setForm} />
-          </SettingsPanel>
+          {hasLocalHost && (
+            <SettingsPanel
+              id={LOCAL_DEVICE_TAB}
+              active={activeTab === LOCAL_DEVICE_TAB}
+            >
+              <LocalDevicePanel form={form} setForm={setForm} />
+            </SettingsPanel>
+          )}
 
           {devices.map((device) => {
             const id = deviceTab(device.deviceId);
@@ -225,7 +235,35 @@ export function SettingsForm({
         onDiscard={handleDiscardAll}
         onSave={() => void handleSaveAll()}
       />
-    </>
+    </div>
+  );
+}
+
+// No provider above the form, so this is the local updater: the
+// sidebar's update dot brought the visitor here for its button. Only on
+// arrival, though. A check that finishes while the page is open must
+// not yank the visitor out of the section they are editing. Mounted
+// only where a local updater exists (a hostless client has none).
+function StagedUpdateLanding() {
+  const { state: localUpdate } = useUpdater();
+  const [stagedOnArrival] = useState(() =>
+    localUpdate?.kind === "ready" ? localUpdate.version : null,
+  );
+  useEffect(() => {
+    if (stagedOnArrival !== null) landOnStagedUpdate(stagedOnArrival);
+  }, [stagedOnArrival]);
+  return null;
+}
+
+// The build this hostless client runs.
+function ClientVersionSection() {
+  return (
+    <section className="space-y-3">
+      <SectionHeading className="mb-1">Web client</SectionHeading>
+      <div className="font-mono text-sm select-text">
+        <BuildVersionLine />
+      </div>
+    </section>
   );
 }
 

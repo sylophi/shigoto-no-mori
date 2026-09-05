@@ -136,8 +136,7 @@ function PeerSettingsForm({
   // frozen, and name where the grant is made. While the verdict is
   // still in flight, assume granted rather than flashing a read-only
   // form that turns editable a moment later.
-  const { granted, isLoading } = useCommandAccess();
-  const readOnly = !granted && !isLoading;
+  const readOnly = !useCommandAccess().canCommand;
   // Same form shape as the local Settings form so the section
   // components are shared verbatim. The client half doesn't exist here:
   // theme/doubutsu seed from an empty client config, nothing in this

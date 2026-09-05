@@ -5,6 +5,10 @@ import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 export interface CommandAccess {
   granted: boolean;
   isLoading: boolean;
+  // Whether a surface should offer commands right now: granted, or the
+  // verdict still in flight (assume granted rather than flash a
+  // disabled control that turns live a moment later).
+  canCommand: boolean;
   // The preflight itself failed (no session to ask over, a transport
   // error), so `granted: false` is the fail-closed default, not the
   // peer's answer. A surface that would tell the user to flip the
@@ -41,17 +45,17 @@ function verdictOf(
     | { data?: { granted: boolean }; isPending: boolean; isError: boolean }
     | undefined,
 ): CommandAccess {
-  if (deviceId === localDeviceId) {
-    return { granted: true, isLoading: false, isError: false };
-  }
-  if (query === undefined) {
-    return { granted: false, isLoading: true, isError: false };
-  }
-  return {
-    granted: query.data?.granted ?? false,
-    isLoading: query.isPending,
-    isError: query.isError,
-  };
+  const verdict =
+    deviceId === localDeviceId
+      ? { granted: true, isLoading: false, isError: false }
+      : query === undefined
+        ? { granted: false, isLoading: true, isError: false }
+        : {
+            granted: query.data?.granted ?? false,
+            isLoading: query.isPending,
+            isError: query.isError,
+          };
+  return { ...verdict, canCommand: verdict.granted || verdict.isLoading };
 }
 
 // Does the CALLING device hold command access on the scoped host? Drives

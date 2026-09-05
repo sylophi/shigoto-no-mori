@@ -1,7 +1,7 @@
 // The enrollment and sign-out orchestration both shells share, the
 // successor to the deleted PKCE login flows: the desktop handler
 // (main/ipc/modules/account.ts) and the web bridge
-// (web/bridge/createWebBridge.ts) differ only in their platform label,
+// (web/ipc/register.ts) differ only in their platform label,
 // device-name default and store backing. Pure like the rest of
 // shared/account/ (every dependency is an injected seam:
 // AccountService, AccountStore, AccountServiceConfig), so the

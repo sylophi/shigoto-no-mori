@@ -46,7 +46,7 @@ export const accountContract = defineContract("client", {
   // registry. Unlike signOut this is not best-effort -- a failed hub
   // call must surface, because nothing local stands in for "the device
   // is still enrolled". Bounded by DeviceIdSchema so a listed peer's id
-  // always parses. The handler mirrors web/bridge/createWebBridge.ts's
+  // always parses. The handler mirrors web/ipc/register.ts's
   // revokeDevice, including the self-revoke caveat: revoking THIS
   // device invalidates our own credential, so the local one is cleared
   // in the same breath (the desktop UI offers Sign out for this device

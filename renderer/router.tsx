@@ -1,107 +1,51 @@
-import { useState } from "react";
+// The one route tree, served by both shells. The desktop mounts it on
+// a memory history, the browser on real history (deep links must
+// survive a reload, which is also why the web deploy rewrites every
+// path to index.html). A hostless client simply never reaches the
+// routes that belong to a local project: nothing in its sidebar links
+// there. Registering the router type once here is what lets every
+// typed Link and navigate in the shared components check against the
+// same tree whichever shell mounts them.
 import {
-  createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
-  Outlet,
-  useRouter,
   lazyRouteComponent,
+  redirect,
+  type RouterHistory,
+  useRouter,
 } from "@tanstack/react-router";
+import { AppShell } from "@/components/AppShell";
 import { ErrorFallback } from "@/components/ErrorFallback";
-import { Sidebar } from "@/components/sidebar/Sidebar";
-import { ConfigureProject } from "@/components/configure/ConfigureProject";
-import { ConvertExternalWorktrees } from "@/components/convertExternal/ConvertExternalWorktrees";
-import { WorktreeLocation } from "@/components/worktreeLocation/WorktreeLocation";
 import { EmptyState } from "@/components/EmptyState";
-import { ManageBranches } from "@/components/manageBranches/ManageBranches";
-import { NewWorktree } from "@/components/newWorktree/NewWorktree";
+import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
-import { TidyForest } from "@/components/tidy/TidyForest";
 import { CommitDiff } from "@/components/diff/CommitDiff";
 import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
-import { dragRegion } from "@/lib/utils";
-import { readStored, writeStored } from "@/lib/localStorage";
+import { hasLocalHost } from "@/lib/localHost";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
-const SIDEBAR_KEY = "sidebar.width";
-const SIDEBAR_MIN = 200;
-const SIDEBAR_MAX = 400;
-const SIDEBAR_DEFAULT = 240;
+const rootRoute = createRootRoute({
+  component: AppShell,
+  notFoundComponent: NotFoundPage,
+});
 
-function readStoredWidth(): number {
-  const raw = readStored(SIDEBAR_KEY);
-  const n = raw ? Number.parseInt(raw, 10) : NaN;
-  if (!Number.isFinite(n)) return SIDEBAR_DEFAULT;
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
-}
-
-function RootLayout() {
-  const [sidebarWidth, setSidebarWidth] = useState<number>(readStoredWidth);
-
-  const startResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    Object.assign(document.body.style, {
-      cursor: "col-resize",
-      userSelect: "none",
-    });
-    let last = sidebarWidth;
-    const onMove = (ev: MouseEvent) => {
-      last = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX));
-      setSidebarWidth(last);
-    };
-    const onUp = () => {
-      Object.assign(document.body.style, {
-        cursor: "",
-        userSelect: "",
-      });
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      writeStored(SIDEBAR_KEY, String(Math.round(last)));
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  };
-
-  return (
-    <div className="flex h-dvh overflow-hidden text-foreground">
-      <div style={{ width: sidebarWidth }} className="shrink-0">
-        <Sidebar />
-      </div>
-      <div
-        onMouseDown={startResize}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize sidebar"
-        tabIndex={-1}
-        className="relative w-px shrink-0 cursor-col-resize bg-border"
-      >
-        <div className="absolute inset-y-0 -left-1 w-2" />
-      </div>
-      <main
-        data-doubutsu-zone="main"
-        className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
-      >
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 z-30 h-7"
-          style={dragRegion("drag")}
-        />
-        <Outlet />
-      </main>
-    </div>
-  );
-}
-
-const rootRoute = createRootRoute({ component: RootLayout });
-
+// "/" is where a fresh window opens and where leaving a worktree's
+// pages lands. With projects of its own the app resolves it to the
+// first worktree (or the first-run state). A hostless client has no
+// local forest, so its home is the account's devices, redirected at
+// load time (no frame rendered) and replaced in history so Back never
+// lands on the dispatcher again.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  beforeLoad: () => {
+    if (!hasLocalHost) throw redirect({ to: "/devices", replace: true });
+  },
   component: EmptyState,
 });
 
@@ -111,12 +55,19 @@ const settingsRoute = createRoute({
   component: Settings,
 });
 
+// The pages below that only a machine with projects of its own can
+// reach are lazy, so a hostless client, whose sidebar never links to
+// them, does not download them at boot.
+
 // App-wide, like settings: the tidy page spans every project rather than
 // scoping to one, so it hangs off the root instead of /projects.
 const tidyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tidy",
-  component: TidyForest,
+  component: lazyRouteComponent(
+    () => import("@/components/tidy/TidyForest"),
+    "TidyForest",
+  ),
 });
 
 // App-wide like settings: the account and its device registry span
@@ -127,6 +78,14 @@ const devicesIndexRoute = createRoute({
   path: "/devices",
   component: DevicesPage,
 });
+
+// The console brings xterm along (a few hundred KB), which a session
+// that never opens a console has no use for at window open. One lazy
+// component for both trees, so the chunk loads once.
+const scriptConsoleComponent = lazyRouteComponent(
+  () => import("@/components/scriptConsole/ScriptConsole"),
+  "ScriptConsole",
+);
 
 // Device-scoped twins of the worktree pages (v2: remote feels local).
 // The SAME components serve both trees: withRemoteScope resolves the
@@ -158,6 +117,12 @@ const remoteCommitDiffRoute = createRoute({
   component: withRemoteScope(CommitDiff),
 });
 
+const remoteScriptConsoleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.script.remote,
+  component: withRemoteScope(scriptConsoleComponent),
+});
+
 // remountDeps on the project- and worktree-scoped routes: the router
 // keeps one component instance across a params change and just
 // re-renders it, so without this a route would keep showing the
@@ -167,35 +132,50 @@ const remoteCommitDiffRoute = createRoute({
 const newWorktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/new",
-  component: NewWorktree,
+  component: lazyRouteComponent(
+    () => import("@/components/newWorktree/NewWorktree"),
+    "NewWorktree",
+  ),
   remountDeps: ({ params }) => params,
 });
 
 const configureProjectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/configure",
-  component: ConfigureProject,
+  component: lazyRouteComponent(
+    () => import("@/components/configure/ConfigureProject"),
+    "ConfigureProject",
+  ),
   remountDeps: ({ params }) => params,
 });
 
 const manageBranchesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/branches",
-  component: ManageBranches,
+  component: lazyRouteComponent(
+    () => import("@/components/manageBranches/ManageBranches"),
+    "ManageBranches",
+  ),
   remountDeps: ({ params }) => params,
 });
 
 const convertExternalRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/convert-external",
-  component: ConvertExternalWorktrees,
+  component: lazyRouteComponent(
+    () => import("@/components/convertExternal/ConvertExternalWorktrees"),
+    "ConvertExternalWorktrees",
+  ),
   remountDeps: ({ params }) => params,
 });
 
 const worktreeLocationRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktree-location",
-  component: WorktreeLocation,
+  component: lazyRouteComponent(
+    () => import("@/components/worktreeLocation/WorktreeLocation"),
+    "WorktreeLocation",
+  ),
   remountDeps: ({ params }) => params,
 });
 
@@ -208,13 +188,8 @@ const worktreeRoute = createRoute({
 
 const scriptConsoleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-  // The console brings xterm along (a few hundred KB), which a session
-  // that never opens a console has no use for at window open.
-  component: lazyRouteComponent(
-    () => import("@/components/scriptConsole/ScriptConsole"),
-    "ScriptConsole",
-  ),
+  path: WORKTREE_ROUTE_PATHS.script.local,
+  component: scriptConsoleComponent,
 });
 
 const worktreeDiffRoute = createRoute({
@@ -244,6 +219,7 @@ const routeTree = rootRoute.addChildren([
   remoteWorktreeDiffRoute,
   remotePullRequestDiffRoute,
   remoteCommitDiffRoute,
+  remoteScriptConsoleRoute,
   newWorktreeRoute,
   configureProjectRoute,
   manageBranchesRoute,
@@ -277,15 +253,20 @@ function RouteErrorFallback({
   );
 }
 
-export const router = createRouter({
-  routeTree,
-  history: createMemoryHistory({ initialEntries: ["/"] }),
-  defaultPreload: false,
-  defaultErrorComponent: RouteErrorFallback,
-});
+// The shell's one choice: which history the tree rides.
+export function createAppRouter(history: RouterHistory) {
+  return createRouter({
+    routeTree,
+    history,
+    defaultPreload: false,
+    defaultErrorComponent: RouteErrorFallback,
+  });
+}
+
+export type AppRouter = ReturnType<typeof createAppRouter>;
 
 declare module "@tanstack/react-router" {
   interface Register {
-    router: typeof router;
+    router: AppRouter;
   }
 }

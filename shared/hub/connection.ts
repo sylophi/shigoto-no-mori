@@ -13,6 +13,7 @@
 // credential-backed ticket mint) arrives through HubConnectOpts.
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import { errorMessageOf } from "@shared/errors";
+import { isHubRefusal } from "@shared/account/service";
 import {
   HELLO_TIMEOUT_MS,
   TERMINATE_GRACE_MS,
@@ -253,12 +254,17 @@ export function createHubConnectionCore(
           settled = true;
           clearPending();
           // A failed mint (offline, hub down, signed out mid-flight,
-          // timeout) is a retryable connect failure.
+          // timeout) is a retryable connect failure. A refusal is not:
+          // the device hub rejecting this credential is deterministic
+          // until the account changes, so it blocks the supervisor
+          // (terminal until refresh restarts it on the next sign-in or
+          // sign-out) instead of minting on the ladder forever. The
+          // message rides along so the UI can name it.
           reject(
             new RemoteConnectError(
               `ticket mint failed: ${errorMessageOf(error)}`,
               null,
-              false,
+              isHubRefusal(error),
             ),
           );
         });

@@ -1,6 +1,6 @@
 // What a device on the account can do and how it addresses itself,
 // read off the platform it enrolled under: "web" for a browser
-// (web/bridge/createWebBridge.ts), an os.platform() value for the
+// (web/ipc/register.ts), an os.platform() value for the
 // desktop app. A browser is a device of its own, but it hosts no
 // projects and serves no peer calls, so its rows carry neither a
 // project strip nor the switches that expose a machine to the others.

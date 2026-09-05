@@ -8,12 +8,14 @@ import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import {
+  useScriptRuns,
+  useScriptRunState,
+} from "@/hooks/scripts/useScriptRuns";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
   scriptKey,
-  scriptRuns,
-  slotToParam,
-  useScriptRunState,
   type ScriptRunState,
   type ScriptSlot,
 } from "@/store/scriptRuns";
@@ -54,18 +56,19 @@ export function WorktreeDetailInner({
   siblings,
 }: InnerProps) {
   const navigate = useNavigate();
+  const { toScript } = useWorktreeNav();
   // Which device this page is scoped to. Everything data-shaped below
   // already rides the host scope. `remote` only gates the affordances
   // that are local by nature (launching, configure links) and adds the
   // cross-device ones (bring here, transplant, the device chip).
   const { remote } = useHostScope();
+  const scriptRuns = useScriptRuns();
   // Always true locally (the local device is granted by contract), so
   // this alone carries the read-only mirror.
   // While the verdict is still in flight, assume granted rather than
   // flashing a read-only page that turns editable a moment later (the
   // same rule PeerDeviceSettings and VersionSection follow).
-  const access = useCommandAccess();
-  const granted = access.granted || access.isLoading;
+  const { canCommand: granted } = useCommandAccess();
   const { data: runtime } = useRuntimeInfo();
   const {
     deleteMutation,
@@ -141,14 +144,7 @@ export function WorktreeDetailInner({
     } else {
       return;
     }
-    void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-      params: {
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        scriptKey: slotToParam(slot),
-      },
-    });
+    toScript(worktree.projectId, worktree.id, slot);
   };
 
   const limboLabel = computeLimboLabel(teardownState, releaseState);

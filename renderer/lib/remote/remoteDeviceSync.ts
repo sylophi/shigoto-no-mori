@@ -80,7 +80,9 @@ let inFlight = false;
 let dirty = false;
 let queuedStatus: HubStatus | undefined;
 
-function apiFor(deviceId: string): RemoteDeviceApi {
+// Exported for the per-device stores that outlive any one page (the
+// script run stores), which need a device's api without a scope.
+export function apiFor(deviceId: string): RemoteDeviceApi {
   const existing = apis.get(deviceId);
   if (existing !== undefined) return existing;
   const api = buildApi({
@@ -234,7 +236,7 @@ async function drainReconciles(): Promise<void> {
 // every snapshot it sees is published there, so no hook needs a
 // subscription or an initial fetch of its own. The boot's query client
 // comes in rather than being reached for, because both boots
-// (renderer/index.tsx, web/app/boot.tsx) build their own.
+// (renderer/boot.tsx, one for both shells) build their own.
 export function startRemoteDeviceSync(queryClient: QueryClient): void {
   boundQueryClient = queryClient;
   window.api.account.onChanged(() => {

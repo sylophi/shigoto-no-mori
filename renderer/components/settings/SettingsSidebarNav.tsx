@@ -6,11 +6,13 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { hasLocalHost } from "@/lib/localHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import {
   APPEARANCE_TAB,
   deviceTab,
+  isSolo,
   LAUNCH_TAB,
   LOCAL_DEVICE_TAB,
   selectSettingsTab,
@@ -24,16 +26,15 @@ import {
 // "Devices" holds one row per machine on the account, this one first,
 // each with the status dot the rest of the app draws for it. The split
 // is the page's whole point, so the list shows it rather than a panel
-// explaining it.
+// explaining it. On a hostless client (the web shell) the rows about
+// the machine the window runs on (Launch tools, this device) do not
+// exist, and the roster is peers only.
 export function SettingsSidebarNav() {
   const navigate = useNavigate();
   const devices = useRemoteDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const localName = useLocalDeviceName();
-  // One machine means no choice to offer, so the group reads as this
-  // device's settings rather than a roster of one, and the presence
-  // dot (a fact about peers) stays off.
-  const solo = devices.length === 0;
+  const solo = isSolo(devices);
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
@@ -52,21 +53,30 @@ export function SettingsSidebarNav() {
           <Palette aria-hidden className="size-3.5 shrink-0" />
           Appearance
         </NavRow>
-        <NavRow id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
-          <Rocket aria-hidden className="size-3.5 shrink-0" />
-          Launch tools
-        </NavRow>
+        {hasLocalHost && (
+          <NavRow id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
+            <Rocket aria-hidden className="size-3.5 shrink-0" />
+            Launch tools
+          </NavRow>
+        )}
       </NavGroup>
 
       <NavGroup label={solo ? "Device" : "Devices"}>
-        <NavRow
-          id={LOCAL_DEVICE_TAB}
-          active={activeTab === LOCAL_DEVICE_TAB}
-          title="This device: the machine this window runs on"
-        >
-          {!solo && <StatusDot tone="emerald" />}
-          <span className="truncate">{localName}</span>
-        </NavRow>
+        {hasLocalHost && (
+          <NavRow
+            id={LOCAL_DEVICE_TAB}
+            active={activeTab === LOCAL_DEVICE_TAB}
+            title="This device: the machine this window runs on"
+          >
+            {!solo && <StatusDot tone="emerald" />}
+            <span className="truncate">{localName}</span>
+          </NavRow>
+        )}
+        {!hasLocalHost && devices.length === 0 && (
+          <p className="px-2 py-1.5 text-xs text-muted-foreground/70">
+            No devices on this account yet.
+          </p>
+        )}
         {devices.map((device) => {
           const { tone, label } = deviceStatusView(device.status);
           const id = deviceTab(device.deviceId);

@@ -1,3 +1,4 @@
+import { useNavigate } from "@tanstack/react-router";
 import {
   useEffect,
   useRef,
@@ -5,7 +6,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { router } from "@/router";
 import { Input } from "@/components/ui/input";
 import { isEditableTarget } from "@/lib/dom";
 import { sortProjects } from "@/components/sidebar/sortProjects";
@@ -108,10 +108,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
       ?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
 
-  // ProjectLauncher is rendered as a sibling of RouterProvider in App.tsx, so
-  // `useNavigate` here has no router context and silently no-ops. Use the
-  // module-level router instance directly instead.
-  const navigate = router.navigate.bind(router);
+  const navigate = useNavigate();
 
   const activate = (project: Project) => {
     onClose();

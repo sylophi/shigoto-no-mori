@@ -1,17 +1,23 @@
 // In-memory store for in-flight + most-recent script runs, keyed by
-// (projectId, worktreeId, slot). One global subscription drains the
-// main-process ScriptEvent channel; events route to the right record
-// via a runId→key index built when a run starts.
+// (projectId, worktreeId, slot). One store per device: each drains the
+// ScriptEvent channel of the device its api names (this machine's over
+// the preload bridge, a peer's over its direct session), and events
+// route to the right record via a runId→key index built when a run
+// starts. Worktree ids are path hashes that can collide across the
+// owner's machines, so a run's key is only unambiguous inside its
+// device's store.
 //
-// React reads via `useScriptRunState(key)`. The store survives
-// navigation but not a renderer reload -- matches the user-confirmed
-// "in-memory only" scope.
+// React reads via the hooks in hooks/scripts/useScriptRuns.ts, which
+// resolve the store from the host scope. A store survives navigation
+// but not a renderer reload -- matches the user-confirmed "in-memory
+// only" scope.
 //
 // Snapshots are immutable: every transition replaces the record with
 // a new object. `useSyncExternalStore` relies on Object.is to detect
 // changes, so mutating in place would silently skip re-renders.
-import { useSyncExternalStore } from "react";
 import type { RemovedWorktreeScripts, ScriptEvent } from "@shared/schemas";
+import { localDeviceId } from "@/lib/queryKeys";
+import { apiFor } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
 import { assertNever } from "@/lib/utils";
 import type { RendererApi } from "@/window";
@@ -101,7 +107,7 @@ interface RunMeta {
 
 export type ScriptActivityKind = "setup" | "teardown" | "package";
 
-const EMPTY_STATE: ScriptRunState = Object.freeze({
+export const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
   status: "idle" as const,
   hasOutput: false,
@@ -126,7 +132,7 @@ type ScriptsApi = Pick<
 
 type WarnFn = (title: string, options?: { description?: string }) => unknown;
 
-class ScriptRunsStore {
+export class ScriptRunsStore {
   private states = new Map<ScriptKey, ScriptRunState>();
   // Per-run output log, keyed like states, mutated in place. Consoles
   // catch up from it on mount and follow it through outputSubs.
@@ -145,10 +151,17 @@ class ScriptRunsStore {
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   private warn: WarnFn;
+  // Whether a removed-worktree notice is worth a toast even for a
+  // worktree this store never saw a run in. True for this machine's
+  // store (a renderer reload forgets runs the host still reaps), false
+  // for a peer's, where the notice reaches every viewer and only the
+  // ones that ran something there have anything to hear.
+  private warnOnUnseenRemoval: boolean;
 
-  constructor(api: ScriptsApi, warn: WarnFn) {
+  constructor(api: ScriptsApi, warn: WarnFn, warnOnUnseenRemoval: boolean) {
     this.api = api;
     this.warn = warn;
+    this.warnOnUnseenRemoval = warnOnUnseenRemoval;
   }
 
   start(): void {
@@ -269,8 +282,9 @@ class ScriptRunsStore {
 
   // Called when a worktree is removed (delete / relocate / convert);
   // otherwise per-worktree state and runId mappings would leak across
-  // worktrees that no longer exist on disk.
-  clearForWorktree(worktreeId: string): void {
+  // worktrees that no longer exist on disk. Returns whether this store
+  // held any run there.
+  clearForWorktree(worktreeId: string): boolean {
     let touched = false;
     for (const [key, m] of this.meta) {
       if (m.worktreeId !== worktreeId) continue;
@@ -283,6 +297,7 @@ class ScriptRunsStore {
       touched = true;
     }
     if (touched) this.notifyWorktree(worktreeId);
+    return touched;
   }
 
   // Main reaped this worktree's scripts because it was removed outside
@@ -292,7 +307,8 @@ class ScriptRunsStore {
   // else. The run's own console can't carry the notice, since the row
   // it lives on disappears with the worktree.
   private handleRemovedWorktree(info: RemovedWorktreeScripts): void {
-    this.clearForWorktree(info.worktreeId);
+    const seen = this.clearForWorktree(info.worktreeId);
+    if (!seen && !this.warnOnUnseenRemoval) return;
     this.warn(`${info.worktreeName} was removed outside the app`, {
       description:
         info.scriptCount === 1
@@ -522,28 +538,36 @@ function exitSentinel(code: number | null): string {
   return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
 }
 
-// `start()` is called by the renderer entry point so subscription
-// lifecycle has a single owner. Importing this module just constructs
-// the singleton; it does not attach IPC listeners as a side effect.
+const warnToast: WarnFn = (title, options) => toast.warning(title, options);
+
+// This machine's store. `start()` is called by the renderer entry point
+// so subscription lifecycle has a single owner. Importing this module
+// just constructs the singleton and attaches no IPC listener as a side
+// effect.
 export const scriptRuns = new ScriptRunsStore(
   window.api.scripts,
-  (title, options) => toast.warning(title, options),
+  warnToast,
+  true,
 );
 
-export function useWorktreeScriptActivity(
-  worktreeId: string,
-): ScriptActivityKind | null {
-  return useSyncExternalStore(
-    (cb) => scriptRuns.subscribeWorktree(worktreeId, cb),
-    () => scriptRuns.getActivityKind(worktreeId),
-    () => null,
-  );
-}
+// The store for any device: this machine's, or a peer's built on first
+// use over that device's api (the same per-device api the remote
+// registry hands every scoped page) and kept for the window's
+// lifetime, like the api itself. A peer store starts draining the
+// device's event channel at once: the first use is a scoped page or a
+// sidebar row that wants the device's runs, so there is no earlier
+// owner to hand the lifecycle to. The channel is a hub-transport
+// subscription that rides the shared peerPush fan-out, so a store per
+// device costs one registry entry each and no IPC listener.
+const peerStores = new Map<string, ScriptRunsStore>();
 
-export function useScriptRunState(key: ScriptKey): ScriptRunState {
-  return useSyncExternalStore(
-    (cb) => scriptRuns.subscribe(key, cb),
-    () => scriptRuns.snapshot(key),
-    () => EMPTY_STATE,
-  );
+export function scriptRunsFor(deviceId: string): ScriptRunsStore {
+  if (deviceId === localDeviceId) return scriptRuns;
+  let store = peerStores.get(deviceId);
+  if (store === undefined) {
+    store = new ScriptRunsStore(apiFor(deviceId).scripts, warnToast, false);
+    store.start();
+    peerStores.set(deviceId, store);
+  }
+  return store;
 }

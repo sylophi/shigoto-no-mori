@@ -10,7 +10,7 @@
 // to the DIALER only, never to the bridge, so no code path here can
 // open a hub peer session for contract traffic. Both owners (the
 // Electron main process in main/ipc/register.ts and the web bridge in
-// web/bridge/createWebBridge.ts) used to hand-assemble exactly this
+// web/ipc/register.ts) used to hand-assemble exactly this
 // and keep each other in step by comment. Now they differ only by the
 // deps here: identity facts, the fan-out sink, the dialable candidate
 // kinds, and the optional host half (a browser runs no direct
