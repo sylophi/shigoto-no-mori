@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DeviceChip } from "@/components/remote/DeviceChip";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -35,7 +36,7 @@ export function ManageBranches() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
           </span>
@@ -43,6 +44,7 @@ export function ManageBranches() {
             Manage branches
           </h1>
         </div>
+        <DeviceChip />
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">

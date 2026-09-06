@@ -1,4 +1,5 @@
 import { PawPrint } from "lucide-react";
+import { DeviceChip } from "@/components/remote/DeviceChip";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
@@ -43,6 +44,10 @@ export function ConfigureProject() {
             </span>
           </SimpleTooltip>
         )}
+        {/* Which machine's copy of the project this page edits: the
+            config lives in that device's project file, so under a peer's
+            scope the header names it (the worktree page does the same). */}
+        <DeviceChip />
       </header>
       {configLoading || branchLoading || !resolvedDefaultBranch ? (
         <ConfigureSkeleton />

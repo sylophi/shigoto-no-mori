@@ -1,4 +1,5 @@
 import { CenteredMessage } from "@/components/ui/centered-message";
+import { DeviceChip } from "@/components/remote/DeviceChip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
@@ -34,7 +35,7 @@ export function WorktreeLocation() {
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex min-w-0 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-xs text-muted-foreground">
             {project.name}
           </span>
@@ -42,6 +43,7 @@ export function WorktreeLocation() {
             Worktree location
           </h1>
         </div>
+        <DeviceChip />
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">

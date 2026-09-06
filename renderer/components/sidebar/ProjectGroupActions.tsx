@@ -177,11 +177,20 @@ export function ProjectGroupActions({
           )}
           {inline !== undefined && (
             <MaybeHostScope deviceId={inline.deviceId} api={inline.api}>
-              <ProjectMenuItems
-                project={inline.project}
-                subject="project"
-                removeArm={removeArm}
-              />
+              {/* Named like the peers' submenus when the group spans
+                  devices, so "Configure" reads as configuring THIS
+                  member's copy rather than the group. The group is
+                  what lets the label render (Base UI ties them). */}
+              <DropdownMenuGroup>
+                {members.length > 1 && (
+                  <DropdownMenuLabel>{inline.deviceLabel}</DropdownMenuLabel>
+                )}
+                <ProjectMenuItems
+                  project={inline.project}
+                  subject="project"
+                  removeArm={removeArm}
+                />
+              </DropdownMenuGroup>
             </MaybeHostScope>
           )}
           {inline !== undefined && submenus.length > 0 && (
