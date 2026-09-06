@@ -10,8 +10,6 @@ import {
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
   SetProjectSortPayloadSchema,
-  SetSidebarViewPayloadSchema,
-  SidebarViewSchema,
   ToggleCollapsedProjectPayloadSchema,
   CarryOverCandidateSchema,
   CarryOverListingPayloadSchema,
@@ -45,21 +43,6 @@ export const projectsContract = defineContract("host", {
     remote: true,
     mutating: true,
   }),
-  getSidebarView: invoke(
-    "projects:getSidebarView",
-    z.void(),
-    SidebarViewSchema,
-    {
-      remote: true,
-      mutating: false,
-    },
-  ),
-  setSidebarView: invoke(
-    "projects:setSidebarView",
-    SetSidebarViewPayloadSchema,
-    z.void(),
-    { remote: true, mutating: true },
-  ),
   getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string()), {
     remote: true,
     mutating: false,

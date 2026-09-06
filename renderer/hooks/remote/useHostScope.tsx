@@ -112,6 +112,28 @@ export function HostScopeProvider({
   );
 }
 
+// Scopes a subtree to a device only when there is a session to scope
+// it to: a peer with an api gets the provider, this machine (whose api
+// is window.api, the default scope) and a peer that is asleep render
+// the children where they are. The seam the sidebar's per-device
+// actions and menus mount through.
+export function MaybeHostScope({
+  deviceId,
+  api,
+  children,
+}: {
+  deviceId: string;
+  api: HostApi | undefined;
+  children: ReactNode;
+}) {
+  if (api === undefined || deviceId === localDeviceId) return children;
+  return (
+    <HostScopeProvider deviceId={deviceId} api={api}>
+      {children}
+    </HostScopeProvider>
+  );
+}
+
 // Re-pins a subtree to THIS machine from inside a remote scope, for
 // the half of a cross-device flow that belongs here (the transplant
 // dialog's destination: its project config, carry-over and runtime

@@ -1,32 +1,25 @@
 import { useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { SidebarView } from "@shared/schemas";
+import { useQueryClient } from "@tanstack/react-query";
+import type { ClientConfig, SidebarView } from "@shared/schemas";
 import { isBareKeyEvent } from "@/lib/dom";
-import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
+import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
+import { queryKeys } from "@/lib/queryKeys";
 
-// Resolved, not the raw query: main already defaults a missing or
-// unreadable preference to "projects", so the only gap left is the first
-// paint before the read lands. Applying the same default here keeps that
-// one literal in one place instead of at each call site.
+// Which layout the sidebar shows. A preference of the window showing
+// it, kept in the client config like the theme, so a hostless client
+// has one exactly as the desktop does. Resolved, not the raw doc: an
+// absent key reads as the classic tree, in one place.
 export function useSidebarView(): SidebarView {
-  const { api, keys } = useHostScope();
-  const { data } = useQuery<SidebarView>({
-    queryKey: keys.sidebarView(),
-    queryFn: () => api.projects.getSidebarView(),
-    staleTime: Number.POSITIVE_INFINITY,
-    meta: { errorTitle: "Couldn't read the sidebar layout" },
-  });
-  return data ?? "projects";
+  const { data: config } = useClientConfig();
+  return config?.sidebarView ?? "projects";
 }
 
-// Optimistic: the whole sidebar re-lays-out on this value, so waiting a
-// round trip to redraw would read as a hang.
+// Optimistic through the patch hook: the whole sidebar re-lays-out on
+// this value, so waiting a round trip to redraw would read as a hang.
 export function useSetSidebarView() {
-  const { api, keys } = useHostScope();
-  return useOptimisticPreference<SidebarView>(
-    keys.sidebarView(),
-    (view) => api.projects.setSidebarView(view),
+  return useClientConfigPatch<SidebarView>(
+    (view) => ({ sidebarView: view }),
     "Couldn't save the sidebar layout",
   );
 }
@@ -45,7 +38,6 @@ export function useSetSidebarView() {
 // Shift+Tab still walks backwards, and pointer focus is untouched.
 export function useSidebarViewHotkey(enabled: boolean): void {
   const queryClient = useQueryClient();
-  const { keys } = useHostScope();
   const { mutate: setView } = useSetSidebarView();
 
   useEffect(() => {
@@ -60,10 +52,15 @@ export function useSidebarViewHotkey(enabled: boolean): void {
       // Two quick presses off the stale value would write the same
       // layout twice and leave the sidebar one flip behind the keyboard.
       const view =
-        queryClient.getQueryData<SidebarView>(keys.sidebarView()) ?? "projects";
+        queryClient.getQueryData<ClientConfig>(queryKeys.clientConfig())
+          ?.sidebarView ?? "projects";
       setView(view === "inbox" ? "projects" : "inbox");
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [enabled, queryClient, setView, keys]);
+    // setView is a fresh closure per render (the patch hook rebuilds
+    // it), and re-subscribing on every sidebar render for a handler
+    // that only reads the cache would be churn for nothing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, queryClient]);
 }

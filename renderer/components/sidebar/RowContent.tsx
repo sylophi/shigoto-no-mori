@@ -33,6 +33,7 @@ export function RowContent({
           project={row.project}
           expanded={row.expanded}
           devices={row.devices}
+          members={row.members}
           onToggle={() => onToggle(row.project.id)}
           arrangeMode={arrangeMode}
           isHovered={isHovered}
@@ -48,6 +49,7 @@ export function RowContent({
           deviceLabel={row.deviceLabel}
           reachable={row.reachable}
           tone={row.tone}
+          pr={row.pr}
         />
       );
     case "remote-project":
@@ -56,12 +58,18 @@ export function RowContent({
           name={row.name}
           count={row.count}
           devices={row.devices}
-          iconSources={row.iconSources}
+          members={row.members}
+          isHovered={isHovered}
         />
       );
     case "inbox-worktree":
       return (
-        <InboxRow worktree={row.worktree} project={row.project} pr={row.pr} />
+        <InboxRow
+          worktree={row.worktree}
+          project={row.project}
+          pr={row.pr}
+          device={row.device}
+        />
       );
     case "worktree-skeleton":
       return (

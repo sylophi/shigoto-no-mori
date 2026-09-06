@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Check, ExternalLink, House, Pencil, Trash2, X } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Input } from "@/components/ui/input";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import { sanitizeBranchName } from "@shared/branches";
 import { isBranchNotMergedError } from "@shared/errors";
@@ -20,7 +20,9 @@ export function BranchRow({
   name: string;
   worktree: Worktree | undefined;
 }) {
-  const navigate = useNavigate();
+  // Scope-aware: a peer's checked-out branch opens its worktree under
+  // the device twin.
+  const { toWorktree } = useWorktreeNav();
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -85,12 +87,7 @@ export function BranchRow({
       {checkedOut && !editing && (
         <button
           type="button"
-          onClick={() =>
-            void navigate({
-              to: "/projects/$projectId/worktrees/$worktreeId",
-              params: { projectId, worktreeId: worktree.id },
-            })
-          }
+          onClick={() => toWorktree(projectId, worktree.id)}
           className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           title={`Checked out in ${worktree.name}`}
         >

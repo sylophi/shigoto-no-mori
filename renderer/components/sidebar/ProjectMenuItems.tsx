@@ -1,10 +1,13 @@
-import { useNavigate } from "@tanstack/react-router";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
+import {
+  useProjectNav,
+  type ProjectPage,
+} from "@/hooks/projects/useProjectNav";
 import { useRemoveProject } from "@/hooks/projects/useProjects";
 import type { Project } from "@shared/schemas";
 
@@ -48,13 +51,15 @@ export function useProjectMenuRemoveArm() {
 }
 
 // The project's action list, shared by the header's `…` dropdown and the
-// inbox row's right-click menu.
+// inbox row's right-click menu. Scope-aware through its hooks: mounted
+// under a peer's HostScopeProvider (a remote project header, a peer's
+// inbox row) every item acts on and links into that device.
 export function ProjectMenuItems({
   project,
   subject,
   removeArm: { armed: removeArmed, trigger: triggerRemove },
 }: ProjectMenuItemsProps) {
-  const navigate = useNavigate();
+  const { toProjectPage } = useProjectNav();
   const labels = LABELS[subject];
   const missing = project.pathExists === false;
   const fromTerrier = project.source === "terrier";
@@ -65,13 +70,7 @@ export function ProjectMenuItems({
     isPending: creating,
   } = useQuickCreateWorktree();
 
-  const goTo = (
-    to:
-      | "/projects/$projectId/convert-external"
-      | "/projects/$projectId/worktree-location"
-      | "/projects/$projectId/branches"
-      | "/projects/$projectId/configure",
-  ) => void navigate({ to, params: { projectId: project.id } });
+  const goTo = (page: ProjectPage) => toProjectPage(page, project.id);
 
   return (
     <>
@@ -87,25 +86,17 @@ export function ProjectMenuItems({
             New worktree from…
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => goTo("/projects/$projectId/convert-external")}
-          >
+          <DropdownMenuItem onClick={() => goTo("convertExternal")}>
             Convert external worktrees
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => goTo("/projects/$projectId/worktree-location")}
-          >
+          <DropdownMenuItem onClick={() => goTo("worktreeLocation")}>
             Set worktree location
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => goTo("/projects/$projectId/branches")}
-          >
+          <DropdownMenuItem onClick={() => goTo("branches")}>
             Manage branches
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => goTo("/projects/$projectId/configure")}
-          >
+          <DropdownMenuItem onClick={() => goTo("configure")}>
             {labels.configure}
           </DropdownMenuItem>
         </>

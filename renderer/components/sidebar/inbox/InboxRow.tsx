@@ -7,6 +7,8 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { MaybeHostScope } from "@/hooks/remote/useHostScope";
+import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
@@ -16,6 +18,7 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
+import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { ProjectIcon } from "../ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
@@ -26,6 +29,8 @@ interface InboxRowProps {
   worktree: Worktree;
   project: Project;
   pr: PullRequest | undefined;
+  // The peer this worktree lives on, or undefined for this machine's own.
+  device: SidebarDeviceBadge | undefined;
 }
 
 // The inbox row answers a different question from the tree row. In the
@@ -42,11 +47,18 @@ interface InboxRowProps {
 //
 // Right-click opens the project's menu -- the same list the tree hangs
 // off a project header's `…`. The inbox has no project headers, so this
-// is the only place its project-level actions can live.
-export function InboxRow({ worktree, project, pr }: InboxRowProps) {
-  const { isSelected, open, activity, isDeleting, title } =
-    useWorktreeRowState(worktree);
+// is the only place its project-level actions can live. A peer's row
+// wears its device badge beside the project name, opens under the
+// device twin, and scopes that menu to the peer. Asleep, it keeps the
+// row (last known state) and drops the menu, since there is no session
+// to act over.
+export function InboxRow({ worktree, project, pr, device }: InboxRowProps) {
+  const { isSelected, open, activity, isDeleting, title } = useWorktreeRowState(
+    worktree,
+    device?.deviceId,
+  );
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
+  const peerApi = useRemoteDeviceApi(device?.deviceId);
 
   // An element for the trigger to `render`, so it wraps no extra div.
   const row = (
@@ -62,15 +74,18 @@ export function InboxRow({ worktree, project, pr }: InboxRowProps) {
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
         worktree.shelved && !isSelected && "opacity-70",
+        device && !device.reachable && "opacity-60",
       )}
     >
       <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
         <ProjectIcon
           projectId={worktree.projectId}
+          deviceId={device?.deviceId}
           className="size-3"
           fallback={Folder}
         />
         <span className="min-w-0 truncate font-medium">{project.name}</span>
+        {device && <DeviceBadge badge={device} />}
         <TrailingSlot
           worktree={worktree}
           activity={activity}
@@ -113,15 +128,18 @@ export function InboxRow({ worktree, project, pr }: InboxRowProps) {
     </button>
   );
 
+  if (device !== undefined && peerApi === undefined) return row;
   return (
     <ContextMenu onOpenChange={onOpenChange}>
       <ContextMenuTrigger render={row} />
       <ContextMenuContent>
-        <ProjectMenuItems
-          project={project}
-          subject="worktree"
-          removeArm={removeArm}
-        />
+        <MaybeHostScope deviceId={device?.deviceId ?? ""} api={peerApi}>
+          <ProjectMenuItems
+            project={project}
+            subject="worktree"
+            removeArm={removeArm}
+          />
+        </MaybeHostScope>
       </ContextMenuContent>
     </ContextMenu>
   );

@@ -48,6 +48,7 @@ export function buildSidebarRows({
       project,
       expanded: false,
       devices: [],
+      members: [],
     }));
     return {
       rows,
@@ -62,11 +63,13 @@ export function buildSidebarRows({
   // by `get` + `delete`, so whatever remains IS the leftover set -- one
   // structure, no consumed-tracking, and a group can never be claimed
   // twice. Shelving is a local noise-control preference, so a peer's
-  // shelved worktrees stay in its own sidebar, not this one's.
+  // shelved worktrees stay in its own sidebar, not this one's. A peer
+  // holding the repo with no worktrees to show still joins its group:
+  // it is a device the header's actions can create on, and a local
+  // project with nothing under it keeps its header too.
   const remoteByIdentity = new Map<string, RemoteForestItem[]>();
   for (const raw of remote) {
     const worktrees = raw.worktrees.filter((worktree) => !worktree.shelved);
-    if (worktrees.length === 0) continue;
     const item = { ...raw, worktrees };
     const groupKey =
       item.project.identity ?? `${item.deviceId}/${item.project.id}`;
@@ -94,6 +97,7 @@ export function buildSidebarRows({
       project,
       expanded,
       devices: deviceBadgesOf(remoteHere),
+      members: membersOf(remoteHere),
     });
     if (!expanded || project.pathExists === false) return;
     // Peers' worktrees of this same repo render after the local rows so
@@ -167,7 +171,7 @@ export function buildSidebarRows({
   // Whatever the local pass left unclaimed: remote projects with no
   // local counterpart, after the local tree. The same repo on several
   // devices reads as one project (the per-row device marker tells them
-  // apart), and any live member serves the icon fetch -- same repo.
+  // apart), and the header's icon and actions come off its live members.
   for (const [groupKey, items] of remoteByIdentity) {
     const [first] = items;
     if (!first) continue;
@@ -178,10 +182,7 @@ export function buildSidebarRows({
       name: first.project.name,
       count: items.reduce((sum, item) => sum + item.worktrees.length, 0),
       devices: deviceBadgesOf(items),
-      iconSources: items.map((item) => ({
-        deviceId: item.deviceId,
-        projectId: item.project.id,
-      })),
+      members: membersOf(items),
     });
     for (const item of items) {
       pushRemoteWorktreeRows(rows, item, groupId);
@@ -223,9 +224,20 @@ function headerKeyIfPresent(rows: SidebarRow[], projectId: string) {
 }
 
 // Device-qualified: the same repo pulled to two machines can carry
-// the same worktree id on both.
-const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
+// the same worktree id on both. Shared with the inbox builder so a
+// peer's row has one key in both views.
+export const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
   `rw:${deviceId}:${worktreeId}`;
+
+// A peer's badge, as the rows and menus draw it.
+export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
+  return {
+    deviceId: item.deviceId,
+    label: item.deviceLabel,
+    tone: item.tone,
+    reachable: item.reachable,
+  };
+}
 
 function pushRemoteWorktreeRows(
   rows: SidebarRow[],
@@ -241,9 +253,32 @@ function pushRemoteWorktreeRows(
       deviceLabel: item.deviceLabel,
       reachable: item.reachable,
       tone: item.tone,
+      pr: item.pullRequests[worktree.branch],
       groupId,
     });
   }
+}
+
+// The group's (device, project) pairs, in the order they were merged,
+// one per device like the badges: a device that registered the same
+// repo twice acts through its first registration.
+function membersOf(
+  items: readonly RemoteForestItem[],
+): { deviceId: string; deviceLabel: string; project: Project }[] {
+  const members = new Map<
+    string,
+    { deviceId: string; deviceLabel: string; project: Project }
+  >();
+  for (const item of items) {
+    if (!members.has(item.deviceId)) {
+      members.set(item.deviceId, {
+        deviceId: item.deviceId,
+        deviceLabel: item.deviceLabel,
+        project: item.project,
+      });
+    }
+  }
+  return [...members.values()];
 }
 
 // One badge per contributing device, first sighting wins the order (a
@@ -254,12 +289,7 @@ function deviceBadgesOf(
   const badges = new Map<string, SidebarDeviceBadge>();
   for (const item of items) {
     if (!badges.has(item.deviceId)) {
-      badges.set(item.deviceId, {
-        deviceId: item.deviceId,
-        label: item.deviceLabel,
-        tone: item.tone,
-        reachable: item.reachable,
-      });
+      badges.set(item.deviceId, deviceBadgeOf(item));
     }
   }
   return [...badges.values()];

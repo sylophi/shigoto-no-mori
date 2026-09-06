@@ -94,7 +94,6 @@ export type WebBridge = {
 };
 
 const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
-
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = webServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);

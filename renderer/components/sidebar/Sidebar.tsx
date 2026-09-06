@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
+import type { SidebarView } from "@shared/schemas";
 import {
   DndContext,
   DragOverlay,
@@ -43,19 +44,26 @@ import { SidebarToolbar } from "./SidebarToolbar";
 import { TidyButton } from "./TidyButton";
 import { sortProjects } from "./sortProjects";
 import { SidebarList } from "./SidebarList";
-import type { RowHandlers } from "./VirtualRow";
 import { withToggled } from "@/lib/toggleSet";
 
 // The app sidebar, one for both shells: the brand header, the forest
 // (or, while Settings is open, the page's section list), and the
-// footer. With a machine of its own behind the window the forest is
-// the local project tree with every peer's forest merged in. On a
-// hostless client (the web shell) it is the peers' forests alone,
-// through the very same row builder and list, so a peer's worktree
-// row looks the same wherever it is drawn. The phone layout draws it
-// as a page (ForestPage) and drops the footer, whose cluster the tab
-// bar carries there.
-export function Sidebar({ footer = true }: { footer?: boolean }) {
+// footer. The forest is this machine's project tree with every peer's
+// forest merged in, in either of its two views. A hostless client (the
+// web shell) has no projects of its own, so its forest is the peers'
+// alone -- through the very same component, builders and list, so a
+// peer's worktree row looks the same wherever it is drawn and the
+// inbox files it beside a local one. The phone layout draws it as a
+// page (ForestPage) and drops the footer, whose cluster the tab bar
+// carries there -- the two views included, each as a tab of its own,
+// so the page pins the view instead of reading the preference.
+export function Sidebar({
+  footer = true,
+  view,
+}: {
+  footer?: boolean;
+  view?: SidebarView;
+}) {
   const [arrangeMode, setArrangeMode] = useState(false);
   // While Settings is open the sidebar is its section list: the tree
   // steps aside (header and footer stay) and comes back on the next
@@ -76,15 +84,12 @@ export function Sidebar({ footer = true }: { footer?: boolean }) {
       className="flex h-full flex-col"
     >
       <SidebarHeader />
-      {hasLocalHost ? (
-        <ProjectTree
-          settingsOpen={onSettings}
-          arrangeMode={arrangeMode}
-          onArrange={() => setArrangeMode(true)}
-        />
-      ) : (
-        <PeerForest settingsOpen={onSettings} />
-      )}
+      <Forest
+        settingsOpen={onSettings}
+        arrangeMode={arrangeMode}
+        onArrange={() => setArrangeMode(true)}
+        pinnedView={view}
+      />
       {footer && (
         <SidebarFooter
           // Arranging is a tree mode. While Settings holds the sidebar the
@@ -99,8 +104,8 @@ export function Sidebar({ footer = true }: { footer?: boolean }) {
 }
 
 // The section list Settings puts in the tree's place. Rendered by the
-// forest components rather than the frame so their hooks (and the
-// queries behind them) stay mounted across the swap.
+// forest rather than the frame so its hooks (and the queries behind
+// them) stay mounted across the swap.
 function SettingsPane() {
   return (
     <div className="min-h-0 flex-1">
@@ -112,18 +117,27 @@ function SettingsPane() {
 }
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
-function ProjectTree({
+function Forest({
   settingsOpen,
   arrangeMode,
   onArrange,
+  pinnedView,
 }: {
   settingsOpen: boolean;
   arrangeMode: boolean;
   onArrange: () => void;
+  // Pins the view (a phone tab). Absent, the saved preference decides.
+  pinnedView: SidebarView | undefined;
 }) {
+  // A hostless client reaches its forest only through the account:
+  // signed out there is nothing to list. A machine with projects of
+  // its own lists them whatever the account says.
+  const { data: status } = useAccountStatus();
+  const signedIn = hasLocalHost || status?.signedIn === true;
   const { data: projects = [], isLoading } = useProjects();
   const { data: sortMode = "manual" } = useProjectSort();
-  const inbox = useSidebarView() === "inbox";
+  const preferredView = useSidebarView();
+  const inbox = (pinnedView ?? preferredView) === "inbox";
   const reorderProjects = useReorderProjects();
   // Absence == expanded, so new projects default open. Persisted in
   // state.json (like the sort preference) so a relaunch keeps the tree
@@ -142,7 +156,11 @@ function ProjectTree({
     () => new Set(),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
-  useSidebarViewHotkey(!arrangeMode && !settingsOpen);
+  // The Tab flip only means something where the preference is what
+  // shows. A pinned view has its tab bar.
+  useSidebarViewHotkey(
+    !arrangeMode && !settingsOpen && pinnedView === undefined,
+  );
 
   const toggleExpanded = (projectId: string) => {
     toggleCollapsed.mutate(projectId);
@@ -167,10 +185,11 @@ function ProjectTree({
   // which re-probe git for every project on mount -- never unmount.
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
-  // Peers' forests, merged into the tree beside the local rows. The
-  // inbox stays local: it triages this machine's work.
+  // Peers' forests, merged into both views beside the local rows. The
+  // inbox's extra facts are asked for only while it shows.
   const { items: remoteItems, loading: remoteLoading } = useRemoteForests({
     refetchOnMount: true,
+    inboxFacts: inbox,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   const view: SidebarViewModel = inbox
@@ -179,6 +198,7 @@ function ProjectTree({
         worktreeQueries,
         pullRequestQueries,
         configQueries,
+        remote: remoteItems,
         openShelves,
       })
     : buildSidebarRows({
@@ -190,6 +210,8 @@ function ProjectTree({
         remote: remoteItems,
       });
   const { rows, failedCount } = view;
+  // Failed listings, local or remote, surface here -- without it a
+  // peer's project would silently vanish from the tree.
   useFanOutErrorToast(failedCount);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
@@ -228,18 +250,24 @@ function ProjectTree({
 
   // "Nothing configured" and "configured but nothing to show" are
   // different answers, and neither should flash while its list is still
-  // resolving.
-  // remoteLoading joins the local gate: with zero local projects the
-  // rows can still be about to arrive from a peer, and "No projects
-  // yet." must not flash while that fetch is in flight.
+  // resolving. remoteLoading joins the local gate: with zero local
+  // projects the rows can still be about to arrive from a peer, and a
+  // slow device hub must not read as "no projects".
   const emptyMessage =
     isLoading || remoteLoading
       ? null
       : projects.length === 0 && rows.length === 0
-        ? "No projects yet."
+        ? hasLocalHost
+          ? "No projects yet."
+          : "No reachable devices with projects yet. Open the Devices page to see this account's machines."
         : view.emptyMessage;
 
   if (settingsOpen) return <SettingsPane />;
+  if (!signedIn) {
+    return (
+      <SidebarEmptyState message="Sign in to reach this account's devices." />
+    );
+  }
 
   const list = (
     <SidebarList
@@ -259,8 +287,10 @@ function ProjectTree({
     <>
       {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
-          the tree instead gets the controls that only apply to it.
-          Arranging takes over the whole sidebar, so neither shows. */}
+          the tree instead gets the controls that only apply to it --
+          which are all about this machine's own projects, so a hostless
+          client's tree has nothing to show there. Arranging takes over
+          the whole sidebar, so neither shows. */}
       {arrangeMode ? null : inbox ? (
         // px-2 like the rows below it, which is where v1 wants it.
         // doubutsu pulls it in to its banner card, hence the slot.
@@ -269,15 +299,19 @@ function ProjectTree({
           className="flex items-center gap-1 px-2 pb-1.5"
         >
           <div className="min-w-0 flex-1">
-            <NewWorktreeButton projects={orderedProjects} />
+            <NewWorktreeButton
+              projects={orderedProjects}
+              remote={remoteItems}
+            />
           </div>
           {/* The tidy page has no other way in, so it can't live only in
-              the tree's toolbar. */}
-          <TidyButton />
+              the tree's toolbar. It spans this machine's projects, so a
+              hostless client has none to tidy. */}
+          {hasLocalHost && <TidyButton />}
         </div>
-      ) : (
+      ) : hasLocalHost ? (
         <SidebarToolbar onArrange={onArrange} />
-      )}
+      ) : null}
       <div className="min-h-0 flex-1">
         <ScrollArea className="size-full" viewportRef={viewportRef}>
           {/* Dragging reorders projects, which the inbox doesn't show --
@@ -308,66 +342,6 @@ function ProjectTree({
         </ScrollArea>
       </div>
     </>
-  );
-}
-
-// The tree has no local half here, so none of the local-row handlers
-// can ever be called, and stable no-ops keep SidebarList's props inert.
-const NO_LOCAL_HANDLERS: RowHandlers = {
-  onToggle: () => {},
-  onToggleShelved: () => {},
-  onToggleShelf: () => {},
-  arrangeMode: false,
-};
-const NO_COLLAPSED = new Set<string>();
-
-// The hostless forest: every worktree is a peer's, so every row carries
-// its device marker. Signed out there is nothing to list, since a peer
-// is only reachable through the account. Like ProjectTree, every hook
-// runs above the settings swap so the fan-out stays mounted across it.
-function PeerForest({ settingsOpen }: { settingsOpen: boolean }) {
-  const { data: status } = useAccountStatus();
-  const signedIn = status?.signedIn === true;
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const { items, loading } = useRemoteForests({ refetchOnMount: true });
-  const view = buildSidebarRows({
-    projects: [],
-    worktreeQueries: [],
-    collapsed: NO_COLLAPSED,
-    shelvedExpanded: NO_COLLAPSED,
-    arrangeMode: false,
-    remote: items,
-  });
-  // Failed remote listings surface here exactly as in the local tree --
-  // without it a peer's project would silently vanish from the tree.
-  useFanOutErrorToast(view.failedCount);
-
-  if (settingsOpen) return <SettingsPane />;
-
-  // Loading and empty are different answers: a slow device hub must
-  // not read as "no projects".
-  const emptyMessage = !signedIn
-    ? "Sign in to reach this account's devices."
-    : view.rows.length > 0
-      ? null
-      : loading
-        ? "Loading forests…"
-        : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
-
-  return (
-    <div className="min-h-0 flex-1">
-      <ScrollArea className="size-full" viewportRef={viewportRef}>
-        {signedIn && (
-          <SidebarList
-            rows={view.rows}
-            revealKey={view.revealKey}
-            viewportRef={viewportRef}
-            handlers={NO_LOCAL_HANDLERS}
-          />
-        )}
-        <SidebarEmptyState message={emptyMessage} />
-      </ScrollArea>
-    </div>
   );
 }
 

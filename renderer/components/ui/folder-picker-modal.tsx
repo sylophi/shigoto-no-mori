@@ -13,6 +13,7 @@ import { FileManagerIcon } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import {
@@ -55,6 +56,11 @@ export function FolderPickerModal({
   // treating the basename as a leaf filter.
   const seed = initialPath ? ensureTrailingSep(initialPath) : "~/";
   const [query, setQuery] = useState<string>(seed);
+  // The listing rides the scope, so browsing a peer's disk works the
+  // same as this one's. The native dialog is this machine's window
+  // manager, though: it can only ever pick a path here, so a peer's
+  // picker keeps the typed listing alone.
+  const { remote } = useHostScope();
   const [highlighted, setHighlighted] = useState<string>("");
 
   const browseDir = getBrowseDirectoryPath(query);
@@ -244,26 +250,28 @@ export function FolderPickerModal({
               </KbdGroup>
             )}
           </div>
-          <ChipButton
-            onClick={async () => {
-              let picked: string | null;
-              try {
-                picked = await window.api.dialog.pickFolder({
-                  title,
-                  buttonLabel: confirmLabel,
-                });
-              } catch (err) {
-                // Cancelling resolves to null, so a rejection is a real
-                // dialog/IPC failure.
-                notifyError("Couldn't open the folder picker", err);
-                return;
-              }
-              if (picked) onPick(picked);
-            }}
-          >
-            <FileManagerIcon />
-            Open in Finder
-          </ChipButton>
+          {!remote && (
+            <ChipButton
+              onClick={async () => {
+                let picked: string | null;
+                try {
+                  picked = await window.api.dialog.pickFolder({
+                    title,
+                    buttonLabel: confirmLabel,
+                  });
+                } catch (err) {
+                  // Cancelling resolves to null, so a rejection is a real
+                  // dialog/IPC failure.
+                  notifyError("Couldn't open the folder picker", err);
+                  return;
+                }
+                if (picked) onPick(picked);
+              }}
+            >
+              <FileManagerIcon />
+              Open in Finder
+            </ChipButton>
+          )}
         </div>
       </Command>
     </ModalShell>

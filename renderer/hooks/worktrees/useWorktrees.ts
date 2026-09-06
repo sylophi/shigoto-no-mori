@@ -1,7 +1,11 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
+import {
+  useHostScope,
+  type HostApi,
+  type HostScope,
+} from "@/hooks/remote/useHostScope";
 
 // Which device's forest to read, and over which api. Both default to
 // the local machine, so a scope-less call reads this machine's forest;
@@ -9,6 +13,22 @@ import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 // fan-out) passes a peer's id and api and that device's data caches
 // under its own id.
 export type HostForestScope = Partial<HostScope>;
+
+// The (device, api) pair a scope names. The api falls back to
+// window.api only when the KEY is absent (a scope-less local call): a
+// caller passing `api: undefined` means "this device has no
+// connection", and a default parameter would silently swap the local
+// api in, so every offline device would fetch and cache THIS machine's
+// data under its own device key.
+export function resolveForestScope(scope: HostForestScope): {
+  deviceId: string;
+  api: HostApi | undefined;
+} {
+  return {
+    deviceId: scope.deviceId ?? localDeviceId,
+    api: "api" in scope ? scope.api : window.api,
+  };
+}
 
 // Single source of truth for the worktrees-list query, so imperative
 // fetches (e.g. queryClient.ensureQueryData) hit the same cache entry
@@ -19,12 +39,7 @@ export function worktreesQueryOptions(
   projectId: string | null,
   scope: HostForestScope = {},
 ) {
-  const deviceId = scope.deviceId ?? localDeviceId;
-  // Key-presence check, not a default parameter: `api: undefined` from
-  // a disconnected device must stay undefined (disabled query), not
-  // fall back to the local api and cache this machine's worktrees
-  // under the peer's device key. See projectsQueryOptions.
-  const api = "api" in scope ? scope.api : window.api;
+  const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<Worktree[]>({
     queryKey: queryKeysFor(deviceId).worktrees(projectId),
     queryFn: () => {

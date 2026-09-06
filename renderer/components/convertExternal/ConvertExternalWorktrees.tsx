@@ -1,22 +1,22 @@
 import { useState } from "react";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@/lib/projectPaths";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
+import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { sanitizeBranchForPath } from "@shared/branches";
 import type { Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
-
-const route = getRouteApi("/projects/$projectId/convert-external");
 
 // For detached HEADs `worktree.branch` is a short SHA -- pass it
 // through unchanged so the managed worktree gets a hash-named dir.
@@ -26,8 +26,11 @@ const proposedName = (worktree: Worktree): string =>
   worktree.detached ? worktree.branch : sanitizeBranchForPath(worktree.branch);
 
 export function ConvertExternalWorktrees() {
-  const { projectId } = route.useParams();
+  const { projectId } = useScopedProjectParams();
   const navigate = useNavigate();
+  // Scope-aware: a worktree converted on a peer opens under its device
+  // twin, like every other link out of a scoped page.
+  const { toWorktree } = useWorktreeNav();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading } = useWorktrees(projectId);
@@ -100,10 +103,7 @@ export function ConvertExternalWorktrees() {
     // page so they can see what happened with the rest.
     const lastSuccess = converted.at(-1) ?? null;
     if (lastSuccess && queue.length === 1) {
-      void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId",
-        params: { projectId: project.id, worktreeId: lastSuccess.id },
-      });
+      toWorktree(project.id, lastSuccess.id);
     }
   };
 

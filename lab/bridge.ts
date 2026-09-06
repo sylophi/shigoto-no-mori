@@ -108,7 +108,6 @@ function hostHandlersFor(
   return {
     "projects:list": () => forest.projects,
     "projects:getSort": () => "manual",
-    "projects:getSidebarView": () => "projects",
     "projects:getCollapsed": () => [...collapsed],
     "projects:toggleCollapsed": ({ projectId }) => {
       if (collapsed.has(projectId)) collapsed.delete(projectId);
@@ -524,12 +523,21 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     },
     "account:enroll": () => accountStatus(),
     "account:signOut": () => undefined,
+    // ?view=inbox poses the sidebar layout over whatever the lab session
+    // has saved, so a shot can open on either view.
     "clientConfig:read": () => {
+      const posedView = new URLSearchParams(location.search).get("view");
+      let stored: Record<string, unknown> = {};
       try {
-        return JSON.parse(localStorage.getItem("sm.lab.clientConfig") ?? "{}");
+        stored = JSON.parse(
+          localStorage.getItem("sm.lab.clientConfig") ?? "{}",
+        );
       } catch {
-        return {};
+        // Corrupt storage reads as defaults.
       }
+      return posedView === "inbox" || posedView === "projects"
+        ? { ...stored, sidebarView: posedView }
+        : stored;
     },
     "clientConfig:write": ({ config }) => {
       localStorage.setItem("sm.lab.clientConfig", JSON.stringify(config));

@@ -202,11 +202,16 @@ export function useDeleteWorktree() {
   });
 }
 
-export function useIsDeletingWorktree(worktreeId: string): boolean {
-  const { deviceId } = useHostScope();
+// `deviceId` names the peer a remote sidebar row belongs to. Absent,
+// it is the surrounding scope's device (this machine with no provider).
+export function useIsDeletingWorktree(
+  worktreeId: string,
+  deviceId?: string,
+): boolean {
+  const scope = useHostScope();
   return (
     useIsMutating({
-      mutationKey: deleteWorktreeMutationKey(deviceId),
+      mutationKey: deleteWorktreeMutationKey(deviceId ?? scope.deviceId),
       predicate: (m) =>
         (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
         worktreeId,

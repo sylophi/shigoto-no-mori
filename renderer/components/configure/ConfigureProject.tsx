@@ -1,17 +1,15 @@
 import { PawPrint } from "lucide-react";
-import { getRouteApi } from "@tanstack/react-router";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { ConfigureForm } from "./ConfigureForm";
 import { ConfigureSkeleton } from "./ConfigureSkeleton";
 
-const route = getRouteApi("/projects/$projectId/configure");
-
 export function ConfigureProject() {
-  const { projectId } = route.useParams();
+  const { projectId } = useScopedProjectParams();
   const { data: projects = [] } = useProjects();
   const project = projects.find((p) => p.id === projectId);
   const { data: config, isLoading: configLoading } =
@@ -53,6 +51,7 @@ export function ConfigureProject() {
           key={projectId}
           projectId={projectId}
           projectPath={project.path}
+          project={project}
           initialConfig={config ?? null}
           resolvedDefaultBranch={resolvedDefaultBranch}
         />

@@ -1,17 +1,15 @@
-import { getRouteApi } from "@tanstack/react-router";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { LocationForm } from "./LocationForm";
 
-const route = getRouteApi("/projects/$projectId/worktree-location");
-
 export function WorktreeLocation() {
-  const { projectId } = route.useParams();
+  const { projectId } = useScopedProjectParams();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading: worktreesLoading } =

@@ -29,7 +29,7 @@ export function useWorktreeRowState(
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const activity = useWorktreeScriptActivity(worktree.id, deviceId);
-  const isDeleting = useIsDeletingWorktree(worktree.id);
+  const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
     deviceId: deviceId ?? "",
     projectId: worktree.projectId,

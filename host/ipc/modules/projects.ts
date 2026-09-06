@@ -19,10 +19,6 @@ import {
   readCollapsedProjects,
   toggleCollapsedProject,
 } from "@host/lib/projects/collapsed";
-import {
-  readSidebarView,
-  writeSidebarView,
-} from "@host/lib/projects/sidebarView";
 import { readProjectSort, writeProjectSort } from "@host/lib/projects/usage";
 import {
   listCarryOverCandidates,
@@ -120,10 +116,6 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   getSort: () => readProjectSort(),
 
   setSort: ({ mode }) => writeProjectSort(mode),
-
-  getSidebarView: () => readSidebarView(),
-
-  setSidebarView: ({ view }) => writeSidebarView(view),
 
   getCollapsed: () => readCollapsedProjects(),
 

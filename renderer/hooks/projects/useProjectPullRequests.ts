@@ -6,9 +6,17 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { Project, PullRequest } from "@shared/schemas";
-import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
-import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
+import {
+  queryKeys,
+  queryKeysFor,
+  type QueryKeyRegistry,
+} from "@/lib/queryKeys";
+import {
+  combineFanOut,
+  resolveForestScope,
+  type HostForestScope,
+} from "@/hooks/worktrees/useWorktrees";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // Cascading invalidator: the shared key prefix knocks out both the
 // sidebar map and any open per-branch detail in one call, so PR
@@ -54,13 +62,18 @@ export function useWatchProjectPullRequests(): void {
 // changed; useWatchProjectPullRequests invalidates this query off that
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest instead.
-function projectPullRequestsQueryOptions(
+// Scope rule as worktreesQueryOptions: a peer's map caches under its
+// own device id, and a device with no session never fetches.
+export function projectPullRequestsQueryOptions(
   projectId: string,
-  { api, keys }: HostScope,
+  scope: HostForestScope = {},
 ) {
+  const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<Record<string, PullRequest>>({
-    queryKey: keys.projectPullRequests(projectId),
-    queryFn: () => api.githubCli.projectPullRequests(projectId),
+    queryKey: queryKeysFor(deviceId).projectPullRequests(projectId),
+    // Guarded by `enabled`.
+    queryFn: () => api!.githubCli.projectPullRequests(projectId),
+    enabled: api !== undefined && deviceId !== "",
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

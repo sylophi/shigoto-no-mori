@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { DeviceChip } from "@/components/remote/DeviceChip";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -7,6 +6,7 @@ import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
+import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import {
@@ -56,11 +56,13 @@ export function WorktreeDetailInner({
   project,
   siblings,
 }: InnerProps) {
-  const navigate = useNavigate();
   const { toScript } = useWorktreeNav();
+  // Configure lives in both trees, so the breadcrumb links there
+  // whichever device the page is scoped to.
+  const { toProjectPage } = useProjectNav();
   // Which device this page is scoped to. Everything data-shaped below
   // already rides the host scope. `remote` only gates the affordances
-  // that are local by nature (launching, configure links) and adds the
+  // that are local by nature (launching) and adds the
   // cross-device ones (bring here, transplant, the device chip).
   const { remote } = useHostScope();
   const scriptRuns = useScriptRuns();
@@ -181,25 +183,14 @@ export function WorktreeDetailInner({
         )}
       >
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          {remote ? (
-            // Configure is a local page, so remotely the name is just the
-            // breadcrumb.
-            <span className="shrink-0">{project.name}</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() =>
-                void navigate({
-                  to: "/projects/$projectId/configure",
-                  params: { projectId: worktree.projectId },
-                })
-              }
-              className="shrink-0 rounded transition-colors hover:text-foreground"
-              title={`Configure ${project.name}`}
-            >
-              {project.name}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => toProjectPage("configure", worktree.projectId)}
+            className="shrink-0 rounded transition-colors hover:text-foreground"
+            title={`Configure ${project.name}`}
+          >
+            {project.name}
+          </button>
           {/* A phone has no room for the path (it shortens to noise
               at that width), so the breadcrumb stops at the project
               and the trailing marks push themselves to the edge. */}

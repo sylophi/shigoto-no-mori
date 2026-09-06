@@ -21,7 +21,6 @@
   "projects:carryOverStats",
   "projects:defaultBranch",
   "projects:getCollapsed",
-  "projects:getSidebarView",
   "projects:getSort",
   "projects:icon",
   "projects:list",

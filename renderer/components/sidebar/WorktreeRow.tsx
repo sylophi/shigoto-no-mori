@@ -3,7 +3,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
-import type { Worktree } from "@shared/schemas";
+import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
@@ -48,6 +48,7 @@ export function WorktreeRowLabel({
 export function WorktreeRow({ worktree }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
+  const { data: prs } = useProjectPullRequests(worktree.projectId);
 
   return (
     <button
@@ -69,6 +70,7 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         worktree={worktree}
         activity={activity}
         isDeleting={isDeleting}
+        pr={prs?.[worktree.branch]}
       />
     </button>
   );
@@ -78,14 +80,22 @@ interface RowTrailingProps {
   worktree: Worktree;
   activity: ScriptActivityKind | null;
   isDeleting: boolean;
+  // Resolved by the row: the local one off its project's map, a peer's
+  // off the map that came with its forest.
+  pr: PullRequest | undefined;
 }
 
-// The right-edge cluster. Deletion takes the whole row (the worktree is
-// going away, so the trash standing alone reads as "destroying"); a
-// running script just adds a leading activity icon to the normal cluster
-// so status / PR / kind stay visible.
-function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
-  const { data: prs } = useProjectPullRequests(worktree.projectId);
+// The right-edge cluster, shared with RemoteWorktreeRow so a peer's row
+// keeps the same marks through the next restyle. Deletion takes the
+// whole row (the worktree is going away, so the trash standing alone
+// reads as "destroying"); a running script just adds a leading activity
+// icon to the normal cluster so status / PR / kind stay visible.
+export function RowTrailing({
+  worktree,
+  activity,
+  isDeleting,
+  pr,
+}: RowTrailingProps) {
   // Deletion spans cleanup scripts + the final git remove; the script
   // activity covers only cleanup, so keep the trash pulsing for the
   // whole mutation regardless of which phase is active.
@@ -96,7 +106,7 @@ function RowTrailing({ worktree, activity, isDeleting }: RowTrailingProps) {
     <>
       {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
-      <PullRequestPill pr={prs?.[worktree.branch]} />
+      <PullRequestPill pr={pr} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
   );

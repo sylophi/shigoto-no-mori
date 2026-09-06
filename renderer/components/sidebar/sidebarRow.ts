@@ -6,29 +6,41 @@ import type { SidebarDeviceBadge } from "./DeviceBadge";
 // the live one -- has no header and no toggle, so it isn't in this union.
 export type InboxShelf = "shelved" | "merged";
 
+// One device's checkout of a remote-only project group.
+export interface RemoteProjectMember {
+  deviceId: string;
+  deviceLabel: string;
+  project: Project;
+}
+
 export type SidebarRow =
   // `devices` lists the peer devices whose worktrees merged into this
   // project's group (empty for a purely local project), for the
-  // header's badge cluster.
+  // header's badge cluster, and `members` the same peers' checkouts,
+  // for the header's actions.
   | {
       kind: "project";
       key: string;
       project: Project;
       expanded: boolean;
       devices: readonly SidebarDeviceBadge[];
+      members: readonly RemoteProjectMember[];
     }
   | { kind: "worktree"; key: string; worktree: Worktree }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
   // and PR ride along because the builder already had both in hand --
   // resolving either again per row would put a query observer on every
-  // visible row for an answer it already knew.
+  // visible row for an answer it already knew. A peer's worktree files
+  // here beside this machine's, carrying its device. Absent, the row
+  // is local.
   | {
       kind: "inbox-worktree";
       key: string;
       worktree: Worktree;
       project: Project;
       pr: PullRequest | undefined;
+      device: SidebarDeviceBadge | undefined;
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }
@@ -48,21 +60,24 @@ export type SidebarRow =
       reachable: boolean;
       // The device's connection tone, for its badge on the row.
       tone: StatusTone;
+      // Its PR on that device, off the peer's own map like a local
+      // row's off this machine's.
+      pr: PullRequest | undefined;
       groupId: string;
     }
   // Header for remote worktrees whose project has no local counterpart.
-  // Not a Project row: it carries no local actions, no collapse state,
-  // and may span several devices sharing one repo identity. Its key
-  // doubles as the group id its worktree rows carry. iconSources names
-  // every member (device, project) pair -- same repo, so any member
-  // with a live connection serves the icon fetch.
+  // May span several devices sharing one repo identity: `members` names
+  // every (device, project) pair, in device order, and the header's
+  // actions act on whichever of them are live. Its key doubles as the
+  // group id its worktree rows carry. No collapse state: nothing
+  // persists a fold for a foreign project.
   | {
       kind: "remote-project";
       key: string;
       name: string;
       count: number;
       devices: readonly SidebarDeviceBadge[];
-      iconSources: readonly { deviceId: string; projectId: string }[];
+      members: readonly RemoteProjectMember[];
     }
   | {
       kind: "shelved-toggle";
