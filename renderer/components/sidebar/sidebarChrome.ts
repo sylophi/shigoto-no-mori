@@ -10,3 +10,9 @@ export const SIDEBAR_ICON_BUTTON =
 // one-constant reasoning as the icon buttons above.
 export const SIDEBAR_FOOTER_BAR =
   "flex items-center gap-1 border-t border-border px-2 py-1.5";
+
+// A project header's `…` trigger, hover-revealed by the row (which
+// sets the opacity) and always shown on a phone, where there is no
+// hover.
+export const PROJECT_MENU_TRIGGER_CLASS =
+  "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100 phone:opacity-100";

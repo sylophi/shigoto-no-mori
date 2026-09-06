@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,10 +10,12 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
+import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
+import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
 import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
@@ -23,7 +25,6 @@ import {
   useCreateWorktree,
   useCreateWorktreeFromPullRequest,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import { localDeviceId } from "@/lib/queryKeys";
 import { tildify } from "@/lib/projectPaths";
 import {
   PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
@@ -43,12 +44,11 @@ import {
   type PullRequestCandidate,
   type Worktree,
 } from "@shared/schemas";
+import { worktreeBaseFor } from "@shared/worktreeLayout";
 import { DevicePicker } from "./DevicePicker";
 import { useDeviceTargets } from "./deviceTargets";
 import { ModeToggle, type Mode } from "./ModeToggle";
 import { PullRequestSource } from "./PullRequestPicker";
-
-const route = getRouteApi("/projects/$projectId/new");
 
 // What the destination line leads with, per mode. The device, when there
 // is a choice of one, is spliced in after this: "... checked out on
@@ -86,32 +86,39 @@ const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 // that device's host scope and handed THAT device's project id -- every
 // hook in it keys off projectId plus scope, so the branch list, the
 // folder collision check and the create all follow the pick with no
-// remote-awareness of their own.
+// remote-awareness of their own. The page itself serves both trees:
+// under /projects the project is this machine's, under a /devices twin
+// it is the peer's, and the pick opens on whichever the route named.
 export function NewWorktree() {
-  const { projectId } = route.useParams();
+  const { projectId } = useScopedProjectParams();
+  const scope = useHostScope();
   const { data: projects = [] } = useProjects();
   const { data: runtime } = useRuntimeInfo();
-  // This machine's own worktrees, for its card's count. The form below
-  // reads the same query when the pick is local, and the peer's when it
-  // isn't.
+  // The scoped device's own worktrees, for its card's count. The form
+  // below reads the same query when the pick stays here, and the
+  // picked device's when it moves.
   const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
   const targets = useDeviceTargets(project, worktrees.length);
-  const [pickedDeviceId, setPickedDeviceId] = useState(localDeviceId);
+  const [pickedDeviceId, setPickedDeviceId] = useState(scope.deviceId);
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
   // A pick only holds while it stays valid: a peer that drops off, loses
-  // its checkout or has its grant pulled falls back to this device
-  // rather than scoping the form to a machine that would refuse the
-  // create. Derived, so there is no effect racing the registry.
+  // its checkout or has its grant pulled falls back to the first device
+  // that can take the job rather than scoping the form to a machine
+  // that would refuse the create. Derived, so there is no effect racing
+  // the registry.
   const picked = targets.find(
     (target) =>
       target.deviceId === pickedDeviceId && target.block === undefined,
   );
-  const target = picked ?? targets[0];
+  const target = picked ?? targets.find((entry) => entry.block === undefined);
+  // Every listed device is blocked: say so under the picker instead of
+  // mounting a form that would refuse the create.
+  const nowhere = targets.length > 0 && target === undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -126,53 +133,47 @@ export function NewWorktree() {
 
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-xl flex-col gap-7">
-          {target && (
+          {targets.length > 0 && (
             <DevicePicker
               targets={targets}
-              selectedId={target.deviceId}
+              selectedId={target?.deviceId ?? ""}
               onSelect={setPickedDeviceId}
-              home={runtime?.homedir ?? null}
+              // The picker abbreviates THIS machine's path only, and
+              // under a device twin the runtime read is the peer's.
+              home={scope.remote ? null : (runtime?.homedir ?? null)}
             />
           )}
-          {/* Unconditional: the provider resolves to exactly the
-              default scope when the target is this device (local id,
-              window.api), so the form needs no local special case. */}
-          <HostScopeProvider
-            deviceId={target?.deviceId ?? localDeviceId}
-            api={target?.api ?? window.api}
-          >
-            {/* Remounted per device: the seeded fields (picked name,
-                default branch) and the mode come from the target's own
-                answers, so carrying the previous machine's state across
-                would show one device's branch under another's path. */}
-            <NewWorktreeForm
-              key={target?.deviceId ?? localDeviceId}
-              projectId={target?.project?.id ?? projectId}
-              project={target?.project ?? project}
-              // Undefined with no device section: the form keeps the copy
-              // it has always had rather than naming a machine nobody
-              // chose.
-              deviceLabel={target?.label}
-            />
-          </HostScopeProvider>
+          {nowhere ? (
+            <p className="text-sm text-muted-foreground">
+              No device can create a worktree for this repo right now.
+            </p>
+          ) : (
+            /* Unconditional: the provider resolves to exactly the
+               surrounding scope when there is nothing to pick, so the
+               form needs no special case for it. */
+            <HostScopeProvider
+              deviceId={target?.deviceId ?? scope.deviceId}
+              api={target?.api ?? scope.api}
+            >
+              {/* Remounted per device: the seeded fields (picked name,
+                  default branch) and the mode come from the target's own
+                  answers, so carrying the previous machine's state across
+                  would show one device's branch under another's path. */}
+              <NewWorktreeForm
+                key={target?.deviceId ?? scope.deviceId}
+                projectId={target?.project?.id ?? projectId}
+                project={target?.project ?? project}
+                // Undefined with no device section: the form keeps the copy
+                // it has always had rather than naming a machine nobody
+                // chose.
+                deviceLabel={target?.label}
+              />
+            </HostScopeProvider>
+          )}
         </div>
       </div>
     </div>
   );
-}
-
-// The worktree base directory on the device the form is scoped to,
-// deduced from a worktree it already keeps there. Remote-only: runtime
-// info is a local module, so a peer's data dir can't be asked for,
-// and its own worktrees are the honest source for where the next one
-// lands. Null before any sibling exists.
-function siblingWorktreeRoot(worktrees: Worktree[]): string | null {
-  for (const worktree of worktrees) {
-    if (worktree.isPrimary || worktree.isExternal) continue;
-    const cut = worktree.path.lastIndexOf("/");
-    if (cut > 0) return worktree.path.slice(0, cut);
-  }
-  return null;
 }
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
@@ -190,11 +191,12 @@ function NewWorktreeForm({
   deviceLabel: string | undefined;
 }) {
   const navigate = useNavigate();
-  // Scope-aware: remote under a peer's provider, and its toWorktree
-  // lands on the device-scoped detail route rather than a local one that
-  // wouldn't exist for that worktree.
-  const { remote, toWorktree } = useWorktreeNav();
+  // Scope-aware: under a peer's provider its toWorktree lands on the
+  // device-scoped detail route rather than a local one that wouldn't
+  // exist for that worktree.
+  const { toWorktree } = useWorktreeNav();
   const { data: runtime } = useRuntimeInfo();
+  const { data: layoutConfig } = useShigomoriConfig(projectId);
   const { data: defaultBranch } = useDefaultBranch(projectId);
   const { data: pickedName } = usePickedWorktreeName(projectId);
   const { data: worktrees = [] } = useWorktrees(projectId);
@@ -230,12 +232,10 @@ function NewWorktreeForm({
   // source -- PR already picked -- and into a submittable branch-from
   // form they never asked for.
   const [defaultMode, setDefaultMode] = useState<Mode | null>(null);
-  const requestedMode = modeInput ?? defaultMode ?? DEFAULT_MODE;
-  // `gh` runs on THIS machine, so a pull request checkout can only ever
-  // produce a local worktree. Pointed at a peer, the form falls back to
-  // the branch source rather than offering one it would have to refuse.
-  const mode =
-    remote && requestedMode === "pull-request" ? "branch-from" : requestedMode;
+  // gh runs on the scoped device, so a pull request checks out there
+  // like any other source. Its readiness verdict (below) says whether
+  // that device can offer it.
+  const mode = modeInput ?? defaultMode ?? DEFAULT_MODE;
   const prMode = mode === "pull-request";
   // The branch name and base are seeded from async reads (the picked
   // animal name and the resolved default branch), so state holds only
@@ -391,12 +391,20 @@ function NewWorktreeForm({
   const errorMessage =
     (prMode ? createFromPr.error : create.error)?.message ?? null;
   const home = runtime?.homedir ?? null;
-  const root = runtime?.dataDir ? tildify(runtime.dataDir, home) : "~/.sm";
-  // Locally the runtime's own data dir. On a peer, where its existing
-  // worktrees live, since runtime is local-only.
-  const destRoot = remote
-    ? siblingWorktreeRoot(worktrees)
-    : `${root}/worktrees/${project.name}`;
+  // Where the worktree lands on the scoped device: the project's own
+  // layout (managed root, in-project, or a custom folder), spelled by
+  // the same rule the location page and the create itself use.
+  const destRoot = runtime
+    ? tildify(
+        worktreeBaseFor({
+          layout: layoutConfig?.worktreeLayout ?? "managed-root",
+          projectPath: project.path,
+          dataDir: runtime.dataDir,
+          customPath: layoutConfig?.customWorktreePath ?? null,
+        }),
+        home,
+      )
+    : null;
   const destName = folderName || "…";
   const destPath = destRoot ? `${destRoot}/${destName}` : destName;
   const destLead = MODE_DEST_LEAD[mode];
@@ -418,14 +426,7 @@ function NewWorktreeForm({
           onChange={setModeInput}
           disabled={busy}
           pullRequestUnavailable={prMode ? undefined : prUnavailable}
-          hidePullRequest={remote}
         />
-        {remote && (
-          <p className="text-xs text-muted-foreground">
-            gh runs on this machine, so the pull request source only creates
-            worktrees here.
-          </p>
-        )}
       </div>
 
       {!prMode && (

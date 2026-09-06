@@ -44,7 +44,6 @@ import type {
   ProjectSortMode,
   ShigomoriConfig,
   ShigomoriWorktreeData,
-  SidebarView,
   Theme,
 } from "@shared/schemas";
 
@@ -298,9 +297,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       }) => projectsClient.reorder(input),
       getSort: projectsClient.getSort,
       setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
-      getSidebarView: projectsClient.getSidebarView,
-      setSidebarView: (view: SidebarView) =>
-        projectsClient.setSidebarView({ view }),
       getCollapsed: projectsClient.getCollapsed,
       toggleCollapsed: (projectId: string) =>
         projectsClient.toggleCollapsed({ projectId }),

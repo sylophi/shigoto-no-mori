@@ -899,7 +899,13 @@ async function main() {
       // Spot-check the load-bearing decisions so a silent flip is caught.
       assert.equal(runtimeContract.calls.nuke.remote, false);
       assert.equal(runtimeContract.calls.moveDataDir.remote, false);
-      assert.equal(runtimeContract.calls.info.remote, false);
+      // info is the one runtime call a peer may make: the project pages
+      // under a device twin spell worktree paths off its data dir. It
+      // rides the command grant like the fs reads, since it names the
+      // host's paths.
+      assert.equal(runtimeContract.calls.info.remote, true);
+      assert.equal(runtimeContract.calls.info.mutating, true);
+      assert.equal(runtimeContract.calls.info.movesHostState, false);
       assert.equal(launchersContract.calls.launch.remote, false);
       assert.equal(cliContract.calls.install.remote, false);
       assert.equal(globalConfigContract.calls.write.remote, false);
@@ -934,7 +940,6 @@ async function main() {
         "remove",
         "reorder",
         "setSort",
-        "setSidebarView",
         "toggleCollapsed",
       ]) {
         assert.equal(

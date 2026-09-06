@@ -9,10 +9,19 @@ import {
 // Host lifecycle of the shigomori data dir. The client-side calls
 // that used to ride along here live in the client-scoped modules now:
 // theme preview and relaunch on window, appearance on clientConfig.
-// Local-only module: every call stays on the Electron wire (remote
-// false). nuke, moveDataDir and info touch host paths and the homedir, so a remote peer must never reach them.
+// nuke and moveDataDir stay on the Electron wire (remote false): they
+// rewrite the host's data dir, which is nobody else's to do. info rides
+// the wire so a peer's project pages can spell the paths a worktree
+// will land at the same way the local ones do, behind the command
+// grant like the fs reads (it names the host's homedir and data dir,
+// which a peer this host has not granted control to has no use for).
+// It moves no state, so it never pings viewers.
 export const runtimeContract = defineContract("host", {
-  info: invoke("runtime:info", z.void(), RuntimeInfoSchema, { remote: false }),
+  info: invoke("runtime:info", z.void(), RuntimeInfoSchema, {
+    remote: true,
+    mutating: true,
+    movesHostState: false,
+  }),
   nuke: invoke("runtime:nuke", z.void(), z.void(), { remote: false }),
   moveDataDir: invoke(
     "runtime:moveDataDir",

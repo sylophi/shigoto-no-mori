@@ -1,24 +1,21 @@
 import { useRef } from "react";
-import { Loader2, MoreHorizontal, Plus } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
+import { ProjectGroupActions, useGroupMembers } from "./ProjectGroupActions";
 import { ProjectHeader } from "./ProjectHeader";
-import { ProjectMenuItems, useProjectMenuRemoveArm } from "./ProjectMenuItems";
+import type { RemoteProjectMember } from "./sidebarRow";
 
 interface ProjectRowProps {
   project: Project;
   expanded: boolean;
-  // Peer devices whose worktrees merged into this project's group.
+  // Peer devices whose worktrees merged into this project's group, and
+  // their checkouts: the header's badges, and the extra devices its
+  // actions can reach.
   devices: readonly SidebarDeviceBadge[];
+  members: readonly RemoteProjectMember[];
   onToggle: () => void;
   arrangeMode: boolean;
   // True while the cursor is anywhere in this project's region in the
@@ -31,6 +28,7 @@ export function ProjectRow({
   project,
   expanded,
   devices,
+  members,
   onToggle,
   arrangeMode,
   isHovered,
@@ -54,12 +52,8 @@ export function ProjectRow({
     transition,
   };
   const missing = project.pathExists === false;
-  const {
-    quickCreate,
-    openCreateForm,
-    isPending: creating,
-  } = useQuickCreateWorktree();
-  const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
+  // This machine first, then every peer holding the same repo.
+  const group = useGroupMembers(members, project);
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get
@@ -70,24 +64,6 @@ export function ProjectRow({
     event.preventDefault();
     triggerRef.current?.click();
   };
-
-  const triggerButton = (
-    <DropdownMenuTrigger
-      render={
-        <button
-          ref={triggerRef}
-          type="button"
-          aria-label={`More actions for ${project.name}`}
-          className={cn(
-            "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100 phone:opacity-100",
-            isHovered ? "opacity-100" : "opacity-0",
-          )}
-        >
-          <MoreHorizontal className="size-3.5" />
-        </button>
-      }
-    />
-  );
 
   return (
     <div
@@ -109,44 +85,13 @@ export function ProjectRow({
           reorderable={reorderable}
         />
         {!arrangeMode && (
-          <>
-            {!missing && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  if (e.shiftKey || e.metaKey || e.ctrlKey) {
-                    openCreateForm(project.id);
-                    return;
-                  }
-                  void quickCreate(project.id);
-                }}
-                disabled={creating}
-                aria-label={`Quick-create worktree in ${project.name}`}
-                title={`Quick-create worktree in ${project.name}`}
-                className={cn(
-                  "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100 phone:opacity-100",
-                  isHovered ? "opacity-100" : "opacity-0",
-                )}
-                aria-busy={creating}
-              >
-                {creating ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Plus className="size-3.5" />
-                )}
-              </button>
-            )}
-            <DropdownMenu onOpenChange={onOpenChange}>
-              {triggerButton}
-              <DropdownMenuContent align="end" sideOffset={2}>
-                <ProjectMenuItems
-                  project={project}
-                  subject="project"
-                  removeArm={removeArm}
-                />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </>
+          <ProjectGroupActions
+            name={project.name}
+            identity={project.identity}
+            members={group}
+            isHovered={isHovered}
+            triggerRef={triggerRef}
+          />
         )}
       </div>
     </div>

@@ -23,6 +23,8 @@ Poses ride the URL:
   per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`
   Work PC). The desktop default is `tp:connected`, and the web
   default adds `sm`.
+- `?view=inbox`: open the sidebar in its inbox view (the toggle flips
+  it in-session either way).
 - Desktop: `?to=/devices` navigates the memory router after mount. Web:
   the path itself is the route (`/devices/...`).
 

@@ -1,9 +1,9 @@
 // The one route tree, served by both shells. The desktop mounts it on
 // a memory history, the browser on real history (deep links must
 // survive a reload, which is also why the web deploy rewrites every
-// path to index.html). A hostless client simply never reaches the
-// routes that belong to a local project: nothing in its sidebar links
-// there. Registering the router type once here is what lets every
+// path to index.html). A hostless client only ever reaches the
+// device-scoped twins: it has no local project for the /projects tree
+// to show. Registering the router type once here is what lets every
 // typed Link and navigate in the shared components check against the
 // same tree whichever shell mounts them.
 import {
@@ -29,7 +29,7 @@ import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { PROJECT_ROUTE_PATHS, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 const rootRoute = createRootRoute({
   component: AppShell,
@@ -40,16 +40,16 @@ const rootRoute = createRootRoute({
 // pages lands. With projects of its own the app resolves it to the
 // first worktree (or the first-run state). A hostless client has no
 // local forest, so its home is the account's devices (on a phone, the
-// forest page the tab bar opens on), redirected at load time (no frame
-// rendered) and replaced in history so Back never lands on the
-// dispatcher again.
+// inbox tab), redirected at load time (no frame rendered) and replaced
+// in history so Back never lands on the dispatcher again.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   beforeLoad: () => {
     if (!hasLocalHost) {
       throw redirect({
-        to: isPhoneLayout() ? "/forest" : "/devices",
+        to: isPhoneLayout() ? "/forest/$view" : "/devices",
+        params: { view: "inbox" },
         replace: true,
       });
     }
@@ -57,12 +57,15 @@ const indexRoute = createRoute({
   component: EmptyState,
 });
 
-// The phone layout's home tab: the forest as a page of its own (see
-// ForestPage). Off the root like settings. A wide viewport has the
-// forest in its sidebar, so the page only points at it.
+// The phone layout's two forest tabs, the inbox and the project tree,
+// as one route with the view as its param (see ForestPage). One route
+// rather than two so a tab flip re-renders the same page instance and
+// keeps its query graph, where a second route would remount it and
+// re-list every peer. Off the root like settings. A wide viewport has
+// the forest in its sidebar, so the page only points at it.
 const forestRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: "/forest",
+  path: "/forest/$view",
   component: ForestPage,
 });
 
@@ -72,9 +75,8 @@ const settingsRoute = createRoute({
   component: Settings,
 });
 
-// The pages below that only a machine with projects of its own can
-// reach are lazy, so a hostless client, whose sidebar never links to
-// them, does not download them at boot.
+// The pages below are lazy: a session that never opens one (a project
+// page, the tidy page) does not download it at boot.
 
 // App-wide, like settings: the tidy page spans every project rather than
 // scoping to one, so it hangs off the root instead of /projects.
@@ -146,55 +148,70 @@ const remoteScriptConsoleRoute = createRoute({
 // previous entity's data until its queries happened to refetch. The
 // router keys the match on this value, which is what the hand-written
 // `key={projectId}` wrappers used to do.
-const newWorktreeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/new",
-  component: lazyRouteComponent(
-    () => import("@/components/newWorktree/NewWorktree"),
-    "NewWorktree",
-  ),
-  remountDeps: ({ params }) => params,
-});
 
-const configureProjectRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/configure",
-  component: lazyRouteComponent(
-    () => import("@/components/configure/ConfigureProject"),
-    "ConfigureProject",
-  ),
-  remountDeps: ({ params }) => params,
-});
+// The project pages, each lazy once for both trees so the chunk loads
+// once, and each mounted twice: under /projects for this machine's
+// projects, under /devices/$deviceId for a peer's (withRemoteScope,
+// exactly like the worktree pages). A remote project header offers
+// the same actions a local one does, and they all land here.
+function projectRoutePair(
+  page: keyof typeof PROJECT_ROUTE_PATHS,
+  component: ReturnType<typeof lazyRouteComponent>,
+) {
+  const paths = PROJECT_ROUTE_PATHS[page];
+  return [
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: paths.local,
+      component,
+      remountDeps: ({ params }) => params,
+    }),
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path: paths.remote,
+      component: withRemoteScope(component),
+      remountDeps: ({ params }) => params,
+    }),
+  ];
+}
 
-const manageBranchesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/branches",
-  component: lazyRouteComponent(
-    () => import("@/components/manageBranches/ManageBranches"),
-    "ManageBranches",
+const projectRoutes = [
+  ...projectRoutePair(
+    "new",
+    lazyRouteComponent(
+      () => import("@/components/newWorktree/NewWorktree"),
+      "NewWorktree",
+    ),
   ),
-  remountDeps: ({ params }) => params,
-});
-
-const convertExternalRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/convert-external",
-  component: lazyRouteComponent(
-    () => import("@/components/convertExternal/ConvertExternalWorktrees"),
-    "ConvertExternalWorktrees",
+  ...projectRoutePair(
+    "configure",
+    lazyRouteComponent(
+      () => import("@/components/configure/ConfigureProject"),
+      "ConfigureProject",
+    ),
   ),
-  remountDeps: ({ params }) => params,
-});
-
-const worktreeLocationRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/projects/$projectId/worktree-location",
-  component: lazyRouteComponent(
-    () => import("@/components/worktreeLocation/WorktreeLocation"),
-    "WorktreeLocation",
+  ...projectRoutePair(
+    "branches",
+    lazyRouteComponent(
+      () => import("@/components/manageBranches/ManageBranches"),
+      "ManageBranches",
+    ),
   ),
-  remountDeps: ({ params }) => params,
-});
+  ...projectRoutePair(
+    "convertExternal",
+    lazyRouteComponent(
+      () => import("@/components/convertExternal/ConvertExternalWorktrees"),
+      "ConvertExternalWorktrees",
+    ),
+  ),
+  ...projectRoutePair(
+    "worktreeLocation",
+    lazyRouteComponent(
+      () => import("@/components/worktreeLocation/WorktreeLocation"),
+      "WorktreeLocation",
+    ),
+  ),
+];
 
 const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -238,11 +255,7 @@ const routeTree = rootRoute.addChildren([
   remotePullRequestDiffRoute,
   remoteCommitDiffRoute,
   remoteScriptConsoleRoute,
-  newWorktreeRoute,
-  configureProjectRoute,
-  manageBranchesRoute,
-  convertExternalRoute,
-  worktreeLocationRoute,
+  ...projectRoutes,
   worktreeRoute,
   scriptConsoleRoute,
   worktreeDiffRoute,

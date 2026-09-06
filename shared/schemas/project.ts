@@ -69,10 +69,6 @@ export const SetProjectSortPayloadSchema = z.object({
 export const SidebarViewSchema = z.enum(["projects", "inbox"]);
 export type SidebarView = z.infer<typeof SidebarViewSchema>;
 
-export const SetSidebarViewPayloadSchema = z.object({
-  view: SidebarViewSchema,
-});
-
 // Sidebar collapse state: toggles one project id in the persisted
 // collapsed set. A toggle (rather than a whole-list write) keeps the
 // read-modify-write in the main process, so a stale renderer cache

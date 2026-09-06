@@ -8,10 +8,11 @@ export function useRuntimeInfo() {
     queryKey: keys.runtimeInfo(),
     queryFn: () => api.runtime.info(),
     staleTime: Number.POSITIVE_INFINITY,
-    // runtime is a local-only module (remote: false), so under a remote
-    // scope this would only ever reject at the wire. Consumers already
-    // treat missing data as "no homedir to abbreviate against".
-    enabled: !remote,
-    meta: { errorTitle: "Couldn't read runtime info" },
+    // A peer that has not granted this device control refuses the
+    // read. Its pages treat missing data as "no path to spell", which
+    // is the honest answer, not an error to toast.
+    meta: remote
+      ? { silentError: true }
+      : { errorTitle: "Couldn't read runtime info" },
   });
 }

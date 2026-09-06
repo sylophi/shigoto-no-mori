@@ -1,18 +1,10 @@
-import { FolderPlus, Inbox, ListTree } from "lucide-react";
-import type { SidebarView } from "@shared/schemas";
-import {
-  SegmentedControl,
-  type SegmentedOption,
-} from "@/components/ui/segmented-control";
+import { FolderPlus } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { hasLocalHost } from "@/lib/localHost";
-import {
-  useSetSidebarView,
-  useSidebarView,
-} from "@/hooks/projects/useSidebarView";
 import { useUpdater } from "@/hooks/system/useUpdater";
 import { SidebarNavActions } from "./SidebarNavActions";
+import { SidebarViewToggle } from "./SidebarViewToggle";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 import { cn } from "@/lib/utils";
 
@@ -21,24 +13,11 @@ interface SidebarFooterProps {
   onToggleArrange: () => void;
 }
 
-const VIEW_OPTIONS = [
-  {
-    value: "inbox",
-    label: <Inbox aria-hidden className="size-3.5" />,
-    title: "One list across every project, newest work first",
-  },
-  {
-    value: "projects",
-    label: <ListTree aria-hidden className="size-3.5" />,
-    title: "Group worktrees by project",
-  },
-] as const satisfies ReadonlyArray<SegmentedOption<SidebarView>>;
-
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
 // SidebarToolbar, above the tree. A hostless client has no local tree
-// to lay out, arrange or add to, and no updater of its own, so its bar
-// carries the page-nav cluster alone.
+// to arrange or add to, and no updater of its own, so its bar carries
+// the toggle and the page-nav cluster alone.
 export function SidebarFooter(props: SidebarFooterProps) {
   return hasLocalHost ? <LocalFooter {...props} /> : <PeerFooter />;
 }
@@ -46,6 +25,7 @@ export function SidebarFooter(props: SidebarFooterProps) {
 function PeerFooter() {
   return (
     <div className={SIDEBAR_FOOTER_BAR}>
+      <SidebarViewToggle />
       <div className="flex-1" />
       <SidebarNavActions />
     </div>
@@ -54,8 +34,6 @@ function PeerFooter() {
 
 function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
   const { openAddProject } = useOverlays();
-  const view = useSidebarView();
-  const { mutate: setView } = useSetSidebarView();
   const { state: updaterState } = useUpdater();
   const updateReady = updaterState?.kind === "ready";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
@@ -77,14 +55,7 @@ function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
   }
   return (
     <div className={SIDEBAR_FOOTER_BAR}>
-      <SegmentedControl<SidebarView>
-        value={view}
-        onChange={setView}
-        options={VIEW_OPTIONS}
-        aria-label="Sidebar layout"
-        aria-keyshortcuts="Tab"
-        optionClassName="px-1.5 py-1"
-      />
+      <SidebarViewToggle />
       <div className="flex-1" />
       <SimpleTooltip tip="Add project (⌘N)">
         <button

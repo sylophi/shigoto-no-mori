@@ -12,10 +12,15 @@ import { useEffect, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
-import { isTabRoute, PhoneTabBar } from "@/components/PhoneTabBar";
+import {
+  forestTabFor,
+  isTabRoute,
+  PhoneTabBar,
+} from "@/components/PhoneTabBar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
@@ -41,6 +46,8 @@ export function AppShell() {
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  // The forest tab a stacked page returns to on a phone.
+  const forestTab = forestTabFor(useSidebarView());
   const [sidebarWidth, setSidebarWidth] = useState<number>(readStoredWidth);
 
   // The layout rides <html> as a data attribute, like the theme
@@ -123,8 +130,8 @@ export function AppShell() {
              wide viewport keeps the sidebar. Thumb-height on purpose. */
           <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-1">
             <BackButton
-              label="Forest"
-              onClick={() => void navigate({ to: "/forest" })}
+              label={forestTab.label}
+              onClick={() => void navigate(forestTab.to)}
               className="min-h-10 text-sm"
             />
           </header>

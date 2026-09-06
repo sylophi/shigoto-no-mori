@@ -1,8 +1,12 @@
 // Every registered remote device's forest at once, for the sidebar's
 // merged tree -- the only place a peer's forest is read, since remote
 // work is meant to look local rather than live on a page of its own.
-// One projects query per device and one worktrees query per (device,
-// project). Both scope the SHARED local options builders to a peer
+// One projects query per device, then one worktrees, one pull-request
+// map and one project-config query per (device, project) -- the same
+// three reads the local sidebar makes per project, so the inbox can
+// file a peer's worktree exactly as it files a local one (its PR tells
+// merged from live, its config says whether the primary shows). All
+// scope the SHARED local options builders to a peer
 // (they derive the key registry from the device id via queryKeysFor,
 // and their queryFns call that device's api instead of window.api), so
 // a peer's rows land under the same keys the device-scoped worktree
@@ -22,8 +26,10 @@
 // stale for good), gated by the stale window below so a quick alt-tab
 // does not re-list every peer.
 import { useQueries } from "@tanstack/react-query";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
+import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
+import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";
@@ -63,6 +69,13 @@ export interface RemoteForestItem {
   tone: StatusTone;
   project: Project;
   worktrees: Worktree[];
+  // Branch -> PR on that device, what its own sidebar reads for the
+  // pills and the inbox's merged shelf. Empty until it lands.
+  pullRequests: Record<string, PullRequest>;
+  // That project's inbox opt-in for its primary checkout
+  // (ShigomoriConfigSchema.showPrimaryInInbox), read off the peer so a
+  // project shows its root the same way in every sidebar.
+  showPrimaryInInbox: boolean;
   // A failed worktree listing, folded into the sidebar's coalesced
   // fan-out toast beside the local failures.
   worktreesError: boolean;
@@ -86,12 +99,18 @@ export interface RemoteForestsOptions {
   // forests fresh: on a shell where it can unmount (the phone layout's
   // forest page) its remount must re-list.
   refetchOnMount?: boolean;
+  // True while the inbox shows: its per-project config read
+  // (showPrimaryInInbox) is the one fact the tree never needs, so it
+  // is asked for only then rather than on every device and project at
+  // boot.
+  inboxFacts?: boolean;
 }
 
 export function useRemoteForests(
   options: RemoteForestsOptions = {},
 ): RemoteForests {
-  const refetch = { ...CALM_REFETCH, ...options };
+  const { inboxFacts = false, ...overrides } = options;
+  const refetch = { ...CALM_REFETCH, ...overrides };
   const devices = useRemoteDevices();
   const projectQueries = useQueries({
     queries: devices.map((device) => ({
@@ -101,12 +120,13 @@ export function useRemoteForests(
     combine: combineFanOut,
   });
   // Flattened (device, project) pairs, so the worktree fan-out is one
-  // flat useQueries whatever shape the forests have.
+  // flat useQueries whatever shape the forests have. A checkout the
+  // peer reports missing is left out, the same gate the local fan-outs
+  // apply: every read on it would only throw.
   const pairs = devices.flatMap((device, index) =>
-    (projectQueries[index]?.data ?? []).map((project) => ({
-      device,
-      project,
-    })),
+    (projectQueries[index]?.data ?? [])
+      .filter((project) => project.pathExists !== false)
+      .map((project) => ({ device, project })),
   );
   const worktreeQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
@@ -115,6 +135,36 @@ export function useRemoteForests(
         api: device.api,
       }),
       ...refetch,
+    })),
+    combine: combineFanOut,
+  });
+  // Both served from the peer's own caches (the PR sweep's map, the
+  // project.json read), so neither costs it a git or gh call. Neither
+  // refetches on its own: the PR map refreshes off the peer's
+  // projectPullRequestsRefreshed push (remoteHostWatch), the way the
+  // local map does off the local wire, and the config only ever changes
+  // through a Configure save, which invalidates it.
+  const pullRequestQueries = useQueries({
+    queries: pairs.map(({ device, project }) => ({
+      ...projectPullRequestsQueryOptions(project.id, {
+        deviceId: device.deviceId,
+        api: device.api,
+      }),
+      meta: { silentError: true },
+    })),
+    combine: combineFanOut,
+  });
+  const configQueries = useQueries({
+    queries: pairs.map(({ device, project }) => ({
+      ...shigomoriConfigQueryOptions(project.id, {
+        deviceId: device.deviceId,
+        api: device.api,
+      }),
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      meta: { silentError: true },
+      ...(inboxFacts ? {} : { enabled: false }),
     })),
     combine: combineFanOut,
   });
@@ -128,6 +178,9 @@ export function useRemoteForests(
         tone: status.tone,
         project,
         worktrees: worktreeQueries[index]?.data ?? [],
+        pullRequests: pullRequestQueries[index]?.data ?? {},
+        showPrimaryInInbox:
+          configQueries[index]?.data?.showPrimaryInInbox === true,
         worktreesError: worktreeQueries[index]?.error != null,
       };
     }),

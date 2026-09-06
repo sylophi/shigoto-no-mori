@@ -9,17 +9,20 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { notifyError } from "@/lib/toast";
 import type {
   CarryOverEntry,
   LauncherCommand,
+  Project,
   ShigomoriConfig,
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
+import { CreateOnSection } from "./CreateOnSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
 import {
@@ -80,6 +83,9 @@ function toConfig(
 interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
+  // The project itself, for the "Create on" pick (its identity names
+  // the group, and the picker matches devices on it).
+  project: Project;
   initialConfig: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
 }
@@ -87,11 +93,15 @@ interface ConfigureFormProps {
 export function ConfigureForm({
   projectId,
   projectPath,
+  project,
   initialConfig,
   resolvedDefaultBranch,
 }: ConfigureFormProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
+  // Revealing the folder opens THIS machine's file manager on the
+  // path, which only means something for a project on this machine.
+  const { remote } = useHostScope();
   const navigate = useNavigate();
   const write = useShigomoriWrite();
 
@@ -176,18 +186,20 @@ export function ConfigureForm({
                 className="min-w-0 flex-1 truncate"
               />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                window.api.shell
-                  .showItemInFolder(projectPath)
-                  .catch((err) => notifyError("Couldn't reveal folder", err));
-              }}
-            >
-              <FolderOpen />
-              Reveal in Finder
-            </Button>
+            {!remote && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  window.api.shell
+                    .showItemInFolder(projectPath)
+                    .catch((err) => notifyError("Couldn't reveal folder", err));
+                }}
+              >
+                <FolderOpen />
+                Reveal in Finder
+              </Button>
+            )}
           </section>
 
           <section className="space-y-3">
@@ -234,6 +246,8 @@ export function ConfigureForm({
               description="Lists it alongside the worktrees. The project view always shows it."
             />
           </section>
+
+          <CreateOnSection project={project} />
 
           <CarryOverSection
             projectId={projectId}

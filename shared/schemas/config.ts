@@ -3,6 +3,7 @@ import { isSafeRelPath } from "../gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
+import { SidebarViewSchema } from "./project";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -327,6 +328,19 @@ export const ClientConfigSchema = z.object({
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.
   forwardLocalPorts: z.record(z.string(), PortNumberSchema).optional(),
+  // Which device a project header's `+` creates on when the project
+  // spans several: device id by repo identity
+  // (renderer/hooks/config/useQuickCreateDevice.ts is the only reader
+  // and writer). Keyed by identity rather than project id because the
+  // merged header IS the identity group, and the same pick then holds
+  // from whichever device the group is viewed. Absent means the first
+  // live device, this machine first.
+  quickCreateDevices: z.record(z.string(), z.string()).optional(),
+  // Which sidebar layout this window shows: the classic tree, or the
+  // flat cross-project inbox. A preference of the window rather than
+  // of a host, so a hostless client keeps one too. Absent means the
+  // tree.
+  sidebarView: SidebarViewSchema.optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 

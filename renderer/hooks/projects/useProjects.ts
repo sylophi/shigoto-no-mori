@@ -14,28 +14,17 @@ import {
   queryKeys,
   queryKeysFor,
 } from "@/lib/queryKeys";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
-
-// Which device's projects to read, and over which api. Both default to
-// the local machine, so a scope-less call reads this machine's list; a
-// scoped caller (a useHostScope consumer, the sidebar's remote fan-out)
-// passes a peer's id and api and that device's data caches under its
-// own id.
-export type ProjectsScope = Partial<HostScope>;
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import {
+  resolveForestScope,
+  type HostForestScope,
+} from "@/hooks/worktrees/useWorktrees";
 
 // Single source of truth for the projects-list query. The key registry
 // is derived from the scope's device id, so the key and the queryFn can
-// never name different devices.
-//
-// The api falls back to window.api only when the KEY is absent (a
-// scope-less local call). A caller passing `api: undefined` means "this
-// device has no connection", and a default parameter would silently
-// swap the local api in, and every offline device would then fetch and
-// cache the LOCAL forest under its own device key, mirroring this
-// machine's projects into the merged sidebar once per offline peer.
-export function projectsQueryOptions(scope: ProjectsScope = {}) {
-  const deviceId = scope.deviceId ?? localDeviceId;
-  const api = "api" in scope ? scope.api : window.api;
+// never name different devices. The scope rule is resolveForestScope's.
+export function projectsQueryOptions(scope: HostForestScope = {}) {
+  const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<Project[]>({
     queryKey: queryKeysFor(deviceId).projects(),
     queryFn: () => (api ? api.projects.list() : []),
@@ -103,8 +92,14 @@ export function useRemoveProject() {
       // cache: its mounted queries (config, branches, diff, worktree
       // state, ...) would otherwise refetch against the unregistered id
       // on the next focus and each toast an "Unknown project" error.
+      // Either tree: the local one, or the device twin when the
+      // removal ran on a peer.
       const { pathname } = router.state.location;
-      if (pathname.startsWith(`/projects/${id}`)) {
+      const prefix =
+        deviceId === localDeviceId
+          ? `/projects/${id}`
+          : `/devices/${deviceId}/projects/${id}`;
+      if (pathname.startsWith(prefix)) {
         await router.navigate({ to: "/" });
       }
       await queryClient.invalidateQueries({

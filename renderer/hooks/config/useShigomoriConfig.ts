@@ -1,19 +1,27 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
-import { combineFanOut } from "@/hooks/worktrees/useWorktrees";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import {
+  combineFanOut,
+  resolveForestScope,
+  type HostForestScope,
+} from "@/hooks/worktrees/useWorktrees";
+import { queryKeysFor } from "@/lib/queryKeys";
 
-function shigomoriConfigQueryOptions(
+// Scope rule as worktreesQueryOptions: a peer's config caches under its
+// own device id, and a device with no session never fetches.
+export function shigomoriConfigQueryOptions(
   projectId: string | null,
-  { api, keys }: HostScope,
+  scope: HostForestScope = {},
 ) {
+  const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<ShigomoriConfig | null>({
-    queryKey: keys.shigomoriConfig(projectId),
+    queryKey: queryKeysFor(deviceId).shigomoriConfig(projectId),
     queryFn: () => {
-      if (!projectId) return null;
+      if (!projectId || !api) return null;
       return api.shigomori.read(projectId);
     },
-    enabled: projectId !== null,
+    enabled: projectId !== null && api !== undefined && deviceId !== "",
     meta: { errorTitle: "Couldn't load project config" },
   });
 }

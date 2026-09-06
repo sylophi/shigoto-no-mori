@@ -34,6 +34,34 @@ export const WORKTREE_ROUTE_PATHS = {
   },
 } as const;
 
+// The project pages' route paths, the same twin shape: each exists
+// under /projects for this machine's projects and under
+// /devices/$deviceId for a peer's. A remote project's header offers the
+// same actions a local one does (v2: remote feels local), and every one
+// of them lands on one of these.
+export const PROJECT_ROUTE_PATHS = {
+  new: {
+    local: "/projects/$projectId/new",
+    remote: "/devices/$deviceId/projects/$projectId/new",
+  },
+  configure: {
+    local: "/projects/$projectId/configure",
+    remote: "/devices/$deviceId/projects/$projectId/configure",
+  },
+  branches: {
+    local: "/projects/$projectId/branches",
+    remote: "/devices/$deviceId/projects/$projectId/branches",
+  },
+  convertExternal: {
+    local: "/projects/$projectId/convert-external",
+    remote: "/devices/$deviceId/projects/$projectId/convert-external",
+  },
+  worktreeLocation: {
+    local: "/projects/$projectId/worktree-location",
+    remote: "/devices/$deviceId/projects/$projectId/worktree-location",
+  },
+} as const;
+
 type RouteParams = Record<string, string>;
 
 // Fills a route template's `$param` segments with values, for the
