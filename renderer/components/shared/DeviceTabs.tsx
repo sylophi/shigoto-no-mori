@@ -3,8 +3,8 @@
 // the tidy page) leads its header with one tab per device and mounts
 // its body under the picked device's HostScope, so the page needs no
 // remote-awareness of its own. Each tab is the pill the worktree
-// header marks a device with (DeviceChip; its connection on the dot,
-// this device has none to report), the picked one in the accent fill
+// header marks a device with (DeviceChip, with its connection on the
+// dot, which this device has no need of), the picked one in the accent fill
 // every selection in the app wears. One row that scrolls sideways when
 // the devices outnumber the width, never wrapping, so the title row
 // below keeps its place however many machines there are. Left and
@@ -18,7 +18,11 @@ import {
   commandAccessOf,
   usePeerCommandAccess,
 } from "@/hooks/remote/useCommandAccess";
-import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import {
+  HostScopeProvider,
+  LocalHostScope,
+  type HostApi,
+} from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { hasLocalHost } from "@/lib/localHost";
@@ -46,7 +50,7 @@ export interface DeviceTab {
 // Every device on the account as a tab: this device first (a hostless
 // client has none), then the reachable peers, then the rest, so the
 // machines that can answer sit where the eye starts. The one list
-// behind every device pick; useDeviceTargets layers a repo's checkout
+// behind every device pick. useDeviceTargets layers a repo's checkout
 // per device on top of it. A peer is granted while its verdict is
 // still in flight, the sidebar's rule, rather than flashing a refusal
 // that turns into a body a moment later.
@@ -131,11 +135,13 @@ export function DeviceTabBar({
 }) {
   const listRef = useRef<HTMLDivElement>(null);
 
-  // On a pick: a route that opens on the last of many devices, or an
-  // arrow key walking past the edge.
+  // On a pick (a route that opens on the last of many devices, an
+  // arrow key walking past the edge) and when the row reorders around
+  // it (a peer dropping offline moves to the end).
+  const order = tabs.map((tab) => tab.deviceId).join(" ");
   useEffect(() => {
     if (listRef.current) reveal(listRef.current);
-  }, [selectedId]);
+  }, [selectedId, order]);
   // And when the row itself changes width: a window narrowed after
   // the pick.
   useEffect(() => {
@@ -212,9 +218,11 @@ export function DeviceTabBar({
 // The body under the picked tab: the page itself under that device's
 // scope, or a note where the page can't be. An offline peer keeps its
 // tab and says so, rather than vanishing and leaving "where did the
-// Thinkpad go" open; a peer that will not run commands from here says
-// where the grant is made, since every page here exists to change
-// something. `subject` is what the page is about, in the peer's
+// Thinkpad go" open (where the page knows the peer at all: a project
+// page lists a peer by its checkout, which an asleep peer never asked
+// this session can't report). A peer that will not run commands from
+// here says where the grant is made, since every page here exists to
+// change something. `subject` is what the page is about, in the peer's
 // possessive ("its copy of this project", "its forest"). Rendered at
 // one tree position whether or not there is a choice yet, so a tab
 // bar arriving after the body (the peers' answers land late) never
@@ -228,26 +236,30 @@ export function DeviceTabPanel({
   subject: string;
   children: ReactNode;
 }) {
+  // This device is re-pinned rather than left to the surrounding
+  // scope: under a peer's /devices route the page already sits in that
+  // peer's scope, and its "this device" tab must not. Keyed per device
+  // either way: a body seeds from the picked device's own answers, so
+  // carrying state across would show one device's data under another's.
+  if (tab.isThisDevice) {
+    return <LocalHostScope key={tab.deviceId}>{children}</LocalHostScope>;
+  }
   const note =
-    tab.block === "offline" || (!tab.isThisDevice && tab.api === undefined)
+    tab.api === undefined || tab.block === "offline"
       ? `${tab.label} is offline, and ${subject} loads when it reconnects.`
       : tab.block === "no-grant"
         ? peerReadOnlyNote(tab.label)
         : null;
-  if (note !== null) {
+  if (note !== null || tab.api === undefined) {
     return (
       <div className="p-6">
         <EmptyPanel>{note}</EmptyPanel>
       </div>
     );
   }
-  // Keyed per device: a body seeds from the picked device's own
-  // answers, so carrying state across would show one device's data
-  // under another's. This device gets no provider at all, the default
-  // scope being its own.
   return (
-    <MaybeHostScope key={tab.deviceId} deviceId={tab.deviceId} api={tab.api}>
+    <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={tab.api}>
       {children}
-    </MaybeHostScope>
+    </HostScopeProvider>
   );
 }

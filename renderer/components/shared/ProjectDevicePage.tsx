@@ -62,18 +62,23 @@ export function ProjectDevicePage({
     return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
+  // A pick only means something with a bar to make it on. Without one
+  // (the peers' answers still landing, or nothing to choose between)
+  // the body is the routed project under the routed device, so a
+  // missing local checkout can never swap the page to a peer's copy
+  // unannounced. The scoped device is what the first holder resolves
+  // to anyway, so the panel keeps its key when the bar appears.
   const tabbed = holders.length > 1 && picked !== undefined;
-  // The body's device while the peers' answers are still landing (or
-  // there is only this one): the scoped device itself, which is what
-  // the first holder resolves to, so the panel keeps its key.
-  const shown: DeviceTab = picked ?? {
-    deviceId: scope.deviceId,
-    label: "",
-    isThisDevice: !scope.remote,
-    status: null,
-    api: scope.api,
-    block: undefined,
-  };
+  const shown: DeviceTab = tabbed
+    ? picked
+    : {
+        deviceId: scope.deviceId,
+        label: "",
+        isThisDevice: !scope.remote,
+        status: null,
+        api: scope.api,
+        block: undefined,
+      };
 
   return (
     <div className="flex h-full flex-col">
@@ -104,14 +109,17 @@ export function ProjectDevicePage({
                 </span>
               </SimpleTooltip>
             )}
-            {/* With tabs they name the device; without them the chip
+            {/* With tabs they name the device. Without them the chip
                 does, for a peer's project (nothing locally). */}
             {!tabbed && <DeviceChip />}
           </>
         }
       />
       <DeviceTabPanel tab={shown} subject="its copy of this project">
-        {children(picked?.project ?? project, tabbed ? picked : undefined)}
+        {children(
+          tabbed ? picked.project : project,
+          tabbed ? picked : undefined,
+        )}
       </DeviceTabPanel>
     </div>
   );

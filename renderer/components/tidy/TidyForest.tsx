@@ -11,6 +11,7 @@ import {
   DeviceTabPanel,
   useDeviceTabs,
   usePickedDevice,
+  type DeviceTab,
 } from "@/components/shared/DeviceTabs";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
@@ -57,10 +58,21 @@ const IDLE: RowStatus = { kind: "idle" };
 // rides the host scope the tab mounts.
 export function TidyForest() {
   const tabs = useDeviceTabs();
-  // Opens on this device; a hostless client, which has none, opens on
+  // Opens on this device. A hostless client, which has none, opens on
   // its first peer.
   const [picked, pick] = usePickedDevice(tabs, localDeviceId);
   const tabbed = tabs.length > 1 && picked !== undefined;
+  // One tree position for the body whether or not the registry has
+  // answered yet (a hostless client's list starts empty): this device,
+  // the default scope, until there is a pick.
+  const shown: DeviceTab = picked ?? {
+    deviceId: localDeviceId,
+    label: "",
+    isThisDevice: true,
+    status: null,
+    api: window.api,
+    block: undefined,
+  };
   return (
     <div data-doubutsu-page="tidy" className="flex h-full flex-col">
       <PageHeader
@@ -77,13 +89,9 @@ export function TidyForest() {
           ) : undefined
         }
       />
-      {picked === undefined ? (
+      <DeviceTabPanel tab={shown} subject="its forest">
         <TidyBody />
-      ) : (
-        <DeviceTabPanel tab={picked} subject="its forest">
-          <TidyBody />
-        </DeviceTabPanel>
-      )}
+      </DeviceTabPanel>
     </div>
   );
 }
