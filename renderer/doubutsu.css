@@ -40,6 +40,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
+ *      device-tab                shared/ProjectDevicePage.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
@@ -557,6 +558,15 @@
   color: var(--primary-foreground);
   box-shadow: var(--doubutsu-sticker-shadow);
   transform: rotate(-4deg);
+}
+
+/* The device pills on a project page's header: the picked one wears
+   the accent fill every selection here does, which needs nothing from
+   this file. The rest are quiet card pills bounded by a hairline in
+   v1, and hairlines are what the reset above strips, so they take the
+   muted fill the action chips get and read as pickable again. */
+.doubutsu [data-slot="device-tab"][aria-selected="false"] {
+  background-color: var(--muted);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
