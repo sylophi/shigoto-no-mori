@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -14,8 +13,6 @@ import {
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
 import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
@@ -87,25 +84,12 @@ const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 // branch list, the folder collision check and the create all follow
 // the pick with no remote-awareness of their own.
 export function NewWorktree() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-
   return (
-    <ProjectDevicePage project={project} title="New worktree">
+    <ProjectDevicePage title="New worktree">
       {(scoped, tab) => (
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           <div className="flex max-w-xl flex-col gap-7">
-            {/* Remounted per device: the seeded fields (picked name,
-                default branch) and the mode come from the target's own
-                answers, so carrying the previous machine's state across
-                would show one device's branch under another's path. */}
             <NewWorktreeForm
-              key={scoped.id}
               projectId={scoped.id}
               project={scoped}
               // Undefined with no choice of device: the form keeps the

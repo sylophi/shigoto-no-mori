@@ -1,7 +1,9 @@
 // The full-page header shared by the top-level pages (Settings, Tidy,
-// Devices, and the web shell's pages): an eyebrow line, the page title,
-// and the doubutsu watermark glyph. One component so the watermark class
-// string and the header chrome live in exactly one place.
+// Devices, the project pages, and the web shell's pages): an eyebrow
+// line, the page title, optional trailing marks, an optional device
+// tab bar leading it, and the doubutsu watermark glyph. One component
+// so the header chrome, the inset and the tab wiring live in exactly
+// one place.
 import type React from "react";
 import { cn } from "@/lib/utils";
 
@@ -18,39 +20,54 @@ export const PAGE_HEADER_PADDING =
 export function PageHeader({
   eyebrow,
   title,
-  watermark,
+  trailing,
   tabs,
+  watermark,
 }: {
   eyebrow: React.ReactNode;
   title: React.ReactNode;
-  // The doubutsu-only kanji glyph behind the header's right edge.
-  watermark: string;
-  // A device tab bar leading the header (DeviceTabs), on the window's
-  // traffic-light line: everything under it is the picked device's.
+  // Marks at the title row's right edge (a device chip, a terrier paw).
+  trailing?: React.ReactNode;
+  // A device tab bar (DeviceTabs) leading the header on the window's
+  // traffic-light line, closer to the edge than a title ever sits:
+  // everything under it is the picked device's.
   tabs?: React.ReactNode;
+  // The doubutsu-only kanji glyph behind the header's right edge.
+  watermark?: string;
 }) {
   return (
     <header
       className={cn(
-        "relative flex flex-col overflow-hidden border-b border-border px-6 pb-4 phone:px-4 phone:pb-3",
-        tabs ? "pt-4 phone:pt-3" : "pt-7 phone:pt-4",
+        "relative flex flex-col overflow-hidden border-b border-border",
+        PAGE_HEADER_PADDING,
+        tabs && "pt-4 phone:pt-3",
       )}
     >
-      {/* Above the watermark, like the title: a long row's last tabs
-          run under the glyph otherwise. */}
-      {tabs && <div className="relative z-[1]">{tabs}</div>}
-      <div className="relative z-[1] flex min-w-0 flex-col">
-        <span className="truncate text-xs text-muted-foreground">
-          {eyebrow}
-        </span>
-        <h1 className="truncate text-lg font-medium tracking-tight">{title}</h1>
+      {/* Cancels the inset so the bar (which carries it as padding)
+          scrolls out under the header's edge. Above the watermark, like
+          the title: a long row's last tabs would run under the glyph. */}
+      {tabs && (
+        <div className="relative z-[1] -mx-6 mb-3 phone:-mx-4">{tabs}</div>
+      )}
+      <div className="relative z-[1] flex items-center gap-3">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate text-xs text-muted-foreground">
+            {eyebrow}
+          </span>
+          <h1 className="truncate text-lg font-medium tracking-tight">
+            {title}
+          </h1>
+        </div>
+        {trailing}
       </div>
-      <span
-        aria-hidden
-        className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
-      >
-        {watermark}
-      </span>
+      {watermark && (
+        <span
+          aria-hidden
+          className="doubutsu-only pointer-events-none absolute -top-6 right-2 text-[120px] leading-none font-black text-[var(--doubutsu-watermark)] opacity-10 select-none"
+        >
+          {watermark}
+        </span>
+      )}
     </header>
   );
 }

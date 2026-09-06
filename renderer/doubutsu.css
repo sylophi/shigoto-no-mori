@@ -40,7 +40,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
- *      device-tab                shared/DeviceTabs.tsx
+ *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
@@ -560,12 +560,12 @@
   transform: rotate(-4deg);
 }
 
-/* The device pills on a project page's header: the picked one wears
-   the accent fill every selection here does, which needs nothing from
-   this file. The rest are quiet card pills bounded by a hairline in
-   v1, and hairlines are what the reset above strips, so they take the
-   muted fill the action chips get and read as pickable again. */
-.doubutsu [data-slot="device-tab"][aria-selected="false"] {
+/* The device pill (the worktree header's chip, a project page's
+   device tabs): the picked tab keeps the accent fill every selection
+   here wears; every other pill lost its hairline with the rest and
+   takes the chip's muted fill instead, so it reads as a pill on the
+   band. */
+.doubutsu [data-slot="device-chip"]:not([aria-selected="true"]) {
   background-color: var(--muted);
 }
 

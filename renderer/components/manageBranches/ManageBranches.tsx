@@ -2,29 +2,18 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useBranches } from "@/hooks/git/useBranches";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
 
 export function ManageBranches() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-
   return (
-    <ProjectDevicePage project={project} title="Manage branches">
-      {(scoped) => <BranchesBody key={scoped.id} project={scoped} />}
+    <ProjectDevicePage title="Manage branches">
+      {(scoped) => <BranchesBody project={scoped} />}
     </ProjectDevicePage>
   );
 }

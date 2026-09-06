@@ -133,6 +133,9 @@ export function ProjectGroupActions({
     (live.length === 1 ? live[0] : undefined);
   const submenus = live.filter((member) => member !== inline);
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
+  // A group of one has nothing to name devices for: no pick, no
+  // labels, the actions plain.
+  const spansDevices = members.length > 1;
   if (inline === undefined && live.length === 0) return null;
 
   return (
@@ -142,7 +145,7 @@ export function ProjectGroupActions({
           <QuickCreateButton
             project={creator.project}
             isHovered={isHovered}
-            deviceLabel={members.length > 1 ? creator.deviceLabel : undefined}
+            deviceLabel={spansDevices ? creator.deviceLabel : undefined}
           />
         </MaybeHostScope>
       )}
@@ -163,7 +166,7 @@ export function ProjectGroupActions({
           }
         />
         <DropdownMenuContent align="end" sideOffset={2}>
-          {members.length > 1 && (
+          {spansDevices && (
             <>
               <QuickCreatePick
                 identity={identity}
@@ -182,7 +185,7 @@ export function ProjectGroupActions({
                   member's copy rather than the group. The group is
                   what lets the label render (Base UI ties them). */}
               <DropdownMenuGroup>
-                {members.length > 1 && (
+                {spansDevices && (
                   <DropdownMenuLabel>{inline.deviceLabel}</DropdownMenuLabel>
                 )}
                 <ProjectMenuItems

@@ -305,28 +305,30 @@ export function ConfigureForm({
               {/* The Settings link opens THIS machine's launch tools, which
                   say nothing about a peer's. A remote project's tools run
                   from the window on that device, so say that instead. */}
-              {remote ? (
-                <p className="text-xs text-muted-foreground">
-                  Tools specific to this project, launched from {deviceLabel}
-                  &apos;s own window.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Tools specific to this project. For tools you want available
-                  in every project (editors, agents), use{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectSettingsTab(LAUNCH_TAB);
-                      void navigate({ to: "/settings" });
-                    }}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Settings
-                  </button>
-                  .
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                {remote ? (
+                  <>
+                    Tools specific to this project, launched from {deviceLabel}
+                    &apos;s own window.
+                  </>
+                ) : (
+                  <>
+                    Tools specific to this project. For tools you want available
+                    in every project (editors, agents), use{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectSettingsTab(LAUNCH_TAB);
+                        void navigate({ to: "/settings" });
+                      }}
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Settings
+                    </button>
+                    .
+                  </>
+                )}
+              </p>
             </div>
             {form.launchers.length === 0 ? (
               <p className="text-xs text-muted-foreground/70">

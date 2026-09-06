@@ -32,7 +32,7 @@ import { shigomoriConfigQueryOptions } from "@/hooks/config/useShigomoriConfig";
 import { projectPullRequestsQueryOptions } from "@/hooks/projects/useProjectPullRequests";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import type { RemoteDeviceApi } from "@/lib/remote/devices";
+import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 import {
   combineFanOut,
   worktreesQueryOptions,
@@ -106,11 +106,20 @@ export interface RemoteForestsOptions {
   inboxFacts?: boolean;
 }
 
-export function useRemoteForests(
-  options: RemoteForestsOptions = {},
-): RemoteForests {
-  const { inboxFacts = false, ...overrides } = options;
-  const refetch = { ...CALM_REFETCH, ...overrides };
+export interface RemoteProjectPair {
+  device: RemoteDevice;
+  project: Project;
+}
+
+// The projects half alone: every peer's registered projects as
+// flattened (device, project) pairs, for the callers that only match a
+// repo per device (the device targets behind the tab bars and the
+// "Create on" pick) and have no use for the worktree, PR and config
+// fan-outs the forests add on top. The forests compose this, so the
+// two can never list different projects.
+export function useRemoteProjects(
+  refetch: { staleTime?: number; refetchOnMount?: boolean } = CALM_REFETCH,
+): { pairs: RemoteProjectPair[]; loading: boolean } {
   const devices = useRemoteDevices();
   const projectQueries = useQueries({
     queries: devices.map((device) => ({
@@ -119,15 +128,26 @@ export function useRemoteForests(
     })),
     combine: combineFanOut,
   });
+  // A checkout the peer reports missing is left out, the same gate the
+  // local fan-outs apply: every read on it would only throw.
+  return {
+    pairs: devices.flatMap((device, index) =>
+      (projectQueries[index]?.data ?? [])
+        .filter((project) => project.pathExists !== false)
+        .map((project) => ({ device, project })),
+    ),
+    loading: projectQueries.some((query) => query.isLoading),
+  };
+}
+
+export function useRemoteForests(
+  options: RemoteForestsOptions = {},
+): RemoteForests {
+  const { inboxFacts = false, ...overrides } = options;
+  const refetch = { ...CALM_REFETCH, ...overrides };
   // Flattened (device, project) pairs, so the worktree fan-out is one
-  // flat useQueries whatever shape the forests have. A checkout the
-  // peer reports missing is left out, the same gate the local fan-outs
-  // apply: every read on it would only throw.
-  const pairs = devices.flatMap((device, index) =>
-    (projectQueries[index]?.data ?? [])
-      .filter((project) => project.pathExists !== false)
-      .map((project) => ({ device, project })),
-  );
+  // flat useQueries whatever shape the forests have.
+  const { pairs, loading: projectsLoading } = useRemoteProjects(refetch);
   const worktreeQueries = useQueries({
     queries: pairs.map(({ device, project }) => ({
       ...worktreesQueryOptions(project.id, {
@@ -185,7 +205,6 @@ export function useRemoteForests(
       };
     }),
     loading:
-      projectQueries.some((query) => query.isLoading) ||
-      worktreeQueries.some((query) => query.isLoading),
+      projectsLoading || worktreeQueries.some((query) => query.isLoading),
   };
 }

@@ -2,12 +2,9 @@ import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@/lib/projectPaths";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -27,17 +24,9 @@ const proposedName = (worktree: Worktree): string =>
   worktree.detached ? worktree.branch : sanitizeBranchForPath(worktree.branch);
 
 export function ConvertExternalWorktrees() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-
   return (
-    <ProjectDevicePage project={project} title="Convert external worktrees">
-      {(scoped) => <ConvertExternalBody key={scoped.id} project={scoped} />}
+    <ProjectDevicePage title="Convert external worktrees">
+      {(scoped) => <ConvertExternalBody project={scoped} />}
     </ProjectDevicePage>
   );
 }

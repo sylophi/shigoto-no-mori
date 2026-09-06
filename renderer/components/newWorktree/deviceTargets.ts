@@ -1,42 +1,25 @@
-// Which machines can host a new worktree for THIS repo, as one list the
-// picker renders straight through: this device first (when the client
-// has one), then every enrolled peer, each carrying the single fact
-// that decides whether it can be picked at all.
+// Which machines hold THIS repo: the device tabs (shared/DeviceTabs)
+// with each device's checkout of the repo laid on top, for the pages
+// whose tabs are the devices holding a project and for the header's
+// "Create on" pick. Identity (shared/repoIdentity.mts) is what "has
+// this repo" means -- the same match the merged sidebar and the
+// pull-here control use -- so a peer with a differently-named clone
+// still counts and a same-named unrelated repo never does.
 //
-// A peer qualifies on three counts, checked in the order the user would
-// ask them: is it reachable, does it have this repo, and will it let us
-// run commands (assumed while its verdict is still in flight, the
-// sidebar's rule, rather than flashing a refusal that lifts a moment
-// later). Identity (shared/repoIdentity.mts) is what "has this
-// repo" means -- the same match the merged sidebar and the pull-here
-// control use -- so a peer with a differently-named clone still counts
-// and a same-named unrelated repo never does.
-//
-// The page serves both trees: under /projects the project is this
+// The pages serve both trees: under /projects the project is this
 // machine's, under a /devices twin it is the peer's. The scope says
 // which, and the list reads the same either way -- the scoped device's
 // own checkout is the project in hand, every other device's is its
 // identity match.
 import type { Project } from "@shared/schemas";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
-import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useRemoteProjects } from "@/hooks/remote/useRemoteForests";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { hasLocalHost } from "@/lib/localHost";
-import { localDeviceId } from "@/lib/queryKeys";
-import {
-  deviceStatusView,
-  type DeviceStatusView,
-} from "@/lib/remote/deviceStatus";
 
-// Why a device can't host the create. Ordered by how the user would
-// ask: a machine that isn't there can't be missing a checkout yet.
+// Why a device can't host a create. Ordered by how the user would ask:
+// a machine that isn't there can't be missing a checkout yet.
 export type DeviceBlock = "offline" | "no-project" | "no-grant";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
@@ -50,97 +33,70 @@ export const BLOCK_REASON: Record<DeviceBlock, string> = {
   "no-grant": peerReadOnlyNote("it"),
 };
 
-export interface DeviceTarget {
-  deviceId: string;
-  label: string;
-  isThisDevice: boolean;
-  // Null for this device, which has no connection to describe.
-  status: DeviceStatusView | null;
-  // The api the form would be scoped to: window.api for this device, a
-  // peer's only while it has a session.
-  api: HostApi | undefined;
+export type DeviceTarget = Omit<DeviceTab, "block"> & {
   // The identity-matched project ON THAT DEVICE -- the id every scoped
-  // hook keys off once the form moves there, and the path the card
-  // shows. Undefined when the device has no checkout of this repo.
+  // hook keys off once a page moves there. Undefined when the device
+  // has no checkout of this repo.
   project: Project | undefined;
   // Undefined when the device can host the create.
   block: DeviceBlock | undefined;
+};
+
+// A tab with the repo's checkout on that device laid on top.
+function target(
+  tab: DeviceTab,
+  project: Project | undefined,
+  block: DeviceBlock | undefined,
+): DeviceTarget {
+  return { ...tab, project, block };
 }
 
-// Empty when there is nothing to choose between: no account, no peers,
-// or no project to match on. The picker renders nothing at all then, so
-// a single-device install sees exactly the form it always had.
 export function useDeviceTargets(project: Project | undefined): DeviceTarget[] {
   const scope = useHostScope();
-  const devices = useRemoteDevices();
+  const tabs = useDeviceTabs();
   // Only an identity match per device is read out of this, and the
-  // sidebar's always-mounted fan-out keeps it current, so opening the
-  // page must not kick a fresh re-listing of every peer's forest.
-  const forests = useRemoteForests();
-  const access = usePeerCommandAccess(devices);
-  const localName = useLocalDeviceName();
+  // sidebar's always-mounted fan-out keeps it current, so opening a
+  // page must not kick a fresh re-listing of every peer's projects.
+  const { pairs } = useRemoteProjects();
   // This machine's checkout: the project in hand on a local page, its
-  // identity match under a device twin. A hostless client has none.
+  // identity match under a device twin.
   const localMatch = useLocalProjectForIdentity(project?.identity);
-  const localProject = !hasLocalHost
-    ? undefined
-    : scope.remote
-      ? localMatch
-      : project;
-  if (devices.length === 0 || project === undefined) return [];
 
-  const here: DeviceTarget[] = hasLocalHost
-    ? [
-        {
-          deviceId: localDeviceId,
-          label: localName,
-          isThisDevice: true,
-          status: null,
-          api: window.api,
-          project: localProject,
-          // A checkout whose folder is gone can't take a create either.
-          block:
-            localProject === undefined || localProject.pathExists === false
-              ? "no-project"
-              : undefined,
-        },
-      ]
-    : [];
-
-  return [
-    ...here,
-    ...devices.map((device): DeviceTarget => {
-      const status = deviceStatusView(device.status);
-      const scoped = device.deviceId === scope.deviceId;
-      // A null identity (a repo with no remote, an empty checkout) can
-      // never match: it means "this device couldn't tell what repo this
-      // is", not "the same unknown repo". The scoped device needs no
-      // match: its checkout is the project in hand.
-      const held =
-        project.identity == null
+  if (project === undefined) return [];
+  return tabs.map((tab): DeviceTarget => {
+    if (tab.isThisDevice) {
+      const held = scope.remote ? localMatch : project;
+      // A checkout whose folder is gone can't take a create either.
+      return target(
+        tab,
+        held,
+        held === undefined || held.pathExists === false
+          ? "no-project"
+          : undefined,
+      );
+    }
+    // A null identity (a repo with no remote, an empty checkout) can
+    // never match: it means "this device couldn't tell what repo this
+    // is", not "the same unknown repo". The scoped device needs no
+    // match: its checkout is the project in hand.
+    const held =
+      tab.deviceId === scope.deviceId
+        ? project
+        : project.identity == null
           ? undefined
-          : forests.items.find(
-              (item) =>
-                item.deviceId === device.deviceId &&
-                item.project.identity === project.identity,
-            );
-      const match = scoped ? project : held?.project;
-      return {
-        deviceId: device.deviceId,
-        label: device.label,
-        isThisDevice: false,
-        status,
-        api: device.api,
-        project: match,
-        block:
-          !status.reachable || device.api === undefined
-            ? "offline"
-            : match === undefined
-              ? "no-project"
-              : commandAccessOf(access, device.deviceId).canCommand
-                ? undefined
-                : "no-grant",
-      };
-    }),
-  ];
+          : pairs.find(
+              (pair) =>
+                pair.device.deviceId === tab.deviceId &&
+                pair.project.identity === project.identity,
+            )?.project;
+    return target(
+      tab,
+      held,
+      tab.block === "offline"
+        ? "offline"
+        : held === undefined
+          ? "no-project"
+          : tab.block,
+    );
+  });
 }

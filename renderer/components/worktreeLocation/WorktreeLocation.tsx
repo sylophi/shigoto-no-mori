@@ -1,9 +1,6 @@
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { CenteredMessage } from "@/components/ui/centered-message";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -11,17 +8,9 @@ import type { Project } from "@shared/schemas";
 import { LocationForm } from "./LocationForm";
 
 export function WorktreeLocation() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  const project = projects.find((p) => p.id === projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-
   return (
-    <ProjectDevicePage project={project} title="Worktree location">
-      {(scoped) => <LocationBody key={scoped.id} project={scoped} />}
+    <ProjectDevicePage title="Worktree location">
+      {(scoped) => <LocationBody project={scoped} />}
     </ProjectDevicePage>
   );
 }

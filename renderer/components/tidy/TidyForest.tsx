@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import {
   DeviceTabBar,
   DeviceTabPanel,
-  useAccountDeviceTabs,
+  useDeviceTabs,
   usePickedDevice,
 } from "@/components/shared/DeviceTabs";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -56,7 +56,7 @@ const IDLE: RowStatus = { kind: "idle" };
 // with its own forest under it: every read and every removal below
 // rides the host scope the tab mounts.
 export function TidyForest() {
-  const tabs = useAccountDeviceTabs();
+  const tabs = useDeviceTabs();
   // Opens on this device; a hostless client, which has none, opens on
   // its first peer.
   const [picked, pick] = usePickedDevice(tabs, localDeviceId);
@@ -73,7 +73,6 @@ export function TidyForest() {
               tabs={tabs}
               selectedId={picked.deviceId}
               onSelect={pick}
-              className="-mx-6 mb-3 px-6 phone:-mx-4 phone:px-4"
             />
           ) : undefined
         }
@@ -82,7 +81,7 @@ export function TidyForest() {
         <TidyBody />
       ) : (
         <DeviceTabPanel tab={picked} subject="its forest">
-          <TidyBody key={picked.deviceId} />
+          <TidyBody />
         </DeviceTabPanel>
       )}
     </div>
