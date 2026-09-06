@@ -3,6 +3,7 @@
 // and the doubutsu watermark glyph. One component so the watermark class
 // string and the header chrome live in exactly one place.
 import type React from "react";
+import { cn } from "@/lib/utils";
 
 // One padding for both shells: the desktop pages sit under the window
 // chrome, and since the web shell became a sidebar layout its pages
@@ -14,20 +15,30 @@ import type React from "react";
 export const PAGE_HEADER_PADDING =
   "px-6 pt-7 pb-4 phone:px-4 phone:pt-4 phone:pb-3";
 
-const HEADER_CLASS = `relative flex items-center gap-3 overflow-hidden border-b border-border ${PAGE_HEADER_PADDING}`;
-
 export function PageHeader({
   eyebrow,
   title,
   watermark,
+  tabs,
 }: {
   eyebrow: React.ReactNode;
   title: React.ReactNode;
   // The doubutsu-only kanji glyph behind the header's right edge.
   watermark: string;
+  // A device tab bar leading the header (DeviceTabs), on the window's
+  // traffic-light line: everything under it is the picked device's.
+  tabs?: React.ReactNode;
 }) {
   return (
-    <header className={HEADER_CLASS}>
+    <header
+      className={cn(
+        "relative flex flex-col overflow-hidden border-b border-border px-6 pb-4 phone:px-4 phone:pb-3",
+        tabs ? "pt-4 phone:pt-3" : "pt-7 phone:pt-4",
+      )}
+    >
+      {/* Above the watermark, like the title: a long row's last tabs
+          run under the glyph otherwise. */}
+      {tabs && <div className="relative z-[1]">{tabs}</div>}
       <div className="relative z-[1] flex min-w-0 flex-col">
         <span className="truncate text-xs text-muted-foreground">
           {eyebrow}

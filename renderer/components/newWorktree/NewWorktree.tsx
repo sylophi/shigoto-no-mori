@@ -4,6 +4,7 @@ import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CenteredMessage } from "@/components/ui/centered-message";
+import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import {
@@ -15,7 +16,6 @@ import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { HostScopeProvider, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
 import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
@@ -45,8 +45,6 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { worktreeBaseFor } from "@shared/worktreeLayout";
-import { DevicePicker } from "./DevicePicker";
-import { useDeviceTargets } from "./deviceTargets";
 import { ModeToggle, type Mode } from "./ModeToggle";
 import { PullRequestSource } from "./PullRequestPicker";
 
@@ -81,98 +79,44 @@ const DEFAULT_MODE: Mode = "pull-request";
 
 const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 
-// The page: which project, and on which machine. Everything below the
-// device section is the same form whichever device wins, mounted under
-// that device's host scope and handed THAT device's project id -- every
-// hook in it keys off projectId plus scope, so the branch list, the
-// folder collision check and the create all follow the pick with no
-// remote-awareness of their own. The page itself serves both trees:
-// under /projects the project is this machine's, under a /devices twin
-// it is the peer's, and the pick opens on whichever the route named.
+// The page: which project, and on which machine. The frame every
+// project page shares picks the device (a tab per device holding the
+// repo), and the form beneath is the same whichever device wins,
+// mounted under that device's host scope and handed THAT device's
+// project id -- every hook in it keys off projectId plus scope, so the
+// branch list, the folder collision check and the create all follow
+// the pick with no remote-awareness of their own.
 export function NewWorktree() {
   const { projectId } = useScopedProjectParams();
-  const scope = useHostScope();
   const { data: projects = [] } = useProjects();
-  const { data: runtime } = useRuntimeInfo();
-  // The scoped device's own worktrees, for its card's count. The form
-  // below reads the same query when the pick stays here, and the
-  // picked device's when it moves.
-  const { data: worktrees = [] } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
-  const targets = useDeviceTargets(project, worktrees.length);
-  const [pickedDeviceId, setPickedDeviceId] = useState(scope.deviceId);
 
   if (!project) {
     return <CenteredMessage>Project not found.</CenteredMessage>;
   }
 
-  // A pick only holds while it stays valid: a peer that drops off, loses
-  // its checkout or has its grant pulled falls back to the first device
-  // that can take the job rather than scoping the form to a machine
-  // that would refuse the create. Derived, so there is no effect racing
-  // the registry.
-  const picked = targets.find(
-    (target) =>
-      target.deviceId === pickedDeviceId && target.block === undefined,
-  );
-  const target = picked ?? targets.find((entry) => entry.block === undefined);
-  // Every listed device is blocked: say so under the picker instead of
-  // mounting a form that would refuse the create.
-  const nowhere = targets.length > 0 && target === undefined;
-
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            {project.name}
-          </span>
-          <h1 className="text-lg font-medium tracking-tight">New worktree</h1>
-        </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="flex max-w-xl flex-col gap-7">
-          {targets.length > 0 && (
-            <DevicePicker
-              targets={targets}
-              selectedId={target?.deviceId ?? ""}
-              onSelect={setPickedDeviceId}
-              // The picker abbreviates THIS machine's path only, and
-              // under a device twin the runtime read is the peer's.
-              home={scope.remote ? null : (runtime?.homedir ?? null)}
+    <ProjectDevicePage project={project} title="New worktree">
+      {(scoped, tab) => (
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="flex max-w-xl flex-col gap-7">
+            {/* Remounted per device: the seeded fields (picked name,
+                default branch) and the mode come from the target's own
+                answers, so carrying the previous machine's state across
+                would show one device's branch under another's path. */}
+            <NewWorktreeForm
+              key={scoped.id}
+              projectId={scoped.id}
+              project={scoped}
+              // Undefined with no choice of device: the form keeps the
+              // copy it has always had rather than naming a machine
+              // nobody chose.
+              deviceLabel={tab?.label}
             />
-          )}
-          {nowhere ? (
-            <p className="text-sm text-muted-foreground">
-              No device can create a worktree for this repo right now.
-            </p>
-          ) : (
-            /* Unconditional: the provider resolves to exactly the
-               surrounding scope when there is nothing to pick, so the
-               form needs no special case for it. */
-            <HostScopeProvider
-              deviceId={target?.deviceId ?? scope.deviceId}
-              api={target?.api ?? scope.api}
-            >
-              {/* Remounted per device: the seeded fields (picked name,
-                  default branch) and the mode come from the target's own
-                  answers, so carrying the previous machine's state across
-                  would show one device's branch under another's path. */}
-              <NewWorktreeForm
-                key={target?.deviceId ?? scope.deviceId}
-                projectId={target?.project?.id ?? projectId}
-                project={target?.project ?? project}
-                // Undefined with no device section: the form keeps the copy
-                // it has always had rather than naming a machine nobody
-                // chose.
-                deviceLabel={target?.label}
-              />
-            </HostScopeProvider>
-          )}
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </ProjectDevicePage>
   );
 }
 

@@ -40,7 +40,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
- *      device-tab                shared/ProjectDevicePage.tsx
+ *      device-tab                shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
