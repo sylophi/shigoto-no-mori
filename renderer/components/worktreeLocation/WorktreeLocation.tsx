@@ -1,16 +1,23 @@
-import { CenteredMessage } from "@/components/ui/centered-message";
+import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import type { Project } from "@shared/schemas";
 import { LocationForm } from "./LocationForm";
 
 export function WorktreeLocation() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
+  return (
+    <ProjectDevicePage title="Worktree location">
+      {(scoped) => <LocationBody project={scoped} />}
+    </ProjectDevicePage>
+  );
+}
+
+// The layout form of whichever device the surrounding scope names.
+function LocationBody({ project }: { project: Project }) {
+  const projectId = project.id;
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading: worktreesLoading } =
     useWorktrees(projectId);
@@ -18,11 +25,6 @@ export function WorktreeLocation() {
     useShigomoriConfig(projectId);
   const { data: resolvedDefaultBranch, isLoading: branchLoading } =
     useDefaultBranch(projectId);
-
-  const project = projects.find((p) => p.id === projectId);
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
 
   const formReady =
     !configLoading &&
@@ -32,34 +34,21 @@ export function WorktreeLocation() {
     !!resolvedDefaultBranch;
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex min-w-0 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            {project.name}
-          </span>
-          <h1 className="text-lg font-medium tracking-tight">
-            Worktree location
-          </h1>
-        </div>
-      </header>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
-        <div className="flex max-w-3xl flex-col gap-6">
-          {!formReady ? (
-            <LocationSkeleton />
-          ) : (
-            <LocationForm
-              projectId={projectId}
-              projectPath={project.path}
-              dataDir={runtime.dataDir}
-              home={runtime.homedir}
-              worktrees={worktrees}
-              config={config ?? null}
-              resolvedDefaultBranch={resolvedDefaultBranch}
-            />
-          )}
-        </div>
+    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className="flex max-w-3xl flex-col gap-6">
+        {!formReady ? (
+          <LocationSkeleton />
+        ) : (
+          <LocationForm
+            projectId={projectId}
+            projectPath={project.path}
+            dataDir={runtime.dataDir}
+            home={runtime.homedir}
+            worktrees={worktrees}
+            config={config ?? null}
+            resolvedDefaultBranch={resolvedDefaultBranch}
+          />
+        )}
       </div>
     </div>
   );

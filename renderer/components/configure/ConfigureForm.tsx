@@ -10,6 +10,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { notifyError } from "@/lib/toast";
@@ -99,9 +100,12 @@ export function ConfigureForm({
 }: ConfigureFormProps) {
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  // Revealing the folder opens THIS machine's file manager on the
-  // path, which only means something for a project on this machine.
-  const { remote } = useHostScope();
+  // Which device's project file this form edits. `remote` gates what
+  // only means something here (revealing the folder opens THIS
+  // machine's file manager, the Settings link opens its launch tools),
+  // and the label names the peer where the copy would otherwise mislead.
+  const { deviceId, remote } = useHostScope();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   const navigate = useNavigate();
   const write = useShigomoriWrite();
 
@@ -298,20 +302,32 @@ export function ConfigureForm({
           <section className="space-y-3">
             <div>
               <SectionHeading className="mb-1">Custom tools</SectionHeading>
+              {/* The Settings link opens THIS machine's launch tools, which
+                  say nothing about a peer's. A remote project's tools run
+                  from the window on that device, so say that instead. */}
               <p className="text-xs text-muted-foreground">
-                Tools specific to this project. For tools you want available in
-                every project (editors, agents), use{" "}
-                <button
-                  type="button"
-                  onClick={() => {
-                    selectSettingsTab(LAUNCH_TAB);
-                    void navigate({ to: "/settings" });
-                  }}
-                  className="underline underline-offset-2 hover:text-foreground"
-                >
-                  Settings
-                </button>
-                .
+                {remote ? (
+                  <>
+                    Tools specific to this project, launched from {deviceLabel}
+                    &apos;s own window.
+                  </>
+                ) : (
+                  <>
+                    Tools specific to this project. For tools you want available
+                    in every project (editors, agents), use{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        selectSettingsTab(LAUNCH_TAB);
+                        void navigate({ to: "/settings" });
+                      }}
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Settings
+                    </button>
+                    .
+                  </>
+                )}
               </p>
             </div>
             {form.launchers.length === 0 ? (

@@ -6,6 +6,14 @@ import type { RowStatus } from "@/components/ui/row-status";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { PageHeader } from "@/components/shared/PageHeader";
+import {
+  DeviceTabBar,
+  DeviceTabPanel,
+  useDeviceTabs,
+  usePickedDevice,
+  type DeviceTab,
+} from "@/components/shared/DeviceTabs";
+import { localDeviceId } from "@/lib/queryKeys";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import {
   useAllProjectHygiene,
@@ -42,11 +50,54 @@ const IDLE: RowStatus = { kind: "idle" };
 
 // The whole forest at once: every worktree of every registered project,
 // what it costs on disk, how stale it is, and whether its work already
-// landed. Scoped to the app rather than to one project because that is
-// the question being asked -- disk fills up per machine, and the
-// worktree worth removing first is rarely in the repo you happen to have
-// open.
+// landed. Scoped to a machine rather than to one project because that
+// is the question being asked -- disk fills up per machine, and the
+// worktree worth removing first is rarely in the repo you happen to
+// have open. One tab per device on the account (this one first), each
+// with its own forest under it: every read and every removal below
+// rides the host scope the tab mounts.
 export function TidyForest() {
+  const tabs = useDeviceTabs();
+  // Opens on this device. A hostless client, which has none, opens on
+  // its first peer.
+  const [picked, pick] = usePickedDevice(tabs, localDeviceId);
+  const tabbed = tabs.length > 1 && picked !== undefined;
+  // One tree position for the body whether or not the registry has
+  // answered yet (a hostless client's list starts empty): this device,
+  // the default scope, until there is a pick.
+  const shown: DeviceTab = picked ?? {
+    deviceId: localDeviceId,
+    label: "",
+    isThisDevice: true,
+    status: null,
+    api: window.api,
+    block: undefined,
+  };
+  return (
+    <div data-doubutsu-page="tidy" className="flex h-full flex-col">
+      <PageHeader
+        eyebrow="Shigoto no Mori"
+        title="Tidy the forest"
+        watermark="掃除"
+        tabs={
+          tabbed ? (
+            <DeviceTabBar
+              tabs={tabs}
+              selectedId={picked.deviceId}
+              onSelect={pick}
+            />
+          ) : undefined
+        }
+      />
+      <DeviceTabPanel tab={shown} subject="its forest">
+        <TidyBody />
+      </DeviceTabPanel>
+    </div>
+  );
+}
+
+// The forest of whichever device the surrounding scope names.
+function TidyBody() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
@@ -173,13 +224,7 @@ export function TidyForest() {
   const reclaimable = sumBytes(candidates);
 
   return (
-    <div data-doubutsu-page="tidy" className="flex h-full flex-col">
-      <PageHeader
-        eyebrow="Shigoto no Mori"
-        title="Tidy the forest"
-        watermark="掃除"
-      />
-
+    <>
       <div className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex max-w-3xl flex-col gap-6">
           <div className="grid grid-cols-3 gap-3">
@@ -324,7 +369,7 @@ export function TidyForest() {
           onConfirm={() => void runRemovals()}
         />
       )}
-    </div>
+    </>
   );
 }
 

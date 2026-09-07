@@ -1,61 +1,37 @@
-import { PawPrint } from "lucide-react";
-import { CenteredMessage } from "@/components/ui/centered-message";
-import { SimpleTooltip } from "@/components/ui/tooltip";
+import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
-import { useProjects } from "@/hooks/projects/useProjects";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import type { Project } from "@shared/schemas";
 import { ConfigureForm } from "./ConfigureForm";
 import { ConfigureSkeleton } from "./ConfigureSkeleton";
 
 export function ConfigureProject() {
-  const { projectId } = useScopedProjectParams();
-  const { data: projects = [] } = useProjects();
-  const project = projects.find((p) => p.id === projectId);
-  const { data: config, isLoading: configLoading } =
-    useShigomoriConfig(projectId);
-  const { data: resolvedDefaultBranch, isLoading: branchLoading } =
-    useDefaultBranch(projectId);
-
-  if (!project) {
-    return <CenteredMessage>Project not found.</CenteredMessage>;
-  }
-
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-6 pt-7 pb-4">
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-xs text-muted-foreground">
-            {project.name}
-          </span>
-          <h1 className="text-lg font-medium tracking-tight">Configure</h1>
-        </div>
-        {/* A terrier-sourced project is otherwise indistinguishable from a
-            registered one, and the difference shows up in what you can do
-            to it (no remove, no reordering). */}
-        {project.source === "terrier" && (
-          <SimpleTooltip tip="Registered via terrier">
-            <span className="inline-flex shrink-0">
-              <PawPrint
-                aria-label="Registered via terrier"
-                className="size-4 text-muted-foreground/70"
-              />
-            </span>
-          </SimpleTooltip>
-        )}
-      </header>
-      {configLoading || branchLoading || !resolvedDefaultBranch ? (
-        <ConfigureSkeleton />
-      ) : (
-        <ConfigureForm
-          key={projectId}
-          projectId={projectId}
-          projectPath={project.path}
-          project={project}
-          initialConfig={config ?? null}
-          resolvedDefaultBranch={resolvedDefaultBranch}
-        />
-      )}
-    </div>
+    <ProjectDevicePage title="Configure">
+      {(scoped) => <ConfigureBody project={scoped} />}
+    </ProjectDevicePage>
+  );
+}
+
+// The form for whichever device the surrounding scope names, seeded
+// from that device's project file and default branch.
+function ConfigureBody({ project }: { project: Project }) {
+  const { data: config, isLoading: configLoading } = useShigomoriConfig(
+    project.id,
+  );
+  const { data: resolvedDefaultBranch, isLoading: branchLoading } =
+    useDefaultBranch(project.id);
+  if (configLoading || branchLoading || !resolvedDefaultBranch) {
+    return <ConfigureSkeleton />;
+  }
+  return (
+    <ConfigureForm
+      key={project.id}
+      projectId={project.id}
+      projectPath={project.path}
+      project={project}
+      initialConfig={config ?? null}
+      resolvedDefaultBranch={resolvedDefaultBranch}
+    />
   );
 }

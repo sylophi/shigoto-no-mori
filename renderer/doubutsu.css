@@ -40,6 +40,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
+ *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
@@ -557,6 +558,15 @@
   color: var(--primary-foreground);
   box-shadow: var(--doubutsu-sticker-shadow);
   transform: rotate(-4deg);
+}
+
+/* The device pill (the worktree header's chip, a project page's
+   device tabs): the picked tab keeps the accent fill every selection
+   here wears; every other pill lost its hairline with the rest and
+   takes the chip's muted fill instead, so it reads as a pill on the
+   band. */
+.doubutsu [data-slot="device-chip"]:not([aria-selected="true"]) {
+  background-color: var(--muted);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
