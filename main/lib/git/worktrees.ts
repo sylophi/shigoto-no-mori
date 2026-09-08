@@ -13,7 +13,8 @@ import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { createLimiter } from "../util/limit";
-import { run, splitZ } from "./core";
+import { listChangedFiles } from "./changes";
+import { run } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -65,44 +66,15 @@ interface WorkingTreeChanges {
   lastChangeAt?: number;
 }
 
-// Splits `git status --porcelain=v1 -z` into the paths it reports. The
-// -z form is what makes the paths usable: without it git C-quotes
-// anything with a space or a non-ASCII byte, and un-quoting that back
-// into a real path is its own parser. The cost is having to consume the
-// rename/copy source, which git emits as a bare extra field right after
-// the entry that renamed it.
-function parseStatusPaths(stdout: string): string[] {
-  const fields = splitZ(stdout);
-  const paths: string[] = [];
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    // Every real record is "XY <path>", so anything shorter is garbage.
-    if (!field || field.length < 4) continue;
-    paths.push(field.slice(3));
-    // Either column can be the R/C: staged renames land in the index
-    // column, unstaged ones (git detects those too) in the worktree
-    // column. Both emit exactly one source field, and mistaking it for a
-    // record of its own both inflates the count and stats a path with
-    // three bytes shorn off the front.
-    if (isRenameOrCopy(field[0]) || isRenameOrCopy(field[1])) i++;
-  }
-  return paths;
-}
-
-function isRenameOrCopy(column: string | undefined): boolean {
-  return column === "R" || column === "C";
-}
-
 async function getWorkingTreeChanges(
   worktreePath: string,
 ): Promise<WorkingTreeChanges> {
   try {
-    // Deliberately NOT pinned to --untracked-files=normal, unlike the
+    // Deliberately NOT pinned to an --untracked-files mode, unlike the
     // dirty guard in overwriteFromUpstream: this runs per worktree on
     // every window focus, and `-uno` users chose that setting to make
     // exactly this scan cheap. See the comment there.
-    const stdout = await run(worktreePath, ["status", "--porcelain=v1", "-z"]);
-    const paths = parseStatusPaths(stdout);
+    const paths = (await listChangedFiles(worktreePath)).map((f) => f.path);
     if (paths.length === 0) return { count: 0 };
     // A deleted path stats as a failure, an untracked directory stats as
     // the directory -- both are fine, we only want the newest hit.
@@ -325,6 +297,7 @@ export async function listWorktreeIdentities(
 const RECENT_COMMITS_COUNT = 4;
 
 interface PrimaryRelation {
+  aheadOfPrimary: number;
   behindPrimary: number;
   mergedIntoPrimary: boolean;
 }
@@ -414,6 +387,7 @@ async function getPrimaryRelation(
   ctx: BuildContext,
 ): Promise<PrimaryRelation> {
   const none: PrimaryRelation = {
+    aheadOfPrimary: 0,
     behindPrimary: 0,
     mergedIntoPrimary: false,
   };
@@ -433,9 +407,10 @@ async function getPrimaryRelation(
     // Anything HEAD still holds on its own hasn't landed yet, and a
     // branch level with the primary has nothing to have landed.
     if (aheadOfPrimary > 0 || behindPrimary === 0) {
-      return { behindPrimary, mergedIntoPrimary: false };
+      return { aheadOfPrimary, behindPrimary, mergedIntoPrimary: false };
     }
     return {
+      aheadOfPrimary,
       behindPrimary,
       mergedIntoPrimary: await landedOnPrimary(
         identity.path,
@@ -499,6 +474,7 @@ async function buildWorktree(
     hasUpstream: remoteSync.hasUpstream,
     hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
+    aheadOfPrimary: primary.aheadOfPrimary,
     behindPrimary: primary.behindPrimary,
     primaryRef: ctx.primaryRef ?? undefined,
     mergedIntoPrimary: primary.mergedIntoPrimary,

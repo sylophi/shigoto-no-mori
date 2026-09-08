@@ -2,7 +2,7 @@
 // and lets `git` surface any failure as a non-zero exit (which `run`
 // turns into a thrown Error -- the IPC layer relays the message verbatim
 // into the renderer's toast).
-import { run, runLenient, splitZ } from "./core";
+import { chunked, run, runLenient, splitZ } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
 export async function pushFastForward(worktreePath: string): Promise<void> {
@@ -74,15 +74,11 @@ export async function overwriteFromUpstream(
       "@{u}",
     ]),
   );
-  // Chunked: pathspecs travel as argv, and a badly-behind branch can
-  // carry enough added files to brush the OS arg-length limit.
-  const chunks: string[][] = [];
-  for (let i = 0; i < addedUpstream.length; i += 500) {
-    chunks.push(addedUpstream.slice(i, i + 500));
-  }
+  // Chunked: a badly-behind branch can carry enough added files to
+  // brush the OS arg-length limit.
   const collisions = (
     await Promise.all(
-      chunks.map((chunk) =>
+      chunked(addedUpstream).map((chunk) =>
         run(worktreePath, [
           "ls-files",
           "-z",

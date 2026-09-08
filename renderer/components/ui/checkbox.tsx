@@ -1,7 +1,7 @@
 // oxlint-disable-next-line no-restricted-imports -- React is used as a type-only namespace
 import type * as React from "react";
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -19,6 +19,11 @@ import { cn } from "@/lib/utils";
 // exists for the one checkbox whose job is to confirm losing work, and
 // it keeps the same weight as the default: the solid fill means ticked,
 // either way round.
+//
+// `indeterminate` (a file with only some hunks staged, a select-all box
+// over a mixed list) takes the ticked fill with a dash: Base UI sets
+// neither data-checked nor data-unchecked in that state, so it has its
+// own rule here and doubutsu's unchecked fill leaves it alone.
 export function Checkbox({
   className,
   variant = "default",
@@ -34,8 +39,8 @@ export function Checkbox({
       className={cn(
         "peer size-4 shrink-0 rounded-[4px] border border-input bg-background transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
         destructive
-          ? "border-destructive/30 data-[checked]:border-destructive data-[checked]:bg-destructive"
-          : "data-[checked]:border-primary data-[checked]:bg-primary",
+          ? "border-destructive/30 data-[checked]:border-destructive data-[checked]:bg-destructive data-[indeterminate]:border-destructive data-[indeterminate]:bg-destructive"
+          : "data-[checked]:border-primary data-[checked]:bg-primary data-[indeterminate]:border-primary data-[indeterminate]:bg-primary",
         className,
       )}
       {...props}
@@ -49,7 +54,11 @@ export function Checkbox({
           destructive ? "text-background" : "text-primary-foreground",
         )}
       >
-        <Check aria-hidden className="size-3" strokeWidth={3} />
+        {props.indeterminate ? (
+          <Minus aria-hidden className="size-3" strokeWidth={3} />
+        ) : (
+          <Check aria-hidden className="size-3" strokeWidth={3} />
+        )}
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
   );

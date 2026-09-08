@@ -71,6 +71,11 @@ export const WorktreeSchema = z.object({
   // ref can't be resolved -- the UI uses > 0 as the gate for offering
   // the "Sync from primary" action.
   behindPrimary: z.number().int().nonnegative(),
+  // The other direction: commits HEAD has that the primary branch does
+  // not. 0 wherever behindPrimary is 0 by rule (primary worktree,
+  // detached HEAD, no primary). Bounds what may be rewritten on a
+  // branch with no upstream to measure against.
+  aheadOfPrimary: z.number().int().nonnegative(),
   // The ref the "Sync from primary" action rebases onto -- the same ref
   // `behindPrimary` is measured against. Carries the remote prefix when
   // the primary resolves to a remote-tracking ref (e.g. "origin/main"),
@@ -155,6 +160,26 @@ export function deriveRemoteSyncState(
     };
   }
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
+}
+
+// Whether the newest `count` commits exist only here, so they can be
+// amended or undone without rewriting anything shared. With an upstream
+// that is what it hasn't got yet. Without one, the primary branch is
+// the next best line: a branch's own commits stop where the primary's
+// history begins. A primary worktree with no upstream is a local-only
+// repo, and all of it is its own.
+export function canRewriteCommits(
+  worktree: Pick<
+    Worktree,
+    "ahead" | "hasUpstream" | "aheadOfPrimary" | "primaryRef" | "isPrimary"
+  >,
+  count: number,
+): boolean {
+  if (worktree.hasUpstream) return count <= worktree.ahead;
+  if (worktree.primaryRef && !worktree.isPrimary) {
+    return count <= worktree.aheadOfPrimary;
+  }
+  return true;
 }
 
 // When the worktree last saw work, epoch ms, for recency sorting.

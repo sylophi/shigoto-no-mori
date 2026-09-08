@@ -179,6 +179,10 @@ const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeId/diff",
   component: WorktreeDiff,
+  // `amend` opens the changes page already set to rewrite the last
+  // commit (a commit row's "Amend" lands here).
+  validateSearch: (search: Record<string, unknown>): { amend?: true } =>
+    search["amend"] === true ? { amend: true } : {},
 });
 
 const pullRequestDiffRoute = createRoute({
