@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { ChangedFile, CommitMessage, StagedState } from "@shared/schemas";
-import { chunked, run, runLenient, splitZ } from "./core";
+import { chunked, onIndex, run, runLenient, splitZ } from "./core";
 
 // Discard snapshots kept per repository. Old ones are dropped by count,
 // not age: a repo you discard in daily and one you touch monthly should
@@ -28,24 +28,6 @@ async function runChunked(
     outputs.push(await run(worktreePath, [...args, "--", ...chunk], options));
   }
   return outputs;
-}
-
-// --- index queue -----------------------------------------------------------
-
-// Writes to one worktree's index run one after another. Git takes
-// index.lock for each, so two ticks in quick succession (or a tick
-// racing a commit) would otherwise fail on the lock rather than wait.
-// One chain per worktree path. A failed task doesn't break the chain.
-const indexQueues = new Map<string, Promise<unknown>>();
-
-function onIndex<T>(worktreePath: string, task: () => Promise<T>): Promise<T> {
-  const previous = indexQueues.get(worktreePath) ?? Promise.resolve();
-  const next = previous.then(task, task);
-  indexQueues.set(
-    worktreePath,
-    next.catch(() => undefined),
-  );
-  return next;
 }
 
 // --- status ------------------------------------------------------------

@@ -381,8 +381,14 @@ function IndexRow({
     // the tick and the discard stop it from bubbling. The inner button
     // is what the keyboard reaches. The wrapper also carries the active
     // marker the scroll-into-view above looks for.
+    //
+    // The two slots are the row's hover unit: doubutsu paints its hover
+    // treatment on the row and holds it off the jump button, which
+    // covers only the middle of the row and would otherwise light a
+    // band inside a pill that is hovered as one thing.
     <div
       role="presentation"
+      data-slot="diff-index-row"
       onClick={() => onSelect(fileKey(file))}
       data-active={active || undefined}
       className={cn(
@@ -408,6 +414,7 @@ function IndexRow({
       )}
       <button
         type="button"
+        data-slot="diff-index-jump"
         onClick={() => onSelect(fileKey(file))}
         title={
           file.prevName

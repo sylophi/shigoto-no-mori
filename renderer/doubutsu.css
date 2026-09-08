@@ -37,6 +37,7 @@
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
  *      diff-index                diff/DiffFileIndex.tsx
+ *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
@@ -703,12 +704,26 @@
 .doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
 .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
 .doubutsu li[data-row-idx].cursor-pointer:hover,
+.doubutsu [data-slot="diff-index-row"]:hover,
 .doubutsu [data-highlighted]:not([data-disabled]),
 .doubutsu [cmdk-item][aria-selected="true"],
 .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
   background-image: var(--doubutsu-stripe-image);
   background-size: 20px 20px;
   animation: ac-stripe-slide 0.6s linear infinite;
+}
+
+/* A diff rail row is hovered as one pill but built from three controls,
+   and the middle one -- the jump button -- is a <button>, so the rule
+   above would stripe a band across the row's middle instead of the row.
+   The row is on the list above; the jump button sits this one out. It
+   needs the type selector to match the button rule's specificity, and
+   the two ride together (both are hooks in the CONTRACT). The tick and
+   the discard keep their own stripes: those are controls you aim at,
+   not the row's own click target. */
+.doubutsu button[data-slot="diff-index-jump"]:hover {
+  background-image: none;
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -720,6 +735,7 @@
   .doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
   .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
   .doubutsu li[data-row-idx].cursor-pointer:hover,
+  .doubutsu [data-slot="diff-index-row"]:hover,
   .doubutsu [data-highlighted]:not([data-disabled]),
   .doubutsu [cmdk-item][aria-selected="true"],
   .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {

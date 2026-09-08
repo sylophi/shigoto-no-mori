@@ -50,7 +50,8 @@ const DIFF_STYLE = {
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
 const INDEX_MIN_FILES = 3;
-// The rail is dragged between these; 288 is where it starts.
+// The rail is dragged between these; 288 is where it starts. The upper
+// one is a flat ceiling -- the pane lowers it further (see railMax).
 const RAIL_MIN = 220;
 const RAIL_MAX = 600;
 const RAIL_DEFAULT = 288;
@@ -60,7 +61,9 @@ const RAIL_DEFAULT = 288;
 // default there trades away width the diff still needs. At AMPLE the
 // diff keeps a width that fits a wide unified hunk. Both are measured
 // as what the diff would keep with the rail out, so a wider rail asks
-// for a wider pane.
+// for a wider pane -- and MIN doubles as the rail's drag ceiling, since
+// dragging into it is the one way a rail already open could stop
+// fitting.
 const DIFF_MIN_BESIDE_RAIL = 384;
 const DIFF_AMPLE_BESIDE_RAIL = 736;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
@@ -118,6 +121,23 @@ function jumpToFile(
   setActiveKey(key);
 }
 
+// One entry per file key. The key is this view's identity for a file --
+// React key, `data-diff-file`, scroll-spy target -- so a patch that
+// names one twice can't be drawn twice: React drops children under a
+// repeated key, and which one it drops is not ours to predict. The
+// working-tree patch is read in two halves (see main/lib/git/diff.ts),
+// and a `git add` from a terminal between them can still hand us a file
+// as both an untracked addition and a staged one.
+function uniqueByKey(files: FileDiffMetadata[]): FileDiffMetadata[] {
+  const seen = new Set<string>();
+  return files.filter((file) => {
+    const key = fileKey(file);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // Three states, not two: null means the user has never said, and the
 // pane width decides. Storing a default up-front would freeze whichever
 // width the diff happened to be opened at first.
@@ -161,10 +181,22 @@ export function DiffView({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
+  // The drag stops where the diff's own minimum starts. Without this
+  // ceiling a drag past it fails the availability check below and the
+  // rail closes under the pointer -- the pane has to be able to hold
+  // both, and the rail is the half being dragged. Unmeasured panes
+  // (first frame) get the flat ceiling; the measurement follows.
+  const railMax =
+    paneWidth === null
+      ? RAIL_MAX
+      : Math.max(
+          RAIL_MIN,
+          Math.min(RAIL_MAX, paneWidth - DIFF_MIN_BESIDE_RAIL),
+        );
   const rail = useResizableWidth({
     storageKey: "diff.railWidth",
     min: RAIL_MIN,
-    max: RAIL_MAX,
+    max: railMax,
     fallback: RAIL_DEFAULT,
     leftEdge: () => paneRef.current?.getBoundingClientRect().left ?? 0,
   });
@@ -178,9 +210,11 @@ export function DiffView({
   // working-tree patch does not (untracked files trail the tracked
   // diff), and there ticking a file would otherwise move it -- staging
   // an untracked file promotes it into the tracked half of the patch.
-  const allFiles = parsedPatches
-    .flatMap((p) => p.files)
-    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const allFiles = uniqueByKey(
+    parsedPatches
+      .flatMap((p) => p.files)
+      .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
+  );
   const filesKey = allFiles.map(fileKey).join("\n");
   const [activeKey, setActiveKey] = useFileScrollSpy(scrollRef, filesKey);
 

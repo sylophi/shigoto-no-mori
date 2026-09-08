@@ -1,4 +1,4 @@
-import { runLenient, splitZ } from "./core";
+import { onIndex, runLenient, splitZ } from "./core";
 
 // Unified patch of every uncommitted change in the worktree. Combines
 // `git diff HEAD` (covers staged + unstaged tracked edits) with a
@@ -8,7 +8,18 @@ import { runLenient, splitZ } from "./core";
 // `core.quotePath=false` keeps a non-ASCII path raw in the headers, the
 // same bytes `status -z` reports, so the changes page can pair a patch
 // entry with its status row. Git would otherwise C-quote it ("caf\303\251").
-export async function getWorktreeDiff(worktreePath: string): Promise<string> {
+//
+// The whole read takes an index-queue slot (core.onIndex) so it sees
+// one index state throughout. The two halves split the working tree
+// between them at the index -- a file is untracked or it is in `diff
+// HEAD`, never both -- so a tick landing mid-read moves a file across
+// that line and the patch comes back with it twice (two entries under
+// one path, which is a duplicate React key) or not at all.
+export function getWorktreeDiff(worktreePath: string): Promise<string> {
+  return onIndex(worktreePath, () => worktreeDiffNow(worktreePath));
+}
+
+async function worktreeDiffNow(worktreePath: string): Promise<string> {
   const [tracked, lsOutput] = await Promise.all([
     runLenient(worktreePath, [
       "-c",
