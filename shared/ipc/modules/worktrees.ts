@@ -1,18 +1,28 @@
 import { z } from "zod";
 import { broadcast, invoke } from "@shared/ipc/contract";
 import {
+  ChangedFileSchema,
   CheckoutBranchPayloadSchema,
+  CommitChangesPayloadSchema,
+  CommitChangesResultSchema,
   CommitDiffPayloadSchema,
+  CommitMessageSchema,
   CommitSummarySchema,
   CreateWorktreePayloadSchema,
   CreateWorktreeResultSchema,
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
+  DiscardChangesPayloadSchema,
+  DiscardChangesResultSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
+  ResetSoftPayloadSchema,
+  ResetSoftResultSchema,
+  RestoreDiscardPayloadSchema,
   SetShelvedPayloadSchema,
+  SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeSchema,
@@ -75,6 +85,48 @@ export const worktreesContract = {
     { tracksProjectUsage: true },
   ),
   diff: invoke("worktrees:diff", WorktreeScopedPayloadSchema, z.string()),
+  // The changes page: what each changed file's index state is, plus the
+  // mutations that tick, commit and discard. `diff` above stays the
+  // patch source. This is the cheap call that refetches after a toggle.
+  changeStatus: invoke(
+    "worktrees:changeStatus",
+    WorktreeScopedPayloadSchema,
+    z.array(ChangedFileSchema),
+  ),
+  // Answers with the fresh status so a tick settles in one round trip.
+  setStaged: invoke(
+    "worktrees:setStaged",
+    SetStagedPayloadSchema,
+    z.array(ChangedFileSchema),
+  ),
+  commit: invoke(
+    "worktrees:commit",
+    CommitChangesPayloadSchema,
+    CommitChangesResultSchema,
+    { tracksProjectUsage: true },
+  ),
+  discardChanges: invoke(
+    "worktrees:discardChanges",
+    DiscardChangesPayloadSchema,
+    DiscardChangesResultSchema,
+    { tracksProjectUsage: true },
+  ),
+  restoreDiscard: invoke(
+    "worktrees:restoreDiscard",
+    RestoreDiscardPayloadSchema,
+    WorktreeSchema,
+  ),
+  commitMessage: invoke(
+    "worktrees:commitMessage",
+    CommitDiffPayloadSchema,
+    CommitMessageSchema,
+  ),
+  resetSoft: invoke(
+    "worktrees:resetSoft",
+    ResetSoftPayloadSchema,
+    ResetSoftResultSchema,
+    { tracksProjectUsage: true },
+  ),
   commitDiff: invoke(
     "worktrees:commitDiff",
     CommitDiffPayloadSchema,

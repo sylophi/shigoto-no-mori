@@ -71,6 +71,10 @@ export const WorktreeSchema = z.object({
   // ref can't be resolved -- the UI uses > 0 as the gate for offering
   // the "Sync from primary" action.
   behindPrimary: z.number().int().nonnegative(),
+  // How many of HEAD's newest commits exist on no remote-tracking ref
+  // at all. Bounds what amend and undo may rewrite. Distinct from
+  // `ahead`, which only measures the configured upstream.
+  unpushedCount: z.number().int().nonnegative(),
   // The ref the "Sync from primary" action rebases onto -- the same ref
   // `behindPrimary` is measured against. Carries the remote prefix when
   // the primary resolves to a remote-tracking ref (e.g. "origin/main"),
@@ -155,6 +159,15 @@ export function deriveRemoteSyncState(
     };
   }
   return { kind: "diverged", ahead: worktree.ahead, behind: worktree.behind };
+}
+
+// Whether the newest `count` commits exist on no remote, so they can
+// be amended or undone without rewriting anything shared.
+export function canRewriteCommits(
+  worktree: Pick<Worktree, "unpushedCount">,
+  count: number,
+): boolean {
+  return count <= worktree.unpushedCount;
 }
 
 // When the worktree last saw work, epoch ms, for recency sorting.

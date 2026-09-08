@@ -13,7 +13,8 @@ import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { createLimiter } from "../util/limit";
-import { run, splitZ } from "./core";
+import { listChangedFiles } from "./changes";
+import { run } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -65,44 +66,15 @@ interface WorkingTreeChanges {
   lastChangeAt?: number;
 }
 
-// Splits `git status --porcelain=v1 -z` into the paths it reports. The
-// -z form is what makes the paths usable: without it git C-quotes
-// anything with a space or a non-ASCII byte, and un-quoting that back
-// into a real path is its own parser. The cost is having to consume the
-// rename/copy source, which git emits as a bare extra field right after
-// the entry that renamed it.
-function parseStatusPaths(stdout: string): string[] {
-  const fields = splitZ(stdout);
-  const paths: string[] = [];
-  for (let i = 0; i < fields.length; i++) {
-    const field = fields[i];
-    // Every real record is "XY <path>", so anything shorter is garbage.
-    if (!field || field.length < 4) continue;
-    paths.push(field.slice(3));
-    // Either column can be the R/C: staged renames land in the index
-    // column, unstaged ones (git detects those too) in the worktree
-    // column. Both emit exactly one source field, and mistaking it for a
-    // record of its own both inflates the count and stats a path with
-    // three bytes shorn off the front.
-    if (isRenameOrCopy(field[0]) || isRenameOrCopy(field[1])) i++;
-  }
-  return paths;
-}
-
-function isRenameOrCopy(column: string | undefined): boolean {
-  return column === "R" || column === "C";
-}
-
 async function getWorkingTreeChanges(
   worktreePath: string,
 ): Promise<WorkingTreeChanges> {
   try {
-    // Deliberately NOT pinned to --untracked-files=normal, unlike the
+    // Deliberately NOT pinned to an --untracked-files mode, unlike the
     // dirty guard in overwriteFromUpstream: this runs per worktree on
     // every window focus, and `-uno` users chose that setting to make
     // exactly this scan cheap. See the comment there.
-    const stdout = await run(worktreePath, ["status", "--porcelain=v1", "-z"]);
-    const paths = parseStatusPaths(stdout);
+    const paths = (await listChangedFiles(worktreePath)).map((f) => f.path);
     if (paths.length === 0) return { count: 0 };
     // A deleted path stats as a failure, an untracked directory stats as
     // the directory -- both are fine, we only want the newest hit.
@@ -171,6 +143,31 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
     divergedClean = false;
   }
   return { ahead, behind, hasUpstream, divergedClean };
+}
+
+// How many of HEAD's newest commits no remote has: what amend and undo
+// may touch. Measured against every remote-tracking ref, not just the
+// upstream, so a commit pushed under another name (`git push origin
+// HEAD:review`) counts as shared too. A repo with no remotes has
+// nothing shared, so all of HEAD is its own. Capped: past the cap the
+// exact number stops mattering and the walk stops paying for it.
+const UNPUSHED_SCAN_LIMIT = 1000;
+
+async function getUnpushedCount(worktreePath: string): Promise<number> {
+  try {
+    const stdout = await run(worktreePath, [
+      "rev-list",
+      "--count",
+      `--max-count=${UNPUSHED_SCAN_LIMIT}`,
+      "HEAD",
+      "--not",
+      "--remotes",
+    ]);
+    return Number(stdout.trim()) || 0;
+  } catch {
+    // An unborn branch has no HEAD to count from.
+    return 0;
+  }
 }
 
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
@@ -482,12 +479,14 @@ async function buildWorktree(
   identity: WorktreeIdentity,
   ctx: BuildContext,
 ): Promise<Worktree> {
-  const [changes, recentCommits, remoteSync, primary] = await Promise.all([
-    getWorkingTreeChanges(identity.path),
-    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-    getRemoteSync(identity.path),
-    getPrimaryRelation(identity, ctx),
-  ]);
+  const [changes, recentCommits, remoteSync, primary, unpushedCount] =
+    await Promise.all([
+      getWorkingTreeChanges(identity.path),
+      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
+      getRemoteSync(identity.path),
+      getPrimaryRelation(identity, ctx),
+      getUnpushedCount(identity.path),
+    ]);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -500,6 +499,7 @@ async function buildWorktree(
     hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
     behindPrimary: primary.behindPrimary,
+    unpushedCount,
     primaryRef: ctx.primaryRef ?? undefined,
     mergedIntoPrimary: primary.mergedIntoPrimary,
     changedCount: changes.count,

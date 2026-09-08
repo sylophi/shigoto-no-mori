@@ -7,14 +7,18 @@ import { FileDiff } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
 import { ChevronDown, Loader2, PanelLeft } from "lucide-react";
 import { useElementWidth } from "@/hooks/ui/useElementWidth";
+import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { isBareKeyEvent } from "@/lib/dom";
 import { cn } from "@/lib/utils";
+import type { ChangedFile } from "@shared/schemas";
+import { changedFilePaths, type DiffChangesControls } from "./changesControls";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { fileKey } from "./patchFiles";
+import { StagedCheckbox } from "./StagedCheckbox";
 import { fileTargets, useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";
@@ -46,13 +50,19 @@ const DIFF_STYLE = {
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
 const INDEX_MIN_FILES = 3;
-// The rail is 288px. Below MIN the diff is left too narrow to read a
-// hunk without wrapping, so the rail isn't offered at all. Between MIN
-// and AMPLE it's offered but stays shut unless you ask for it: opening
-// by default there trades away width the diff still needs. At AMPLE the
-// diff keeps ~736px with the rail out, which fits a wide unified hunk.
-const INDEX_MIN_PANE = 672;
-const INDEX_AMPLE_PANE = 1024;
+// The rail is dragged between these; 288 is where it starts.
+const RAIL_MIN = 220;
+const RAIL_MAX = 600;
+const RAIL_DEFAULT = 288;
+// Below MIN the diff beside the rail is too narrow to read a hunk
+// without wrapping, so the rail isn't offered at all. Between MIN and
+// AMPLE it's offered but stays shut unless you ask for it: opening by
+// default there trades away width the diff still needs. At AMPLE the
+// diff keeps a width that fits a wide unified hunk. Both are measured
+// as what the diff would keep with the rail out, so a wider rail asks
+// for a wider pane.
+const DIFF_MIN_BESIDE_RAIL = 384;
+const DIFF_AMPLE_BESIDE_RAIL = 736;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
 // would sit if you had scrolled it to the top yourself.
 const JUMP_GAP = 8;
@@ -125,6 +135,8 @@ export function DiffView({
   title,
   subtitle,
   emptyMessage,
+  changes,
+  railFooter,
 }: {
   patch: string | undefined;
   isLoading: boolean;
@@ -134,6 +146,13 @@ export function DiffView({
   title: ReactNode;
   subtitle: ReactNode;
   emptyMessage: ReactNode;
+  // Present on the uncommitted-changes page only. Turns the rail into
+  // a tick list with the commit composer under it, puts a checkbox in
+  // every file header, and keeps the rail on screen regardless of file
+  // count or pane width -- there is nowhere else to commit from.
+  changes?: DiffChangesControls;
+  // Mounted at the foot of the rail: the commit composer.
+  railFooter?: ReactNode;
 }) {
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [indexPref, setIndexPref] = useState(readStoredIndexPref);
@@ -142,13 +161,26 @@ export function DiffView({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
+  const rail = useResizableWidth({
+    storageKey: "diff.railWidth",
+    min: RAIL_MIN,
+    max: RAIL_MAX,
+    fallback: RAIL_DEFAULT,
+    leftEdge: () => paneRef.current?.getBoundingClientRect().left ?? 0,
+  });
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
   const { resolved } = useTheme();
 
   const parsedPatches = patch ? parsePatchFiles(patch) : [];
-  const allFiles = parsedPatches.flatMap((p) => p.files);
+  // Path order, always. Git already emits commits and PRs that way. The
+  // working-tree patch does not (untracked files trail the tracked
+  // diff), and there ticking a file would otherwise move it -- staging
+  // an untracked file promotes it into the tracked half of the patch.
+  const allFiles = parsedPatches
+    .flatMap((p) => p.files)
+    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const filesKey = allFiles.map(fileKey).join("\n");
   const [activeKey, setActiveKey] = useFileScrollSpy(scrollRef, filesKey);
 
@@ -163,12 +195,19 @@ export function DiffView({
 
   // Unmeasured (null) counts as too narrow, so the rail can't flash in
   // and back out on the first frame of a diff opened in a narrow pane.
+  // The changes page overrides all of it: its rail is the page, and it
+  // stays up on a clean tree too, since amending and undoing the last
+  // commit live there.
+  const railForced = changes !== undefined;
   const indexAvailable =
+    !railForced &&
     allFiles.length >= INDEX_MIN_FILES &&
     paneWidth !== null &&
-    paneWidth >= INDEX_MIN_PANE;
+    paneWidth >= rail.width + DIFF_MIN_BESIDE_RAIL;
   const showIndex =
-    indexAvailable && (indexPref ?? paneWidth >= INDEX_AMPLE_PANE);
+    railForced ||
+    (indexAvailable &&
+      (indexPref ?? paneWidth >= rail.width + DIFF_AMPLE_BESIDE_RAIL));
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
@@ -199,8 +238,20 @@ export function DiffView({
   // that guard they'd scroll the diff hidden behind them. The handler
   // only picks the neighbouring key. jumpToFile stays the single
   // definition of what landing on a file does.
+  //
+  // On the changes page `x` ticks or unticks the file being read, so a
+  // review can go "], read, x, ], read, x" without touching the mouse.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "x" && changes && !changes.busy) {
+        if (!isBareKeyEvent(e)) return;
+        const file = allFiles.find((f) => fileKey(f) === activeKey);
+        const row = file && changes.byPath.get(file.name);
+        if (!row) return;
+        e.preventDefault();
+        changes.onSetStaged(changedFilePaths(row), row.staged !== "all");
+        return;
+      }
       if (e.key !== "[" && e.key !== "]") return;
       if (!isBareKeyEvent(e)) return;
       const container = scrollRef.current;
@@ -217,7 +268,7 @@ export function DiffView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeKey, setActiveKey]);
+  }, [activeKey, setActiveKey, allFiles, changes]);
 
   return (
     // Measured rather than left to a container query: the chip has to
@@ -269,7 +320,22 @@ export function DiffView({
                 allCollapsed ? new Set() : new Set(allFiles.map(fileKey)),
               )
             }
+            changes={changes}
+            footer={railFooter}
+            width={rail.width}
           />
+        )}
+        {showIndex && (
+          <div
+            onMouseDown={rail.onMouseDown}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file list"
+            tabIndex={-1}
+            className="relative w-px shrink-0 cursor-col-resize bg-border"
+          >
+            <div className="absolute inset-y-0 -left-1 w-2" />
+          </div>
         )}
 
         <div
@@ -306,6 +372,9 @@ export function DiffView({
                     diffStyle={diffStyle}
                     themeType={resolved}
                     onToggle={setCollapsed}
+                    row={changes?.byPath.get(fileDiff.name)}
+                    stagingDisabled={changes?.busy ?? false}
+                    onSetStaged={changes?.onSetStaged}
                   />
                 );
               })}
@@ -329,6 +398,10 @@ export function DiffView({
 // observes. `collapsed` is pierre's own option, which drops the file's
 // rendered rows and keeps the header, so folding a file also stops
 // paying for it.
+//
+// `row` is per file too, so ticking one file re-renders that file's
+// header and leaves the rest cached. Undefined (a read-only diff, or a
+// patch entry the status list doesn't know) draws no checkbox.
 function DiffFileRow({
   fileDiff,
   fileId,
@@ -336,6 +409,9 @@ function DiffFileRow({
   diffStyle,
   themeType,
   onToggle,
+  row,
+  stagingDisabled,
+  onSetStaged,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
@@ -343,6 +419,9 @@ function DiffFileRow({
   diffStyle: DiffStyle;
   themeType: "light" | "dark";
   onToggle: (key: string, collapsed: boolean) => void;
+  row: ChangedFile | undefined;
+  stagingDisabled: boolean;
+  onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
 }) {
   return (
     <div data-diff-file={fileId}>
@@ -353,25 +432,34 @@ function DiffFileRow({
         fileDiff={fileDiff}
         options={{ ...DIFF_THEME, diffStyle, themeType, collapsed }}
         renderHeaderPrefix={() => (
-          <button
-            type="button"
-            onClick={() => onToggle(fileId, !collapsed)}
-            aria-expanded={!collapsed}
-            aria-label={
-              collapsed
-                ? `Expand ${fileDiff.name}`
-                : `Collapse ${fileDiff.name}`
-            }
-            className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
-            <ChevronDown
-              aria-hidden
-              className={cn(
-                "size-3.5 transition-transform",
-                collapsed && "-rotate-90",
-              )}
-            />
-          </button>
+          <span className="inline-flex items-center gap-1.5">
+            {row && onSetStaged && (
+              <StagedCheckbox
+                file={row}
+                disabled={stagingDisabled}
+                onSetStaged={onSetStaged}
+              />
+            )}
+            <button
+              type="button"
+              onClick={() => onToggle(fileId, !collapsed)}
+              aria-expanded={!collapsed}
+              aria-label={
+                collapsed
+                  ? `Expand ${fileDiff.name}`
+                  : `Collapse ${fileDiff.name}`
+              }
+              className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <ChevronDown
+                aria-hidden
+                className={cn(
+                  "size-3.5 transition-transform",
+                  collapsed && "-rotate-90",
+                )}
+              />
+            </button>
+          </span>
         )}
       />
     </div>

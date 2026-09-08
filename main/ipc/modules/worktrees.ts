@@ -4,6 +4,15 @@ import type { Handlers } from "@shared/ipc/types";
 import type { Project, Worktree } from "@shared/schemas";
 import { readShigomoriConfig } from "../../lib/config/project";
 import { checkoutBranch, renameBranch } from "../../lib/git/branches";
+import {
+  commitStaged,
+  discardChanges,
+  listChangedFiles,
+  readCommitMessage,
+  resetSoft,
+  restoreDiscard,
+  setStaged,
+} from "../../lib/git/changes";
 import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
 import {
@@ -115,6 +124,57 @@ export const worktreesHandlers: Handlers<
     return getWorktreeDiff(worktree.path);
   },
 
+  changeStatus: async ({ projectId, worktreeId }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return listChangedFiles(worktree.path, { untracked: "all" });
+  },
+
+  setStaged: async ({ projectId, worktreeId, paths, staged }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return setStaged(worktree.path, paths, staged);
+  },
+
+  commit: async (input) => {
+    const { result: hash, worktree } = await mutateAndDescribeWith(
+      input,
+      (wt) => commitStaged(wt.path, input),
+    );
+    return { hash, worktree };
+  },
+
+  discardChanges: async (input) => {
+    const { result: snapshot, worktree } = await mutateAndDescribeWith(
+      input,
+      (wt) => discardChanges(wt.path, input.paths),
+    );
+    return { snapshot, worktree };
+  },
+
+  restoreDiscard: (input) =>
+    mutateAndDescribe(input, (wt) => restoreDiscard(wt.path, input.snapshot)),
+
+  commitMessage: async ({ projectId, worktreeId, hash }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return readCommitMessage(worktree.path, hash);
+  },
+
+  resetSoft: async (input) => {
+    const { result: previousHead, worktree } = await mutateAndDescribeWith(
+      input,
+      (wt) => resetSoft(wt.path, input.target, input.expectHead),
+    );
+    return { previousHead, worktree };
+  },
+
   commitDiff: async ({ projectId, worktreeId, hash }) => {
     const { worktree } = await findProjectAndWorktreeOrThrow(
       projectId,
@@ -174,24 +234,32 @@ async function resolvePrimaryRef(
   return resolveDefaultBranch(projectPath, config?.defaultBranch);
 }
 
-// Worktree mutations (remote syncs and local branch ops) all share the
-// same shape: resolve the worktree, run a git action, return the
+// Worktree mutations (remote syncs, local branch ops, commits) all share
+// the same shape: resolve the worktree, run a git action, return the
 // freshly-described worktree so the renderer can replace its cached row
-// in one round trip.
-async function mutateAndDescribe(
+// in one round trip. The `With` form also hands back what the action
+// produced (a commit hash, a snapshot ref) for the calls that have one.
+async function mutateAndDescribeWith<T>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
-  action: (target: WorktreeIdentity, project: Project) => Promise<void>,
-): Promise<Worktree> {
+  action: (target: WorktreeIdentity, project: Project) => Promise<T>,
+): Promise<{ result: T; worktree: Worktree }> {
   // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
   const { project, worktree } = await findProjectAndWorktreeOrThrow(
     projectId,
     worktreeId,
   );
-  await action(worktree, project);
+  const result = await action(worktree, project);
   const refreshed = await findWorktreeIdentityOrThrow(
     project.id,
     project.path,
     worktreeId,
   );
-  return describeWorktree(refreshed, project.path);
+  return { result, worktree: await describeWorktree(refreshed, project.path) };
+}
+
+async function mutateAndDescribe(
+  scope: { projectId: string; worktreeId: string },
+  action: (target: WorktreeIdentity, project: Project) => Promise<void>,
+): Promise<Worktree> {
+  return (await mutateAndDescribeWith(scope, action)).worktree;
 }

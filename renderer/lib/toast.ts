@@ -16,4 +16,8 @@ export function notifyError(message: string, err?: unknown): void {
   });
 }
 
+// How long a toast that carries an undo (or redo) waits before it goes:
+// long enough to read what just changed and change your mind.
+export const UNDO_TOAST_MS = 12_000;
+
 export { toast };

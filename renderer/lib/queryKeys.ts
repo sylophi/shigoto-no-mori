@@ -22,11 +22,18 @@ export const queryKeys = {
     ["worktreeData", projectId, worktreeId] as const,
   worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeDiff", projectId, worktreeId] as const,
+  worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
+    ["worktreeChanges", projectId, worktreeId] as const,
   commitDiff: (
     projectId: string,
     worktreeId: string | undefined,
     hash: string,
   ) => ["commitDiff", projectId, worktreeId, hash] as const,
+  commitMessage: (
+    projectId: string,
+    worktreeId: string | undefined,
+    hash: string | undefined,
+  ) => ["commitMessage", projectId, worktreeId, hash] as const,
   pickedWorktreeName: (projectId: string | null) =>
     ["pickedWorktreeName", projectId] as const,
 

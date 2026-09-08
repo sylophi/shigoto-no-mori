@@ -5,9 +5,18 @@ import { runLenient, splitZ } from "./core";
 // /dev/null diff per untracked file so additions render alongside
 // modifications in @pierre/diffs. `runLenient` swallows the non-zero
 // exits `git diff --no-index` always emits when there's a diff.
+// `core.quotePath=false` keeps a non-ASCII path raw in the headers, the
+// same bytes `status -z` reports, so the changes page can pair a patch
+// entry with its status row. Git would otherwise C-quote it ("caf\303\251").
 export async function getWorktreeDiff(worktreePath: string): Promise<string> {
   const [tracked, lsOutput] = await Promise.all([
-    runLenient(worktreePath, ["diff", "HEAD", "--no-color"]),
+    runLenient(worktreePath, [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "HEAD",
+      "--no-color",
+    ]),
     runLenient(worktreePath, [
       "ls-files",
       "--others",
@@ -20,6 +29,8 @@ export async function getWorktreeDiff(worktreePath: string): Promise<string> {
     untracked.map((file) =>
       // `--` keeps a filename like `-weird.txt` from being parsed as flags.
       runLenient(worktreePath, [
+        "-c",
+        "core.quotePath=false",
         "diff",
         "--no-index",
         "--no-color",

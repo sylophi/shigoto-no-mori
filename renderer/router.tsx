@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -23,54 +22,28 @@ import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { dragRegion } from "@/lib/utils";
-import { readStored, writeStored } from "@/lib/localStorage";
+import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 
-const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
 
-function readStoredWidth(): number {
-  const raw = readStored(SIDEBAR_KEY);
-  const n = raw ? Number.parseInt(raw, 10) : NaN;
-  if (!Number.isFinite(n)) return SIDEBAR_DEFAULT;
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
-}
-
 function RootLayout() {
-  const [sidebarWidth, setSidebarWidth] = useState<number>(readStoredWidth);
-
-  const startResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    Object.assign(document.body.style, {
-      cursor: "col-resize",
-      userSelect: "none",
-    });
-    let last = sidebarWidth;
-    const onMove = (ev: MouseEvent) => {
-      last = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX));
-      setSidebarWidth(last);
-    };
-    const onUp = () => {
-      Object.assign(document.body.style, {
-        cursor: "",
-        userSelect: "",
-      });
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      writeStored(SIDEBAR_KEY, String(Math.round(last)));
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  };
+  const sidebar = useResizableWidth({
+    storageKey: "sidebar.width",
+    min: SIDEBAR_MIN,
+    max: SIDEBAR_MAX,
+    fallback: SIDEBAR_DEFAULT,
+    leftEdge: () => 0,
+  });
 
   return (
     <div className="flex h-dvh overflow-hidden text-foreground">
-      <div style={{ width: sidebarWidth }} className="shrink-0">
+      <div style={{ width: sidebar.width }} className="shrink-0">
         <Sidebar />
       </div>
       <div
-        onMouseDown={startResize}
+        onMouseDown={sidebar.onMouseDown}
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize sidebar"
@@ -179,6 +152,10 @@ const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/projects/$projectId/worktrees/$worktreeId/diff",
   component: WorktreeDiff,
+  // `amend` opens the changes page already set to rewrite the last
+  // commit (a commit row's "Amend" lands here).
+  validateSearch: (search: Record<string, unknown>): { amend?: true } =>
+    search["amend"] === true ? { amend: true } : {},
 });
 
 const pullRequestDiffRoute = createRoute({
