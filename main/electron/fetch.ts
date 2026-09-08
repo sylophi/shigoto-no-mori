@@ -5,6 +5,7 @@
 // The periodic sweep also refreshes the project-wide PR cache (sidebar
 // dots); focus does not, since the open worktree page has its own
 // fresher per-branch PR query.
+import { errorMessageOf } from "@shared/errors";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Project } from "@shared/schemas";
@@ -26,6 +27,8 @@ const FRESHNESS_MS = 3_000;
 const SWEEP_INTERVAL_MS = 60_000;
 
 const lastFetchedAt = new Map<string, number>();
+// Projects whose last fetch attempt failed, so a run of failures warns once.
+const failingProjects = new Set<string>();
 let sweepHandle: NodeJS.Timeout | null = null;
 
 export async function maybeFetchProject(
@@ -39,12 +42,23 @@ export async function maybeFetchProject(
     const before = await snapshotRemoteRefs(projectPath);
     await fetchAllRemotes(projectPath);
     lastFetchedAt.set(projectId, Date.now());
+    failingProjects.delete(projectId);
     const after = await snapshotRemoteRefs(projectPath);
     if (before !== after) {
       broadcastAll(gitContract, "refsRefreshed", { projectId });
     }
-  } catch {
-    // Network/auth failure -- leave refs stale, surface elsewhere if it matters.
+  } catch (error) {
+    // Leave refs stale and let the next attempt retry. Warn only on the way
+    // into the failed state: lastFetchedAt advances on success only, so a
+    // project that stays broken (offline, expired credentials) would
+    // otherwise warn on every sweep, focus and navigation. Nothing else
+    // reports it. The one caller that awaits this, refreshProject, voids
+    // the promise, so the alternative is ahead/behind counts that quietly
+    // stop moving.
+    if (!failingProjects.has(projectId)) {
+      failingProjects.add(projectId);
+      console.warn(`[fetch] ${projectPath}: ${errorMessageOf(error)}`);
+    }
   } finally {
     broadcastAll(gitContract, "fetchActive", { projectId, active: false });
   }
