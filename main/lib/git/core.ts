@@ -11,6 +11,47 @@ export interface RunOptions {
   // user so far is the discard snapshot, which points GIT_INDEX_FILE at
   // a scratch index so it never touches the worktree's real one.
   env?: Record<string, string>;
+  // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
+  // reads raise it -- see PATCH_MAX_BUFFER.
+  maxBuffer?: number;
+}
+
+// Every run is buffered, so a command that never stops printing can't
+// take the main process with it. This covers any status, log or ref
+// output the app asks for by a wide margin.
+const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
+
+// A patch is the one output whose size the user decides rather than the
+// app: one regenerated lockfile or checked-in bundle in the working
+// tree runs to tens of megabytes on its own. Sized to swallow that,
+// because the alternative isn't a smaller patch -- it's a wrong one
+// (see below).
+export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
+
+// Node kills the child once its output passes maxBuffer and reports the
+// truncated stdout alongside the error. That is not a git failure and
+// must never be treated as one: the output is a prefix of the real
+// thing, which for a patch means whole files silently missing from the
+// end of it.
+function isTruncated(err: unknown): boolean {
+  return (
+    (err as { code?: string }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+  );
+}
+
+// The subcommand, for the message above: argv can open with any number
+// of `-c key=value` pairs, and "git -c produced too much output" names
+// the wrong thing.
+function subcommandOf(args: readonly string[]): string {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "-c") {
+      i++;
+      continue;
+    }
+    const arg = args[i];
+    if (arg !== undefined && !arg.startsWith("-")) return arg;
+  }
+  return "git";
 }
 
 async function exec(
@@ -38,6 +79,10 @@ async function exec(
     // and says nothing a user can act on. Git's own words do. Keep the
     // stdout the lenient callers read, and the rest of the error.
     const failure = err as Error & { stdout?: string; stderr?: string };
+    if (isTruncated(err)) {
+      failure.message = `git ${subcommandOf(args)} produced more output than the app can hold.`;
+      throw failure;
+    }
     const stderr = failure.stderr?.trim();
     if (stderr) failure.message = stderr;
     throw failure;
@@ -51,7 +96,7 @@ export async function run(
 ): Promise<string> {
   const { stdout } = await exec(args, {
     cwd,
-    maxBuffer: 10 * 1024 * 1024,
+    maxBuffer: DEFAULT_MAX_BUFFER,
     ...options,
   });
   return stdout;
@@ -60,6 +105,12 @@ export async function run(
 // Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
 // which exits 1 whenever there's a diff to print). Returns whatever
 // stdout was produced before exit, falling back to empty.
+//
+// Truncation is the one failure it won't swallow. Git's exit code says
+// nothing about whether the output is complete, so a run killed at
+// maxBuffer looks exactly like a diff that exited 1 -- and answering
+// with the prefix hands the caller a patch that parses cleanly and is
+// missing every file past the cut. Loudly wrong beats quietly wrong.
 export async function runLenient(
   cwd: string,
   args: string[],
@@ -68,6 +119,7 @@ export async function runLenient(
   try {
     return await run(cwd, args, options);
   } catch (err) {
+    if (isTruncated(err)) throw err;
     return (err as { stdout?: string }).stdout ?? "";
   }
 }

@@ -1,4 +1,4 @@
-import { onIndex, runLenient, splitZ } from "./core";
+import { onIndex, PATCH_MAX_BUFFER, runLenient, splitZ } from "./core";
 
 // Unified patch of every uncommitted change in the worktree. Combines
 // `git diff HEAD` (covers staged + unstaged tracked edits) with a
@@ -21,13 +21,11 @@ export function getWorktreeDiff(worktreePath: string): Promise<string> {
 
 async function worktreeDiffNow(worktreePath: string): Promise<string> {
   const [tracked, lsOutput] = await Promise.all([
-    runLenient(worktreePath, [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "HEAD",
-      "--no-color",
-    ]),
+    runLenient(
+      worktreePath,
+      ["-c", "core.quotePath=false", "diff", "HEAD", "--no-color"],
+      { maxBuffer: PATCH_MAX_BUFFER },
+    ),
     runLenient(worktreePath, [
       "ls-files",
       "--others",
@@ -39,16 +37,20 @@ async function worktreeDiffNow(worktreePath: string): Promise<string> {
   const additions = await Promise.all(
     untracked.map((file) =>
       // `--` keeps a filename like `-weird.txt` from being parsed as flags.
-      runLenient(worktreePath, [
-        "-c",
-        "core.quotePath=false",
-        "diff",
-        "--no-index",
-        "--no-color",
-        "--",
-        "/dev/null",
-        file,
-      ]),
+      runLenient(
+        worktreePath,
+        [
+          "-c",
+          "core.quotePath=false",
+          "diff",
+          "--no-index",
+          "--no-color",
+          "--",
+          "/dev/null",
+          file,
+        ],
+        { maxBuffer: PATCH_MAX_BUFFER },
+      ),
     ),
   );
   return [tracked, ...additions].filter((s) => s.length > 0).join("");
@@ -66,12 +68,9 @@ export async function getCommitDiff(
   // A trailing `--` only bounds the pathspec list, so on its own it would
   // still let a hash like `--output=FILE` be parsed as a flag and hand a
   // malicious repo an arbitrary file write.
-  return runLenient(worktreePath, [
-    "show",
-    "--format=",
-    "--no-color",
-    "--end-of-options",
-    hash,
-    "--",
-  ]);
+  return runLenient(
+    worktreePath,
+    ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
 }
