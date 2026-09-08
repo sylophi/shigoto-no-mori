@@ -52,6 +52,7 @@ export function DiffFileIndex({
   onToggleAll,
   changes,
   footer,
+  width,
 }: {
   files: FileDiffMetadata[];
   activeKey: string | null;
@@ -63,6 +64,8 @@ export function DiffFileIndex({
   // question because it owns the pane.
   changes?: DiffChangesControls;
   footer?: ReactNode;
+  // Dragged by the caller's separator; the rail only draws it.
+  width: number;
 }) {
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
@@ -98,7 +101,8 @@ export function DiffFileIndex({
   return (
     <div
       data-slot="diff-index"
-      className="flex w-72 shrink-0 flex-col border-r border-border"
+      style={{ width }}
+      className="flex shrink-0 flex-col"
     >
       <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5">
         {changes ? (
@@ -372,9 +376,14 @@ function IndexRow({
 
   return (
     // A row is three controls side by side (tick, jump, discard), so it
-    // can't be one button. The wrapper carries the active marker the
-    // scroll-into-view above looks for.
+    // can't be one button. The wrapper still takes the click, so the
+    // whole pill lands on the file the way the old single button did;
+    // the tick and the discard stop it from bubbling. The inner button
+    // is what the keyboard reaches. The wrapper also carries the active
+    // marker the scroll-into-view above looks for.
     <div
+      role="presentation"
+      onClick={() => onSelect(fileKey(file))}
       data-active={active || undefined}
       className={cn(
         "group/row flex w-full items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
@@ -385,12 +394,17 @@ function IndexRow({
       )}
     >
       {row && onSetStaged && (
-        <StagedCheckbox
-          file={row}
-          disabled={busy}
-          onSetStaged={onSetStaged}
-          className="shrink-0"
-        />
+        <span
+          role="presentation"
+          onClick={(e) => e.stopPropagation()}
+          className="flex shrink-0"
+        >
+          <StagedCheckbox
+            file={row}
+            disabled={busy}
+            onSetStaged={onSetStaged}
+          />
+        </span>
       )}
       <button
         type="button"
@@ -427,7 +441,10 @@ function IndexRow({
         <Button
           variant="ghost-destructive"
           size="xs"
-          onClick={() => onDiscard(row)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDiscard(row);
+          }}
           disabled={busy}
           aria-pressed={discardArmed}
           aria-label={

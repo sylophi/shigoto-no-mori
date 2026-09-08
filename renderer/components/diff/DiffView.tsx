@@ -7,6 +7,7 @@ import { FileDiff } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
 import { ChevronDown, Loader2, PanelLeft } from "lucide-react";
 import { useElementWidth } from "@/hooks/ui/useElementWidth";
+import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
@@ -49,13 +50,19 @@ const DIFF_STYLE = {
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
 const INDEX_MIN_FILES = 3;
-// The rail is 288px. Below MIN the diff is left too narrow to read a
-// hunk without wrapping, so the rail isn't offered at all. Between MIN
-// and AMPLE it's offered but stays shut unless you ask for it: opening
-// by default there trades away width the diff still needs. At AMPLE the
-// diff keeps ~736px with the rail out, which fits a wide unified hunk.
-const INDEX_MIN_PANE = 672;
-const INDEX_AMPLE_PANE = 1024;
+// The rail is dragged between these; 288 is where it starts.
+const RAIL_MIN = 220;
+const RAIL_MAX = 600;
+const RAIL_DEFAULT = 288;
+// Below MIN the diff beside the rail is too narrow to read a hunk
+// without wrapping, so the rail isn't offered at all. Between MIN and
+// AMPLE it's offered but stays shut unless you ask for it: opening by
+// default there trades away width the diff still needs. At AMPLE the
+// diff keeps a width that fits a wide unified hunk. Both are measured
+// as what the diff would keep with the rail out, so a wider rail asks
+// for a wider pane.
+const DIFF_MIN_BESIDE_RAIL = 384;
+const DIFF_AMPLE_BESIDE_RAIL = 736;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
 // would sit if you had scrolled it to the top yourself.
 const JUMP_GAP = 8;
@@ -154,6 +161,13 @@ export function DiffView({
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
+  const rail = useResizableWidth({
+    storageKey: "diff.railWidth",
+    min: RAIL_MIN,
+    max: RAIL_MAX,
+    fallback: RAIL_DEFAULT,
+    leftEdge: () => paneRef.current?.getBoundingClientRect().left ?? 0,
+  });
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
@@ -189,10 +203,11 @@ export function DiffView({
     !railForced &&
     allFiles.length >= INDEX_MIN_FILES &&
     paneWidth !== null &&
-    paneWidth >= INDEX_MIN_PANE;
+    paneWidth >= rail.width + DIFF_MIN_BESIDE_RAIL;
   const showIndex =
     railForced ||
-    (indexAvailable && (indexPref ?? paneWidth >= INDEX_AMPLE_PANE));
+    (indexAvailable &&
+      (indexPref ?? paneWidth >= rail.width + DIFF_AMPLE_BESIDE_RAIL));
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
@@ -307,7 +322,20 @@ export function DiffView({
             }
             changes={changes}
             footer={railFooter}
+            width={rail.width}
           />
+        )}
+        {showIndex && (
+          <div
+            onMouseDown={rail.onMouseDown}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize file list"
+            tabIndex={-1}
+            className="relative w-px shrink-0 cursor-col-resize bg-border"
+          >
+            <div className="absolute inset-y-0 -left-1 w-2" />
+          </div>
         )}
 
         <div

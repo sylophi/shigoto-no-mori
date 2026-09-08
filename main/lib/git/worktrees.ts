@@ -145,6 +145,31 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
   return { ahead, behind, hasUpstream, divergedClean };
 }
 
+// How many of HEAD's newest commits no remote has: what amend and undo
+// may touch. Measured against every remote-tracking ref, not just the
+// upstream, so a commit pushed under another name (`git push origin
+// HEAD:review`) counts as shared too. A repo with no remotes has
+// nothing shared, so all of HEAD is its own. Capped: past the cap the
+// exact number stops mattering and the walk stops paying for it.
+const UNPUSHED_SCAN_LIMIT = 1000;
+
+async function getUnpushedCount(worktreePath: string): Promise<number> {
+  try {
+    const stdout = await run(worktreePath, [
+      "rev-list",
+      "--count",
+      `--max-count=${UNPUSHED_SCAN_LIMIT}`,
+      "HEAD",
+      "--not",
+      "--remotes",
+    ]);
+    return Number(stdout.trim()) || 0;
+  } catch {
+    // An unborn branch has no HEAD to count from.
+    return 0;
+  }
+}
+
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
 // sentinel between records keeps parsing robust against subjects that
@@ -297,7 +322,6 @@ export async function listWorktreeIdentities(
 const RECENT_COMMITS_COUNT = 4;
 
 interface PrimaryRelation {
-  aheadOfPrimary: number;
   behindPrimary: number;
   mergedIntoPrimary: boolean;
 }
@@ -387,7 +411,6 @@ async function getPrimaryRelation(
   ctx: BuildContext,
 ): Promise<PrimaryRelation> {
   const none: PrimaryRelation = {
-    aheadOfPrimary: 0,
     behindPrimary: 0,
     mergedIntoPrimary: false,
   };
@@ -407,10 +430,9 @@ async function getPrimaryRelation(
     // Anything HEAD still holds on its own hasn't landed yet, and a
     // branch level with the primary has nothing to have landed.
     if (aheadOfPrimary > 0 || behindPrimary === 0) {
-      return { aheadOfPrimary, behindPrimary, mergedIntoPrimary: false };
+      return { behindPrimary, mergedIntoPrimary: false };
     }
     return {
-      aheadOfPrimary,
       behindPrimary,
       mergedIntoPrimary: await landedOnPrimary(
         identity.path,
@@ -457,12 +479,14 @@ async function buildWorktree(
   identity: WorktreeIdentity,
   ctx: BuildContext,
 ): Promise<Worktree> {
-  const [changes, recentCommits, remoteSync, primary] = await Promise.all([
-    getWorkingTreeChanges(identity.path),
-    listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-    getRemoteSync(identity.path),
-    getPrimaryRelation(identity, ctx),
-  ]);
+  const [changes, recentCommits, remoteSync, primary, unpushedCount] =
+    await Promise.all([
+      getWorkingTreeChanges(identity.path),
+      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
+      getRemoteSync(identity.path),
+      getPrimaryRelation(identity, ctx),
+      getUnpushedCount(identity.path),
+    ]);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -474,8 +498,8 @@ async function buildWorktree(
     hasUpstream: remoteSync.hasUpstream,
     hasRemote: ctx.hasRemote,
     divergedClean: remoteSync.divergedClean,
-    aheadOfPrimary: primary.aheadOfPrimary,
     behindPrimary: primary.behindPrimary,
+    unpushedCount,
     primaryRef: ctx.primaryRef ?? undefined,
     mergedIntoPrimary: primary.mergedIntoPrimary,
     changedCount: changes.count,
