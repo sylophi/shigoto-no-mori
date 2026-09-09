@@ -183,24 +183,33 @@ export function DiffView({
   // Force it to follow the in-app theme instead.
   const { resolved } = useTheme();
 
+  // Which of the two views this is. The changes page hands over one
+  // file's diff -- the one its rail has picked -- so the pane draws
+  // what it was given, holds no fold state and needs no scroll spy. A
+  // commit or PR diff hands over the whole patch and reads as one
+  // scroll, and its rail is optional. Named once, read everywhere.
+  const railMode = changes !== undefined;
+
   const parsedPatches = patch ? parsePatchFiles(patch) : [];
-  // Path order, always. Git already emits commits and PRs that way. The
-  // working-tree patch does not (untracked files trail the tracked
-  // diff), and there ticking a file would otherwise move it -- staging
-  // an untracked file promotes it into the tracked half of the patch.
+  // Path order, always -- which is the order git emits a commit or a PR
+  // in anyway, so this only ever settles a tie.
   const allFiles = parsedPatches
     .flatMap((p) => p.files)
     .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const filesKey = allFiles.map(fileKey).join("\n");
-  const [activeKey, setActiveKey] = useFileScrollSpy(scrollRef, filesKey);
+  const [activeKey, setActiveKey] = useFileScrollSpy(
+    scrollRef,
+    filesKey,
+    !railMode,
+  );
 
   // Fold state is keyed by path, so it can only survive a patch whose
-  // file set is unchanged (a worktree diff refetching after an edit).
-  // A different set of files is a different reading session.
+  // file set is unchanged (a commit diff re-rendering). A different set
+  // of files is a different reading session.
   const [seenFilesKey, setSeenFilesKey] = useState(filesKey);
   if (seenFilesKey !== filesKey) {
     setSeenFilesKey(filesKey);
-    setCollapsedKeys(new Set());
+    if (collapsedKeys.size > 0) setCollapsedKeys(new Set());
   }
 
   // Unmeasured (null) counts as too narrow, so the rail can't flash in
@@ -208,7 +217,7 @@ export function DiffView({
   // The changes page overrides all of it: its rail is the page, and it
   // stays up on a clean tree too, since amending and undoing the last
   // commit live there.
-  const railForced = changes !== undefined;
+  const railForced = railMode;
   const indexAvailable =
     !railForced &&
     allFiles.length >= INDEX_MIN_FILES &&
@@ -233,17 +242,11 @@ export function DiffView({
     ? changeEntries(changes.files)
     : patchEntries(allFiles);
 
-  // The changes page hands over one file's diff -- the one its rail has
-  // picked -- so the pane draws whatever it was given and the two can't
-  // describe different moments. A commit or PR diff hands over the
-  // whole patch and reads as one scroll.
-  const onePerPick = changes !== undefined;
-
   // A fresh file starts at its own top, not at the scroll the last one
   // was left at.
   useEffect(() => {
-    if (onePerPick) scrollRef.current?.scrollTo({ top: 0 });
-  }, [onePerPick, patch]);
+    if (railMode) scrollRef.current?.scrollTo({ top: 0 });
+  }, [railMode, patch]);
 
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
@@ -314,11 +317,12 @@ export function DiffView({
             activeKey={currentKey}
             collapsedKeys={collapsedKeys}
             // Folding is a combined-read affordance: with one file in
-            // the pane there is nothing for it to collapse.
-            allCollapsed={onePerPick ? undefined : allCollapsed}
+            // the pane there is nothing for it to collapse, so the
+            // header drops the control with its handler.
+            allCollapsed={allCollapsed}
             onSelect={selectFile}
             onToggleAll={
-              onePerPick
+              railMode
                 ? undefined
                 : () =>
                     setCollapsedKeys(
@@ -361,7 +365,7 @@ export function DiffView({
               {/* A picked file with no patch of its own -- a mode
                   change, or content git won't diff -- is not the same
                   as a clean tree, and mustn't borrow its wording. */}
-              {onePerPick && changes.files.length > 0
+              {railMode && changes.files.length > 0
                 ? "No text changes to show for this file."
                 : emptyMessage}
             </CenteredMessage>
@@ -378,14 +382,14 @@ export function DiffView({
                     key={key}
                     fileDiff={fileDiff}
                     fileId={key}
-                    collapsed={!onePerPick && collapsedKeys.has(key)}
+                    collapsed={!railMode && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
                     themeType={resolved}
                     // No fold control in a picker: the file in the pane
                     // is the one you asked for, and folding it away
                     // would leave the pane blank with nothing to
                     // unfold it from.
-                    onToggle={onePerPick ? undefined : setCollapsed}
+                    onToggle={railMode ? undefined : setCollapsed}
                   />
                 );
               })}

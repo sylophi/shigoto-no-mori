@@ -26,12 +26,15 @@ function fileTargets(container: HTMLElement): HTMLElement[] {
 export function useFileScrollSpy(
   containerRef: React.RefObject<HTMLElement | null>,
   filesKey: string,
+  // Off for a pane that holds the one file it was asked for: there is
+  // nothing to spy on, and the caller already knows which file it is.
+  enabled: boolean,
 ): [string | null, (key: string) => void] {
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!enabled || !container) return;
     const targets = fileTargets(container);
     if (targets.length === 0) return;
 
@@ -51,7 +54,7 @@ export function useFileScrollSpy(
     );
     for (const target of targets) observer.observe(target);
     return () => observer.disconnect();
-  }, [containerRef, filesKey]);
+  }, [containerRef, filesKey, enabled]);
 
   return [activeKey, setActiveKey];
 }

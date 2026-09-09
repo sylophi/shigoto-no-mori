@@ -20,7 +20,7 @@ import {
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import type { Worktree } from "@shared/schemas";
+import { isUntracked, type Worktree } from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
@@ -113,6 +113,7 @@ function ChangesView({
     projectId,
     worktreeId,
     picked ? changedFilePaths(picked) : [],
+    picked ? isUntracked(picked) : false,
   );
   // The stable `mutate`s, not the result objects: those are rebuilt
   // every render and would reach every diff file header as a new

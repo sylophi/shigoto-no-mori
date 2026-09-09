@@ -12,6 +12,7 @@ import type {
   CommitMessage,
   StagedState,
 } from "@shared/schemas";
+import { isUntracked } from "@shared/schemas";
 import { chunked, run, runLenient, splitZ } from "./core";
 
 // Discard snapshots kept per repository. Old ones are dropped by count,
@@ -113,26 +114,34 @@ function parseNumstat(stdout: string): Map<string, ChangeCounts | undefined> {
 // An untracked file is in no diff git can be asked for in one go, and
 // spawning a `--no-index` per new file is a process each on a read that
 // happens on every tick. It is a new file, so every line in it is an
-// addition -- count them here. Git's own rules for what it won't count:
-// a NUL byte in the first 8k makes it binary, and past a point it is
-// not worth reading a file to put a number next to it.
+// addition -- count them here. Git's own rules for what it declines to
+// count: a NUL byte in the first 8k makes it binary, and past a point
+// it is not worth reading a file to put a number beside its name.
+const BINARY_SNIFF_BYTES = 8000;
 const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
 
 async function countUntracked(
   worktreePath: string,
   path: string,
 ): Promise<ChangeCounts | undefined> {
+  const full = join(worktreePath, path);
   try {
-    const stats = await stat(join(worktreePath, path));
+    const stats = await stat(full);
     if (!stats.isFile() || stats.size > UNTRACKED_COUNT_LIMIT) return undefined;
-    const contents = await readFile(join(worktreePath, path));
-    if (contents.subarray(0, 8000).includes(0)) return undefined;
+    const contents = await readFile(full);
+    if (contents.subarray(0, BINARY_SNIFF_BYTES).includes(0)) return undefined;
     let additions = 0;
-    for (const byte of contents) if (byte === 0x0a) additions++;
-    // A last line without its newline still counts as a line.
-    if (contents.length > 0 && contents[contents.length - 1] !== 0x0a) {
+    // `indexOf` is a native scan; a `for..of` over the bytes would run
+    // the iterator protocol millions of times on the main process.
+    for (
+      let at = contents.indexOf(0x0a);
+      at !== -1;
+      at = contents.indexOf(0x0a, at + 1)
+    ) {
       additions++;
     }
+    // A last line without its newline is still a line.
+    if (contents.length > 0 && contents.at(-1) !== 0x0a) additions++;
     return { additions, deletions: 0 };
   } catch {
     // Vanished between the status walk and here, or unreadable. The row
@@ -143,36 +152,40 @@ async function countUntracked(
 
 // The +/- each row shows. One `diff HEAD --numstat` covers everything
 // git has a record of -- tracked edits, staged or not, and deletions --
-// and the new files that diff has never heard of are counted from disk.
+// and the new files it has never heard of are counted from disk. Which
+// files those are comes from their own status letters, not from being
+// missing here, so a file git declines to count can't be mistaken for
+// one: the two reads don't need each other and run together.
+//
+// The disk reads run one after another. A worktree with an unignored
+// build directory can list thousands of new files, and the point is to
+// hold one file's bytes at a time rather than all of them.
 async function countsFor(
   worktreePath: string,
   files: readonly ChangedFile[],
 ): Promise<ChangedFile[]> {
-  const tracked = parseNumstat(
-    await runLenient(worktreePath, [
+  const readUntracked = async () => {
+    const counted = new Map<string, ChangeCounts | undefined>();
+    for (const file of files.filter(isUntracked)) {
+      // oxlint-disable-next-line no-await-in-loop -- one file's bytes in memory at a time, not every file's
+      counted.set(file.path, await countUntracked(worktreePath, file.path));
+    }
+    return counted;
+  };
+  const [tracked, untracked] = await Promise.all([
+    runLenient(worktreePath, [
       "-c",
       "core.quotePath=false",
       "diff",
       "HEAD",
       "--numstat",
       "-z",
-    ]),
-  );
-  const untracked = new Map(
-    await Promise.all(
-      files
-        .filter((file) => !tracked.has(file.path))
-        .map(
-          async (file): Promise<[string, ChangeCounts | undefined]> => [
-            file.path,
-            await countUntracked(worktreePath, file.path),
-          ],
-        ),
-    ),
-  );
+    ]).then(parseNumstat),
+    readUntracked(),
+  ]);
   return files.map((file) => {
     const counts = tracked.get(file.path) ?? untracked.get(file.path);
-    return counts ? { ...file, ...counts } : file;
+    return counts ? { ...file, counts } : file;
   });
 }
 
@@ -238,6 +251,17 @@ export async function listChangedFiles(
   return options.counts ? countsFor(worktreePath, files) : files;
 }
 
+// The changes page's read, named once: every changed file, each file's
+// own row, and the counts the list draws. Both of its callers -- the
+// page's own fetch and the answer a tick settles with -- want exactly
+// this, and neither should have to remember which flags mean "the
+// changes page".
+export function listChangesForPage(
+  worktreePath: string,
+): Promise<ChangedFile[]> {
+  return listChangedFiles(worktreePath, { untracked: "all", counts: true });
+}
+
 // --- staging -----------------------------------------------------------
 
 // Tick or untick files in the index. `add -A` so a deleted tracked file
@@ -259,7 +283,7 @@ export function setStaged(
     } else {
       await runChunked(worktreePath, ["reset", "-q"], paths);
     }
-    return listChangedFiles(worktreePath, { untracked: "all", counts: true });
+    return listChangesForPage(worktreePath);
   });
 }
 

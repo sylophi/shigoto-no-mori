@@ -28,7 +28,7 @@ export const queryKeys = {
     projectId: string,
     worktreeId: string | undefined,
     paths: readonly string[],
-  ) => ["worktreeDiff", projectId, worktreeId, paths.join("\0")] as const,
+  ) => ["worktreeDiff", projectId, worktreeId, [...paths]] as const,
   worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeChanges", projectId, worktreeId] as const,
   commitDiff: (

@@ -7,7 +7,7 @@ import { checkoutBranch, renameBranch } from "../../lib/git/branches";
 import {
   commitStaged,
   discardChanges,
-  listChangedFiles,
+  listChangesForPage,
   readCommitMessage,
   resetSoft,
   restoreDiscard,
@@ -116,12 +116,12 @@ export const worktreesHandlers: Handlers<
   checkoutBranch: (input) =>
     mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
 
-  fileDiff: async ({ projectId, worktreeId, paths }) => {
+  fileDiff: async ({ projectId, worktreeId, paths, untracked }) => {
     const { worktree } = await findProjectAndWorktreeOrThrow(
       projectId,
       worktreeId,
     );
-    return getFileDiff(worktree.path, paths);
+    return getFileDiff(worktree.path, paths, untracked);
   },
 
   changeStatus: async ({ projectId, worktreeId }) => {
@@ -129,7 +129,7 @@ export const worktreesHandlers: Handlers<
       projectId,
       worktreeId,
     );
-    return listChangedFiles(worktree.path, { untracked: "all", counts: true });
+    return listChangesForPage(worktree.path);
   },
 
   setStaged: async ({ projectId, worktreeId, paths, staged }) => {

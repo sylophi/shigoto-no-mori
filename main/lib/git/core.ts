@@ -39,21 +39,6 @@ function isTruncated(err: unknown): boolean {
   );
 }
 
-// The subcommand, for the message above: argv can open with any number
-// of `-c key=value` pairs, and "git -c produced too much output" names
-// the wrong thing.
-function subcommandOf(args: readonly string[]): string {
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "-c") {
-      i++;
-      continue;
-    }
-    const arg = args[i];
-    if (arg !== undefined && !arg.startsWith("-")) return arg;
-  }
-  return "git";
-}
-
 async function exec(
   args: string[],
   options: { cwd: string; maxBuffer?: number } & RunOptions,
@@ -80,7 +65,7 @@ async function exec(
     // stdout the lenient callers read, and the rest of the error.
     const failure = err as Error & { stdout?: string; stderr?: string };
     if (isTruncated(err)) {
-      failure.message = `git ${subcommandOf(args)} produced more output than the app can hold.`;
+      failure.message = "git produced more output than the app can hold.";
       throw failure;
     }
     const stderr = failure.stderr?.trim();

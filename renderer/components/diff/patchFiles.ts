@@ -17,7 +17,7 @@ export function fileKey(file: FileDiffMetadata): string {
 // pierre's own file header does (createFileHeaderElement). Cheap: hunk
 // counts are precomputed by the parser, this is a walk over ~tens of
 // entries per file.
-export function fileStats(file: FileDiffMetadata): {
+function fileStats(file: FileDiffMetadata): {
   additions: number;
   deletions: number;
 } {
@@ -121,10 +121,7 @@ export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
       path: row.path,
       prevPath: row.prevPath ?? null,
       mark: STATUS_MARKS[row.kind],
-      stats:
-        row.additions === undefined || row.deletions === undefined
-          ? null
-          : { additions: row.additions, deletions: row.deletions },
+      stats: row.counts ?? null,
       row,
     }),
   );

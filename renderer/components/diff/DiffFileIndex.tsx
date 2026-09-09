@@ -59,9 +59,9 @@ export function DiffFileIndex({
   activeKey: string | null;
   collapsedKeys: ReadonlySet<string>;
   onSelect: (key: string) => void;
-  // Both absent when the pane shows one file at a time: there is no
-  // combined scroll to fold, so the header drops the control.
-  allCollapsed?: boolean;
+  allCollapsed: boolean;
+  // Absent when the pane shows one file at a time: there is no combined
+  // scroll to fold, so the header drops the control.
   onToggleAll?: () => void;
   // Visibility only. The caller owns the "is there room for a rail"
   // question because it owns the pane.
@@ -178,10 +178,11 @@ export function DiffFileIndex({
               busy={changes?.busy ?? false}
               onSetStaged={changes?.onSetStaged}
               discardArmed={discardArm.armedKey === entry.key}
-              onDiscard={(row) =>
-                discardArm.trigger(entry.key, () =>
-                  changes?.onDiscard(changedFilePaths(row)),
-                )
+              onDiscard={() =>
+                discardArm.trigger(entry.key, () => {
+                  if (entry.row)
+                    changes?.onDiscard(changedFilePaths(entry.row));
+                })
               }
             />
           ))
@@ -362,7 +363,7 @@ function IndexRow({
   busy: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
   discardArmed: boolean;
-  onDiscard: (row: ChangedFile) => void;
+  onDiscard: () => void;
 }) {
   // No home to tildify against: these are repo-relative paths, so the
   // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
@@ -469,7 +470,7 @@ function IndexRow({
           size="xs"
           onClick={(e) => {
             e.stopPropagation();
-            onDiscard(row);
+            onDiscard();
           }}
           disabled={busy}
           aria-pressed={discardArmed}

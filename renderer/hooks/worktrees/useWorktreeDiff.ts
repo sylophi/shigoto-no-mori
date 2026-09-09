@@ -10,6 +10,7 @@ export function useFileDiff(
   projectId: string,
   worktreeId: string | undefined,
   paths: readonly string[],
+  untracked: boolean,
 ) {
   return useQuery<string>({
     queryKey: queryKeys.worktreeFileDiff(projectId, worktreeId, paths),
@@ -19,10 +20,15 @@ export function useFileDiff(
         projectId,
         worktreeId,
         paths: [...paths],
+        untracked,
       });
     },
     enabled: !!worktreeId && paths.length > 0,
     staleTime: 0,
+    // Every file looked at leaves a patch behind, and a long review
+    // looks at a lot of them. The data is stale on arrival anyway, so
+    // holding it only buys an instant second look at the same file.
+    gcTime: 60_000,
     meta: { errorTitle: "Couldn't compute diff" },
   });
 }

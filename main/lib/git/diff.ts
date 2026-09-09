@@ -5,52 +5,33 @@ import { PATCH_MAX_BUFFER, runLenient } from "./core";
 // Nothing here can go stale against a list built somewhere else -- the
 // answer is whatever git says about this path right now.
 //
-// `diff HEAD` covers a tracked file whether its edits are staged, not
-// staged, or both. An untracked file is in neither HEAD nor the index,
-// so it takes the /dev/null form instead. Empty output is the signal to
-// try that: git already knows which kind a path is, so asking costs one
-// process and knowing would cost the caller a lie to keep in sync.
+// Which comparison to make is the caller's to say, from the status row
+// it drew the file from. `diff HEAD` covers a tracked file whether its
+// edits are staged, not staged, or both; a file git has never seen is
+// in neither HEAD nor the index and only compares against /dev/null.
+// Asking git instead -- running the first and reading empty output as
+// "must be the other kind" -- gets a staged edit that was reverted in
+// the working tree wrong, and renders it as a new file.
 //
 // `paths` is the file, and its old name first when git records a
 // rename -- handing over both is what makes the pair one entry rather
 // than an unexplained addition.
-export async function getFileDiff(
+export function getFileDiff(
   worktreePath: string,
   paths: readonly string[],
+  untracked: boolean,
 ): Promise<string> {
   const file = paths[paths.length - 1];
-  if (file === undefined) return "";
-  const tracked = await runLenient(
-    worktreePath,
-    [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "HEAD",
-      "--no-color",
-      "--",
-      ...paths,
-    ],
-    { maxBuffer: PATCH_MAX_BUFFER },
-  );
-  if (tracked.length > 0) return tracked;
-  // `--` keeps a filename like `-weird.txt` from being parsed as flags.
-  // `runLenient` swallows the non-zero exit `--no-index` always emits
-  // when there is a diff to print.
-  return runLenient(
-    worktreePath,
-    [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "--no-index",
-      "--no-color",
-      "--",
-      "/dev/null",
-      file,
-    ],
-    { maxBuffer: PATCH_MAX_BUFFER },
-  );
+  if (file === undefined) return Promise.resolve("");
+  // `--` keeps a filename like `-weird.txt` from being parsed as flags,
+  // and `runLenient` swallows the non-zero exit `--no-index` makes
+  // whenever it has a diff to print.
+  const args = untracked
+    ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
+    : ["diff", "HEAD", "--no-color", "--", ...paths];
+  return runLenient(worktreePath, ["-c", "core.quotePath=false", ...args], {
+    maxBuffer: PATCH_MAX_BUFFER,
+  });
 }
 
 // Unified patch of a single commit, with the commit metadata stripped
