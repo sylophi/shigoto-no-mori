@@ -49,8 +49,8 @@ export function DiffFileIndex({
   entries,
   activeKey,
   collapsedKeys,
-  allCollapsed,
   onSelect,
+  allCollapsed,
   onToggleAll,
   changes,
   footer,
@@ -59,9 +59,11 @@ export function DiffFileIndex({
   entries: IndexEntry[];
   activeKey: string | null;
   collapsedKeys: ReadonlySet<string>;
-  allCollapsed: boolean;
   onSelect: (key: string) => void;
-  onToggleAll: () => void;
+  // Both absent when the pane shows one file at a time: there is no
+  // combined scroll to fold, so the header drops the control.
+  allCollapsed?: boolean;
+  onToggleAll?: () => void;
   // Visibility only. The caller owns the "is there room for a rail"
   // question because it owns the pane.
   changes?: DiffChangesControls;
@@ -140,19 +142,23 @@ export function DiffFileIndex({
             }}
           />
         )}
-        <button
-          type="button"
-          onClick={onToggleAll}
-          title={allCollapsed ? "Expand all files" : "Collapse all files"}
-          aria-label={allCollapsed ? "Expand all files" : "Collapse all files"}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {allCollapsed ? (
-            <ChevronsUpDown aria-hidden className="size-3.5" />
-          ) : (
-            <ChevronsDownUp aria-hidden className="size-3.5" />
-          )}
-        </button>
+        {onToggleAll && (
+          <button
+            type="button"
+            onClick={onToggleAll}
+            title={allCollapsed ? "Expand all files" : "Collapse all files"}
+            aria-label={
+              allCollapsed ? "Expand all files" : "Collapse all files"
+            }
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {allCollapsed ? (
+              <ChevronsUpDown aria-hidden className="size-3.5" />
+            ) : (
+              <ChevronsDownUp aria-hidden className="size-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">

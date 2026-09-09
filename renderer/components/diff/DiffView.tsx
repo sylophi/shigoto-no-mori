@@ -257,6 +257,38 @@ export function DiffView({
     ? changeEntries(changes.files, allFiles)
     : patchEntries(allFiles);
 
+  // The changes page is a picker, not a reader. Selecting a file swaps
+  // the pane to that file the way GitHub Desktop's Changes tab does,
+  // instead of scrolling one combined patch: the question there is
+  // "what am I about to commit in this file", and the answer should
+  // fill the pane rather than be a place you scrolled to and can lose.
+  //
+  // A commit or PR diff stays the combined read. The task there is the
+  // whole change, and its rail is optional -- pane too narrow, or shut
+  // from the header -- so one file at a time would leave no way to
+  // reach the rest.
+  const pickOne = changes !== undefined;
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  // Derived rather than corrected in an effect: the patch is refetched
+  // under this page constantly (every tick, commit and discard), and a
+  // pick that no longer exists has to fall back the same render, not a
+  // frame later with an empty pane in between.
+  const picked = pickOne
+    ? (allFiles.find((file) => fileKey(file) === pickedKey) ?? allFiles[0])
+    : undefined;
+  const pickedFileKey = picked ? fileKey(picked) : null;
+  const shownFiles = pickOne ? (picked ? [picked] : []) : allFiles;
+  // Which file the rest of the view is talking about: the pick, or
+  // whatever the scroll has reached in a combined read.
+  const currentKey = pickOne ? pickedFileKey : activeKey;
+
+  // A fresh file starts at its own top. Without this the pane keeps the
+  // scroll the last file was left at, so a short file picked after a
+  // long one can open past its own end.
+  useEffect(() => {
+    if (pickOne) scrollRef.current?.scrollTo({ top: 0 });
+  }, [pickOne, pickedFileKey]);
+
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
   // do anything the first time reads as broken.
@@ -272,7 +304,13 @@ export function DiffView({
   const setCollapsed = (key: string, collapsed: boolean) =>
     setCollapsedKeys((prev) => withCollapsed(prev, key, collapsed));
 
-  const jumpTo = (key: string) => {
+  // One entry point for "the rail picked a file", so the two modes
+  // differ in what landing on a file means and nowhere else.
+  const selectFile = (key: string) => {
+    if (pickOne) {
+      setPickedKey(key);
+      return;
+    }
     const container = scrollRef.current;
     if (container) jumpToFile(container, key, setCollapsedKeys, setActiveKey);
   };
@@ -291,7 +329,7 @@ export function DiffView({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "x" && changes && !changes.busy) {
         if (!isBareKeyEvent(e)) return;
-        const file = allFiles.find((f) => fileKey(f) === activeKey);
+        const file = allFiles.find((f) => fileKey(f) === currentKey);
         const row = file && changes.byPath.get(file.name);
         if (!row) return;
         e.preventDefault();
@@ -300,21 +338,32 @@ export function DiffView({
       }
       if (e.key !== "[" && e.key !== "]") return;
       if (!isBareKeyEvent(e)) return;
-      const container = scrollRef.current;
-      if (!container) return;
-      const keys = fileTargets(container).map((el) => el.dataset["diffFile"]);
+      const step = e.key === "]" ? 1 : -1;
+      // A picker steps through the rail, which is the list on screen. A
+      // combined read steps through the files the scroll area has, read
+      // from the DOM so it can't drift from what is rendered.
+      const keys = pickOne
+        ? indexEntries.flatMap((entry) => entry.target ?? [])
+        : fileTargets(scrollRef.current ?? document.body).map(
+            (el) => el.dataset["diffFile"],
+          );
       if (keys.length === 0) return;
       e.preventDefault();
-      // No active file yet (nothing scrolled) steps to the first one.
-      const at = keys.indexOf(activeKey ?? undefined);
-      const step = e.key === "]" ? 1 : -1;
+      // No file landed on yet steps to the first one.
+      const at = keys.indexOf(currentKey ?? undefined);
       const next = keys[Math.min(keys.length - 1, Math.max(0, at + step))];
-      if (next !== undefined)
+      if (next === undefined) return;
+      if (pickOne) {
+        setPickedKey(next);
+        return;
+      }
+      const container = scrollRef.current;
+      if (container)
         jumpToFile(container, next, setCollapsedKeys, setActiveKey);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [activeKey, setActiveKey, allFiles, changes]);
+  }, [currentKey, setActiveKey, allFiles, changes, indexEntries, pickOne]);
 
   return (
     // Measured rather than left to a container query: the chip has to
@@ -357,14 +406,19 @@ export function DiffView({
         {showIndex && (
           <DiffFileIndex
             entries={indexEntries}
-            activeKey={activeKey}
+            activeKey={currentKey}
             collapsedKeys={collapsedKeys}
-            allCollapsed={allCollapsed}
-            onSelect={jumpTo}
-            onToggleAll={() =>
-              setCollapsedKeys(
-                allCollapsed ? new Set() : new Set(allFiles.map(fileKey)),
-              )
+            // Folding is a combined-read affordance: with one file in
+            // the pane there is nothing for it to collapse.
+            allCollapsed={pickOne ? undefined : allCollapsed}
+            onSelect={selectFile}
+            onToggleAll={
+              pickOne
+                ? undefined
+                : () =>
+                    setCollapsedKeys(
+                      allCollapsed ? new Set() : new Set(allFiles.map(fileKey)),
+                    )
             }
             changes={changes}
             footer={railFooter}
@@ -407,17 +461,21 @@ export function DiffView({
               className="flex flex-col gap-2 p-2 select-text"
               style={DIFF_STYLE}
             >
-              {allFiles.map((fileDiff) => {
+              {shownFiles.map((fileDiff) => {
                 const key = fileKey(fileDiff);
                 return (
                   <DiffFileRow
                     key={key}
                     fileDiff={fileDiff}
                     fileId={key}
-                    collapsed={collapsedKeys.has(key)}
+                    collapsed={!pickOne && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
                     themeType={resolved}
-                    onToggle={setCollapsed}
+                    // No fold control in a picker: the file in the pane
+                    // is the one you asked for, and folding it away
+                    // would leave the pane blank with nothing to
+                    // unfold it from.
+                    onToggle={pickOne ? undefined : setCollapsed}
                     row={changes?.byPath.get(fileDiff.name)}
                     stagingDisabled={changes?.busy ?? false}
                     onSetStaged={changes?.onSetStaged}
@@ -464,7 +522,8 @@ function DiffFileRow({
   collapsed: boolean;
   diffStyle: DiffStyle;
   themeType: "light" | "dark";
-  onToggle: (key: string, collapsed: boolean) => void;
+  // Absent in a picker, where there is nothing to fold away.
+  onToggle: ((key: string, collapsed: boolean) => void) | undefined;
   row: ChangedFile | undefined;
   stagingDisabled: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
@@ -486,25 +545,27 @@ function DiffFileRow({
                 onSetStaged={onSetStaged}
               />
             )}
-            <button
-              type="button"
-              onClick={() => onToggle(fileId, !collapsed)}
-              aria-expanded={!collapsed}
-              aria-label={
-                collapsed
-                  ? `Expand ${fileDiff.name}`
-                  : `Collapse ${fileDiff.name}`
-              }
-              className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            >
-              <ChevronDown
-                aria-hidden
-                className={cn(
-                  "size-3.5 transition-transform",
-                  collapsed && "-rotate-90",
-                )}
-              />
-            </button>
+            {onToggle && (
+              <button
+                type="button"
+                onClick={() => onToggle(fileId, !collapsed)}
+                aria-expanded={!collapsed}
+                aria-label={
+                  collapsed
+                    ? `Expand ${fileDiff.name}`
+                    : `Collapse ${fileDiff.name}`
+                }
+                className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              >
+                <ChevronDown
+                  aria-hidden
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    collapsed && "-rotate-90",
+                  )}
+                />
+              </button>
+            )}
           </span>
         )}
       />
