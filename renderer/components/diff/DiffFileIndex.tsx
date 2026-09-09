@@ -29,7 +29,6 @@ import {
   type DiffChangesControls,
 } from "./changesControls";
 import type { IndexEntry } from "./patchFiles";
-import { StagedCheckbox } from "./StagedCheckbox";
 
 // The navigation rail for a multi-file patch: every file in the order it
 // appears in the scroll area, with its change marker and +/- counts.
@@ -402,19 +401,37 @@ function IndexRow({
         collapsed && "opacity-55",
       )}
     >
-      {row && onSetStaged && (
-        <span
-          role="presentation"
-          onClick={(e) => e.stopPropagation()}
-          className="flex shrink-0"
-        >
-          <StagedCheckbox
-            file={row}
-            disabled={busy}
-            onSetStaged={onSetStaged}
-          />
-        </span>
-      )}
+      {row &&
+        onSetStaged && (
+          // The tick is the row's own control, not a way into the file:
+          // its click stops here rather than selecting.
+          <span
+            role="presentation"
+            onClick={(e) => e.stopPropagation()}
+            className="flex shrink-0"
+          >
+            <Checkbox
+              checked={row.staged === "all"}
+              indeterminate={row.staged === "partial"}
+              disabled={busy}
+              onCheckedChange={(next) =>
+                onSetStaged(changedFilePaths(row), next)
+              }
+              aria-label={
+                row.staged === "all"
+                  ? `Leave ${row.path} out of the commit`
+                  : `Include ${row.path} in the commit`
+              }
+              title={
+                row.staged === "partial"
+                  ? "Partly staged: tick to include the whole file"
+                  : row.staged === "all"
+                    ? "Included in the commit"
+                    : "Not included in the commit"
+              }
+            />
+          </span>
+        )}
       <button
         type="button"
         data-slot="diff-index-jump"

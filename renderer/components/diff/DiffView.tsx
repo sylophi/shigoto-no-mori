@@ -12,12 +12,10 @@ import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { cn } from "@/lib/utils";
-import type { ChangedFile } from "@shared/schemas";
 import type { DiffChangesControls } from "./changesControls";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { changeEntries, fileKey, patchEntries } from "./patchFiles";
-import { StagedCheckbox } from "./StagedCheckbox";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";
@@ -388,9 +386,6 @@ export function DiffView({
                     // would leave the pane blank with nothing to
                     // unfold it from.
                     onToggle={onePerPick ? undefined : setCollapsed}
-                    row={changes?.byPath.get(fileDiff.name)}
-                    stagingDisabled={changes?.busy ?? false}
-                    onSetStaged={changes?.onSetStaged}
                   />
                 );
               })}
@@ -415,9 +410,6 @@ export function DiffView({
 // rendered rows and keeps the header, so folding a file also stops
 // paying for it.
 //
-// `row` is per file too, so ticking one file re-renders that file's
-// header and leaves the rest cached. Undefined (a read-only diff, or a
-// patch entry the status list doesn't know) draws no checkbox.
 function DiffFileRow({
   fileDiff,
   fileId,
@@ -425,20 +417,15 @@ function DiffFileRow({
   diffStyle,
   themeType,
   onToggle,
-  row,
-  stagingDisabled,
-  onSetStaged,
 }: {
   fileDiff: FileDiffMetadata;
   fileId: string;
   collapsed: boolean;
   diffStyle: DiffStyle;
   themeType: "light" | "dark";
-  // Absent in a picker, where there is nothing to fold away.
+  // Absent in a picker, where there is nothing to fold away -- and with
+  // it the header prefix, which then has nothing to draw.
   onToggle: ((key: string, collapsed: boolean) => void) | undefined;
-  row: ChangedFile | undefined;
-  stagingDisabled: boolean;
-  onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
 }) {
   return (
     <div data-diff-file={fileId}>
@@ -448,38 +435,31 @@ function DiffFileRow({
       <FileDiff
         fileDiff={fileDiff}
         options={{ ...DIFF_THEME, diffStyle, themeType, collapsed }}
-        renderHeaderPrefix={() => (
-          <span className="inline-flex items-center gap-1.5">
-            {row && onSetStaged && (
-              <StagedCheckbox
-                file={row}
-                disabled={stagingDisabled}
-                onSetStaged={onSetStaged}
-              />
-            )}
-            {onToggle && (
-              <button
-                type="button"
-                onClick={() => onToggle(fileId, !collapsed)}
-                aria-expanded={!collapsed}
-                aria-label={
-                  collapsed
-                    ? `Expand ${fileDiff.name}`
-                    : `Collapse ${fileDiff.name}`
-                }
-                className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              >
-                <ChevronDown
-                  aria-hidden
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    collapsed && "-rotate-90",
-                  )}
-                />
-              </button>
-            )}
-          </span>
-        )}
+        renderHeaderPrefix={
+          onToggle
+            ? () => (
+                <button
+                  type="button"
+                  onClick={() => onToggle(fileId, !collapsed)}
+                  aria-expanded={!collapsed}
+                  aria-label={
+                    collapsed
+                      ? `Expand ${fileDiff.name}`
+                      : `Collapse ${fileDiff.name}`
+                  }
+                  className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      "size-3.5 transition-transform",
+                      collapsed && "-rotate-90",
+                    )}
+                  />
+                </button>
+              )
+            : undefined
+        }
       />
     </div>
   );

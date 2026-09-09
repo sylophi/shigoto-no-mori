@@ -21,11 +21,7 @@ import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { Worktree } from "@shared/schemas";
-import {
-  changedFilePaths,
-  fileMapByPath,
-  includedFiles,
-} from "./changesControls";
+import { changedFilePaths, includedFiles } from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -247,7 +243,6 @@ function ChangesView({
       emptyMessage="No uncommitted changes."
       changes={{
         files: list,
-        byPath: fileMapByPath(list),
         busy,
         selectedPath: picked?.path ?? null,
         onSelect: setPickedPath,
