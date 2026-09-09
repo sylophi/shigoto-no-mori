@@ -16,6 +16,10 @@ export interface DiffChangesControls {
   byPath: ReadonlyMap<string, ChangedFile>;
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
+  // The file whose diff is in the pane, by path, and how to change it.
+  // The page owns this because the page fetches that file's diff.
+  selectedPath: string | null;
+  onSelect: (path: string) => void;
   // A commit or discard is in flight: checkboxes and discard controls
   // hold still until the tree settles.
   busy: boolean;

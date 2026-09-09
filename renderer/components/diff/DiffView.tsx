@@ -118,23 +118,6 @@ function jumpToFile(
   setActiveKey(key);
 }
 
-// One entry per file key. The key is this view's identity for a file --
-// React key, `data-diff-file`, scroll-spy target -- so a patch that
-// names one twice can't be drawn twice: React drops children under a
-// repeated key, and which one it drops is not ours to predict. The
-// working-tree patch is read in two halves (see main/lib/git/diff.ts),
-// and a `git add` from a terminal between them can still hand us a file
-// as both an untracked addition and a staged one.
-function uniqueByKey(files: FileDiffMetadata[]): FileDiffMetadata[] {
-  const seen = new Set<string>();
-  return files.filter((file) => {
-    const key = fileKey(file);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 // Three states, not two: null means the user has never said, and the
 // pane width decides. Storing a default up-front would freeze whichever
 // width the diff happened to be opened at first.
@@ -207,11 +190,9 @@ export function DiffView({
   // working-tree patch does not (untracked files trail the tracked
   // diff), and there ticking a file would otherwise move it -- staging
   // an untracked file promotes it into the tracked half of the patch.
-  const allFiles = uniqueByKey(
-    parsedPatches
-      .flatMap((p) => p.files)
-      .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)),
-  );
+  const allFiles = parsedPatches
+    .flatMap((p) => p.files)
+    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const filesKey = allFiles.map(fileKey).join("\n");
   const [activeKey, setActiveKey] = useFileScrollSpy(scrollRef, filesKey);
 
@@ -251,40 +232,20 @@ export function DiffView({
   // moment ago has yet to hear about the newest edit), and only one of
   // them is the working tree as the commit will take it.
   const indexEntries = changes
-    ? changeEntries(changes.files, allFiles)
+    ? changeEntries(changes.files)
     : patchEntries(allFiles);
 
-  // The changes page is a picker, not a reader. Selecting a file swaps
-  // the pane to that file the way GitHub Desktop's Changes tab does,
-  // instead of scrolling one combined patch: the question there is
-  // "what am I about to commit in this file", and the answer should
-  // fill the pane rather than be a place you scrolled to and can lose.
-  //
-  // A commit or PR diff stays the combined read. The task there is the
-  // whole change, and its rail is optional -- pane too narrow, or shut
-  // from the header -- so one file at a time would leave no way to
-  // reach the rest.
-  const pickOne = changes !== undefined;
-  const [pickedKey, setPickedKey] = useState<string | null>(null);
-  // Derived rather than corrected in an effect: the patch is refetched
-  // under this page constantly (every tick, commit and discard), and a
-  // pick that no longer exists has to fall back the same render, not a
-  // frame later with an empty pane in between.
-  const picked = pickOne
-    ? (allFiles.find((file) => fileKey(file) === pickedKey) ?? allFiles[0])
-    : undefined;
-  const pickedFileKey = picked ? fileKey(picked) : null;
-  const shownFiles = pickOne ? (picked ? [picked] : []) : allFiles;
-  // Which file the rail marks: the pick, or whatever the scroll has
-  // reached in a combined read.
-  const currentKey = pickOne ? pickedFileKey : activeKey;
+  // The changes page hands over one file's diff -- the one its rail has
+  // picked -- so the pane draws whatever it was given and the two can't
+  // describe different moments. A commit or PR diff hands over the
+  // whole patch and reads as one scroll.
+  const onePerPick = changes !== undefined;
 
-  // A fresh file starts at its own top. Without this the pane keeps the
-  // scroll the last file was left at, so a short file picked after a
-  // long one can open past its own end.
+  // A fresh file starts at its own top, not at the scroll the last one
+  // was left at.
   useEffect(() => {
-    if (pickOne) scrollRef.current?.scrollTo({ top: 0 });
-  }, [pickOne, pickedFileKey]);
+    if (onePerPick) scrollRef.current?.scrollTo({ top: 0 });
+  }, [onePerPick, patch]);
 
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
@@ -301,16 +262,19 @@ export function DiffView({
   const setCollapsed = (key: string, collapsed: boolean) =>
     setCollapsedKeys((prev) => withCollapsed(prev, key, collapsed));
 
-  // One entry point for "the rail picked a file", so the two modes
-  // differ in what landing on a file means and nowhere else.
+  // What landing on a file means: the changes page fetches it, a
+  // combined read scrolls to it.
   const selectFile = (key: string) => {
-    if (pickOne) {
-      setPickedKey(key);
+    if (changes) {
+      changes.onSelect(key);
       return;
     }
     const container = scrollRef.current;
     if (container) jumpToFile(container, key, setCollapsedKeys, setActiveKey);
   };
+  // Which row the rail marks: the picked path, or whatever the scroll
+  // has reached in a combined read.
+  const currentKey = changes ? changes.selectedPath : activeKey;
 
   return (
     // Measured rather than left to a container query: the chip has to
@@ -353,10 +317,10 @@ export function DiffView({
             collapsedKeys={collapsedKeys}
             // Folding is a combined-read affordance: with one file in
             // the pane there is nothing for it to collapse.
-            allCollapsed={pickOne ? undefined : allCollapsed}
+            allCollapsed={onePerPick ? undefined : allCollapsed}
             onSelect={selectFile}
             onToggleAll={
-              pickOne
+              onePerPick
                 ? undefined
                 : () =>
                     setCollapsedKeys(
@@ -396,7 +360,12 @@ export function DiffView({
             </CenteredMessage>
           ) : allFiles.length === 0 ? (
             <CenteredMessage className="px-6 text-center">
-              {emptyMessage}
+              {/* A picked file with no patch of its own -- a mode
+                  change, or content git won't diff -- is not the same
+                  as a clean tree, and mustn't borrow its wording. */}
+              {onePerPick && changes.files.length > 0
+                ? "No text changes to show for this file."
+                : emptyMessage}
             </CenteredMessage>
           ) : (
             <div
@@ -404,21 +373,21 @@ export function DiffView({
               className="flex flex-col gap-2 p-2 select-text"
               style={DIFF_STYLE}
             >
-              {shownFiles.map((fileDiff) => {
+              {allFiles.map((fileDiff) => {
                 const key = fileKey(fileDiff);
                 return (
                   <DiffFileRow
                     key={key}
                     fileDiff={fileDiff}
                     fileId={key}
-                    collapsed={!pickOne && collapsedKeys.has(key)}
+                    collapsed={!onePerPick && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
                     themeType={resolved}
                     // No fold control in a picker: the file in the pane
                     // is the one you asked for, and folding it away
                     // would leave the pane blank with nothing to
                     // unfold it from.
-                    onToggle={pickOne ? undefined : setCollapsed}
+                    onToggle={onePerPick ? undefined : setCollapsed}
                     row={changes?.byPath.get(fileDiff.name)}
                     stagingDisabled={changes?.busy ?? false}
                     onSetStaged={changes?.onSetStaged}

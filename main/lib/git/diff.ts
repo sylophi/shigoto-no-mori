@@ -1,59 +1,56 @@
-import { onIndex, PATCH_MAX_BUFFER, runLenient, splitZ } from "./core";
+import { PATCH_MAX_BUFFER, runLenient } from "./core";
 
-// Unified patch of every uncommitted change in the worktree. Combines
-// `git diff HEAD` (covers staged + unstaged tracked edits) with a
-// /dev/null diff per untracked file so additions render alongside
-// modifications in @pierre/diffs. `runLenient` swallows the non-zero
-// exits `git diff --no-index` always emits when there's a diff.
-// `core.quotePath=false` keeps a non-ASCII path raw in the headers, the
-// same bytes `status -z` reports, so the changes page can pair a patch
-// entry with its status row. Git would otherwise C-quote it ("caf\303\251").
+// The diff of one file in the working tree: what the changes page asks
+// for as you pick files, instead of reading the whole tree and slicing.
+// Nothing here can go stale against a list built somewhere else -- the
+// answer is whatever git says about this path right now.
 //
-// The whole read takes an index-queue slot (core.onIndex) so it sees
-// one index state throughout. The two halves split the working tree
-// between them at the index -- a file is untracked or it is in `diff
-// HEAD`, never both -- so a tick landing mid-read moves a file across
-// that line and the patch comes back with it twice (two entries under
-// one path, which is a duplicate React key) or not at all.
-export function getWorktreeDiff(worktreePath: string): Promise<string> {
-  return onIndex(worktreePath, () => worktreeDiffNow(worktreePath));
-}
-
-async function worktreeDiffNow(worktreePath: string): Promise<string> {
-  const [tracked, lsOutput] = await Promise.all([
-    runLenient(
-      worktreePath,
-      ["-c", "core.quotePath=false", "diff", "HEAD", "--no-color"],
-      { maxBuffer: PATCH_MAX_BUFFER },
-    ),
-    runLenient(worktreePath, [
-      "ls-files",
-      "--others",
-      "--exclude-standard",
-      "-z",
-    ]),
-  ]);
-  const untracked = splitZ(lsOutput);
-  const additions = await Promise.all(
-    untracked.map((file) =>
-      // `--` keeps a filename like `-weird.txt` from being parsed as flags.
-      runLenient(
-        worktreePath,
-        [
-          "-c",
-          "core.quotePath=false",
-          "diff",
-          "--no-index",
-          "--no-color",
-          "--",
-          "/dev/null",
-          file,
-        ],
-        { maxBuffer: PATCH_MAX_BUFFER },
-      ),
-    ),
+// `diff HEAD` covers a tracked file whether its edits are staged, not
+// staged, or both. An untracked file is in neither HEAD nor the index,
+// so it takes the /dev/null form instead. Empty output is the signal to
+// try that: git already knows which kind a path is, so asking costs one
+// process and knowing would cost the caller a lie to keep in sync.
+//
+// `paths` is the file, and its old name first when git records a
+// rename -- handing over both is what makes the pair one entry rather
+// than an unexplained addition.
+export async function getFileDiff(
+  worktreePath: string,
+  paths: readonly string[],
+): Promise<string> {
+  const file = paths[paths.length - 1];
+  if (file === undefined) return "";
+  const tracked = await runLenient(
+    worktreePath,
+    [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "HEAD",
+      "--no-color",
+      "--",
+      ...paths,
+    ],
+    { maxBuffer: PATCH_MAX_BUFFER },
   );
-  return [tracked, ...additions].filter((s) => s.length > 0).join("");
+  if (tracked.length > 0) return tracked;
+  // `--` keeps a filename like `-weird.txt` from being parsed as flags.
+  // `runLenient` swallows the non-zero exit `--no-index` always emits
+  // when there is a diff to print.
+  return runLenient(
+    worktreePath,
+    [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--no-index",
+      "--no-color",
+      "--",
+      "/dev/null",
+      file,
+    ],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
 }
 
 // Unified patch of a single commit, with the commit metadata stripped

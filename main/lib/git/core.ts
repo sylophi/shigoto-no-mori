@@ -124,34 +124,6 @@ export async function runLenient(
   }
 }
 
-// --- index queue -----------------------------------------------------------
-
-// One worktree's index-touching git runs, one after another. Git takes
-// index.lock for each write, so two ticks in quick succession (or a
-// tick racing a commit) would otherwise fail on the lock rather than
-// wait. One chain per worktree path. A failed task doesn't break the
-// chain.
-//
-// Reads that have to see one index state join the queue too: the
-// working-tree patch is two git runs (the tracked diff and the
-// untracked scan), and a `git add` landing between them stages a file
-// out of one half and into the other -- so the file comes back twice,
-// or not at all.
-const indexQueues = new Map<string, Promise<unknown>>();
-
-export function onIndex<T>(
-  worktreePath: string,
-  task: () => Promise<T>,
-): Promise<T> {
-  const previous = indexQueues.get(worktreePath) ?? Promise.resolve();
-  const next = previous.then(task, task);
-  indexQueues.set(
-    worktreePath,
-    next.catch(() => undefined),
-  );
-  return next;
-}
-
 // Pathspecs travel as argv, and a big refactor can carry enough paths
 // to brush the OS arg-length limit. Callers run one git process per
 // chunk.

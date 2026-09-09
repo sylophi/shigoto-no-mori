@@ -20,8 +20,15 @@ export const queryKeys = {
   worktrees: (projectId: string | null) => ["worktrees", projectId] as const,
   worktreeData: (projectId: string | null, worktreeId: string | null) =>
     ["worktreeData", projectId, worktreeId] as const,
+  // Every file diff of one worktree sits under this prefix, so the
+  // working-tree invalidation can drop them all with one key.
   worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeDiff", projectId, worktreeId] as const,
+  worktreeFileDiff: (
+    projectId: string,
+    worktreeId: string | undefined,
+    paths: readonly string[],
+  ) => ["worktreeDiff", projectId, worktreeId, paths.join("\0")] as const,
   worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeChanges", projectId, worktreeId] as const,
   commitDiff: (

@@ -250,7 +250,7 @@ export const worktrees = {
   renameBranch: worktreesClient.renameBranch,
   setShelved: worktreesClient.setShelved,
   checkoutBranch: worktreesClient.checkoutBranch,
-  diff: worktreesClient.diff,
+  fileDiff: worktreesClient.fileDiff,
   changeStatus: worktreesClient.changeStatus,
   setStaged: worktreesClient.setStaged,
   commit: worktreesClient.commit,

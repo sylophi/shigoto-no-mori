@@ -22,9 +22,19 @@ export const ChangeKindSchema = z.enum([
 ]);
 export type ChangeKind = z.infer<typeof ChangeKindSchema>;
 
+// Lines added and removed against HEAD. Absent when git won't say --
+// a binary file -- and the row then shows no counts rather than zeros.
+export const ChangeCountsSchema = z.object({
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+export type ChangeCounts = z.infer<typeof ChangeCountsSchema>;
+
 export const ChangedFileSchema = z.object({
   path: z.string().min(1),
   kind: ChangeKindSchema,
+  additions: z.number().int().nonnegative().optional(),
+  deletions: z.number().int().nonnegative().optional(),
   // Present for a rename or copy recorded in the index: where the file
   // came from. Staging and discarding act on both paths.
   prevPath: z.string().optional(),
@@ -44,6 +54,12 @@ const PathListSchema = z
       .refine((p) => !p.includes("\0")),
   )
   .min(1);
+
+// The file whose diff to read: its path, with the old one first when
+// git records it as a rename.
+export const FileDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  paths: PathListSchema,
+});
 
 export const SetStagedPayloadSchema = WorktreeScopedPayloadSchema.extend({
   paths: PathListSchema,

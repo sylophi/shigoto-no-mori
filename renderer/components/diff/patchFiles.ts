@@ -3,7 +3,7 @@
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
-import type { ChangedFile, ChangeKind } from "@shared/schemas";
+import type { ChangeCounts, ChangedFile, ChangeKind } from "@shared/schemas";
 
 // Stable identity for one file inside one patch. `name` alone collides
 // on a rename pair (the old path can still appear as another entry), so
@@ -81,72 +81,51 @@ const STATUS_MARKS: Record<ChangeKind, ChangeMark> = {
 // where the rows come from is the caller's decision rather than a shape
 // the rail has to know about.
 export interface IndexEntry {
-  // Row identity, and what the filter and the React key run on.
+  // Row identity: what the filter and the React key run on, what a
+  // click hands back, and what marks the row as the current one.
   key: string;
   path: string;
   prevPath: string | null;
   mark: ChangeMark;
-  // The patch entry this row scrolls to, when the patch has one. Null
-  // rows still tick and discard; there is just nothing to jump to.
-  target: string | null;
-  stats: { additions: number; deletions: number } | null;
+  stats: ChangeCounts | null;
   // The status row behind this file, absent on a read-only diff.
   row: ChangedFile | null;
 }
 
-function entryOf(file: FileDiffMetadata): IndexEntry {
-  return {
+// A read-only patch is its own table of contents: one row per file it
+// carries, in the order the scroll area has them. The key is the
+// patch's own identity for a file, which is what the scroll spy and the
+// jump both speak.
+export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
+  return files.map((file) => ({
     key: fileKey(file),
     path: file.name,
     prevPath: file.prevName ?? null,
     mark: PATCH_MARKS[file.type],
-    target: fileKey(file),
     stats: fileStats(file),
     row: null,
-  };
+  }));
 }
 
-// A read-only patch is its own table of contents: one row per file it
-// carries, in the order the scroll area has them.
-export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
-  return files.map(entryOf);
-}
-
-// The changes page lists what `git status` reports, which is the list
-// the commit button acts on. The patch is read only for what it can add
-// to a row -- the counts and somewhere to scroll to.
-//
-// The two disagree more often than it looks. `git diff HEAD` compares
-// HEAD with the working tree and pairs a deletion with an addition as
-// one rename; status compares HEAD, index and working tree separately,
-// so the same pair stays two rows until both halves are staged. Listing
-// from the patch there drops a file the commit would still take, which
-// is the one thing this list must never do.
-export function changeEntries(
-  files: readonly ChangedFile[],
-  patch: readonly FileDiffMetadata[],
-): IndexEntry[] {
-  const byName = new Map(patch.map((file) => [file.name, file]));
-  // A file git folded into a rename is reachable under the name it had:
-  // the deleted half of the pair scrolls to the entry that swallowed it.
-  const byPrevName = new Map(
-    patch.flatMap((file) => (file.prevName ? [[file.prevName, file]] : [])),
+// The changes page lists what `git status` reports -- the list the
+// commit button acts on -- and every row is drawn from that one read:
+// the marker from the change kind, the counts from git's own numstat.
+// Nothing is joined against a patch here, because there is no patch to
+// join against: the pane fetches the diff of whichever row is picked.
+export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
+  // Order is the list's own -- listChangedFiles sorts by path -- so the
+  // rail, the pane's first pick and the commit all agree on it.
+  return files.map(
+    (row): IndexEntry => ({
+      key: row.path,
+      path: row.path,
+      prevPath: row.prevPath ?? null,
+      mark: STATUS_MARKS[row.kind],
+      stats:
+        row.additions === undefined || row.deletions === undefined
+          ? null
+          : { additions: row.additions, deletions: row.deletions },
+      row,
+    }),
   );
-  return files
-    .map((row): IndexEntry => {
-      const own = byName.get(row.path);
-      const match = own ?? byPrevName.get(row.path);
-      return {
-        key: row.path,
-        path: row.path,
-        prevPath: row.prevPath ?? null,
-        mark: STATUS_MARKS[row.kind],
-        target: match ? fileKey(match) : null,
-        // Counts belong to the patch entry itself, so the half that was
-        // folded into a rename doesn't restate the pair's numbers.
-        stats: own ? fileStats(own) : null,
-        row,
-      };
-    })
-    .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }

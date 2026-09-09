@@ -173,10 +173,8 @@ export function DiffFileIndex({
             <IndexRow
               key={entry.key}
               entry={entry}
-              active={entry.target !== null && entry.target === activeKey}
-              collapsed={
-                entry.target !== null && collapsedKeys.has(entry.target)
-              }
+              active={entry.key === activeKey}
+              collapsed={collapsedKeys.has(entry.key)}
               onSelect={onSelect}
               busy={changes?.busy ?? false}
               onSetStaged={changes?.onSetStaged}
@@ -373,8 +371,8 @@ function IndexRow({
   const [pathRef, display] = useShortPath(entry.path, null);
   const cut = display.lastIndexOf("/");
   const { mark, label, className } = entry.mark;
-  const { target, row } = entry;
-  const jump = target === null ? undefined : () => onSelect(target);
+  const { row } = entry;
+  const select = () => onSelect(entry.key);
   const title = entry.prevPath
     ? `${label}: ${entry.prevPath} → ${entry.path}`
     : `${label}: ${entry.path}`;
@@ -394,7 +392,7 @@ function IndexRow({
     <div
       role="presentation"
       data-slot="diff-index-row"
-      onClick={jump}
+      onClick={select}
       data-active={active || undefined}
       className={cn(
         "group/row flex w-full items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
@@ -420,16 +418,9 @@ function IndexRow({
       <button
         type="button"
         data-slot="diff-index-jump"
-        onClick={jump}
-        // A row the patch has nothing for still ticks and discards; it
-        // just has nowhere to scroll to. Marked rather than `disabled`,
-        // which would take the tooltip saying so with it.
-        aria-disabled={target === null || undefined}
-        title={target === null ? `${title} (not in the diff)` : title}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 py-1 text-left",
-          target === null && "cursor-default",
-        )}
+        onClick={select}
+        title={title}
+        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
       >
         <span
           aria-hidden

@@ -2,16 +2,17 @@
 // the changes page ticks, commits and discards. Everything here acts on
 // whole files. Hunk-level staging done from a terminal survives (it
 // reads as "partial" and is left alone unless the file is toggled).
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type {
+  ChangeCounts,
   ChangedFile,
   ChangeKind,
   CommitMessage,
   StagedState,
 } from "@shared/schemas";
-import { chunked, onIndex, run, runLenient, splitZ } from "./core";
+import { chunked, run, runLenient, splitZ } from "./core";
 
 // Discard snapshots kept per repository. Old ones are dropped by count,
 // not age: a repo you discard in daily and one you touch monthly should
@@ -64,17 +65,132 @@ function kindOf(x: string, y: string): ChangeKind {
   return "modified";
 }
 
+// --- index queue -----------------------------------------------------------
+
+// Writes to one worktree's index run one after another. Git takes
+// index.lock for each, so two ticks in quick succession (or a tick
+// racing a commit) would otherwise fail on the lock rather than wait.
+// One chain per worktree path. A failed task doesn't break the chain.
+const indexQueues = new Map<string, Promise<unknown>>();
+
+function onIndex<T>(worktreePath: string, task: () => Promise<T>): Promise<T> {
+  const previous = indexQueues.get(worktreePath) ?? Promise.resolve();
+  const next = previous.then(task, task);
+  indexQueues.set(
+    worktreePath,
+    next.catch(() => undefined),
+  );
+  return next;
+}
+
+// --- line counts -----------------------------------------------------
+
+// `--numstat -z` records are "<adds>\t<dels>\t<path>", except a rename
+// leaves the path slot empty and spends two more fields on the old and
+// new names. Binary files report "-" for both: they map to undefined
+// rather than being left out, so a caller can tell "git says no counts"
+// from "git never mentioned it".
+function parseNumstat(stdout: string): Map<string, ChangeCounts | undefined> {
+  const fields = splitZ(stdout);
+  const counts = new Map<string, ChangeCounts | undefined>();
+  for (let i = 0; i < fields.length; i++) {
+    const [adds = "", dels = "", path = ""] = (fields[i] ?? "").split("\t");
+    const name = path === "" ? (fields[i + 2] ?? "") : path;
+    if (path === "") i += 2;
+    if (name === "") continue;
+    const additions = Number.parseInt(adds, 10);
+    const deletions = Number.parseInt(dels, 10);
+    counts.set(
+      name,
+      Number.isFinite(additions) && Number.isFinite(deletions)
+        ? { additions, deletions }
+        : undefined,
+    );
+  }
+  return counts;
+}
+
+// An untracked file is in no diff git can be asked for in one go, and
+// spawning a `--no-index` per new file is a process each on a read that
+// happens on every tick. It is a new file, so every line in it is an
+// addition -- count them here. Git's own rules for what it won't count:
+// a NUL byte in the first 8k makes it binary, and past a point it is
+// not worth reading a file to put a number next to it.
+const UNTRACKED_COUNT_LIMIT = 4 * 1024 * 1024;
+
+async function countUntracked(
+  worktreePath: string,
+  path: string,
+): Promise<ChangeCounts | undefined> {
+  try {
+    const stats = await stat(join(worktreePath, path));
+    if (!stats.isFile() || stats.size > UNTRACKED_COUNT_LIMIT) return undefined;
+    const contents = await readFile(join(worktreePath, path));
+    if (contents.subarray(0, 8000).includes(0)) return undefined;
+    let additions = 0;
+    for (const byte of contents) if (byte === 0x0a) additions++;
+    // A last line without its newline still counts as a line.
+    if (contents.length > 0 && contents[contents.length - 1] !== 0x0a) {
+      additions++;
+    }
+    return { additions, deletions: 0 };
+  } catch {
+    // Vanished between the status walk and here, or unreadable. The row
+    // is still listed; it just shows no counts.
+    return undefined;
+  }
+}
+
+// The +/- each row shows. One `diff HEAD --numstat` covers everything
+// git has a record of -- tracked edits, staged or not, and deletions --
+// and the new files that diff has never heard of are counted from disk.
+async function countsFor(
+  worktreePath: string,
+  files: readonly ChangedFile[],
+): Promise<ChangedFile[]> {
+  const tracked = parseNumstat(
+    await runLenient(worktreePath, [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "HEAD",
+      "--numstat",
+      "-z",
+    ]),
+  );
+  const untracked = new Map(
+    await Promise.all(
+      files
+        .filter((file) => !tracked.has(file.path))
+        .map(
+          async (file): Promise<[string, ChangeCounts | undefined]> => [
+            file.path,
+            await countUntracked(worktreePath, file.path),
+          ],
+        ),
+    ),
+  );
+  return files.map((file) => {
+    const counts = tracked.get(file.path) ?? untracked.get(file.path);
+    return counts ? { ...file, ...counts } : file;
+  });
+}
+
 // `git status --porcelain=v2 -z`, one file per entry. This is the one
 // status parser: the sidebar's per-worktree count runs it too.
 //
 // `untracked` picks how untracked directories come out. The changes
-// page wants "all" (each file its own row, so the patch view and a
+// page wants "all" (each file its own row, so the diff view and a
 // discard can name it). The per-focus sidebar scan leaves it unset so
 // a user's `status.showUntrackedFiles = no` keeps that scan cheap (see
 // getWorkingTreeChanges).
+//
+// `counts` adds the +/- the changes list draws, and is off by default
+// for the same reason: it is a second pass over the tree, and a scan
+// that only wants the number of files shouldn't pay for it.
 export async function listChangedFiles(
   worktreePath: string,
-  options: { untracked?: "all" } = {},
+  options: { untracked?: "all"; counts?: boolean } = {},
 ): Promise<ChangedFile[]> {
   const args = ["status", "--porcelain=v2", "-z"];
   if (options.untracked) args.push(`--untracked-files=${options.untracked}`);
@@ -115,7 +231,11 @@ export async function listChangedFiles(
     // "!" (ignored) never appears without --ignored, and "#" headers only
     // with --branch. Anything else is skipped rather than guessed at.
   }
-  return files;
+  // Path order, once, here: git emits status in its own order, and
+  // every reader of this list -- the rail, the commit, the page's first
+  // pick -- wants the same one.
+  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return options.counts ? countsFor(worktreePath, files) : files;
 }
 
 // --- staging -----------------------------------------------------------
@@ -139,7 +259,7 @@ export function setStaged(
     } else {
       await runChunked(worktreePath, ["reset", "-q"], paths);
     }
-    return listChangedFiles(worktreePath, { untracked: "all" });
+    return listChangedFiles(worktreePath, { untracked: "all", counts: true });
   });
 }
 

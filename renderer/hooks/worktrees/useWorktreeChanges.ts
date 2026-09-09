@@ -15,9 +15,10 @@ import type {
 import { clearCommitDraft } from "@/lib/commitDraft";
 import { queryKeys } from "@/lib/queryKeys";
 
-// Index state per changed file, for the changes page's checkboxes. Kept
-// apart from the patch query: a tick changes only this, and refetching
-// a large patch on every checkbox would make the rail feel stuck.
+// Every changed file: what it is, how much of it is staged, and its
+// +/- counts. The changes page draws its whole list from this, and
+// fetches a diff only for the file it has picked -- so a tick refreshes
+// the list and nothing else has to be kept in step with it.
 export function useWorktreeChanges(
   projectId: string,
   worktreeId: string | undefined,
@@ -43,21 +44,6 @@ interface SetStagedInput {
   staged: boolean;
 }
 
-// Whether two status lists describe the same set of files, ignoring how
-// much of each is staged. `listChangedFiles` walks git's own output, so
-// the same tree comes back in the same order; a false "no" here costs
-// one refetch and nothing else.
-function samePaths(
-  before: readonly ChangedFile[] | undefined,
-  after: readonly ChangedFile[],
-): boolean {
-  if (!before || before.length !== after.length) return false;
-  return before.every(
-    (file, i) =>
-      file.path === after[i]?.path && file.prevPath === after[i]?.prevPath,
-  );
-}
-
 // Tick/untick. Optimistic: the checkbox flips before git answers, and
 // the status the call answers with is what makes a partial file settle
 // to "all" -- one round trip, no refetch.
@@ -78,21 +64,10 @@ export function useSetStaged() {
       );
     },
     onSuccess: (files, vars) => {
-      const key = queryKeys.worktreeChanges(vars.projectId, vars.worktreeId);
-      const before = queryClient.getQueryData<ChangedFile[]>(key);
-      queryClient.setQueryData(key, files);
-      // This answer is a fresher look at the tree than the patch beside
-      // it was: anything written since the patch was fetched -- an agent
-      // is usually running in these worktrees -- arrives here, and the
-      // changes list would show a file the patch has nothing for, which
-      // is a row you can tick but not read. Only when the set of files
-      // moved: a tick that just flips index state is the common case and
-      // must not drag a whole patch behind it.
-      if (!samePaths(before, files)) {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.worktreeDiff(vars.projectId, vars.worktreeId),
-        });
-      }
+      queryClient.setQueryData(
+        queryKeys.worktreeChanges(vars.projectId, vars.worktreeId),
+        files,
+      );
     },
     onError: (_err, vars) => {
       void queryClient.invalidateQueries({
