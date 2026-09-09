@@ -9,8 +9,22 @@ import { CommitHashSchema, WorktreeSchema } from "./worktree";
 export const StagedStateSchema = z.enum(["none", "partial", "all"]);
 export type StagedState = z.infer<typeof StagedStateSchema>;
 
+// What happened to the file, in git's own four buckets. Taken from the
+// status codes rather than the patch: the patch answers a different
+// question (how HEAD and the working tree differ, with renames paired
+// across the two), and the changes page has to describe what a commit
+// would record.
+export const ChangeKindSchema = z.enum([
+  "added",
+  "modified",
+  "deleted",
+  "renamed",
+]);
+export type ChangeKind = z.infer<typeof ChangeKindSchema>;
+
 export const ChangedFileSchema = z.object({
   path: z.string().min(1),
+  kind: ChangeKindSchema,
   // Present for a rename or copy recorded in the index: where the file
   // came from. Staging and discarding act on both paths.
   prevPath: z.string().optional(),

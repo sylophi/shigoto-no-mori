@@ -17,7 +17,7 @@ import type { ChangedFile } from "@shared/schemas";
 import { changedFilePaths, type DiffChangesControls } from "./changesControls";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
-import { fileKey } from "./patchFiles";
+import { changeEntries, fileKey, patchEntries } from "./patchFiles";
 import { StagedCheckbox } from "./StagedCheckbox";
 import { fileTargets, useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -245,6 +245,18 @@ export function DiffView({
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
+  // What the rail lists. A read-only diff has only the patch to go on.
+  // The changes page has git status too, and that is the list it shows:
+  // it is what the commit button acts on, so a file it leaves out is a
+  // file you cannot tick, discard, or even see is there. The patch and
+  // the status disagree in both directions (git pairs a staged addition
+  // with an unstaged deletion into one rename entry; a patch fetched a
+  // moment ago has yet to hear about the newest edit), and only one of
+  // them is the working tree as the commit will take it.
+  const indexEntries = changes
+    ? changeEntries(changes.files, allFiles)
+    : patchEntries(allFiles);
+
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
   // do anything the first time reads as broken.
@@ -344,7 +356,7 @@ export function DiffView({
       <div className="flex min-h-0 flex-1">
         {showIndex && (
           <DiffFileIndex
-            files={allFiles}
+            entries={indexEntries}
             activeKey={activeKey}
             collapsedKeys={collapsedKeys}
             allCollapsed={allCollapsed}

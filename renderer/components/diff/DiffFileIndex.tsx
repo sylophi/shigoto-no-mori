@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { FileDiffMetadata } from "@pierre/diffs";
 import {
   ChevronsDownUp,
   ChevronsUpDown,
@@ -29,7 +28,7 @@ import {
   includedFiles,
   type DiffChangesControls,
 } from "./changesControls";
-import { CHANGE_MARKS, fileKey, fileStats } from "./patchFiles";
+import type { IndexEntry } from "./patchFiles";
 import { StagedCheckbox } from "./StagedCheckbox";
 
 // The navigation rail for a multi-file patch: every file in the order it
@@ -43,8 +42,11 @@ import { StagedCheckbox } from "./StagedCheckbox";
 // select-all box and a discard menu in the header, and the commit
 // composer as its footer. Bulk discards confirm in a strip that takes
 // the footer's place. Per-file discards arm on the row itself.
+//
+// Rows arrive built (patchFiles.ts): the caller decides whether they
+// come from the patch or from git status, and the rail just draws them.
 export function DiffFileIndex({
-  files,
+  entries,
   activeKey,
   collapsedKeys,
   allCollapsed,
@@ -54,7 +56,7 @@ export function DiffFileIndex({
   footer,
   width,
 }: {
-  files: FileDiffMetadata[];
+  entries: IndexEntry[];
   activeKey: string | null;
   collapsedKeys: ReadonlySet<string>;
   allCollapsed: boolean;
@@ -71,12 +73,12 @@ export function DiffFileIndex({
   const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim().toLowerCase();
   const matches = needle
-    ? files.filter(
-        (file) =>
-          file.name.toLowerCase().includes(needle) ||
-          file.prevName?.toLowerCase().includes(needle),
+    ? entries.filter(
+        (entry) =>
+          entry.path.toLowerCase().includes(needle) ||
+          entry.prevPath?.toLowerCase().includes(needle),
       )
-    : files;
+    : entries;
 
   // Keep the highlighted row on screen. Past ~24 files the rail is taller
   // than its own viewport, and a scroll-spy marker you can't see is no
@@ -156,38 +158,36 @@ export function DiffFileIndex({
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
         {matches.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            {files.length === 0
+            {entries.length === 0
               ? "No changed files."
               : "No files match that filter."}
           </p>
         ) : (
-          matches.map((file) => {
-            const key = fileKey(file);
-            return (
-              <IndexRow
-                key={key}
-                file={file}
-                active={key === activeKey}
-                collapsed={collapsedKeys.has(key)}
-                onSelect={onSelect}
-                row={changes?.byPath.get(file.name)}
-                busy={changes?.busy ?? false}
-                onSetStaged={changes?.onSetStaged}
-                discardArmed={discardArm.armedKey === key}
-                onDiscard={(row) =>
-                  discardArm.trigger(key, () =>
-                    changes?.onDiscard(changedFilePaths(row)),
-                  )
-                }
-              />
-            );
-          })
+          matches.map((entry) => (
+            <IndexRow
+              key={entry.key}
+              entry={entry}
+              active={entry.target !== null && entry.target === activeKey}
+              collapsed={
+                entry.target !== null && collapsedKeys.has(entry.target)
+              }
+              onSelect={onSelect}
+              busy={changes?.busy ?? false}
+              onSetStaged={changes?.onSetStaged}
+              discardArmed={discardArm.armedKey === entry.key}
+              onDiscard={(row) =>
+                discardArm.trigger(entry.key, () =>
+                  changes?.onDiscard(changedFilePaths(row)),
+                )
+              }
+            />
+          ))
         )}
       </div>
 
       {needle && matches.length > 0 && (
         <p className="border-t border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-          {matches.length} of {files.length} files
+          {matches.length} of {entries.length} files
         </p>
       )}
 
@@ -340,27 +340,22 @@ function DiscardConfirmStrip({
 
 // Split out so the highlight moving re-renders two rows' worth of work
 // rather than the whole rail: `onSelect` is the caller's own handler
-// (the key comes from the row), so an untouched row's props are
+// (the entry carries what to jump to), so an untouched row's props are
 // unchanged and its markup stays cached.
 function IndexRow({
-  file,
+  entry,
   active,
   collapsed,
   onSelect,
-  row,
   busy,
   onSetStaged,
   discardArmed,
   onDiscard,
 }: {
-  file: FileDiffMetadata;
+  entry: IndexEntry;
   active: boolean;
   collapsed: boolean;
   onSelect: (key: string) => void;
-  // The status row behind this patch entry, absent on read-only diffs.
-  // Narrow props rather than the controls object, so a row only
-  // re-renders when its own row or the shared busy flag changes.
-  row: ChangedFile | undefined;
   busy: boolean;
   onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
   discardArmed: boolean;
@@ -369,10 +364,14 @@ function IndexRow({
   // No home to tildify against: these are repo-relative paths, so the
   // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
   // against the measured width of this row's path column.
-  const [pathRef, display] = useShortPath(file.name, null);
+  const [pathRef, display] = useShortPath(entry.path, null);
   const cut = display.lastIndexOf("/");
-  const { mark, label, className } = CHANGE_MARKS[file.type];
-  const { additions, deletions } = fileStats(file);
+  const { mark, label, className } = entry.mark;
+  const { target, row } = entry;
+  const jump = target === null ? undefined : () => onSelect(target);
+  const title = entry.prevPath
+    ? `${label}: ${entry.prevPath} → ${entry.path}`
+    : `${label}: ${entry.path}`;
 
   return (
     // A row is three controls side by side (tick, jump, discard), so it
@@ -389,7 +388,7 @@ function IndexRow({
     <div
       role="presentation"
       data-slot="diff-index-row"
-      onClick={() => onSelect(fileKey(file))}
+      onClick={jump}
       data-active={active || undefined}
       className={cn(
         "group/row flex w-full items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
@@ -415,13 +414,16 @@ function IndexRow({
       <button
         type="button"
         data-slot="diff-index-jump"
-        onClick={() => onSelect(fileKey(file))}
-        title={
-          file.prevName
-            ? `${label}: ${file.prevName} → ${file.name}`
-            : `${label}: ${file.name}`
-        }
-        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+        onClick={jump}
+        // A row the patch has nothing for still ticks and discards; it
+        // just has nowhere to scroll to. Marked rather than `disabled`,
+        // which would take the tooltip saying so with it.
+        aria-disabled={target === null || undefined}
+        title={target === null ? `${title} (not in the diff)` : title}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 py-1 text-left",
+          target === null && "cursor-default",
+        )}
       >
         <span
           aria-hidden
@@ -440,8 +442,11 @@ function IndexRow({
           )}
           {display.slice(cut + 1)}
         </span>
-        {!discardArmed && (
-          <DiffStats additions={additions} deletions={deletions} />
+        {entry.stats && !discardArmed && (
+          <DiffStats
+            additions={entry.stats.additions}
+            deletions={entry.stats.deletions}
+          />
         )}
       </button>
       {row && (
@@ -456,8 +461,8 @@ function IndexRow({
           aria-pressed={discardArmed}
           aria-label={
             discardArmed
-              ? `Confirm discarding ${file.name}`
-              : `Discard changes to ${file.name}`
+              ? `Confirm discarding ${entry.path}`
+              : `Discard changes to ${entry.path}`
           }
           title={discardArmed ? "Click again to discard" : "Discard changes"}
           className={cn(

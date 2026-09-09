@@ -5,7 +5,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { ChangedFile, CommitMessage, StagedState } from "@shared/schemas";
+import type {
+  ChangedFile,
+  ChangeKind,
+  CommitMessage,
+  StagedState,
+} from "@shared/schemas";
 import { chunked, onIndex, run, runLenient, splitZ } from "./core";
 
 // Discard snapshots kept per repository. Old ones are dropped by count,
@@ -49,6 +54,16 @@ function stagedOf(x: string, y: string): StagedState {
   return y === "." ? "all" : "partial";
 }
 
+// The two status letters are index-vs-HEAD and worktree-vs-index, and a
+// file can carry a different one in each ("AM": added to the index,
+// edited since). Whichever side says the file arrived or left is the
+// one worth reporting -- the other is an edit on top of that.
+function kindOf(x: string, y: string): ChangeKind {
+  if (x === "A" || y === "A") return "added";
+  if (x === "D" || y === "D") return "deleted";
+  return "modified";
+}
+
 // `git status --porcelain=v2 -z`, one file per entry. This is the one
 // status parser: the sidebar's per-worktree count runs it too.
 //
@@ -70,20 +85,29 @@ export async function listChangedFiles(
     const record = fields[i] ?? "";
     const type = record[0];
     if (type === "?") {
-      files.push({ path: record.slice(2), staged: "none" });
+      files.push({ path: record.slice(2), kind: "added", staged: "none" });
     } else if (type === "1") {
       files.push({
         path: afterNthSpace(record, 8),
+        kind: kindOf(record[2] ?? ".", record[3] ?? "."),
         staged: stagedOf(record[2] ?? ".", record[3] ?? "."),
       });
     } else if (type === "2") {
       // Rename/copy: the original path follows as its own NUL field.
       const staged = stagedOf(record[2] ?? ".", record[3] ?? ".");
       const prevPath = fields[++i];
-      files.push({ path: afterNthSpace(record, 9), prevPath, staged });
+      files.push({
+        path: afterNthSpace(record, 9),
+        kind: "renamed",
+        prevPath,
+        staged,
+      });
     } else if (type === "u") {
       files.push({
         path: afterNthSpace(record, 10),
+        // Both sides of an unmerged path have content; what it needs is
+        // resolving, which `conflicted` is what the page reads for.
+        kind: "modified",
         staged: "none",
         conflicted: true,
       });
