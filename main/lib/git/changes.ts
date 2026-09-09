@@ -142,7 +142,7 @@ async function countUntracked(
     const contents = await readFile(full);
     if (contents.subarray(0, BINARY_SNIFF_BYTES).includes(0)) return undefined;
     let additions = 0;
-    // `indexOf` is a native scan; a `for..of` over the bytes would run
+    // `indexOf` is a native scan. A `for..of` over the bytes would run
     // the iterator protocol millions of times on the main process.
     for (
       let at = contents.indexOf(0x0a);
@@ -156,7 +156,7 @@ async function countUntracked(
     return { additions, deletions: 0 };
   } catch {
     // Vanished between the status walk and here, or unreadable. The row
-    // is still listed; it just shows no counts.
+    // is still listed, and just shows no counts.
     return undefined;
   }
 }
@@ -251,8 +251,8 @@ export async function listChangedFiles(
     } else if (type === "u") {
       files.push({
         path: afterNthSpace(record, 10),
-        // Both sides of an unmerged path have content; what it needs is
-        // resolving, which `conflicted` is what the page reads for.
+        // Both sides of an unmerged path have content. What it needs is
+        // resolving, and `conflicted` is what the page reads for that.
         kind: "modified",
         staged: "none",
         conflicted: true,

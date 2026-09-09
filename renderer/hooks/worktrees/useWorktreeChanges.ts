@@ -68,7 +68,7 @@ export function useSetStaged() {
       const key = queryKeys.worktreeChanges(vars.projectId, vars.worktreeId);
       // The answer comes back without counts -- staging can't change
       // them, and reading every new file's lines again on each tick is
-      // what that would cost. Carry over the ones already on screen; a
+      // what that would cost. Carry over the ones already on screen. A
       // file this tick is the first to hear about shows none until the
       // next full read, which is a number missing for a moment rather
       // than a row that misbehaves.

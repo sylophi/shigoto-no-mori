@@ -7,8 +7,8 @@ import { PATCH_MAX_BUFFER, runLenient } from "./core";
 //
 // Which comparison to make is the caller's to say, from the status row
 // it drew the file from. `diff HEAD` covers a tracked file whether its
-// edits are staged, not staged, or both; a file git has never seen is
-// in neither HEAD nor the index and only compares against /dev/null.
+// edits are staged, not staged, or both. A file git has never seen is
+// in neither HEAD nor the index, and only compares against /dev/null.
 // Asking git instead -- running the first and reading empty output as
 // "must be the other kind" -- gets a staged edit that was reverted in
 // the working tree wrong, and renders it as a new file.

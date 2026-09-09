@@ -716,7 +716,7 @@
 /* A diff rail row is hovered as one pill but built from three controls,
    and the middle one -- the jump button -- is a <button>, so the rule
    above would stripe a band across the row's middle instead of the row.
-   The row is on the list above; the jump button sits this one out. It
+   The row is on the list above. The jump button sits this one out. It
    needs the type selector to match the button rule's specificity, and
    the two ride together (both are hooks in the CONTRACT). The tick and
    the discard keep their own stripes: those are controls you aim at,

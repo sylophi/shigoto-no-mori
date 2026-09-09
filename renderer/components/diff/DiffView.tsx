@@ -163,7 +163,7 @@ export function DiffView({
   // ceiling a drag past it fails the availability check below and the
   // rail closes under the pointer -- the pane has to be able to hold
   // both, and the rail is the half being dragged. Unmeasured panes
-  // (first frame) get the flat ceiling; the measurement follows.
+  // (first frame) get the flat ceiling, and the measurement follows.
   const railMax =
     paneWidth === null
       ? RAIL_MAX
@@ -230,14 +230,10 @@ export function DiffView({
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
-  // What the rail lists. A read-only diff has only the patch to go on.
-  // The changes page has git status too, and that is the list it shows:
-  // it is what the commit button acts on, so a file it leaves out is a
-  // file you cannot tick, discard, or even see is there. The patch and
-  // the status disagree in both directions (git pairs a staged addition
-  // with an unstaged deletion into one rename entry; a patch fetched a
-  // moment ago has yet to hear about the newest edit), and only one of
-  // them is the working tree as the commit will take it.
+  // What the rail lists. A read-only diff has only its patch to go on.
+  // The changes page lists what git status reports, which is the list
+  // the commit button acts on, so a file left out of it is a file you
+  // cannot tick, discard, or even see is there.
   const indexEntries = changes
     ? changeEntries(changes.files)
     : patchEntries(allFiles);
