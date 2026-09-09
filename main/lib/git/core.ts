@@ -17,7 +17,6 @@ async function exec(
   args: string[],
   options: { cwd: string; maxBuffer?: number } & RunOptions,
 ): Promise<{ stdout: string }> {
-  const start = performance.now();
   const { env, ...execOptions } = options;
   try {
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
@@ -27,12 +26,8 @@ async function exec(
       env: { ...process.env, LC_ALL: "C", ...env },
       ...execOptions,
     });
-    const elapsed = Math.round(performance.now() - start);
-    console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
     return { stdout: result.stdout };
   } catch (err) {
-    const elapsed = Math.round(performance.now() - start);
-    console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
     // execFile's message is "Command failed: git <argv>\n<stderr>". The
     // argv repeats whatever was passed (a commit message, a path list)
     // and says nothing a user can act on. Git's own words do. Keep the
