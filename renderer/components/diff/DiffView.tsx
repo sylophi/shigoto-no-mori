@@ -11,15 +11,14 @@ import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { isBareKeyEvent } from "@/lib/dom";
 import { cn } from "@/lib/utils";
 import type { ChangedFile } from "@shared/schemas";
-import { changedFilePaths, type DiffChangesControls } from "./changesControls";
+import type { DiffChangesControls } from "./changesControls";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { changeEntries, fileKey, patchEntries } from "./patchFiles";
 import { StagedCheckbox } from "./StagedCheckbox";
-import { fileTargets, useFileScrollSpy } from "./useFileScrollSpy";
+import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";
 
@@ -94,10 +93,8 @@ function withCollapsed(
   return next;
 }
 
-// What landing on a file means, in one place: the rail's clicks and the
-// `[` / `]` keys both come through here. Module-level and taking the
-// (stable) state setters, so the key listener can call it without
-// re-registering on every render.
+// What landing on a file means in a combined read: expand it, put it at
+// the top of the view, and take the highlight.
 function jumpToFile(
   container: HTMLElement,
   key: string,
@@ -278,8 +275,8 @@ export function DiffView({
     : undefined;
   const pickedFileKey = picked ? fileKey(picked) : null;
   const shownFiles = pickOne ? (picked ? [picked] : []) : allFiles;
-  // Which file the rest of the view is talking about: the pick, or
-  // whatever the scroll has reached in a combined read.
+  // Which file the rail marks: the pick, or whatever the scroll has
+  // reached in a combined read.
   const currentKey = pickOne ? pickedFileKey : activeKey;
 
   // A fresh file starts at its own top. Without this the pane keeps the
@@ -315,56 +312,6 @@ export function DiffView({
     if (container) jumpToFile(container, key, setCollapsedKeys, setActiveKey);
   };
 
-  // `[` / `]` step through the files without reaching for the rail (and
-  // work even when it's hidden). Bare keys, so they stay inert while the
-  // filter box or any other field has focus, and while an overlay covers
-  // the page -- neither the launcher nor a modal traps focus, so without
-  // that guard they'd scroll the diff hidden behind them. The handler
-  // only picks the neighbouring key. jumpToFile stays the single
-  // definition of what landing on a file does.
-  //
-  // On the changes page `x` ticks or unticks the file being read, so a
-  // review can go "], read, x, ], read, x" without touching the mouse.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "x" && changes && !changes.busy) {
-        if (!isBareKeyEvent(e)) return;
-        const file = allFiles.find((f) => fileKey(f) === currentKey);
-        const row = file && changes.byPath.get(file.name);
-        if (!row) return;
-        e.preventDefault();
-        changes.onSetStaged(changedFilePaths(row), row.staged !== "all");
-        return;
-      }
-      if (e.key !== "[" && e.key !== "]") return;
-      if (!isBareKeyEvent(e)) return;
-      const step = e.key === "]" ? 1 : -1;
-      // A picker steps through the rail, which is the list on screen. A
-      // combined read steps through the files the scroll area has, read
-      // from the DOM so it can't drift from what is rendered.
-      const keys = pickOne
-        ? indexEntries.flatMap((entry) => entry.target ?? [])
-        : fileTargets(scrollRef.current ?? document.body).map(
-            (el) => el.dataset["diffFile"],
-          );
-      if (keys.length === 0) return;
-      e.preventDefault();
-      // No file landed on yet steps to the first one.
-      const at = keys.indexOf(currentKey ?? undefined);
-      const next = keys[Math.min(keys.length - 1, Math.max(0, at + step))];
-      if (next === undefined) return;
-      if (pickOne) {
-        setPickedKey(next);
-        return;
-      }
-      const container = scrollRef.current;
-      if (container)
-        jumpToFile(container, next, setCollapsedKeys, setActiveKey);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [currentKey, setActiveKey, allFiles, changes, indexEntries, pickOne]);
-
   return (
     // Measured rather than left to a container query: the chip has to
     // know whether the rail is currently on screen to toggle the right
@@ -386,11 +333,7 @@ export function DiffView({
               <ChipButton
                 onClick={toggleIndex}
                 aria-pressed={showIndex}
-                title={
-                  showIndex
-                    ? "Hide file index"
-                    : "Show file index ([ and ] step through files)"
-                }
+                title={showIndex ? "Hide file index" : "Show file index"}
                 aria-label={showIndex ? "Hide file index" : "Show file index"}
                 className={cn("py-1.5", showIndex && "text-foreground")}
               >

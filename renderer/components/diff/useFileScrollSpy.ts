@@ -17,10 +17,9 @@ import { useEffect, useState } from "react";
 // the observer has to be re-armed.
 const SPY_BAND = "0px 0px -72% 0px";
 
-// The file wrappers in scroll order. This module owns the marker, so the
-// jump and step paths in DiffView read it through here rather than
-// spelling the selector out again.
-export function fileTargets(container: HTMLElement): HTMLElement[] {
+// The file wrappers in scroll order. This module owns the `data-diff-file`
+// marker, so the selector is spelled out here and nowhere else.
+function fileTargets(container: HTMLElement): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>("[data-diff-file]")];
 }
 
