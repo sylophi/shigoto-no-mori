@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { changeKey } from "@shared/schemas";
 import type {
   ChangedFile,
   CommitChangesResult,
@@ -15,9 +16,10 @@ import type {
 import { clearCommitDraft } from "@/lib/commitDraft";
 import { queryKeys } from "@/lib/queryKeys";
 
-// Index state per changed file, for the changes page's checkboxes. Kept
-// apart from the patch query: a tick changes only this, and refetching
-// a large patch on every checkbox would make the rail feel stuck.
+// Every changed file: what it is, how much of it is staged, and its
+// +/- counts. The changes page draws its whole list from this, and
+// fetches a diff only for the file it has picked -- so a tick refreshes
+// the list and nothing else has to be kept in step with it.
 export function useWorktreeChanges(
   projectId: string,
   worktreeId: string | undefined,
@@ -63,9 +65,24 @@ export function useSetStaged() {
       );
     },
     onSuccess: (files, vars) => {
+      const key = queryKeys.worktreeChanges(vars.projectId, vars.worktreeId);
+      // The answer comes back without counts -- staging can't change
+      // them, and reading every new file's lines again on each tick is
+      // what that would cost. Carry over the ones already on screen. A
+      // file this tick is the first to hear about shows none until the
+      // next full read, which is a number missing for a moment rather
+      // than a row that misbehaves.
+      const carried = new Map(
+        queryClient
+          .getQueryData<ChangedFile[]>(key)
+          ?.map((file) => [changeKey(file), file.counts]),
+      );
       queryClient.setQueryData(
-        queryKeys.worktreeChanges(vars.projectId, vars.worktreeId),
-        files,
+        key,
+        files.map((file) => {
+          const counts = carried.get(changeKey(file));
+          return counts ? { ...file, counts } : file;
+        }),
       );
     },
     onError: (_err, vars) => {

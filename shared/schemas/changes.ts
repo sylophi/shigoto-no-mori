@@ -9,8 +9,33 @@ import { CommitHashSchema, WorktreeSchema } from "./worktree";
 export const StagedStateSchema = z.enum(["none", "partial", "all"]);
 export type StagedState = z.infer<typeof StagedStateSchema>;
 
+// What happened to the file, in git's own four buckets. Taken from the
+// status codes rather than the patch: the patch answers a different
+// question (how HEAD and the working tree differ, with renames paired
+// across the two), and the changes page has to describe what a commit
+// would record.
+export const ChangeKindSchema = z.enum([
+  "added",
+  "modified",
+  "deleted",
+  "renamed",
+]);
+export type ChangeKind = z.infer<typeof ChangeKindSchema>;
+
+// Lines added and removed against HEAD. Absent when git won't say --
+// a binary file -- and the row then shows no counts rather than zeros.
+export const ChangeCountsSchema = z.object({
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+export type ChangeCounts = z.infer<typeof ChangeCountsSchema>;
+
 export const ChangedFileSchema = z.object({
   path: z.string().min(1),
+  kind: ChangeKindSchema,
+  // One field, so "either both numbers or neither" is the type's job
+  // rather than something every reader re-checks.
+  counts: ChangeCountsSchema.optional(),
   // Present for a rename or copy recorded in the index: where the file
   // came from. Staging and discarding act on both paths.
   prevPath: z.string().optional(),
@@ -19,6 +44,24 @@ export const ChangedFileSchema = z.object({
   conflicted: z.literal(true).optional(),
 });
 export type ChangedFile = z.infer<typeof ChangedFileSchema>;
+
+// A row's identity. Two rows can name one path: `git rm --cached f`
+// leaves a staged deletion and an untracked file, both called f, and
+// they are separate decisions with separate diffs and separate counts.
+// The kind tells them apart and survives a tick, which moves `staged`
+// and nothing else.
+export function changeKey(file: ChangedFile): string {
+  return `${file.kind} ${file.path}`;
+}
+
+// Git knows nothing about this file yet: it is in neither HEAD nor the
+// index, so its diff is a comparison against /dev/null and its counts
+// can't come from `diff HEAD`. A tracked file can't reach this state --
+// an unstaged addition is what "untracked" means -- so the two status
+// letters say it on their own.
+export function isUntracked(file: ChangedFile): boolean {
+  return file.kind === "added" && file.staged === "none";
+}
 
 // Every path list travels into git argv after `--`, so a name that looks
 // like a flag is never one. NUL is the one byte a path can't carry.
@@ -30,6 +73,17 @@ const PathListSchema = z
       .refine((p) => !p.includes("\0")),
   )
   .min(1);
+
+// The file whose diff to read: its path, with the old one first when
+// git records it as a rename, and which of the two comparisons answers
+// for it. The caller has the status row in hand and git does not answer
+// "is this tracked" from an empty diff -- a staged edit reverted in the
+// working tree is empty too, and reading that as a new file would show
+// every line as an addition.
+export const FileDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  paths: PathListSchema,
+  untracked: z.boolean(),
+});
 
 export const SetStagedPayloadSchema = WorktreeScopedPayloadSchema.extend({
   paths: PathListSchema,

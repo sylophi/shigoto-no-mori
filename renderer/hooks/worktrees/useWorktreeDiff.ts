@@ -1,20 +1,39 @@
 import { useQuery } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
 
-export function useWorktreeDiff(
+// One file's working-tree diff, read when the changes page picks it.
+// Keyed by the paths asked for, so switching back to a file already
+// looked at is instant and the query cache is the only place a patch
+// lives. Refetched like everything else derived from the tree: on
+// mount, on focus, and when a commit or discard invalidates it.
+export function useFileDiff(
   projectId: string,
   worktreeId: string | undefined,
+  paths: readonly string[],
+  untracked: boolean,
 ) {
   return useQuery<string>({
-    queryKey: queryKeys.worktreeDiff(projectId, worktreeId),
+    queryKey: queryKeys.worktreeFileDiff(
+      projectId,
+      worktreeId,
+      paths,
+      untracked,
+    ),
     queryFn: () => {
-      if (!worktreeId) return "";
-      return window.api.worktrees.diff({ projectId, worktreeId });
+      if (!worktreeId || paths.length === 0) return "";
+      return window.api.worktrees.fileDiff({
+        projectId,
+        worktreeId,
+        paths: [...paths],
+        untracked,
+      });
     },
-    enabled: !!worktreeId,
-    // Diff reflects working-tree state, which mutates outside our control;
-    // always refetch on mount so re-entering the page shows current state.
+    enabled: !!worktreeId && paths.length > 0,
     staleTime: 0,
+    // Every file looked at leaves a patch behind, and a long review
+    // looks at a lot of them. The data is stale on arrival anyway, so
+    // holding it only buys an instant second look at the same file.
+    gcTime: 60_000,
     meta: { errorTitle: "Couldn't compute diff" },
   });
 }

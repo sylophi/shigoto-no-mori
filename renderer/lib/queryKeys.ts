@@ -20,8 +20,19 @@ export const queryKeys = {
   worktrees: (projectId: string | null) => ["worktrees", projectId] as const,
   worktreeData: (projectId: string | null, worktreeId: string | null) =>
     ["worktreeData", projectId, worktreeId] as const,
+  // Every file diff of one worktree sits under this prefix, so the
+  // working-tree invalidation can drop them all with one key.
   worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeDiff", projectId, worktreeId] as const,
+  // `untracked` belongs in the key, not just in the request: one path
+  // can be two rows (a staged deletion and an untracked file of the
+  // same name), and they have different diffs to show.
+  worktreeFileDiff: (
+    projectId: string,
+    worktreeId: string | undefined,
+    paths: readonly string[],
+    untracked: boolean,
+  ) => ["worktreeDiff", projectId, worktreeId, [...paths], untracked] as const,
   worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
     ["worktreeChanges", projectId, worktreeId] as const,
   commitDiff: (

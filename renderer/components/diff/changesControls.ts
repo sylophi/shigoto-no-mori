@@ -1,30 +1,24 @@
 import type { ChangedFile } from "@shared/schemas";
 
 // What turns the read-only diff view into the changes page: the status
-// rows behind each file's checkbox, and the actions the rail and the
-// file headers fire. The status list is the sole authority on paths --
-// the patch is only what gets drawn -- so every action names files by
-// their status row, looked up under the path pierre gives the file.
+// rows the rail draws, which file of them is in the pane, and the
+// actions the rows fire. The status list is the sole authority on what
+// is changed, and every action names files by their row.
 // Data and stable callbacks only: the composer rides in as its own
 // prop, so typing a message never changes this object's identity and
 // the rail rows keyed off it stay cached.
 export interface DiffChangesControls {
   files: ChangedFile[];
-  // Status row by the path the patch names the file under. Rename rows
-  // are keyed by their destination, which is also what pierre puts in
-  // `name`.
-  byPath: ReadonlyMap<string, ChangedFile>;
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
+  // The row whose diff is in the pane (patchFiles.changeKey), and how
+  // to change it. The page owns this because the page fetches that
+  // file's diff.
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
   // A commit or discard is in flight: checkboxes and discard controls
   // hold still until the tree settles.
   busy: boolean;
-}
-
-export function fileMapByPath(
-  files: readonly ChangedFile[],
-): ReadonlyMap<string, ChangedFile> {
-  return new Map(files.map((file) => [file.path, file]));
 }
 
 // The working-tree paths a row stands for, for staging and discarding.

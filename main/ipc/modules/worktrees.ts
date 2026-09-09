@@ -7,13 +7,13 @@ import { checkoutBranch, renameBranch } from "../../lib/git/branches";
 import {
   commitStaged,
   discardChanges,
-  listChangedFiles,
+  listChangesForPage,
   readCommitMessage,
   resetSoft,
   restoreDiscard,
   setStaged,
 } from "../../lib/git/changes";
-import { getCommitDiff, getWorktreeDiff } from "../../lib/git/diff";
+import { getCommitDiff, getFileDiff } from "../../lib/git/diff";
 import { resolveDefaultBranch } from "../../lib/git/remotes";
 import {
   overwriteFromUpstream,
@@ -116,12 +116,12 @@ export const worktreesHandlers: Handlers<
   checkoutBranch: (input) =>
     mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
 
-  diff: async ({ projectId, worktreeId }) => {
+  fileDiff: async ({ projectId, worktreeId, paths, untracked }) => {
     const { worktree } = await findProjectAndWorktreeOrThrow(
       projectId,
       worktreeId,
     );
-    return getWorktreeDiff(worktree.path);
+    return getFileDiff(worktree.path, paths, untracked);
   },
 
   changeStatus: async ({ projectId, worktreeId }) => {
@@ -129,7 +129,7 @@ export const worktreesHandlers: Handlers<
       projectId,
       worktreeId,
     );
-    return listChangedFiles(worktree.path, { untracked: "all" });
+    return listChangesForPage(worktree.path);
   },
 
   setStaged: async ({ projectId, worktreeId, paths, staged }) => {

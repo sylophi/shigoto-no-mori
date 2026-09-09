@@ -14,6 +14,7 @@ import {
   DeleteWorktreeResultSchema,
   DiscardChangesPayloadSchema,
   DiscardChangesResultSchema,
+  FileDiffPayloadSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
@@ -84,10 +85,13 @@ export const worktreesContract = {
     WorktreeSchema,
     { tracksProjectUsage: true },
   ),
-  diff: invoke("worktrees:diff", WorktreeScopedPayloadSchema, z.string()),
-  // The changes page: what each changed file's index state is, plus the
-  // mutations that tick, commit and discard. `diff` above stays the
-  // patch source. This is the cheap call that refetches after a toggle.
+  // One file's working-tree diff, which is what the changes page reads
+  // as you pick files. Per file rather than per worktree so the pane
+  // can't be describing a different moment than the list beside it.
+  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, z.string()),
+  // The changes page's list: every changed file, its index state and
+  // its counts. The one read the page needs to draw the rail, and the
+  // one a tick refetches.
   changeStatus: invoke(
     "worktrees:changeStatus",
     WorktreeScopedPayloadSchema,

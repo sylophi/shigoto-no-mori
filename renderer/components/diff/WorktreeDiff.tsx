@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { useWorktreeDiff } from "@/hooks/worktrees/useWorktreeDiff";
+import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   commitMessageQueryOptions,
   useCommitChanges,
@@ -20,12 +20,8 @@ import {
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import type { Worktree } from "@shared/schemas";
-import {
-  changedFilePaths,
-  fileMapByPath,
-  includedFiles,
-} from "./changesControls";
+import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
+import { changedFilePaths, includedFiles } from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
@@ -61,12 +57,6 @@ export function WorktreeDiff() {
       replace: true,
     });
 
-  const {
-    data: patch,
-    isLoading,
-    error,
-  } = useWorktreeDiff(projectId, worktree?.id);
-
   if (!worktree) {
     return (
       <WorktreeMissing
@@ -82,9 +72,6 @@ export function WorktreeDiff() {
   return (
     <ChangesView
       worktree={worktree}
-      patch={patch}
-      isLoading={isLoading}
-      error={error}
       onBack={goBack}
       amendRequested={amend === true}
       setAmending={setAmending}
@@ -98,17 +85,11 @@ export function WorktreeDiff() {
 // component so the change hooks only mount once the worktree resolved.
 function ChangesView({
   worktree,
-  patch,
-  isLoading,
-  error,
   onBack,
   amendRequested,
   setAmending,
 }: {
   worktree: Worktree;
-  patch: string | undefined;
-  isLoading: boolean;
-  error: Error | null;
   onBack: () => void;
   amendRequested: boolean;
   setAmending: (on: boolean) => void;
@@ -116,6 +97,24 @@ function ChangesView({
   const navigate = useNavigate();
   const { projectId, id: worktreeId } = worktree;
   const { data: files } = useWorktreeChanges(projectId, worktreeId);
+  // The list is the page's, so the pick is too -- and the pick decides
+  // what to fetch. Held as the row's key and resolved against the live
+  // list, so a file that stops being changed (discarded, committed,
+  // reverted in an editor) falls back to the first row instead of
+  // leaving the pane pointing at nothing.
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const picked =
+    files?.find((file) => changeKey(file) === pickedKey) ?? files?.[0] ?? null;
+  const {
+    data: patch,
+    isLoading,
+    error,
+  } = useFileDiff(
+    projectId,
+    worktreeId,
+    picked ? changedFilePaths(picked) : [],
+    picked ? isUntracked(picked) : false,
+  );
   // The stable `mutate`s, not the result objects: those are rebuilt
   // every render and would reach every diff file header as a new
   // callback, re-rendering all of pierre's rows on each tick.
@@ -245,8 +244,9 @@ function ChangesView({
       emptyMessage="No uncommitted changes."
       changes={{
         files: list,
-        byPath: fileMapByPath(list),
         busy,
+        selectedKey: picked ? changeKey(picked) : null,
+        onSelect: setPickedKey,
         onSetStaged: (paths, staged) =>
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,
