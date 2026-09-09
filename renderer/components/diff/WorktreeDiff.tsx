@@ -20,7 +20,7 @@ import {
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
-import { isUntracked, type Worktree } from "@shared/schemas";
+import { changeKey, isUntracked, type Worktree } from "@shared/schemas";
 import { changedFilePaths, includedFiles } from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
@@ -98,13 +98,13 @@ function ChangesView({
   const { projectId, id: worktreeId } = worktree;
   const { data: files } = useWorktreeChanges(projectId, worktreeId);
   // The list is the page's, so the pick is too -- and the pick decides
-  // what to fetch. Held by path and resolved against the live list, so
-  // a file that stops being changed (discarded, committed, reverted in
-  // an editor) falls back to the first row instead of leaving the pane
-  // pointing at nothing.
-  const [pickedPath, setPickedPath] = useState<string | null>(null);
+  // what to fetch. Held as the row's key and resolved against the live
+  // list, so a file that stops being changed (discarded, committed,
+  // reverted in an editor) falls back to the first row instead of
+  // leaving the pane pointing at nothing.
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
   const picked =
-    files?.find((file) => file.path === pickedPath) ?? files?.[0] ?? null;
+    files?.find((file) => changeKey(file) === pickedKey) ?? files?.[0] ?? null;
   const {
     data: patch,
     isLoading,
@@ -245,8 +245,8 @@ function ChangesView({
       changes={{
         files: list,
         busy,
-        selectedPath: picked?.path ?? null,
-        onSelect: setPickedPath,
+        selectedKey: picked ? changeKey(picked) : null,
+        onSelect: setPickedKey,
         onSetStaged: (paths, staged) =>
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,

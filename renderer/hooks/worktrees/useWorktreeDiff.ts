@@ -13,7 +13,12 @@ export function useFileDiff(
   untracked: boolean,
 ) {
   return useQuery<string>({
-    queryKey: queryKeys.worktreeFileDiff(projectId, worktreeId, paths),
+    queryKey: queryKeys.worktreeFileDiff(
+      projectId,
+      worktreeId,
+      paths,
+      untracked,
+    ),
     queryFn: () => {
       if (!worktreeId || paths.length === 0) return "";
       return window.api.worktrees.fileDiff({

@@ -2,7 +2,7 @@
 // the changes page ticks, commits and discards. Everything here acts on
 // whole files. Hunk-level staging done from a terminal survives (it
 // reads as "partial" and is left alone unless the file is toggled).
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type {
@@ -31,8 +31,17 @@ async function runChunked(
 ): Promise<string[]> {
   const outputs: string[] = [];
   for (const chunk of chunked(paths)) {
+    // `--literal-pathspecs`: these paths are the ones `git status`
+    // reported, so they are filenames. Left as pathspecs, a file called
+    // `a[1].txt` is a glob, and the run that was meant to stage or
+    // throw away one file reaches whatever else it matches.
     // oxlint-disable-next-line no-await-in-loop -- index writes take index.lock, so chunks have to run one after another
-    outputs.push(await run(worktreePath, [...args, "--", ...chunk], options));
+    const output = await run(
+      worktreePath,
+      ["--literal-pathspecs", ...args, "--", ...chunk],
+      options,
+    );
+    outputs.push(output);
   }
   return outputs;
 }
@@ -126,7 +135,9 @@ async function countUntracked(
 ): Promise<ChangeCounts | undefined> {
   const full = join(worktreePath, path);
   try {
-    const stats = await stat(full);
+    // lstat, not stat: a symlink is a one-line blob to git, and
+    // following it would count whatever it points at instead.
+    const stats = await lstat(full);
     if (!stats.isFile() || stats.size > UNTRACKED_COUNT_LIMIT) return undefined;
     const contents = await readFile(full);
     if (contents.subarray(0, BINARY_SNIFF_BYTES).includes(0)) return undefined;
@@ -184,7 +195,13 @@ async function countsFor(
     readUntracked(),
   ]);
   return files.map((file) => {
-    const counts = tracked.get(file.path) ?? untracked.get(file.path);
+    // Which side answers is the row's own business, not a lookup by
+    // path: `git rm --cached f` leaves a staged deletion and an
+    // untracked file both called f, and the numstat only speaks for
+    // the first of them.
+    const counts = isUntracked(file)
+      ? untracked.get(file.path)
+      : tracked.get(file.path);
     return counts ? { ...file, counts } : file;
   });
 }
@@ -283,7 +300,10 @@ export function setStaged(
     } else {
       await runChunked(worktreePath, ["reset", "-q"], paths);
     }
-    return listChangesForPage(worktreePath);
+    // No counts: staging moves the index, and the counts are the
+    // working tree against HEAD, which the index has no say in. The
+    // page carries the ones it already has over to this answer.
+    return listChangedFiles(worktreePath, { untracked: "all" });
   });
 }
 

@@ -275,7 +275,7 @@ export function DiffView({
   };
   // Which row the rail marks: the picked path, or whatever the scroll
   // has reached in a combined read.
-  const currentKey = changes ? changes.selectedPath : activeKey;
+  const currentKey = changes ? changes.selectedKey : activeKey;
 
   return (
     // Measured rather than left to a container query: the chip has to

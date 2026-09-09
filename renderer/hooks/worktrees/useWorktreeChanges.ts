@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { changeKey } from "@shared/schemas";
 import type {
   ChangedFile,
   CommitChangesResult,
@@ -64,9 +65,24 @@ export function useSetStaged() {
       );
     },
     onSuccess: (files, vars) => {
+      const key = queryKeys.worktreeChanges(vars.projectId, vars.worktreeId);
+      // The answer comes back without counts -- staging can't change
+      // them, and reading every new file's lines again on each tick is
+      // what that would cost. Carry over the ones already on screen; a
+      // file this tick is the first to hear about shows none until the
+      // next full read, which is a number missing for a moment rather
+      // than a row that misbehaves.
+      const carried = new Map(
+        queryClient
+          .getQueryData<ChangedFile[]>(key)
+          ?.map((file) => [changeKey(file), file.counts]),
+      );
       queryClient.setQueryData(
-        queryKeys.worktreeChanges(vars.projectId, vars.worktreeId),
-        files,
+        key,
+        files.map((file) => {
+          const counts = carried.get(changeKey(file));
+          return counts ? { ...file, counts } : file;
+        }),
       );
     },
     onError: (_err, vars) => {

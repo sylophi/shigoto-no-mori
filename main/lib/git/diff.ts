@@ -29,9 +29,14 @@ export function getFileDiff(
   const args = untracked
     ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
     : ["diff", "HEAD", "--no-color", "--", ...paths];
-  return runLenient(worktreePath, ["-c", "core.quotePath=false", ...args], {
-    maxBuffer: PATCH_MAX_BUFFER,
-  });
+  return runLenient(
+    worktreePath,
+    // Every path here came out of `git status`, so it is a filename and
+    // never a pattern. Without this a file called `a[1].txt` is a glob,
+    // and the pane for one file quietly answers with another's hunks.
+    ["-c", "core.quotePath=false", "--literal-pathspecs", ...args],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
 }
 
 // Unified patch of a single commit, with the commit metadata stripped

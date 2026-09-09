@@ -35,7 +35,11 @@ export function useResizableWidth(options: {
       userSelect: "none",
     });
     const left = leftEdge();
-    let last = width;
+    // Seeded from the stored value, not the clamped one: a click on the
+    // separator that never moves then writes back what was already
+    // there, instead of quietly shrinking a width that a wider window
+    // would have given back.
+    let last = dragged;
     const onMove = (ev: MouseEvent) => {
       last = clamp(ev.clientX - left);
       setDragged(last);

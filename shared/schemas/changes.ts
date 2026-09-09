@@ -45,6 +45,15 @@ export const ChangedFileSchema = z.object({
 });
 export type ChangedFile = z.infer<typeof ChangedFileSchema>;
 
+// A row's identity. Two rows can name one path: `git rm --cached f`
+// leaves a staged deletion and an untracked file, both called f, and
+// they are separate decisions with separate diffs and separate counts.
+// The kind tells them apart and survives a tick, which moves `staged`
+// and nothing else.
+export function changeKey(file: ChangedFile): string {
+  return `${file.kind} ${file.path}`;
+}
+
 // Git knows nothing about this file yet: it is in neither HEAD nor the
 // index, so its diff is a comparison against /dev/null and its counts
 // can't come from `diff HEAD`. A tracked file can't reach this state --

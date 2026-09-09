@@ -3,6 +3,7 @@
 // row shows, and the two ways a rail's rows are built (from a patch on
 // a read-only diff, from git status on the changes page).
 import type { ChangeTypes, FileDiffMetadata } from "@pierre/diffs";
+import { changeKey } from "@shared/schemas";
 import type { ChangeCounts, ChangedFile, ChangeKind } from "@shared/schemas";
 
 // Stable identity for one file inside one patch. `name` alone collides
@@ -117,7 +118,7 @@ export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
   // rail, the pane's first pick and the commit all agree on it.
   return files.map(
     (row): IndexEntry => ({
-      key: row.path,
+      key: changeKey(row),
       path: row.path,
       prevPath: row.prevPath ?? null,
       mark: STATUS_MARKS[row.kind],
