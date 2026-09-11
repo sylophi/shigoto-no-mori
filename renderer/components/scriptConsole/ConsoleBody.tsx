@@ -67,9 +67,9 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
 }
 
 // One xterm instance per run (keyed on the run key and start time by
-// the parent, so a rerun or another script mounts a fresh one -- xterm
+// the parent, so a rerun or another script mounts a fresh one). Xterm
 // applies writes asynchronously, so reusing a terminal across runs
-// would let the old run's queued tail paint over the new one). It is
+// would let the old run's queued tail paint over the new one. It is
 // a real terminal, not a log view: the run's output is replayed into
 // it byte for byte (so cursor movement, progress bars and full-screen
 // programs render as they would in Terminal.app), keystrokes go back

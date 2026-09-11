@@ -7,8 +7,8 @@
 // names can't disagree between the renderer and the maker.
 //
 // Coordinates are points with the origin at the top-left of the
-// window's content area -- the space the background image is painted
-// in, and the space appdmg writes icon positions in.
+// window's content area. That is the space the background image is
+// painted in, and the space appdmg writes icon positions in.
 //
 // .mts with no imports, so plain `node` and forge.config.ts can both
 // load it directly.
@@ -49,8 +49,8 @@ export function dmgBackgroundName(prerelease: boolean, scale: 1 | 2): string {
 }
 
 // A semver prerelease is anything carrying a tag (0.4.0-beta.1). Those
-// ship the flavor with the app's dev-build tell -- leaf-green wordmark
-// and a sticker on the card -- so a beta window never looks like the
+// ship the flavor with the app's dev-build tell (leaf-green wordmark
+// and a sticker on the card), so a beta window never looks like the
 // real thing sitting in someone's Downloads.
 export function dmgBackgroundFor(version: string): string {
   return `${DMG_ART_DIR}/${dmgBackgroundName(version.includes("-"), 1)}`;

@@ -24,7 +24,7 @@ export const ProjectSchema = z.object({
   id: z.string(),
   name: z.string(),
   path: z.string(),
-  // Populated by ProjectsList only — `false` means the project's path is
+  // Populated by ProjectsList only. `false` means the project's path is
   // missing on disk (deleted/moved/unmounted). Other handlers don't set it.
   pathExists: z.boolean().optional(),
   // Usage stats, populated by ProjectsList only, feeding the sidebar
@@ -43,8 +43,8 @@ export const ProjectSchema = z.object({
 export type Project = z.infer<typeof ProjectSchema>;
 
 // Sidebar project ordering. `manual` is the user-arranged drag order and the
-// implicit default; `frequent` = most used, `recent` = most recently used —
-// matching the package.json scripts sort vocabulary.
+// implicit default; `frequent` = most used, `recent` = most recently
+// used, matching the package.json scripts sort vocabulary.
 export const ProjectSortModeSchema = z.enum([
   "alphabetical",
   "recent",

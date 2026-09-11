@@ -1,7 +1,7 @@
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 
-// The two shelves the inbox view folds shut by default. The third box --
-// the live one -- has no header and no toggle, so it isn't in this union.
+// The two shelves the inbox view folds shut by default. The third box
+// (the live one) has no header and no toggle, so it isn't in this union.
 export type InboxShelf = "shelved" | "merged";
 
 export type SidebarRow =
@@ -9,8 +9,8 @@ export type SidebarRow =
   | { kind: "worktree"; key: string; worktree: Worktree }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
-  // and PR ride along because the builder already had both in hand --
-  // resolving either again per row would put a query observer on every
+  // and PR ride along because the builder already had both in hand.
+  // Resolving either again per row would put a query observer on every
   // visible row for an answer it already knew.
   | {
       kind: "inbox-worktree";
@@ -42,14 +42,14 @@ export interface SidebarViewModel {
   rows: SidebarRow[];
   failedCount: number;
   // Shown instead of the list when the view has nothing to render and
-  // isn't merely still resolving. Null means "say nothing" -- which
+  // isn't merely still resolving. Null means "say nothing". That
   // includes the loading case, since a flash of "nothing here" while the
   // answer is still in flight is worse than a beat of blank space.
   emptyMessage: string | null;
   // Which row to scroll to when navigation lands on a worktree from
   // outside the sidebar. Falls back to whatever contains it when its own
-  // row isn't rendered -- a folded project in the tree, a folded shelf in
-  // the inbox -- and null when the view can't place it at all. Neither
+  // row isn't rendered (a folded project in the tree, a folded shelf in
+  // the inbox), and null when the view can't place it at all. Neither
   // view unfolds anything on the way: the empty-state redirect runs on
   // every launch, and auto-expanding would undo the user's folding.
   revealKey: (projectId: string, worktreeId: string) => string | null;

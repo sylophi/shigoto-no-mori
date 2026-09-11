@@ -8,7 +8,7 @@ package main
 // force-remove the old directory, `git worktree add` at the managed
 // path in checkout mode, then the full create lifecycle (carry-over,
 // setup, port-pool). Externals never got teardown/port-release on the
-// way out -- the app never provisioned them.
+// way out, because the app never provisioned them.
 
 import "strings"
 
@@ -45,7 +45,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 		worktreeName = sanitizeBranchForPath(branchOrSha)
 	}
 
-	// Refuse a name collision BEFORE the wipe below -- createWorktree's
+	// Refuse a name collision BEFORE the wipe below. createWorktree's
 	// own check runs after the old directory is already gone.
 	if worktreeName != "" {
 		identities, err := listWorktreeIdentities(proj)
@@ -83,7 +83,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	}
 	code := finishCreateLifecycle(proj, worktree, "")
 	if wasInside && !jsonMode {
-		note(dimErr("note: your shell is inside the old location -- cd " + worktree.Path))
+		note(dimErr("note: your shell is inside the old location. cd " + worktree.Path))
 	}
 	return code, nil
 }

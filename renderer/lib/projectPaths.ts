@@ -1,6 +1,6 @@
 // Path helpers for the add-project filesystem-browse flow. Ported
-// from T3 Code's projectPaths.ts. Only "/" separates -- a backslash is
-// a legal filename character on POSIX.
+// from T3 Code's projectPaths.ts. Only "/" separates, since a backslash
+// is a legal filename character on POSIX.
 
 const TRAILING_SEPS = /\/+$/;
 

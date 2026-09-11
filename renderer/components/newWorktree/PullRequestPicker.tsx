@@ -80,10 +80,10 @@ function SelectionNote({ pr }: { pr: PullRequestCandidate }) {
 }
 
 // The list behind the "From pull request" mode. One row per open PR,
-// and picking one sets the branch the worktree checks out. Rows the resolver
-// has no free branch name left for are shown but not selectable --
-// hiding them would leave the user hunting for a PR that's right there
-// on GitHub.
+// and picking one sets the branch the worktree checks out. Rows the
+// resolver has no free branch name left for are shown but not
+// selectable. Hiding them would leave the user hunting for a PR that's
+// right there on GitHub.
 export function PullRequestPicker({
   pullRequests,
   selected,

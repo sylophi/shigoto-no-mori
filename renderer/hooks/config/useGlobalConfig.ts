@@ -21,11 +21,11 @@ export function useGlobalConfigWrite() {
       // Launcher catalogs for every project depend on global custom launchers.
       queryClient.invalidateQueries({ queryKey: queryKeys.launchersAll() });
       // Toggling the GitHub CLI integration flips both readiness gating
-      // and the project PR list -- refetch immediately rather than wait
+      // and the project PR list, so refetch immediately rather than wait
       // for the next focus/mount.
       queryClient.invalidateQueries({ queryKey: queryKeys.githubCliAll() });
       // Toggling the terrier integration changes which projects the
-      // list handler merges in -- same immediate refetch. (Terrier
+      // list handler merges in. Same immediate refetch. (Terrier
       // readiness depends only on the binary, not the toggle, so it
       // has nothing to invalidate here.)
       queryClient.invalidateQueries({ queryKey: queryKeys.projects() });

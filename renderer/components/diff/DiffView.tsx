@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 // parsePatchFiles lives in the root entry, not /react (the docs example
-// is slightly off — `@pierre/diffs/react` only re-exports the React
+// is slightly off: `@pierre/diffs/react` only re-exports the React
 // components and shared types). The two imports are friendly together.
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
@@ -31,7 +31,7 @@ const DIFF_THEME = {
   // cascades through the whole diff surface. Without this the diff
   // reads as a pitch-black slab against the lifted neutral-900 main
   // pane that PR #59 introduced. `unsafeCSS` is the documented path
-  // for CSS overrides — see https://diffs.com/docs (Hunk Separators).
+  // for CSS overrides. See https://diffs.com/docs (Hunk Separators).
   unsafeCSS: `:host { --diffs-bg: var(--background); }`,
 };
 

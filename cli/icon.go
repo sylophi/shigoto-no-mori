@@ -20,17 +20,17 @@ import (
 )
 
 var iconCandidates = []string{
-	// Root -- the universal favicon convention.
+	// Root, the universal favicon convention.
 	"favicon.svg",
 	"favicon.ico",
 	"favicon.png",
 
-	// public/ -- Vite, CRA, Next.js, Nuxt.
+	// public/ for Vite, CRA, Next.js, Nuxt.
 	"public/favicon.svg",
 	"public/favicon.ico",
 	"public/favicon.png",
 
-	// static/ -- Docusaurus, SvelteKit, Hugo, Jekyll.
+	// static/ for Docusaurus, SvelteKit, Hugo, Jekyll.
 	"static/favicon.svg",
 	"static/favicon.ico",
 	"static/favicon.png",
@@ -39,14 +39,14 @@ var iconCandidates = []string{
 	"static/img/favicon.svg",
 	"static/img/favicon.ico",
 
-	// app/ -- Next.js App Router (root layout).
+	// app/ for Next.js App Router (root layout).
 	"app/icon.svg",
 	"app/icon.png",
 	"app/icon.ico",
 	"app/favicon.ico",
 	"app/favicon.png",
 
-	// src/ -- Vite/CRA/Next.js with src layout, plus Astro's src/assets.
+	// src/ for Vite/CRA/Next.js with src layout, plus Astro's src/assets.
 	"src/favicon.svg",
 	"src/favicon.ico",
 	"src/assets/logo.svg",
@@ -57,7 +57,7 @@ var iconCandidates = []string{
 	"src/app/icon.png",
 	"src/app/favicon.ico",
 
-	// assets/ -- Electron Forge, Expo, generic.
+	// assets/ for Electron Forge, Expo, generic.
 	"assets/icon.svg",
 	"assets/icon.png",
 	"assets/adaptive-icon.png",
@@ -173,7 +173,7 @@ func packageRoots(files []string) []string {
 // Where a <link rel="icon"> href lands within git's file set (path
 // normalisation rejects traversal for free: an escaping href never
 // matches a listed path), or on the raw filesystem when git listed
-// nothing -- there the within-project guard does the rejecting.
+// nothing. There the within-project guard does the rejecting.
 func resolveHrefOnDisk(cwd, root, href string, files map[string]bool) string {
 	clean := strings.TrimPrefix(href, "/")
 	if files == nil {
@@ -205,7 +205,7 @@ func resolveHrefOnDisk(cwd, root, href string, files map[string]bool) string {
 
 // The two-phase scan (conventional files, then <link rel="icon"> in a
 // source file) scoped to one package root. Each git-listed match is
-// confirmed on disk before winning -- a staged-then-deleted phantom
+// confirmed on disk before winning, so a staged-then-deleted phantom
 // can't shadow a lower-priority icon that exists.
 func scanRootForIcon(cwd, root string, files map[string]bool) string {
 	for _, candidate := range iconCandidates {

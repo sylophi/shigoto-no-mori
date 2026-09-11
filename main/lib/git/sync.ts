@@ -1,7 +1,7 @@
 // Remote sync mutations. Each operates on a single worktree's checkout
 // and lets `git` surface any failure as a non-zero exit (which `run`
-// turns into a thrown Error -- the IPC layer relays the message verbatim
-// into the renderer's toast).
+// turns into a thrown Error, whose message the IPC layer relays
+// verbatim into the renderer's toast).
 import { chunked, run, runLenient, splitZ } from "./core";
 import { fetchAllRemotes, listRemotes } from "./remotes";
 
@@ -28,27 +28,28 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // overwrites any untracked file whose path exists in the upstream tree.
 // `--untracked-files=normal` pins that protection against a user-level
 // `status.showUntrackedFiles = no`. getWorkingTreeChanges deliberately
-// does NOT pin it -- it runs per worktree on every window focus, and
+// does NOT pin it. It runs per worktree on every window focus, and
 // `-uno` is a setting people choose to make exactly that scan cheap. The
 // only cost of the mismatch is the overwrite button showing when this
 // guard will refuse, and the guard still refuses.
 //
 // Ignored files never appear in `status`, but `reset --hard` overwrites
 // them all the same when the upstream tree tracks a file at their path
-// (e.g. a carried-over `.env` colliding with a committed one) -- and
+// (e.g. a carried-over `.env` colliding with a committed one), and
 // their content was never in git, so nothing can recover it. After a
 // clean status the only paths that can collide are upstream-tracked
 // ones with no local tracked counterpart, and (tree clean, so tracked
 // == HEAD) those are exactly the upstream side's added files versus
 // HEAD: one divergence-sized listing instead of two whole-tree ones.
-// `--no-renames` matters -- rename detection would report an upstream
-// rename as R, not A, and its destination path would slip through.
+// `--no-renames` matters because rename detection would report an
+// upstream rename as R, not A, and its destination path would slip
+// through.
 // git itself then says which candidates are ignored files on disk
 // (`ls-files -o -i` with the candidates as pathspecs): a plain
 // exists-check would false-positive on case-insensitive APFS, where an
 // upstream case-only rename "exists" locally as the tracked file under
-// its old casing -- a state `reset --hard` handles fine and this guard
-// must not turn into a dead end.
+// its old casing. That is a state `reset --hard` handles fine, and this
+// guard must not turn into a dead end.
 export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {

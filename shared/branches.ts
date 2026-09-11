@@ -14,7 +14,7 @@
 const PATH_SEPARATOR = /[/:]/g;
 // oxlint-disable-next-line no-control-regex -- intentional: strips control bytes
 const CONTROL_CHARS = /[\x00-\x1f\x7f]/g;
-// Checked against the lowercased name -- the CLI matches its keywords
+// Checked against the lowercased name. The CLI matches its keywords
 // case-insensitively, so "Root" must be reserved too.
 const RESERVED_NAMES = new Set([".", "..", "root", "primary"]);
 
@@ -41,7 +41,7 @@ export function sanitizeBranchName(name: string): string {
 }
 
 // Live sanitizer for worktree-folder-name text inputs. Same safe set as
-// branch names but forward slashes are out too — a folder name is a
+// branch names but forward slashes are out too. A folder name is a
 // single path segment, so `/` would smuggle in a subdirectory.
 const INVALID_WORKTREE_NAME_INPUT_CHARS = /[^A-Za-z0-9._-]/g;
 
@@ -73,9 +73,9 @@ export function localBranchOf(
 // Local branch names a fork PR head can land on, in the order the
 // resolver tries them (pickForkBranchName in
 // main/lib/githubCli/pullRequestCheckout.ts). A fork head is named by
-// its author, so collisions with local branches are routine --
-// "patch-1", or "main" when the PR was opened off the fork's default
-// branch -- hence the owner-prefixed fallback. Shared so the form's
+// its author, so collisions with local branches are routine ("patch-1",
+// or "main" when the PR was opened off the fork's default branch),
+// hence the owner-prefixed fallback. Shared so the form's
 // "already checked out" check can't drift from what the resolver
 // actually picks.
 export function forkBranchCandidates(

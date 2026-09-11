@@ -88,7 +88,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     // left to stop them, and the per-worktree delete path (which would
     // normally kill them) can't be reached for an unknown project.
     // The inflight mark blocks a renderer script run from spawning into
-    // the project during the kill window -- the kill snapshots running
+    // the project during the kill window. The kill snapshots running
     // scripts once, so a spawn slipping in after that would outlive the
     // removal as an unstoppable orphan.
     markProjectDeleteInflight(id);

@@ -41,7 +41,7 @@ export async function relocateWorktreeToManagedPath(
     "This worktree is already being removed or moved.",
     async () => {
       const carryData = await readWorktreeData(project.id, worktreeId);
-      // The id is path-derived, so the relocate changes it -- carry the
+      // The id is path-derived, so the relocate changes it. Carry the
       // shelf flag and per-worktree state forward to the new id.
       const carryShelved = isShelved(worktreeId);
       await relocateWorktree(project.path, target.path, destinationPath);

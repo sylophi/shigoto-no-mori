@@ -67,7 +67,7 @@ function toPullRequest(item: GhPrListItem): PullRequest {
 }
 
 // Indexed by head branch name. The cache is repopulated by the background
-// sweep in fetch.ts -- this read path just serves whatever's there.
+// sweep in fetch.ts. This read path just serves whatever's there.
 // Toggle + readiness checks gate the cache too, so flipping the
 // integration off takes effect immediately.
 export async function listProjectPullRequests(
@@ -86,7 +86,7 @@ export async function refreshProjectPullRequests(
   if (!(await ghReadyForRepo(cwd))) return cacheAndReturn(cwd, new Map());
   const rows = await runGhPrList(cwd, ["--limit", String(PR_LIST_LIMIT)]);
   if (rows === null) {
-    // Transient gh / network failure -- preserve the previous map so the
+    // Transient gh / network failure. Preserve the previous map so the
     // sidebar dots don't blink out on a single bad sweep. Fall through
     // to caching empty only when we've never had a value.
     const previous = prCache.get(cwd)?.value;
@@ -194,7 +194,7 @@ function bucketForItem(item: StatusCheckRollupItem): PullRequestCheckBucket {
   if (NEUTRAL_CONCLUSIONS.has(conclusion)) return "neutral";
   if (SKIPPED_CONCLUSIONS.has(conclusion)) return "skipped";
   if (FAILING_CONCLUSIONS.has(conclusion)) return "failing";
-  // Empty / unrecognized conclusion on a COMPLETED check -- safest to
+  // Empty / unrecognized conclusion on a COMPLETED check. Safest to
   // treat as pending so the user doesn't merge on an unknown signal.
   return "pending";
 }
@@ -229,14 +229,14 @@ function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
   return summary;
 }
 
-// Single-branch lookup for the currently open worktree page. Uncached --
-// invalidations from focus / refs-changed must actually hit gh. The
-// --head filter is server-side so this stays cheap regardless of repo
-// PR count. Returns the rich detail shape (checks + mergeable state)
-// since the only consumer is the worktree detail page; the slim
+// Single-branch lookup for the currently open worktree page. Uncached,
+// since invalidations from focus / refs-changed must actually hit gh.
+// The --head filter is server-side so this stays cheap regardless of
+// repo PR count. Returns the rich detail shape (checks + mergeable
+// state) since the only consumer is the worktree detail page; the slim
 // PullRequest projection is used by the sidebar list path. Throws on
 // transient gh / network / parse failure so callers can distinguish
-// "no PR" (null) from "we don't know" -- the renderer uses that to
+// "no PR" (null) from "we don't know". The renderer uses that to
 // avoid clobbering the sidebar's project-wide PR map.
 export async function getWorktreePullRequest(
   cwd: string,

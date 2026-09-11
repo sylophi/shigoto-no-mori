@@ -8,7 +8,7 @@ package main
 //
 // Known delta vs the app: the app also rewrites project.json to drop
 // manual entries now covered by .worktreeinclude (reconciliation).
-// The CLI skips that write-back -- mergeCarryOver dedupes at apply
+// The CLI skips that write-back. mergeCarryOver dedupes at apply
 // time, so behavior in the worktree is identical; only the app's
 // Configure view tidy-up is app-only.
 

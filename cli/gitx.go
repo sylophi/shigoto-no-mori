@@ -21,7 +21,7 @@ import (
 const unknownBranch = "(unknown)"
 
 // Every git spawn passes through here, and `sm list` fans out over every
-// project x every worktree x four probes -- unbounded, that is hundreds
+// project x every worktree x four probes. Unbounded, that is hundreds
 // of processes and the time goes into fork/exec. runGit waits only on
 // its own child, never on another slot, so a counting semaphore here
 // caps the tree without deadlock.
@@ -221,8 +221,8 @@ func parseStatusEntries(stdout string) []statusEntry {
 			continue
 		}
 		entries = append(entries, statusEntry{index: field[0], worktree: field[1], path: field[3:]})
-		// Either column can be the R/C -- staged renames land in the
-		// index column, unstaged ones in the worktree column -- and both
+		// Either column can be the R/C (staged renames land in the
+		// index column, unstaged ones in the worktree column) and both
 		// emit exactly one source field.
 		if isRenameOrCopy(field[0]) || isRenameOrCopy(field[1]) {
 			i++
@@ -260,7 +260,7 @@ func getWorkingTreeChanges(worktreePath string) (workingTreeChanges, error) {
 	}
 	out := workingTreeChanges{count: len(paths)}
 	// A deleted path stats as a failure, an untracked directory stats as
-	// the directory -- both are fine, we only want the newest hit.
+	// the directory. Both are fine, we only want the newest hit.
 	for i, rel := range paths {
 		if i >= changeMtimeStatLimit {
 			break
@@ -436,7 +436,7 @@ func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain
 }
 
 // The primary's first-parent chain, read once per project and shared by
-// every worktree in it -- one object store, one ref, one answer. Lazy,
+// every worktree in it: one object store, one ref, one answer. Lazy,
 // so a project whose worktrees are all ahead of the primary never asks.
 // Mirrors primaryChainReader in main/lib/git/worktrees.ts.
 type primaryChain struct {
@@ -606,7 +606,7 @@ func gitWorktreeAdd(projectPath, worktreePath, branch, base string) error {
 // resolves to that branch, and one whose local branch doesn't exist yet
 // keeps the explicit remote ref (unambiguous when several remotes share
 // the name) and names the tracking branch to create from it. Anything
-// else goes to git as-is -- a bare name found in exactly one remote
+// else goes to git as-is. A bare name found in exactly one remote
 // DWIMs into a tracking branch. Callers that already hold the remote
 // list pass it to skip a `git remote`.
 func resolveCheckoutRef(repoPath, ref string, remotes []string) (target, track string) {

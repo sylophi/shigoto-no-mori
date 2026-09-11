@@ -100,7 +100,7 @@ export function LocationForm({
   // managed-root and we'd compute a misleading toMove diff.
   const customMissing = layout === "custom" && !customPath.trim();
 
-  // Non-primary worktrees only -- the primary checkout sits at projectPath
+  // Non-primary worktrees only. The primary checkout sits at projectPath
   // and can't be moved. Externals can't be moved either: `git worktree
   // move` works only on managed worktrees we created.
   const movable = worktrees.filter(isManagedWorktree);

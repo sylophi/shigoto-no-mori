@@ -1,8 +1,8 @@
 package main
 
 // sm setup: re-run the provisioning half of the create lifecycle on
-// an existing worktree -- the recovery path for create/adopt exit 3
-// (worktree exists, setup failed) and for setup scripts that changed
+// an existing worktree. It's the recovery path for create/adopt exit
+// 3 (worktree exists, setup failed) and for setup scripts that changed
 // after the worktree was made. Runs the project's setup script, then
 // port-pool provision under the same gating as create. Carry-over is
 // deliberately not repeated: its entries already exist and would only

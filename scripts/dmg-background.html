@@ -4,7 +4,7 @@
   scripts/build-dmg-background.cjs (`pnpm dmg:background`).
 
   Deliberately not a hand-painted image: this page links the app's own
-  renderer/doubutsu.css and reuses its rules -- the drifting leaf
+  renderer/doubutsu.css and reuses its rules: the drifting leaf
   wallpaper on the canvas, the palette tokens, the sticker elevation
   recipe, Zen Maru Gothic. A palette change in the app therefore reaches
   the installer by re-running the script, with no second copy of the
@@ -16,7 +16,7 @@
   along the bottom carrying the instruction.
 
   Window and icon geometry arrives as CSS custom properties from
-  shared/dmgLayout.mts -- the same module forge.config.ts reads to tell
+  shared/dmgLayout.mts, the same module forge.config.ts reads to tell
   Finder where to drop the icons, so the painted tiles land exactly
   under the real ones.
 -->
@@ -61,7 +61,7 @@
         transform-origin: top left;
         background-color: var(--background);
         color: var(--foreground);
-        /* Type comes from doubutsu.css's own `body` rule -- Zen Maru
+        /* Type comes from doubutsu.css's own `body` rule: Zen Maru
            Gothic at 700, with the app's fallback stack behind it. */
         -webkit-font-smoothing: antialiased;
       }
@@ -116,7 +116,7 @@
       /* --- Prerelease sticker ------------------------------------------
          Same tell the app uses for a dev build: the hero's near-black
          ink swaps to leaf green and a rotated sticker lands on the
-         card's corner. Generic wording on purpose -- one committed
+         card's corner. Generic wording on purpose, since one committed
          asset has to cover alpha, beta and rc alike. Hidden until the
          root carries .prerelease. */
       .chip {
@@ -179,7 +179,7 @@
       }
 
       /* --- Arrow: drag this way --------------------------------------
-         Leaf green carrying the AC diagonal stripes -- the same
+         Leaf green carrying the AC diagonal stripes, the same
          45deg/20px pattern the app slides across anything you hover,
          here holding still and pointing at /Applications. */
       .arrow {

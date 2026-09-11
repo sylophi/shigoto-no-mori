@@ -6,8 +6,8 @@ package main
 // the accent hue rides along with the icon entry. Every
 // read-modify-write holds index.json.lock (the state.json protocol).
 //
-// Schema, mirrored by IconCacheEntry in main/lib/projects/icon.ts --
-// change them together:
+// Schema, mirrored by IconCacheEntry in main/lib/projects/icon.ts
+// (change them together):
 //   sourcePath     absolute icon path, or "" for "resolved to no
 //                  icon". Negative entries are CLI-only: the app
 //                  skips them (a freshly added icon must show up in

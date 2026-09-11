@@ -9,7 +9,7 @@
 //
 // Run:   pnpm seed <dest-dir> [--keep] [--only=<name>[,<name>...]]
 // The destination directory is required so worktree `.git` pointers are
-// always self-contained at the chosen location — previously hard-coding
+// always self-contained at the chosen location. Previously, hard-coding
 // /tmp/shigomori-seed meant a second seeding could cross-link external
 // worktrees with the first repo's `.git` admin. Wipes <dest-dir> by
 // default; --keep skips the wipe.
@@ -233,7 +233,7 @@ async function seedPnpmWorkspaces(): Promise<Manifest> {
   return {
     name: "pnpm-workspaces",
     path: repo,
-    purpose: "pnpm workspaces — should detect packageManager: pnpm",
+    purpose: "pnpm workspaces, so packageManager should detect pnpm",
     tests: [
       "Package Scripts row says 'pnpm' and lists build + clean.",
       "Icon detection: yellow 'pw' tile (public/favicon.svg candidate).",
@@ -262,7 +262,7 @@ async function seedYarnClassic(): Promise<Manifest> {
   return {
     name: "yarn-classic",
     path: repo,
-    purpose: "yarn.lock present — should detect packageManager: yarn",
+    purpose: "yarn.lock present, so packageManager should detect yarn",
     tests: [
       "Package Scripts row says 'yarn'.",
       "Icon detection: teal 'yc' tile (root favicon.svg, top of the candidate list).",
@@ -287,7 +287,7 @@ async function seedNpmVanilla(): Promise<Manifest> {
   return {
     name: "npm-vanilla",
     path: repo,
-    purpose: "No lockfile — falls back to packageManager: npm",
+    purpose: "No lockfile, so packageManager falls back to npm",
     tests: [
       "Package Scripts row says 'npm'.",
       "Icon detection: solid red 1x1 PNG dot (exercises the .png mime path with bytes that actually decode).",
@@ -368,7 +368,7 @@ async function seedNoRemote(): Promise<Manifest> {
     tests: [
       "Ahead/behind stays 0/0 (no upstream to compare).",
       "resolveDefaultBranch should fall back to local `main`.",
-      "Icon detection: teal 'nr' tile (static/favicon.svg — Docusaurus / SvelteKit / Hugo).",
+      "Icon detection: teal 'nr' tile (static/favicon.svg, the Docusaurus / SvelteKit / Hugo candidate).",
     ],
   };
 }
@@ -451,7 +451,7 @@ async function seedAheadBehind(): Promise<Manifest> {
   return {
     name: "ahead-behind-divergent",
     path: repo,
-    purpose: "Diverged 1/1 with non-overlapping changes — clean rebase path",
+    purpose: "Diverged 1/1 with non-overlapping changes, a clean rebase path",
     tests: [
       "Sidebar shows the indigo ↑1/↓1 indicator.",
       "Detail header shows 'Pull and push ↑1↓1' (indigo). Clicking rebases (no merge commit lands) and then pushes; pill clears.",
@@ -583,7 +583,7 @@ async function seedBehindOnly(): Promise<Manifest> {
     tests: [
       "Sidebar shows the sky ↓2 indicator.",
       "Detail header shows 'Pull 2 commits' (sky). Clicking fast-forwards and the pill clears.",
-      "Icon detection: pink 'mn' tile (logo/light.svg — Mintlify). Dark variant exists too at logo/dark.svg with a 'no' label; if you ever see that one in the sidebar the resolver picked the wrong variant.",
+      "Icon detection: pink 'mn' tile (logo/light.svg, the Mintlify candidate). Dark variant exists too at logo/dark.svg with a 'no' label; if you ever see that one in the sidebar the resolver picked the wrong variant.",
     ],
   };
 }
@@ -593,7 +593,7 @@ async function seedUnpublishedBranch(): Promise<Manifest> {
   const repo = join(REPOS, "unpublished-branch");
   await initRepo(repo);
   await commit(repo, { "README.md": "# unpublished-branch\n" }, "Initial");
-  // Remote is wired up, but main is never pushed -- no upstream is set.
+  // Remote is wired up, but main is never pushed, so no upstream is set.
   await git(repo, ["remote", "add", "origin", remote]);
   return {
     name: "unpublished-branch",
@@ -638,7 +638,7 @@ async function seedDivergedConflicts(): Promise<Manifest> {
     name: "diverged-conflicts",
     path: repo,
     purpose:
-      "Diverged 1/1 with overlapping edits on `shared.txt` — merge-tree fails",
+      "Diverged 1/1 with overlapping edits on `shared.txt`, so merge-tree fails",
     tests: [
       "Sidebar shows the rose diverged indicator (1/1).",
       "Detail header shows the rose trio [Overwrite | Push 1 | Pull 1].",
@@ -652,9 +652,9 @@ async function seedDivergedConflicts(): Promise<Manifest> {
 // Exercises the "Sync from primary" pill. Three feature-branch worktrees
 // hang off `main`: one that rebases cleanly, one whose per-commit replay
 // conflicts but whose final tree is mergeable (drives the merge
-// fallback), and one already at the primary tip (control case -- pill
-// must stay hidden). The primary itself is in sync with origin so its
-// row stays quiet.
+// fallback), and one already at the primary tip (the control case,
+// where the pill must stay hidden). The primary itself is in sync with
+// origin so its row stays quiet.
 async function seedBehindPrimary(): Promise<Manifest> {
   const remote = await bareRemote("behind-primary");
   const repo = join(REPOS, "behind-primary");
@@ -750,7 +750,7 @@ async function seedBehindPrimary(): Promise<Manifest> {
       "feat/clean-sync detail header shows a sky 'Sync 3 from main' pill. Click it: rebase replays the feature commit on top of main and the pill clears. `git log --oneline` stays linear.",
       "feat/merge-fallback shows 'Sync 3 from main'. Click it: rebase conflicts on commit B, aborts, then merges cleanly. `git log --oneline` shows a merge commit afterward.",
       "feat/up-to-date does NOT show the pill (behindPrimary === 0).",
-      "Primary worktree does NOT show the pill regardless of its upstream state -- the handler also rejects with 'The primary worktree is already on the primary branch' if invoked directly.",
+      "Primary worktree does NOT show the pill regardless of its upstream state. The handler also rejects with 'The primary worktree is already on the primary branch' if invoked directly.",
     ],
   };
 }
@@ -840,7 +840,7 @@ async function seedBranchDeleteStates(): Promise<Manifest> {
   );
   const baseSha = (await git(repo, ["rev-parse", "HEAD"])).trim();
 
-  // Unique commits reachable from nowhere else -- `-d` refuses and the
+  // Unique commits reachable from nowhere else, so `-d` refuses and the
   // force prompt shows the not-fully-merged banner.
   await git(repo, ["checkout", "-q", "-b", "unmerged-commits"]);
   await commit(
@@ -863,7 +863,7 @@ async function seedBranchDeleteStates(): Promise<Manifest> {
   await git(repo, ["merge", "-q", "--squash", "squash-merged"]);
   await git(repo, ["commit", "-q", "-m", "Squash-merge feature (#1)"]);
 
-  // Fully merged: ancestors of main -- safe delete succeeds outright.
+  // Fully merged (ancestors of main), so safe delete succeeds outright.
   await git(repo, ["branch", "merged-at-tip"]);
   await git(repo, ["branch", "merged-behind", baseSha]);
 
@@ -876,7 +876,7 @@ async function seedBranchDeleteStates(): Promise<Manifest> {
       "Manage Branches: `main` row's delete button is disabled (checked out in the primary).",
       "Delete `merged-at-tip`, then `merged-behind`: each deletes on the first confirm with no force prompt.",
       "Delete `unmerged-commits`: safe delete refuses, the modal shows the not-fully-merged banner, and the button flips to Force delete. Cancel and reopen: back at the safe stage. Force delete removes it and the list refreshes.",
-      "Delete `squash-merged`: trips the same force prompt even though feature.txt landed on main via the squash commit -- the banner's squash-merge caveat in action.",
+      "Delete `squash-merged`: trips the same force prompt even though feature.txt landed on main via the squash commit. That is the banner's squash-merge caveat in action.",
     ],
   };
 }
@@ -1065,7 +1065,7 @@ async function seedStaleWorktrees(): Promise<Manifest> {
   );
   await fakeDependencies(halfDone, 3);
 
-  // 4. Branch is merged, but the working tree is dirty -- dirty must win
+  // 4. Branch is merged, but the working tree is dirty. Dirty must win
   //    over merged so nothing uncommitted is ever ticked.
   const messy = await add("messy-otter", "chore/tidy-imports");
   await git(repo, [
@@ -1097,8 +1097,8 @@ async function seedStaleWorktrees(): Promise<Manifest> {
   await fakeDependencies(fresh, 1);
 
   // Publish the landed merges. Without this, origin/main still points at
-  // the initial commit and -- since resolveDefaultBranch prefers the
-  // remote-tracking ref -- every merged branch would be compared against
+  // the initial commit, and since resolveDefaultBranch prefers the
+  // remote-tracking ref, every merged branch would be compared against
   // an empty main. That is the realistic state anyway: you push what you
   // merge.
   await git(repo, ["push", "origin", "main", "-q"]);
@@ -1121,7 +1121,7 @@ async function seedStaleWorktrees(): Promise<Manifest> {
 // A second forest, so the app-wide page has more than one project to
 // span: cross-project sorting, the "Project" grouping, and the confirm
 // dialog's "across N projects" line all need two repos to mean anything.
-// Deliberately small -- its job is to be a second row source, not to
+// Deliberately small. Its job is to be a second row source, not to
 // re-cover the verdicts stale-worktrees already covers.
 async function seedStaleSatellite(): Promise<Manifest> {
   const remote = await bareRemote("stale-satellite");
@@ -1169,7 +1169,7 @@ async function seedStaleSatellite(): Promise<Manifest> {
   await fakeDependencies(landed, 4);
 
   // Unmerged and unpushed, so this project always has something the page
-  // refuses to tick -- a group that can't be cleared in one go.
+  // refuses to tick, a group that can't be cleared in one go.
   const wip = await add("busy-lark", "feature/notifications");
   await commitAt(
     wip,
@@ -1242,11 +1242,11 @@ async function seedConvertibleExternals(): Promise<Manifest> {
     '{"editor.formatOnSave":true}\n',
   );
 
-  // Branch with a slash — slugified into a hyphenated dir name.
+  // Branch with a slash, slugified into a hyphenated dir name.
   await git(repo, ["branch", "feat/auth-flow"]);
-  // Unicode branch — should round-trip through sanitizeBranchForPath.
+  // Unicode branch that should round-trip through sanitizeBranchForPath.
   await git(repo, ["branch", "feat/日本語ブランチ"]);
-  // Long branch — should still produce a usable dir name.
+  // Long branch that should still produce a usable dir name.
   await git(repo, [
     "branch",
     "experiment/extremely-long-branch-name-to-stress-the-managed-path-preview-and-confirm-no-overflow",
@@ -1264,7 +1264,7 @@ async function seedConvertibleExternals(): Promise<Manifest> {
   const cleanSlashed = join(baseExternal, "clean-slashed");
   await git(repo, ["worktree", "add", cleanSlashed, "feat/auth-flow"]);
 
-  // 2. Dirty external — modified tracked file + untracked file. The convert
+  // 2. Dirty external: modified tracked file + untracked file. The convert
   //    flow's destructive warning should make clear this gets wiped.
   const dirty = join(baseExternal, "dirty-edits");
   await git(repo, [
@@ -1402,8 +1402,9 @@ async function seedCarryoverSymlinkDir(): Promise<Manifest> {
   // Absolute target so the link survives moving the worktree dir, matching
   // what `applyCarryOver` would produce for a Symlink-mode entry.
   await symlink(join(repo, "shared-deps"), join(worktreePath, "shared-deps"));
-  // Same `info/exclude` entry applyCarryOver writes -- leading slash anchors
-  // the pattern to the worktree root, hides the symlink from git status.
+  // Same `info/exclude` entry applyCarryOver writes. The leading slash
+  // anchors the pattern to the worktree root and hides the symlink from
+  // git status.
   await appendFile(join(repo, ".git/info/exclude"), "/shared-deps\n");
   return {
     name: "carryover-symlink-dir",
@@ -1413,7 +1414,7 @@ async function seedCarryoverSymlinkDir(): Promise<Manifest> {
     tests: [
       "Add project. Sidebar should show the primary plus a `feat/sym-repro` worktree (External).",
       "Open `feat/sym-repro`. Sync pill should report no uncommitted changes; Uncommitted changes view shows the empty state.",
-      "To exercise the pre-fix bug: remove the `/shared-deps` line from `repos/carryover-symlink-dir/.git/info/exclude` -- count returns to 1 and the diff body is blank.",
+      "To exercise the pre-fix bug: remove the `/shared-deps` line from `repos/carryover-symlink-dir/.git/info/exclude`. The count returns to 1 and the diff body is blank.",
     ],
   };
 }
@@ -1435,7 +1436,7 @@ async function seedWorktreeInclude(): Promise<Manifest> {
       // two gitignored matches (.env, node_modules/), a negation pair
       // (*.log minus debug.log), a match on a TRACKED file (must not
       // copy), and a match on an untracked NON-ignored file (must not
-      // copy either -- spec requires matched AND gitignored).
+      // copy either, since the spec requires matched AND gitignored).
       ".worktreeinclude":
         "# Copied into every new worktree when gitignored\n" +
         "\n" +
@@ -1505,8 +1506,8 @@ async function seedPathSpaces(): Promise<Manifest> {
     path: repo,
     purpose: "Directory name contains spaces",
     tests: [
-      "Add project — the path renders correctly throughout the UI.",
-      "Run the `hello` script — confirm the cwd quoting holds end-to-end.",
+      "Add project. The path renders correctly throughout the UI.",
+      "Run the `hello` script. Confirm the cwd quoting holds end-to-end.",
       "Icon detection: teal 'sp' tile (public/favicon.svg with a space in the cwd).",
     ],
   };
@@ -1594,12 +1595,12 @@ async function seedPortPoolBasic(): Promise<Manifest> {
     purpose: "Valid port-pool config with two ports and one .env file",
     tests: [
       "Toggle 'Automatically use port-pool' on in Settings.",
-      "Create a worktree -- ScriptsSection shows Port-pool provision and Port-pool release rows.",
+      "Create a worktree. ScriptsSection shows Port-pool provision and Port-pool release rows.",
       "Provision runs at create. Check the new worktree's .env: PORT and API_PORT are populated.",
-      "Run dev -- the echoed values match the .env.",
-      "Delete the worktree -- Port-pool release runs before remove. Allocations dropped from `port-pool list`.",
-      "Toggle off in Settings, then add the project again -- no Port-pool rows appear.",
-      "Icon detection: lime 'tr' tile (src-tauri/icons/icon.svg — Tauri).",
+      "Run dev. The echoed values match the .env.",
+      "Delete the worktree. Port-pool release runs before remove. Allocations dropped from `port-pool list`.",
+      "Toggle off in Settings, then add the project again. No Port-pool rows appear.",
+      "Icon detection: lime 'tr' tile (src-tauri/icons/icon.svg, the Tauri candidate).",
     ],
   };
 }
@@ -1653,11 +1654,11 @@ async function seedPortPoolMonorepo(): Promise<Manifest> {
     purpose:
       "pnpm workspaces + port-pool managing three ports across three env files",
     tests: [
-      "Create a worktree -- provision populates root .env plus apps/web/.env.local plus apps/api/.env.",
+      "Create a worktree. Provision populates root .env plus apps/web/.env.local plus apps/api/.env.",
       "Verify the same ${api} value appears in apps/web/.env.local API_URL and apps/api/.env PORT.",
       "Lifecycle rows render in order: Setup (if configured), Port-pool provision, Port-pool release, Teardown (if configured).",
-      "Delete worktree -- release runs first, then removeWorktree.",
-      "Icon detection: amber 'as' tile (src/assets/logo.svg — Astro).",
+      "Delete worktree. Release runs first, then removeWorktree.",
+      "Icon detection: amber 'as' tile (src/assets/logo.svg, the Astro candidate).",
     ],
   };
 }
@@ -1718,14 +1719,14 @@ async function seedManyScripts(): Promise<Manifest> {
     purpose:
       "Repo with 30 package.json scripts for exercising sort modes and search",
     tests: [
-      "First visit: section starts on 'Most used' (the implicit default for a fresh repo) — with no run history yet, entries fall back to alphabetical.",
-      "Switch to 'package.json' — entries appear in the manifest's declared order (alphabetized in this fixture, but exercising the manifest-order branch).",
-      "Switch to Alphabetical — order is identical here, confirming the sort runs without flicker.",
-      "Run a handful of scripts (e.g. `validate`, `lint`, `test`, `db:seed`). Navigate away and back; switch to 'Most recently used' — those four float to the top in run order (latest first), tiebroken alphabetically.",
+      "First visit: section starts on 'Most used' (the implicit default for a fresh repo). With no run history yet, entries fall back to alphabetical.",
+      "Switch to 'package.json'. Entries appear in the manifest's declared order (alphabetized in this fixture, but exercising the manifest-order branch).",
+      "Switch to Alphabetical. Order is identical here, confirming the sort runs without flicker.",
+      "Run a handful of scripts (e.g. `validate`, `lint`, `test`, `db:seed`). Navigate away and back; switch to 'Most recently used'. Those four float to the top in run order (latest first), tiebroken alphabetically.",
       "Run `lint` several more times. Re-mount the page, then 'Most used' shows `lint` on top; ties below it sort alphabetically.",
-      "Order does NOT shift mid-session when a script is bumped — only on re-mount (matches launcher behavior).",
+      "Order does NOT shift mid-session when a script is bumped, only on re-mount (matches launcher behavior).",
       "The sort preference is persisted: pick a non-default mode, restart, and the same mode is selected.",
-      "Open a different project with package scripts — its sort starts on 'Most used'; sort is per-repo.",
+      "Open a different project with package scripts. Its sort starts on 'Most used'; sort is per-repo.",
       "Search overrides the sort while the query box is non-empty (relevance order); clearing the query restores the chosen sort.",
     ],
   };
@@ -1748,11 +1749,11 @@ async function seedPortPoolInvalid(): Promise<Manifest> {
     name: "port-pool-invalid-config",
     path: repo,
     purpose:
-      "port-pool.config.json without schemaVersion -- gate should reject",
+      "port-pool.config.json without schemaVersion, so the gate should reject it",
     tests: [
       "Toggle 'Automatically use port-pool' on. Add this project.",
       "ScriptsSection shows NO Port-pool rows.",
-      "Create a worktree -- provision does not run (no toast, no console entries).",
+      "Create a worktree. Provision does not run (no toast, no console entries).",
       "Confirms the loose schema check (schemaVersion field presence) is enforced.",
     ],
   };
@@ -1762,7 +1763,7 @@ async function seedPortPoolInvalid(): Promise<Manifest> {
 
 async function writeReadme(manifests: Manifest[]): Promise<void> {
   const lines: string[] = [
-    "# Shigoto no Mori — manual test seed",
+    "# Shigoto no Mori manual test seed",
     "",
     `Throwaway repos under \`${REPOS}/\`, each exercising a`,
     "different slice of the app. Add each one in the app and follow the",
@@ -1788,11 +1789,15 @@ async function writeReadme(manifests: Manifest[]): Promise<void> {
   }
   lines.push("## Supporting directories");
   lines.push("");
-  lines.push("- `remotes/` — bare repos backing any repo with a real remote.");
   lines.push(
-    "- `external/` — git worktrees pre-created outside the managed dir.",
+    "- `remotes/` holds bare repos backing any repo with a real remote.",
   );
-  lines.push("- `.sidecar/` — internal clones used to push divergent commits.");
+  lines.push(
+    "- `external/` holds git worktrees pre-created outside the managed dir.",
+  );
+  lines.push(
+    "- `.sidecar/` holds internal clones used to push divergent commits.",
+  );
   lines.push("");
   lines.push("## Icon detection coverage");
   lines.push("");

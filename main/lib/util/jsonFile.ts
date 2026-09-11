@@ -96,7 +96,7 @@ export function tempPathFor(filePath: string): string {
 }
 
 // selfWrite: false is for control-plane files the state watcher ignores
-// anyway (the updater bridge, the running-scripts record) -- claiming a
+// anyway (the updater bridge, the running-scripts record). Claiming a
 // self-write there would blind the watcher to genuine external state
 // writes for the echo window around every updater transition.
 //

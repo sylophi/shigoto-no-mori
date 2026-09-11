@@ -8,7 +8,7 @@
 // links the app's own renderer/doubutsu.css, so the leaf wallpaper, the
 // palette tokens, the sticker and stripe recipes and Zen Maru Gothic in
 // the artwork are the rules the app ships rather than copies that can
-// drift. Re-run this after a doubutsu palette change -- `pnpm dmg:check`
+// drift. Re-run this after a doubutsu palette change. `pnpm dmg:check`
 // (lefthook pre-commit) fails when the committed art predates one.
 //
 // Window and icon geometry, and the file names, come from
@@ -28,7 +28,7 @@ const ROOT = dirname(__dirname);
 
 // A terminal launched from an Electron app (any agent harness, say)
 // exports ELECTRON_RUN_AS_NODE=1, which makes the electron binary
-// behave as plain node -- `require("electron")` then hands back a path
+// behave as plain node. `require("electron")` then hands back a path
 // string instead of the api, and nothing here works. Relaunch with it
 // cleared rather than failing with a puzzling TypeError.
 if (typeof electron === "string") {
@@ -50,7 +50,7 @@ app.commandLine.appendSwitch("force-device-scale-factor", "1");
 // stopped in css, but the webfont and the first paint still need a beat
 // to settle before the capture.
 //
-// One window renders all four images -- the art is authored at 1x and
+// One window renders all four images. The art is authored at 1x and
 // the page scales itself, so a capture is: resize, restate the flavor
 // and the scale, let it paint. (A second BrowserWindow in the same run
 // fails to load at all, so reuse is also the only thing that works.)

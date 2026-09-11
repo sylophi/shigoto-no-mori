@@ -1,8 +1,8 @@
 package main
 
 // sm run: run (or list) the package.json scripts of the worktree
-// containing the cwd -- the CLI face of the app's scripts panel, and
-// the engine behind it (the app delegates its own runs through
+// containing the cwd. It's the CLI face of the app's scripts panel,
+// and the engine behind it (the app delegates its own runs through
 // `sm run --worktree-id ...`, see main/ipc/modules/packageScripts.ts).
 // The CLI picks the package manager, injects the SHIGOMORI_* env
 // contract, bumps the shared use log, then replaces itself with the
@@ -89,7 +89,7 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 		return 1, errf("%s isn't on PATH (the %s lockfile selects it).", manager, target.worktree.Name)
 	}
 	// The worktree root, not the cwd: a nested package.json (monorepo
-	// subpackage) must not retarget the run -- the scripts listed and
+	// subpackage) must not retarget the run. The scripts listed and
 	// validated above are the root's.
 	if err := os.Chdir(target.worktree.Path); err != nil {
 		return 1, errf("cannot enter %s: %v", target.worktree.Path, err)
@@ -170,7 +170,7 @@ func listPackageScripts(manager string, scripts []packageScript) (int, error) {
 	for _, line := range alignRows(rows) {
 		out(line)
 	}
-	note(dimErr(fmt.Sprintf("runs with %s -- `%s run <script>`", manager, binaryName)))
+	note(dimErr(fmt.Sprintf("runs with %s: `%s run <script>`", manager, binaryName)))
 	return 0, nil
 }
 

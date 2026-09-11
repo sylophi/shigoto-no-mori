@@ -7,15 +7,15 @@ export interface SegmentedOption<T extends string> {
   // Shown as a native tooltip on the option button.
   title?: string;
   // Greys out this option alone (the control-level `disabled` greys out
-  // all of them). For choices that exist but aren't available right now
-  // -- pair it with `title`, and say why somewhere the eye will land.
+  // all of them). For choices that exist but aren't available right now.
+  // Pair it with `title`, and say why somewhere the eye will land.
   disabled?: boolean;
 }
 
 // The house few-way toggle: pill options on an inset track (new-worktree
 // mode, carry-over mode, diff layout). One source of truth for the
 // track + selection treatment; call sites only pass sizing. The
-// data-slot doubles as the doubutsu hook -- the overlay fills the track
+// data-slot doubles as the doubutsu hook. The overlay fills the track
 // with the --input tray tint once borders are stripped.
 export function SegmentedControl<T extends string>({
   value,

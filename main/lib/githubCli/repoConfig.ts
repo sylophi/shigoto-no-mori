@@ -15,7 +15,7 @@ const GhRepoMergeConfigSchema = z.object({
 });
 
 // The loader throws on gh failure or a malformed response so only
-// successful reads get cached -- a transient failure shouldn't pin
+// successful reads get cached. A transient failure shouldn't pin
 // "no config" for the full hour.
 const repoMergeConfigCache = ttlMapCache<string, RepoMergeConfig>(
   REPO_MERGE_CONFIG_TTL_MS,

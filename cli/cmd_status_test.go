@@ -2,8 +2,8 @@ package main
 
 // Tests for the status card's pure pieces: porcelain classification,
 // the port-pool env reverse lookup, the gh check rollup, and the age /
-// truncation formatting. Everything here is string in, string out --
-// no repo, no state root, no gh.
+// truncation formatting. Everything here is string in, string out (no
+// repo, no state root, no gh).
 
 import (
 	"reflect"
@@ -201,7 +201,7 @@ func TestTruncateRunes(t *testing.T) {
 }
 
 // The card must render without color, without a PR, and without the
-// optional rows -- the shape a piped `sm status` produces.
+// optional rows. That's the shape a piped `sm status` produces.
 func TestStatusCardPlainRendersEveryKnownRow(t *testing.T) {
 	status := statusJSON{
 		ProjectName: "shigoto-no-mori",

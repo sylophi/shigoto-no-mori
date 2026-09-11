@@ -13,8 +13,8 @@ export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
 // Move the state root: the picked directory becomes the new parent of
 // the root folder (which keeps its name). The app relaunches right
-// after a successful move -- the root is a boot-time constant -- so
-// the invoke returns nothing the renderer could outlive.
+// after a successful move (the root is a boot-time constant), so the
+// invoke returns nothing the renderer could outlive.
 export const MoveRootPayloadSchema = z.object({
   parentDir: z.string().min(1),
 });
@@ -37,7 +37,7 @@ export type NukeProgress = z.infer<typeof NukeProgressSchema>;
 // In-app updater state. The CLI owns the update pipeline
 // (cli/updater.go), and the app mirrors its progress into this machine.
 // `downloading` covers both "found an update" and "still pulling
-// bytes" -- the CLI streams no byte progress, so we collapse them.
+// bytes". The CLI streams no byte progress, so we collapse them.
 // `ready` carries the version we'll restart into. `unsupported` means
 // this build has no update channel at all (dev builds): the renderer
 // hides the check button rather than offering a dead one.
@@ -64,8 +64,8 @@ export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
 // updater-request.json (UpdateRequest) dropped by the CLI. Both sides
 // of the bridge live in main/electron/updaterBridge.ts. The only
 // reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
-// to pin the published shape -- cli/cmd_update.go mirrors the subset
-// it needs (pid, appVersion, and the state's error kind).
+// to pin the published shape. cli/cmd_update.go mirrors the subset it
+// needs (pid, appVersion, and the state's error kind).
 export const UpdaterStatusSchema = z.object({
   pid: z.number().int().positive(),
   appVersion: z.string(),
@@ -76,8 +76,8 @@ export type UpdaterStatus = z.infer<typeof UpdaterStatusSchema>;
 export const UpdateRequestSchema = z.object({
   // The one thing the CLI ever asks of a running app: quit (confirming
   // with the user if scripts are running) and restart into the update
-  // the CLI already staged. Checking needs no request -- the CLI talks
-  // to the release feed itself.
+  // the CLI already staged. Checking needs no request, since the CLI
+  // talks to the release feed itself.
   action: z.literal("install"),
   // Unix ms. Requests older than a couple of minutes are dropped as
   // leftovers of an interrupted CLI run: acting on one later would

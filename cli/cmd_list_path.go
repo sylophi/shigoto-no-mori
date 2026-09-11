@@ -79,7 +79,7 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	}
 
 	if len(ctx.projects) == 0 {
-		return 1, errf("No projects are registered yet -- add a repo in the Shigoto no Mori app first.")
+		return 1, errf("No projects are registered yet. Add a repo in the Shigoto no Mori app first.")
 	}
 
 	scope := ctx.projects
@@ -144,7 +144,7 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 
 	multi := len(collected) > 1
 	// Only block on the accent fan-out when its result will actually
-	// paint something -- multi can come up false (errors, empty
+	// paint something, since multi can come up false (errors, empty
 	// projects) even though the prefetch was started.
 	if multi && stdoutColor {
 		<-accentsReady

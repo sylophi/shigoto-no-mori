@@ -11,7 +11,7 @@ const readinessCache = ttlValueCache<GithubCliReadiness>(
   async () => {
     const installed = await binaryOnPath("gh");
     // `gh auth status` exits non-zero when not signed in. We don't bother
-    // probing for auth when `gh` is missing -- there's nothing to ask.
+    // probing for auth when `gh` is missing, since there's nothing to ask.
     const authed = installed ? await isAuthed() : false;
     return { installed, authed };
   },

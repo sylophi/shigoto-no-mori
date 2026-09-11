@@ -36,8 +36,8 @@ func runGh(cwd string, args ...string) (string, error) {
 }
 
 // The one gh invocation, so every caller shares the install guard, the
-// stderr shaping, and the trace line. The context is what lets a caller
-// that must not hang -- the status card -- put a deadline on it.
+// stderr shaping, and the trace line. The context lets a caller that
+// must not hang, like the status card, put a deadline on it.
 func runGhContext(ctx context.Context, cwd string, args ...string) (string, error) {
 	if !ghAvailable() {
 		return "", errf("GitHub CLI isn't installed")
@@ -45,8 +45,8 @@ func runGhContext(ctx context.Context, cwd string, args ...string) (string, erro
 	cmd := exec.CommandContext(ctx, "gh", args...)
 	// Without this, a cancelled context kills gh but Wait still blocks
 	// on the inherited pipes until every grandchild it spawned (git, a
-	// credential helper) exits too -- so the caller's deadline isn't
-	// one. Only ever reached after the context is already done.
+	// credential helper) exits too, so the caller's deadline isn't one.
+	// Only ever reached after the context is already done.
 	cmd.WaitDelay = time.Second
 	cmd.Dir = cwd
 	var stdout, stderr bytes.Buffer
@@ -136,7 +136,7 @@ func allowedMergeMethods(projectPath string) []string {
 }
 
 // The PR lookup and the repo-settings read are independent gh
-// round-trips (300-800ms each); overlap them -- shared by merge and
+// round-trips (300-800ms each); overlap them. Shared by merge and
 // land. pr is nil when the branch has no PR at all.
 func resolveMergeTarget(projectPath, branch string) (pr *prSummary, allowed []string, err error) {
 	var wg sync.WaitGroup
@@ -147,7 +147,7 @@ func resolveMergeTarget(projectPath, branch string) (pr *prSummary, allowed []st
 	return pr, allowed, err
 }
 
-// The validated -m/--method flag value -- shared by merge and land.
+// The validated -m/--method flag value, shared by merge and land.
 func mergeMethodOf(parsed parsedArgs) (string, error) {
 	m := parsed.strings["method"]
 	if m != "" && !slices.Contains(mergeMethodOrder, m) {
@@ -156,7 +156,7 @@ func mergeMethodOf(parsed parsedArgs) (string, error) {
 	return m, nil
 }
 
-// The merge result's JSON fields -- merge's document and land's
+// The merge result's JSON fields for merge's document and land's
 // nested "merged" object, so the key set can't drift. method == ""
 // means the PR was already merged before the command ran.
 func mergeResultFields(pr *prSummary, branch, method string) map[string]any {
@@ -245,7 +245,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 }
 
 // Resolve the merge method (explicit flag > saved preference > first
-// allowed), run `gh pr merge`, and persist the pick -- shared by the
+// allowed), run `gh pr merge`, and persist the pick. Shared by the
 // branch-lookup path and the app's --number path. Callers pass the
 // repo's allowed methods so the settings read can overlap other work.
 func execMerge(proj project, number int, methodFlag string, allowed []string) (string, error) {

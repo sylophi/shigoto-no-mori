@@ -279,15 +279,15 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 }
 
 // The command that runs a package.json script through the CLI
-// engine. Unlike the functions above this doesn't
-// spawn anything: package-script runs go through startScript so the
-// app's registry keeps owning streaming, cancel, and quit-time
-// reaping -- the CLI contributes manager detection and the
-// SHIGOMORI_* env. The branches ride along so the CLI reuses the
-// resolution the IPC handler already performed instead of re-spawning
-// git for it, --skip-use-log keeps the use-log bump in the app's own
-// process (whose state watcher suppresses it as a self-write), and
-// `--` guards a script name that looks like a flag.
+// engine. Unlike the functions above this doesn't spawn anything:
+// package-script runs go through startScript so the app's registry
+// keeps owning streaming, cancel, and quit-time reaping. The CLI
+// contributes manager detection and the SHIGOMORI_* env. The branches
+// ride along so the CLI reuses the resolution the IPC handler already
+// performed instead of re-spawning git for it, --skip-use-log keeps
+// the use-log bump in the app's own process (whose state watcher
+// suppresses it as a self-write), and `--` guards a script name that
+// looks like a flag.
 export function cliRunScriptSpawn(args: {
   projectId: string;
   worktreeId: string;
@@ -315,8 +315,8 @@ export function cliRunScriptSpawn(args: {
 
 // Whole-document config writes through the CLI's plumbing `write
 // --data` verbs, so both surfaces run one write path (validation,
-// lock+atomic merge, and -- for project config -- the in-project
-// exclude side effect). The payloads were already zod-parsed at the
+// lock+atomic merge, and the in-project exclude side effect for
+// project config). The payloads were already zod-parsed at the
 // IPC boundary. The CLI merges the payload into the file rather than
 // replacing it, so a key written by a newer version survives a save
 // from an older one, and it re-checks the shape so engine drift fails

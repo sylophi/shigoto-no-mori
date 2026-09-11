@@ -24,7 +24,7 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   projectPullRequests: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);
     const map = await listProjectPullRequests(project.path);
-    // Maps don't survive structured clone across IPC -- ship as a record.
+    // Maps don't survive structured clone across IPC, so ship a record.
     return Object.fromEntries(map);
   },
 
@@ -52,8 +52,8 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
     const project = findProjectOrThrow(projectId);
     // The CLI runs the gh merge and persists lastMergeMethod itself.
     await mergeViaCli(project, number, method);
-    // The merge changes upstream refs (and the sidebar PR cache) --
-    // evict so the next read sees the merged state.
+    // The merge changes upstream refs (and the sidebar PR cache). Evict
+    // so the next read sees the merged state.
     evictProjectPullRequests(project.path);
   },
 

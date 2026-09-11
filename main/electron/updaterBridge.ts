@@ -3,10 +3,10 @@
 // every other app<->CLI feature: the app publishes its updater state to
 // updater.json ({ pid, appVersion, state }) on boot and on every state
 // change, and consumes updater-request.json ({ action, requestedAt })
-// written by the CLI -- picked up at boot (a request can land in the
-// gap around a restart) and via an fs watch afterwards. Everything
-// here is best-effort: a failed write or a malformed request degrades
-// `sm update`, never the updater itself.
+// written by the CLI. Requests are picked up at boot (a request can
+// land in the gap around a restart) and via an fs watch afterwards.
+// Everything here is best-effort: a failed write or a malformed
+// request degrades `sm update`, never the updater itself.
 import { watch } from "node:fs";
 import { rename } from "node:fs/promises";
 import { join } from "node:path";
@@ -45,8 +45,8 @@ export function publishUpdaterState(state: UpdaterState): Promise<void> {
   };
   publishChain = publishChain.then(async () => {
     try {
-      // selfWrite: false -- this is control-plane plumbing the state
-      // watcher ignores, not user state (see atomicWriteJson).
+      // selfWrite: false because this is control-plane plumbing the
+      // state watcher ignores, not user state (see atomicWriteJson).
       await atomicWriteJson(updaterStatePath(), status, { selfWrite: false });
     } catch {
       // The CLI treats a missing/stale file as "app not reachable".
@@ -59,9 +59,9 @@ export function startUpdaterBridge(
   handle: (action: UpdateRequest["action"]) => void,
 ): void {
   // Watch events burst (the atomic write's tmp+rename, our own cleanup
-  // echoing back), so consumes are single-flight -- but an event that
-  // lands mid-consume is deferred via `rerun`, never dropped: it may be
-  // the only event a just-written request ever gets.
+  // echoing back), so consumes are single-flight. An event that lands
+  // mid-consume is still deferred via `rerun`, never dropped: it may
+  // be the only event a just-written request ever gets.
   let consuming = false;
   let rerun = false;
   const consumingPath = () => updateRequestPath() + ".consuming";
@@ -80,8 +80,8 @@ export function startUpdaterBridge(
         // Claim atomically before reading: a fresh request landing
         // mid-consume keeps its own file (and its own watch event,
         // deferred through `rerun`) instead of being deleted unread by
-        // this pass's cleanup. The claimed file is always removed --
-        // unparseable leftovers must not shadow the next request.
+        // this pass's cleanup. The claimed file is always removed,
+        // since unparseable leftovers must not shadow the next request.
         try {
           await rename(updateRequestPath(), consumingPath());
         } catch {

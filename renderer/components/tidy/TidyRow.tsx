@@ -46,7 +46,7 @@ export function TidyRow({
       ? `Last commit ${new Date(ageAt).toLocaleString()}`
       : undefined;
   // Only worth showing when someone actually touched files after the last
-  // commit -- otherwise it just restates the commit date.
+  // commit. Otherwise it just restates the commit date.
   const editedSince =
     ageAt !== null &&
     lastActivityAt !== null &&
@@ -74,7 +74,7 @@ export function TidyRow({
         <TidyEntryTitle entry={entry} showProject={showProject}>
           {worktree.isExternal && <RowTag>External</RowTag>}
           {/* Shelved worktrees are hidden from the sidebar by default,
-              which is exactly how one ends up forgotten on disk -- so
+              which is exactly how one ends up forgotten on disk, so
               this list shows them, labelled. */}
           {worktree.shelved && <RowTag>Shelved</RowTag>}
         </TidyEntryTitle>

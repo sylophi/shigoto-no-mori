@@ -57,7 +57,7 @@ export function useWatchWorktreePullRequests(): void {
 // opening a worktree feels instant; useWatchWorktreePullRequests invalidates
 // it explicitly on window focus and on git refs changing, so we opt out
 // of TanStack's stale-gated focus refetch path. Silent on error to match
-// the sweep's swallow behavior -- a transient gh failure shouldn't toast.
+// the sweep's swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
   branch: string,
@@ -74,7 +74,7 @@ export function useWorktreePullRequest(
       // Without this, the sidebar dot waits up to a full sweep tick to
       // catch a PR merging on GitHub even after the user opened the
       // worktree. The IPC throws on transient gh failure, so we only
-      // reach here with ground truth -- never clobber the project map
+      // reach here with ground truth and never clobber the project map
       // on a network hiccup. The sweep in main/fetch.ts still covers
       // branches the user hasn't visited.
       mirrorIntoProjectMap(queryClient, projectId, branch, pr);
@@ -83,7 +83,7 @@ export function useWorktreePullRequest(
     enabled: options.enabled ?? true,
     refetchOnWindowFocus: false,
     // gh failures here are stable (not in a github repo, gh not authed,
-    // network down) -- the default 3-retry exponential backoff just
+    // network down), so the default 3-retry exponential backoff just
     // turns a fast error into a 7s wait. The focus + refs-changed
     // invalidations bring us back from a true transient.
     retry: false,

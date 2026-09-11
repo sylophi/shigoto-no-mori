@@ -7,7 +7,7 @@ import { PullRequestBody } from "./PullRequestBody";
 import { PullRequestRefreshIndicator } from "./PullRequestRefreshIndicator";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
-  // Skip the PR query on detached HEAD — there's no branch to ask gh
+  // Skip the PR query on detached HEAD. There's no branch to ask gh
   // about, and the eager enabled-flag spares the wasted IPC.
   const enabled = !worktree.detached;
   const { data: pr, isPending } = useWorktreePullRequest(

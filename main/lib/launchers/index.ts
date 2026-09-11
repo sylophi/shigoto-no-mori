@@ -38,7 +38,7 @@ export interface DetectedApp extends CatalogEntry {
 // imported here, so `sm open` and the launcher row offer one list.
 // (T3 Code deliberately has no `cli`: the npm-installable `t3` binary
 // starts a server rather than opening a folder, and launching needs
-// the app bundle anyway -- see t3code.ts.)
+// the app bundle anyway. See t3code.ts.)
 const CATALOG: CatalogEntry[] = catalogJson;
 
 const APP_ROOTS = [
@@ -100,7 +100,7 @@ async function openWithBundle(
 // T3 Code can't open a folder directly (see t3code.ts): register the
 // worktree via the CLI bundled in the app, then activate the app. On a
 // cold start T3's landing route auto-opens a draft composer for the
-// most recently active project -- the one just added -- so this lands
+// most recently active project, the one just added, so this lands
 // ready to prompt; when already running it can only surface the project
 // and focus the window.
 async function launchT3Code(
@@ -164,7 +164,7 @@ export function findDetected(
 // Deep-link URL for launchers whose app opens via a custom protocol
 // rather than a bundle invocation. These deliberately bypass the
 // detected app even when one exists: the protocol URL is the only API
-// these apps expose for "open this folder" -- launching the app with a
+// these apps expose for "open this folder". Launching the app with a
 // path argument just opens the app. Detection still gates visibility
 // (the launcher only shows when the app is installed, and installers
 // register their scheme). The IPC layer opens the URL with Electron's

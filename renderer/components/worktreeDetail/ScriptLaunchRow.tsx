@@ -23,7 +23,7 @@ interface ScriptLaunchRowProps {
 }
 
 // A second row in the Launch section: the top package.json scripts, in the
-// same order the Scripts section shows them (the project's sort mode --
+// same order the Scripts section shows them (the project's sort mode,
 // most-used by default), trimmed to whatever fits on one line. Off-row
 // scripts stay reachable in the Scripts section; this row is a shortcut,
 // not a replacement, so it never wraps and never scrolls.
@@ -35,7 +35,7 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
   );
 
   // Undefined config means the read is still in flight, which is NOT the same
-  // as "on by default" -- defaulting to on there flashes the row in and back
+  // as "on by default". Defaulting to on there flashes the row in and back
   // out for anyone who switched it off.
   const enabled = config !== undefined && (config.launchScripts ?? true);
   const candidates = pkg
@@ -81,7 +81,7 @@ export function ScriptLaunchRow({ worktree }: ScriptLaunchRowProps) {
   if (!enabled || candidates.length === 0) return null;
 
   // No overflow-hidden on the row: the fit is measured, so there's nothing to
-  // clip -- and clipping would eat the pills' focus ring, which paints outside
+  // clip, and clipping would eat the pills' focus ring, which paints outside
   // the button box.
   return (
     <div ref={containerRef} className="relative flex items-center gap-2">
@@ -157,7 +157,7 @@ function ScriptLaunchButton({
   const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
 
   // Cmd-click detours to the script's console instead of toggling the
-  // run -- the modifier the tooltip advertises.
+  // run. Cmd is the modifier the tooltip advertises.
   const handleClick = (e: React.MouseEvent) => {
     if (e.metaKey) {
       void navigate({
@@ -197,7 +197,7 @@ function ScriptPill({
   busy: boolean;
 } & React.ComponentProps<typeof Button>) {
   // Pill height tracks the launcher row above it, but the glyph and label
-  // inside are the Scripts section's (size-3 icon, text-xs mono) -- these are
+  // inside are the Scripts section's (size-3 icon, text-xs mono). These are
   // scripts, and reading them at the launcher's weight overstates them.
   return (
     <Button variant="outline" size="sm" {...props}>

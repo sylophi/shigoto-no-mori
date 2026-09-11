@@ -1,6 +1,6 @@
 package main
 
-// sm status -- one worktree, one card. `list` answers "what do I have";
+// sm status: one worktree, one card. `list` answers "what do I have";
 // this answers "where does the worktree I'm standing in stand": how the
 // branch sits against its upstream and against the project's base
 // branch, what's dirty, what's stashed, what landed last, which ports
@@ -79,7 +79,7 @@ func readChangeCounts(worktreePath string) changeCounts {
 }
 
 // Stashes live in the repo's common dir, so this counts the whole
-// repo's stack, not just entries pushed from here -- the card says so.
+// repo's stack, not just entries pushed from here. The card says so.
 func stashCount(worktreePath string) int {
 	stdout, err := runGit(worktreePath, "stash", "list")
 	if err != nil {
@@ -170,11 +170,11 @@ func ghProbeReason(stderr string) string {
 	return "gh failed"
 }
 
-// findPullRequest's lookup -- the same args, so the card can't end up
-// describing a different PR than `sm merge` acts on -- with the check
-// rollup attached and a deadline around it. The deadline is why it
-// takes the context form: a status card must never be the command that
-// hangs.
+// findPullRequest's lookup with the check rollup attached and a
+// deadline around it. It uses the same args, so the card can't end up
+// describing a different PR than `sm merge` acts on. The deadline is
+// why it takes the context form: a status card must never be the
+// command that hangs.
 func probePullRequest(projectPath, branch string) prProbe {
 	if !ghAvailable() {
 		return prProbe{reason: "gh isn't installed"}
@@ -257,8 +257,8 @@ type statusJSON struct {
 	Ports       []portInfo    `json:"ports"`
 	PortPool    portPoolJSON  `json:"portPool"`
 	Scripts     scriptsJSON   `json:"scripts"`
-	// null when the branch has no PR, when the lookup couldn't run --
-	// prUnavailable then carries why -- or when --no-pr skipped it,
+	// null when the branch has no PR, when the lookup couldn't run
+	// (prUnavailable then carries why), or when --no-pr skipped it,
 	// which prSkipped is how a --json consumer tells apart from "this
 	// branch has no PR".
 	PR            *prCard `json:"pr"`
@@ -295,7 +295,7 @@ func relativeAge(iso string) string {
 	}
 }
 
-// Ellipsize to max visible columns. Takes unpainted text only -- color
+// Ellipsize to max visible columns. Takes unpainted text only. Color
 // goes on after the width math, like the help renderer.
 func truncateRunes(s string, max int) string {
 	runes := []rune(s)
@@ -305,7 +305,7 @@ func truncateRunes(s string, max int) string {
 	return string(runes[:max-1]) + "…"
 }
 
-// Whether the checked-out branch IS the base branch -- "main" against
+// Whether the checked-out branch IS the base branch: "main" against
 // a base ref of "main" or "origin/main".
 func onBaseBranch(branch, ref string) bool {
 	return branch != "" && (ref == branch || strings.HasSuffix(ref, "/"+branch))
@@ -491,8 +491,7 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	}()
 
 	// Every local probe is independent, so none of them waits on
-	// another -- including the two that read files rather than spawn
-	// git.
+	// another, including the two that read files rather than spawn git.
 	var (
 		counts   changeCounts
 		stashes  int
@@ -512,8 +511,8 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 	go func() {
 		defer wg.Done()
 		// One read of the project's remotes, base ref, config, and
-		// shelved set -- the same context list builds its rows from --
-		// then the divergence it exists for here.
+		// shelved set (the same context list builds its rows from), then
+		// the divergence it exists for here.
 		build = loadBuildContext(proj)
 		if ahead, behind, ok := aheadBehind(id.Path, build.primaryRef); ok {
 			base = &baseJSON{Ref: build.primaryRef, syncJSON: syncJSON{Ahead: ahead, Behind: behind}}

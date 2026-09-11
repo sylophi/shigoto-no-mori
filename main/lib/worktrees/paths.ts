@@ -31,8 +31,8 @@ export function managedBasesFor(
   });
 }
 
-// A worktree is managed when it sits DIRECTLY under one of the bases --
-// the app only ever creates worktrees as `<base>/<name>`. Parent
+// A worktree is managed when it sits DIRECTLY under one of the bases,
+// since the app only ever creates worktrees as `<base>/<name>`. Parent
 // equality, not prefix matching: a prefix check would let a root base
 // ("/") claim every worktree on the volume, and managed status feeds
 // destructive flows (nuke, delete cleanup).

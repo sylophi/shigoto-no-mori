@@ -85,7 +85,7 @@ export function NewWorktreeButton({ projects }: NewWorktreeButtonProps) {
         }
       />
       <DropdownMenuContent align="start" sideOffset={4}>
-        {/* GroupLabel throws outside a Group -- Base UI reads the group
+        {/* GroupLabel throws outside a Group, since Base UI reads the group
             context to wire the label to the items it names. */}
         <DropdownMenuGroup>
           <DropdownMenuLabel>

@@ -96,13 +96,13 @@ export async function resolveDefaultBranch(
 ): Promise<string> {
   const trimmed = override?.trim();
   if (trimmed) {
-    // User explicitly picked it — accept whether it's local or remote.
+    // User explicitly picked it, so accept whether it's local or remote.
     if (await localBranchExists(projectPath, trimmed)) return trimmed;
     if (await remoteRefExists(projectPath, trimmed)) return trimmed;
   }
   // No (valid) override. Prefer a remote-tracking ref (the source of
   // truth) over the local copy, which tends to drift. Try each remote
-  // in the order `git remote` lists them — usually that's the project's
+  // in the order `git remote` lists them. Usually that's the project's
   // canonical "origin"-equivalent first.
   const remotes = await listRemotes(projectPath);
   for (const candidate of DEFAULT_BRANCH_CANDIDATES) {

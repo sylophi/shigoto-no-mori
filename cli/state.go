@@ -48,11 +48,10 @@ func initRoot() {
 // $XDG_CONFIG_HOME/<rootDirName>/root, one line holding an absolute
 // path (~/ allowed). Go mirror of the policy in shared/cliDist.mts
 // (the app reads and writes the same file). SHIGOMORI_ROOT still beats
-// it, and nothing injects that var -- a caller who sets it is
-// sandboxing the whole tree on purpose (scripts.go). Missing,
-// empty, or non-absolute content falls through to the flavor default
-// -- initRoot runs before every command, so a malformed file must not
-// be fatal.
+// it, and nothing injects that var. A caller who sets it is sandboxing
+// the whole tree on purpose (scripts.go). Missing, empty, or
+// non-absolute content falls through to the flavor default. initRoot
+// runs before every command, so a malformed file must not be fatal.
 func readRootPointer() string {
 	cfg := configHomeDir()
 	if cfg == "" {
@@ -76,7 +75,7 @@ func readRootPointer() string {
 // that doesn't exist yet, is empty, or already holds shigomori state.
 // A pointer at ~/Documents must fall back to the default rather than
 // adopt a directory full of unrelated files as the state root. Mirror
-// of main/lib/util/paths.ts looksLikeRootTarget -- keep in sync.
+// of main/lib/util/paths.ts looksLikeRootTarget. Keep the two in sync.
 func looksLikeRootTarget(target string) bool {
 	entries, err := os.ReadDir(target)
 	if err != nil {
@@ -109,14 +108,14 @@ type project struct {
 	Path string `json:"path"`
 	// "terrier" on entries merged from the terrier registry
 	// (terrier.go). Never persisted: registry.json rows always leave it
-	// empty, and the merge layer decorates at read time -- mirroring
+	// empty, and the merge layer decorates at read time, mirroring
 	// ProjectSchema's source field (shared/schemas/project.ts).
 	Source string `json:"source,omitempty"`
 }
 
 // Per-project config (ShigomoriConfigSchema). Mirrors the zod schema's
 // strictness where it matters: defaultBranch is required there, so a
-// config missing it is treated as absent entirely -- same as the app's
+// config missing it is treated as absent entirely, same as the app's
 // readShigomoriConfig(...).catch(() => null).
 type projectConfig struct {
 	Scripts struct {
@@ -378,16 +377,16 @@ func readRegistryHints() map[string]json.RawMessage {
 // readJSONObject's strictness has to reach the key values too: a
 // well-formed document holding a wrong-shaped value would otherwise
 // read as empty, and the next locked write would persist that
-// emptiness -- the "rebuilt from an empty picture" failure the strict
+// emptiness, the "rebuilt from an empty picture" failure the strict
 // document read exists to prevent, one level down.
 func malformedKeyErr(path, key string, err error) error {
 	return errf("%s holds a malformed %q value (%v). Fix the file or move it aside, then retry.", path, key, err)
 }
 
 // The one way to read a key's value: nil raw reads as absent, anything
-// else must decode. Every consumer -- reader or locked read-modify-
-// write -- goes through here so no call site can quietly fall back to
-// empty.
+// else must decode. Every consumer (reader or locked
+// read-modify-write) goes through here so no call site can quietly
+// fall back to empty.
 func decodeKey[T any](path, key string, raw json.RawMessage, dst *T) error {
 	if raw == nil {
 		return nil
@@ -600,7 +599,7 @@ func dropShelved(worktreeID string) error {
 // Missing reads as defaults. A file that exists but can't be read or
 // parsed is an error. deleteBranchOnRemove decides whether `sm rm`
 // deletes a branch, so a corrupt config.json must not quietly read as
-// "unset" -- that flips an explicit opt-out back to the destructive
+// "unset". That flips an explicit opt-out back to the destructive
 // default. Same rule readJSONObject applies to the registry.
 func readGlobalConfig() (globalConfig, error) {
 	var cfg globalConfig
@@ -627,7 +626,7 @@ func readGlobalConfigHints() globalConfig {
 }
 
 // nil when the file is missing, unreadable, or fails the schema's
-// required-field check -- matching the app's null-on-invalid behavior.
+// required-field check, matching the app's null-on-invalid behavior.
 // A missing file or absent defaultBranch is the ordinary
 // pre-configure state and stays silent. A file that exists but can't
 // be read or parsed gets a one-time warning, because nil here means

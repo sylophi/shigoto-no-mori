@@ -1,8 +1,8 @@
 // Install of the CLI as a symlink into a PATH bin dir, pointing at the
-// binary the app itself runs -- the VS Code / Docker Desktop pattern.
-// No copy means no version drift: when the binary updates, the link
-// stays current. Flavor-aware: the packaged app manages `CLI` linking
-// its Resources binary; a dev run manages `smd` linking the
+// binary the app itself runs. That's the VS Code / Docker Desktop
+// pattern. No copy means no version drift: when the binary updates,
+// the link stays current. Flavor-aware: the packaged app manages `CLI`
+// linking its Resources binary; a dev run manages `smd` linking the
 // checkout's dist-cli build (made by `pnpm dev`).
 //
 // Install and uninstall are user actions in Settings (the cli IPC
@@ -52,10 +52,10 @@ function linkPath(): string {
 //   this-flavor  this flavor's binary in its expected home (an app
 //                bundle's Resources when packaged, a checkout's
 //                dist-cli in dev) at a location that has since moved
-//   our-family   a shigomori-made link of the other kind -- notably
-//                the `sm -> <checkout>/dist-cli` link (pnpm
-//                cli:install) that the prod app deliberately leaves to
-//                keep running the checkout's build
+//   our-family   a shigomori-made link of the other kind, notably the
+//                `sm -> <checkout>/dist-cli` link (pnpm cli:install)
+//                that the prod app deliberately leaves to keep running
+//                the checkout's build
 //   foreign      anything else (a regular file, someone else's link);
 //                never touched
 // Call sites express strictness by which levels they accept.
@@ -92,7 +92,7 @@ function isOnPath(dir: string): boolean {
 
 // Gatekeeper app translocation (quarantined app run from ~/Downloads)
 // mounts the bundle at a randomized read-only path that dies with the
-// process -- a link to it would dangle immediately.
+// process. A link to it would dangle immediately.
 function isTranslocated(): boolean {
   return app.isPackaged && process.resourcesPath.includes("/AppTranslocation/");
 }
@@ -213,8 +213,8 @@ async function uninstallCliLinks(): Promise<void> {
 // stayed.
 export async function uninstallCliEverything(): Promise<void> {
   let hookFailure: unknown;
-  // No binary means the hook-removal spawn can't run -- and the guarded
-  // hook line is inert without the command anyway, so skipping is not a
+  // No binary means the hook-removal spawn can't run. The guarded hook
+  // line is inert without the command anyway, so skipping is not a
   // failure worth reporting.
   if (cliBinaryPath() !== null) {
     try {

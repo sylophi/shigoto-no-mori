@@ -3,13 +3,13 @@
 # dependencies = ["Pillow>=10.0"]
 # ///
 """
-Build the app icons — a squircle with a stylized tree, echoing the
+Build the app icons: a squircle with a stylized tree, echoing the
 TreeDeciduous glyph from the welcome panel.
 
 Produces:
-  assets/icon.png        — 1024x1024 master
-  assets/icon.svg        — vector master, same geometry
-  assets/icon.iconset/   — per-size PNGs for `iconutil`
+  assets/icon.png        1024x1024 master
+  assets/icon.svg        vector master, same geometry
+  assets/icon.iconset/   per-size PNGs for `iconutil`
 
 Run `iconutil -c icns assets/icon.iconset -o assets/icon.icns` after.
 

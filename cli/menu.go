@@ -3,7 +3,7 @@ package main
 // The selection menu behind every picker: a small bubbletea loop with
 // arrow keys or j/k, `/` to filter, enter to select, esc/ctrl-c to
 // cancel, and scrolling on long lists. Output goes to stderr so
-// command results (stdout) stay clean -- `cd "$(sm path)"` opens the
+// command results (stdout) stay clean. `cd "$(sm path)"` opens the
 // menu and still cd's. Rows keep their own ANSI colors in every
 // state: the selected row lays a background bar under them
 // (selectedRow), and when color is off the rows carry no ANSI to
@@ -36,7 +36,7 @@ func buildMenu(header []string, cells [][]string) (string, []string) {
 
 // Background for the menu's selected row: a gray bar one step off the
 // terminal background, quantized to the terminal's color depth ("" on
-// colorless terminals -- the caller then relies on the arrow alone).
+// colorless terminals, where the caller relies on the arrow alone).
 func menuBarBG() string {
 	gray := color.RGBA{R: 58, G: 58, B: 58, A: 255}
 	if !darkBackground() {
@@ -51,7 +51,7 @@ func menuBarBG() string {
 
 // The selected row keeps its cell colors and gains a background bar.
 // Cells arrive pre-painted and every paint ends in a full reset, which
-// would cut the bar mid-row -- so each reset is rewritten to one that
+// would cut the bar mid-row, so each reset is rewritten to one that
 // re-applies the bar (the technique fzf uses).
 func selectedRow(line string) string {
 	bg := menuBarBG()
@@ -271,9 +271,9 @@ func menuSelect(title, header string, rows []string, names []string, initial int
 	if len(rows) == 0 {
 		return -1, errf("Nothing to select from.")
 	}
-	// bubbletea's Run doesn't fail on a redirected stdin -- it waits
-	// forever on input that never comes -- so route non-tty stdio to
-	// the numbered prompt up front.
+	// bubbletea's Run doesn't fail on a redirected stdin. It waits
+	// forever on input that never comes, so route non-tty stdio to the
+	// numbered prompt up front.
 	if !isTerminal(os.Stdin) || !isTerminal(os.Stderr) {
 		return menuSelectNumbered(title, rows, names)
 	}

@@ -28,7 +28,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 			"project-id": {}, // app plumbing: exact addressing from IPC
 		},
 		// checkout: reuse the existing branch `base` instead of creating
-		// one -- the app's "open existing branch" flow. Requires --base.
+		// one, the app's "open existing branch" flow. Requires --base.
 		// no-cd: don't open a subshell in the new worktree afterwards.
 		bools: map[string][]string{"checkout": {}, "no-cd": {}},
 	})
@@ -41,7 +41,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	}
 	name := parsed.positional(0)
 	if isPrimaryKeyword(name) {
-		return 2, usageErrf("%q is reserved -- it addresses the project's primary checkout.", name)
+		return 2, usageErrf("%q is reserved. It addresses the project's primary checkout.", name)
 	}
 	if name != "" && !isValidWorktreeDirName(name) {
 		return 2, usageErrf("%q is not a valid worktree folder name.", name)
@@ -180,9 +180,9 @@ func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scri
 
 // The provisioning half shared by create/adopt and `sm setup`: the
 // project's setup script, then port-pool provision (skipped for
-// external worktrees -- rm skips the matching release for them, so
-// provisioning would leak a port). Returns the failures and which
-// steps ran; callers own the trailing "idle" phase.
+// external worktrees, because rm skips the matching release for
+// them, so provisioning would leak a port). Returns the failures and
+// which steps ran; callers own the trailing "idle" phase.
 func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfig) ([]scriptFailure, []string) {
 	failures := []scriptFailure{}
 	ran := []string{}

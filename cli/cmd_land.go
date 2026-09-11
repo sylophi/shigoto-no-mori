@@ -1,12 +1,12 @@
 package main
 
-// sm land: the finish line as one command -- merge the worktree's PR
-// (the sm merge flow), fast-forward the checkout holding the PR's
-// base branch so it sees the merge, and clean up: the sm rm pipeline
+// sm land is the finish line as one command. It merges the worktree's
+// PR (the sm merge flow), fast-forwards the checkout holding the PR's
+// base branch so it sees the merge, and cleans up: the sm rm pipeline
 // for a managed or external worktree, or the sm done switch-and-delete
-// when landing the primary checkout itself. A PR that's already merged skips
-// straight to cleanup, so re-running after a partial failure (say a
-// teardown script) resumes where it left off.
+// when landing the primary checkout itself. A PR that's already merged
+// skips straight to cleanup, so re-running after a partial failure
+// (say a teardown script) resumes where it left off.
 
 import (
 	"cmp"
@@ -52,7 +52,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		return 1, err
 	}
 	if pr == nil {
-		return 1, errf("No pull request found for branch %s -- push the branch and open a PR first", id.Branch)
+		return 1, errf("No pull request found for branch %s. Push the branch and open a PR first", id.Branch)
 	}
 	alreadyMerged := pr.State == "MERGED"
 	method := ""
@@ -65,7 +65,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	case alreadyMerged:
 		// Merged on a previous run (or by hand): resume with cleanup.
 	default:
-		return 1, errf("PR #%d for %s is %s, not open -- reopen it, or clean up with `%s rm %s`",
+		return 1, errf("PR #%d for %s is %s, not open. Reopen it, or clean up with `%s rm %s`",
 			pr.Number, id.Branch, strings.ToLower(pr.State), binaryName, id.Name)
 	}
 
@@ -79,7 +79,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	}
 
 	// Landing the primary checkout itself is the sm done flow, minus
-	// its is-it-merged guard -- the merge just happened above.
+	// its is-it-merged guard, since the merge just happened above.
 	if id.IsPrimary {
 		pt, err := resolvePrimaryTarget(proj)
 		if err != nil {
@@ -184,7 +184,7 @@ func (cu catchUpResult) addTo(doc map[string]any) {
 // A PR based on a release line or a long-lived feature branch leaves
 // the primary branch untouched, so pulling the primary checkout would
 // advance it by unrelated commits and report a catch-up that never
-// happened -- and leave the line that did move behind, inviting a
+// happened, and leave the line that did move behind, inviting a
 // by-hand fast-forward that can land in the wrong checkout. Only the
 // base branch's own checkout is touched, and ffPull refuses unless
 // that checkout really is on the base branch, so nothing else can
@@ -195,7 +195,7 @@ func (cu catchUpResult) addTo(doc map[string]any) {
 // overwhelmingly the common one, so guessing it beats skipping.
 //
 // Skipped when the primary ref has no remote or no checkout has the
-// base branch out. Failures never abort the command -- the merge and
+// base branch out. Failures never abort the command. The merge and
 // the cleanup are the substance of land.
 func catchUpBase(proj project, pt primaryTarget, prBase string) catchUpResult {
 	base := cmp.Or(prBase, pt.localPrimary)

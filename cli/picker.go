@@ -3,7 +3,7 @@ package main
 // The pickers behind every command that can be run without naming its
 // target: they build the rows and hand them to menuSelect (menu.go)
 // for arrow-key selection. Everything renders on stderr and the answer
-// comes from stdin, so stdout stays clean for the command's result --
+// comes from stdin, so stdout stays clean for the command's result.
 // `cd "$(sm path)"` opens the picker and still cd's. Nothing here
 // triggers for --json or when stdin/stderr isn't a terminal, so agents
 // and pipelines keep deterministic behavior.
@@ -69,13 +69,14 @@ func pickProject(ctx cliContext, preferredID string) (project, error) {
 	return ctx.projects[idx], nil
 }
 
-// excludeID drops one worktree from the menu -- for `cd` that's
+// excludeID drops one worktree from the menu. For `cd` that's
 // wherever you stand, since entering it again isn't a destination.
 // primaryOK=false additionally drops the primary checkout, for
 // commands that would refuse it anyway (rm, adopt, shelve).
 // primaryLast moves the primary to the bottom so it never sits on the
-// initial highlight -- for menus shown FROM the primary, where a real
-// worktree is the likely target but the primary must stay reachable.
+// initial highlight. That's for menus shown FROM the primary, where a
+// real worktree is the likely target but the primary must stay
+// reachable.
 type pickOpts struct {
 	excludeID   string
 	primaryOK   bool

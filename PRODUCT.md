@@ -22,7 +22,7 @@ Shigoto no Mori is a lightweight desktop app for managing many git worktrees in 
 
 It deliberately does not own the terminal, the editor, the agent, or the dev server. Those tools already exist and are good. The app's job is the worktree, the launcher, and the at-a-glance status.
 
-The product succeeds when a developer can run 3–10 parallel worktrees with agents or experiments and feel calm, not chaotic.
+The product succeeds when a developer can run 3 to 10 parallel worktrees with agents or experiments and feel calm, not chaotic.
 
 ## Brand Personality
 

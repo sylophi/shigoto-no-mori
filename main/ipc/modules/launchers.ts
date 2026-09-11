@@ -85,7 +85,7 @@ async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
 // alphabetical by label as the tiebreaker so first-time users see a
 // predictable A→Z list instead of the curated category order. The renderer
 // query has a staleTime and useLaunch doesn't invalidate it, so the visible
-// order stays put while the user interacts — only re-sorts when they
+// order stays put while the user interacts. It only re-sorts when they
 // navigate away and back (or the cache goes stale).
 async function getLaunchersForProject(
   projectId: string,

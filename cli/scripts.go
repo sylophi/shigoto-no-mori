@@ -3,7 +3,7 @@ package main
 // Lifecycle script execution (setup / teardown / port-pool), ported
 // from main/lib/scripts/. The CLI runs scripts in the foreground and
 // shares the terminal's process group, so Ctrl-C reaches the whole
-// tree naturally -- none of the app's background kill machinery is
+// tree naturally. None of the app's background kill machinery is
 // needed. Env, shell selection, and event shapes match the app so
 // scripts and --json consumers see identical behavior.
 
@@ -62,7 +62,7 @@ func resolveShell() (string, []string) {
 // can't leak a parent run's identity into this one. SHIGOMORI_ROOT
 // isn't part of the contract and passes through untouched: when a
 // caller has sandboxed the root, the sandbox should cover the whole
-// tree. Nothing on either side adds one -- see initShigomoriRoot
+// tree. Nothing on either side adds one. See initShigomoriRoot
 // (main/lib/util/paths.ts) for why injecting it is the bug.
 func scriptEnv(in scriptEnvInputs) []string {
 	contract := map[string]string{
@@ -115,8 +115,8 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	cmd.Dir = in.worktree.Path
 	// The terminal-faking trio on top of the contract env: lifecycle
 	// output is piped (through the CLI or the app's console), so tools
-	// need convincing to emit ANSI. `sm run` deliberately skips these --
-	// its script inherits the real terminal.
+	// need convincing to emit ANSI. `sm run` deliberately skips these,
+	// since its script inherits the real terminal.
 	cmd.Env = append(scriptEnv(in),
 		"FORCE_COLOR=1",
 		"TERM=xterm-256color",
@@ -241,7 +241,7 @@ func readPortPoolConfig(dir string) portPoolConfig {
 	// Key by key, tolerantly: "is this worktree configured" is the
 	// question provision and release both hinge on, and a portNames or
 	// envFiles shape this build doesn't model must not turn it into a
-	// no -- release would then skip and leak the worktree's ports.
+	// no, since release would then skip and leak the worktree's ports.
 	config := portPoolConfig{SchemaVersion: keys["schemaVersion"]}
 	_ = json.Unmarshal(keys["portNames"], &config.PortNames)
 	_ = json.Unmarshal(keys["envFiles"], &config.EnvFiles)
@@ -279,7 +279,7 @@ type portInfo struct {
 
 // KEY=VALUE lines from a dotenv file: comments, blanks, `export `
 // prefixes, and surrounding quotes off. Deliberately not a full dotenv
-// parser -- these files are machine-written by port-pool.
+// parser, since these files are machine-written by port-pool.
 func parseEnvAssignments(content string) map[string]string {
 	env := map[string]string{}
 	for _, line := range strings.Split(content, "\n") {
@@ -302,7 +302,7 @@ func parseEnvAssignments(content string) map[string]string {
 }
 
 // The value each declared port name currently holds, read back out of
-// the env files rather than out of port-pool's own state -- the files
+// the env files rather than out of port-pool's own state. The files
 // are the contract both sides already agree on. Only whole-value
 // templates ("${renderer}") can be reversed; a name embedded in a
 // larger string (a URL, say) goes unreported instead of guessed at.

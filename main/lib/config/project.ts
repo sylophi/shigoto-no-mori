@@ -1,6 +1,6 @@
 // Per-project on-disk state lives under ~/shigomori[-dev]/projects/<projectId>/:
-//   project.json                       -- project-wide settings (scripts, layout, ...)
-//   worktrees/<worktreeId>.json        -- per-worktree state (notes, ...)
+//   project.json                 project-wide settings (scripts, layout, ...)
+//   worktrees/<worktreeId>.json  per-worktree state (notes, ...)
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
@@ -37,7 +37,7 @@ function worktreeDataPath(projectId: string, worktreeId: string): string {
   return join(projectDir(projectId), "worktrees", `${worktreeId}.json`);
 }
 
-// Failures aren't cached -- a bad config should error every read so the
+// Failures aren't cached. A bad config should error every read so the
 // user notices and fixes it.
 const configCache = ttlMapCache<string, ShigomoriConfig | null>(
   5_000,
@@ -101,7 +101,7 @@ export async function deleteWorktreeData(
 }
 
 // For delegated CLI writes of project.json, which the state watcher
-// suppresses as self-writes -- the handler drops the cache itself.
+// suppresses as self-writes. The handler drops the cache itself.
 export function invalidateProjectConfigCache(projectId: string): void {
   configCache.invalidate(projectId);
 }

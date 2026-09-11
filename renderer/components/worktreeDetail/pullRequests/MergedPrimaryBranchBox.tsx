@@ -8,8 +8,8 @@ import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-bu
 
 // Primary-worktree analog of ClosedPullRequestBox's "Delete worktree":
 // the repo root can't be removed, so once its branch is merged we offer
-// to switch it back to the primary branch and delete the merged branch
-// — the same cleanup a regular worktree gets, adapted to the root.
+// to switch it back to the primary branch and delete the merged branch.
+// This is the same cleanup a regular worktree gets, adapted to the root.
 //
 // Both halves run as one main-side operation (worktrees.switchToPrimaryAndDeleteBranch):
 // the switch unmounts this box, and a renderer-chained delete would be lost
@@ -31,7 +31,7 @@ export function MergedPrimaryBranchBox({ worktree }: { worktree: Worktree }) {
   // local tracking branch + fast-forward onto the remote tip) and the delete
   // of the merged branch are done server-side in one atomic operation.
   const target = localBranchOf(defaultBranch, new Set(branches?.remote ?? []));
-  // Already on the primary branch — nothing to switch to or delete.
+  // Already on the primary branch, so nothing to switch to or delete.
   if (target === worktree.branch) return null;
 
   const run = () => {
