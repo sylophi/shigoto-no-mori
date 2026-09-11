@@ -1,7 +1,7 @@
 package main
 
 // The update engine behind `sm update` (cmd_update.go). The CLI owns
-// the whole pipeline -- the app is not involved until the moment a
+// the whole pipeline. The app is not involved until the moment a
 // running instance has to restart:
 //   query    GET the update.electronjs.org feed for this repo/arch/
 //            version. The server does the version comparison (204 =
@@ -16,7 +16,7 @@ package main
 //            final location, and only then swapped in via two
 //            same-directory renames with a rollback in between.
 // Trust model: transport is HTTPS, but the anchor is Apple's code
-// signature -- a staged bundle installs only if `codesign --verify`
+// signature. A staged bundle installs only if `codesign --verify`
 // passes and its Team ID matches the installed app's. A compromised
 // feed can therefore redirect to a different release of ours, not to
 // arbitrary code. Verification failures always fail closed.
@@ -309,12 +309,12 @@ func pruneUpdateLeftovers(targetBundle string) {
 // Check the feed and, when a release is newer than this build, leave a
 // verified bundle in updates/staged. Returns (nil, nil) when already up
 // to date. progress is called with (phase, version) at each slow phase
-// boundary -- phases are the UpdateStageEventSchema enum
+// boundary. Phases are the UpdateStageEventSchema enum
 // (shared/schemas/runtime.ts); installedBundle anchors signature
 // comparison.
 func stageUpdate(installedBundle string, progress func(phase, version string)) (*stagedManifest, error) {
-	// The lock comes first: every mutation below -- pruning debris,
-	// clearing the staged dir, the download/extract scratch space --
+	// The lock comes first: every mutation below (pruning debris,
+	// clearing the staged dir, the download/extract scratch space)
 	// must be invisible to a concurrent stager, or two runs (the app's
 	// periodic check and a terminal `sm update`) can delete each
 	// other's in-flight files.
@@ -449,8 +449,8 @@ func findExtractedBundle(extractDir string) (string, error) {
 // Replace targetBundle with stagedApp. Ordering makes every crash
 // point recoverable:
 //  1. Move (or, cross-volume, copy) the staged bundle NEXT TO the
-//     target -- the only slow step, and the target is untouched if it
-//     fails.
+//     target. This is the only slow step, and the target is untouched
+//     if it fails.
 //  2. Re-verify the signature in its final location, closing the gap
 //     between stage-time verification and install.
 //  3. rename(target -> aside), rename(incoming -> target): two
@@ -490,7 +490,7 @@ func swapBundle(stagedApp, targetBundle string) error {
 		rollbackErr := os.Rename(aside, targetBundle)
 		_ = os.RemoveAll(incoming)
 		if rollbackErr != nil {
-			return errf("Couldn't install the update (%v) and restoring the old app failed too (%v) -- the old app is at %s.",
+			return errf("Couldn't install the update (%v) and restoring the old app failed too (%v). The old app is at %s.",
 				err, rollbackErr, aside)
 		}
 		return errf("Couldn't install the update: %v (the old app was restored)", err)

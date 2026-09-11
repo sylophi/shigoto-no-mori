@@ -14,7 +14,7 @@ const SEED_JSON = `${JSON.stringify(withSchemaVersion({}), null, 2)}\n`;
 
 async function ensureFile(path: string, contents: string): Promise<void> {
   try {
-    // `wx` fails if the file exists — race-safe "create if missing".
+    // `wx` fails if the file exists: race-safe "create if missing".
     await writeFile(path, contents, { flag: "wx", encoding: "utf8" });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") return;

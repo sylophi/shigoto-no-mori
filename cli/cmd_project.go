@@ -1,6 +1,6 @@
 package main
 
-// sm projects <list|add|remove|config> -- manage registered projects
+// sm projects <list|add|remove|config>: manage registered projects
 // without the app. `add` ports the app's projects:add handler
 // (host/ipc/modules/projects.ts): git-repo check, duplicate-path
 // check, uuid + basename identity, locked registry append, then a
@@ -41,8 +41,8 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 // what separates the two callers: for `projects remove` a name that
 // isn't registered is a user error, while doctor's repair races the app
 // and must tolerate an entry that has already gone. The per-project
-// state dir is removeProjectState's job -- the two callers disagree
-// about what a failure there means.
+// state dir is removeProjectState's job, since the two callers
+// disagree about what a failure there means.
 func removeProjectRegistration(projectID string, missingOK bool) error {
 	err := updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
 		var projects []project
@@ -80,7 +80,7 @@ func removeProjectState(projectID string) error {
 
 // Ports the app's projects:remove: drop the registry entry and the
 // per-project state dir (config, shelved marks, worktree data).
-// Worktree checkouts stay on disk -- remove them first with `rm` if
+// Worktree checkouts stay on disk. Remove them first with `rm` if
 // that's the intent. Unlike the app, the CLI can't reap scripts the
 // app spawned into this project's worktrees; stop those in the app.
 func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
@@ -152,7 +152,7 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	// Best-effort, like the app's icon-cache cleanup: the entry is
 	// already gone, so failing here would report a half-removal the
 	// user can do nothing about. A project that stays listed via
-	// terrier keeps its state -- under the deterministic id it
+	// terrier keeps its state under the deterministic id it
 	// resurfaces with, relocating when the registry id was an older
 	// random one.
 	if stillListed {
@@ -382,7 +382,7 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	}
 	// Dedupe against the registry alone, not the merged list: single
 	// add registers a terrier-listed repo (as an ordinary, removable
-	// project), so the bulk form must agree -- counting terrier entries
+	// project), so the bulk form must agree. Counting terrier entries
 	// as "already registered" would silently leave them unregistered
 	// and unconfigured while claiming otherwise.
 	registered := make(map[string]bool, len(ctx.projects))
@@ -397,7 +397,7 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	for _, repo := range scanForGitRepos(root) {
 		// Raw-path check first: registered rows were canonicalized at
 		// registration, so a raw hit is already canonical and skips the
-		// git spawn -- a re-run over an all-registered root then costs
+		// git spawn. A re-run over an all-registered root then costs
 		// no spawns at all.
 		if registered[repo] {
 			known++
@@ -634,7 +634,7 @@ func projectConfigScope(proj project) configDocScope {
 }
 
 // sm projects config carryover [add <path> [--copy|--symlink] | rm
-// <path>] -- element verbs over the carryOver array. Paths are
+// <path>]: element verbs over the carryOver array. Paths are
 // project-relative (absolute paths inside the project are folded);
 // add upserts, so re-adding a path just switches its mode.
 func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs) (int, error) {
@@ -758,8 +758,8 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 	}
 }
 
-// Folds whatever the user gave -- ./-prefixed, duplicated or trailing
-// separators, or absolute-inside-the-project -- to one canonical
+// Folds whatever the user gave (./-prefixed, duplicated or trailing
+// separators, or absolute-inside-the-project) to one canonical
 // project-relative forward-slash form, so the upsert and rm compares
 // can't miss an existing entry over spelling. Applies the schema's
 // stay-within-the-root refinement (isSafeRelPath).
@@ -791,7 +791,7 @@ func normalizeCarryOverPath(proj project, raw string) (string, error) {
 
 // The zod schema requires defaultBranch, and the app's reader throws
 // on a document missing it (readJsonOrNull is null only for a missing
-// file) -- so backfill it from the repo, and when that fails (bare
+// file), so backfill it from the repo, and when that fails (bare
 // repo, unborn HEAD, moved path) refuse the write rather than land a
 // file that breaks every shigomori:read for the project.
 func ensureDefaultBranchField(doc map[string]any, proj project) error {
@@ -809,9 +809,10 @@ func ensureDefaultBranchField(doc map[string]any, proj project) error {
 }
 
 // Hide `.shigomori/` from the primary's `git status` whenever the
-// project opts into the in-project layout -- the same side effect the
-// app's shigomori:write handler performs. Best-effort like the app's:
-// appendExcludes skips lines that already exist and swallows failures.
+// project opts into the in-project layout. That's the same side effect
+// the app's shigomori:write handler performs. Best-effort like the
+// app's: appendExcludes skips lines that already exist and swallows
+// failures.
 func maybeExcludeInProjectDir(proj project, doc map[string]any) {
 	if layout, _ := configDocGet(doc, "worktreeLayout"); layout == "in-project" {
 		appendExcludes(proj.Path, []string{".shigomori"})

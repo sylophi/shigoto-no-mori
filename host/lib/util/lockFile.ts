@@ -8,8 +8,8 @@
 // Mechanics: O_EXCL-create a sibling `<file>.lock` holding our pid.
 // Contenders spin with a short sleep; a lock older than STALE_MS is
 // treated as leaked (holder crashed between create and unlink) and
-// broken. Real hold times are milliseconds -- one JSON read + write --
-// so the stale threshold is generous.
+// broken. Real hold times are milliseconds (one JSON read + write), so
+// the stale threshold is generous.
 import {
   closeSync,
   mkdirSync,
@@ -50,7 +50,7 @@ function acquire(lockPath: string): void {
     // Break a leaked lock (holder crashed between create and unlink).
     // Best effort: the stat can race a concurrent release and the rm
     // can fail on permissions. Fall through to the deadline check
-    // either way -- every loop iteration must reach it, or an
+    // either way. Every loop iteration must reach it, or an
     // undeletable lock would spin this (synchronous, main-thread)
     // loop forever.
     try {

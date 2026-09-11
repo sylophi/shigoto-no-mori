@@ -1,4 +1,4 @@
-// Set-state updater for a value that's either in or out -- every
+// Set-state updater for a value that's either in or out. Every
 // multi-select surface in the app is exactly this.
 export function withToggled<T>(value: T) {
   return (prev: Set<T>): Set<T> => {

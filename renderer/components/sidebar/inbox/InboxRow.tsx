@@ -45,7 +45,7 @@ interface InboxRowProps {
 //   feat/the-branch                            ±3  ↑2  #142
 //   [kind] dirname
 //
-// Right-click opens the project's menu -- the same list the tree hangs
+// Right-click opens the project's menu, the same list the tree hangs
 // off a project header's `…`. The inbox has no project headers, so this
 // is the only place its project-level actions can live. A peer's row
 // wears its device badge beside the project name, opens under the
@@ -116,7 +116,7 @@ export function InboxRow({ worktree, project, pr, device }: InboxRowProps) {
           The kind glyph leads it, since it describes this worktree and
           not the project above. Shelved is the one kind left out: it
           would restate the shelf header the row is already under. The
-          primary's house glyph stays -- when it's opted into the inbox
+          primary's house glyph stays. When it's opted into the inbox
           it's the only thing telling the root apart from a worktree
           named after the project. */}
       <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/70">
@@ -147,7 +147,7 @@ export function InboxRow({ worktree, project, pr, device }: InboxRowProps) {
 
 // Right end of the context line: normally "when did this last move",
 // which is what the inbox sorts on. A running script or a delete in
-// flight displaces it -- those are happening now, so they outrank a
+// flight displaces it. Those are happening now, so they outrank a
 // timestamp.
 function TrailingSlot({
   worktree,

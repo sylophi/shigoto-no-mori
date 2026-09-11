@@ -15,7 +15,7 @@ import { includedFiles } from "./changesControls";
 // once the commit lands.
 //
 // The button reads what the commit will take. With files ticked it
-// commits those. With nothing ticked it commits everything listed --
+// commits those. With nothing ticked it commits everything listed,
 // the way a fresh commit usually goes, and the reason a tree touched
 // only from a terminal (where nothing is staged yet) isn't a dead end.
 //

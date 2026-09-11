@@ -1,16 +1,15 @@
 package main
 
-// sm done: post-merge cleanup --
-// land the worktree back on the project's primary branch
-// (creating a local tracking branch from the remote ref when needed,
-// then --ff-only pulling it current) and delete the now-merged branch
-// it was sitting on. Order matters: the checkout frees the merged
-// branch (git refuses to delete a checked-out branch). The branch we
-// just landed on is never deleted.
+// sm done: post-merge cleanup. Land the worktree back on the
+// project's primary branch (creating a local tracking branch from the
+// remote ref when needed, then --ff-only pulling it current) and
+// delete the now-merged branch it was sitting on. Order matters: the
+// checkout frees the merged branch (git refuses to delete a
+// checked-out branch). The branch we just landed on is never deleted.
 //
 // Note: git refuses to check out a branch already checked out in
 // another worktree, so this flow fits a checkout sitting on a merged
-// feature branch -- classically the primary checkout. For a managed
+// feature branch, classically the primary checkout. For a managed
 // worktree you're done with entirely, `sm rm` is the cleanup.
 
 import (
@@ -22,7 +21,7 @@ import (
 // The project's primary branch in every form the flows below need:
 // the resolved ref (possibly remote-qualified), its remote (empty for
 // a local-only ref), the bare local branch name, and the remotes list
-// that fed the resolution -- one `git remote` spawn serves the ref
+// that fed the resolution. One `git remote` spawn serves the ref
 // resolution, the split, and the checkout inside
 // switchToPrimaryBranch.
 type primaryTarget struct {
@@ -203,8 +202,9 @@ func switchToPrimaryBranch(worktreePath string, pt primaryTarget) error {
 // remote/branch. The HEAD check is the safety: `git pull --ff-only
 // remote branch` advances whatever branch is checked out, so run in a
 // checkout sitting on main it would move main onto branch whenever
-// main is an ancestor -- --ff-only only forbids merge commits. Refuse
-// instead, so a stale worktree listing cannot pick the wrong checkout.
+// main is an ancestor, since --ff-only only forbids merge commits.
+// Refuse instead, so a stale worktree listing cannot pick the wrong
+// checkout.
 func ffPull(worktreePath, remote, branch string) error {
 	head, err := runGit(worktreePath, "symbolic-ref", "--short", "HEAD")
 	if err != nil {

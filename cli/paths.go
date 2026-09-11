@@ -2,8 +2,8 @@ package main
 
 // Path math ported from shared/worktreeLayout.ts and
 // host/lib/worktrees/paths.ts: path-derived worktree ids and the
-// managed-layout bases. Must stay behavior-identical to the TS side --
-// both compute the same ids and "is this managed?" answers over the
+// managed-layout bases. Must stay behavior-identical to the TS side.
+// Both compute the same ids and "is this managed?" answers over the
 // same state.
 
 import (
@@ -16,7 +16,7 @@ import (
 )
 
 // sha256(path)[:12], identical to worktreeIdFromPath in
-// host/lib/git/worktrees.ts -- the same path must hash to the same id
+// host/lib/git/worktrees.ts. The same path must hash to the same id
 // from the app and the CLI.
 func worktreeIDFromPath(path string) string {
 	sum := sha256.Sum256([]byte(path))
@@ -77,8 +77,8 @@ func toAbsolute(path string) string {
 	return abs
 }
 
-// True when the process's cwd is dir or sits anywhere below it --
-// the "your shell is inside the directory being removed" check.
+// True when the process's cwd is dir or sits anywhere below it, the
+// "your shell is inside the directory being removed" check.
 func cwdInside(dir string) bool {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -162,7 +162,7 @@ func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 }
 
 func removeIfEmptyDir(path string) error {
-	// os.Remove on a directory fails unless empty -- exactly rmdir.
+	// os.Remove on a directory fails unless empty, exactly like rmdir.
 	return os.Remove(path)
 }
 
@@ -187,7 +187,7 @@ func sanitizeBranchForPath(branch string) string {
 // The reserved worktree refs, mirroring RESERVED_NAMES in
 // shared/branches.ts: `sm cd root` / `sm path primary` (and the
 // qualified <project>/root, -p forms) address the project's primary
-// checkout, unconditionally -- a worktree carrying one of these names
+// checkout, unconditionally. A worktree carrying one of these names
 // never resolves by name, only by path or menu. sanitizeBranchForPath
 // above rejects both words so create/adopt can't mint one; external
 // tools still can, which is why the keyword can't be allowed to lose.

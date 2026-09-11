@@ -112,7 +112,7 @@ export function SettingsForm({
         }));
       }
     }
-    // No explicit setOverride(null) -- the providers clear the override
+    // No explicit setOverride(null). The providers clear the override
     // automatically once `saved` catches up to the staged value.
   };
 

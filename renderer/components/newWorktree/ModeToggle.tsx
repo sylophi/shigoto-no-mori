@@ -23,9 +23,9 @@ export function ModeToggle({
       onChange={onChange}
       // Pull request leads: it's the source the form opens on, and the
       // selected segment should be the one your eye lands on first.
-      // It stays in place when unavailable rather than dropping out --
-      // segments that reshuffle once the availability check lands
-      // would move out from under the cursor.
+      // It stays in place when unavailable rather than dropping out,
+      // since segments that reshuffle once the availability check
+      // lands would move out from under the cursor.
       options={[
         {
           value: "pull-request",

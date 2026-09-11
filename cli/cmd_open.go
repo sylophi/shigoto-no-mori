@@ -1,12 +1,12 @@
 package main
 
-// sm open -- launch a tool from the app's launcher row in a worktree.
+// sm open runs a tool from the app's launcher row in a worktree.
 // `sm open finder` (label or id, case-insensitive) launches directly;
 // bare `sm open` shows the row as a menu, ordered like the app (by
 // recent use, then label). The target worktree is the one containing
-// cwd (the primary counts -- opening the primary in Finder is a normal
-// thing to want), a second positional names one explicitly, and from
-// outside any repo the menus ask project then worktree.
+// cwd (the primary counts, since opening the primary in Finder is a
+// normal thing to want), a second positional names one explicitly, and
+// from outside any repo the menus ask project then worktree.
 
 import (
 	"fmt"
@@ -79,7 +79,7 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 }
 
 // Label, full id, or bare catalog id ("finder" for app:finder), all
-// case-insensitive. Hidden launchers still match by name -- hiding is
+// case-insensitive. Hidden launchers still match by name. Hiding is
 // presentational, same as the app.
 func matchLauncher(entries []launcherEntry, tool string) *launcherEntry {
 	for i := range entries {

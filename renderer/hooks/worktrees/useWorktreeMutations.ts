@@ -42,8 +42,8 @@ interface CreateWorktreeFromPullRequestInput {
 
 // Two calls behind one mutation: land the PR head on a local branch,
 // then create the worktree on it through the ordinary checkout path.
-// Splitting it this way keeps the create itself on the bundled CLI --
-// only the ref resolution is PR-aware. The branch survives a failed
+// Splitting it this way keeps the create itself on the bundled CLI.
+// Only the ref resolution is PR-aware. The branch survives a failed
 // create, which is fine: it's the same branch `gh pr checkout` would
 // have left, and a retry reuses it.
 export function useCreateWorktreeFromPullRequest() {
@@ -96,8 +96,9 @@ export function useConvertExternalWorktree() {
         void queryClient.invalidateQueries({
           queryKey: keys.worktrees(vars.projectId),
         });
-        // The old external worktree's id no longer maps to anything on disk
-        // -- drop any cached script runs so they don't linger in the UI.
+        // The old external worktree's id no longer maps to anything on
+        // disk. Drop any cached script runs so they don't linger in the
+        // UI.
         scriptRuns.clearForWorktree(vars.worktreeId);
       },
       // The page surfaces per-row errors inline; a toast on top would be noise.
@@ -196,7 +197,7 @@ export function useDeleteWorktree() {
         });
       }
     },
-    // The detail page swaps into a force-delete prompt on failure -- a
+    // The detail page swaps into a force-delete prompt on failure, so a
     // toast on top would be noise.
     meta: { silentError: true },
   });

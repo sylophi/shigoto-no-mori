@@ -111,7 +111,7 @@ export function WorktreeDetailInner({
   // Banner-only for setup / port-pool provision: those are user scripts
   // (`pnpm install` etc.) that can run alongside the user opening files
   // or kicking off launches. Carry-over moves real files into the new
-  // worktree, so we lock the page until it finishes. inLimbo wins -- a
+  // worktree, so we lock the page until it finishes. inLimbo wins, so a
   // delete-during-setup race shows the destructive banner instead.
   // Scoped to this machine: the lifecycle broadcast is local, and a
   // pull can mint a local worktree with the SAME id as the peer's (ids
@@ -233,7 +233,7 @@ export function WorktreeDetailInner({
             <section className="space-y-3">
               <SectionHeading>Launch</SectionHeading>
               {/* The two rows are one wrapping group of pills, so they sit a
-                  pill-gap apart -- not the section's heading-to-content gap. */}
+                  pill-gap apart, not the section's heading-to-content gap. */}
               <div className="space-y-2">
                 <LauncherRow worktree={worktree} />
                 <ScriptLaunchRow worktree={worktree} />
@@ -304,7 +304,7 @@ function computeFooterState(input: {
   };
 }
 
-// Decide which limbo phase label to show -- release runs before
+// Decide which limbo phase label to show. Release runs before
 // teardown, then the actual git remove.
 function computeLimboLabel(
   teardownState: ScriptRunState,

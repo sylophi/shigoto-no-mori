@@ -114,7 +114,7 @@ export function LaunchToolsPanel({
 }
 
 // Static pill for a supported-but-not-installed tool. Detected tools are
-// interactive toggles instead -- see DetectedToolsSection.
+// interactive toggles instead. See DetectedToolsSection.
 function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
     <span

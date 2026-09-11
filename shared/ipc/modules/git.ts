@@ -21,7 +21,7 @@ export const gitContract = defineContract("host", {
     { remote: true },
   ),
   // Something outside the app (the CLI) changed worktrees or state
-  // on disk. The renderer invalidates its queries -- refetch-on-focus
+  // on disk. The renderer invalidates its queries. Refetch-on-focus
   // can't cover this, since the window may already be focused while an
   // agent works in a terminal beside it.
   externalChange: broadcast("git:externalChange", z.void(), { remote: true }),

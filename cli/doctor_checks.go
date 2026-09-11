@@ -48,7 +48,7 @@ const minGitMajor, minGitMinor = 2, 31
 func checkGit(report *doctorReport) {
 	stdout, err := runGit("", "--version")
 	if err != nil {
-		report.fail(groupEnv, "git", "git", "not runnable -- every command in sm shells out to it",
+		report.fail(groupEnv, "git", "git", "not runnable (every command in sm shells out to it)",
 			"Install git (`xcode-select --install`) and make sure it's on PATH.")
 		return
 	}
@@ -66,7 +66,7 @@ func checkGit(report *doctorReport) {
 func checkGh(report *doctorReport) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		report.warn(groupEnv, "gh", "gh",
-			"not on PATH -- pr, merge, and land can't talk to GitHub without it",
+			"not on PATH, so pr, merge, and land can't talk to GitHub without it",
 			"Install the GitHub CLI (`brew install gh`), then `gh auth login`.")
 		return
 	}
@@ -100,7 +100,7 @@ func ghVersion() string {
 func checkFlavorAndApp(report *doctorReport) {
 	if flavor != "prod" {
 		report.ok(groupEnv, "app", "app",
-			"dev build ("+binaryName+" "+version+") -- runs from a checkout, no installed bundle")
+			"dev build ("+binaryName+" "+version+"): runs from a checkout, no installed bundle")
 		return
 	}
 	bundle, err := installedBundlePath()
@@ -112,7 +112,7 @@ func checkFlavorAndApp(report *doctorReport) {
 			return
 		}
 		report.warn(groupEnv, "app", "app",
-			"no installed app bundle found -- update, app, and the port-pool toggle have nothing behind them",
+			"no installed app bundle found, so update, app, and the port-pool toggle have nothing behind them",
 			"Install Shigoto no Mori, or use the dev CLI (smd) against a checkout.")
 		return
 	}
@@ -124,7 +124,7 @@ func checkFlavorAndApp(report *doctorReport) {
 			"Reinstall the app.")
 	case appVersion != version:
 		report.warn(groupEnv, "app", "app",
-			"app is "+appVersion+" but this CLI is "+version+" -- they ship together, so one of them is stale",
+			"app is "+appVersion+" but this CLI is "+version+". They ship together, so one of them is stale",
 			"Run `"+binaryName+" update`, or re-link the CLI from the app's Settings.")
 	default:
 		report.ok(groupEnv, "app", "app", appVersion+" at "+collapseHome(bundle))
@@ -132,8 +132,8 @@ func checkFlavorAndApp(report *doctorReport) {
 }
 
 // The conventional install locations, for the case where the CLI on
-// PATH is NOT the bundle's own copy (installedBundlePath refuses those,
-// on purpose -- see updater.go). Goes through the launcher catalog's
+// PATH is NOT the bundle's own copy (installedBundlePath refuses those
+// on purpose. See updater.go). Goes through the launcher catalog's
 // scan so there's one list of where an .app can live.
 func findInstalledBundle() string {
 	if runtime.GOOS != "darwin" {
@@ -142,10 +142,10 @@ func findInstalledBundle() string {
 	return bundlePathFor(appExecutableName + ".app")
 }
 
-// CFBundleShortVersionString, via `defaults` -- Info.plist is binary,
-// and reading it any other way would mean a plist parser. "" when it
-// can't be read; every caller treats that as "unknown", never as a
-// mismatch.
+// CFBundleShortVersionString, via `defaults`, because Info.plist is
+// binary and reading it any other way would mean a plist parser. ""
+// when it can't be read. Every caller treats that as "unknown", never
+// as a mismatch.
 func bundleVersion(bundle string) string {
 	if runtime.GOOS != "darwin" {
 		return ""
@@ -166,7 +166,7 @@ func checkPathShadowing(report *doctorReport) {
 	switch len(found) {
 	case 0:
 		report.warn(groupEnv, "path", "PATH",
-			"no `"+binaryName+"` on PATH -- this run came from an explicit path",
+			"no `"+binaryName+"` on PATH, so this run came from an explicit path",
 			"Link the CLI from the app's Settings, or add its directory to PATH.")
 	case 1:
 		report.ok(groupEnv, "path", "PATH", found[0])
@@ -232,7 +232,7 @@ func checkShellHook(report *doctorReport) {
 			"Run `"+binaryName+" shell install` to refresh it.")
 	case len(installed) == 0:
 		report.warn(groupEnv, "shell-hook", "shell hook",
-			"not installed -- cd and create open a subshell instead of moving your shell",
+			"not installed, so cd and create open a subshell instead of moving your shell",
 			"Run `"+binaryName+" shell install`.")
 	default:
 		detail := "installed for " + strings.Join(installed, ", ")
@@ -293,7 +293,7 @@ func checkDataDir(report *doctorReport) bool {
 	switch {
 	case os.IsNotExist(err):
 		report.warn(groupState, "data-dir", "data dir",
-			collapseHome(root)+" doesn't exist yet ("+source+") -- nothing is registered",
+			collapseHome(root)+" doesn't exist yet ("+source+"), so nothing is registered",
 			"Add a project (`"+binaryName+" projects add`) and it will be created.")
 		return false
 	case err != nil:
@@ -341,7 +341,7 @@ func checkGlobalConfig(report *doctorReport) {
 	path := configJSONPath()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		report.ok(groupState, "config", configFile, "absent -- defaults apply")
+		report.ok(groupState, "config", configFile, "absent, so defaults apply")
 		return
 	}
 	if err != nil {
@@ -380,7 +380,7 @@ func checkRegistryFile(report *doctorReport) {
 	path := registryPath()
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		report.ok(groupState, "registry", registryFile, "absent -- no projects registered yet")
+		report.ok(groupState, "registry", registryFile, "absent, so no projects are registered yet")
 		return
 	}
 	if err != nil {
@@ -561,8 +561,8 @@ func checkShelvedEntries(report *doctorReport, projects []project) {
 
 // port-pool leases live in port-pool's own state, keyed by directory,
 // and sm only ever provisions/releases them. An allocation whose
-// directory is gone means a worktree was removed without a release --
-// the ports stay reserved forever. Reported, never fixed: the file
+// directory is gone means a worktree was removed without a release,
+// so the ports stay reserved forever. Reported, never fixed: the file
 // belongs to another tool.
 func checkPortAllocations(report *doctorReport) {
 	global := readGlobalConfigHints()
@@ -602,7 +602,7 @@ func checkPortAllocations(report *doctorReport) {
 // The terrier registry belongs to terrier, and sm only merges it into
 // the project list. So this check explains why merged projects might be
 // missing (the same terrierTroubleFor ladder the merge warns from) and
-// reports entries whose directory is gone -- never fixes anything,
+// reports entries whose directory is gone. It never fixes anything,
 // since `terrier prune` owns that. This is also the only doctor
 // coverage terrier projects get: checkProjects filters them out so its
 // repairs can't touch entries sm doesn't own.
@@ -752,7 +752,7 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 		// git always answers with a symlink-free path, and every match in
 		// sm is plain string equality against it (resolveContext,
 		// resolveWorktreeByDir), so the two ways this can differ are both
-		// real breakage -- but they need different words and different
+		// real breakage, but they need different words and different
 		// fixes.
 		detail := "registered at " + collapseHome(proj.Path) + ", which is a worktree of " +
 			collapseHome(primaryPath) + ", not the repo's primary checkout"
@@ -770,7 +770,7 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 
 // Whether two paths name the same directory once symlinks are gone
 // (/tmp vs /private/tmp, a checkout reached through a symlinked home).
-// False when either side can't be resolved -- a "can't tell" must not
+// False when either side can't be resolved. A "can't tell" must not
 // read as "same".
 func sameDirectory(a, b string) bool {
 	resolvedA, errA := filepath.EvalSymlinks(a)
@@ -787,7 +787,7 @@ func checkProjectConfig(report *doctorReport, proj project, config *projectConfi
 		return
 	}
 	// The file is there but readProjectConfig rejected it, which is
-	// exactly what the app does -- silently, so the user sees their
+	// exactly what the app does, silently, so the user sees their
 	// setup script and layout settings simply stop applying.
 	report.warn(groupProjects, "project-config", proj.Name,
 		"project.json exists but is invalid (bad JSON or no defaultBranch), so its scripts and layout are ignored",
@@ -841,7 +841,7 @@ func checkProjectWorktrees(report *doctorReport, proj project, config *projectCo
 	}
 	// The mirror image: a directory sitting in the managed layout that
 	// git has no record of. Adoptable, deletable, or a half-finished
-	// create -- sm can't tell, so it only points.
+	// create. sm can't tell, so it only points.
 	var strays []string
 	for _, base := range managedBasesFor(proj.Path, config) {
 		entries, err := os.ReadDir(base)
@@ -872,7 +872,7 @@ func checkProjectWorktrees(report *doctorReport, proj project, config *projectCo
 			fmt.Sprintf("%d %s in the managed layout that git doesn't know about (%s)",
 				len(strays), pluralize(len(strays), "directory", "directories"),
 				strings.Join(strays, ", ")),
-			"Adopt it (`"+binaryName+" adopt <path>`) or delete it by hand -- "+
+			"Adopt it (`"+binaryName+" adopt <path>`) or delete it by hand. "+
 				binaryName+" won't guess.")
 	}
 }
@@ -925,7 +925,7 @@ func missingScriptFiles(projectPath, command string) []string {
 }
 
 // .worktreeinclude drives carry-over into every new worktree. A broken
-// one doesn't fail create -- it degrades to "nothing carried over",
+// one doesn't fail create. It degrades to "nothing carried over",
 // which looks like the feature is off.
 func checkProjectWorktreeInclude(report *doctorReport, proj project, config *projectConfig) {
 	path := filepath.Join(proj.Path, worktreeIncludeFile)

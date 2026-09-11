@@ -90,7 +90,7 @@ export function useProjectPullRequests(projectId: string) {
 // useProjectPullRequests. The inbox sidebar is cross-project, so it
 // needs every map at once to tell a merged branch from a live one.
 // Main serves these from the sweep's cache, so the fan-out costs no
-// extra `gh` calls. Projects whose path is gone are skipped -- the
+// extra `gh` calls. Projects whose path is gone are skipped, since the
 // handler would just throw on the missing repo.
 //
 // Positionally aligned with `projects`, like useAllProjectWorktrees, so

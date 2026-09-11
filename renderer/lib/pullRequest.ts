@@ -60,7 +60,7 @@ const FOLDER_SLUG_MAX = 28;
 // leads because that's how PRs get talked about. The slug is the first
 // few title words, only there so the folder is recognizable at a glance
 // in a list of ten worktrees. Callers still run it through
-// sanitizeBranchForPath -- this only decides the shape.
+// sanitizeBranchForPath. This only decides the shape.
 export function pullRequestFolderName(pr: PullRequestCandidate): string {
   const words = pr.title
     .toLowerCase()
@@ -89,7 +89,7 @@ export function pullRequestBranchCandidates(
 }
 
 // The worktree standing in the way of checking a PR out, if any. Only a
-// PR with no candidate name left is genuinely blocked -- checking the
+// PR with no candidate name left is genuinely blocked. Checking the
 // head name alone would report every fork PR opened off its author's
 // default branch as taken. Names the *last* candidate's holder: a
 // blocked fork PR is usually blocked because that PR is already checked
@@ -166,7 +166,7 @@ export interface ChecksDescriptor {
   tone: PullRequestTone;
 }
 
-// Returns null when the PR has no checks at all -- callers should skip
+// Returns null when the PR has no checks at all. Callers should skip
 // rendering the row entirely rather than show "0 checks".
 export function describeChecks(
   summary: PullRequestChecksSummary,
@@ -185,7 +185,7 @@ export function describeChecks(
       tone: "amber",
     };
   }
-  // Only neutral / skipped runs in the rollup -- they didn't pass, they
+  // Only neutral / skipped runs in the rollup. They didn't pass, they
   // just didn't fail. Calling that "passed" would be misleading.
   if (summary.passed === 0) {
     return {
@@ -227,7 +227,7 @@ export function resolveMergeMethod(
   config: RepoMergeConfig | null,
   lastPicked: MergeMethod | undefined,
 ): { primary: MergeMethod | null; allowed: MergeMethod[] } {
-  // A null config means we couldn't read it -- assume everything's
+  // A null config means we couldn't read it. Assume everything's
   // allowed so the user isn't blocked by our missing data.
   const allowedMap: RepoMergeConfig = config ?? {
     merge: true,

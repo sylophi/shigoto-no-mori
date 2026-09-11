@@ -96,7 +96,7 @@ function projectsToSweep(): Project[] {
 }
 
 // Git-only refresh used by the window-focus handler. The PR sweep is
-// timer-driven only -- the open worktree page has its own per-branch
+// timer-driven only. The open worktree page has its own per-branch
 // query that handles focus.
 export function refreshAllProjectGitRefs(): void {
   for (const project of projectsToSweep()) {

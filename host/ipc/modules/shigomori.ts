@@ -35,7 +35,7 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
 
   worktreeDataWrite: async ({ projectId, worktreeId, data }) => {
     // The renderer only surfaces a notes UI for managed worktrees and the
-    // primary checkout, so we don't re-verify here -- enforcing the "no
+    // primary checkout, so we don't re-verify here. Enforcing the "no
     // external state" rule would mean shelling out to `git worktree list`
     // on every save. findProjectOrThrow + the WorktreeIdSchema regex keep
     // the path-build safe against malformed input.

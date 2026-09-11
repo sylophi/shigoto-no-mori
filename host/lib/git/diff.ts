@@ -1,20 +1,19 @@
 import { PATCH_MAX_BUFFER, runLenient } from "./core";
 
-// The diff of one file in the working tree: what the changes page asks
-// for as you pick files, instead of reading the whole tree and slicing.
-// Nothing here can go stale against a list built somewhere else -- the
-// answer is whatever git says about this path right now.
+// The diff of one file in the working tree, read as the changes page
+// picks files. Nothing here can go stale against a list built somewhere
+// else: the answer is whatever git says about this path right now.
 //
-// Which comparison to make is the caller's to say, from the status row
-// it drew the file from. `diff HEAD` covers a tracked file whether its
-// edits are staged, not staged, or both. A file git has never seen is
-// in neither HEAD nor the index, and only compares against /dev/null.
-// Asking git instead -- running the first and reading empty output as
-// "must be the other kind" -- gets a staged edit that was reverted in
-// the working tree wrong, and renders it as a new file.
+// Which comparison to make is the caller's call, from the status row it
+// drew the file from. `diff HEAD` covers a tracked file whether its
+// edits are staged, unstaged, or both. A file git has never seen is in
+// neither HEAD nor the index, and only compares against /dev/null.
+// Trying `diff HEAD` first and reading empty output as "must be
+// untracked" would get a staged edit reverted in the working tree
+// wrong, and render it as a new file.
 //
-// `paths` is the file, and its old name first when git records a
-// rename -- handing over both is what makes the pair one entry rather
+// `paths` is the file, preceded by its old name when git records a
+// rename. Handing over both is what makes the pair one entry rather
 // than an unexplained addition.
 export function getFileDiff(
   worktreePath: string,

@@ -87,8 +87,8 @@ export function persistRunningScripts(scripts: PersistedScript[]): void {
   const path = filePath();
   const snapshot: Snapshot = { ownerPid: process.pid, scripts };
   try {
-    // selfWrite: false -- this is our own bookkeeping file, not state
-    // the watcher should echo back to the renderer.
+    // selfWrite: false because this is our own bookkeeping file, not
+    // state the watcher should echo back to the renderer.
     withFileLock(lockPath(), () => {
       atomicWriteJsonSync(path, snapshot, { selfWrite: false });
     });

@@ -30,7 +30,7 @@ import {
 // takes seconds in the worst case (SIGTERM, grace, SIGKILL), and even
 // just the git enumeration can overlap the next watcher event, so a
 // candidate is marked here for the whole pass, not only once it's
-// confirmed removed -- otherwise two overlapping passes could both
+// confirmed removed. Otherwise two overlapping passes could both
 // conclude "removed" and reap-and-report the same worktree twice.
 // Always cleared in a finally, so an entry can never outlive the pass
 // that guards it.

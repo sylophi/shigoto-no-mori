@@ -16,7 +16,7 @@ import { worktreePathFor } from "@shared/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 
-// For detached HEADs `worktree.branch` is a short SHA -- pass it
+// For detached HEADs `worktree.branch` is a short SHA. Pass it
 // through unchanged so the managed worktree gets a hash-named dir.
 // (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
 // never see here.)

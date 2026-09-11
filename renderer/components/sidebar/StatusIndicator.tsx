@@ -16,8 +16,8 @@ interface StatusIndicatorProps {
 
 // The classic sidebar row has room for one pill, so uncommitted work wins
 // and the remote state waits its turn. The inbox row is taller and asks a
-// different question -- "what is going on here" rather than "which row is
-// this" -- so it renders both pills itself.
+// different question ("what is going on here" rather than "which row is
+// this"), so it renders both pills itself.
 export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   return worktree.changedCount > 0 ? (
     <ChangedFilesPill worktree={worktree} />
@@ -89,7 +89,7 @@ export function RemoteSyncPill({ worktree }: StatusIndicatorProps) {
         <StatusPill
           icon={ArrowDownUp}
           tone="indigo"
-          title={`${state.ahead} ahead, ${state.behind} behind -- mergeable`}
+          title={`Mergeable: ${state.ahead} ahead, ${state.behind} behind`}
           aria-label={`${state.ahead} ahead, ${state.behind} behind`}
         >
           {state.ahead}/{state.behind}

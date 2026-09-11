@@ -18,9 +18,9 @@ import { clearCommitDraft } from "@/lib/commitDraft";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // Every changed file: what it is, how much of it is staged, and its
-// +/- counts. The changes page draws its whole list from this, and
-// fetches a diff only for the file it has picked -- so a tick refreshes
-// the list and nothing else has to be kept in step with it.
+// +/- counts. The changes page draws its whole list from this and
+// fetches a diff only for the picked file, so a tick refreshes the list
+// and nothing else has to be kept in step.
 export function useWorktreeChanges(
   projectId: string,
   worktreeId: string | undefined,
@@ -52,9 +52,9 @@ interface SetStagedInput {
   staged: boolean;
 }
 
-// Tick/untick. Optimistic: the checkbox flips before git answers, and
-// the status the call answers with is what makes a partial file settle
-// to "all" -- one round trip, no refetch.
+// Tick or untick. Optimistic: the checkbox flips before git answers,
+// and the status the call answers with settles a partial file to "all"
+// in the same round trip, with no refetch.
 export function useSetStaged() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
@@ -74,12 +74,11 @@ export function useSetStaged() {
     },
     onSuccess: (files, vars) => {
       const key = keys.worktreeChanges(vars.projectId, vars.worktreeId);
-      // The answer comes back without counts -- staging can't change
-      // them, and reading every new file's lines again on each tick is
-      // what that would cost. Carry over the ones already on screen. A
-      // file this tick is the first to hear about shows none until the
-      // next full read, which is a number missing for a moment rather
-      // than a row that misbehaves.
+      // The answer comes back without counts, since staging can't change
+      // them and re-reading every new file on each tick is what they
+      // would cost. Carry over the ones already on screen. A file this
+      // tick is the first to hear about shows none until the next full
+      // read.
       const carried = new Map(
         queryClient
           .getQueryData<ChangedFile[]>(key)
@@ -208,9 +207,9 @@ export function useRestoreDiscard() {
 }
 
 // The message of one commit, for prefilling an amend. Immutable per
-// hash, like the commit diff. Exposed as options: the page fetches it
-// on the Amend click rather than observing it. Not a hook, so the
-// scope (which device's api and keys) comes in from the caller.
+// hash, like the commit diff. Exposed as options so the caller can add
+// its own `enabled`. Not a hook, so the scope (which device's api and
+// keys) comes in from the caller.
 export function commitMessageQueryOptions(
   { api, keys }: Pick<HostScope, "api" | "keys">,
   projectId: string,

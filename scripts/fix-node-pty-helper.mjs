@@ -4,8 +4,9 @@
 // without the executable bit and relies on node-pty's install scripts,
 // which this repo disables (pnpm-workspace.yaml: allowBuilds). Without
 // the bit every script run fails with "posix_spawnp failed", so restore
-// it here as a postinstall step -- for every prebuild present, since a
-// package built for the other Mac architecture ships that one's helper.
+// it here as a postinstall step. Do it for every prebuild present,
+// since a package built for the other Mac architecture ships that
+// one's helper.
 //
 // On a Mac, a missing prebuild for this machine is an error, not a
 // skip: the script console can't spawn anything without it, and that

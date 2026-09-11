@@ -4,8 +4,8 @@ package main
 // hand-seeded temp data dir (and, where a repo is needed, a temp
 // git repo), so the real ~/.sm is never read and never written.
 // The environment checks (git, gh, the app bundle, PATH) are left to
-// their pure helpers -- shelling out to the host's tools would make
-// the suite describe the machine instead of the code.
+// their pure helpers, since shelling out to the host's tools would
+// make the suite describe the machine instead of the code.
 
 import (
 	"crypto/sha256"
@@ -350,7 +350,7 @@ func TestStrayDirectoryInManagedLayoutIsReportedNotFixed(t *testing.T) {
 }
 
 // project.json that fails the schema's required-field check is treated
-// as absent by both the app and the CLI -- silently, which is exactly
+// as absent by both the app and the CLI, silently, which is exactly
 // what makes it worth a line.
 func TestProjectConfigPresentButInvalid(t *testing.T) {
 	root := sandboxDataDir(t)

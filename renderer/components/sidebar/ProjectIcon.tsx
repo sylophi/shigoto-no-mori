@@ -2,7 +2,7 @@ import type { ComponentType, SVGProps } from "react";
 import { cn } from "@/lib/utils";
 import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 
-// No placeholder slot during the initial fetch -- the row simply
+// No placeholder slot during the initial fetch. The row simply
 // tightens. Avoids the layout shift of a temporary fallback icon at the
 // cost of a small one-frame shift the first time an icon resolves.
 //

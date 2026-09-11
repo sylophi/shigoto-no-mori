@@ -1,11 +1,11 @@
 package main
 
-// sm update -- update the app (and with it this CLI, a symlink into
+// sm update: update the app (and with it this CLI, a symlink into
 // the bundle) from the terminal. The CLI owns the whole pipeline
 // (updater.go): it queries the release feed, downloads and verifies
 // the new bundle, and swaps /Applications itself. The app is only
-// involved when it's already running -- a bundle swap under a live
-// instance would leave it executing a deleted version -- and even then
+// involved when it's already running (a bundle swap under a live
+// instance would leave it executing a deleted version), and even then
 // it is never launched: the CLI stages the update, asks the running
 // app to restart over the on-disk bridge (updaterBridge.ts), and the
 // app confirms with the user if it's busy, spawns a detached
@@ -24,8 +24,8 @@ package main
 //                     before it quits. Waits for <n> to exit, swaps
 //                     the staged bundle in, relaunches the app.
 //
-// macOS-only, and the dev CLI refuses -- dev builds run from a
-// checkout and have no update channel.
+// macOS-only, and the dev CLI refuses. Dev builds run from a checkout
+// and have no update channel.
 
 import (
 	"encoding/json"
@@ -57,7 +57,7 @@ type updaterStatus struct {
 func updaterStatusPath() string { return filepath.Join(dataDir(), "updater.json") }
 func updateRequestPath() string { return filepath.Join(dataDir(), "updater-request.json") }
 
-// nil when the file is absent or malformed -- every caller treats
+// nil when the file is absent or malformed. Every caller treats
 // those the same way ("no reachable app").
 func readUpdaterStatus() *updaterStatus {
 	raw, err := os.ReadFile(updaterStatusPath())
@@ -78,7 +78,7 @@ func pidAlive(pid int) bool {
 	return err == nil || err == syscall.EPERM
 }
 
-// A live pid alone isn't "the app is running" -- pids recycle across
+// A live pid alone isn't "the app is running". Pids recycle across
 // reboots, and trusting a recycled one would hand the install off to a
 // process that will never restart. The executable name
 // (CFBundleExecutable) survives bundle moves and renames, so require
@@ -125,7 +125,7 @@ const (
 )
 
 // NDJSON phase events for --json consumers, pinned by
-// UpdateStageEventSchema (shared/schemas/runtime.ts) -- the app's
+// UpdateStageEventSchema (shared/schemas/runtime.ts). The app's
 // check parses these as they stream. A no-op for humans, whose
 // progress is the spinner.
 func emitEvent(name string) {
@@ -319,7 +319,7 @@ func reportUpdated(from, to string) {
 }
 
 // --finish-install: the detached installer the app spawns just before
-// quitting. Headless -- outcomes go to updates/install.log, and the
+// quitting. Headless, so outcomes go to updates/install.log, and the
 // relaunched app (or its absence) is what the user sees.
 func cmdUpdateFinishInstall(pidArg string) (int, error) {
 	pid, err := strconv.Atoi(strings.TrimSpace(pidArg))
@@ -357,18 +357,17 @@ func cmdUpdateFinishInstall(pidArg string) (int, error) {
 }
 
 // The handed-off install restarts the app. Success is updater.json
-// reappearing under a new pid AND a new version -- a failed swap
+// reappearing under a new pid AND a new version. A failed swap
 // relaunching the old bundle must not be reported as "updated X -> X".
 // An error the old pid publishes after our request (its installer
 // spawn failed) is reported immediately with its message. The mtime
-// guard keeps a leftover error from an earlier failed check -- which
-// the app never clears on this path -- from being blamed on this
-// install. If the app is busy (running scripts), it asks for
-// confirmation in a dialog the CLI can't see -- hence the hint -- and
-// a decline simply times out here with the old pid still alive. The
-// timeout message stays tentative because a late confirmation still
-// installs after the CLI has given up: the staged update survives
-// until it's consumed.
+// guard keeps a leftover error from an earlier failed check (which the
+// app never clears on this path) from being blamed on this install. If
+// the app is busy (running scripts), it asks for confirmation in a
+// dialog the CLI can't see, hence the hint, and a decline simply times
+// out here with the old pid still alive. The timeout message stays
+// tentative because a late confirmation still installs after the CLI
+// has given up: the staged update survives until it's consumed.
 func waitForRestart(spin *spinner, oldPid int, oldVersion string, requestedAt time.Time) (*updaterStatus, error) {
 	start := time.Now()
 	deadline := start.Add(restartTimeout)
@@ -393,10 +392,10 @@ func waitForRestart(spin *spinner, oldPid int, oldVersion string, requestedAt ti
 		}
 		if time.Now().After(deadline) {
 			if sameVersion {
-				return nil, errf("The app restarted but is still on %s -- the install "+
+				return nil, errf("The app restarted but is still on %s, so the install "+
 					"may have failed. Check %s.", oldVersion, filepath.Join(updatesDir(), "install.log"))
 			}
-			return nil, errf("The app hasn't restarted yet -- it may still be waiting on a " +
+			return nil, errf("The app hasn't restarted yet. It may still be waiting on a " +
 				"confirmation in the app (confirming there will still install the update), " +
 				"or the install failed. Check the app.")
 		}
@@ -461,7 +460,7 @@ func (s *spinner) set(label string) {
 	s.label = label
 	s.mu.Unlock()
 	// Not animated: one note per label change. Labels are plain text
-	// here -- the *Err painters no-op whenever stderrColor is off.
+	// here, since the *Err painters no-op whenever stderrColor is off.
 	if !s.animated && changed && !jsonMode {
 		note(label)
 	}

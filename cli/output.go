@@ -23,7 +23,7 @@ var (
 	verboseMode bool
 )
 
-// ANSI is decoration only -- meaning always lives in the text itself,
+// ANSI is decoration only. Meaning always lives in the text itself,
 // so pipes, agents, and --json consumers lose nothing. Enabled per
 // stream, only when it's a terminal, NO_COLOR is unset, and TERM isn't
 // dumb (the conventions gh/cargo follow).
@@ -71,7 +71,7 @@ func codeErr(s, code string) string { return paint(s, code, stderrColor) }
 
 // Whether the terminal background is dark: COLORFGBG ("fg;bg", set by
 // konsole/rxvt and friends) when present, else assume dark, the more
-// common terminal theme. Deliberately NOT an OSC 11 query -- that
+// common terminal theme. Deliberately NOT an OSC 11 query. That
 // requires a competing reader on the tty, which eats type-ahead
 // keystrokes and stalls for seconds on terminals that never answer.
 var darkBackground = sync.OnceValue(func() bool {

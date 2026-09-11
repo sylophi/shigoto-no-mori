@@ -22,8 +22,8 @@ export function CommitDiff() {
 
   // Resolve commit metadata from the worktree's recentCommits cache so the
   // header shows author/subject without an extra IPC round-trip. If it's
-  // not in the cache (e.g. user deep-linked) we still render the diff —
-  // the hash alone is enough for git show.
+  // not in the cache (e.g. user deep-linked) we still render the diff. The
+  // hash alone is enough for git show.
   const commit = worktree?.recentCommits.find((c) => c.hash === hash);
   const {
     data: patch,
@@ -63,7 +63,7 @@ export function CommitDiff() {
         </>
       }
       // Merge commits show empty by default (git's combined diff is empty
-      // when --cc/-m aren't passed) — note it explicitly so the page
+      // when --cc/-m aren't passed). Note it explicitly so the page
       // doesn't look broken.
       emptyMessage="No file changes to show. Merge commits render empty by default."
     />

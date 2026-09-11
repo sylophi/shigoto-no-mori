@@ -39,7 +39,7 @@ const LABELS = {
 // Two-step confirm so accidentally landing on "Remove" doesn't drop the
 // project. Menu stays open while armed; second click within the timeout
 // fires the actual remove. The host wires `onOpenChange` to its menu
-// root so a leftover arm is cleared the instant the menu closes -- the
+// root so a leftover arm is cleared the instant the menu closes. The
 // popup's own unmount comes only after its exit animation, and a reopen
 // inside that window would otherwise find the item still armed.
 export function useProjectMenuRemoveArm() {

@@ -25,7 +25,7 @@ type MenuPopupSurfaceProps = MenuPrimitive.Popup.Props &
 
 // Portal, Positioner, Popup: the surface every menu popup renders.
 // Base UI's ContextMenu parts are the same components, so
-// ui/context-menu.tsx renders this too -- with placement left unset,
+// ui/context-menu.tsx renders this too, with placement left unset,
 // which is how Base UI knows to anchor at the pointer.
 export function MenuPopupSurface({
   align,

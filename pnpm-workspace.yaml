@@ -1,9 +1,9 @@
 # Project-local pnpm settings.
 #
-# nodeLinker: hoisted — required by electron-forge so it can crawl a
+# nodeLinker: hoisted is required by electron-forge so it can crawl a
 # flat node_modules tree when packaging.
 #
-# blockExoticSubdeps: false — project-scoped allowance for the
+# blockExoticSubdeps: false is a project-scoped allowance for the
 # @electron/node-gyp transitive dep (git+https://github.com/electron/node-gyp.git,
 # pinned SHA, used by @electron/rebuild during native-module builds).
 # Your other guards still apply: minimumReleaseAge: 10080 (7 days),
@@ -53,9 +53,9 @@ allowBuilds:
   utf-8-validate: false
   # node-pty (script console PTY) ships Node-API prebuilds that Electron
   # loads as-is, and forge.config.ts's rebuildConfig skips rebuilding it,
-  # so its install-time node-gyp build is skipped too. The one thing the
-  # skipped scripts would have done -- making the bundled spawn-helper
-  # executable -- is scripts/fix-node-pty-helper.mjs's job.
+  # so its install-time node-gyp build is skipped too. Those scripts
+  # would have made the bundled spawn-helper executable, and that is
+  # scripts/fix-node-pty-helper.mjs's job instead.
   node-pty: false
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively

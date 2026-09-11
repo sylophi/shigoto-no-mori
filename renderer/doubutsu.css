@@ -1,6 +1,6 @@
 /*
- * Doubutsu mode -- the default Animal Crossing visual overlay (opt-out
- * via Settings -> Appearance, which restores the plain v1 look).
+ * Doubutsu mode: the default Animal Crossing visual overlay. Opt out
+ * via Settings -> Appearance, which restores the plain v1 look.
  * Activated by adding `.doubutsu` to <html> (via useDoubutsu). Orthogonal to .dark;
  * .doubutsu and .doubutsu.dark each remap the same shadcn-style tokens
  * the rest of the app already consumes, so existing components inherit
@@ -8,7 +8,7 @@
  *
  * Design language taken from the animal-crossing-demo branch and
  * tightened per the impeccable shape brief: no borders, no gradients,
- * no soft shadows -- color-blocking and fill contrast carry hierarchy.
+ * no soft shadows. Color-blocking and fill contrast carry hierarchy.
  *
  * ============================= CONTRACT =============================
  * Everything this file hooks into, so refactors can't silently strip
@@ -23,9 +23,9 @@
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
  *
- * 2. data-slot attributes set by our components (the preferred hook --
- *    when building new UI that doubutsu must restyle, add a slot here
- *    rather than targeting utility classes):
+ * 2. data-slot attributes set by our components, the preferred hook.
+ *    When building new UI that doubutsu must restyle, add a slot here
+ *    rather than targeting utility classes:
  *      button (+ data-variant)   ui/button.tsx
  *      input, textarea           ui/input.tsx, ui/textarea.tsx
  *      checkbox (+ data-variant) ui/checkbox.tsx
@@ -65,8 +65,9 @@
  *    dmg installer artwork, which links this file and renders against
  *    the leaf-wallpaper ::before, the header/footer band rule and the
  *    --doubutsu-* tokens. It is a committed png, so a broken hook there
- *    is invisible until someone opens a release -- theme:check verifies
- *    it, and `pnpm dmg:check` catches art that predates a palette edit.
+ *    is invisible until someone opens a release. `pnpm theme:check`
+ *    verifies it, and `pnpm dmg:check` catches art that predates a
+ *    palette edit.
  *
  * 6. Tailwind utility names (stable public API, checked loosely):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
@@ -74,7 +75,7 @@
  *    slotted surfaces), [class*="backdrop-blur"].
  *
  * Token blocks below use `:root.doubutsu` (not `.doubutsu`) so they
- * outrank index.css's `:root` / `.dark` blocks by specificity -- this
+ * outrank index.css's `:root` / `.dark` blocks by specificity. This
  * file is @imported before those rules, so order can't be relied on.
  * ====================================================================
  */
@@ -88,12 +89,12 @@
    * distinct without anyone needing a border.
    *
    *   background  (0.974 c=0.011)  base canvas cream
-   *   card        (0.992 c=0.008)  lifted -- panels float ABOVE canvas
+   *   card        (0.992 c=0.008)  lifted: panels float ABOVE canvas
    *   popover     (pure white)     floats above even card; with shadows
    *                                stripped the color step IS elevation
-   *   muted       (0.945 c=0.025)  recessed warm cream -- chips, code,
+   *   muted       (0.945 c=0.025)  recessed warm cream for chips, code,
    *                                ghost-button hover, outline-button hover
-   *   secondary   (0.930 c=0.038)  sandier still -- secondary button fill
+   *   secondary   (0.930 c=0.038)  sandier still, the secondary button fill
    *
    *   primary    (saturated leaf)  the rare loud CTA: Save, Add, Confirm
    *   accent     (pastel mint)     the constant quiet pillow: selection
@@ -184,7 +185,7 @@
   --color-violet-500: oklch(0.58 0.13 300);
   --color-indigo-500: oklch(0.56 0.12 268);
 
-  /* @pierre/diffs theme vars -- the diff viewer lives in shadow DOM but
+  /* @pierre/diffs theme vars. The diff viewer lives in shadow DOM but
      CSS custom props cascade in. Wiring these to the doubutsu palette
      makes the diff feel like part of the app instead of a foreign blue
      panel pasted in. */
@@ -228,14 +229,14 @@
   --doubutsu-stripe: oklch(1 0 0 / 0.1);
   --doubutsu-watermark: oklch(0.7 0.17 155);
   --doubutsu-pattern: oklch(0.7 0.17 155);
-  /* Evening milk tea. Dark inverts the light relationship -- the chip
-     sits ABOVE --card in lightness rather than below it -- but it has
+  /* Evening milk tea. Dark inverts the light relationship (the chip
+     sits ABOVE --card in lightness rather than below it), but it has
      to travel just as far, or it lands a few percent off the card band
      and reads as a failed match instead of a second material. So: the
      same 0.09 gap from --card the light pair has (0.9 vs 0.992), which
      also re-opens the gap to secondary's sand (0.35) that the old 0.34
      had collapsed. Lightness carries that separation on its own, so the
-     chroma stays low -- dark surfaces read as saturated far sooner than
+     chroma stays low. Dark surfaces read as saturated far sooner than
      their light counterparts, and pushing the brown here just turns the
      chip orange. */
   --doubutsu-button-outline: oklch(0.4 0.022 65);
@@ -319,10 +320,10 @@
 /* --- Outline button fill ---
    In v1, the outline variant relies on its 1px border to read as a
    button against the canvas. In doubutsu the border is gone, so we
-   give it a peach pastel fill -- distinct hue from secondary's sand
+   give it a peach pastel fill, a distinct hue from secondary's sand
    and clearly different from canvas, so outline / secondary read as
    different button TYPES. (Unlayered, so it also outranks the
-   variant's hover:bg-muted -- the stripe overlay is the hover signal.) */
+   variant's hover:bg-muted. The stripe overlay is the hover signal.) */
 .doubutsu
   [data-slot="button"]:is(
     [data-variant="outline"],
@@ -333,7 +334,7 @@
 
 /* --- Dropdown / menu separator ---
    The Tailwind `bg-border` separator went transparent when we zeroed
-   --border. AC's equivalent is a chunky tinted bar, not a hairline --
+   --border. AC's equivalent is a chunky tinted bar, not a hairline, so
    bump to --muted as a soft 1px-tall band. Same fix for the diff hunk
    separator which lives in pierre's shadow DOM but inherits the var. */
 .doubutsu [data-slot="dropdown-menu-separator"] {
@@ -415,7 +416,7 @@
    The accent pillow is doubutsu's "active" signal everywhere else, so
    use it here too. aria-haspopup scopes this to menu/combobox triggers;
    tooltip triggers also carry data-popup-open but no haspopup, and the
-   combobox's search <input> carries both -- keep it a plain field. */
+   combobox's search <input> carries both, so keep it a plain field. */
 .doubutsu [aria-haspopup][data-popup-open]:not(input) {
   background-color: var(--accent);
 }
@@ -426,8 +427,8 @@
    into content. Lift them to bg-card so each reads as its own panel
    stacked on the cream canvas.
 
-   The card fill is held back to 70% so the canvas -- and specifically
-   its drifting leaves -- carries on THROUGH the band instead of being
+   The card fill is held back to 70% so the canvas (and specifically
+   its drifting leaves) carries on THROUGH the band instead of being
    walled off by it. That works because the leaf layer is main's
    ::before at z-index -1: above main's background paint, below every
    in-flow child, so a band that lets light through reveals the pattern
@@ -443,7 +444,7 @@
    Descendant selectors on purpose: views nest their <header> at varying
    depths (Settings at the route root, WorktreeDetailInner one level
    down), and the band is the intended pattern for all of them. The
-   footer sets bg-card in component code -- this is unlayered, so it
+   footer sets bg-card in component code. This rule is unlayered, so it
    outranks that utility and the pair stays in sync.
 
    The diff file index joins them rather than restating the recipe: it
@@ -463,8 +464,8 @@
    utilities are re-pinned so anything labeled font-medium is still at
    least as bold as the body, preserving hierarchy. Mono wants roughly
    a 550: 500 looks anemic next to Zen Maru's chunky strokes and 600
-   reads too loud, but the system mono stack has no weight between --
-   so 500 plus a hairline text-stroke splits the difference. */
+   reads too loud, but the system mono stack has no weight between, so
+   500 plus a hairline text-stroke splits the difference. */
 .doubutsu body {
   font-family:
     "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-sans-serif, system-ui,
@@ -479,7 +480,7 @@
   -webkit-text-stroke: 0.2px currentColor;
 }
 /* The pierre diff viewer renders inside shadow DOM, where the class
-   selectors above can't reach -- but the body's 700 still gets in via
+   selectors above can't reach, but the body's 700 still gets in via
    inheritance, so diff code rendered fat. Pin the mono treatment on
    the wrapper; font-weight and text-stroke are inherited properties,
    so they carry across the shadow boundary. */
@@ -508,7 +509,7 @@
 /* --- Zone tints ---
    AC menus separate regions by stacking flat colored panels. The
    sidebar gets a calm mint, the main canvas keeps the cream --background
-   plus a low-opacity leaf wallpaper. No borders between them -- the
+   plus a low-opacity leaf wallpaper. No borders between them. The
    color shift is the boundary.
 
    The base-layer [data-sidebar] token overrides assume the translucent
@@ -529,7 +530,7 @@
 /* The inbox's New worktree button is a filled surface sitting directly
    under the banner card, and doubutsu's card is inset at mx-3. At the
    px-2 the rows use, the button's fill visibly overhangs the card above
-   it -- two stacked blocks that nearly line up read worse than two that
+   it. Two stacked blocks that nearly line up read worse than two that
    either match or clearly don't. The rows underneath are text with only
    a hover fill, so they can run full width without the same clash.
    v1 has no card, so it keeps the px-2. */
@@ -570,7 +571,7 @@
   background-color: var(--muted);
 }
 
-/* The 1px sidebar resize handle is bg-border, which doubutsu zeroes --
+/* The 1px sidebar resize handle is bg-border, which doubutsu zeroes,
    leaving a transparent slit that lets the window material show
    through as a hairline "border" between the rails. Paint it as an
    extension of the sidebar so the mint meets the canvas seamlessly. */
@@ -586,7 +587,7 @@
    charge of hue.
 
    Stacking: each host isolates its own context so the ::before can sit
-   at z-index -1 -- above the host's background paint, below every
+   at z-index -1, above the host's background paint and below every
    in-flow child. This deliberately avoids touching the children's
    `position` (an earlier `> * { position: relative }` lift silently
    converted the absolutely-positioned title-bar drag strip into a 28px
@@ -602,11 +603,11 @@
    to out-rank one `animation`, not one per page.
 
    Two constraints on the numbers. Travel must be a whole multiple of
-   the tile on each axis or the loop visibly jumps -- as written, every
+   the tile on each axis or the loop visibly jumps. As written, every
    last frame is pixel-identical to its first. And none of them can go
    much slower: these all sit under 13% opacity, where below a few px/s
    the eye has nothing to lock onto and the pattern just looks static.
-   All five drift at the same ~4.7px/s down five different vectors --
+   All five drift at the same ~4.7px/s down five different vectors:
    related rooms, not copies. */
 @keyframes ac-wallpaper-drift {
   from {
@@ -681,7 +682,7 @@
 }
 
 /* The launcher is its own place, so it gets its own wallpaper on a
-   fully opaque surface (no see-through scrim -- doubutsu wants
+   fully opaque surface (no see-through scrim, because doubutsu wants
    color-blocking, not frosted glass): sparse AC ground confetti,
    drifting up-right. The 160px tile can't ride the leaves' 80px travel
    and still loop seamlessly, so it goes at its own pace to the same
@@ -702,8 +703,8 @@
    which the four max() terms read straight off the drift vector, so a
    new wallpaper can't pad the wrong side or forget to pad at all. Hosts
    are overflow-hidden, so the bleed is clipped. Transform (not
-   mask-position) keeps the drift on the compositor -- no full-surface
-   repaint every frame. */
+   mask-position) keeps the drift on the compositor, so there is no
+   full-surface repaint every frame. */
 .doubutsu [data-doubutsu-zone="main"]::before,
 .doubutsu [data-slot="launcher"]::before {
   content: "";
@@ -744,7 +745,7 @@
 }
 
 /* AC signature: diagonal stripes that slide vertically while you hover.
-   Applied universally to interactive elements -- in AC, hovering ANY
+   Applied universally to interactive elements. In AC, hovering ANY
    button brings it to life with sliding stripes. The pattern goes in as
    a background-image so it layers on top of whatever fill the element
    already has, no markup changes required.
@@ -752,8 +753,8 @@
    Coverage comes in two kinds. Pointer things (:hover): buttons, links,
    radio/checkbox option cards, the file-picker rows. Composite widgets
    (Base UI menus/comboboxes, cmdk lists) move a highlight themselves
-   instead of relying on :hover -- there the stripes ride the
-   highlighted item, which also animates keyboard navigation. */
+   instead of relying on :hover. There the stripes ride the highlighted
+   item, which also animates keyboard navigation. */
 @keyframes ac-stripe-slide {
   from {
     background-position: 0 0;
@@ -779,7 +780,7 @@
 }
 
 /* A diff rail row is hovered as one pill but built from three controls,
-   and the middle one -- the jump button -- is a <button>, so the rule
+   and the middle one (the jump button) is a <button>, so the rule
    above would stripe a band across the row's middle instead of the row.
    The row is on the list above. The jump button sits this one out. It
    needs the type selector to match the button rule's specificity, and

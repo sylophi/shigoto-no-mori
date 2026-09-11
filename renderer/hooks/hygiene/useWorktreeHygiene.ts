@@ -86,7 +86,7 @@ export interface DiskUsageTarget {
 
 // One query per worktree, in parallel. Each disk walk is independent, so
 // sizes fill in as they land instead of the page blocking on the largest
-// checkout -- which on a repo with node_modules is the whole point.
+// checkout, which on a repo with node_modules is the whole point.
 // Main caps how many walks actually run at once, so asking for every
 // worktree in every project here is safe.
 //

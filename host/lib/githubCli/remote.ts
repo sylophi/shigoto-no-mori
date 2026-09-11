@@ -18,8 +18,8 @@ export interface GithubRepoInfo {
   // Hostname only, matched against the gh hosts.yml set.
   host: string;
   // Port for the web URL, empty when none applies. Populated only for
-  // https remotes — ssh/git/http ports belong to a different service
-  // than the browser would talk to.
+  // https remotes, since ssh/git/http ports belong to a different
+  // service than the browser would talk to.
   port: string;
   owner: string;
   repo: string;
@@ -28,7 +28,7 @@ export interface GithubRepoInfo {
 const KNOWN_HOSTS_TTL_MS = 60 * 60_000;
 
 // gh stores logged-in hosts in a top-level YAML map. We only need the
-// keys, so a regex over "<host>:" lines is enough — pulling in a YAML
+// keys, so a regex over "<host>:" lines is enough. Pulling in a YAML
 // parser for this would be overkill. github.com is always allowed even
 // if the file is missing (most users) or unreadable.
 const knownHostsCache = ttlValueCache<Set<string>>(
@@ -130,7 +130,7 @@ export function getGithubRepoInfo(cwd: string): Promise<GithubRepoInfo | null> {
 // remote" is a safe stand-in: a fork checkout has both the fork and the
 // parent as remotes, gh resolves pull requests against the parent, and
 // fetching a head from the wrong one lands different code under the
-// right branch name. Pass the PR's own URL -- it names the repo gh
+// right branch name. Pass the PR's own URL. It names the repo gh
 // actually answered from.
 export async function remoteNameForUrl(
   cwd: string,

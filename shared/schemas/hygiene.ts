@@ -129,7 +129,7 @@ export function deriveHygieneVerdict(
     };
   }
   // Untracked files the status scan didn't count. Same consequence as
-  // dirty -- files that exist nowhere else -- so it is reported the same
+  // dirty (files that exist nowhere else), so it is reported the same
   // way, just after it, since the count above is the more precise one
   // whenever it was taken.
   if (hygiene?.untracked) {

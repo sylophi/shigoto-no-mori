@@ -48,7 +48,7 @@ let cachedPointerRead: string | null = null;
 // The override is something a human or a test harness sets, and it must
 // stay that way: the app itself may never put SHIGOMORI_DATA_DIR into a
 // child's environment. Env vars are inherited by the whole process
-// tree, and the app runs the user's package.json scripts -- so a `dev`
+// tree, and the app runs the user's package.json scripts, so a `dev`
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's data dir here, and quietly operate
 // on real data. A sandboxed session needs no injection either: children
@@ -166,7 +166,7 @@ function readPointerRaw(pointerPath: string): string | null {
   }
 }
 
-// Empty or non-absolute content falls through (null) -- boot must not
+// Empty or non-absolute content falls through (null), because boot must not
 // die on a malformed hand-edited file.
 function pointerTarget(raw: string): string | null {
   const target = expandHome(raw.trim());
@@ -179,7 +179,7 @@ function pointerTarget(raw: string): string | null {
 // shigomori state. The data dir is the target of destructive
 // operations (nuke rm -rf's it), so a pointer at ~/Documents must fall
 // back to the default rather than adopt a directory full of unrelated
-// files. Mirrored by the CLI (cli/state.go looksLikeDataDir) -- keep
+// files. Mirrored by the CLI (cli/state.go looksLikeDataDir). Keep
 // the two in sync.
 function looksLikeDataDir(target: string): boolean {
   let entries: string[];

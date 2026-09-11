@@ -81,8 +81,8 @@ export async function moveDataDir(
     );
   }
   // Running scripts are reaped below (same semantics as nuke), but
-  // in-flight destructive lifecycle work -- worktree/project deletes,
-  // delegated CLI children -- is mid-write inside the data dir and can't be
+  // in-flight destructive lifecycle work (worktree/project deletes,
+  // delegated CLI children) is mid-write inside the data dir and can't be
   // safely killed or moved under. Refuse instead.
   if (getBusyOperations().inflightDeletes > 0) {
     throw new Error(
@@ -103,8 +103,8 @@ export async function moveDataDir(
   // marked delete-inflight for the whole move (blocking a renderer
   // script run from landing in a directory mid-move, exactly like the
   // nuke flow), their shigomori state re-keyed, and their git metadata
-  // repaired afterwards. Collected before anything moves -- listing
-  // needs the old paths.
+  // repaired afterwards. Collected before anything moves, because
+  // listing needs the old paths.
   const repairTargets = await Promise.all(
     projects.map(async (project) => {
       try {
@@ -185,7 +185,7 @@ export async function moveDataDir(
     // Point both readers (app boot, CLI) at the new location. Atomic
     // rename so no reader can ever see a half-written path. Committed
     // before the old copy is deleted: if that cleanup fails midway, the
-    // pointer already names the complete new copy -- leftovers beat a
+    // pointer already names the complete new copy. Leftovers beat a
     // boot against a half-deleted data dir. Moving to the default
     // removes the pointer instead, and the pre-2.0 pointer goes either
     // way: exactly one file may ever redirect a boot.

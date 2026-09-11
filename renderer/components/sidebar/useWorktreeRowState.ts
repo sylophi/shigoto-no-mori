@@ -10,13 +10,13 @@ export interface WorktreeRowState {
   open: () => void;
   activity: ScriptActivityKind | null;
   isDeleting: boolean;
-  // Hover title, or undefined when the row is in no state worth naming --
-  // a tooltip that only repeats the branch already on screen is noise.
+  // Hover title, or undefined when the row is in no state worth naming.
+  // A tooltip that only repeats the branch already on screen is noise.
   title: string | undefined;
 }
 
-// What the two sidebar row layouts share. They look nothing alike -- one
-// line of chrome in the tree, three in the inbox -- but "am I the open
+// What the two sidebar row layouts share. They look nothing alike (one
+// line of chrome in the tree, three in the inbox), but "am I the open
 // one", "what's running here", "where does a click go" and "what do I
 // say on hover" have the same answers in both, and answering them twice
 // is how the two silently drift.

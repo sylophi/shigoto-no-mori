@@ -18,7 +18,7 @@ export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
 ];
 
 // Containment test: true when `path` IS `ancestor` or sits anywhere
-// beneath it. Prefix matching by intent -- callers guarding destructive
+// beneath it. Prefix matching by intent. Callers guarding destructive
 // flows (nuke, data dir move) want the whole subtree. Contrast
 // isManagedPath (host/lib/worktrees/paths.ts), which deliberately uses
 // parent equality instead.

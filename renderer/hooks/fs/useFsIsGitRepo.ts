@@ -7,7 +7,7 @@ export function useFsIsGitRepo(path: string, enabled = true) {
     queryKey: keys.fsIsGitRepo(path),
     queryFn: () => api.fs.isGitRepo(path),
     enabled: enabled && path.length > 0,
-    // Boolean UI hint — failure falls back to "not a repo" cleanly.
+    // Boolean UI hint. Failure falls back to "not a repo" cleanly.
     meta: { silentError: true },
   });
 }

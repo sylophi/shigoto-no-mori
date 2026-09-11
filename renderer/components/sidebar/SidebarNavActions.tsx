@@ -17,7 +17,7 @@ export function SidebarNavActions({
       </NavIconButton>
       <NavIconButton
         to="/settings"
-        tip={updateReady ? "Settings — update available" : "Settings"}
+        tip={updateReady ? "Settings (update available)" : "Settings"}
         label={updateReady ? "Settings (update available)" : "Settings"}
       >
         <SettingsIcon className="size-3.5" />

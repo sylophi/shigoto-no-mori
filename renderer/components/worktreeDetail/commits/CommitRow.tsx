@@ -74,9 +74,9 @@ export function CommitRow({
   );
 
   // Rewriting is only offered for commits no remote has: HEAD can be
-  // amended, and any run of local commits can be undone back to a row
-  // (soft reset -- their changes come back staged). Rows past that line
-  // get the plain menu.
+  // amended, and a run of local commits can be undone back to a row
+  // with a soft reset, so their changes come back staged. Rows past
+  // that line get the plain menu.
   const { canAmend, undo } = rewrite;
 
   return (

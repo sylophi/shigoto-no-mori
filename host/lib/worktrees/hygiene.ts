@@ -62,7 +62,7 @@ async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
 // under git), an unreadable ref or a corrupt repo all fail here. Folding
 // those into 0 would preselect them as "every commit is already in
 // main", which is the one mistake this surface must not make. Unparsable
-// output is treated the same way -- fail safe, like `contentAlreadyIn`.
+// output is treated the same way, failing safe like `contentAlreadyIn`.
 async function countUniqueCommits(
   worktreePath: string,
   primaryRef: string,
@@ -107,7 +107,7 @@ async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
 //
 // `git merge-tree --write-tree` prints the resulting tree OID on its
 // first line. If that equals the primary's own tree, the branch
-// contributes no content -- which is exactly the state a squash- or
+// contributes no content, which is exactly the state a squash- or
 // rebase-merged branch is left in, and one that counting commits can't
 // see (those branches keep commits primary never took verbatim).
 //
@@ -142,7 +142,7 @@ async function contentAlreadyIn(
 // `resolveDefaultBranch` prefers the remote-tracking ref (origin/main)
 // because it's the source of truth for how far behind you are. But for
 // "is it safe to delete this?", work merged into the *local* main is
-// equally safe -- it isn't lost, it just hasn't been pushed yet. Asking
+// equally safe. It isn't lost, it just hasn't been pushed yet. Asking
 // only about origin/main marks every locally-merged branch as unmerged,
 // which is exactly backwards for a cleanup surface.
 //
@@ -222,7 +222,7 @@ async function hygieneFor(
   // into a "can't tell" verdict, which is never preselected.
   //
   // The primary takes this arm on purpose, and it is not what keeps it
-  // off the tidy page -- that list drops primaries before they become
+  // off the tidy page. That list drops primaries before they become
   // rows. It is what keeps every other caller safe: facts that compare
   // to nothing can't derive the merged verdict that ticks a row.
   if (
@@ -322,7 +322,7 @@ export async function collectProjectHygiene(
 // The worktree list, cached for long enough to serve one page load.
 //
 // The renderer asks for disk usage one worktree at a time, and each of
-// those calls needs the same id-to-path lookup -- without this, opening
+// those calls needs the same id-to-path lookup. Without this, opening
 // the page re-runs `git worktree list` once per row on top of the once
 // per project the facts already paid for.
 const identityCache = ttlMapCache(10_000, (key: string) => {

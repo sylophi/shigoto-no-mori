@@ -32,9 +32,9 @@ function updaterStateQueryOptions(
 }
 
 // Seeded from `updater:get` once on mount and then driven entirely by
-// the `updater:state` broadcast -- no polling. The serving process is
-// the single source of truth; the renderer just mirrors it. Reads its
-// device from the host scope: this window's own updater with no
+// the `updater:state` broadcast, with no polling. The serving process
+// is the single source of truth. The renderer just mirrors it. Reads
+// its device from the host scope: this window's own updater with no
 // provider mounted, or a peer's over its direct session inside one,
 // so the same Settings card answers for whichever device is selected.
 export function useUpdater() {

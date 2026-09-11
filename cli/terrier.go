@@ -5,7 +5,7 @@ package main
 // `terrier` toggle is on. Terrier's stable surface is `terrier ls
 // --json` plus the rule that a minor version bump is the compatibility
 // signal, so that is all this file consumes. Ported alongside
-// host/lib/terrier.ts -- the two engines must produce the same merged
+// host/lib/terrier.ts. The two engines must produce the same merged
 // list or the app and the CLI would disagree about which projects
 // exist.
 //
@@ -43,7 +43,7 @@ func terrierOutput(args ...string) ([]byte, error) {
 }
 
 // The registry-read contract this build understands. Terrier's README:
-// "a tool checks the minor version and nothing else" -- a minor bump
+// "a tool checks the minor version and nothing else". A minor bump
 // means something a tool could be relying on has changed, so an
 // unknown minor deactivates the merge rather than guessing. Mirror of
 // TERRIER_SUPPORTED_* in host/lib/terrier.ts.
@@ -113,8 +113,8 @@ var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 // Deterministic id for a terrier-sourced project: UUID-shaped from
 // sha256(path) so the TS engine and this one mint the same id for the
 // same path without ever writing it down. Uppercased like every
-// CLI-minted id. Mirror of terrierProjectId in host/lib/terrier.ts --
-// keep the two byte-for-byte in sync (terrier_test.go pins a vector).
+// CLI-minted id. Mirror of terrierProjectId in host/lib/terrier.ts.
+// Keep the two byte-for-byte in sync (terrier_test.go pins a vector).
 func terrierProjectID(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	h := strings.ToUpper(hex.EncodeToString(sum[:16]))
@@ -126,8 +126,8 @@ func terrierProjectID(path string) string {
 // the merge's stderr warning and doctor's finding with the same words
 // so the two can never explain the same "off" state differently.
 // Assumes the caller already checked terrierEnabled: an off toggle is
-// the normal quiet state, not trouble. Memoized -- every input is a
-// process-lifetime constant.
+// the normal quiet state, not trouble. Memoized, since every input is
+// a process-lifetime constant.
 type terrierTrouble struct {
 	summary, advice string
 }
@@ -172,7 +172,7 @@ func activeTerrierListings() ([]terrierListing, *terrierTrouble) {
 }
 
 // Whether the active terrier registry lists path. False whenever the
-// integration is off or unreadable -- callers use this to decide id
+// integration is off or unreadable. Callers use this to decide id
 // continuity, and "don't know" must act like "no". Mirror of
 // terrierHasPath in host/lib/terrier.ts.
 func terrierHasPath(path string) bool {
@@ -187,8 +187,8 @@ func terrierHasPath(path string) bool {
 
 // The pre-dispatch merge (main.go): registry entries as-is, then a
 // read-only project per terrier repo the registry doesn't already
-// hold. Failures degrade to the registry alone with one stderr note --
-// a broken terrier must not take every command down with it.
+// hold. Failures degrade to the registry alone with one stderr note,
+// since a broken terrier must not take every command down with it.
 func mergeTerrierProjects(projects []project) []project {
 	listings, trouble := activeTerrierListings()
 	if trouble != nil {

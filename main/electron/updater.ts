@@ -8,15 +8,15 @@
 // The renderer sees the same small state machine as before.
 //
 // The staged manifest on disk is the source of truth for "there is an
-// update to restart into" -- a terminal `sm update` may have staged it
-// without this process's state machine ever leaving idle -- so boot
+// update to restart into". A terminal `sm update` may have staged it
+// without this process's state machine ever leaving idle, so boot
 // seeds from the manifest and the install path re-checks it.
 //
 // Dev builds run from a checkout, so they report `unsupported` and the
 // renderer hides the check button.
 //
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
-// testing of a signed build -- the CLI child inherits it from our
+// testing of a signed build. The CLI child inherits it from our
 // environment.
 import { join } from "node:path";
 import { app } from "electron";
@@ -114,7 +114,7 @@ export function checkForUpdates(): void {
 // One check at a time. Once an update is staged ("ready") the only
 // useful action left is install, so further checks no-op until the
 // restart. The CLI holds its own cross-process staging lock, so a
-// terminal `sm update` racing this check is also safe -- the loser
+// terminal `sm update` racing this check is also safe. The loser
 // reports "update-in-progress" and is treated as a skip, not an error.
 async function runCheck(): Promise<void> {
   if (!started || checkInFlight) return;
@@ -176,10 +176,10 @@ async function runCheck(): Promise<void> {
 // True when the staged update is actually installable: manifest
 // present, bundle on disk, and a different version than this build (a
 // same-version manifest is debris from an install that crashed between
-// swap and cleanup -- restarting into it would deliver nothing). When
-// it's gone while the UI still says ready, resets to idle: runCheck
-// refuses to run while ready, so nothing else would ever revive the
-// dead "Restart to update" button.
+// swap and cleanup, and restarting into it would deliver nothing).
+// When it's gone while the UI still says ready, resets to idle:
+// runCheck refuses to run while ready, so nothing else would ever
+// revive the dead "Restart to update" button.
 async function hasInstallableStaged(): Promise<boolean> {
   const staged = await readStagedManifest();
   if (staged !== null && staged.version !== app.getVersion()) return true;
@@ -266,7 +266,7 @@ export function startUpdater(): void {
     // (a previous run, or `sm update --stage` in a terminal) is ready
     // immediately, no CLI spawn needed. A manifest matching our own
     // version is debris from an install that crashed between swap and
-    // cleanup -- offering it would restart-loop into the same version.
+    // cleanup. Offering it would restart-loop into the same version.
     // The CLI clears it on its next stage run.
     const staged = await readStagedManifest();
     if (staged !== null && staged.version !== app.getVersion()) {

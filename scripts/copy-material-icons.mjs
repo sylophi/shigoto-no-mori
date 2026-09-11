@@ -28,8 +28,9 @@ async function maybeStat(path) {
 async function main() {
   const srcStat = await maybeStat(SRC);
   if (!srcStat) {
-    // material-icon-theme isn't installed yet — pnpm may run postinstall
-    // before all deps are linked in some workspace layouts. Nothing to do.
+    // material-icon-theme isn't installed yet, since pnpm may run
+    // postinstall before all deps are linked in some workspace layouts.
+    // Nothing to do.
     return;
   }
 

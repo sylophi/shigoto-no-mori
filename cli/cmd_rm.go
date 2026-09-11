@@ -40,7 +40,7 @@ func removeOptionsFrom(parsed parsedArgs) removeOptions {
 }
 
 // The guards every removal shares: never the primary checkout, and
-// fail closed on a dirty or unreadable worktree unless forced -- an
+// fail closed on a dirty or unreadable worktree unless forced. An
 // unreadable status must not pass for clean when the next step
 // destroys the directory.
 func removePreflight(id worktreeIdentity, force bool) error {
@@ -118,7 +118,7 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	}
 	config := readProjectConfig(proj.ID)
 
-	// Cleanup scripts (skip for externals -- no provision ever ran).
+	// Cleanup scripts (skip for externals, since no provision ever ran).
 	if !id.IsExternal && !opts.skipCleanup {
 		envInputs := lifecycleEnvInputs(proj, id, config)
 
@@ -195,7 +195,7 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 	} else {
 		out(greenOut("removed " + id.Name))
 		if hint != "" {
-			note(dimErr("note: your shell is inside the removed worktree -- cd " + hint))
+			note(dimErr("note: your shell is inside the removed worktree. Run `cd " + hint + "`"))
 		}
 	}
 }

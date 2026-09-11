@@ -2,7 +2,7 @@
 // (via `git worktree remove --force`) and wipes the shigomori data dir so state,
 // global config, and any orphan worktree directories all go away.
 //
-// The original project repos on disk are untouched -- we only act on data
+// The original project repos on disk are untouched. We only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
 import type { NukeProgress } from "@shared/schemas";
@@ -27,7 +27,7 @@ export async function nukeEverything(
 ): Promise<void> {
   const projects = loadProjects();
   // The final step rm -rf's the shigomori data dir. A trapped project repo
-  // would be wiped with it -- .git, uncommitted work, everything.
+  // would be wiped with it: .git, uncommitted work, everything.
   // Refuse up front, before any script kill or worktree removal.
   const trapped = findProjectInsideDataDir(projects);
   if (trapped) {
@@ -37,7 +37,7 @@ export async function nukeEverything(
         "Move the repository out first.",
     );
   }
-  // Reap every running script first -- dev servers and watchers may have
+  // Reap every running script first. Dev servers and watchers may have
   // their cwd inside the worktrees we're about to force-remove. Skipping
   // this would orphan them with deleted working directories, still
   // holding their ports, exactly what the per-worktree delete path
@@ -76,7 +76,7 @@ export async function nukeEverything(
   // Same inflight marking as the per-worktree delete: blocks a renderer
   // script run from landing in a directory mid-removal and keeps the
   // busy-quit prompt honest during the wipe. Held through the data dir rm
-  // below -- clearing each id right after its `git worktree remove`
+  // below. Clearing each id right after its `git worktree remove`
   // would leave a window where a script could spawn into a directory
   // the rm is about to take out.
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));

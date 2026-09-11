@@ -21,7 +21,7 @@ interface BranchHistoryDrawerProps {
 }
 
 // Approximate height of a CommitRow + spacing in the list. Used as the
-// virtualizer's size hint -- it remeasures real rows on mount, so this
+// virtualizer's size hint. It remeasures real rows on mount, so this
 // only needs to be in the right ballpark.
 const ROW_ESTIMATE = 60;
 

@@ -33,7 +33,7 @@ type launcherApp struct {
 const t3codeID = "t3code"
 
 // The tool catalog is embedded from embed/launcher-catalog.json, which
-// host/lib/launchers/index.ts imports too -- one list, two consumers.
+// host/lib/launchers/index.ts imports too. One list, two consumers.
 // bundleNames resolve against appRoots; "__finder__" is the
 // always-available Finder sentinel.
 //
@@ -143,8 +143,8 @@ func availableLaunchers(proj project) []launcherEntry {
 
 const useLogWindow = 14 * 24 * time.Hour
 
-// Sorts by rolling-window use (descending), label as tiebreaker --
-// the launcher row's ordering, driven by the same state.json log.
+// Sorts by rolling-window use (descending), label as tiebreaker, the
+// launcher row's ordering, driven by the same state.json log.
 func sortLaunchersByUse(entries []launcherEntry) {
 	var log map[string][]int64
 	if raw, ok := readStateHints()["launcherUseLog"]; ok {
@@ -211,7 +211,7 @@ func launchEntry(entry launcherEntry, worktreePath string) error {
 }
 
 // Fire-and-forget through the user's shell, detached so it outlives
-// this process -- the app's launchCustom.
+// this process. This is the app's launchCustom.
 func launchCustomCommand(command, worktreePath string) error {
 	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Dir = worktreePath

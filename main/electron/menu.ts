@@ -1,7 +1,7 @@
 // Native application menu. Owns the keyboard shortcuts so the renderer doesn't
-// have to register window-level listeners — accelerators here fire regardless
-// of which element has focus, and Electron dispatches them through the menu
-// before the renderer sees them.
+// have to register window-level listeners. Accelerators here fire regardless of
+// which element has focus, and Electron dispatches them through the menu before
+// the renderer sees them.
 import {
   app,
   Menu,

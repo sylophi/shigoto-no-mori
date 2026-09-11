@@ -66,7 +66,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
     );
   }
 
-  // Everything the user could launch is switched off in Settings -- point
+  // Everything the user could launch is switched off in Settings, so point
   // there rather than at project Configure, which has no visibility toggles.
   if (entries.length === 0 && (data?.hiddenCount ?? 0) > 0) {
     return (

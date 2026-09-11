@@ -34,9 +34,9 @@ export function useShigomoriConfig(projectId: string | null) {
 // Every project's config at once, for the inbox's per-project display
 // options. Fan-out shape and combine rationale: useAllProjectWorktrees.
 // Shares the cache key with useShigomoriConfig, so a Configure save
-// reaches the sidebar through the same invalidation -- which is also
-// why these never refetch on their own: every writer invalidates the
-// key, and the external-change broadcast covers CLI edits.
+// reaches the sidebar through the same invalidation. That is also why
+// these never refetch on their own: every writer invalidates the key,
+// and the external-change broadcast covers CLI edits.
 export function useAllProjectShigomoriConfigs(projects: Project[]) {
   const scope = useHostScope();
   return useQueries({

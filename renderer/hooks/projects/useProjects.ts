@@ -107,7 +107,7 @@ export function useRemoveProject() {
       });
       // With the route and sidebar row gone nothing observes the
       // removed project's queries; drop the leftovers so nothing can
-      // replay them. Only inactive ones -- removing a query that still
+      // replay them. Only inactive ones: removing a query that still
       // has an observer (a row mid-unmount) would refetch it instead.
       queryClient.removeQueries({
         type: "inactive",

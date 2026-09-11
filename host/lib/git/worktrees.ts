@@ -55,7 +55,7 @@ function deriveBranch(entry: RawWorktreeEntry): string {
 
 // How many changed paths get stat'd for their mtime. Only the newest
 // timestamp survives, so a worktree in the middle of a huge refactor
-// doesn't need every path measured -- the cap keeps the per-worktree
+// doesn't need every path measured. The cap keeps the per-worktree
 // cost flat no matter how dirty the tree is.
 const CHANGE_MTIME_STAT_LIMIT = 64;
 
@@ -77,7 +77,7 @@ async function getWorkingTreeChanges(
     const paths = (await listChangedFiles(worktreePath)).map((f) => f.path);
     if (paths.length === 0) return { count: 0 };
     // A deleted path stats as a failure, an untracked directory stats as
-    // the directory -- both are fine, we only want the newest hit.
+    // the directory. Both are fine, we only want the newest hit.
     const times = await Promise.all(
       paths.slice(0, CHANGE_MTIME_STAT_LIMIT).map((rel) =>
         stat(join(worktreePath, rel)).then(
@@ -104,7 +104,7 @@ interface RemoteSync {
 }
 
 // Probes how the worktree's HEAD relates to its upstream. Failure of the
-// rev-list call is taken as "no upstream" -- either the branch was never
+// rev-list call is taken as "no upstream": either the branch was never
 // pushed, or HEAD is detached. `divergedClean` runs a `merge-tree`
 // probe only when both sides have unique commits; it tells the UI
 // whether a whole-tree merge would land cleanly. The action behind
@@ -134,7 +134,7 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
   // Diverged: ask git whether a merge would land without conflicts.
   // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
   // when conflicts would arise (or on git < 2.38, where we treat the
-  // unknown as "not clean" -- safer default).
+  // unknown as "not clean", the safer default).
   let divergedClean = false;
   try {
     await run(worktreePath, ["merge-tree", "--write-tree", "HEAD", "@{u}"]);
@@ -334,17 +334,17 @@ const FIRST_PARENT_SCAN_LIMIT = 2000;
 
 // A branch can be an ancestor of the primary for two very different
 // reasons: its work was merged in, or it never left the primary's own
-// history -- a worktree created and then left alone while the primary
-// moved on. `git branch --merged` can't tell those apart, which is why
-// this walks the primary's first-parent chain instead: a branch that
-// landed via a merge commit hangs off that chain, an untouched one sits
-// on it. Keeping the second case out is what stops fresh, idle
+// history, like a worktree created and then left alone while the
+// primary moved on. `git branch --merged` can't tell those apart, which
+// is why this walks the primary's first-parent chain instead: a branch
+// that landed via a merge commit hangs off that chain, an untouched one
+// sits on it. Keeping the second case out is what stops fresh, idle
 // worktrees from piling into the sidebar's Merged box every time
 // something else lands.
 //
 // A local fast-forward or rebase merge is genuinely indistinguishable
-// from "never started" here -- the resulting history is identical -- so
-// it reads as not landed. That errs toward leaving a row visible, and
+// from "never started" here: the resulting history is identical, so it
+// reads as not landed. That errs toward leaving a row visible, and
 // GitHub-hosted repos get the answer from the PR state anyway.
 async function landedOnPrimary(
   worktreePath: string,
@@ -365,7 +365,7 @@ async function landedOnPrimary(
 }
 
 // The primary's first-parent chain is the same answer for every worktree
-// in the project -- one object store, one ref -- so it's read once and
+// in the project (one object store, one ref), so it's read once and
 // shared. Lazily, because a project whose worktrees are all ahead of the
 // primary never asks the question and shouldn't pay for it.
 //
@@ -516,7 +516,7 @@ async function buildWorktree(
 }
 
 // Each buildWorktree starts four to six git processes and the sidebar
-// asks for every project at once on focus -- unbounded, that is hundreds
+// asks for every project at once on focus. Unbounded, that is hundreds
 // of simultaneous forks. Same window as tidy's gitProbes.
 const rowProbes = createLimiter(6);
 
@@ -577,7 +577,7 @@ async function removeWorktree(
 
 // Force-removes a worktree, falling back to a manual wipe when git's
 // recursive rmdir fails with ENOTEMPTY (untracked content git couldn't
-// sweep -- caches, files held open). We don't retry `git worktree
+// sweep: caches, files held open). We don't retry `git worktree
 // remove` after fs.rm because once the dir is gone, remove errors out
 // on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
 // real bugs stay visible.

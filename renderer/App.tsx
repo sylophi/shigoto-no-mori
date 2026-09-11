@@ -35,7 +35,7 @@ export function App({ router }: { router: AppRouter }) {
 
 // Convention: IPC broadcasts that drive query invalidations live in
 // useWatch* hooks next to the queries they affect, and this is the
-// single place they get called -- adding a new watcher is one import +
+// single place they get called. Adding a new watcher is one import +
 // one hook call here, with the actual subscribe/invalidate logic
 // co-located with the query it owns. They watch this machine's
 // broadcasts, which a hostless client's bridge never emits, so it

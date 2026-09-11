@@ -9,7 +9,7 @@ import (
 // host/lib/terrier.ts must mint this exact id for this exact path. A
 // drift here means the app and the CLI address the same terrier
 // project by two different ids, orphaning per-project state between
-// them -- so never "fix" the expectation to match a changed
+// them, so never "fix" the expectation to match a changed
 // implementation without changing both engines together.
 func TestTerrierProjectIDVector(t *testing.T) {
 	got := terrierProjectID("/tmp/repo")

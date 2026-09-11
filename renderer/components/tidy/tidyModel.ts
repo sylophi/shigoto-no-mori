@@ -28,8 +28,8 @@ export interface TidyEntry {
   //
   // Deliberately not backfilled from file mtimes: `git worktree add`
   // stamps every checked-out file with the current time, so a worktree
-  // branched from year-old work would report itself as seconds old --
-  // and the row renders this as "committed X ago", which a mtime isn't.
+  // branched from year-old work would report itself as seconds old.
+  // The row renders this as "committed X ago", which a mtime isn't.
   // File activity is surfaced separately as `lastActivityAt`.
   ageAt: number | null;
   // Newest mtime outside dependency/build dirs. Meaningful mainly for a
@@ -90,9 +90,9 @@ const bytes = (entry: TidyEntry) => entry.disk?.bytes ?? 0;
 const age = (entry: TidyEntry) => entry.ageAt ?? Number.MAX_SAFE_INTEGER;
 const rank = (entry: TidyEntry) => VERDICT_RANK[entry.verdict.kind];
 
-// Every byte total on the page -- headline, per project, per selection
-// -- goes through here, so "a row still being walked counts as zero"
-// is stated once and every figure is a floor in the same way.
+// Every byte total on the page (headline, per project, per selection)
+// goes through here, so "a row still being walked counts as zero" is
+// stated once and every figure is a floor in the same way.
 export function sumBytes(entries: TidyEntry[]): number {
   return entries.reduce((total, entry) => total + bytes(entry), 0);
 }
@@ -107,9 +107,9 @@ export function sortTidyEntries(
     if (sort === "project") {
       // Keeps every project's rows contiguous so the list can be broken
       // into labelled groups, and orders within a project exactly the
-      // way "Recommended" would. Two projects can share a name -- the
-      // name is a directory basename -- so the id breaks the tie rather
-      // than letting their rows interleave into duplicate groups.
+      // way "Recommended" would. Two projects can share a name (the name
+      // is a directory basename), so the id breaks the tie rather than
+      // letting their rows interleave into duplicate groups.
       const byProject =
         a.project.name.localeCompare(b.project.name) ||
         a.project.id.localeCompare(b.project.id);
@@ -130,7 +130,7 @@ export interface TidyGroup {
 
 // Splits an already-sorted list into the runs of one project each. Only
 // the "Project" sort produces contiguous runs, so this is only asked for
-// there -- every other sort is deliberately one flat cross-project list.
+// there. Every other sort is deliberately one flat cross-project list.
 export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
   const groups: TidyGroup[] = [];
   for (const entry of entries) {
@@ -144,7 +144,7 @@ export function groupByProject(entries: TidyEntry[]): TidyGroup[] {
 
 // The rows we are willing to tick on the user's behalf, and the only
 // rule that decides it. Nothing dirty, unmerged or detached is ever in
-// here -- that is the whole safety guarantee of the page, so the page
+// here. That is the whole safety guarantee of the page, so the page
 // reads its "safe to remove" count off this same list rather than
 // re-filtering with its own copy of the predicate.
 export function safeToRemove(entries: TidyEntry[]): TidyEntry[] {

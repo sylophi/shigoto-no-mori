@@ -6,7 +6,7 @@ function describe(err: unknown): string | undefined {
   return undefined;
 }
 
-// Same title + same error text collapses into one toast — useful when a
+// Same title + same error text collapses into one toast. Useful when a
 // fan-out of queries all fail with the same root cause.
 export function notifyError(message: string, err?: unknown): void {
   const description = describe(err);

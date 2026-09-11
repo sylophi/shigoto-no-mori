@@ -193,7 +193,7 @@ export function buildSidebarRows({
     rows,
     failedCount,
     // Every project renders a header, so "no rows" here only ever means
-    // "no projects" -- which the shell already has its own answer for.
+    // "no projects", which the shell already has its own answer for.
     emptyMessage: null,
     revealKey: (projectId, worktreeId, deviceId) => {
       // A peer's row is device-qualified (pushRemoteWorktreeRows). It

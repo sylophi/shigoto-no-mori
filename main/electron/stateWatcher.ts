@@ -101,12 +101,12 @@ export function startStateWatcher(poke: () => void): void {
   };
   // registry.json, state.json and config.json live at the top, with
   // per-project config and worktree data under projects/. worktrees/
-  // needs its own recursive
-  // watch: an external `sm create` writes no state file at all -- the
-  // only observable change is the new checkout directory two levels
-  // down (worktrees/<project>/<name>), which a non-recursive top-level
-  // watch never sees. (In-project and custom layouts sit outside the
-  // data dir and aren't covered; the managed-root default is.)
+  // needs its own recursive watch: an external `sm create` writes no
+  // state file at all. The only observable change is the new checkout
+  // directory two levels down (worktrees/<project>/<name>), which a
+  // non-recursive top-level watch never sees. (In-project and custom
+  // layouts sit outside the data dir and aren't covered. The
+  // managed-root default is.)
   watchDir(dataDir(), false);
   watchDir(join(dataDir(), "projects"), true);
   const worktreesDir = join(dataDir(), "worktrees");

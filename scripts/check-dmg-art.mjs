@@ -1,7 +1,7 @@
 // Verifies the committed dmg artwork isn't older than the design it was
 // rendered from. The art in assets/dmg/ is generated (see
 // scripts/build-dmg-background.cjs) but committed, so `make` never has
-// to run a browser -- the tradeoff is that a doubutsu palette edit can
+// to run a browser. The tradeoff is that a doubutsu palette edit can
 // land, pass every other check, and still ship an installer window
 // wearing the previous release's colors. Nothing about a png says how
 // old it is, so the renderer stamps a hash of its inputs next to it and
@@ -20,7 +20,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // The design the pixels are rendered from: the stylesheet the art is
 // drawn with, the art itself, the geometry both it and the maker read,
 // and the webfont package (a bump reshapes every glyph in the window).
-// Not the render script -- editing that means running it.
+// Not the render script, since editing that means running it.
 const INPUT_FILES = [
   "renderer/doubutsu.css",
   "scripts/dmg-background.html",
@@ -29,8 +29,8 @@ const INPUT_FILES = [
 const FONT_PACKAGE = "node_modules/@fontsource/zen-maru-gothic/package.json";
 
 // The rendered art itself is hashed too, so a twin that goes missing or
-// gets reverted fails here rather than at someone's retina download --
-// appdmg falls back to the 1x image without complaining.
+// gets reverted fails here rather than at someone's retina download,
+// since appdmg falls back to the 1x image without complaining.
 const ART_FILES = [false, true].flatMap((prerelease) =>
   [1, 2].map(
     (scale) => `${DMG_ART_DIR}/${dmgBackgroundName(prerelease, scale)}`,
@@ -58,7 +58,7 @@ function check() {
     // Hashing reads every art file, so a missing twin short-circuits
     // before the stamp comparison.
     failures.push(
-      `the installer artwork is incomplete -- missing ${missing.join(", ")}.`,
+      `the installer artwork is incomplete, missing ${missing.join(", ")}.`,
     );
   } else {
     const stamped = existsSync(ART_STAMP_FILE)

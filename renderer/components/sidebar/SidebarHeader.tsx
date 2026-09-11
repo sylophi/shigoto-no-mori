@@ -65,7 +65,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
           !hasLocalHost && "mt-3",
         )}
       >
-        {/* Dev swaps the hero's near-black ink for leaf green -- loud
+        {/* Dev swaps the hero's near-black ink for leaf green, loud
             enough to catch at a glance, still inside the palette. */}
         <h1
           className={cn(
@@ -82,7 +82,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
             stacks and overlaps rather than sitting in a tidy row: two
             stickers thrown on at their own angles is the playful read,
             a row is a toolbar. Empty when neither shows, which paints
-            nothing -- the cluster has no box of its own. */}
+            nothing, since the cluster has no box of its own. */}
         <span className="absolute top-3 right-3 z-[2] flex flex-col items-center">
           {badge !== undefined && (
             // Calmer than the dev sticker (secondary, not the loud
@@ -101,7 +101,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
             <button
               type="button"
               onClick={onRevealProd}
-              title="Dev build — click to preview production styling"
+              title="Dev build. Click to preview production styling"
               className={cn(
                 STICKER,
                 "bg-primary text-primary-foreground",
@@ -153,13 +153,13 @@ function DefaultSidebarHeader({
       {badge !== undefined && <span className={HEADER_CHIP}>{badge}</span>}
       {showDevStyle && (
         // Dev keeps the title itself intact and hangs a quiet mono chip
-        // off it -- reads instantly, still lets the wordmark sit right.
+        // off it. Reads instantly, still lets the wordmark sit right.
         // Doubles as the reveal-prod affordance, so it carves a no-drag
         // hole out of the title bar for its own click.
         <button
           type="button"
           onClick={onRevealProd}
-          title="Dev build — click to preview production styling"
+          title="Dev build. Click to preview production styling"
           style={dragRegion("no-drag")}
           className={cn(
             HEADER_CHIP,

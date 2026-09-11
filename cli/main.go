@@ -1,6 +1,6 @@
 package main
 
-// sm -- the Shigoto no Mori CLI, a Go port of the app's worktree
+// sm is the Shigoto no Mori CLI, a Go port of the app's worktree
 // engine (host/lib/) with the same on-disk state, ids, lock protocol,
 // and JSON output shapes. The data dir follows the compiled-in
 // flavor (sm -> ~/.sm, smd -> ~/.smd, see flavor.go). A
@@ -10,7 +10,7 @@ package main
 // Known deltas vs the app: project-usage stats aren't bumped,
 // .worktreeinclude reconciliation doesn't rewrite project.json, the
 // `port` field isn't populated, and `rm` / `project remove` can't reap
-// scripts the app spawned into a worktree -- that registry lives in
+// scripts the app spawned into a worktree. That registry lives in
 // the app's process, so stop those from the app (or quit it) first.
 
 import (
@@ -38,7 +38,7 @@ var generalItems = []helpItem{
 		"Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm) and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them."},
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"update [--check]", "Update the app to the latest release",
-		"Checks GitHub releases, downloads, verifies, and installs -- all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
+		"Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports."},
 	{"doctor [--fix] [--yes]", "Check the installation and data dir",
 		"A grouped checklist: the environment (git, gh, the app bundle behind this binary, PATH shadowing, the shell hook) and the data dir (config and registry parse, stale locks, registry entries whose repo is gone, git's worktree metadata vs the disk, port-pool leases, the terrier registry), then each project. Exits non-zero when anything failed. --fix applies only the unambiguously safe repairs, asking before each one that deletes something (--yes skips the prompts); anything with a judgment call in it is reported, never touched."},
 	{"help [<command>] [--all]", "Show help",
@@ -54,7 +54,7 @@ var worktreeItems = []helpItem{
 		"Like cd without the project menu. Exit the shell to return, or cd in place with shell integration."},
 	{"worktrees path [<name>]", "Print a worktree's directory", ""},
 	{"worktrees create [<name>] [-b <branch-name>] [--base <ref>] [--no-cd]", "Create a worktree",
-		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision, then drops into the new worktree -- a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
+		"On a new branch named -b (default: the worktree name), forked from --base (default: the default branch). Runs carry-over, the setup script, and port provision, then drops into the new worktree: a subshell, or your own shell with shell integration (--no-cd, --json, and scripts skip it)."},
 	{"worktrees rm [<name>] [-f] [--keep-branch]", "Remove a worktree",
 		"Teardown, release port, delete the branch per app settings."},
 	{"worktrees done [<name>] [-f]", "Post-merge cleanup",
@@ -219,7 +219,7 @@ func helpText(full bool) string {
 	}
 	width := helpWidth()
 	var b strings.Builder
-	b.WriteString(boldOut(binaryName+" -- Shigoto no Mori CLI") + devNote + "\n\n")
+	b.WriteString(boldOut(binaryName+": Shigoto no Mori CLI") + devNote + "\n\n")
 	b.WriteString(boldOut("Usage:") + " " + binaryName + " " +
 		colorUsage("[--json] [--verbose] <command> [args]") + "\n\n")
 	for _, line := range wrapText(
@@ -340,8 +340,8 @@ func renderHelpSection(title string, items []helpItem, col, width int) string {
 
 // Token-type coloring for usage strings: bare words (the command
 // itself and its subcommands) cyan, <placeholders> yellow, flags
-// green, brackets and separators dim. Runs before nothing -- width
-// math strips ANSI, so this is purely cosmetic.
+// green, brackets and separators dim. Runs before nothing. Width math
+// strips ANSI, so this is purely cosmetic.
 func colorUsage(usage string) string {
 	var b strings.Builder
 	runes := []rune(usage)

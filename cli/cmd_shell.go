@@ -1,6 +1,6 @@
 package main
 
-// sm shell <install|uninstall|status|init> -- shell integration, so cd
+// sm shell <install|uninstall|status|init>: shell integration, so cd
 // and create move the calling shell instead of nesting a subshell (a
 // child process can never chdir its parent, see cmd_cd.go).
 //
@@ -236,7 +236,7 @@ func hookPath(kind string) string {
 		return filepath.Join(home, ".bash_profile")
 	default: // fish
 		// configHomeDir is "" only when the home dir is unresolvable,
-		// in which case `home` above is too -- no fallback can help.
+		// in which case `home` above is too. No fallback can help.
 		return filepath.Join(configHomeDir(), "fish", "conf.d", aliasName+".fish")
 	}
 }

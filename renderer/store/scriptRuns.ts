@@ -9,7 +9,7 @@
 //
 // React reads via the hooks in hooks/scripts/useScriptRuns.ts, which
 // resolve the store from the host scope. A store survives navigation
-// but not a renderer reload -- matches the user-confirmed "in-memory
+// but not a renderer reload, matching the user-confirmed "in-memory
 // only" scope.
 //
 // Snapshots are immutable: every transition replaces the record with
@@ -44,7 +44,7 @@ const MAX_OUTPUT_BYTES = 1024 * 1024;
 
 // Cap per-runId pre-bind buffers. The legitimate buffering window is one
 // IPC round-trip (events arriving before `scripts.run` resolves), so a
-// bucket this deep means the runId will never bind -- e.g. a script that
+// bucket this deep means the runId will never bind, e.g. a script that
 // was already streaming when the renderer reloaded and rebuilt this
 // store. Without a cap those orphaned buckets grow for as long as the
 // script keeps producing output.
@@ -346,7 +346,7 @@ export class ScriptRunsStore {
       const s = this.states.get(key);
       if (!s) continue;
       if (s.status !== "starting" && s.status !== "running") continue;
-      // Release is conceptually like teardown -- highest priority tier.
+      // Release is conceptually like teardown, the highest priority tier.
       if (m.slotKind === "teardown" || m.slotKind === "portPoolRelease") {
         return "teardown";
       }

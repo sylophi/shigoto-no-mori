@@ -44,7 +44,7 @@ func testProject(t *testing.T) project {
 }
 
 // The scope refuses to write a defaultBranch-less document, and the
-// test project's dir isn't a repo to backfill from -- seed the branch
+// test project's dir isn't a repo to backfill from. Seed the branch
 // so tests can exercise the other keys.
 func seededProject(t *testing.T) project {
 	t.Helper()
@@ -304,7 +304,7 @@ func TestProjectConfigBoolAndPathKeys(t *testing.T) {
 	proj := seededProject(t)
 	path := projectConfigJSONPath(proj.ID)
 	// Default true: explicit true stays out of the file, false is the
-	// stored opt-out -- the app's serialization exactly.
+	// stored opt-out, exactly the app's serialization.
 	if code, err := runConfigSet(projectConfigScope(proj), "useWorktreeInclude", "true"); code != 0 || err != nil {
 		t.Fatalf("set useWorktreeInclude true: %d, %v", code, err)
 	}
@@ -801,7 +801,7 @@ func TestListAndGetRefuseMalformedFile(t *testing.T) {
 // The editor seed is a real document, marker included, so a file
 // created by `sm config edit` doesn't read as pre-schema forever.
 // jsonMode returns right after seeding, so only the seed is covered
-// here -- the editor branch needs an interactive terminal.
+// here. The editor branch needs an interactive terminal.
 func TestEditSeedStampsSchemaVersion(t *testing.T) {
 	sandboxDataDir(t)
 	jsonModeSaved := jsonMode

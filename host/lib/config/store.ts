@@ -1,6 +1,6 @@
 // Tiny JSON-file persistence in the shigomori data dir. Atomic via tmp+rename.
 // Writes are read-modify-write of the whole file, and both the app and
-// the CLI go through this module -- so every write cycle holds the
+// the CLI go through this module, so every write cycle holds the
 // cross-process lock. Reads stay lock-free: the rename keeps the file
 // itself always consistent.
 //

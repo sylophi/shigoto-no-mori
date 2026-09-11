@@ -145,7 +145,7 @@ function Forest({
   const { data: collapsedIds = [] } = useCollapsedProjects();
   const toggleCollapsed = useToggleCollapsedProject();
   const collapsed = new Set(collapsedIds);
-  // Per-project "Show shelved" reveal. Transient on purpose -- the
+  // Per-project "Show shelved" reveal. Transient on purpose, since the
   // whole point of shelving is to keep the noise down on a fresh window.
   const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
     () => new Set(),
@@ -181,8 +181,8 @@ function Forest({
 
   // Subscribed here rather than inside the row builders so the two views
   // share one set of observers. Toggling the view then costs nothing: the
-  // builders are plain functions over these results, and the queries --
-  // which re-probe git for every project on mount -- never unmount.
+  // builders are plain functions over these results, and the queries
+  // (which re-probe git for every project on mount) never unmount.
   const worktreeQueries = useAllProjectWorktrees(orderedProjects);
   const pullRequestQueries = useAllProjectPullRequests(orderedProjects);
   // Peers' forests, merged into both views beside the local rows. The
@@ -231,7 +231,7 @@ function Forest({
     setActiveId(null);
     // Reorder writes the stored (manual) order, so it must only run while the
     // displayed order is the stored order. Any other sort means the dragged
-    // indices wouldn't line up with `projects` -- bail rather than corrupt.
+    // indices wouldn't line up with `projects`, so bail rather than corrupt.
     if (sortMode !== "manual") return;
     if (!over || active.id === over.id) return;
     const draggedId = String(active.id);
@@ -314,8 +314,8 @@ function Forest({
       ) : null}
       <div className="min-h-0 flex-1">
         <ScrollArea className="size-full" viewportRef={viewportRef}>
-          {/* Dragging reorders projects, which the inbox doesn't show --
-              so it doesn't mount the DnD context at all. */}
+          {/* Dragging reorders projects, which the inbox doesn't show, so
+              it doesn't mount the DnD context at all. */}
           {inbox ? (
             list
           ) : (

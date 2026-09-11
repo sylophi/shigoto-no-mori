@@ -1,6 +1,6 @@
 package main
 
-// sm app -- open (or focus) the Shigoto no Mori app. Addressed by
+// sm app opens (or focuses) the Shigoto no Mori app. Addressed by
 // bundle id so a renamed or moved bundle still resolves. The dev CLI
 // refuses: the dev app isn't installed, it runs from a checkout.
 
@@ -10,10 +10,10 @@ import (
 
 // Launch (or activate) the installed app by bundle id, so a renamed or
 // moved bundle still resolves. (The update installer relaunches by
-// path instead -- see cmdUpdateFinishInstall.)
+// path instead. See cmdUpdateFinishInstall.)
 func openAppBundle() error {
 	if err := exec.Command("open", "-b", appBundleID).Run(); err != nil {
-		return errf("Couldn't open Shigoto no Mori -- is the app installed?")
+		return errf("Couldn't open Shigoto no Mori. Is the app installed?")
 	}
 	return nil
 }

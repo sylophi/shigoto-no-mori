@@ -1,6 +1,6 @@
 package main
 
-// sm config <list|get|set|unset|edit|launcher> -- global settings from
+// sm config <list|get|set|unset|edit|launcher> is global settings from
 // the terminal, plus the shared key engine `sm projects config` reuses
 // for its per-project verbs (cmd_project.go). Keys are the JSON field
 // names (dotted for nesting: scripts.setup), values are validated
@@ -11,8 +11,8 @@ package main
 // default is stored by deleting the key, so config files stay tidy no
 // matter which surface wrote them.
 //
-// The two scopes differ only in what configDocScope models -- file
-// path, output decoration, key registry, and write hooks -- so every
+// The two scopes differ only in what configDocScope models (file
+// path, output decoration, key registry, and write hooks), so every
 // verb body lives here once and cmd_project.go contributes hooks.
 //
 // `write --data '<json>'` is plumbing for the app: the delegated
@@ -117,7 +117,7 @@ var globalConfigKeys = []configKey{
 		desc: "Hidden launcher ids (via edit or the app)"},
 }
 
-// Mirrors ShigomoriConfigSchema. defaultBranch is required there -- a
+// Mirrors ShigomoriConfigSchema. defaultBranch is required there. A
 // document without it fails the app's schema read outright.
 var projectConfigKeys = []configKey{
 	{name: "defaultBranch", kind: stringKind, required: true,
@@ -284,7 +284,7 @@ func renderConfigValue(value any) string {
 
 // Numbers decode as json.Number so an untouched value re-serializes
 // byte-identical instead of round-tripping through float64. A JSON
-// `null` (or any non-object) is an error -- callers that tolerate it
+// `null` (or any non-object) is an error. Callers that tolerate it
 // map the error to an empty document themselves.
 func decodeConfigDoc(raw []byte) (map[string]any, error) {
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -338,7 +338,7 @@ func readConfigArray(path, key string) ([]any, error) {
 
 // Read-modify-write under the sibling .lock (withFileLock), so two CLI
 // invocations can't clobber each other's fields. A no-op mutation
-// skips the write entirely -- no watcher poke, no mtime churn.
+// skips the write entirely: no watcher poke, no mtime churn.
 func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 	return withFileLock(path, func() error {
 		doc := map[string]any{}
@@ -444,7 +444,7 @@ func setConfigList(doc map[string]any, name string, entries []any) {
 }
 
 // Like configDocGet, but a wrong-typed intermediate ({"scripts":
-// "oops"}) is an error rather than "absent" -- the distinction
+// "oops"}) is an error rather than "absent", the distinction
 // validateConfigDoc needs to reject such documents.
 func configDocLookup(doc map[string]any, name string) (any, bool, error) {
 	var cur any = doc
@@ -915,7 +915,7 @@ func cmdConfigGlobal(_ cliContext, args []string) (int, error) {
 // --- structured lists: element verbs (launcher here, carry-over in
 // cmd_project.go) ---
 
-// sm [projects] config launcher [add <label> <command> | rm <ref>] --
+// sm [projects] config launcher [add <label> <command> | rm <ref>]:
 // element verbs over the launchers array. Ids are minted like the
 // app's (a lowercase uuid, shown in the launcher row as
 // custom:<id>). rm takes the id or an unambiguous label. Entries are

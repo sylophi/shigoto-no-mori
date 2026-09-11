@@ -1,8 +1,8 @@
 package main
 
 // Tiny argument parser that allows flags and positionals to interleave
-// (node's parseArgs behavior, which the TS CLI had) -- stdlib flag
-// stops at the first positional, which would break
+// (node's parseArgs behavior, which the TS CLI had). The stdlib flag
+// package stops at the first positional, which would break
 // `sm create my-name -b my-branch`.
 
 import "strings"
@@ -95,8 +95,8 @@ func parseCmdArgs(args []string, spec argSpec) (parsedArgs, error) {
 	return result, nil
 }
 
-// The i-th positional, "" when the caller didn't supply one -- the
-// optional-ref idiom every worktree-targeting command needs.
+// The i-th positional, "" when the caller didn't supply one. This is
+// the optional-ref idiom every worktree-targeting command needs.
 func (p parsedArgs) positional(i int) string {
 	if i < len(p.positionals) {
 		return p.positionals[i]

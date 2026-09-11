@@ -18,17 +18,17 @@ import { isENOENT, dataDir } from "../util/paths";
 // root → public/ → static/ → app/ → src/ → assets/ → docs sites →
 // build artifacts.
 const ICON_CANDIDATES = [
-  // Root — the universal favicon convention.
+  // Root: the universal favicon convention.
   "favicon.svg",
   "favicon.ico",
   "favicon.png",
 
-  // public/ — Vite, CRA, Next.js, Nuxt.
+  // public/: Vite, CRA, Next.js, Nuxt.
   "public/favicon.svg",
   "public/favicon.ico",
   "public/favicon.png",
 
-  // static/ — Docusaurus, SvelteKit, Hugo, Jekyll.
+  // static/: Docusaurus, SvelteKit, Hugo, Jekyll.
   "static/favicon.svg",
   "static/favicon.ico",
   "static/favicon.png",
@@ -37,14 +37,14 @@ const ICON_CANDIDATES = [
   "static/img/favicon.svg",
   "static/img/favicon.ico",
 
-  // app/ — Next.js App Router (root layout).
+  // app/: Next.js App Router (root layout).
   "app/icon.svg",
   "app/icon.png",
   "app/icon.ico",
   "app/favicon.ico",
   "app/favicon.png",
 
-  // src/ — Vite/CRA/Next.js with src layout, plus Astro's src/assets.
+  // src/: Vite/CRA/Next.js with src layout, plus Astro's src/assets.
   "src/favicon.svg",
   "src/favicon.ico",
   "src/assets/logo.svg",
@@ -55,7 +55,7 @@ const ICON_CANDIDATES = [
   "src/app/icon.png",
   "src/app/favicon.ico",
 
-  // assets/ — Electron Forge, Expo, generic.
+  // assets/: Electron Forge, Expo, generic.
   "assets/icon.svg",
   "assets/icon.png",
   "assets/adaptive-icon.png",
@@ -67,7 +67,7 @@ const ICON_CANDIDATES = [
   "docs/.vitepress/public/favicon.svg",
   "docs/.vitepress/public/favicon.ico",
 
-  // Mintlify — no theme awareness yet, so pick the light variant first
+  // Mintlify: no theme awareness yet, so pick the light variant first
   // (looks correct in shigomori's light theme; will look poor in dark
   // until we plumb theme through the resolver).
   "logo/light.svg",
@@ -110,7 +110,7 @@ function extractIconHref(source: string): string | null {
 }
 
 // Defense against a malicious source file pointing href="../.." outside
-// the project. Path-string only, not realpath — matches t3code's
+// the project. Path-string only, not realpath, matching t3code's
 // trade-off; symlinks within the project are fine.
 function isPathWithinProject(
   projectCwd: string,
@@ -157,8 +157,8 @@ function resolveIconHref(projectCwd: string, href: string): string[] {
 // ─── Git-driven resolution ──────────────────────────────────────────────────
 //
 // The primary resolver probes the existing candidate/source patterns at every
-// *package root* in the repo — the top level plus each package.json directory
-// — over the set of files git can see (tracked plus untracked-but-not-ignored).
+// *package root* in the repo (the top level plus each package.json directory)
+// over the set of files git can see (tracked plus untracked-but-not-ignored).
 // Driving off that set keeps build output (dist/, .next/) and node_modules
 // invisible while still surfacing an uncommitted favicon. It also descends into
 // monorepo subpackages (a web app in web/ or apps/web/ resolves its favicon
@@ -215,7 +215,7 @@ function resolveIconHrefInFiles(
 // of the repo, which keeps build artifacts and node_modules invisible;
 // null means git listed nothing and we probe the filesystem directly.
 // A listed path may be staged-then-deleted from the working tree, so
-// each match is confirmed on disk before we commit to it -- a phantom
+// each match is confirmed on disk before we commit to it, so a phantom
 // entry can't shadow a lower-priority icon that does exist. `root ===
 // ""` is the repo top level and reproduces the pre-descent behaviour
 // exactly.
@@ -274,8 +274,8 @@ async function resolveIconPath(cwd: string): Promise<string | null> {
   if (files.length === 0) return scanRootForIcon(cwd, "", null);
 
   const fileSet = new Set(files);
-  // Repo root first — so any project that resolved before resolves to the
-  // identical icon — then each deeper package root, nearest first. Descent is
+  // Repo root first (so any project that resolved before resolves to the
+  // identical icon), then each deeper package root, nearest first. Descent is
   // pure addition: it only fires where the top-level scan came up empty.
   for (const root of packageRoots(files)) {
     const resolved = await scanRootForIcon(cwd, root, fileSet);
@@ -319,7 +319,7 @@ interface IconCacheEntry {
   sourcePath: string;
   sourceHash: string;
   // mtime + size let revalidation short-circuit the full read+hash when
-  // the source file hasn't been touched — the common steady-state path.
+  // the source file hasn't been touched, the common steady-state path.
   sourceSize: number;
   sourceMtimeMs: number;
   mime: string;
@@ -349,8 +349,8 @@ async function loadCache(): Promise<Map<string, IconCacheEntry>> {
       const parsed = JSON.parse(raw) as Record<string, IconCacheEntry>;
       memoryCache = new Map(Object.entries(parsed));
     } catch (error) {
-      // A corrupt or unreadable index shouldn't take the app down — we
-      // can always rebuild it from disk on demand.
+      // A corrupt or unreadable index shouldn't take the app down. We can
+      // always rebuild it from disk on demand.
       if (!isENOENT(error)) {
         console.warn(
           "[icon-cache] failed to read index, starting fresh:",
@@ -488,7 +488,7 @@ async function buildEntry(
 
 // Revalidate a cached entry and return both the (possibly refreshed)
 // entry and the source bytes ready to base64. Fast path is a single
-// stat plus one read of the source — no hash, no double-read. Returns
+// stat plus one read of the source: no hash, no double-read. Returns
 // null when the source has disappeared, signalling the caller to
 // re-run the resolver.
 async function revalidateAndRead(
@@ -502,7 +502,7 @@ async function revalidateAndRead(
     return { entry, bytes, dirty: false };
   }
 
-  // Stat differs — read + hash to tell a content change from a
+  // Stat differs, so read + hash to tell a content change from a
   // touch-only edit.
   let sourceBytes: Buffer;
   try {
@@ -576,7 +576,7 @@ async function readProjectIconInner(
         base64: revalidated.bytes.toString("base64"),
       };
     }
-    // Source vanished — drop the stale entry and fall through to
+    // Source vanished, so drop the stale entry and fall through to
     // re-resolve in case the project now has a different icon.
     deleteEntry(cache, projectPath);
     await persistCache(cache);

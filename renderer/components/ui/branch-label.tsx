@@ -11,7 +11,7 @@ interface BranchLabelProps {
 
 // Renders a branch name with a muted "(detached)" suffix when HEAD is
 // detached. The parent owns the wrapping element, its classes, and any
-// tooltip — this component just keeps the detached affordance uniform.
+// tooltip. This component just keeps the detached affordance uniform.
 export function BranchLabel({
   branch,
   detached,

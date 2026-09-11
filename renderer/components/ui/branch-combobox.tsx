@@ -19,7 +19,7 @@ interface BranchComboboxProps {
   // Free-text "Use as ref" entries are NOT filtered.
   excludeBranches?: readonly string[];
   // Moved to the top of the unfiltered list, for pickers that ask "which
-  // branch do I start from" -- git's alphabetical order buries the one
+  // branch do I start from". Git's alphabetical order buries the one
   // answer almost everyone wants. Opt-in rather than resolved in here:
   // the project-settings picker is choosing which branch the default
   // *is*, so seeding its list with the current answer only begs the
@@ -48,7 +48,7 @@ function toBranchEntries(
 }
 
 // Only reorders the browse list. Once there's a query, ranking is the
-// query's business alone -- a pinned branch that doesn't match what was
+// query's business alone. A pinned branch that doesn't match what was
 // typed sitting above the branch that does would just look broken.
 // Mutates: the caller hands over a list toBranchEntries just built.
 function pinFirst(entries: BranchEntry[], name: string | undefined) {

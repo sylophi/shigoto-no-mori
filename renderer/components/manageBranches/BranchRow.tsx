@@ -36,8 +36,8 @@ export function BranchRow({
   // A safe delete refused for unmerged commits swaps the modal into its
   // force-delete stage until it closes (sticky, so a transient force
   // failure doesn't drop back to the safe stage). Any other failure
-  // keeps a plain retry. Close is ignored while a delete is in flight --
-  // the mutation's toast is silenced in favor of the inline banner, so
+  // keeps a plain retry. Close is ignored while a delete is in flight.
+  // The mutation's toast is silenced in favor of the inline banner, so
   // dismissing mid-delete would swallow the failure entirely.
   const [needsForce, setNeedsForce] = useState(false);
   const closeDelete = () => {

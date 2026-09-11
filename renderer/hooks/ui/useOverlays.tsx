@@ -21,8 +21,8 @@ export function OverlaysProvider({ children }: { children: ReactNode }) {
     toggleLauncher: () => setLauncherOpen((v) => !v),
     addProjectOpen,
     setAddProjectOpen,
-    // Closing the launcher first keeps ⌘N sane while it's open — the modal
-    // shouldn't stack on top of the full-screen overlay.
+    // Closing the launcher first keeps ⌘N sane while it's open. The
+    // modal shouldn't stack on top of the full-screen overlay.
     openAddProject: () => {
       setLauncherOpen(false);
       setAddProjectOpen(true);
