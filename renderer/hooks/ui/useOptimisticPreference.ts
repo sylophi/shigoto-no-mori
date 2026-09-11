@@ -7,7 +7,7 @@ interface PreferenceContext<T> {
 
 // One optimistic write for a single-value preference: cancel, snapshot,
 // apply, roll back on failure. The cancelQueries is the load-bearing
-// part -- it stops an in-flight read clobbering the optimistic value.
+// part. It stops an in-flight read clobbering the optimistic value.
 export function useOptimisticPreference<T>(
   queryKey: QueryKey,
   write: (value: T) => Promise<void>,

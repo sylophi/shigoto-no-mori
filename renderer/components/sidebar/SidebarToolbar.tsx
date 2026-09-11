@@ -35,7 +35,7 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 
 // Controls that only mean something to the project tree: ordering the
 // projects, and hopping between them. Neither has an answer in the inbox
-// -- it's one list in one fixed order -- so they live above the tree
+// (it's one list in one fixed order), so they live above the tree
 // rather than in the footer, where they'd have to blink in and out as
 // the view changes. The footer keeps what both views share.
 export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {

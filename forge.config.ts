@@ -50,7 +50,7 @@ const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
 const [feedOwner, feedName] = UPDATE_FEED_REPO.split("/");
 
-// The dmg's volume name -- what Finder prints in the window's title bar
+// The dmg's volume name is what Finder prints in the window's title bar
 // while someone installs. It carries the full version, prerelease tag
 // and all, but the name also goes into the alias record ds-store writes
 // into the image's .DS_Store, and that format stores it in a 27-byte
@@ -67,8 +67,8 @@ const dmgVolumeName =
 // Forge's Vite plugin normally ships only the .vite/ bundles. node-pty
 // (the script console's PTY) is the one dependency Vite can't bundle:
 // its loader requires the native addon by path and posix_spawns the
-// spawn-helper next to it, so the package has to exist as real files
-// -- its manifest, the JS in lib/, and the prebuilt darwin binaries.
+// spawn-helper next to it, so the package has to exist as real files:
+// its manifest, the JS in lib/, and the prebuilt darwin binaries.
 // Everything else in the package (sources, typings, tests' fixtures)
 // stays out, as do the files of every other node_modules entry (the
 // packager's pruner still creates an empty directory per production
@@ -161,11 +161,11 @@ const config: ForgeConfig = {
     // painted tiles.
     //
     // Which flavor a prerelease gets, and both file names, are
-    // dmgLayout's call -- see dmgBackgroundFor.
+    // dmgLayout's call. See dmgBackgroundFor.
     new MakerDMG(
       {
-        // The version rides the volume name rather than the artwork --
-        // the art is a committed png and would go stale every release.
+        // The version rides the volume name rather than the artwork,
+        // which is a committed png and would go stale every release.
         title: dmgVolumeName,
         icon: "assets/icon.icns",
         background: dmgBackgroundFor(version),

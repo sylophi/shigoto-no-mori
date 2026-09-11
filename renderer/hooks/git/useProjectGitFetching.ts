@@ -3,7 +3,7 @@ import { singletonInit } from "@/lib/singletonInit";
 
 // Module-level so every consumer shares one IPC subscription and one
 // view of "which projects are currently fetching." Events broadcast
-// before any hook mounts are still safe to miss -- the renderer treats
+// before any hook mounts are still safe to miss. The renderer treats
 // the absence of a fetchActive=true as "not fetching."
 const active = new Set<string>();
 const listeners = new Set<() => void>();

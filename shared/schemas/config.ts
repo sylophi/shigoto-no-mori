@@ -31,8 +31,8 @@ export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 //   (sits inside the primary; lets tools that walk up to a workspace
 //   root, like Turbopack, accept symlinked node_modules from carry-over)
 // - custom: <customWorktreePath>/<worktreeName>
-//   (escape hatch; not recommended -- can collide with other repos and
-//   complicates external-vs-managed detection)
+//   (escape hatch, not recommended, since it can collide with other
+//   repos and complicates external-vs-managed detection)
 export const WorktreeLayoutSchema = z.enum([
   "managed-root",
   "in-project",
@@ -72,7 +72,7 @@ export const ShigomoriConfigSchema = z.object({
   // alongside its worktrees (always live, never shelved or merged).
   // Per project because the primary means different things in
   // different repos: in some it's a place you work, in most it's just
-  // the root. Off by default -- absent = hidden.
+  // the root. Off by default. Absent = hidden.
   showPrimaryInInbox: z.boolean().optional(),
 });
 export type ShigomoriConfig = z.infer<typeof ShigomoriConfigSchema>;
@@ -159,20 +159,20 @@ export const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
   // user has switched off, so they're skipped when building a project's
-  // launcher row -- and therefore also absent from the File menu's
+  // launcher row, and therefore also absent from the File menu's
   // ⌘1..⌘9, which mirrors the row. Everything is shown by default;
   // absent = nothing hidden. Ids that no longer resolve (an app the user
   // uninstalled, a deleted custom tool) simply never match and are
   // harmless to keep.
   hiddenLaunchers: z.array(z.string()).optional(),
   // When true, the Launch section carries a second row of the worktree's
-  // top package.json scripts -- as many as fit on one line, ordered by the
+  // top package.json scripts, as many as fit on one line, ordered by the
   // project's script sort. On by default; absent = on, explicit `false` is
   // the opt-out.
   launchScripts: z.boolean().optional(),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
-  // use by another worktree). ON by default -- unset means delete, in
+  // use by another worktree). ON by default. Unset means delete, in
   // both engines (cli/cmd_config.go and main/lib/nuke.ts).
   deleteBranchOnRemove: z.boolean().optional(),
   // When true, adding a project with a package.json seeds its setup

@@ -1,9 +1,9 @@
 // Single source of truth for the CLI's flavor system: what each
 // flavor's binary is called, which state root it targets, where user
-// binaries get linked, and how links are (re)pointed. Imported from
-// every boundary that needs the policy -- app main (cli.ts), the
-// CLI itself, the build scripts, and forge.config.ts -- so a rename or
-// relocation is a one-file change.
+// binaries get linked, and how links are (re)pointed. Every boundary
+// that needs the policy imports it: app main (cli.ts), the CLI itself,
+// the build scripts, and forge.config.ts. A rename or relocation is
+// then a one-file change.
 //
 // .mts with node-builtin imports only: plain `node scripts/*.mjs` must
 // be able to load it without the CLI's loader shim or a bundler. Never
@@ -65,7 +65,7 @@ export function rootPointerPath(flavor: CliFlavor): string {
 // honor the de-facto XDG_BIN_HOME override when set. Caveat: a
 // packaged app launched from Finder inherits launchd's environment, so
 // a profile-exported XDG_BIN_HOME is only visible if set via
-// launchctl -- the fallback covers the rest.
+// launchctl. The fallback covers the rest.
 export function cliUserBinDir(): string {
   const xdg = process.env.XDG_BIN_HOME;
   if (xdg !== undefined && xdg !== "" && isAbsolute(xdg)) return xdg;

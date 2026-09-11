@@ -1,6 +1,6 @@
 // Shared rolling-window usage log. The launcher row and the package.json
 // scripts list both rank entries by "how often did the user run this in
-// the last 14 days" — same algorithm, different storage shape, so the
+// the last 14 days". Same algorithm, different storage shape, so the
 // math lives here while the callers own their store layout.
 
 export const USE_LOG_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;

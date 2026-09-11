@@ -18,7 +18,7 @@ interface WorktreeSyncPillProps {
 
 // Renders the remote-sync action(s) for a worktree. Returns null in the
 // states where there's nothing to show (synced, detached) so the header
-// stays quiet -- the caller takes care of the dirty-state pill, which is
+// stays quiet. The caller takes care of the dirty-state pill, which is
 // mutually exclusive with this one.
 export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
   const state = deriveRemoteSyncState(worktree);
@@ -99,11 +99,11 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
   // remote" (force-push) or "overwrite local" (reset hard), both behind a
   // two-step confirm.
   // pull --rebase would almost certainly fail mid-flight here, so we don't
-  // offer it -- the user picks which side wins.
+  // offer it. The user picks which side wins.
   const busy = pushForce.isPending || overwrite.isPending;
   return (
     <span
-      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split -- pick which side wins.`}
+      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
       className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
     >
       <span className="px-1.5 text-rose-500">Overwrite:</span>
@@ -114,7 +114,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         title={
           confirmPushForce.armed
             ? "Click again to confirm"
-            : "git push --force-with-lease -- overwrites the remote"
+            : "git push --force-with-lease (overwrites the remote)"
         }
         pending={pushForce.isPending}
         disabled={busy}
@@ -130,7 +130,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         title={
           confirmOverwrite.armed
             ? "Click again to confirm"
-            : "git fetch && git reset --hard @{u} -- overwrites local"
+            : "git fetch && git reset --hard @{u} (overwrites local)"
         }
         pending={overwrite.isPending}
         disabled={busy}

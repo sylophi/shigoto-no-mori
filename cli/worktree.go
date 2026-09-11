@@ -1,6 +1,6 @@
 package main
 
-// Full worktree status objects -- the same shape the app's IPC returns
+// Full worktree status objects in the same shape the app's IPC returns
 // (shared/schemas/worktree.ts WorktreeSchema) plus projectName, so
 // --json consumers and the future app-as-CLI-caller read one format.
 
@@ -48,7 +48,7 @@ type buildContext struct {
 	config *projectConfig
 }
 
-// The configured default-branch override, or "" -- the nil-config
+// The configured default-branch override, or "": the nil-config
 // unwrap every default-branch resolver shares.
 func defaultBranchOverride(config *projectConfig) string {
 	if config == nil {
@@ -85,7 +85,7 @@ func shelvedFlag(id worktreeIdentity, ctx buildContext) bool {
 	return !id.IsPrimary && !id.IsExternal && ctx.shelved[id.ID]
 }
 
-// The identity fields of a full status object -- for reusing helpers
+// The identity fields of a full status object, for reusing helpers
 // that take a worktreeIdentity when a worktreeJSON is already in hand.
 func identityOf(w worktreeJSON) worktreeIdentity {
 	return worktreeIdentity{
@@ -170,7 +170,7 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 // main/lib/git/worktrees.ts: pick/validate the dirname, resolve the
 // layout base, refresh the remote base ref, `git worktree add`, and
 // re-read the identity so the returned branch is what git settled on.
-// checkout=true reuses the existing branch `base` (no -b) -- the adopt
+// checkout=true reuses the existing branch `base` (no -b) for the adopt
 // path; otherwise a new branch is created (branchName, or the dirname).
 func createWorktree(proj project, requestedName, branchName, base string, checkout bool) (worktreeJSON, error) {
 	existing, err := listWorktreeIdentities(proj)

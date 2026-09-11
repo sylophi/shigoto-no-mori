@@ -11,7 +11,7 @@ const KEY = "sidebarView";
 const IMPLICIT_VIEW: SidebarView = "projects";
 
 // state.json is hand-editable, and packaged builds skip the IPC
-// output-schema parse -- so an unrecognized value has to degrade to the
+// output-schema parse, so an unrecognized value has to degrade to the
 // classic tree here rather than reach the renderer's switch.
 export function readSidebarView(): SidebarView {
   const raw = stateStore.readHint<unknown>(KEY, IMPLICIT_VIEW);

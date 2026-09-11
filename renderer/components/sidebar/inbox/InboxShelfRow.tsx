@@ -26,7 +26,7 @@ interface InboxShelfRowProps {
 }
 
 // A shelf header: label, hairline rule, chevron. Collapsed, the count is
-// the shelf's whole footprint -- which is the point, since both shelves
+// the shelf's whole footprint. That's the point, since both shelves
 // hold work the user has already decided not to look at.
 export function InboxShelfRow({
   shelf,

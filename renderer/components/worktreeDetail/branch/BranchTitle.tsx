@@ -17,7 +17,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   const begin = () => {
-    // Detached HEAD has no branch to rename — guard against any caller
+    // Detached HEAD has no branch to rename, so guard against any caller
     // (incl. future keybindings) that bypasses the hidden pencil button.
     if (worktree.detached) return;
     rename.reset();

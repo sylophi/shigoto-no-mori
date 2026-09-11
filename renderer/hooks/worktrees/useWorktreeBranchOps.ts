@@ -48,8 +48,9 @@ interface SwitchToPrimaryInput {
 // the now-merged branch it was sitting on. This is a SINGLE main-side
 // operation on purpose: the switch flips the root's branch to the primary,
 // which unmounts the cleanup box, and React Query drops a `mutate()`
-// callback once its component has unmounted — so chaining the delete in the
-// renderer would silently lose it (which is exactly the bug this replaced).
+// callback once its component has unmounted, so chaining the delete in
+// the renderer would silently lose it (which is exactly the bug this
+// replaced).
 // Errors surface via a global toast so they survive the box unmounting.
 export function useSwitchToPrimaryAndDeleteBranch() {
   const queryClient = useQueryClient();

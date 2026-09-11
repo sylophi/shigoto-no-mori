@@ -12,7 +12,7 @@ export interface RunOptions {
   // a scratch index so it never touches the worktree's real one.
   env?: Record<string, string>;
   // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
-  // reads raise it -- see PATCH_MAX_BUFFER.
+  // reads raise it (see PATCH_MAX_BUFFER).
   maxBuffer?: number;
 }
 
@@ -22,10 +22,9 @@ export interface RunOptions {
 const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 
 // A patch is the one output whose size the user decides rather than the
-// app: one regenerated lockfile or checked-in bundle in the working
-// tree runs to tens of megabytes on its own. Sized to swallow that,
-// because the alternative isn't a smaller patch -- it's a wrong one
-// (see below).
+// app: one regenerated lockfile or checked-in bundle runs to tens of
+// megabytes on its own. Sized to swallow that, because the alternative
+// isn't a smaller patch but a wrong one (see isTruncated).
 export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
 
 // Node kills the child once its output passes maxBuffer and reports the
@@ -86,11 +85,10 @@ export async function run(
 // which exits 1 whenever there's a diff to print). Returns whatever
 // stdout was produced before exit, falling back to empty.
 //
-// Truncation is the one failure it won't swallow. Git's exit code says
-// nothing about whether the output is complete, so a run killed at
-// maxBuffer looks exactly like a diff that exited 1 -- and answering
-// with the prefix hands the caller a patch that parses cleanly and is
-// missing every file past the cut. Loudly wrong beats quietly wrong.
+// Truncation is the one failure it won't swallow. A run killed at
+// maxBuffer looks exactly like a diff that exited 1, and answering with
+// the prefix would hand the caller a patch that parses cleanly and is
+// missing every file past the cut.
 export async function runLenient(
   cwd: string,
   args: string[],

@@ -1,8 +1,8 @@
 // Per-repo usage log and sort preference for the package.json scripts list.
 // Same rolling-window algorithm as the launcher row (see ./useLog) so the
 // "Most used" sort behaves identically across both features. Stored in the
-// global state.json keyed by projectId — sort and usage are app-managed UI
-// state, not the user-editable per-project shigomori config.
+// global state.json keyed by projectId, since sort and usage are
+// app-managed UI state, not the user-editable per-project shigomori config.
 import type {
   PackageScriptSortMode,
   PackageScriptUsage,

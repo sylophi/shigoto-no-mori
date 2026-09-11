@@ -128,7 +128,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
         params: { projectId: project.id, worktreeId: target.id },
       });
     } else {
-      // No worktrees (or the path is gone and the query never ran) — the
+      // No worktrees (or the path is gone and the query never ran), so the
       // new-worktree page is the only useful destination.
       void navigate({
         to: "/projects/$projectId/new",
@@ -243,7 +243,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
           />
           {projects.length === 0 ? (
             <p className="mt-10 text-center text-sm text-muted-foreground">
-              No projects yet — press ⌘N to add one.
+              No projects yet. Press ⌘N to add one.
             </p>
           ) : filtered.length === 0 ? (
             <p className="mt-10 text-center text-sm text-muted-foreground">

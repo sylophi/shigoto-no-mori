@@ -2,7 +2,7 @@ import { readStoredJson, writeStored } from "@/lib/localStorage";
 // Per-project most-recently-used worktree, so the project launcher can jump
 // straight to where the user last was. localStorage-only: worktree usage is
 // not tracked in the main process (project usage stats are per-project), and
-// a renderer-side record is enough — a stale or missing id just falls back.
+// a renderer-side record is enough. A stale or missing id just falls back.
 const KEY = "recentWorktree.byProject";
 
 function readMap(): Record<string, string> {

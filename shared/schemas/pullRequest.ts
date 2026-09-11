@@ -15,7 +15,7 @@ export type PullRequest = z.infer<typeof PullRequestSchema>;
 
 // Strip a PullRequestDetail to the slim PullRequest fields used by the
 // sidebar's project-wide map. Keep this in lockstep with
-// PullRequestSchema -- adding a field there means adding it here too.
+// PullRequestSchema. Adding a field there means adding it here too.
 export function toSlimPullRequest(pr: PullRequest): PullRequest {
   return {
     number: pr.number,
@@ -41,7 +41,7 @@ export function pullRequestsEqual(a: PullRequest, b: PullRequest): boolean {
 
 // GraphQL's PullRequest.mergeStateStatus, surfaced verbatim so the
 // renderer can pick the right reason text. UNKNOWN covers both "still
-// computing" and "gh didn't report it" -- the UI treats both the same.
+// computing" and "gh didn't report it". The UI treats both the same.
 export const PullRequestMergeStateSchema = z.enum([
   "CLEAN",
   "BLOCKED",
@@ -137,7 +137,7 @@ export const PullRequestCandidateSchema = z.object({
   headRefName: z.string().min(1),
   authorLogin: z.string(),
   // Fork heads exist locally only as refs/pull/<n>/head, so the resolver
-  // takes a different path for them -- and a different set of local
+  // takes a different path for them, and a different set of local
   // branch names.
   fromFork: z.boolean(),
   // "owner/repo" of the fork, for the row's label. Null for a same-repo
@@ -171,7 +171,7 @@ export type PullRequestSourceUnavailable = z.infer<
 >;
 
 // "no open PRs" (ok + empty list) is a different answer from "we can't
-// ask" -- the form disables the whole mode for the latter, so the two
+// ask". The form disables the whole mode for the latter, so the two
 // can't collapse into an empty array.
 export const PullRequestCandidateListSchema = z.discriminatedUnion("status", [
   z.object({
@@ -194,7 +194,7 @@ export const ResolvePullRequestCheckoutPayloadSchema =
 
 export const PullRequestCheckoutRefSchema = z.object({
   // Local branch the PR head now sits on. Feed it to worktrees.create as
-  // `base` with `checkout: true` -- from there it's an ordinary
+  // `base` with `checkout: true`. From there it's an ordinary
   // check-out-existing-branch create.
   branch: z.string().min(1),
 });

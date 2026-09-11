@@ -1,6 +1,6 @@
 // T3 Code (macOS-only here) is the one launcher that can't be handed a
 // folder. Its desktop app parses no argv path and registers no inbound
-// URL handler -- the `t3code://` scheme it claims serves the renderer
+// URL handler. The `t3code://` scheme it claims serves the renderer
 // origin and receives OAuth callbacks, and its protocol handler 404s any
 // host but `app`. The only programmatic way in is the `t3` CLI's
 // `project add`, which registers a workspace root in T3 Code's project
@@ -9,7 +9,7 @@
 //
 // That still yields "opened, ready to go" in the main case. T3 Code's
 // window always loads its index route, which auto-opens a draft composer
-// for the project with the newest activity -- and a just-added project
+// for the project with the newest activity, and a just-added project
 // (fresh updatedAt, no threads yet) is exactly that. So add-then-launch
 // lands in a prompt for the worktree. Two weaker corners, both inherent
 // to T3 Code 0.0.32: if the app is already running there is no external
@@ -40,7 +40,7 @@ export const T3_BUNDLED_CLI_SUBPATH = [
   "bin.mjs",
 ] as const;
 
-// `project add` is not idempotent -- re-adding a registered workspace
+// `project add` is not idempotent. Re-adding a registered workspace
 // root fails with ProjectAlreadyExistsError. A launcher gets pressed
 // repeatedly on the same worktree and "already there" is exactly our
 // success case, so swallow that one error and surface every other

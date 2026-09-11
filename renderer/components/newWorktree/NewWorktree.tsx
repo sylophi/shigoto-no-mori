@@ -100,8 +100,8 @@ export function NewWorktree() {
     worktreeByBranch.get(localBranchOf(ref, remoteRefs));
   // What checkout mode leaves out of the picker: refs held by a
   // worktree, and remote refs shadowed by a local branch (picking
-  // `origin/feat` would land on local `feat` anyway -- same rule as the
-  // branch switcher).
+  // `origin/feat` would land on local `feat` anyway, the same rule as
+  // the branch switcher).
   const hiddenInCheckout = [...localRefs, ...remoteRefs].filter(
     (ref) =>
       worktreeHolding(ref) !== undefined ||
@@ -112,7 +112,7 @@ export function NewWorktree() {
   // Which source to open on, latched from the first availability verdict
   // we hear. Deriving it from the live query instead would let a later
   // refetch that can't reach GitHub move someone out of the pull request
-  // source -- PR already picked -- and into a submittable branch-from
+  // source (PR already picked) and into a submittable branch-from
   // form they never asked for.
   const [defaultMode, setDefaultMode] = useState<Mode | null>(null);
   const mode = modeInput ?? defaultMode ?? DEFAULT_MODE;
@@ -160,7 +160,7 @@ export function NewWorktree() {
   }
 
   // Only the "unavailable" verdict is worth greying the option over, and
-  // only once we've heard it -- while the query is in flight or errored
+  // only once we've heard it. While the query is in flight or errored
   // the mode stays offered. Never greyed while it's the selected mode,
   // so the user can't get stuck on a segment they can't click off of.
   const prUnavailable =
@@ -169,7 +169,7 @@ export function NewWorktree() {
       : undefined;
 
   // The picker hides occupied branches, but free-text "Use as ref" can
-  // still smuggle one in — block submit and surface why.
+  // still smuggle one in, so block submit and surface why.
   const baseHolder = mode === "checkout" ? worktreeHolding(base) : undefined;
 
   // `git worktree add -b` refuses an existing branch name. Catch it
@@ -188,7 +188,7 @@ export function NewWorktree() {
 
   // Raw `worktreeName` is held separately from the sanitized `folderName`
   // so trailing dashes survive mid-typing (otherwise `my-folder-2` would
-  // be unreachable — the trailing `-` would be trimmed before the `2`).
+  // be unreachable: the trailing `-` would be trimmed before the `2`).
   const folderSource = {
     "branch-from": branchName,
     checkout: checkoutBranch,
@@ -307,8 +307,8 @@ export function NewWorktree() {
           {/* First, and outside the sections it governs: the pull request
             mode hides the source field, and a toggle that moves out from
             under the cursor as it's clicked is worse than the gap. The
-            wrapper keeps the track hugging its options -- a bare flex
-            child would stretch to the form's width. */}
+            wrapper keeps the track hugging its options, since a bare
+            flex child would stretch to the form's width. */}
           <div>
             <ModeToggle
               mode={mode}

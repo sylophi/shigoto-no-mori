@@ -1,7 +1,7 @@
 // Formats a millisecond timestamp as a coarse relative-time label
 // suitable for inline use ("12s ago", "3h ago"). Granularity is
 // deliberately low: seconds under a minute, then minutes, hours, days,
-// and past a fortnight weeks/months/years -- a stale worktree reading
+// and past a fortnight weeks/months/years. A stale worktree reading
 // "8mo ago" says more at a glance than "247d ago".
 const DAY = 86_400;
 

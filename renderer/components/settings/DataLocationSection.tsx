@@ -9,7 +9,7 @@ import { notifyError } from "@/lib/toast";
 
 // Where the shigomori state root lives, and the flow that moves it.
 // The picker chooses the new PARENT and the folder keeps its name (the
-// main process owns that rule -- see lib/rootMove.ts). On success the
+// main process owns that rule in lib/rootMove.ts). On success the
 // main process relaunches the app, so the overlay's job is just to
 // block interaction until the window goes away.
 export function DataLocationSection() {
@@ -39,7 +39,7 @@ export function DataLocationSection() {
       await window.api.runtime.moveRoot(parent);
       // Acknowledge: the main process relaunches only after this call,
       // which can't fire before the moveRoot reply above was delivered.
-      // Fire-and-forget -- the app quits out from under the promise.
+      // Fire-and-forget, because the app quits out from under the promise.
       void window.api.runtime.relaunch();
     } catch (err) {
       notifyError("Couldn't move data folder", err);

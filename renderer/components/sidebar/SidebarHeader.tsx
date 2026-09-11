@@ -41,7 +41,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: DevAffordance) {
           pill below doesn't get overlapped by the window controls. */}
       <div className="doubutsu-only h-10 shrink-0" style={dragRegion("drag")} />
       <div className="doubutsu-only relative mx-3 mb-2 overflow-hidden rounded-2xl bg-card px-5 pt-4 pb-5">
-        {/* Dev swaps the hero's near-black ink for leaf green -- loud
+        {/* Dev swaps the hero's near-black ink for leaf green, loud
             enough to catch at a glance, still inside the palette. */}
         <h1
           className={cn(
@@ -61,7 +61,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: DevAffordance) {
           <button
             type="button"
             onClick={onRevealProd}
-            title="Dev build — click to preview production styling"
+            title="Dev build. Click to preview production styling"
             className="absolute top-3 right-3 z-[2] -rotate-6 rounded-full bg-primary px-2 py-[3px] text-[10px] leading-none font-black tracking-widest text-primary-foreground uppercase"
           >
             dev
@@ -90,13 +90,13 @@ function DefaultSidebarHeader({ showDevStyle, onRevealProd }: DevAffordance) {
       </div>
       {showDevStyle && (
         // Dev keeps the title itself intact and hangs a quiet mono chip
-        // off it -- reads instantly, still lets the wordmark sit right.
+        // off it. Reads instantly, still lets the wordmark sit right.
         // Doubles as the reveal-prod affordance, so it carves a no-drag
         // hole out of the title bar for its own click.
         <button
           type="button"
           onClick={onRevealProd}
-          title="Dev build — click to preview production styling"
+          title="Dev build. Click to preview production styling"
           style={dragRegion("no-drag")}
           className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] leading-none font-medium tracking-widest text-muted-foreground uppercase transition-colors hover:border-foreground/25 hover:text-foreground"
         >

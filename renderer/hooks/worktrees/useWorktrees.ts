@@ -47,7 +47,7 @@ export function useWorktrees(projectId: string | null) {
 
 // One query per project, sharing the per-project cache key with useWorktrees.
 // `enabled` toggles them all off when the consumer isn't visible (launcher).
-// Skip projects whose path is gone — git would just ENOENT.
+// Skip projects whose path is gone, since git would just ENOENT.
 // Without a `combine`, useQueries hands back a fresh array of fresh
 // objects every render, so nothing downstream can stay memoized.
 // Projecting to the fields consumers read routes it through

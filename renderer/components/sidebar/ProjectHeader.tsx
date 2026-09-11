@@ -25,7 +25,7 @@ interface ProjectHeaderProps {
 
 // Header row shared by the healthy and missing-project branches. The
 // project name is `truncate`d, with a Tooltip that only opens when the
-// text actually overflows -- uses `useIsTruncated` to suppress redundant
+// text actually overflows. `useIsTruncated` suppresses redundant
 // tooltips on names that already fit.
 export function ProjectHeader({
   project,

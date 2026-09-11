@@ -104,7 +104,7 @@ interface DeleteBranchInput {
 
 export function useDeleteBranch() {
   // BranchRow's confirm modal swaps into a force-delete prompt on
-  // failure -- a toast on top would be noise.
+  // failure, so a toast on top would be noise.
   return useBranchMutation<DeleteBranchInput>(
     (input) => window.api.branches.delete(input),
     { silentError: true },

@@ -3,10 +3,10 @@ import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import type { Worktree } from "@shared/schemas";
 
-// "Undo commits" as one action for every surface that offers it (the
+// Undo commits, as one action for every surface that offers it (the
 // changes page's last-commit strip, a commit row's context menu): soft
-// reset to `target`, then a toast whose Redo puts HEAD back -- refused
-// by the backend if anything was committed in between.
+// reset to `target`, then a toast whose Redo puts HEAD back. The
+// backend refuses the redo if anything was committed in between.
 export function useUndoCommits(worktree: Worktree) {
   const { mutate: reset, isPending } = useResetSoft();
   const { projectId, id: worktreeId } = worktree;

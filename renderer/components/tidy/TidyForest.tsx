@@ -42,7 +42,7 @@ const IDLE: RowStatus = { kind: "idle" };
 // The whole forest at once: every worktree of every registered project,
 // what it costs on disk, how stale it is, and whether its work already
 // landed. Scoped to the app rather than to one project because that is
-// the question being asked -- disk fills up per machine, and the
+// the question being asked. Disk fills up per machine, and the
 // worktree worth removing first is rarely in the repo you happen to have
 // open.
 export function TidyForest() {
@@ -143,7 +143,7 @@ export function TidyForest() {
     );
     // Removing a worktree doesn't change any *other* worktree's facts,
     // but the primary-ref comparison is per project and the row is gone
-    // either way -- refetching the projects we touched keeps the counts
+    // either way. Refetching the projects we touched keeps the counts
     // and the "safe to remove" tally honest without re-probing repos the
     // run never went near.
     for (const projectId of new Set(queue.map((entry) => entry.project.id))) {

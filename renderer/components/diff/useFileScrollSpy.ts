@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 // IntersectionObserver is the trigger, not the answer: no scroll handler
 // runs, so nothing is measured while a 200-file patch flies past, and the
 // callback only fires when a file crosses the band under the top edge.
-// The answer itself comes from one geometry pass -- the first file whose
+// The answer itself comes from one geometry pass: the first file whose
 // bottom edge hasn't left the top of the view is the one being read.
 // Tracking entry/exit in a Set instead looked cheaper but wasn't correct:
 // when a jump parks a file's bottom edge exactly on the root edge, the

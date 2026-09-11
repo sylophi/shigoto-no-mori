@@ -58,7 +58,7 @@ export async function checkoutBranch(
     return;
   }
   // Either a plain name git can DWIM, or the stripped local branch already
-  // exists — switch to it.
+  // exists, so switch to it.
   await run(worktreePath, [
     "checkout",
     "--end-of-options",
@@ -71,8 +71,8 @@ export async function checkoutBranch(
 // the nuke-everything path (per-worktree deletes run the CLI's port):
 // honor the global toggle, never touch externals (we didn't create the
 // branch), skip placeholder branches, and swallow failures since the
-// branch may be shared with another worktree or be the primary's HEAD --
-// leaving it behind is always the safe fallback.
+// branch may be shared with another worktree or be the primary's HEAD.
+// Leaving it behind is always the safe fallback.
 export async function deleteBranchAfterWorktreeRemoval(
   projectPath: string,
   identity: WorktreeIdentity,
@@ -91,9 +91,9 @@ export async function deleteBranchAfterWorktreeRemoval(
 // Create a local branch pointing at `base` (or HEAD if omitted). When
 // base is a remote-tracking ref, `--track` sets upstream explicitly so
 // the behavior doesn't depend on the user's branch.autoSetupMerge. A
-// local base (even a slashed one like `feature/foo`) must not track --
-// that would pin the new branch's upstream to a local ref. An exact
-// local branch wins over the remote interpretation, matching
+// local base (even a slashed one like `feature/foo`) must not track,
+// since that would pin the new branch's upstream to a local ref. An
+// exact local branch wins over the remote interpretation, matching
 // checkoutBranch's precedence.
 export async function createLocalBranch(
   projectPath: string,
@@ -112,8 +112,8 @@ export async function createLocalBranch(
 }
 
 // Rename any local branch (not necessarily the current one). `git branch
-// -m <old> <new>` works even if `old` is checked out in a worktree —
-// git updates that worktree's HEAD to the new name.
+// -m <old> <new>` works even if `old` is checked out in a worktree. Git
+// updates that worktree's HEAD to the new name.
 export async function renameAnyLocalBranch(
   projectPath: string,
   oldName: string,
@@ -182,8 +182,8 @@ export async function listUntrackedMatchingExcludeFile(
 }
 
 // Lists branches usable as a base ref: local heads and remote-tracking refs.
-// Symbolic refs like `origin/HEAD` are dropped — they alias another remote
-// branch and would show up twice.
+// Symbolic refs like `origin/HEAD` are dropped because they alias another
+// remote branch and would show up twice.
 export async function listBranches(projectPath: string): Promise<BranchList> {
   const stdout = await run(projectPath, [
     "for-each-ref",

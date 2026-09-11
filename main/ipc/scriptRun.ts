@@ -29,8 +29,9 @@ export async function prepareScriptRun(
   worktreeId: string,
 ): Promise<ScriptRunContext> {
   // The default-branch resolution only needs the config, so chain it off
-  // that read rather than the full join -- resolveDefaultBranch spawns
-  // several sequential git calls and shouldn't wait on the worktree list.
+  // that read rather than the full join, since resolveDefaultBranch
+  // spawns several sequential git calls and shouldn't wait on the
+  // worktree list.
   const configPromise = readShigomoriConfig(project.id);
   const [config, identities, defaultBranch] = await Promise.all([
     configPromise,

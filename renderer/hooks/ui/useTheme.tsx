@@ -4,7 +4,7 @@ import { readStored, writeStored } from "@/lib/localStorage";
 import { useGlobalConfig } from "../config/useGlobalConfig";
 
 interface ThemeState {
-  // Persisted value from config.json — what the settings UI considers "saved".
+  // Persisted value from config.json: what the settings UI considers "saved".
   saved: Theme;
   // Live value driving <html class="dark"> and the BrowserWindow background.
   // Equals `override ?? saved`.

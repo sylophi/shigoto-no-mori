@@ -1,7 +1,7 @@
 // Checking out a pull request into a fresh worktree. Two halves: the
 // picker's list of open PRs, and the resolver that turns the PR the user
-// picked into a local branch. The resolver stops there on purpose --
-// worktrees.create takes it from the local branch through the ordinary
+// picked into a local branch. The resolver stops there on purpose. From
+// the local branch, worktrees.create takes over through the ordinary
 // `checkout` path, so the bundled CLI stays the create engine and knows
 // nothing about PRs.
 import { z } from "zod";
@@ -178,7 +178,7 @@ export async function resolvePullRequestCheckout(
 
 // Same-repo head: an ordinary remote branch. Land it on a local branch
 // tracking the remote, which is what the user would have gotten by
-// checking the branch out by hand -- push, pull, and the worktree page's
+// checking the branch out by hand. Push, pull, and the worktree page's
 // ahead/behind all behave normally from there.
 async function resolveSameRepoHead(
   cwd: string,
@@ -235,7 +235,7 @@ async function resolveForkHead(
     // Non-fast-forward (the author force-pushed since this branch was
     // last checked out) and "checked out at <path>" (the PR is already
     // open in another worktree) both land here, and git's own stderr
-    // says which -- the remedy is the same either way.
+    // says which, and the remedy is the same either way.
     throw new Error(
       `Couldn't fetch ${pullRef} onto ${branch}: ${message(err)}. Delete ` +
         `or rename ${branch} and try again.`,
@@ -245,8 +245,8 @@ async function resolveForkHead(
   // What `gh pr checkout` writes for a fork the user can't push to:
   // `git pull` re-fetches the PR head, and nothing is configured to push
   // at a branch that isn't theirs. It also leaves @{upstream}
-  // unresolvable, so the worktree page shows the branch as unpublished
-  // -- which is true.
+  // unresolvable, so the worktree page shows the branch as unpublished,
+  // which is true.
   await run(cwd, ["config", `branch.${branch}.remote`, remote]);
   await run(cwd, ["config", `branch.${branch}.merge`, pullRef]);
   return { branch };

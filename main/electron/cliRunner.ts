@@ -1,8 +1,8 @@
 // Spawns the bundled CLI as the app's worktree engine. The five
 // lifecycle mutations (create, delete, adopt, done, merge) route
 // through here, so the app and a terminal produce byte-identical
-// behavior. The binary is addressed directly -- Resources/ when
-// packaged, dist-cli/smd in dev (built by `pnpm dev`) -- so no PATH
+// behavior. The binary is addressed directly, Resources/ when
+// packaged and dist-cli/smd in dev (built by `pnpm dev`), so no PATH
 // install is involved: the binary is flavor-stamped at build time and
 // reads the same pointer file the app does, so it lands on the app's
 // root without being told.
@@ -60,13 +60,13 @@ const children = new Set<ChildProcess>();
 
 // Children doing invisible housekeeping (the updater's staging
 // download): still reaped at quit like every other child, but excluded
-// from the busy aggregate -- a background download must not trigger
-// the "tasks are running" quit prompt.
+// from the busy aggregate, because a background download must not
+// trigger the "tasks are running" quit prompt.
 let backgroundChildren = 0;
 
 // Every live child, background or not. stateWatcher.ts reads this to
 // suppress the fs echo of a CLI child's own writes into the state
-// root -- background children churn the root too, so they must count
+// root. Background children churn the root too, so they must count
 // here even though they are exempt from the busy aggregate below.
 export function cliChildCount(): number {
   return children.size;
@@ -105,11 +105,10 @@ export function killAllCli(): void {
 // installer waits for our pid to exit before swapping bundles).
 // Deliberately NOT tracked in `children`: killAllCli reaping it at
 // quit would defeat its purpose. Settles only once the child actually
-// spawned (or failed to):
-// spawn errors arrive asynchronously, and an unhandled 'error' event
-// on a ChildProcess is an uncaught exception in the main process --
-// the caller is about to quit on success, so it must not do that on a
-// child that never started.
+// spawned (or failed to): spawn errors arrive asynchronously, and an
+// unhandled 'error' event on a ChildProcess is an uncaught exception
+// in the main process. The caller is about to quit on success, so it
+// must not do that on a child that never started.
 export async function spawnCliDetached(args: string[]): Promise<void> {
   const binary = requireCliBinary();
   return new Promise((resolve, reject) => {
@@ -133,14 +132,14 @@ export interface CliResult {
 
 // Runs `sm --json <args>`, parsing each stdout line as a document and
 // forwarding it to onDoc as it arrives. Resolves with every document
-// once the process exits; rejects only on spawn failure -- non-zero
+// once the process exits, and rejects only on spawn failure. Non-zero
 // exits resolve normally since the error payload is in the documents.
 // extraEnv overlays the app's environment (used by cliShell.ts to pass
 // the user's real shell-config env vars, which launchd strips).
 // opts.background exempts the child from the busy aggregate (see
 // backgroundChildren). opts.timeoutMs SIGKILLs the child's process
 // group when it runs that long, so a wedged child (a stuck subprocess
-// on the Go side) can't hold the returned promise open forever -- the
+// on the Go side) can't hold the returned promise open forever. The
 // kill surfaces as a normal non-zero close.
 export async function runCli(
   args: string[],

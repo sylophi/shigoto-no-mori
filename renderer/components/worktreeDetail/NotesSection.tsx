@@ -9,8 +9,8 @@ import type { Worktree } from "@shared/schemas";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
   // The primary checkout (the main repo root) lives at the project path,
-  // which never sits under a managed prefix, so it's flagged external --
-  // but it's ours to annotate, so notes stay available for it. Only
+  // which never sits under a managed prefix, so it's flagged external.
+  // It's still ours to annotate, so notes stay available for it. Only
   // genuinely external worktrees (manual checkouts elsewhere) are skipped.
   if (worktree.isExternal && !worktree.isPrimary) return null;
   return <NotesSectionLoader key={worktree.id} worktree={worktree} />;
@@ -20,7 +20,7 @@ function NotesSectionLoader({ worktree }: { worktree: Worktree }) {
   const { data, isPending } = useWorktreeData(worktree.projectId, worktree.id);
   // Wait for the persisted value before mounting the editor. The inner
   // seeds its draft from `saved` via useState, which only reads the
-  // initial value -- mounting while the read is still in flight would
+  // initial value. Mounting while the read is still in flight would
   // seed an empty draft that never picks up the notes once they arrive.
   if (isPending) return null;
   return <NotesSectionInner worktree={worktree} saved={data?.notes ?? ""} />;
@@ -47,8 +47,8 @@ function NotesSectionInner({
     });
   };
 
-  // Compare against what the last write actually sent, not `saved` --
-  // the prop lags behind until the invalidation refetch lands, which
+  // Compare against what the last write actually sent, not `saved`.
+  // The prop lags behind until the invalidation refetch lands, which
   // would blank the status right after a successful save.
   const submitted = write.variables?.data.notes ?? "";
   const status = write.isPending

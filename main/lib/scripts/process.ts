@@ -7,7 +7,7 @@
 // forwards (interactive prompts, vite's "r"/"q" shortcuts, TUIs).
 //
 // Kill strategy:
-//   1. SIGTERM the process group (negative pgid) -- covers normal forks.
+//   1. SIGTERM the process group (negative pgid), covering normal forks.
 //   2. Walk `ps` for any descendant still reachable via ppid (e.g.
 //      double-forked daemons) and SIGTERM those too.
 //   3. The caller escalates to SIGKILL through the same path after its
@@ -95,7 +95,7 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
   // kill(-1) signals every process the user may signal, kill(0) our
   // own group, kill(1) launchd. No real child or group ever maps to
   // these, so refuse them at the chokepoint every pid source funnels
-  // through -- the persisted-scripts schema rejects pid < 2 too, but
+  // through. The persisted-scripts schema rejects pid < 2 too, but
   // a floor here covers future sources as well.
   if (!Number.isInteger(pid) || Math.abs(pid) < 2) return;
   try {
@@ -108,7 +108,7 @@ function safeKill(pid: number, signal: NodeJS.Signals): void {
 
 // Walks `ps` to find every process that descends from rootPid via the
 // ppid chain. Catches grandchildren that called setsid() and left our
-// process group -- still reachable here as long as their ppid hasn't
+// process group. They stay reachable here as long as their ppid hasn't
 // been re-parented to init.
 async function listDescendantPids(rootPid: number): Promise<number[]> {
   let stdout: string;

@@ -108,14 +108,13 @@ export function patchEntries(files: readonly FileDiffMetadata[]): IndexEntry[] {
   }));
 }
 
-// The changes page lists what `git status` reports -- the list the
-// commit button acts on -- and every row is drawn from that one read:
-// the marker from the change kind, the counts from git's own numstat.
-// Nothing is joined against a patch here, because there is no patch to
-// join against: the pane fetches the diff of whichever row is picked.
+// The changes page lists what `git status` reports, which is the list
+// the commit button acts on. Every row comes from that one read: the
+// marker from the change kind, the counts from numstat. There is no
+// patch to join against, since the pane fetches the diff of whichever
+// row is picked. Order is the list's own (listChangedFiles sorts by
+// path), so the rail, the first pick and the commit all agree on it.
 export function changeEntries(files: readonly ChangedFile[]): IndexEntry[] {
-  // Order is the list's own -- listChangedFiles sorts by path -- so the
-  // rail, the pane's first pick and the commit all agree on it.
   return files.map(
     (row): IndexEntry => ({
       key: changeKey(row),

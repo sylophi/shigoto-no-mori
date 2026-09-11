@@ -24,7 +24,7 @@ let cachedPointerPath: string | null = null;
 // The override is something a human or a test harness sets, and it must
 // stay that way: the app itself may never put SHIGOMORI_ROOT into a
 // child's environment. Env vars are inherited by the whole process
-// tree, and the app runs the user's package.json scripts -- so a `dev`
+// tree, and the app runs the user's package.json scripts, so a `dev`
 // script launched from the packaged app's script runner would boot the
 // dev build, see the packaged app's root here, and quietly operate on
 // real data. A sandboxed session needs no injection either: children
@@ -46,10 +46,10 @@ export function initShigomoriRoot(isPackaged: boolean): void {
 }
 
 // The live flavor's pointer-file location, for writers (the root move).
-// Only meaningful when the root came from the normal boot resolution --
-// under a SHIGOMORI_ROOT override or an initShigomoriRootAt entry point
-// (tests) there is no pointer to write, and moving the root would edit
-// state the sandbox doesn't own.
+// Only meaningful when the root came from the normal boot resolution.
+// Under a SHIGOMORI_ROOT override or an initShigomoriRootAt entry
+// point (tests) there is no pointer to write, and moving the root
+// would edit state the sandbox doesn't own.
 export function rootPointerPath(): string {
   if (cachedPointerPath === null) {
     throw new Error(
@@ -61,9 +61,9 @@ export function rootPointerPath(): string {
 }
 
 // Missing, empty, or non-absolute content falls through to the default
-// (null) -- boot must not die on a malformed hand-edited file. Sync on
-// purpose: this runs once, at module-top-level boot, before the config
-// stores exist.
+// (null), because boot must not die on a malformed hand-edited file.
+// Sync on purpose: this runs once, at module-top-level boot, before the
+// config stores exist.
 function readRootPointer(pointerPath: string): string | null {
   let raw: string;
   try {
@@ -81,7 +81,7 @@ function readRootPointer(pointerPath: string): string | null {
 // The root is the target of destructive operations (nuke rm -rf's it),
 // so a pointer at ~/Documents must fall back to the default rather
 // than adopt a directory full of unrelated files. Mirrored by the CLI
-// (cli/state.go looksLikeRootTarget) -- keep the two in sync.
+// (cli/state.go looksLikeRootTarget). Keep the two in sync.
 function looksLikeRootTarget(target: string): boolean {
   let entries: string[];
   try {

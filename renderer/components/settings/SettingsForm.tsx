@@ -51,7 +51,7 @@ function fromConfig(config: GlobalConfig): FormState {
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
-    // hiding is set-semantic -- without this, re-hiding a tool in a
+    // hiding is set-semantic. Without this, re-hiding a tool in a
     // different order would read as an unsaved change.
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
     launchScripts: config.launchScripts ?? true,
@@ -131,7 +131,7 @@ export function SettingsForm({
   const handleSave = async () => {
     await write.mutateAsync(toConfig(initialConfig, form));
     setSavedSnapshot(form);
-    // No explicit setOverride(null) — the providers clear the override
+    // No explicit setOverride(null). The providers clear the override
     // automatically once `saved` catches up to the staged value.
   };
 
@@ -339,7 +339,7 @@ export function SettingsForm({
 }
 
 // Static pill for a supported-but-not-installed tool. Detected tools are
-// interactive toggles instead -- see DetectedToolsSection.
+// interactive toggles instead. See DetectedToolsSection.
 function ToolPill({ entry }: { entry: DetectedLauncher }) {
   return (
     <span

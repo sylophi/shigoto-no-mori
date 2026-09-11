@@ -30,20 +30,19 @@ import {
 } from "./changesControls";
 import type { IndexEntry } from "./patchFiles";
 
-// The navigation rail for a multi-file patch: every file in the order it
-// appears in the scroll area, with its change marker and +/- counts.
-// Order is never re-ranked (that's why the filter is a plain substring
-// match and not lib/fuzzyMatch). The rail is a map of the scroll area,
-// so it has to keep the scroll area's order to stay readable.
+// The file rail beside a diff: every file in scroll order with its
+// change marker and +/- counts. Order is never re-ranked, which is why
+// the filter is a plain substring match and not lib/fuzzyMatch. The
+// rail is a map of the scroll area and has to keep its order.
 //
-// With `changes` it is also the changes list: a checkbox per row (the
-// file's index state), a discard control that shows on hover, a
-// select-all box and a discard menu in the header, and the commit
-// composer as its footer. Bulk discards confirm in a strip that takes
-// the footer's place. Per-file discards arm on the row itself.
+// With `changes` it is also the changes list: a checkbox per row for
+// the file's index state, a discard control on hover, a select-all box
+// and a discard menu in the header, and the commit composer as its
+// footer. Bulk discards confirm in a strip that takes the footer's
+// place. Per-file discards arm on the row itself.
 //
-// Rows arrive built (patchFiles.ts): the caller decides whether they
-// come from the patch or from git status, and the rail just draws them.
+// Rows arrive built (patchFiles.ts). The caller decides whether they
+// come from the patch or from git status.
 export function DiffFileIndex({
   entries,
   activeKey,
@@ -342,10 +341,8 @@ function DiscardConfirmStrip({
   );
 }
 
-// Split out so the highlight moving re-renders two rows' worth of work
-// rather than the whole rail: `onSelect` is the caller's own handler
-// (the entry carries what to jump to), so an untouched row's props are
-// unchanged and its markup stays cached.
+// Its own component so moving the highlight re-renders two rows rather
+// than the whole rail.
 function IndexRow({
   entry,
   active,
@@ -379,16 +376,12 @@ function IndexRow({
 
   return (
     // A row is three controls side by side (tick, jump, discard), so it
-    // can't be one button. The wrapper still takes the click, so the
-    // whole pill lands on the file the way the old single button did;
-    // the tick and the discard stop it from bubbling. The inner button
-    // is what the keyboard reaches. The wrapper also carries the active
-    // marker the scroll-into-view above looks for.
-    //
-    // The two slots are the row's hover unit: doubutsu paints its hover
-    // treatment on the row and holds it off the jump button, which
-    // covers only the middle of the row and would otherwise light a
-    // band inside a pill that is hovered as one thing.
+    // can't be one button. The wrapper takes the click so the whole pill
+    // lands on the file, the tick and the discard stop it from bubbling,
+    // and the inner button is what the keyboard reaches. The wrapper
+    // also carries the active marker the scroll-into-view above looks
+    // for, and it is what doubutsu paints its hover treatment on (see
+    // diff-index-jump there).
     <div
       role="presentation"
       data-slot="diff-index-row"

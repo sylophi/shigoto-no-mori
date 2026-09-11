@@ -1,6 +1,6 @@
 package main
 
-// sm doctor -- the "why is sm behaving weirdly" command. It answers two
+// sm doctor is the "why is sm behaving weirdly" command. It answers two
 // questions the other commands can only fail at: is this installation
 // intact (git, gh, the app bundle behind the binary, PATH, the shell
 // hook), and is the state root internally consistent (config and state
@@ -9,9 +9,9 @@ package main
 // with what's on disk).
 //
 // Everything here is read-only unless --fix is passed. --fix applies
-// only the repairs whose outcome is unambiguous -- delete a stale lock,
+// only the repairs whose outcome is unambiguous (delete a stale lock,
 // drop a registry entry whose repo no longer exists, `git worktree
-// prune` -- and prompts before each one that deletes something (--yes
+// prune`) and prompts before each one that deletes something (--yes
 // skips the prompts). Anything with a judgment call in it (a directory
 // git doesn't know about, a setup script naming a missing file, a repo
 // that stopped being a repo) is reported with a suggested fix and never
@@ -128,7 +128,7 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	}
 
 	// doctor is noContext, so run() hands over an empty cliContext and
-	// never touches the registry -- which is the point: a root this
+	// never touches the registry, which is the point: a root this
 	// command exists to diagnose must not fail the load before the
 	// checks get to describe it. Read it here and degrade to none,
 	// because checkRegistryFile reports the parse failure itself.

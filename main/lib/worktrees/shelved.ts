@@ -1,6 +1,6 @@
 // Shelf state for worktrees: a flat set of worktree ids that the user
-// has chosen to hide from the sidebar's main list. Purely a UI hint --
-// the worktree itself is untouched on disk, and nothing per-worktree
+// has chosen to hide from the sidebar's main list. Purely a UI hint.
+// The worktree itself is untouched on disk, and nothing per-worktree
 // (scripts, ports, processes) is stopped. Stored in the global
 // registry.json alongside the project list, since rebuilding a shelf by
 // hand means remembering which of dozens of worktrees were hidden. Not
@@ -25,9 +25,9 @@ export function readShelvedSet(): Set<string> {
   return new Set(Object.keys(readMap()));
 }
 
-// updateKey so the current map is read under the cross-process lock --
-// the CLI mutates this key too, and a read-outside-the-lock
-// version would clobber a concurrent CLI write.
+// updateKey so the current map is read under the cross-process lock.
+// The CLI mutates this key too, and a read-outside-the-lock version
+// would clobber a concurrent CLI write.
 export function setShelved(worktreeId: string, shelved: boolean): void {
   registryStore.updateKey<ShelvedMap>(SHELVED_KEY, {}, (map) => {
     if ((map[worktreeId] === true) === shelved) return undefined;

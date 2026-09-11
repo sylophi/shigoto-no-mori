@@ -2,7 +2,7 @@ package main
 
 // Invocation context: which registered project and worktree contain
 // the cwd, plus the explicit name / project resolvers every command
-// shares. cwd is only ever a default, never a requirement -- each
+// shares. cwd is only ever a default, never a requirement. Each
 // command has an explicit form (-p, <project>/<name>) that works from
 // anywhere. The reserved names "root" and "primary" address a
 // project's primary checkout.
@@ -101,7 +101,7 @@ func noteUnregistered(ctx cliContext) {
 
 func projectHint(ctx cliContext) string {
 	if len(ctx.projects) == 0 {
-		return "No projects are registered yet -- add the repo in the Shigoto no Mori app first."
+		return "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
 	}
 	names := make([]string, len(ctx.projects))
 	for i, p := range ctx.projects {
@@ -281,7 +281,7 @@ func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located,
 // (with optional --project-id scoping) wins, then the positional
 // name/<project>/<name> forms, then cwd. primaryOK declares whether
 // the command can act on the primary checkout; it only shapes the
-// pickers -- explicit refs resolve either way so commands that refuse
+// pickers. Explicit refs resolve either way, so commands that refuse
 // the primary get to say so themselves.
 func resolveWorktreeArgs(ctx cliContext, parsed parsedArgs, primaryOK bool) (located, error) {
 	if wid := parsed.strings["worktree-id"]; wid != "" {
@@ -325,7 +325,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 		if ctx.current != nil {
 			// From the primary checkout, silently acting on it surprises
 			// more than a menu: offer the project's worktrees when a human
-			// is on the other end -- with the primary itself on the menu
+			// is on the other end, with the primary itself on the menu
 			// (listed last, so enter-enter picks a real worktree) when the
 			// command can act on it. Agents, pipelines, and --json keep
 			// the deterministic primary.
@@ -396,7 +396,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 			return primaryOf(ctx.current.proj)
 		case len(scope) > 1:
 			return located{}, usageErrf(
-				"%q needs a project when outside one -- use <project>/%s or -p <project>.", name, name)
+				"%q needs a project when outside one. Use <project>/%s or -p <project>.", name, name)
 		}
 	}
 
@@ -438,7 +438,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 		for i, m := range matches {
 			candidates[i] = m.proj.Name + "/" + m.worktree.Name
 		}
-		return located{}, usageErrf("%q is ambiguous (%s) -- qualify it as <project>/<name>.",
+		return located{}, usageErrf("%q is ambiguous (%s). Qualify it as <project>/<name>.",
 			name, strings.Join(candidates, ", "))
 	}
 }

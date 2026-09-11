@@ -5,8 +5,8 @@ package main
 // one stay uncolored.
 //
 // All color math runs in OKLab/OKLCH (Björn Ottosson's perceptual
-// space): hue extraction weights samples by OKLab chroma -- how
-// colorful they *look*, not how far their RGB is from gray -- and
+// space): hue extraction weights samples by OKLab chroma (how
+// colorful they *look*, not how far their RGB is from gray), and
 // rendering fixes perceptual lightness and chroma, so every accent
 // reads equally bright regardless of hue (HSL can't promise that:
 // its yellows glare and its blues recede at the same L). termenv's
@@ -81,8 +81,8 @@ func oklchToSRGB(lightness, chroma, hue float64) (float64, float64, float64) {
 }
 
 // The accent look: one perceptual lightness and chroma for every
-// project, only the hue varies. Muted on purpose -- an accent, not a
-// highlight -- and matched to the terminal background: pastels for
+// project, only the hue varies. Muted on purpose (an accent, not a
+// highlight) and matched to the terminal background: pastels for
 // dark themes, deeper tones for light ones (a light pastel vanishes
 // on white).
 func accentLC() (float64, float64) {
@@ -293,7 +293,7 @@ func icoLargestPNG(data []byte) []byte {
 	return best
 }
 
-// Sniffed by content, not extension -- plenty of favicon.ico files are
+// Sniffed by content, not extension. Plenty of favicon.ico files are
 // really PNGs.
 func iconHueBytes(data []byte) (float64, bool) {
 	if len(data) == 0 {
@@ -324,7 +324,7 @@ func iconHueBytes(data []byte) (float64, bool) {
 var projectColorMemo sync.Map // project ID -> SGR code string
 
 // SGR code for the project's accent color, "" when the project has no
-// (chromatic) logo -- the accent means "this is the logo's color", so
+// (chromatic) logo. The accent means "this is the logo's color", so
 // icon-less projects stay uncolored rather than getting an arbitrary
 // one. Cheap after the first call per project; prefetchProjectColors
 // front-loads the icon work.
@@ -341,7 +341,7 @@ func projectColorCode(proj project) string {
 }
 
 // Resolve every project's color concurrently before a picker or table
-// renders -- resolution may shell out to git once per project, so the
+// renders. Resolution may shell out to git once per project, so the
 // fan-out is capped rather than one subprocess per project at once.
 func prefetchProjectColors(projects []project) {
 	semaphore := make(chan struct{}, 8)

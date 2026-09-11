@@ -5,7 +5,7 @@
 // watchers, compilers the user's command spawns), not just the wrapping
 // shell.
 //
-// The spawn/signal mechanics live in ./process.ts -- this file only
+// The spawn/signal mechanics live in ./process.ts. This file only
 // runs the SIGTERM -> grace -> SIGKILL escalation over them.
 //
 // On app quit (see index.ts) we kill every running script the same way
@@ -35,8 +35,8 @@ const DEFAULT_GRACE_MS = 3_000;
 const UNKILLABLE_WAIT_MS = 5_000;
 // PTY size a script starts with. The console resizes it to the real
 // viewport as soon as it is on screen, but scripts launched from a
-// worktree row (or by a lifecycle) may run a while before -- or without
-// -- anyone opening the console, so the default should suit a log.
+// worktree row (or by a lifecycle) may run a while before (or without)
+// anyone opening the console, so the default should suit a log.
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 40;
 // PTYs hand output over in many small reads (a TUI redraw is several, a
@@ -112,7 +112,7 @@ function persistSnapshot(): void {
 
 // Ref-counted: overlapping deleters can mark the same worktree (a
 // per-worktree delete racing a nuke that lists it too), and the guard
-// must hold until the LAST one finishes -- with a plain Set, whichever
+// must hold until the LAST one finishes. With a plain Set, whichever
 // finally ran first would drop the other's still-needed mark.
 const inflightDeleteCounts = new Map<string, number>();
 const inflightProjectDeleteIds = new Set<string>();
@@ -255,8 +255,8 @@ interface KillOptions {
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
-    // Another caller is already escalating; wait for it, but bounded --
-    // an unkillable child must not wedge this caller's chain too.
+    // Another caller is already escalating. Wait for it, but bounded
+    // so an unkillable child doesn't wedge this caller's chain too.
     await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
     return;
   }
@@ -439,8 +439,9 @@ export function startScript(args: RunArgs): string {
 }
 
 // Keystrokes from the console. A no-op when the run isn't one of ours
-// (already exited, or a lifecycle script the CLI ran on the app's behalf
-// -- those stream output through the same events but have no PTY here).
+// (already exited, or a lifecycle script the CLI ran on the app's
+// behalf, which streams output through the same events but has no PTY
+// here).
 // Both calls can also fail on a PTY that is being torn down (the exit
 // event is already on its way), which is not worth reporting.
 export function writeToScript(runId: string, data: string): void {

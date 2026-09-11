@@ -18,7 +18,7 @@ import { withToggled } from "@/lib/toggleSet";
 
 const route = getRouteApi("/projects/$projectId/convert-external");
 
-// For detached HEADs `worktree.branch` is a short SHA -- pass it
+// For detached HEADs `worktree.branch` is a short SHA. Pass it
 // through unchanged so the managed worktree gets a hash-named dir.
 // (isRealBranch only filters the UNKNOWN_BRANCH sentinel, which we
 // never see here.)

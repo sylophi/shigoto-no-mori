@@ -93,7 +93,7 @@ export function SidebarFooter({
         </button>
       </SimpleTooltip>
       <SimpleTooltip
-        tip={updateReady ? "Settings — update available" : "Settings"}
+        tip={updateReady ? "Settings (update available)" : "Settings"}
       >
         <button
           type="button"

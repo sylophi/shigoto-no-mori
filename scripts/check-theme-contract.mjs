@@ -1,7 +1,7 @@
 // Verifies that every hook renderer/doubutsu.css depends on still
 // exists, so a v1 refactor (or a dependency upgrade) can't silently
-// strip parts of doubutsu mode. Devs work in v1 by default -- without
-// this check, a renamed data-slot or a Base UI attribute change would
+// strip parts of doubutsu mode. Devs work in v1 by default, so without
+// this check a renamed data-slot or a Base UI attribute change would
 // only be noticed by someone running with the theme on.
 //
 // Checked:
@@ -10,9 +10,9 @@
 //      renderer source.
 //   2. The `doubutsu-only` and `data-row-idx` app markers must exist.
 //   3. Upstream attributes (Base UI, cmdk, sonner) must still appear in
-//      the installed packages -- catches breaking upgrades.
-//   4. The one consumer outside renderer/ -- the dmg artwork in
-//      scripts/dmg-background.html -- must still find the tokens and
+//      the installed packages, which catches breaking upgrades.
+//   4. The one consumer outside renderer/ (the dmg artwork in
+//      scripts/dmg-background.html) must still find the tokens and
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -44,8 +44,8 @@ const failures = [];
 
 // 1. data-* hooks the CSS selects must be set in renderer source.
 //    (data-highlighted / data-popup-open / data-disabled / data-unchecked
-//    are set by Base UI at runtime, data-sonner-toast by sonner --
-//    checked below.)
+//    are set by Base UI at runtime, data-sonner-toast by sonner, and
+//    both are checked below.)
 const RUNTIME_ATTRS = new Set([
   "data-highlighted",
   "data-popup-open",
@@ -82,7 +82,7 @@ for (const marker of ["doubutsu-only", "v1-only", "data-row-idx"]) {
   }
 }
 
-// 3. Upstream attribute contracts -- grep the installed packages so a
+// 3. Upstream attribute contracts: grep the installed packages so a
 //    dependency upgrade that drops an attribute fails loudly here
 //    instead of silently un-theming menus/toasts.
 const upstream = [
@@ -116,11 +116,11 @@ for (const { pkg, file, needle } of upstream) {
   const path = join(root, file);
   if (!existsSync(path)) {
     failures.push(
-      `${pkg}: expected file ${file} is gone (upgrade moved it?) -- re-verify "${needle}" still exists and update this check`,
+      `${pkg}: expected file ${file} is gone (upgrade moved it?). Re-verify "${needle}" still exists and update this check`,
     );
   } else if (!readFileSync(path, "utf8").includes(needle)) {
     failures.push(
-      `${pkg}: "${needle}" no longer found in ${file} -- doubutsu selectors depending on it are dead`,
+      `${pkg}: "${needle}" no longer found in ${file}, so doubutsu selectors depending on it are dead`,
     );
   }
 }
@@ -128,7 +128,7 @@ for (const { pkg, file, needle } of upstream) {
 // 4. The installer artwork renders against this stylesheet from outside
 //    renderer/, so the walk above never sees it. Check the tokens it
 //    reads are still declared, and that the two rule shapes it leans on
-//    -- the leaf wallpaper and the header/footer band -- still exist.
+//    (the leaf wallpaper and the header/footer band) still exist.
 const artFile = join(root, "scripts/dmg-background.html");
 const art = readFileSync(artFile, "utf8");
 // --dmg-*, --icon* and --app*-x are injected by the renderer at capture

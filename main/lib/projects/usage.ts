@@ -1,8 +1,8 @@
 // Per-project action usage log and the sidebar sort preference. Same
 // rolling-window algorithm as the launcher row and package.json scripts list
 // (see ../util/useLog) so the "most used" sort behaves identically across the
-// app. Stored in the global state.json — sort and usage are app-managed UI
-// state, not the user-editable per-project shigomori config.
+// app. Stored in the global state.json, since sort and usage are
+// app-managed UI state, not the user-editable per-project shigomori config.
 import type { ProjectSortMode } from "@shared/schemas";
 import { stateStore } from "../config/store";
 import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";

@@ -15,7 +15,7 @@ export function EmptyState() {
 
   // Walk projects in order so we redirect to the first worktree the user
   // would see in the sidebar. Wait on in-flight queries for an earlier
-  // project rather than skipping past it -- otherwise a slow first project
+  // project rather than skipping past it. Otherwise a slow first project
   // would lose its turn to a later one.
   let redirectProjectId: string | null = null;
   let redirectWorktreeId: string | null = null;

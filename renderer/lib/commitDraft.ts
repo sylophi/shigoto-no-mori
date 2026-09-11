@@ -33,9 +33,9 @@ export function clearCommitDraft(projectId: string, worktreeId: string): void {
 
 // The draft as state plus its persistence, owned by the changes page:
 // the composer edits it, a landed commit empties it, and amend mode
-// swaps it out and back. Persisted from an effect rather than in the
-// setter, so the page may seed it during render (the amend prefill)
-// without a storage write in the middle of a render.
+// (useAmendDraft) swaps it out and back. Persisted from an effect
+// rather than in the setter, so amend mode can seed it during render
+// without a storage write in the middle of one.
 export function useCommitDraft(projectId: string, worktreeId: string) {
   const [draft, setDraft] = useState<CommitDraft>(() =>
     readCommitDraft(projectId, worktreeId),

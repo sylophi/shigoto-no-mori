@@ -54,8 +54,8 @@ export function VirtualRow({
 
 // Who a row's hover belongs to, so a ProjectRow can keep its actions up
 // while the cursor is on one of its children. Only the tree has project
-// headers to keep alive, so the inbox's rows -- which do their own
-// hovering in CSS -- report to nobody rather than re-rendering the
+// headers to keep alive, so the inbox's rows (which do their own
+// hovering in CSS) report to nobody rather than re-rendering the
 // sidebar on every row the cursor crosses.
 function projectIdForRow(row: SidebarRow): string | null {
   if (row.kind === "project") return row.project.id;

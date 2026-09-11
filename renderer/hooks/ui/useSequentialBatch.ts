@@ -9,8 +9,8 @@ import { errorMessageOf } from "@shared/errors";
 // runBatch owns `batchRunning` (raised before `prepare`, cleared in a
 // finally) so no caller can leave the flow's inputs permanently disabled
 // by missing a reset on one exit path. `prepare` covers work that must
-// run under the flag before the loop -- the relocate flow's config write
-// -- and returning false aborts without touching the row statuses.
+// run under the flag before the loop (the relocate flow's config write),
+// and returning false aborts without touching the row statuses.
 //
 // The loop lives at module scope (not inside the hook) because React
 // Compiler skips any component/hook containing a `finally` clause.

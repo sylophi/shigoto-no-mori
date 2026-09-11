@@ -14,7 +14,7 @@ export const runtimeContract = {
   moveRoot: invoke("runtime:moveRoot", MoveRootPayloadSchema, z.void()),
   // Renderer-acknowledged restart after a successful moveRoot: firing
   // this only after the moveRoot reply resolves guarantees the reply
-  // was delivered before the app quits -- no timing guesses.
+  // was delivered before the app quits, with no timing guesses.
   relaunch: invoke("runtime:relaunch", z.void(), z.void()),
   nukeProgress: broadcast("runtime:nukeProgress", NukeProgressSchema),
 } as const;

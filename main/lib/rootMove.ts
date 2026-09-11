@@ -1,9 +1,9 @@
 // Moves the shigomori state root to a new parent directory: the folder
 // itself (basename unchanged) relocates, the pointer file (policy in
 // shared/cliDist.mts) records the new spot for both the app's and the
-// CLI's next boot, and the caller must relaunch the app right after --
-// the in-process root is a boot-time constant and every module has
-// already derived paths from it.
+// CLI's next boot, and the caller must relaunch the app right after,
+// since the in-process root is a boot-time constant and every module
+// has already derived paths from it.
 //
 // No per-file state rewriting is needed: nothing under the root stores
 // absolute paths into the root (worktree paths are derived from
@@ -32,7 +32,7 @@ import {
 export async function moveShigomoriRoot(
   parentDir: string,
   // Electron-side pre-rename hook: the caller closes its fs watchers on
-  // the root here -- they're moot anyway, the app relaunches after the
+  // the root here. They're moot anyway, the app relaunches after the
   // move.
   opts: { beforeMove?: () => void } = {},
 ): Promise<void> {
@@ -59,8 +59,8 @@ export async function moveShigomoriRoot(
     );
   }
   // Running scripts are reaped below (same semantics as nuke), but
-  // in-flight destructive lifecycle work -- worktree/project deletes,
-  // delegated CLI children -- is mid-write inside the root and can't be
+  // in-flight destructive lifecycle work (worktree/project deletes,
+  // delegated CLI children) is mid-write inside the root and can't be
   // safely killed or moved under. Refuse instead.
   if (getBusyOperations().inflightDeletes > 0) {
     throw new Error(
@@ -81,7 +81,7 @@ export async function moveShigomoriRoot(
   // marked delete-inflight for the whole move (blocking a renderer
   // script run from landing in a directory mid-move, exactly like the
   // nuke flow), and their git metadata gets repaired afterwards.
-  // Collected before anything moves -- listing needs the old paths.
+  // Collected before anything moves, because listing needs the old paths.
   const repairTargets = await Promise.all(
     projects.map(async (project) => {
       try {
@@ -149,7 +149,7 @@ export async function moveShigomoriRoot(
     // Point both readers (app boot, CLI) at the new location. Atomic
     // rename so no reader can ever see a half-written path. Committed
     // before the old copy is deleted: if that cleanup fails midway, the
-    // pointer already names the complete new copy -- leftovers beat a
+    // pointer already names the complete new copy. Leftovers beat a
     // boot against a half-deleted root.
     await rename(pointerTmp, pointerFile);
     if (copied) {

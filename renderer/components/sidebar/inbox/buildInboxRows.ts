@@ -17,7 +17,7 @@ interface BuildInboxRowsArgs {
   // Carries each project's showPrimaryInInbox opt-in.
   configQueries: ProjectShigomoriConfigQueries;
   // Which shelves are open. Absence means shut, so both shelves start
-  // folded on every launch -- the same reasoning as the per-project
+  // folded on every launch, the same reasoning as the per-project
   // "Show shelved" reveal in the classic view.
   openShelves: Set<InboxShelf>;
 }
@@ -64,7 +64,7 @@ function worktreeRow(entry: Entry): SidebarRow {
 // Flattens every project's worktrees into the inbox view's three boxes:
 // live work at the top with no header, then the Shelved and Merged
 // shelves. Primary checkouts are left out unless the project opts in
-// (ShigomoriConfigSchema.showPrimaryInInbox) -- they're a project's
+// (ShigomoriConfigSchema.showPrimaryInInbox). They're a project's
 // root, not a piece of in-flight work, and one per project would crowd
 // out everything the list exists to show.
 //
@@ -82,7 +82,7 @@ export function buildInboxRows({
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = { shelved: [], merged: [] };
-  // Filed for every shelved worktree, open shelf or not -- it's the
+  // Filed for every shelved worktree, open shelf or not. It's the
   // folded case that revealKey needs an answer for.
   const shelfOf = new Map<string, InboxShelf>();
   projects.forEach((project, i) => {
@@ -130,9 +130,9 @@ export function buildInboxRows({
     failedCount,
     // Only once every listing has landed and none of them failed. An
     // empty list looks the same whether the answer is "nothing here",
-    // "still asking", or "couldn't ask" -- and the last two have their
-    // own signals already (the skeleton, the fan-out toast), so
-    // asserting the first over them is the one wrong answer available.
+    // "still asking", or "couldn't ask". The last two have their own
+    // signals already (the skeleton, the fan-out toast), so asserting
+    // the first over them is the one wrong answer available.
     emptyMessage:
       total === 0 && loadingCount === 0 && failedCount === 0
         ? "No worktrees yet."

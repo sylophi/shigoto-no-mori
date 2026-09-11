@@ -31,7 +31,7 @@ function AppErrorFallback({ error }: FallbackProps) {
 
 // Convention: IPC broadcasts that drive query invalidations live in
 // useWatch* hooks next to the queries they affect. App.tsx is the single
-// place they get called -- adding a new watcher is one import + one hook
+// place they get called. Adding a new watcher is one import + one hook
 // call here, with the actual subscribe/invalidate logic co-located with
 // the query it owns.
 export function App() {
